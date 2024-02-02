@@ -7,6 +7,7 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import LinearRegression
 
 from typing import Union
+from abc import abstractmethod, ABC
 
 
 class NaivePredictor(BaseEstimator, RegressorMixin):
@@ -24,45 +25,7 @@ class NaivePredictor(BaseEstimator, RegressorMixin):
         return np.array(X)
 
 
-class BaseWeightedLinearRegression(BaseEstimator, RegressorMixin):
-    def __init__(
-        self,
-        fit_intercept: bool = True,
-        copy_X: bool = True,
-        n_jobs: int = None,
-        positive: bool = False,
-    ):
-        """
-        Base class for WLS linear regression models.
-
-        :param <bool> fit_intercept: Whether to calculate the intercept for this model. If set to False, no intercept will be used in calculations (i.e. data is expected to be centered).
-        :param <bool> copy_X: If True, X will be copied; else, it may be overwritten.
-        :param <int> n_jobs: The number of jobs to use for the computation.
-        :param <bool> positive: When set to True, forces the coefficients to be positive. This option is only supported for dense arrays.
-        """
-        if not isinstance(fit_intercept, bool):
-            raise TypeError("fit_intercept must be a boolean.")
-        if not isinstance(copy_X, bool):
-            raise TypeError("copy_X must be a boolean.")
-        if not isinstance(n_jobs, int) and n_jobs != None:
-            raise TypeError("n_jobs must be an integer or None.")
-        if n_jobs is not None:
-            if n_jobs < -1 or n_jobs == 0:
-                raise ValueError("n_jobs must be a positive integer or -1.")
-        if not isinstance(positive, bool):
-            raise TypeError("positive must be a boolean.")
-
-        self.fit_intercept = fit_intercept
-        self.copy_X = copy_X
-        self.n_jobs = n_jobs
-        self.positive = positive
-        self.model = LinearRegression(
-            fit_intercept=self.fit_intercept,
-            copy_X=self.copy_X,
-            n_jobs=self.n_jobs,
-            positive=self.positive,
-        )
-
+class BaseWeightedRegressor(BaseEstimator, RegressorMixin, ABC):
     def fit(self, X: pd.DataFrame, y: Union[pd.DataFrame, pd.Series]):
         """
         Fit method to fit the underlying model with weighted samples, as passed
@@ -123,7 +86,7 @@ class BaseWeightedLinearRegression(BaseEstimator, RegressorMixin):
         :return <np.ndarray>: Numpy array of predictions.
         """
         # Checks
-        if type(X) != pd.DataFrame:
+        if not isinstance(X, pd.DataFrame):
             raise TypeError(
                 "Input feature matrix for the SignWeightedLinearRegression must be a pandas dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
@@ -137,6 +100,32 @@ class BaseWeightedLinearRegression(BaseEstimator, RegressorMixin):
         # Predict
         return self.model.predict(X)
 
+    @abstractmethod
+    def _calculate_sample_weights(self, y: Union[pd.DataFrame, pd.Series]):
+        """
+        Abstract method for calculating sample weights based on the target variable `y`.
+        """
+        pass
+
+
+class SignWeightedRegressor(BaseWeightedRegressor):
+
+    def __init__(self, model: BaseEstimator):
+        """
+        Custom class to create a weighted regressor, with the sample weights
+        chosen by inverse frequency of the label's sign in the training set.
+        
+        :param <BaseEstimator> model: The underlying model to be trained with weighted samples.
+
+        NOTE: By weighting the contribution of different training samples based on the
+        sign of the label, the model is encouraged to learn equally from both positive and negative return samples,
+        irrespective of class imbalance. If there are more positive targets than negative
+        targets in the training set, then the negative target samples are given a higher
+        weight in the model training process. The opposite is true if there are more
+        negative targets than positive targets.
+        """
+        self.model = model
+
     def _calculate_sample_weights(self, targets: Union[pd.DataFrame, pd.Series]):
         """
         Private helper method to calculate the sample weights, chosen by inverse frequency
@@ -146,10 +135,59 @@ class BaseWeightedLinearRegression(BaseEstimator, RegressorMixin):
 
         :return <tuple[np.ndarray, float, float]>: Tuple of sample weights, positive weight and negative weight.
         """
-        raise NotImplementedError
+        pos_sum = np.sum(targets >= 0)
+        neg_sum = np.sum(targets < 0)
+
+        pos_weight = len(targets) / (2 * pos_sum) if pos_sum > 0 else 0
+        neg_weight = len(targets) / (2 * neg_sum) if neg_sum > 0 else 0
+
+        sample_weights = np.where(targets >= 0, pos_weight, neg_weight)
+        return sample_weights
 
 
-class SignWeightedLinearRegression(BaseWeightedLinearRegression):
+class TimeWeightedRegressor(BaseWeightedRegressor):
+    def __init__(self, half_life: Union[float, int], model: BaseEstimator):
+        """
+        Custom class to create a weighted regressor, where the training sample
+        weights exponentially decay by sample recency, given a prescribed half_life.
+
+        :param <Union[float, int]> half_life: The number of time periods in units of the native data frequency for the weight attributed to the most recent sample (one) to decay by half.
+        :param <BaseEstimator> model: The underlying model to be trained with weighted samples.
+
+        NOTE: By weighting the contribution of different training samples based on the
+        observation date, the model is encouraged to prioritise newer information.
+        The half-life denotes the number of time periods in units of the native data
+        frequency for the weight attributed to the most recent sample (one) to decay by half.
+        """
+        if not isinstance(half_life, (float, int)):
+            raise TypeError("half_life must be a float or an integer.")
+        if half_life <= 1:
+            raise ValueError("The half-life must be greater than 1.")
+        self.half_life = half_life
+        self.model = model
+
+    def _calculate_sample_weights(self, targets: Union[pd.DataFrame, pd.Series]):
+        """
+        Private helper method to calculate the sample weights, chosen by an exponentially
+        decaying function of the sample recency.
+
+        :param <Union[pd.DataFrame, pd.Series]> targets: Pandas series or dataframe of targets.
+
+        :return <np.ndarray>: Numpy array of sample weights.
+        """
+
+        dates = sorted(targets.index.get_level_values(1).unique(), reverse=True)
+        num_dates = len(dates)
+        weights = np.power(2, -np.arange(num_dates) / self.half_life)
+        weights = weights / np.sum(weights)
+
+        weight_map = dict(zip(dates, weights))
+        self.sample_weights = targets.index.get_level_values(1).map(weight_map)
+
+        return self.sample_weights
+
+
+class SignWeightedLinearRegression(SignWeightedRegressor):
     def __init__(
         self,
         fit_intercept: bool = True,
@@ -173,33 +211,33 @@ class SignWeightedLinearRegression(BaseWeightedLinearRegression):
         weight in the model training process. The opposite is true if there are more
         negative targets than positive targets.
         """
-        super().__init__(
-            fit_intercept=fit_intercept,
-            copy_X=copy_X,
-            n_jobs=n_jobs,
-            positive=positive,
+
+        if not isinstance(fit_intercept, bool):
+            raise TypeError("fit_intercept must be a boolean.")
+        if not isinstance(copy_X, bool):
+            raise TypeError("copy_X must be a boolean.")
+        if not isinstance(n_jobs, int) and n_jobs != None:
+            raise TypeError("n_jobs must be an integer or None.")
+        if n_jobs is not None:
+            if n_jobs < -1 or n_jobs == 0:
+                raise ValueError("n_jobs must be a positive integer or -1.")
+        if not isinstance(positive, bool):
+            raise TypeError("positive must be a boolean.")
+
+        self.fit_intercept = fit_intercept
+        self.copy_X = copy_X
+        self.n_jobs = n_jobs
+        self.positive = positive
+        model = LinearRegression(
+            fit_intercept=self.fit_intercept,
+            copy_X=self.copy_X,
+            n_jobs=self.n_jobs,
+            positive=self.positive,
         )
-
-    def _calculate_sample_weights(self, targets: Union[pd.DataFrame, pd.Series]):
-        """
-        Private helper method to calculate the sample weights, chosen by inverse frequency
-        of the label's sign in the training set.
-
-        :param <Union[pd.DataFrame, pd.Series]> targets: Pandas series or dataframe of targets.
-
-        :return <tuple[np.ndarray, float, float]>: Tuple of sample weights, positive weight and negative weight.
-        """
-        pos_sum = np.sum(targets >= 0)
-        neg_sum = np.sum(targets < 0)
-
-        pos_weight = len(targets) / (2 * pos_sum) if pos_sum > 0 else 0
-        neg_weight = len(targets) / (2 * neg_sum) if neg_sum > 0 else 0
-
-        sample_weights = np.where(targets >= 0, pos_weight, neg_weight)
-        return sample_weights
+        super().__init__(model)
 
 
-class TimeWeightedLinearRegression(BaseWeightedLinearRegression):
+class TimeWeightedLinearRegression(TimeWeightedRegressor):
     def __init__(
         self,
         fit_intercept: bool = True,
@@ -216,43 +254,31 @@ class TimeWeightedLinearRegression(BaseWeightedLinearRegression):
         :param <bool> copy_X: If True, X will be copied; else, it may be overwritten.
         :param <int> n_jobs: The number of jobs to use for the computation.
         :param <bool> positive: When set to True, forces the coefficients to be positive. This option is only supported for dense arrays.
-
-        NOTE: By weighting the contribution of different training samples based on the
-        observation date, the model is encouraged to prioritise newer information.
-        The half-life denotes the number of time periods in units of the native data
-        frequency for the weight attributed to the most recent sample (one) to decay by half.
+        :param <Union[float, int]> half_life: The number of time periods in units of the native data frequency for the weight attributed to the most recent sample (one) to decay by half.
         """
-        super().__init__(
-            fit_intercept=fit_intercept,
-            copy_X=copy_X,
-            n_jobs=n_jobs,
-            positive=positive,
+        if not isinstance(fit_intercept, bool):
+            raise TypeError("fit_intercept must be a boolean.")
+        if not isinstance(copy_X, bool):
+            raise TypeError("copy_X must be a boolean.")
+        if not isinstance(n_jobs, int) and n_jobs != None:
+            raise TypeError("n_jobs must be an integer or None.")
+        if n_jobs is not None:
+            if n_jobs < -1 or n_jobs == 0:
+                raise ValueError("n_jobs must be a positive integer or -1.")
+        if not isinstance(positive, bool):
+            raise TypeError("positive must be a boolean.")
+
+        self.fit_intercept = fit_intercept
+        self.copy_X = copy_X
+        self.n_jobs = n_jobs
+        self.positive = positive
+        model = LinearRegression(
+            fit_intercept=self.fit_intercept,
+            copy_X=self.copy_X,
+            n_jobs=self.n_jobs,
+            positive=self.positive,
         )
-        if not (isinstance(half_life, float) or isinstance(half_life, int)):
-            raise TypeError("The half-life must be either a float or an integer.")
-        if half_life <= 1:
-            raise ValueError("The half-life must be greater than 1.")
-        self.half_life = half_life
-
-    def _calculate_sample_weights(self, targets: Union[pd.DataFrame, pd.Series]):
-        """
-        Private helper method to calculate the sample weights, chosen by an exponentially
-        decaying function of the sample recency.
-
-        :param <Union[pd.DataFrame, pd.Series]> targets: Pandas series or dataframe of targets.
-
-        :return <np.ndarray>: Numpy array of sample weights.
-        """
-
-        dates = sorted(targets.index.get_level_values(1).unique(), reverse=True)
-        num_dates = len(dates)
-        weights = np.power(2, -np.arange(num_dates) / self.half_life)
-        weights = weights / np.sum(weights)
-
-        weight_map = dict(zip(dates, weights))
-        self.sample_weights = targets.index.get_level_values(1).map(weight_map)
-
-        return self.sample_weights
+        super().__init__(half_life=half_life, model=model)
 
 
 if __name__ == "__main__":
