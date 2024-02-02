@@ -744,9 +744,14 @@ class SignalReturnRelations:
         return df_out
 
     def map_pval(self, ret_vals, sig_vals):
+        if not "cid" in ret_vals.index.names or ret_vals.index.get_level_values("cid").nunique() <= 1:
+            warnings.warn(
+                "P-value could not be calculated, since there wasn't enough datapoints."
+            )
+            return np.NaN
         X = sm.add_constant(ret_vals)
         y = sig_vals.copy()
-        groups = ret_vals.index
+        groups = ret_vals.index.get_level_values("real_date")
         mlm = sm.MixedLM(y, X, groups=groups)
         try:
             re = mlm.fit(reml=False)
