@@ -35,6 +35,8 @@ from macrosynergy.management.utils import form_full_url
 logger = logging.getLogger(__name__)
 cache = lru_cache(maxsize=None)
 
+def cache_buster() -> float:
+    return time.time()
 
 class LocalDataQueryInterface(DataQueryInterface):
     def __init__(self, local_path: str, fmt="pkl", *args, **kwargs):
@@ -54,6 +56,7 @@ class LocalDataQueryInterface(DataQueryInterface):
     @cache
     def _find_expression_files(
         self,
+        cache_buster: Any = None,
     ) -> List[str]:
         """
         Returns a list of files in the local path
@@ -71,7 +74,7 @@ class LocalDataQueryInterface(DataQueryInterface):
         return files
 
     @cache
-    def _get_expression_path(self, expression: str) -> str:
+    def _get_expression_path(self, expression: str, *args, **kwargs) -> str:
         """
         Returns the absolute path to the ticker file.
 
@@ -79,7 +82,7 @@ class LocalDataQueryInterface(DataQueryInterface):
         :return: The absolute path to the ticker file.
         :raises FileNotFoundError: If the ticker is not found in the local path.
         """
-        files: List[str] = self._find_expression_files()
+        files: List[str] = self._find_expression_files(*args, **kwargs)
         r = self.expression_paths.get(expression, None)
         if r is None:
             raise FileNotFoundError(
@@ -102,6 +105,7 @@ class LocalDataQueryInterface(DataQueryInterface):
         )
         return tickers
 
+    @cache
     def get_metrics(self, *args, **kwargs) -> List[str]:
         """
         Returns a list of metrics available in the local
@@ -116,16 +120,38 @@ class LocalDataQueryInterface(DataQueryInterface):
         metrics: List[str] = sorted(list(set([expr[2] for expr in exprs])))
         return metrics
 
-    def check_connection(self, verbose=False) -> bool:
+    def check_connection(
+        self,
+        verbose: bool = False,
+        raise_error: bool = False,
+        return_info: bool = True,
+        *args,
+        **kwargs,
+    ) -> bool:
+        """
+        Checks the "heartbeat"/"health" of the local tickerstore. Checks if all tickers referenced
+        in the catalogue are available in the local tickerstore.
+
+        :param <bool> verbose: whether to print messages to the console.
+        :param <bool> raise_error: whether to raise an error if "heartbeat" fails.
+        :param <bool> return_info: whether to return a dictionary with information about the
+            local tickerstore.
+        """
+
         # check if _find_ticker_files returns anything
+
+        fetched_catalogue: List[str] = self.get_catalogue()
         if len(self._find_expression_files()) > 0:
-            ctl: List[str] = self.get_catalogue()
+            ctl: List[str] = fetched_catalogue
             metrics: List[str] = self.get_metrics()
             for ticker in ctl:
                 self._get_expression_path(
                     JPMaQSDownload.construct_expressions(
-                        tickers=[ticker], metrics=metrics
-                    )[0]
+                        tickers=[ticker],
+                        metrics=metrics,
+                    )[0],
+                    *args,
+                    **kwargs,
                 )
                 # verifies local paths, and builds cache
             if verbose:
@@ -133,13 +159,40 @@ class LocalDataQueryInterface(DataQueryInterface):
 
             return True
         else:
+            if verbose:
+                print("Connection to local tickerstore failed.")
+
+            if return_info:
+                info: Dict[str, Any] = {}
+                info["found_metrics"] = self.get_metrics()
+                info["expected_tickers"]: List[str] = fetched_catalogue
+                info["found_tickers"]: List[str] = []
+                info["missing_tickers"]: List[str] = []
+                for ticker in info["expected_tickers"]:
+                    try:
+                        self._get_expression_path(
+                            JPMaQSDownload.construct_expressions(
+                                tickers=[ticker],
+                                metrics=metrics,
+                            )[0],
+                            *args,
+                            **kwargs,
+                        )
+                        info["found_tickers"].append(ticker)
+                    except FileNotFoundError:
+                        info["missing_tickers"].append(ticker)
+
+                return info
+
             fmt_long: str = (
                 "pickle (*.pkl)" if self.store_format == "pkl" else "csv (*.csv)"
             )
-            raise FileNotFoundError(
-                f"The local path provided : {self.local_path}, "
-                f"does not contain {fmt_long} files."
-            )
+            if raise_error:
+                raise FileNotFoundError(
+                    f"The local path provided : {self.local_path}, "
+                    f"does not contain {fmt_long} files."
+                )
+            return False
 
     def _load_timeseries(self, expression: str) -> Dict[str, Any]:
         loader: Callable = pickle.load if self.store_format == "pkl" else json.load
@@ -267,7 +320,7 @@ class LocalCache(JPMaQSDownload):
             check_connection=False,
             **config,
         )
-        self.dq_interface = LocalDataQueryInterface(
+        self.dq_interface: LocalDataQueryInterface = LocalDataQueryInterface(
             local_path=self.local_path,
             fmt=self.store_format,
             **config,
@@ -351,6 +404,9 @@ class LocalCache(JPMaQSDownload):
             raise InvalidDataframeError(f"Downloaded dataframe is invalid.")
 
         return final_df
+
+    def check_connection(self, *args, **kwargs) -> bool:
+        return self.dq_interface.check_connection(*args, **kwargs)
 
     def download(
         self,
@@ -714,7 +770,7 @@ class DownloadTimeseries(DataQueryInterface):
         print(f"Number of expressions missing: {len(expressions_missing)}")
         if expressions_missing:
             for expression in sorted(expressions_missing):
-                print(f"Esxpression missing: {expression}")
+                print(f"Expressions missing: {expression}")
 
         size_downloaded: float = sum(
             [os.path.getsize(fx) for fx in expressions_saved_files]
@@ -735,6 +791,7 @@ def create_store(
     fmt: str = "pkl",
     expressions: List[str] = None,
     test_mode: bool = False,
+    check_download: bool = False,
 ) -> None:
     DownloadTimeseries(
         store_path=store_path,
@@ -751,21 +808,23 @@ def create_store(
     lc: LocalCache = LocalCache(local_path=store_path, fmt=fmt)
     # get 100 random tickers
     start_time: float = time.time()
-    catalogue: List[str] = lc.get_catalogue()
+    ldqi = lc.dq_interface
+    catalogue: List[str] = ldqi.get_catalogue(cache_buster=cache_buster())
 
     print(f"Time taken: {(time.time() - start_time) * 1000 :.2f} milliseconds")
 
     tickers: List[str] = random.sample(catalogue, min(100, len(catalogue)))
 
     start_time: float = time.time()
-    df: pd.DataFrame = lc.download(tickers=tickers, start_date="1990-01-01")
+    if check_download:
+        df: pd.DataFrame = lc.download(tickers=tickers, start_date="1990-01-01")
 
-    print(f"Time taken: {(time.time() - start_time) * 1000 :.2f} milliseconds")
+        print(f"Time taken: {(time.time() - start_time) * 1000 :.2f} milliseconds")
 
-    print(df.head())
-    print(df.info())
+        print(df.head())
+        print(df.info())
 
-    print(f"Total time taken: {(time.time() - total_start_time) / 60 :.2f} minutes")
+        print(f"Total time taken: {(time.time() - total_start_time) / 60 :.2f} minutes")
 
 
 if __name__ == "__main__":
