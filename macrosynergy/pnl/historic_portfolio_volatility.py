@@ -20,6 +20,7 @@ from macrosynergy.management.utils import (
     ticker_df_to_qdf,
     get_eops,
     get_cid,
+    get_xcat,
 )
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
@@ -38,7 +39,7 @@ def expo_weights(lback_periods: int = 21, half_life: int = 11):
         period.
 
     Note: 50% of the weight allocation will be applied to the number of days delimited by
-          the half_life.
+        the half_life.
     """
     # Copied from macrosynergy.panel.historic_vol
     decf = 2 ** (-1 / half_life)
@@ -172,6 +173,8 @@ def _rolling_window_calc(
 def _hist_vol(
     df: pd.DataFrame,
     sname: str,
+    rstring: str,
+    weight_signal: str,
     est_freq: str = "m",
     lback_periods: int = 21,
     lback_meth: str = "ma",
@@ -208,6 +211,23 @@ def _hist_vol(
         )
 
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
+
+    ## Multiply the returns by weight_signals
+    r_series_list = df_wide[
+        df_wide.columns[
+            df_wide.columns.str.endswith(f"{rstring}_{rstring}_CSIG_{sname}")
+        ]
+    ]
+    w_series_list = df_wide[
+        df_wide.columns[
+            df_wide.columns.str.endswith(f"{rstring}_{weight_signal}_CSIG_{sname}")
+        ]
+    ]
+
+    for r_series, w_series in zip(r_series_list, w_series_list):
+        df_wide[r_series] = df_wide[r_series] * df_wide[w_series]
+
+    df_wide = df_wide[r_series_list]
 
     # NOTE: `get_eops` helps identify the dates for which the volatility calculation
     # will be performed. This is done by identifying the last date of each cycle.
@@ -288,6 +308,7 @@ def historic_portfolio_vol(
     lback_meth: str = "ma",
     half_life=11,
     rstring: str = "XR",
+    weight_signal: str = "XRWGT",
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
@@ -316,8 +337,11 @@ def historic_portfolio_vol(
         "xma", for exponential moving average.
     :param <str> rstring: a general string of the return category. This identifies
         the contract returns that are required for the volatility-targeting method, based
-        on the category identifier format <cid>_<ctype><rstring>_<rstring> in accordance
-        with JPMaQS conventions. Default is 'XR'.
+        on the category identifier format <cid>_<ctype><rstring>_<rstring>_CSIG_<sname>
+        in accordance with JPMaQS conventions. Default is 'XR'.
+    :param <str> weight_signal: the name of the signal (time series) to use as weights
+        for the volatility calculation. Default is None, which means that the weights
+        are equal. The signal must be in the format <cid>_<ctype>_<rstring>_<weight_signal>_CSIG_<sname>.
     :param <str> start: the start date of the data. Default is None, which means that
         the start date is taken from the dataframe.
     :param <str> end: the end date of the data. Default is None, which means that
@@ -410,18 +434,43 @@ def historic_portfolio_vol(
             and (get_cid(tx) in _cfids)
         )
     ]
-    df: pd.DataFrame = df.loc[df["ticker"].isin(filt_tickers)]
+
+    filt_weights: List[str] = []
+    filt_weights = [
+        f"{get_cid(tx)}_{rstring}_{weight_signal}_CSIG_{sname}" for tx in filt_tickers
+    ]
+
+    # missing weights - fill with 1
+    for w in filt_weights:
+        if w not in df["ticker"].unique():
+            dtr = df.loc[
+                df["ticker"].str.contains(f"{get_cid(w)}_{rstring}"), "real_date"
+            ]
+            ndf = pd.DataFrame(
+                {
+                    "cid": get_cid(w),
+                    "xcat": get_xcat(w),
+                    "real_date": dtr,
+                    "value": 1,
+                }
+            )
+            df = pd.concat([df, ndf])
+
+    df: pd.DataFrame = df.loc[df["ticker"].isin(filt_tickers + filt_weights)]
 
     if df.empty:
         raise ValueError(
             "No data available for the given strategy and contract identifiers."
             "Please check the inputs. \n"
-            f"Strategy: {sname} ; Contract identifiers: {fids}"
+            f"Strategy: {sname}\nContract identifiers: {fids} \n"
+            f"Return string: {rstring}\nWeight signal: {weight_signal}"
         )
 
     hist_port_vol: pd.DataFrame = _hist_vol(
         df=df,
         sname=sname,
+        rstring=rstring,
+        weight_signal=weight_signal,
         est_freq=est_freq,
         lback_periods=lback_periods,
         lback_meth=lback_meth,
@@ -454,7 +503,7 @@ if __name__ == "__main__":
 
     df.loc[(df["cid"] == "USD") & (df["xcat"] == "SIG"), "value"] = 1.0
     ctypes = ["FXXR_XR", "IRSXR_XR", "CDSXR_XR"]
-    ctypes += [c.replace("_XR", "") for c in ctypes]
+    ctypes += [c.replace("_XR", "_WEIGHTS") for c in ctypes]
     cscales = [1.0, 0.5, 0.1]
     csigns = [1, -1, 1]
 
