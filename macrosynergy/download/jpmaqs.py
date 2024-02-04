@@ -337,10 +337,11 @@ class JPMaQSDownload(object):
 
         :raises <InvalidDataError>: if the downloaded dataframe is invalid.
         """
-        dfs: List[pd.DataFrame] = []
+        dfs_dict: Dict[str, List[pd.DataFrame]] = {}
         cid: str
         xcat: str
         found_expressions: List[str] = []
+        found_metrics: List[str] = []
         _missing_exprs: List[str] = []
         self.unavailable_expr_messages = []
         # _missing_exprs is just a sanity check to verify self.unavailable_expressions
@@ -348,18 +349,18 @@ class JPMaQSDownload(object):
             cid, xcat, metricx = JPMaQSDownload.deconstruct_expression(
                 d["attributes"][0]["expression"]
             )
+            found_metrics = list(set(found_metrics) | {metricx})
             if d["attributes"][0]["time-series"] is not None:
                 found_expressions.append(d["attributes"][0]["expression"])
                 df: pd.DataFrame = (
                     pd.DataFrame(
                         d["attributes"][0]["time-series"],
                         columns=["real_date", metricx],
-                    )
-                    .assign(cid=cid, xcat=xcat, metric=metricx)
-                    .rename(columns={metricx: "obs"})
+                    ).assign(cid=cid, xcat=xcat)
+                    # .rename(columns={metricx: "obs"})
                 )
-                df = df[["real_date", "cid", "xcat", "obs", "metric"]]
-                dfs.append(df)
+                df = df[["real_date", "cid", "xcat", metricx]]
+                dfs_dict[metricx] = dfs_dict.get(metricx, []) + [df]
             else:
                 _missing_exprs.append(d["attributes"][0]["expression"])
                 if "message" in d["attributes"][0]:
@@ -372,41 +373,27 @@ class JPMaQSDownload(object):
             d = None  # free up memory
         dicts_list = None  # free up memory
 
-        if len(dfs) == 0:
+        if len(dfs_dict) == 0:
             raise InvalidDataframeError(
                 "No data was downloaded. Check logger output for"
                 " complete list of missing expressions."
             )
 
-        final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
-        dfs = None  # free up memory
+        final_df: pd.DataFrame = functools.reduce(
+            lambda left, right: pd.merge(
+                left,
+                right,
+                on=["real_date", "cid", "xcat"],
+            ),
+            list(
+                map(
+                    lambda metricx: pd.concat(dfs_dict[metricx], ignore_index=True),
+                    dfs_dict,
+                )
+            ),
+        )
 
-        # Do we really need to check for duplicates?
-        # if final_df.duplicated(subset=["real_date", "cid", "xcat", "metric"], keep=False).any():
-        #     # report the expressions that have duplicate data
-        #     err_str: str = "Duplicate data found for the following expressions:\n"
-        #     for i in df.groupby(["cid", "xcat", "metric"]).groups:
-        #         dts_series: pd.Series = df.iloc[
-        #             df.groupby(["cid", "xcat", "metric"]).groups[i]
-        #         ]["real_date"]
-        #         dts: List[str] = dts_series.tolist()
-        #         max_date: str = pd.to_datetime(max(dts)).strftime("%Y-%m-%d")
-        #         min_date: str = pd.to_datetime(min(dts)).strftime("%Y-%m-%d")
-        #         expression: str = self.construct_expressions(
-        #             cids=[i[0]], xcats=[i[1]], metrics=[i[2]]
-        #         )[0]
-        #         err_str += (
-        #             f"Expression: {expression}, Dates: {min_date} to {max_date}\n"
-        #         )
-
-        #     raise InvalidDataframeError(err_str)
-
-        final_df = (
-            final_df.set_index(["real_date", "cid", "xcat", "metric"])["obs"]
-            .unstack(3)
-            .rename_axis(None, axis=1)
-            .reset_index()
-        )  # thank you @mikiinterfiore
+        dfs_dict = None  # free up memory
 
         final_df["real_date"] = pd.to_datetime(final_df["real_date"])
 
