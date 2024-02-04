@@ -235,9 +235,9 @@ class JPMaQSDownload(object):
         Validate the downloaded data in the provided dataframe.
 
         :param <pd.DataFrame> data_df: dataframe containing the downloaded data.
-        :param <list[str]> expected_expressions: list of expressions that were expected 
+        :param <list[str]> expected_expressions: list of expressions that were expected
             to be downloaded.
-        :param <list[str]> found_expressions: list of expressions that were actually 
+        :param <list[str]> found_expressions: list of expressions that were actually
             downloaded.
         :param <str> start_date: start date of the downloaded data.
         :param <str> end_date: end date of the downloaded data.
@@ -282,7 +282,7 @@ class JPMaQSDownload(object):
                 print(log_str)
 
         # check if all dates are present in the df
-        # NOTE : Hardcoded max start date to 1990-01-01. This is because the JPMAQS 
+        # NOTE : Hardcoded max start date to 1990-01-01. This is because the JPMAQS
         # database does not have data before this date.
         if datetime.datetime.strptime(
             start_date, "%Y-%m-%d"
