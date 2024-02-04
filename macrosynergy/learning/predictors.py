@@ -302,7 +302,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         self.fit_intercept = fit_intercept
         self.positive = positive
 
-    def __l1_loss(self, X: pd.DataFrame, y: Union[pd.DataFrame, pd.Series], weights: np.ndarray):
+    def __l1_loss(self, weights: np.ndarray, X: pd.DataFrame, y: Union[pd.DataFrame, pd.Series]):
         """
         Private helper method to determine the mean training L1 loss induced by 'weights'.
 
@@ -401,11 +401,13 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             )
 
         # Fit
-        if self.fit_intercept:
-            self.X = X.copy()
-            self.X.insert(0,"intercept", 1)
+        X2 = X.copy()
+        y2 = y.copy()
 
-        p = self.X.shape[1]
+        if self.fit_intercept:
+            X2.insert(0,"intercept", 1)
+
+        p = X2.shape[1]
 
         if self.positive:
             if self.fit_intercept:
@@ -416,12 +418,12 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             bounds = [(None, None) for _ in range(p)]
 
         # optimisation
-        init_weights = np.zeros(self.X.shape[1])
+        init_weights = np.zeros(X2.shape[1])
         optim_results = minimize(
             fun = partial(
                 self.__l1_loss,
-                X = self.X,
-                y = self.y,
+                X = X2,
+                y = y2,
             ),
             x0 = init_weights,
             method='SLSQP',
