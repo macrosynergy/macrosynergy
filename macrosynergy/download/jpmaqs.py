@@ -9,6 +9,7 @@ import traceback as tb
 import warnings
 from timeit import default_timer as timer
 from typing import Dict, List, Optional, Tuple, Union
+import functools
 
 
 import pandas as pd
@@ -144,8 +145,7 @@ class JPMaQSDownload(object):
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        ...
+    def __exit__(self, exc_type, exc_value, traceback): ...
 
     @staticmethod
     def construct_expressions(
