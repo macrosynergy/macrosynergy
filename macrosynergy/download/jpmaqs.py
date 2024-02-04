@@ -473,7 +473,6 @@ class JPMaQSDownload(object):
                     "found_expressions": found_expressions,
                     "start_date": start_date,
                     "end_date": end_date,
-                    "downloaded_dicts": dicts_list,
                 }
 
                 raise InvalidDataframeError(
