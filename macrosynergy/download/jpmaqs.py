@@ -145,10 +145,7 @@ class JPMaQSDownload(object):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if exc_type:
-            print(f"Exception: {exc_type} {exc_value}")
-            print(tb.print_exc())
-            raise exc_type(exc_value)
+        ...
 
     @staticmethod
     def construct_expressions(
