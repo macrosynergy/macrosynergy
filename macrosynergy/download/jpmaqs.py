@@ -700,9 +700,9 @@ class JPMaQSDownload(object):
             end_date = (datetime.datetime.today() + pd.offsets.BusinessDay(2)).strftime(
                 "%Y-%m-%d"
             )
-            # NOTE : due to timezone conflicts, we choose to request data for 2 days in 
+            # NOTE : due to timezone conflicts, we choose to request data for 2 days in
             # the future.
-            # NOTE : DataQuery specifies YYYYMMDD as the date format, but we use 
+            # NOTE : DataQuery specifies YYYYMMDD as the date format, but we use
             # YYYY-MM-DD for consistency.
             # This is date is cast to YYYYMMDD in macrosynergy.download.dataquery.py.
 
@@ -752,7 +752,9 @@ class JPMaQSDownload(object):
         with self.dq_interface as dq:
             print(
                 "Downloading data from JPMaQS.\nTimestamp UTC: ",
-                datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                datetime.datetime.now(datetime.timezone.utc).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
             )
             self.dq_interface.check_connection(verbose=True)
             print(f"Number of expressions requested: {len(expressions)}")
