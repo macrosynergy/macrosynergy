@@ -98,6 +98,21 @@ class TestLADRegressor(unittest.TestCase):
         np.testing.assert_almost_equal(model.coef_, sklearn_model.coef_,decimal=3)
         np.testing.assert_almost_equal(model.intercept_, sklearn_model.intercept_,decimal=3)
 
+        # Test that fitting with a positive restriction works
+        model = LADRegressor(positive=True)
+        try:
+            model.fit(self.X, self.y)
+        except Exception as e:
+            self.fail(
+                "LADRegressor fit raised an exception: {}".format(
+                    e
+                )
+            )
+        self.assertIsInstance(model, LADRegressor)
+        self.assertEqual(model.fit_intercept, True)
+        self.assertEqual(model.positive, True)
+        self.assertIsInstance(model.coef_, np.ndarray)
+
 class TestSWLRegression(unittest.TestCase):
     @classmethod
     def setUpClass(self):

@@ -465,12 +465,11 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             raise TypeError("The inner index of X must be datetime.date.")
 
         # Predict
+        X = X.copy()
         if self.fit_intercept:
-            X = X.copy()
-            X.insert(0,"intercept",1)
-            return X.dot(self.coef_)
-        else:
             return X.dot(self.coef_) + self.intercept_
+        else:
+            return X.dot(self.coef_)
 
 if __name__ == "__main__":
     from macrosynergy.management import make_qdf
