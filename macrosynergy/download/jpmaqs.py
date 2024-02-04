@@ -372,6 +372,8 @@ class JPMaQSDownload(object):
                         "DataQuery did not return data or error message for expression "
                         f"{d['attributes'][0]['expression']}"
                     )
+            d = None  # free up memory
+        dicts_list = None  # free up memory
 
         if len(dfs) == 0:
             raise InvalidDataframeError(
@@ -380,7 +382,7 @@ class JPMaQSDownload(object):
             )
 
         final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
-        dups_df: pd.DataFrame = final_df.groupby(
+        dfs = None  # free up memory
             ["real_date", "cid", "xcat", "metric"]
         )["obs"].count()
         if sum(dups_df > 1) > 0:
