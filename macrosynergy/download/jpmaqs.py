@@ -383,15 +383,15 @@ class JPMaQSDownload(object):
 
         final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
         dfs = None  # free up memory
-            ["real_date", "cid", "xcat", "metric"]
-        )["obs"].count()
-        if sum(dups_df > 1) > 0:
-            dups_df = pd.DataFrame(dups_df[dups_df > 1].index.tolist())
+
+        # Do we really need to check for duplicates?
+        if final_df.duplicated(subset=["real_date", "cid", "xcat", "metric"], keep=False).any():
+            # report the expressions that have duplicate data
             err_str: str = "Duplicate data found for the following expressions:\n"
-            for i in dups_df.groupby([1, 2, 3]).groups:
-                dts_series: pd.Series = dups_df.iloc[
-                    dups_df.groupby([1, 2, 3]).groups[i]
-                ][0]
+            for i in df.groupby(["cid", "xcat", "metric"]).groups:
+                dts_series: pd.Series = df.iloc[
+                    df.groupby(["cid", "xcat", "metric"]).groups[i]
+                ]["real_date"]
                 dts: List[str] = dts_series.tolist()
                 max_date: str = pd.to_datetime(max(dts)).strftime("%Y-%m-%d")
                 min_date: str = pd.to_datetime(min(dts)).strftime("%Y-%m-%d")
@@ -419,7 +419,7 @@ class JPMaQSDownload(object):
             list(set(pd.date_range(start=start_date, end=end_date)) - set(expc_bdates))
         )
 
-        # check if any dates in the downloaded data are not in the expected dates 
+        # check if any dates in the downloaded data are not in the expected dates
         # (business + non-business)
         dates_bools: pd.Series = final_df["real_date"].isin(expc_bdates) | final_df[
             "real_date"
@@ -439,7 +439,7 @@ class JPMaQSDownload(object):
 
         final_df = final_df.sort_values(["real_date", "cid", "xcat"])
 
-        # sort all metrics in the order of self.valid_metrics, all other metrics will be 
+        # sort all metrics in the order of self.valid_metrics, all other metrics will be
         # at the end
         found_metrics = [
             metricx for metricx in self.valid_metrics if metricx in final_df.columns
