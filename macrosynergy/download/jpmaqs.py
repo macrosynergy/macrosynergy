@@ -417,16 +417,15 @@ class JPMaQSDownload(object):
             raise InvalidDataframeError(
                 f"Unexpected dates were found in the downloaded data: {unexpected_dates}"
             )
+        dates_bools, unexpected_dates, expc_nbdates = None, None, None  # free up memory
 
         # finally, filter out the non-business dates
         final_df = final_df[final_df["real_date"].isin(expc_bdates)]
 
-        final_df = final_df.sort_values(["real_date", "cid", "xcat"])
-
         # sort all metrics in the order of self.valid_metrics, all other metrics will be
         # at the end
         found_metrics = [
-            metricx for metricx in self.valid_metrics if metricx in final_df.columns
+            metricx for metricx in self.valid_metrics if metricx in found_metrics
         ]
         # sort found_metrics in the order of self.valid_metrics, then re-order the columns
         final_df = final_df[["real_date", "cid", "xcat"] + found_metrics]
