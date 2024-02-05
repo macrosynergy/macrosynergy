@@ -26,6 +26,7 @@ from .predictors import (
     NaivePredictor,
     SignWeightedLinearRegression,
     TimeWeightedLinearRegression,
+    LADRegressor,
 )
 
 __all__ = [
@@ -52,6 +53,7 @@ __all__ = [
     # signal_optimizer
     "SignalOptimizer",
     # predictors
+    "LADRegressor",
     "NaivePredictor",
     "SignWeightedRegressor",
     "TimeWeightedRegressor",
