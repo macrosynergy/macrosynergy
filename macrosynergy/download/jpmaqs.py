@@ -399,23 +399,27 @@ class JPMaQSDownload(object):
 
         dfs_dict = None  # free up memory
 
-        if final_df.duplicated(subset=["real_date", "cid", "xcat"], keep=False).any():
-            # report the expressions that have duplicate data
-            err_str: str = "Duplicate data found for the following expressions:\n"
-            for i in df.groupby(["cid", "xcat"]).groups:
-                dts_series: pd.Series = df.iloc[df.groupby(["cid", "xcat"]).groups[i]][
-                    "real_date"
-                ]
-                dts: List[str] = dts_series.tolist()
-                max_date: str = pd.to_datetime(max(dts)).strftime("%Y-%m-%d")
-                min_date: str = pd.to_datetime(min(dts)).strftime("%Y-%m-%d")
-                expression: str = self.construct_expressions(
-                    cids=[i[0]], xcats=[i[1]], metrics=[i[2]]
-                )[0]
-                err_str += (
-                    f"Expression: {expression}, Dates: {min_date} to {max_date}\n"
-                )
-            raise InvalidDataframeError(err_str)
+        ## Check for duplicate data
+        ## As of now, we are not checking for duplicate data as DQ specifies that there 
+        ## will only be one entry for each expression on each date.
+
+        # if final_df.duplicated(subset=["real_date", "cid", "xcat"], keep=False).any():
+        #     # report the expressions that have duplicate data
+        #     err_str: str = "Duplicate data found for the following expressions:\n"
+        #     for i in df.groupby(["cid", "xcat"]).groups:
+        #         dts_series: pd.Series = df.iloc[df.groupby(["cid", "xcat"]).groups[i]][
+        #             "real_date"
+        #         ]
+        #         dts: List[str] = dts_series.tolist()
+        #         max_date: str = pd.to_datetime(max(dts)).strftime("%Y-%m-%d")
+        #         min_date: str = pd.to_datetime(min(dts)).strftime("%Y-%m-%d")
+        #         expression: str = self.construct_expressions(
+        #             cids=[i[0]], xcats=[i[1]], metrics=[i[2]]
+        #         )[0]
+        #         err_str += (
+        #             f"Expression: {expression}, Dates: {min_date} to {max_date}\n"
+        #         )
+        #     raise InvalidDataframeError(err_str)
 
         final_df["real_date"] = pd.to_datetime(final_df["real_date"])
 
