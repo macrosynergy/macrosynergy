@@ -24,64 +24,53 @@ trading or investment value of quantamental strategies.
 
 .. grid:: 3
 
-   .. grid-item-card:: About Macrosynergy
-      :link: about
-      :link-type: ref
+   .. grid-item-card:: :octicon:`rocket;1em`      Getting Started
+      :link: getting_started.html
 
-   .. grid-item-card:: Getting Started
-      :link: getting_started
-      :link-type: ref
-
-   .. grid-item-card:: API Reference
-      :link: api_reference
-      :link-type: ref
-
+   .. grid-item-card:: :octicon:`book;1em` API Reference
+      :link: api_reference.html
+      
+   .. grid-item-card:: :octicon:`star-fill;1em` Common Definitions
+      :link: common_definitions.html
 
 
 .. grid:: 3
 
-   .. grid-item-card:: Common Definitions
-      :link: common_definitions
-      :link-type: ref
+   .. grid-item-card:: :octicon:`code-review;1em` Usage Examples
+      :link: usage_examples.html
+      
+   .. grid-item-card:: :octicon:`versions;1em` Release Notes
+      :link: release_notes.html
+      
+   .. grid-item-card:: :octicon:`question;1em` FAQs and Troubleshooting
+      :link: faqs.html
 
-   .. grid-item-card:: Contribution Guide
-      :link: contribution_guide
-      :link-type: ref
+.. _about:
 
-   .. grid-item-card:: FAQs and Troubleshooting
-      :link: faqs
-      :link-type: ref
+About Macrosynergy
+------------------
 
+Macrosynergy
+~~~~~~~~~~~~
 
+**Data Science** | **Tradable Economics** | **Investor Value**
 
-More from Macrosynergy:
-.......................
-.. card:: Macrosynergy Research
-    :link: https://research.macrosynergy.com/
+Macrosynergy is the global leader in macro-quantamental investment technology. Macro
+quantamental indicators capture the information state of the market with respect to
+macroeconomic activity, balance sheets and sentiment. Quantamental indicators can add
+tremendous value to macro trading strategies, especially when combined with market price
+information.
 
-    Macrosynergy Research is a free educational site dedicated to responsible 
-    macro trading strategies. 
-
-.. card:: Macrosynergy Academy
-    :link: https://academy.macrosynergy.com/
-
-    Macrosynergy's Academy explains all the basics and provides helpful resources 
-    to produce strategies and backtests quickly and cost-efficiently.
-
-.. card:: J.P. Morgan Macrosynergy Quantamental System - JPMaQS
-   :link: https://www.jpmorgan.com/insights/global-research/markets/macrosynergy-quantamental-system
-
-   Macro quantamental trading made easy by breaking down the barriers 
-   between purely quantitative and fundamental trading styles.
-
+Home Page: `macrosynergy.com <https://www.macrosynergy.com/>`_
 
 .. toctree::
    :hidden:
-   :maxdepth: 2
+   :maxdepth: 5
 
-   static_rsts/about
-   static_rsts/getting_started
-   static_rsts/api_reference
-   static_rsts/usage_examples.md
-   gen_rsts/release_notes.md
+   getting_started
+   api_reference
+   common_definitions
+   usage_examples.md
+   release_notes.md
+   faqs
 

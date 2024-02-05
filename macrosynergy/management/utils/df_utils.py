@@ -349,20 +349,6 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
 
     return df.reset_index(drop=True)
 
-
-def df_tickers(df: pd.DataFrame):
-    """
-    Helper function used to delimit the tickers defined in a received DataFrame.
-
-    :param <pd.DataFrame> df: standardised DataFrame.
-    """
-    cids_append = list(map(lambda c: c + "_", set(df["cid"])))
-    tickers = list(itertools.product(cids_append, set(df["xcat"])))
-    tickers = [c[0] + c[1] for c in tickers]
-
-    return tickers
-
-
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     """
     Method used to update aggregate DataFrame on a ticker level.
@@ -371,10 +357,10 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     :param <pd.DataFrame> df_add: DataFrame with the latest values.
 
     """
-    agg_df_tick = set(df_tickers(df))
-    add_df_tick = set(df_tickers(df_add))
-
     df["ticker"] = df["cid"] + "_" + df["xcat"]
+    df_add["ticker"] = df_add["cid"] + "_" + df_add["xcat"]
+    agg_df_tick = set(df["ticker"])
+    add_df_tick = set(df_add["ticker"])
 
     # If the ticker is already defined in the DataFrame, replace with the new series
     # otherwise append the series to the aggregate DataFrame.
@@ -383,6 +369,7 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     df = pd.concat([df, df_add], axis=0, ignore_index=True)
 
     df = df.drop(["ticker"], axis=1)
+    df_add = df_add.drop(["ticker"], axis=1)
 
     return df.sort_values(["xcat", "cid", "real_date"])
 
