@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
-from scipy.stats import expon
+from scipy.stats import expon 
+import itertools
 
 import unittest
 
@@ -8,6 +9,7 @@ from macrosynergy.learning import (
     NaivePredictor,
     SignWeightedLinearRegression,
     TimeWeightedLinearRegression,
+    LADRegressor,
     LassoSelector,
     panel_cv_scores,
     SignalOptimizer,
@@ -16,6 +18,7 @@ from macrosynergy.learning import (
 
 from sklearn.linear_model import (
     LinearRegression,
+    QuantileRegressor,
 )
 
 from sklearn.metrics import (
@@ -24,6 +27,134 @@ from sklearn.metrics import (
     mean_absolute_error,
 )
 
+from parameterized import parameterized
+
+class TestLADRegressor(unittest.TestCase):
+    @classmethod
+    def setUpClass(self):
+        # Generate data with true linear relationship
+        cids = ["AUD", "CAD", "GBP", "USD"]
+        xcats = ["XR", "CPI", "GROWTH", "RIR"]
+
+        df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
+        df_cids.loc["AUD"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["CAD"] = ["2020-01-01", "2020-12-31"]
+        df_cids.loc["GBP"] = ["2020-01-01", "2020-12-31"]
+        df_cids.loc["USD"] = ["2019-06-01", "2020-12-31"]
+
+        tuples = []
+
+        for cid in cids:
+            # get list of all eligible dates
+            sdate = df_cids.loc[cid]["earliest"]
+            edate = df_cids.loc[cid]["latest"]
+            all_days = pd.date_range(sdate, edate)
+            work_days = all_days[all_days.weekday < 5]
+            for work_day in work_days:
+                tuples.append((cid, work_day))
+
+        n_samples = len(tuples)
+        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
+        labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
+        df = pd.DataFrame(
+            data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
+            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
+            columns=xcats,
+            dtype=np.float32,
+        )
+
+        self.X = df.drop(columns="XR")
+        self.y = df["XR"]
+
+    @parameterized.expand(itertools.product([True, False], [True, False]))
+    def test_valid_init(self, fit_intercept, positive):
+        # Test that a the LAD regression model is successfully instantiated for each of the possible arguments
+        try:
+            model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+        except Exception as e:
+            self.fail(
+                "LADRegressor constructor with a LinearRegression object raised an exception: {}".format(
+                    e
+                )
+            )
+
+        self.assertIsInstance(model, LADRegressor)
+        self.assertEqual(model.fit_intercept, fit_intercept)
+        self.assertEqual(model.positive, positive)
+
+    def test_equiv_quantile_lad_fit(self):
+        # Test that the LADRegressor is equivalent to a QuantileRegressor with q=0.5
+        model = LADRegressor()
+        try:
+            model.fit(self.X, self.y)
+        except Exception as e:
+            self.fail(
+                "LADRegressor fit raised an exception: {}".format(
+                    e
+                )
+            )
+        sklearn_model = QuantileRegressor(quantile=0.5,alpha=0,solver="highs")
+        sklearn_model.fit(self.X, self.y)
+        np.testing.assert_almost_equal(model.coef, sklearn_model.coef_,decimal=2)
+        np.testing.assert_almost_equal(model.intercept, sklearn_model.intercept_,decimal=2)
+
+    @parameterized.expand(itertools.product([True, False], [True, False]))
+    def test_valid_fit(self, fit_intercept, positive):
+        # Test that the LADRegressor fit is successful for each of the possible arguments
+        model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+        try:
+            model.fit(self.X, self.y)
+        except Exception as e:
+            self.fail(
+                "LADRegressor fit raised an exception: {}".format(
+                    e
+                )
+            )
+        self.assertIsInstance(model, LADRegressor)
+        self.assertEqual(model.fit_intercept, fit_intercept)
+        self.assertEqual(model.positive, positive)
+        self.assertIsInstance(model.coef, np.ndarray)
+        if fit_intercept:
+            self.assertIsInstance(model.intercept, float)
+        else:
+            self.assertTrue(model.intercept is None)
+
+    @parameterized.expand(itertools.product([True, False], [True, False], [True, False]))
+    def test_valid_predict(self, fit_intercept, positive, is_df):
+        # Test that the LADRegressor predict is successful for each of the possible arguments
+        model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+        if is_df:
+            model.fit(self.X, self.y.to_frame())
+        else:
+            model.fit(self.X, self.y)
+        try:
+            y_pred = model.predict(self.X)
+        except Exception as e:
+            self.fail(
+                "LADRegressor predict raised an exception: {}".format(
+                    e
+                )
+            )
+        self.assertIsInstance(y_pred, pd.Series)
+        self.assertIsInstance(y_pred.index, pd.MultiIndex)
+
+    def test_equiv_quantile_lad_predict(self):
+        # Test that the LADRegressor is equivalent to a QuantileRegressor with q=0.5
+        model = LADRegressor()
+        model.fit(self.X, self.y)
+
+        try:
+            y_pred = model.predict(self.X)
+        except Exception as e:
+            self.fail(
+                "LADRegressor predict raised an exception: {}".format(
+                    e
+                )
+            )
+        sklearn_model = QuantileRegressor(quantile=0.5,alpha=0,solver="highs")
+        sklearn_model.fit(self.X, self.y)
+        y_pred_sk = sklearn_model.predict(self.X)
+        np.testing.assert_almost_equal(y_pred.values, y_pred_sk,decimal=2)
 
 class TestSWLRegression(unittest.TestCase):
     @classmethod
