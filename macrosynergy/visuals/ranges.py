@@ -32,7 +32,7 @@ def view_ranges(
     """Plots averages and various ranges across sections for one or more categories.
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to be checked on. Default is all
         in the DataFrame.
     :param <List[str]> cids: cross sections to plot. Default is all in DataFrame.
