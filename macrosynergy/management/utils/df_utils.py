@@ -803,10 +803,14 @@ def _map_to_business_day_frequency(freq: str, valid_freqs: List[str] = None) -> 
     if valid_freqs is None:
         valid_freqs = list(FREQUENCY_MAP.keys())
 
+    if freq in FREQUENCY_MAP.values():
+        freq = list(FREQUENCY_MAP.keys())[list(FREQUENCY_MAP.values()).index(freq)]
+
     if freq not in valid_freqs:
         raise ValueError(
             f"Frequency must be one of {valid_freqs}, but received {freq}."
         )
+
     return FREQUENCY_MAP[freq]
 
 
