@@ -712,6 +712,9 @@ class TestFunctions(unittest.TestCase):
         # check reverse mapping
         for k, v in fm_copy.items():
             self.assertEqual(_map_to_business_day_frequency(v), v, f"Failed for {v}")
+            
+        with self.assertRaises(TypeError):
+            _map_to_business_day_frequency("M", valid_freqs=1)
 
 if __name__ == "__main__":
     unittest.main()
