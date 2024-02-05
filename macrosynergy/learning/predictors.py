@@ -35,7 +35,7 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin, ABC):
         :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
             associated with each sample in X.
 
-        :return <BaseWeightedLinearRegression>
+        :return <BaseWeightedRegressor>
         """
         # Checks
         if not isinstance(X, pd.DataFrame):
