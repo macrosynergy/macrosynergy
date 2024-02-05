@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import requests
 import requests.compat
-from .core import get_cid, get_xcat
+from .core import get_cid, get_xcat, _map_to_business_day_frequency
 
 
 def standardise_dataframe(
@@ -788,26 +788,6 @@ def categories_df(
     # how is set to "any", a potential unnecessary loss of data on certain categories
     # could arise.
     return dfc.dropna(axis=0, how="all")
-
-
-def _map_to_business_day_frequency(freq: str, valid_freqs: List[str] = None) -> str:
-    """
-    Maps a frequency string to a business frequency string.
-
-    :param <str> freq: The frequency string to be mapped.
-    :param <List[str]> valid_freqs: The valid frequency strings. If None, defaults to
-        ["D", "W". "M", "Q", "A"].
-    """
-    freq = freq.upper()
-
-    if valid_freqs is None:
-        valid_freqs = list(FREQUENCY_MAP.keys())
-
-    if freq not in valid_freqs:
-        raise ValueError(
-            f"Frequency must be one of {valid_freqs}, but received {freq}."
-        )
-    return FREQUENCY_MAP[freq]
 
 
 def years_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
