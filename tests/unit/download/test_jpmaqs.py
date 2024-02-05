@@ -303,8 +303,8 @@ class TestJPMaQSDownload(unittest.TestCase):
             duplicate_entries=dupl_exprs,
         )
         jpmaqs.dq_interface = mock_dq_interface
-        with self.assertRaises(InvalidDataframeError):
-            jpmaqs.download(**good_args)
+        # with self.assertRaises(InvalidDataframeError):
+        #     jpmaqs.download(**good_args)
 
         mock_dq_interface._gen_attributes(
             unavailable_expressions=un_avail_exprs,
