@@ -746,7 +746,7 @@ class DataQueryInterface(object):
         downloaded_data.extend(response["instruments"])
 
         if "links" in response.keys() and response["links"][1]["next"] is not None:
-            logger.info("DQ response paginated - get next response page")
+            logger.debug("DQ response paginated - get next response page")
             downloaded_data.extend(
                 self._fetch(
                     url=self.base_url + response["links"][1]["next"],
