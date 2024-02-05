@@ -1,10 +1,11 @@
+(usage_examples)=
 # Usage Examples
 
 ## DataQuery Download Interface
 
 ### Downlading using OAuth credentials
 
-To download data from JP Morgan DataQuery, you can use the [JPMaQSDownload Object](../gen_rsts/macrosynergy.download.jpmaqs.rst)
+To download data from JP Morgan DataQuery, you can use the [JPMaQSDownload Object](macrosynergy.download.jpmaqs.rst)
 together with your OAuth authentication credentials (default):
 
 ```python
@@ -120,7 +121,7 @@ with JPMaQSDownload(
 
 ## Simulated/Mock Data
 
-In order to use the rest of the package without access to the API you can [simulate](../gen_rsts/macrosynergy.management.simulate.rst) quantamental data using the management sub-package.
+In order to use the rest of the package without access to the API you can [simulate](macrosynergy.management.simulate.rst) quantamental data using the management sub-package.
 
 ```python
 from macrosynergy.management.simulate import make_qdf
@@ -150,7 +151,7 @@ df_xcats.loc['EQWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.9, 0.5]
 data = make_qdf(df_cids, df_xcats, back_ar=0.75)
 ```
 
-The management sub-package can also be used to [check](../gen_rsts/macrosynergy.management.utils.check_availability.rst) which data is available
+The management sub-package can also be used to [check](macrosynergy.management.utils.check_availability.rst) which data is available
 in the dataframe.
 
 ```python
@@ -160,7 +161,7 @@ data_filt.loc[filt_na, 'value'] = np.nan
 check_availability(df=data_filt, xcats=xcats, cids=cids)
 ```
 
-You can also use the built-in utility functions to [reshape](../gen_rsts/macrosynergy.management.utils.df_utils.rst) the data depending on
+You can also use the built-in utility functions to [reshape](macrosynergy.management.utils.df_utils.rst) the data depending on
 the dates or tickers of your choice.
 
 ```python
@@ -174,7 +175,7 @@ data_reduced = reduce_df(data, xcats=xcats[:-1], cids=cids[0],
 ### Basket
 
 The basket class is used to calculate the returns and carries of financial contracts using various methods,
-a [basket](../gen_rsts/macrosynergy.panel.basket.rst) is created as so.
+a [basket](macrosynergy.panel.basket.rst) is created as so.
 
 ```python
 from macrosynergy.panel.basket import Basket
@@ -200,10 +201,10 @@ basket_1.weight_visualiser(basket_name="GLB_EQUAL")
 
 You can also calculate and visualise the following and more with built-in functions.
 
-1.  [historic volatility](../gen_rsts/macrosynergy.panel.historic_vol.rst)
-2.  [z-scores](../gen_rsts/macrosynergy.panel.make_zn_scores.rst)
-3.  [beta values](../gen_rsts/macrosynergy.panel.return_beta.rst)
-4.  [timeline](../gen_rsts/macrosynergy.panel.view_timelines.rst)
+1.  [historic volatility](macrosynergy.panel.historic_vol.rst)
+2.  [z-scores](macrosynergy.panel.make_zn_scores.rst)
+3.  [beta values](macrosynergy.panel.return_beta.rst)
+4.  [timeline](macrosynergy.panel.view_timelines.rst)
 
 ```python
 from macrosynergy.panel.historic_vol import historic_vol
@@ -243,7 +244,7 @@ view_timelines(data, xcats=['FXXR_NSA','FXCRY_NSA'], cids=cids[0],
 
 ### Signal Return Relations
 
-The [SignalReturnRelations](../gen_rsts/macrosynergy.signal.signal_return_relations.rst) class analyses and visualises signal and
+The [SignalReturnRelations](macrosynergy.signal.signal_return_relations.rst) class analyses and visualises signal and
 return series.
 
 ```python
@@ -277,7 +278,7 @@ srn.accuracy_bars(type="signals", title="Accuracy measure between target return,
 
 ### Naive pnl
 
-The [NaivePnL](../gen_rsts/macrosynergy.pnl.naive_pnl.rst) class computes Pnls with limited signal options and
+The [NaivePnL](macrosynergy.pnl.naive_pnl.rst) class computes Pnls with limited signal options and
 disregarding transaction costs.
 
 ```python
