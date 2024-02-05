@@ -119,7 +119,7 @@ class SignWeightedRegressor(BaseWeightedRegressor):
         """
         Custom class to create a weighted regressor, with the sample weights
         chosen by inverse frequency of the label's sign in the training set.
-        
+
         :param <BaseEstimator> model: The underlying model to be trained with weighted samples.
 
         NOTE: By weighting the contribution of different training samples based on the
@@ -286,7 +286,6 @@ class TimeWeightedLinearRegression(TimeWeightedRegressor):
         super().__init__(half_life=half_life, model=model)
 
 
-
 class LADRegressor(BaseEstimator, RegressorMixin):
     def __init__(self, fit_intercept=True, positive=False):
         """
@@ -297,7 +296,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             If set to False, no intercept will be used in calculations.
         :param <bool> positive: If True, the optimisation is restricted so that model
             weights (other than the intercept) are greater or equal to zero.
-            This is a way of incorporating prior knowledge about the relationship between 
+            This is a way of incorporating prior knowledge about the relationship between
             model features and corresponding targets into the model fit.
 
         NOTE: Standard OLS linear regression models are fit by minimising the residual
@@ -315,7 +314,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         self.fit_intercept = fit_intercept
         self.positive = positive
 
-    def __l1_loss(
+    def _l1_loss(
         self,
         weights: np.ndarray,
         X: pd.DataFrame,
@@ -338,19 +337,19 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         if not isinstance(weights, np.ndarray):
             raise TypeError("The weights must be contained within a numpy array.")
 
-        if type(X) != pd.DataFrame:
+        if not isinstance(X, pd.DataFrame):
             raise TypeError(
                 "Input feature matrix for the LADRegressor must be a pandas dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas dataframe."
             )
-        if (type(y) != pd.Series) and (type(y) != pd.DataFrame):
+        if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
             raise TypeError(
                 "Target vector for the LADRegressor must be a pandas series or dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas series or dataframe."
             )
-        if type(y) == pd.DataFrame:
+        if isinstance(y, pd.DataFrame):
             if y.shape[1] != 1:
                 raise ValueError(
                     "The target dataframe must have only one column. If used as part of "
@@ -387,13 +386,13 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             )
 
         if isinstance(y, pd.DataFrame):
-            raw_resids = y.iloc[:, 0] - X.dot(weights)
+            raw_residuals = y.iloc[:, 0] - X.dot(weights)
         else:  # y is a series
-            raw_resids = y - X.dot(weights)
-        abs_resids = np.abs(raw_resids)
-        weighted_abs_resids = abs_resids * sample_weights
+            raw_residuals = y - X.dot(weights)
+        abs_residuals = np.abs(raw_residuals)
+        weighted_abs_residuals = abs_residuals * sample_weights
 
-        return np.mean(weighted_abs_resids)
+        return np.mean(weighted_abs_residuals)
 
     def fit(
         self,
@@ -413,19 +412,19 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         :return <LADRegressor>
         """
         # Checks
-        if type(X) != pd.DataFrame:
+        if not isinstance(X, pd.DataFrame):
             raise TypeError(
                 "Input feature matrix for the LADRegressor must be a pandas dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas dataframe."
             )
-        if (type(y) != pd.Series) and (type(y) != pd.DataFrame):
+        if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
             raise TypeError(
                 "Target vector for the LADRegressor must be a pandas series or dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas series or dataframe."
             )
-        if type(y) == pd.DataFrame:
+        if isinstance(y, pd.DataFrame):
             if y.shape[1] != 1:
                 raise ValueError(
                     "The target dataframe must have only one column. If used as part of "
@@ -460,29 +459,29 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 )
 
         # Fit
-        X2 = X.copy()
-        y2 = y.copy()
+        X = X.copy()
+        y = y.copy()
 
         if self.fit_intercept:
-            X2.insert(0, "intercept", 1)
+            X.insert(0, "intercept", 1)
 
-        p = X2.shape[1]
+        n_cols = X.shape[1]
 
         if self.positive:
             if self.fit_intercept:
-                bounds = [(None, None)] + [(0, None) for _ in range(p - 1)]
+                bounds = [(None, None)] + [(0, None) for _ in range(n_cols - 1)]
             else:
-                bounds = [(0, None) for _ in range(p)]
+                bounds = [(0, None) for _ in range(n_cols)]
         else:
-            bounds = [(None, None) for _ in range(p)]
+            bounds = [(None, None) for _ in range(n_cols)]
 
         # optimisation
-        init_weights = np.zeros(p)
+        init_weights = np.zeros(n_cols)
         optim_results = minimize(
             fun=partial(
-                self.__l1_loss,
-                X=X2,
-                y=y2,
+                self._l1_loss,
+                X=X,
+                y=y,
                 sample_weights=sample_weights,
             ),
             x0=init_weights,
@@ -492,8 +491,8 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         )
 
         if not optim_results.success:
-            self.intercept_ = None
-            self.coef_ = None
+            self.intercept = None
+            self.coef = None
             warnings.warn(
                 "LADRegressor optimisation failed. Setting intercept and coefficients to None.",
                 RuntimeWarning,
@@ -502,11 +501,11 @@ class LADRegressor(BaseEstimator, RegressorMixin):
 
         if self.fit_intercept:
             # Then store the intercept and feature weights
-            self.intercept_ = optim_results.x[0]
-            self.coef_ = optim_results.x[1:]
+            self.intercept = optim_results.x[0]
+            self.coef = optim_results.x[1:]
         else:
-            self.intercept_ = None
-            self.coef_ = optim_results.x
+            self.intercept = None
+            self.coef = optim_results.x
 
         return self
 
@@ -520,7 +519,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         :return <np.ndarray>: Numpy array of predictions.
         """
         # Checks
-        if type(X) != pd.DataFrame:
+        if not isinstance(X, pd.DataFrame):
             raise TypeError(
                 "Input feature matrix for the LADRegressor must be a pandas dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
@@ -532,17 +531,18 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             raise TypeError("The inner index of X must be datetime.date.")
 
         # Predict
-        if self.intercept_ is None and self.coef_ is None:
+        if self.intercept is None and self.coef is None:
             warnings.warn(
-                "LADRegressor model fit failed. Predicting a zero signal.", RuntimeWarning
+                "LADRegressor model fit failed. Predicting a zero signal.",
+                RuntimeWarning,
             )
             return pd.Series(0, index=X.index)
 
         X = X.copy()
         if self.fit_intercept:
-            return X.dot(self.coef_) + self.intercept_
+            return X.dot(self.coef) + self.intercept
         else:
-            return X.dot(self.coef_)
+            return X.dot(self.coef)
 
 
 if __name__ == "__main__":
