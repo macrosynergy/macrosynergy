@@ -10,7 +10,7 @@ import warnings
 from timeit import default_timer as timer
 from typing import Dict, List, Optional, Tuple, Union
 import functools
-
+from tqdm import tqdm
 
 import pandas as pd
 
@@ -323,6 +323,7 @@ class JPMaQSDownload(object):
         expected_expressions: Optional[List[str]] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        show_progress: bool = False,
         verbose: bool = True,
     ) -> pd.DataFrame:
         """
@@ -345,7 +346,7 @@ class JPMaQSDownload(object):
         _missing_exprs: List[str] = []
         self.unavailable_expr_messages = []
         # _missing_exprs is just a sanity check to verify self.unavailable_expressions
-        for d in dicts_list:
+        for d in tqdm(dicts_list, desc="Processing data", disable=not show_progress):
             cid, xcat, metricx = JPMaQSDownload.deconstruct_expression(
                 d["attributes"][0]["expression"]
             )
@@ -379,6 +380,9 @@ class JPMaQSDownload(object):
                 " complete list of missing expressions."
             )
 
+        if show_progress:
+            print("Concatenating dataframes...")
+
         final_df: pd.DataFrame = functools.reduce(
             lambda left, right: pd.merge(
                 left,
@@ -395,15 +399,13 @@ class JPMaQSDownload(object):
 
         dfs_dict = None  # free up memory
 
-        if final_df.duplicated(
-            subset=["real_date", "cid", "xcat"], keep=False
-        ).any():
+        if final_df.duplicated(subset=["real_date", "cid", "xcat"], keep=False).any():
             # report the expressions that have duplicate data
             err_str: str = "Duplicate data found for the following expressions:\n"
             for i in df.groupby(["cid", "xcat"]).groups:
-                dts_series: pd.Series = df.iloc[
-                    df.groupby(["cid", "xcat"]).groups[i]
-                ]["real_date"]
+                dts_series: pd.Series = df.iloc[df.groupby(["cid", "xcat"]).groups[i]][
+                    "real_date"
+                ]
                 dts: List[str] = dts_series.tolist()
                 max_date: str = pd.to_datetime(max(dts)).strftime("%Y-%m-%d")
                 min_date: str = pd.to_datetime(min(dts)).strftime("%Y-%m-%d")
@@ -461,6 +463,8 @@ class JPMaQSDownload(object):
         )
 
         if validate_df:
+            if show_progress:
+                print("Validating the downloaded data...")
             vdf = self.validate_downloaded_df(
                 data_df=final_df,
                 expected_expressions=expected_expressions,
@@ -791,6 +795,7 @@ class JPMaQSDownload(object):
                 start_date=start_date,
                 end_date=end_date,
                 verbose=not self.suppress_warning,
+                show_progress=show_progress,
             )
             data = data_df
 
