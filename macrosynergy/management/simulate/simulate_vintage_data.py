@@ -90,7 +90,7 @@ class VintageData:
             try:
                 pd.Timestamp(date_string).strftime("%Y-%m-%d")
             except ValueError:
-                raise AssertionError(date_error)
+                raise ValueError(date_error)
             else:
                 date = pd.Timestamp(date_string).strftime("%Y-%m-%d")
                 return pd.Timestamp(date)

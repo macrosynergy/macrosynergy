@@ -134,5 +134,19 @@ class Test_All(unittest.TestCase):
             freq="W",
         ).make_grade1()
 
+        with self.assertRaises(ValueError):
+            vins_m = VintageData(
+                "USD_INDX_SA",
+                cutoff="sdfm",
+                release_lags=[3, 20, 25],
+                number_firsts=12,
+                shortest=12,
+                sd_ar=5,
+                trend_ar=20,
+                seasonal=10,
+                added_dates=6,
+                freq="M",
+            ).make_grade1()
+
 if __name__ == "__main__":
     unittest.main()
