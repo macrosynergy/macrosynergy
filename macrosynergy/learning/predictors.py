@@ -297,7 +297,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
 
         NOTE: Standard OLS linear regression models are fit by minimising the residual sum of squares. Our
             implemented (L)east (A)bsolute (D)eviation regression model fits a linear model by minimising the residual absolute deviations. 
-            Consequently, the model fit is more robust to outliers. 
+            Consequently, the model fit is more robust to outliers than an OLS fit.  
         """
         self.fit_intercept = fit_intercept
         self.positive = positive
@@ -350,7 +350,10 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         if not isinstance(weights, np.ndarray):
             raise TypeError("The weights must be contained within a numpy array.")
         
-        raw_resids = y - X.dot(weights)
+        if isinstance(y, pd.DataFrame):
+            raw_resids = y.iloc[:,0] - X.dot(weights)
+        else: # y is a series
+            raw_resids = y - X.dot(weights)
         abs_resids = np.abs(raw_resids)
 
         return np.mean(abs_resids)
@@ -418,7 +421,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             bounds = [(None, None) for _ in range(p)]
 
         # optimisation
-        init_weights = np.zeros(X2.shape[1])
+        init_weights = np.zeros(p)
         optim_results = minimize(
             fun = partial(
                 self.__l1_loss,
