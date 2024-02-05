@@ -3,8 +3,9 @@
 macrosynergy.download
 =============================
 
-.. include:: ../../../macrosynergy/download/README.md
+.. include:: download.README.md
    :parser: myst_parser.sphinx_
+
 
 Submodules
 ----------
@@ -12,5 +13,5 @@ Submodules
 .. toctree::
    :maxdepth: 2
    
-   ../gen_rsts/macrosynergy.download.dataquery
-   ../gen_rsts/macrosynergy.download.jpmaqs
+   macrosynergy.download.dataquery
+   macrosynergy.download.jpmaqs
