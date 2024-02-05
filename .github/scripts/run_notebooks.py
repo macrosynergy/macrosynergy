@@ -35,7 +35,7 @@ sorted_notebooks_info = sorted(notebooks_info, key=lambda x: x[1])
 notebooks = [name for name, size in sorted_notebooks_info]
 print(f"Found {len(notebooks)} notebooks in the s3 bucket")
 
-batch_size = 1
+#batch_size = 1
 # Get remainder too
 remainder = len(notebooks) % len(list(instances))
 
@@ -43,7 +43,7 @@ remainder = len(notebooks) % len(list(instances))
 batches = []
 for i in range(len(list(instances))):
     batch = notebooks[i::len(list(instances))]
-    batch = batch[:batch_size]
+    #batch = batch[:batch_size]
     batches.append(batch)
 bucket_url = "https://macrosynergy-notebook-prod.s3.eu-west-2.amazonaws.com/"
 
@@ -53,6 +53,7 @@ print(len(list(instances)))
 
 # If len(notebooks) < len(instances), then don't use all instances
 # Start the ec2 instances
+
 for instance in instances:
     instance.start()
 
@@ -71,9 +72,9 @@ NOTE: If commands have no hangup then need to find a way to know when the comman
 Suggestion for now is that only once the entire python script is complete does it create the output file which is then deleted once the file has been read
 """
 
-def run_commands_on_ec2(instance, notebooks):
-    connected = False
-    while not connected:
+def connect_to_instance(instance):
+    retries = 0
+    while retries < 10:
         try:
             instance_ip = instance.public_ip_address
             ssh_client = paramiko.SSHClient()
@@ -82,46 +83,85 @@ def run_commands_on_ec2(instance, notebooks):
                 hostname=instance_ip, username="ubuntu", key_filename="./notebook_runner.pem"
             )
             print("Connection Succeeded!!!")
-            connected = True
-            outputs = {"succeeded": [], "failed": []}
-            commands = [
-                "rm -rf notebooks",
-                " && ".join(
-                    ["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks]
-                ),
-                "source myvenv/bin/activate \n pip install linearmodels --upgrade \n pip install jupyter --upgrade \n pip install git+https://github.com/macrosynergy/macrosynergy@test --upgrade \n python3 run_notebooks.py",
-                "rm -rf notebooks"
-            ]
-            for command in commands:
-                print("Executing {}".format(command))
-                stdin, stdout, stderr = ssh_client.exec_command(command)
-                output = stdout.read().decode("utf-8")
-                error = stderr.read().decode("utf-8")
-                print(output)
-                print(error)
-                command = "nohup ls >> output.txt &"
-                if command == "source myvenv/bin/activate \n pip install linearmodels --upgrade \n pip install jupyter --upgrade \n pip install git+https://github.com/macrosynergy/macrosynergy@test --upgrade \n python3 run_notebooks.py":
-                    # Find each occurence of "Notebook x succeeded" and "Notebook x failed" and store in outputs
-                    success_regex = r"Notebook (.+) succeeded"
-                    failure_regex = r"Notebook (.+) failed"
-
-                    for match in re.finditer(success_regex, error):
-                        notebook = match.group(1)
-                        print(notebook)
-                        notebook = notebook.split("/")[-1]
-                        outputs["succeeded"].append(notebook)
-                    for match in re.finditer(failure_regex, error):
-                        notebook = match.group(1)
-                        print(notebook)
-                        notebook = notebook.split("/")[-1]
-                        outputs["failed"].append(notebook)
-
-            ssh_client.close()
-            instance.stop()
-            return outputs
+            return ssh_client
         except:
+            retries += 1
             print("Failed to connect, retrying...")
             time.sleep(2)
+    print("Failed to connect after 10 retries, stopping instance...")
+    instance.stop()
+    raise Exception("Failed to connect to instance")
+
+def run_commands_on_ec2(instance, notebooks):
+    ssh_client = connect_to_instance(instance)
+    outputs = {"succeeded": [], "failed": []}
+    commands = [
+        "rm -rf notebooks",
+        "rm -rf failed_notebooks.txt",
+        "rm -rf successful_notebooks.txt",
+        "rm -rf nohup.out",
+        " && ".join(
+            ["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks]
+        ),
+        "source myvenv/bin/activate \n pip install linearmodels --upgrade \n pip install jupyter --upgrade \n pip install git+https://github.com/macrosynergy/macrosynergy@test --upgrade \n nohup python3 run_notebooks.py &",
+    ]
+    for command in commands:
+        print("Executing {}".format(command))
+        stdin, stdout, stderr = ssh_client.exec_command(command)
+        output = stdout.read().decode("utf-8")
+        error = stderr.read().decode("utf-8")
+        print(output)
+        print(error)
+    
+    print("Getting output from instance...")
+    successful_notebooks, failed_notebooks = get_output_from_instance(ssh_client)
+    outputs["succeeded"].extend(successful_notebooks)
+    outputs["failed"].extend(failed_notebooks)
+    print("Stopping instance...")
+    ssh_client.close()
+    instance.stop()
+    return outputs
+
+
+def check_output(ssh_client):
+    command = "ls"
+    stdin, stdout, stderr = ssh_client.exec_command(command)
+    output = stdout.read().decode("utf-8")
+    error = stderr.read().decode("utf-8")
+    return "failed_notebooks.txt" in output and "successful_notebooks.txt" in output
+    
+
+def get_output_from_instance(ssh_client):
+    python_running = True
+    while python_running:
+        print("Executing command to check if python is still running...")
+        command = "ps -ef | grep python"
+        stdin, stdout, stderr = ssh_client.exec_command(command)
+        output = stdout.read().decode("utf-8")
+        error = stderr.read().decode("utf-8")
+
+        if "run_notebooks.py" in output:
+            print("Python process still running, waiting 10 seconds...")
+            time.sleep(10)
+        else:
+            print("Python process has finished")
+            python_running = False
+    
+    print("Python process has finished, getting failed notebooks...")
+    command = "cat failed_notebooks.txt"
+    stdin, stdout, stderr = ssh_client.exec_command(command)
+    output = stdout.read().decode("utf-8")
+    error = stderr.read().decode("utf-8")
+    failed_notebooks = output.split("\n")[:-1] # Removes empty string at the end
+
+    print("Python process has finished, getting successful notebooks...")
+    command = "cat successful_notebooks.txt"
+    stdin, stdout, stderr = ssh_client.exec_command(command)
+    output = stdout.read().decode("utf-8")
+    error = stderr.read().decode("utf-8")
+    successful_notebooks = output.split("\n")[:-1] # Removes empty string at the end
+    
+    return successful_notebooks, failed_notebooks
 
 def process_instance(instance):
     instance_ip = instance.public_ip_address
