@@ -381,7 +381,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         self,
         X: pd.DataFrame,
         y: Union[pd.DataFrame, pd.Series],
-        sample_weights: np.ndarray = None,
+        sample_weight: np.ndarray = None,
     ):
         """
         Fit method to fit a LAD linear regression model.
@@ -389,7 +389,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         :param <pd.DataFrame> X: Pandas dataframe of input features.
         :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
             associated with each sample in X.
-        :param <np.ndarray> sample_weights: Numpy array of sample weights to create a
+        :param <np.ndarray> sample_weight: Numpy array of sample weights to create a
             weighted LAD regression model. Default is None for equal sample weights.
 
         :return <LADRegressor>
@@ -429,14 +429,14 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 "match."
             )
 
-        if sample_weights is not None:
-            if not isinstance(sample_weights, np.ndarray):
+        if sample_weight is not None:
+            if not isinstance(sample_weight, np.ndarray):
                 raise TypeError(
                     "The sample weights must be contained within a numpy array."
                 )
-            if sample_weights.ndim != 1:
+            if sample_weight.ndim != 1:
                 raise ValueError("The sample weights must be a 1D numpy array.")
-            if len(sample_weights) != X.shape[0]:
+            if len(sample_weight) != X.shape[0]:
                 raise ValueError(
                     "The number of sample weights must match the number of samples in the input feature matrix."
                 )
@@ -465,7 +465,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 self._l1_loss,
                 X=X,
                 y=y,
-                sample_weights=sample_weights,
+                sample_weight=sample_weight,
             ),
             x0=init_weights,
             method="SLSQP",
@@ -532,7 +532,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         weights: np.ndarray,
         X: pd.DataFrame,
         y: Union[pd.DataFrame, pd.Series],
-        sample_weights: np.ndarray = None,
+        sample_weight: np.ndarray = None,
     ):
         """
         Private helper method to determine the mean training L1 loss induced by 'weights'.
@@ -541,7 +541,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         :param <pd.DataFrame> X: Pandas dataframe of input features.
         :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
             associated with each sample in X.
-        :param <np.ndarray> sample_weights: Numpy array of sample weights to create a
+        :param <np.ndarray> sample_weight: Numpy array of sample weights to create a
             weighted LAD regression model. Default is None for equal sample weights.
 
         :return <float>: Training loss induced by 'weights'.
@@ -584,16 +584,16 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 "match."
             )
 
-        if sample_weights is None:
-            sample_weights = np.ones(X.shape[0])
+        if sample_weight is None:
+            sample_weight = np.ones(X.shape[0])
 
-        if not isinstance(sample_weights, np.ndarray):
+        if not isinstance(sample_weight, np.ndarray):
             raise TypeError(
                 "The sample weights must be contained within a numpy array."
             )
-        if sample_weights.ndim != 1:
+        if sample_weight.ndim != 1:
             raise ValueError("The sample weights must be a 1D numpy array.")
-        if len(sample_weights) != X.shape[0]:
+        if len(sample_weight) != X.shape[0]:
             raise ValueError(
                 "The number of sample weights must match the number of samples in the input feature matrix."
             )
@@ -603,7 +603,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         else:  # y is a series
             raw_residuals = y - X.dot(weights)
         abs_residuals = np.abs(raw_residuals)
-        weighted_abs_residuals = abs_residuals * sample_weights
+        weighted_abs_residuals = abs_residuals * sample_weight
 
         return np.mean(weighted_abs_residuals)
 
