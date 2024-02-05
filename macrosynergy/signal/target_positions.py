@@ -70,7 +70,7 @@ def modify_signals(
     or conversion to signs (digital method).
 
     :param <pd.Dataframe> df: standardized DataFrame containing the following columns:
-        'cid', 'xcats', 'real_date' and 'value'.
+        'cid', 'xcat', 'real_date' and 'value'.
     :param <List[str]> cids: cross sections of markets or currency areas in which
         positions should be taken.
     :param <str> xcat_sig: category that serves as signal across markets.
@@ -134,7 +134,7 @@ def cs_unit_returns(
     Calculate returns of composite unit positions (that jointly depend on one signal).
 
     :param <pd.Dataframe> df: standardized DataFrame containing the following columns:
-        'cid', 'xcats', 'real_date' and 'value'.
+        'cid', 'xcat', 'real_date' and 'value'.
     :param <List[str]> contract_returns: list of the contract return types.
     :param <List[float]> sigrels: respective signal for each contract type.
     :param <str> ret: postfix denoting the returns in % applied to the contract types.
@@ -346,7 +346,7 @@ def target_positions(
     Converts signals into contract-specific target positions.
 
     :param <pd.Dataframe> df: standardized DataFrame containing at least the following
-        columns: 'cid', 'xcats', 'real_date' and 'value'.
+        columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <List[str]> cids: cross-sections of markets or currency areas in which
         positions should be taken.
     :param <str> xcat_sig: category that serves as signal across markets.
