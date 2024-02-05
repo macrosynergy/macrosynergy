@@ -523,9 +523,9 @@ class LADRegressor(BaseEstimator, RegressorMixin):
 
         X = X.copy()
         if self.fit_intercept:
-            return X.dot(self.coef) + self.intercept
+            return (X.dot(self.coef) + self.intercept).values
         else:
-            return X.dot(self.coef)
+            return X.dot(self.coef).values
 
     def _l1_loss(
         self,
