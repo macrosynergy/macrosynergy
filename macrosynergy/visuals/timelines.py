@@ -57,7 +57,7 @@ def timelines(
 
     Parameters
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to plot. Default is all in DataFrame.
     :param <List[str]> cids: cross sections to plot. Default is all in DataFrame.
         If this contains only one cross section a single line chart is created.

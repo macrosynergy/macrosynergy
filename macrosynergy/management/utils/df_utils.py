@@ -259,7 +259,7 @@ def downsample_df_on_real_date(
     Downsample JPMaQS DataFrame.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
     :param <List> groupby_columns: a list of columns used to group the DataFrame.
     :param <str> freq: frequency option. Per default the correlations are calculated
         based on the native frequency of the datetimes in 'real_date', which is business
@@ -416,7 +416,7 @@ def reduce_df(
     Filter DataFrame by xcats and cids and notify about missing xcats and cids.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and 'value'.
+        'cid', 'xcat', 'real_date' and 'value'.
     :param <Union[str, List[str]]> xcats: extended categories to be filtered on. Default is
         all in the DataFrame.
     :param <List[str]> cids: cross sections to be checked on. Default is all in the
@@ -502,7 +502,7 @@ def reduce_df_by_ticker(
     Filter dataframe by xcats and cids and notify about missing xcats and cids
 
     :param <pd.Dataframe> df: standardized dataframe with the following columns:
-        'cid', 'xcats', 'real_date'.
+        'cid', 'xcat', 'real_date'.
     :param <List[str]> ticks: tickers (cross sections + base categories)
     :param <str> start: string in ISO 8601 representing earliest date. Default is None.
     :param <str> end: string ISO 8601 representing the latest date. Default is None.
@@ -619,7 +619,7 @@ def categories_df(
     if applicable, lags.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the following necessary
-        columns: 'cid', 'xcats', 'real_date' and at least one column with values of
+        columns: 'cid', 'xcat', 'real_date' and at least one column with values of
         interest.
     :param <List[str]> xcats: extended categories involved in the custom DataFrame. The
         last category in the list represents the dependent variable, and the (n - 1)

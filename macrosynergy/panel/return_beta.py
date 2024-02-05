@@ -211,7 +211,7 @@ def return_beta(
     Estimate sensitivities (betas) of return category with respect to single return.
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and 'value.
+        'cid', 'xcat', 'real_date' and 'value.
     :param <str> xcat:  return category based on the type of positions that are
         to be hedged.
         N.B.: Each cross-section of this category uses the same hedge asset/basket.
