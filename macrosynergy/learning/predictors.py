@@ -314,86 +314,6 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         self.fit_intercept = fit_intercept
         self.positive = positive
 
-    def _l1_loss(
-        self,
-        weights: np.ndarray,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
-        sample_weights: np.ndarray = None,
-    ):
-        """
-        Private helper method to determine the mean training L1 loss induced by 'weights'.
-
-        :param <np.ndarray> weights: LADRegressor model coefficients to be optimised.
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
-            associated with each sample in X.
-        :param <np.ndarray> sample_weights: Numpy array of sample weights to create a
-            weighted LAD regression model. Default is None for equal sample weights.
-
-        :return <float>: Training loss induced by 'weights'.
-        """
-        # Checks
-        if not isinstance(weights, np.ndarray):
-            raise TypeError("The weights must be contained within a numpy array.")
-
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError(
-                "Input feature matrix for the LADRegressor must be a pandas dataframe. "
-                "If used as part of an sklearn pipeline, ensure that previous steps "
-                "return a pandas dataframe."
-            )
-        if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
-            raise TypeError(
-                "Target vector for the LADRegressor must be a pandas series or dataframe. "
-                "If used as part of an sklearn pipeline, ensure that previous steps "
-                "return a pandas series or dataframe."
-            )
-        if isinstance(y, pd.DataFrame):
-            if y.shape[1] != 1:
-                raise ValueError(
-                    "The target dataframe must have only one column. If used as part of "
-                    "an sklearn pipeline, ensure that previous steps return a pandas "
-                    "series or dataframe."
-                )
-
-        if not isinstance(X.index, pd.MultiIndex):
-            raise ValueError("X must be multi-indexed.")
-        if not isinstance(y.index, pd.MultiIndex):
-            raise ValueError("y must be multi-indexed.")
-        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
-            raise TypeError("The inner index of X must be datetime.date.")
-        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
-            raise TypeError("The inner index of y must be datetime.date.")
-        if not X.index.equals(y.index):
-            raise ValueError(
-                "The indices of the input dataframe X and the output dataframe y don't "
-                "match."
-            )
-
-        if sample_weights is None:
-            sample_weights = np.ones(X.shape[0])
-
-        if not isinstance(sample_weights, np.ndarray):
-            raise TypeError(
-                "The sample weights must be contained within a numpy array."
-            )
-        if sample_weights.ndim != 1:
-            raise ValueError("The sample weights must be a 1D numpy array.")
-        if len(sample_weights) != X.shape[0]:
-            raise ValueError(
-                "The number of sample weights must match the number of samples in the input feature matrix."
-            )
-
-        if isinstance(y, pd.DataFrame):
-            raw_residuals = y.iloc[:, 0] - X.dot(weights)
-        else:  # y is a series
-            raw_residuals = y - X.dot(weights)
-        abs_residuals = np.abs(raw_residuals)
-        weighted_abs_residuals = abs_residuals * sample_weights
-
-        return np.mean(weighted_abs_residuals)
-
     def fit(
         self,
         X: pd.DataFrame,
@@ -543,6 +463,86 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             return X.dot(self.coef) + self.intercept
         else:
             return X.dot(self.coef)
+
+    def _l1_loss(
+        self,
+        weights: np.ndarray,
+        X: pd.DataFrame,
+        y: Union[pd.DataFrame, pd.Series],
+        sample_weights: np.ndarray = None,
+    ):
+        """
+        Private helper method to determine the mean training L1 loss induced by 'weights'.
+
+        :param <np.ndarray> weights: LADRegressor model coefficients to be optimised.
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+        :param <np.ndarray> sample_weights: Numpy array of sample weights to create a
+            weighted LAD regression model. Default is None for equal sample weights.
+
+        :return <float>: Training loss induced by 'weights'.
+        """
+        # Checks
+        if not isinstance(weights, np.ndarray):
+            raise TypeError("The weights must be contained within a numpy array.")
+
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError(
+                "Input feature matrix for the LADRegressor must be a pandas dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas dataframe."
+            )
+        if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
+            raise TypeError(
+                "Target vector for the LADRegressor must be a pandas series or dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas series or dataframe."
+            )
+        if isinstance(y, pd.DataFrame):
+            if y.shape[1] != 1:
+                raise ValueError(
+                    "The target dataframe must have only one column. If used as part of "
+                    "an sklearn pipeline, ensure that previous steps return a pandas "
+                    "series or dataframe."
+                )
+
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of y must be datetime.date.")
+        if not X.index.equals(y.index):
+            raise ValueError(
+                "The indices of the input dataframe X and the output dataframe y don't "
+                "match."
+            )
+
+        if sample_weights is None:
+            sample_weights = np.ones(X.shape[0])
+
+        if not isinstance(sample_weights, np.ndarray):
+            raise TypeError(
+                "The sample weights must be contained within a numpy array."
+            )
+        if sample_weights.ndim != 1:
+            raise ValueError("The sample weights must be a 1D numpy array.")
+        if len(sample_weights) != X.shape[0]:
+            raise ValueError(
+                "The number of sample weights must match the number of samples in the input feature matrix."
+            )
+
+        if isinstance(y, pd.DataFrame):
+            raw_residuals = y.iloc[:, 0] - X.dot(weights)
+        else:  # y is a series
+            raw_residuals = y - X.dot(weights)
+        abs_residuals = np.abs(raw_residuals)
+        weighted_abs_residuals = abs_residuals * sample_weights
+
+        return np.mean(weighted_abs_residuals)
 
 
 if __name__ == "__main__":
