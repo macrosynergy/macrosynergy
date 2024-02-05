@@ -18,6 +18,8 @@ warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
 
+# Ignore all warnings
+warnings.filterwarnings("ignore")
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import (
@@ -66,24 +68,9 @@ class SignalReturnRelations:
         returns, which is often characterized by a delay due to the setup of of positions.
         Technically, this is a negative lag (early arrival) of the target category
         in working days prior to any frequency conversion. Default is 0.
-    :param <str> ret: return category. (Argument is deprecated)
-    :param <str> sig: primary signal category for which detailed relational statistics
-        can be calculated. (Argument is deprecated)
-    :param <str, List[str]> rival_sigs: "rival signals" for which basic relational
-        statistics can be calculated for comparison with the primary signal category. The
-        table, if rival signals are defined, will be generated upon instantiation of the
-        object. (Argument is deprecated)
-        N.B.: parameters set for sig, such as sig_neg, freq, and agg_sig are equally
-        applied to all rival signals.
-    :param <str> freq: letter denoting frequency at which the series are to be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
-        The return series will always be summed over the sample period.
-        The signal series will be aggregated according to the value of agg_sig.
-        (Argument is deprecated)
-    :param <str> agg_sig: aggregation method applied to the signal values in down-
-        sampling. The default is "last".
-        If defined, the additional signals will also use the same aggregation method for
-        any down-sampling. (Argument is deprecated)
+    :param <bool> ms_panel_test: if True the Macrosynergy Panel test is calculated. Please
+        note that this is a very time-consuming operation and should be used only if you 
+        require the result.
     """
 
     def __init__(
@@ -101,6 +88,7 @@ class SignalReturnRelations:
         agg_sigs: Union[str, List[str]] = "last",
         fwin: int = 1,
         slip: int = 0,
+        ms_panel_test: bool = False,
     ):
         if rets is None:
             raise ValueError("Target return must be defined.")
@@ -144,6 +132,8 @@ class SignalReturnRelations:
             else:
                 self.freqs = [freqs]
 
+        self.ms_panel_test = ms_panel_test
+
         self.metrics = [
             "accuracy",
             "bal_accuracy",
@@ -155,9 +145,10 @@ class SignalReturnRelations:
             "pearson_pval",
             "kendall",
             "kendall_pval",
-            "map_pval",
-            "auc",
+            "auc"
         ]
+        if self.ms_panel_test:
+            self.metrics.append("map_pval")
 
         if not isinstance(cosp, bool):
             raise TypeError(f"<bool> object expected and not {type(cosp)}.")
@@ -735,11 +726,13 @@ class SignalReturnRelations:
             corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
         df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
 
-        df_out.loc[segment, "map_pval"] = self.map_pval(ret_vals, sig_vals)
         if (ret_sign == -1.0).all() or (ret_sign == 1.0).all():
             df_out.loc[segment, "auc"] = np.NaN
         else:
             df_out.loc[segment, "auc"] = skm.roc_auc_score(ret_sign, sig_sign)
+
+        if self.ms_panel_test:
+            df_out.loc[segment, "map_pval"] = self.map_pval(ret_vals, sig_vals)
 
         return df_out
 
@@ -840,9 +833,10 @@ class SignalReturnRelations:
             # Positive correlation with error prob < 50%.
             df_out.loc["PosRatio", below50s] = pos_pvals
             pos_pearson = pos_corr_coefs["pearson"]
-            map_pval_bool = df_out.loc[css, "map_pval"] < 0.5
-            pos_map_pval = np.mean(np.array(map_pval_bool) * np.array(pos_pearson))
-            df_out.loc["PosRatio", "map_pval"] = pos_map_pval
+            if self.ms_panel_test:
+                map_pval_bool = df_out.loc[css, "map_pval"] < 0.5
+                pos_map_pval = np.mean(np.array(map_pval_bool) * np.nan)
+                df_out.loc["PosRatio", "map_pval"] = pos_map_pval
 
         return df_out.astype("float")
 
@@ -930,6 +924,8 @@ class SignalReturnRelations:
                     list_of_results.append(np.NaN)
                 else:
                     list_of_results.append(skm.roc_auc_score(ret_sign, sig_sign))
+            elif stat == "map_pval" and self.ms_panel_test:
+                list_of_results.append(self.map_pval(ret_vals, sig_vals))
             else:
                 raise ValueError("Invalid statistic.")
 
@@ -938,7 +934,7 @@ class SignalReturnRelations:
         elif type == "mean_years" or type == "mean_cids":
             return np.mean(np.array(list_of_results))
         elif type == "pr_years" or type == "pr_cids":
-            if stat in self.metrics[0:6] + [self.metrics[-1]]:
+            if stat in self.metrics[0:6] + ["auc"]:
                 return np.mean(np.array(list_of_results) > 0.5)
             elif stat in self.metrics[6:9:2]:
                 return np.mean(np.array(list_of_results) > 0)
@@ -1431,6 +1427,7 @@ if __name__ == "__main__":
         cosp=True,
         freqs="Q",
         start="2002-01-01",
+        ms_panel_test=True
     )
 
     dfsum = srn.summary_table(years=True)
