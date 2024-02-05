@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from scipy.stats import expon 
+from scipy.stats import expon
 
 import unittest
 
@@ -123,13 +123,17 @@ class TestSWLRegression(unittest.TestCase):
         # The weights function is designed to return the same weights that a classifier with
         # balanced class weights would return in scikit-learn. Test that this is the case.
         model = SignWeightedLinearRegression()
-        sample_weights, pos_weight, neg_weight = model._SignWeightedLinearRegression__calculate_sample_weights(
-            self.y
+        sample_weights = model._calculate_sample_weights(self.y)
+
+        pos_sum = np.sum(self.y >= 0)
+        neg_sum = np.sum(self.y < 0)
+
+        correct_pos_weight = len(self.y) / (2 * pos_sum) if pos_sum > 0 else 0
+        correct_neg_weight = len(self.y) / (2 * neg_sum) if neg_sum > 0 else 0
+        np.testing.assert_array_almost_equal(
+            sample_weights,
+            np.where(self.y >= 0, correct_pos_weight, correct_neg_weight),
         )
-        correct_pos_weight = len(self.y) / (2 * np.sum(self.y >= 0))
-        correct_neg_weight = len(self.y) / (2 * np.sum(self.y < 0))
-        self.assertEqual(pos_weight, correct_pos_weight)
-        self.assertEqual(neg_weight, correct_neg_weight)
 
     def test_valid_fit(self):
         # Check that the SignWeightedRegressor fit is equivalent to using LR with sample weights
@@ -215,19 +219,29 @@ class TestSWLRegression(unittest.TestCase):
     def test_panelcvscores_compatible(self):
         # Test that the SignWeightedLinearRegression is compatible with panel_cv_scores
         splitter = RollingKFoldPanelSplit(n_splits=5)
-        estimators = {"SWOLS": SignWeightedLinearRegression(), "OLS": LinearRegression()}
-        scoring = {"NEG_RMSE": make_scorer(mean_squared_error, squared=False, greater_is_better=False), "NEG_MAE": make_scorer(mean_absolute_error, greater_is_better=False)}
+        estimators = {
+            "SWOLS": SignWeightedLinearRegression(),
+            "OLS": LinearRegression(),
+        }
+        scoring = {
+            "NEG_RMSE": make_scorer(
+                mean_squared_error, squared=False, greater_is_better=False
+            ),
+            "NEG_MAE": make_scorer(mean_absolute_error, greater_is_better=False),
+        }
         try:
             cv_df = panel_cv_scores(
-                X = self.X,
-                y = self.y,
-                splitter = splitter,
-                estimators = estimators,
-                scoring = scoring,
-                n_jobs = 1
+                X=self.X,
+                y=self.y,
+                splitter=splitter,
+                estimators=estimators,
+                scoring=scoring,
+                n_jobs=1,
             )
         except Exception as e:
-            self.fail(f"panel_cv_scores raised an exception {e} when using SignWeightedLinearRegression as an estimator.")
+            self.fail(
+                f"panel_cv_scores raised an exception {e} when using SignWeightedLinearRegression as an estimator."
+            )
         self.assertIsInstance(cv_df, pd.DataFrame)
         self.assertEqual(cv_df.shape[1], 2)
         self.assertEqual(sorted(cv_df.columns), sorted(estimators.keys()))
@@ -247,8 +261,8 @@ class TestSWLRegression(unittest.TestCase):
         }
         so = SignalOptimizer(
             inner_splitter=inner_splitter,
-            X = self.X,
-            y = self.y,
+            X=self.X,
+            y=self.y,
             blacklist=None,
         )
         try:
@@ -260,7 +274,9 @@ class TestSWLRegression(unittest.TestCase):
                 n_jobs=1,
             )
         except Exception as e:
-            self.fail(f"SignalOptimizer raised an exception {e} when using SignWeightedLinearRegression as an estimator.")
+            self.fail(
+                f"SignalOptimizer raised an exception {e} when using SignWeightedLinearRegression as an estimator."
+            )
 
         df_sigs = so.get_optimized_signals(name="test")
         df_models = so.get_optimal_models(name="test")
@@ -273,9 +289,12 @@ class TestSWLRegression(unittest.TestCase):
 
         self.assertIsInstance(df_sigs, pd.DataFrame)
         self.assertEqual(df_models.shape[1], 4)
-        self.assertEqual(sorted(df_models.columns), ["hparams", "model_type", "name", "real_date"])
+        self.assertEqual(
+            sorted(df_models.columns), ["hparams", "model_type", "name", "real_date"]
+        )
         self.assertTrue(len(df_models.name.unique()) == 1)
         self.assertEqual(df_models.name.unique()[0], "test")
+
 
 class TestTWLRegression(unittest.TestCase):
     @classmethod
@@ -325,7 +344,7 @@ class TestTWLRegression(unittest.TestCase):
                 )
             )
         self.assertIsInstance(model, TimeWeightedLinearRegression)
-        self.assertEqual(model.half_life, 12*21)
+        self.assertEqual(model.half_life, 12 * 21)
         self.assertEqual(model.fit_intercept, True)
         self.assertEqual(model.copy_X, True)
         self.assertTrue(model.n_jobs is None)
@@ -347,7 +366,7 @@ class TestTWLRegression(unittest.TestCase):
                 )
             )
         self.assertIsInstance(model, TimeWeightedLinearRegression)
-        self.assertEqual(model.half_life, 12*21)
+        self.assertEqual(model.half_life, 12 * 21)
         self.assertEqual(model.fit_intercept, False)
         self.assertEqual(model.copy_X, True)
         self.assertEqual(model.positive, True)
@@ -379,15 +398,19 @@ class TestTWLRegression(unittest.TestCase):
 
     def test_valid_weightsfunc(self):
         model = TimeWeightedLinearRegression(half_life=21)
-        sample_weights = model._TimeWeightedLinearRegression__calculate_sample_weights(self.y)
-        # compute expected weights using scipy 
-        unique_dates = sorted(self.y.index.get_level_values("real_date").unique(), reverse=True)
+        sample_weights = model._calculate_sample_weights(self.y)
+        # compute expected weights using scipy
+        unique_dates = sorted(
+            self.y.index.get_level_values("real_date").unique(), reverse=True
+        )
         num_dates = len(unique_dates)
-        scale = 21/np.log(2) 
+        scale = 21 / np.log(2)
         expected_weights = expon.pdf(np.arange(num_dates), scale=scale)
         expected_weights /= np.sum(expected_weights)
         weight_map = dict(zip(unique_dates, expected_weights))
-        expected_weights = self.y.index.get_level_values("real_date").map(weight_map).values
+        expected_weights = (
+            self.y.index.get_level_values("real_date").map(weight_map).values
+        )
         # check that the scipy weights and our calculated weights are equal
         np.testing.assert_array_almost_equal(sample_weights, expected_weights)
 
@@ -405,7 +428,9 @@ class TestTWLRegression(unittest.TestCase):
         self.assertTrue(np.all(model.model.coef_ == model_check.coef_))
         self.assertEqual(model.model.intercept_, model_check.intercept_)
         # Check that the TimeWeightedLinearRegression fit is equivalent to using LR with sample weights
-        model = TimeWeightedLinearRegression(half_life = 21, fit_intercept=False, positive=True)
+        model = TimeWeightedLinearRegression(
+            half_life=21, fit_intercept=False, positive=True
+        )
         model.fit(self.X, self.y)
         self.assertIsInstance(model.model, LinearRegression)
         model_check = LinearRegression(fit_intercept=False, positive=True)
@@ -475,19 +500,29 @@ class TestTWLRegression(unittest.TestCase):
     def test_panelcvscores_compatible(self):
         # Test that the TimeWeightedLinearRegression is compatible with panel_cv_scores
         splitter = RollingKFoldPanelSplit(n_splits=5)
-        estimators = {"SWOLS": TimeWeightedLinearRegression(), "OLS": LinearRegression()}
-        scoring = {"NEG_RMSE": make_scorer(mean_squared_error, squared=False, greater_is_better=False), "NEG_MAE": make_scorer(mean_absolute_error, greater_is_better=False)}
+        estimators = {
+            "SWOLS": TimeWeightedLinearRegression(),
+            "OLS": LinearRegression(),
+        }
+        scoring = {
+            "NEG_RMSE": make_scorer(
+                mean_squared_error, squared=False, greater_is_better=False
+            ),
+            "NEG_MAE": make_scorer(mean_absolute_error, greater_is_better=False),
+        }
         try:
             cv_df = panel_cv_scores(
-                X = self.X,
-                y = self.y,
-                splitter = splitter,
-                estimators = estimators,
-                scoring = scoring,
-                n_jobs = 1
+                X=self.X,
+                y=self.y,
+                splitter=splitter,
+                estimators=estimators,
+                scoring=scoring,
+                n_jobs=1,
             )
         except Exception as e:
-            self.fail(f"panel_cv_scores raised an exception {e} when using TimeWeightedLinearRegression as an estimator.")
+            self.fail(
+                f"panel_cv_scores raised an exception {e} when using TimeWeightedLinearRegression as an estimator."
+            )
         self.assertIsInstance(cv_df, pd.DataFrame)
         self.assertEqual(cv_df.shape[1], 2)
         self.assertEqual(sorted(cv_df.columns), sorted(estimators.keys()))
@@ -507,8 +542,8 @@ class TestTWLRegression(unittest.TestCase):
         }
         so = SignalOptimizer(
             inner_splitter=inner_splitter,
-            X = self.X,
-            y = self.y,
+            X=self.X,
+            y=self.y,
             blacklist=None,
         )
         try:
@@ -520,7 +555,9 @@ class TestTWLRegression(unittest.TestCase):
                 n_jobs=1,
             )
         except Exception as e:
-            self.fail(f"SignalOptimizer raised an exception {e} when using TimeWeightedLinearRegression as an estimator.")
+            self.fail(
+                f"SignalOptimizer raised an exception {e} when using TimeWeightedLinearRegression as an estimator."
+            )
 
         df_sigs = so.get_optimized_signals(name="test")
         df_models = so.get_optimal_models(name="test")
@@ -533,6 +570,8 @@ class TestTWLRegression(unittest.TestCase):
 
         self.assertIsInstance(df_sigs, pd.DataFrame)
         self.assertEqual(df_models.shape[1], 4)
-        self.assertEqual(sorted(df_models.columns), ["hparams", "model_type", "name", "real_date"])
+        self.assertEqual(
+            sorted(df_models.columns), ["hparams", "model_type", "name", "real_date"]
+        )
         self.assertTrue(len(df_models.name.unique()) == 1)
-        self.assertEqual(df_models.name.unique()[0], "test") 
+        self.assertEqual(df_models.name.unique()[0], "test")
