@@ -17,7 +17,7 @@ from sklearn.pipeline import Pipeline
 from typing import List, Union, Dict, Optional, Callable, Tuple
 from tqdm import tqdm
 
-import logging
+import warnings
 
 from joblib import Parallel, delayed
 
@@ -423,7 +423,13 @@ class SignalOptimizer:
         # Condense the collected data into a single dataframe
         for column_name, xs_levels, date_levels, predictions in prediction_data:
             idx = pd.MultiIndex.from_product([xs_levels, date_levels])
-            signal_df.loc[idx, column_name] = predictions
+            try:
+                signal_df.loc[idx, column_name] = predictions
+            except Exception as e:
+                warnings.warn(
+                    f"Error in signal calculation for {column_name}, date {str(date_levels[0])}. Setting to zero."
+                )
+                signal_df.loc[idx, column_name] = 0
 
         # Now convert signal_df into a quantamental dataframe
         # This will also ffill the last date of each cross-section as this will be an NA.
@@ -434,9 +440,10 @@ class SignalOptimizer:
             for cross_section, periods in self.blacklist.items():
                 cross_section_key = cross_section.split("_")[0]
                 # Set blacklisted periods to NaN
-                signal_df.loc[
-                    (cross_section_key, slice(periods[0], periods[1])), :
-                ] = np.nan
+                if cross_section_key in signal_xs_levels:
+                    signal_df.loc[
+                        (cross_section_key, slice(periods[0], periods[1])), :
+                    ] = np.nan
 
         signal_df_long: pd.DataFrame = pd.melt(
             frame=signal_df.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
