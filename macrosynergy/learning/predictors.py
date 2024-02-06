@@ -375,6 +375,8 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             raise TypeError("'positive' must be a boolean.")
         if tol is not None and not isinstance(tol, (int, float)):
             raise TypeError("'tol' must be a float or int.")
+        if tol is not None and tol <= 0:
+            raise ValueError("'tol' must be a positive number.")
 
         # Initialise
         self.fit_intercept = fit_intercept

@@ -66,6 +66,17 @@ class TestLADRegressor(unittest.TestCase):
         self.X = df.drop(columns="XR")
         self.y = df["XR"]
 
+    def test_types_init(self):
+        # Check that incorrectly specified arguments raise exceptions
+        with self.assertRaises(TypeError):
+            model = LADRegressor(fit_intercept="fit_intercept")
+        with self.assertRaises(TypeError):
+            model = LADRegressor(positive="positive")
+        with self.assertRaises(TypeError):
+            model = LADRegressor(tol="tol")
+        with self.assertRaises(ValueError):
+            model = LADRegressor(tol=-2)
+            
     @parameterized.expand(itertools.product([True, False], [True, False]))
     def test_valid_init(self, fit_intercept, positive):
         # Test that a the LAD regression model is successfully instantiated for each of the possible arguments
