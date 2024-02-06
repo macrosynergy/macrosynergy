@@ -741,6 +741,75 @@ class CategoryRelations(object):
             if ylab is not None:
                 ax.set_ylabel(ylab)
 
+        # elif separator == "xcats":
+        #     assert isinstance(single_chart, bool)
+
+        #     dfx_copy = dfx.reset_index()
+        #     n_cids = len(dfx_copy["cid"].unique())
+
+        #     error_cids = (
+        #         "There must be more than one xcat to use "
+        #         "separator = 'xcats'."
+        #     )
+        #     assert n_cids > 1, error_cids
+
+        #     # “Wrap” the column variable at this width, so that the column facets span
+        #     # multiple rows. Used to determine the number of grids on each row.
+        #     dict_coln = {2: 2, 5: 3, 8: 4, 30: 5}
+
+        #     keys_ar = np.array(list(dict_coln.keys()))
+        #     key = keys_ar[keys_ar <= n_cids][-1]
+        #     if ncol is None:
+        #         ncol = dict_coln[key]
+        #     if ncol > n_cids:
+        #         ncol = n_cids
+
+        #     # The DataFrame is already a standardised DataFrame. Three columns: two
+        #     # categories (dependent & explanatory variable) and the respective
+        #     # cross-sections. The index will be the date timestamp.
+
+        #     fg = sns.FacetGrid(data=dfx_copy, col="cid", col_wrap=ncol)
+        #     fg.map(
+        #         sns.regplot,
+        #         self.xcats[0],
+        #         self.xcats[1],
+        #         ci=reg_ci,
+        #         order=reg_order,
+        #         robust=reg_robust,
+        #         fit_reg=fit_reg,
+        #         scatter_kws={"s": 15, "alpha": 0.5, "color": "lightgray"},
+        #         line_kws={"lw": 1},
+        #     )
+
+        #     if coef_box is not None:
+        #         fg.map_dataframe(self.annotate_facet)
+
+        #     fg.set_titles(col_template="{col_name}")
+        #     fg.fig.suptitle(title, y=title_adj, fontsize=14)
+
+        #     if not single_chart:
+        #         if xlab is not None:
+        #             fg.set_xlabels(xlab, clear_inner=True)
+        #         if ylab is not None:
+        #             fg.set_ylabels(ylab)
+        #     else:
+        #         error = "Label expected for the respective axis."
+        #         assert xlab is not None, error
+        #         assert ylab is not None, error
+        #         number_of_graphs = len(fg.axes)
+        #         no_columns = fg._ncol
+        #         remainder = int(number_of_graphs % no_columns)
+
+        #         for i in range(number_of_graphs):
+        #             fg.axes[i].set_xlabel("")
+        #             fg.axes[i].set_ylabel("")
+
+        #             if remainder == 0:
+        #                 fg.axes[no_columns].set_xlabel(xlab)
+        #                 fg.axes[no_columns].set_ylabel(ylab)
+        #             else:
+        #                 fg.axes[-remainder].set_xlabel(xlab)
+        #                 fg.axes[-remainder].set_ylabel(ylab)
         else:
             ValueError("Separator must be either a valid year <int> or 'cids' <str>.")
 
