@@ -154,6 +154,13 @@ def make_docs(
     return f"{docs_dir}/build"
 
 
+def run_redirects_script():
+    """
+    Runs the redirects script.
+    """
+    os.system("python ./docs/redirects.py")
+
+
 def driver(
     package_dir: str = PACKAGE_ROOT_DIR,
     temp_dir: str = TEMP_DIR,
@@ -229,6 +236,9 @@ def driver(
     make_docs(docs_dir=PACKAGE_DOCS_DIR)
 
     temp_site_dir = OPx.normpath(OPx.join(temp_dir, PACKAGE_DOCS_DIR, "build"))
+
+    # run the redirects script
+    run_redirects_script()
 
     os.chdir(starting_dir)
 
