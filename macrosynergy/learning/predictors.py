@@ -187,7 +187,7 @@ class TimeWeightedRegressor(BaseWeightedRegressor):
         weights = weights / np.sum(weights)
 
         weight_map = dict(zip(dates, weights))
-        self.sample_weights = targets.index.get_level_values(1).map(weight_map)
+        self.sample_weights = targets.index.get_level_values(1).map(weight_map).to_numpy()
 
         return self.sample_weights
 
@@ -350,7 +350,7 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
 
 
 class LADRegressor(BaseEstimator, RegressorMixin):
-    def __init__(self, fit_intercept=True, positive=False):
+    def __init__(self, fit_intercept=True, positive=False, tol=None):
         """
         Custom class to create a linear regression model with model fit determined
         by minimising L1 (absolute) loss.
@@ -361,6 +361,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             weights (other than the intercept) are greater or equal to zero.
             This is a way of incorporating prior knowledge about the relationship between
             model features and corresponding targets into the model fit.
+        :param <float> tol: The tolerance for termination. Default is None.
 
         NOTE: Standard OLS linear regression models are fit by minimising the residual
             sum of squares. Our implemented (L)east (A)bsolute (D)eviation regression
@@ -372,10 +373,13 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             raise TypeError("'fit_intercept' must be a boolean.")
         if not isinstance(positive, bool):
             raise TypeError("'positive' must be a boolean.")
+        if tol is not None and not isinstance(tol, (int, float)):
+            raise TypeError("'tol' must be a float or int.")
 
         # Initialise
         self.fit_intercept = fit_intercept
         self.positive = positive
+        self.tol = tol
 
     def fit(
         self,
@@ -431,9 +435,12 @@ class LADRegressor(BaseEstimator, RegressorMixin):
 
         if sample_weight is not None:
             if not isinstance(sample_weight, np.ndarray):
-                raise TypeError(
-                    "The sample weights must be contained within a numpy array."
-                )
+                try:
+                    sample_weight = sample_weight.to_numpy().flatten()
+                except Exception as e:
+                    raise TypeError(
+                        "The sample weights must be contained within a numpy array."
+                    )
             if sample_weight.ndim != 1:
                 raise ValueError("The sample weights must be a 1D numpy array.")
             if len(sample_weight) != X.shape[0]:
@@ -468,9 +475,9 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 sample_weight=sample_weight,
             ),
             x0=init_weights,
-            method="SLSQP",
+            method="SLSQP", # TODO: make this an option in the constructor.
             bounds=bounds,
-            tol=1e-9,
+            tol=self.tol,
         )
 
         if not optim_results.success:
