@@ -135,8 +135,7 @@ class TestLADRegressor(unittest.TestCase):
                     e
                 )
             )
-        self.assertIsInstance(y_pred, pd.Series)
-        self.assertIsInstance(y_pred.index, pd.MultiIndex)
+        self.assertIsInstance(y_pred, np.ndarray)
 
     def test_equiv_quantile_lad_predict(self):
         # Test that the LADRegressor is equivalent to a QuantileRegressor with q=0.5
@@ -154,7 +153,7 @@ class TestLADRegressor(unittest.TestCase):
         sklearn_model = QuantileRegressor(quantile=0.5,alpha=0,solver="highs")
         sklearn_model.fit(self.X, self.y)
         y_pred_sk = sklearn_model.predict(self.X)
-        np.testing.assert_almost_equal(y_pred.values, y_pred_sk,decimal=2)
+        np.testing.assert_almost_equal(y_pred, y_pred_sk,decimal=2)
 
 class TestSWLRegression(unittest.TestCase):
     @classmethod
