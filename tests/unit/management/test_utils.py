@@ -23,7 +23,9 @@ from macrosynergy.management.utils import (
     ticker_df_to_qdf,
     qdf_to_ticker_df,
     get_eops,
+    _map_to_business_day_frequency,
 )
+from macrosynergy.management.constants import FREQUENCY_MAP
 from macrosynergy.management.utils.math import expanding_mean_with_nan
 from tests.simulate import make_qdf
 
@@ -688,6 +690,31 @@ class TestFunctions(unittest.TestCase):
         for tval in test_vals:
             self.assertEqual(tval[0] in set_test_result_3, tval[1])
 
+    def test_map_to_business_day_frequency(self):
+        fm_copy = FREQUENCY_MAP.copy()
+        for k in fm_copy.keys():
+            self.assertEqual(
+                _map_to_business_day_frequency(k), fm_copy[k], f"Failed for {k}"
+            )
+
+        with self.assertRaises(ValueError):
+            _map_to_business_day_frequency("X")
+            
+        with self.assertRaises(TypeError):
+            _map_to_business_day_frequency(1)
+        
+        with self.assertRaises(ValueError):
+            _map_to_business_day_frequency("D", valid_freqs=["W", "M"])
+            
+        with self.assertRaises(ValueError):
+            _map_to_business_day_frequency("D", valid_freqs=["X", "Y", "Z"])
+            
+        # check reverse mapping
+        for k, v in fm_copy.items():
+            self.assertEqual(_map_to_business_day_frequency(v), v, f"Failed for {v}")
+            
+        with self.assertRaises(TypeError):
+            _map_to_business_day_frequency("M", valid_freqs=1)
 
 if __name__ == "__main__":
     unittest.main()

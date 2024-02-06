@@ -75,8 +75,10 @@ def clean_features_bugfixes(release_text: str) -> str:
         if not any(line.startswith(prefix) for prefix in ACCEPTED_PREFIXES):
             continue
         if line.startswith("* Feature: "):
+            line = line[0] + line[10:]
             features.append(line)
         elif line.startswith("* Bugfix: ") or line.startswith("* Hotfix: "):
+            line = line[0] + line[9:]
             fixes.append(line)
 
     # sort each list by pr number
