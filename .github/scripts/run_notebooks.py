@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 import re
 import time
 import boto3
+import pandas as pd
 import paramiko
 from botocore.exceptions import ClientError
 
@@ -35,7 +36,7 @@ sorted_notebooks_info = sorted(notebooks_info, key=lambda x: x[1])
 notebooks = [name for name, size in sorted_notebooks_info]
 print(f"Found {len(notebooks)} notebooks in the s3 bucket")
 
-#batch_size = 1
+# batch_size = 2
 # Get remainder too
 remainder = len(notebooks) % len(list(instances))
 
@@ -43,7 +44,7 @@ remainder = len(notebooks) % len(list(instances))
 batches = []
 for i in range(len(list(instances))):
     batch = notebooks[i::len(list(instances))]
-    #batch = batch[:batch_size]
+#    batch = batch[:batch_size]
     batches.append(batch)
 bucket_url = "https://macrosynergy-notebook-prod.s3.eu-west-2.amazonaws.com/"
 
@@ -103,15 +104,15 @@ def run_commands_on_ec2(instance, notebooks):
         " && ".join(
             ["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks]
         ),
-        "source myvenv/bin/activate \n pip install linearmodels --upgrade \n pip install jupyter --upgrade \n pip install git+https://github.com/macrosynergy/macrosynergy@test --upgrade \n nohup python3 run_notebooks.py &",
+        "source myvenv/bin/activate \n pip install linearmodels --upgrade \n pip install jupyter --upgrade \n pip install git+https://github.com/macrosynergy/macrosynergy@test --upgrade \n nohup python run_notebooks.py &",
     ]
     for command in commands:
         print("Executing {}".format(command))
-        stdin, stdout, stderr = ssh_client.exec_command(command)
-        output = stdout.read().decode("utf-8")
-        error = stderr.read().decode("utf-8")
-        print(output)
-        print(error)
+        if command != commands[-1]:
+            stdin, stdout, stderr = ssh_client.exec_command(command)
+        else:
+            # Does not wait for output of python3 run_notebooks.py
+            ssh_client.exec_command(command)
     
     print("Getting output from instance...")
     successful_notebooks, failed_notebooks = get_output_from_instance(ssh_client)
@@ -195,7 +196,7 @@ def send_email(subject, body, recipient, sender):
     ses_client = boto3.client("ses", region_name=aws_region)
 
     # Specify the email content
-    email_content = {"Subject": {"Data": subject}, "Body": {"Text": {"Data": body}}}
+    email_content = {"Subject": {"Data": subject}, "Body": {"Html": {"Data": body}}}
 
     try:
         # Send the email
@@ -210,7 +211,7 @@ def send_email(subject, body, recipient, sender):
         print(f"Error sending email: {e.response['Error']['Message']}")
 
 email_subject = "Notebook Failures"
-email_body = f"Please note that the following notebooks failed when ran on the branch: {merged_dict['failed']}. The total time to run all notebooks was {end_time - start_time} seconds."
+email_body = f"Please note that the following notebooks failed when ran on the branch: \n{pd.DataFrame(merged_dict['failed']).to_html()}\nThe total time to run all notebooks was {end_time - start_time} seconds."
 recipient_email = [
     "sandresen@macrosynergy.com",
     "ebrine@macrosynergy.com",
