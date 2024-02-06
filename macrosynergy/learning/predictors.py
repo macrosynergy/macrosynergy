@@ -14,6 +14,7 @@ from sklearn.linear_model import LinearRegression
 from typing import Union
 from abc import abstractmethod, ABC
 
+import numbers
 
 class NaivePredictor(BaseEstimator, RegressorMixin):
     """
@@ -440,11 +441,19 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 try:
                     sample_weight = sample_weight.to_numpy().flatten()
                 except Exception as e:
-                    raise TypeError(
-                        "The sample weights must be contained within a numpy array."
-                    )
+                    try:
+                        sample_weight = np.array(sample_weight).flatten()
+                    except Exception as e:
+                        raise TypeError(
+                            "The sample weights must be contained within a numpy array."
+                        )
             if sample_weight.ndim != 1:
                 raise ValueError("The sample weights must be a 1D numpy array.")
+            for w in sample_weight:
+                if not isinstance(w, numbers.Number):
+                    raise TypeError(
+                        "All elements of the sample weights must be numeric."
+                    )
             if len(sample_weight) != X.shape[0]:
                 raise ValueError(
                     "The number of sample weights must match the number of samples in the input feature matrix."
@@ -483,8 +492,8 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         )
 
         if not optim_results.success:
-            self.intercept = None
-            self.coef = None
+            self.intercept_ = None
+            self.coef_ = None
             warnings.warn(
                 "LADRegressor optimisation failed. Setting intercept and coefficients to None.",
                 RuntimeWarning,
@@ -493,11 +502,11 @@ class LADRegressor(BaseEstimator, RegressorMixin):
 
         if self.fit_intercept:
             # Then store the intercept and feature weights
-            self.intercept = optim_results.x[0]
-            self.coef = optim_results.x[1:]
+            self.intercept_ = optim_results.x[0]
+            self.coef_ = optim_results.x[1:]
         else:
-            self.intercept = None
-            self.coef = optim_results.x
+            self.intercept_ = None
+            self.coef_ = optim_results.x
 
         return self
 
@@ -523,7 +532,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             raise TypeError("The inner index of X must be datetime.date.")
 
         # Predict
-        if self.intercept is None and self.coef is None:
+        if self.intercept_ is None and self.coef_ is None:
             warnings.warn(
                 "LADRegressor model fit failed. Predicting a zero signal.",
                 RuntimeWarning,
@@ -532,9 +541,9 @@ class LADRegressor(BaseEstimator, RegressorMixin):
 
         X = X.copy()
         if self.fit_intercept:
-            return (X.dot(self.coef) + self.intercept).values
+            return (X.dot(self.coef_) + self.intercept_).values
         else:
-            return X.dot(self.coef).values
+            return X.dot(self.coef_).values
 
     def _l1_loss(
         self,
