@@ -2,6 +2,7 @@
 Module with functionality for generating mock 
 quantamental data vintages for testing purposes.
 """
+
 import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple
@@ -79,14 +80,17 @@ class VintageData:
     def date_check(date_string):
         """
         Validates that the dates passed are valid timestamp expressions and will convert
-        to the required form '%Y-%m-%d'. Will raise an assertion if not in the expected
-        form.
+        to the required form '%Y-%m-%d'.
 
         :param <str> date_string: valid date expression. For instance, "1st January,
             2000."
+        :raises <TypeError>: if the date_string is not a string.
+        :raises <ValueError>: if the date_string is not in the correct format.
         """
         date_error = "Expected form of string: '%Y-%m-%d'."
         if date_string is not None:
+            if not isinstance(date_string, str):
+                raise TypeError("`date_string` must be a string.")
             try:
                 pd.Timestamp(date_string).strftime("%Y-%m-%d")
             except ValueError:
