@@ -427,7 +427,8 @@ class SignalOptimizer:
                 signal_df.loc[idx, column_name] = predictions
             except Exception as e:
                 warnings.warn(
-                    f"Error in signal calculation for {column_name}, date {str(date_levels[0])}. Setting to zero."
+                    f"Error in signal calculation for {column_name}, date {str(date_levels[0])}. Setting to zero.",
+                    RuntimeWarning,
                 )
                 signal_df.loc[idx, column_name] = 0
 
@@ -673,9 +674,9 @@ class SignalOptimizer:
         if cap <= 0:
             raise ValueError("The cap must be greater than zero.")
         if cap > 20:
-            logging.warning(
+            warnings.warn(
                 f"The maximum number of models to display is 20. The cap has been set to "
-                "20."
+                "20.", RuntimeWarning,
             )
             cap = 20
 
