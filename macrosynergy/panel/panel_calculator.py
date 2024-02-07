@@ -196,8 +196,9 @@ def panel_calculator(
     )
     cidx = np.sort(dfx["cid"].unique())
 
-    if np.all(cidx == single_cids):
-        cidx = cids
+    if len(cidx) == len(single_cids):
+        if np.all(cidx == single_cids):
+            cidx = cids
 
     # E. Create all required wide dataframes with category names.
 
