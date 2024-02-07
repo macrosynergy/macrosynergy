@@ -84,6 +84,7 @@ def multiple_reg_scatter(
             single_chart=single_chart,
             ax=ax,
         )
+    plt.tight_layout()
     plt.show()
 
 
