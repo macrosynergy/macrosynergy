@@ -36,6 +36,8 @@ from .df_utils import (
     years_btwn_dates,
     quarters_btwn_dates,
     get_eops,
+    time_series_to_df,
+    combine_qdfs,
 )
 
 from .math import (
@@ -81,5 +83,7 @@ __all__ = [
     "years_btwn_dates",
     "quarters_btwn_dates",
     "get_eops",
+    "time_series_to_df",
+    "combine_qdfs",
     "expanding_mean_with_nan",
 ]
