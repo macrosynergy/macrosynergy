@@ -421,6 +421,7 @@ class CategoryRelations(object):
                 colLabels=fields,
                 cellLoc="center",
                 loc=coef_box_loc,
+                zorder=10,
             )
         else:
             data_table = ax.table(
@@ -429,6 +430,7 @@ class CategoryRelations(object):
                 colLabels=fields,
                 cellLoc="center",
                 loc=coef_box_loc,
+                zorder=10,
             )
 
         return data_table
