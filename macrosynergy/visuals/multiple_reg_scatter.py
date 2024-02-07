@@ -24,6 +24,7 @@ def multiple_reg_scatter(
     prob_est="pool",
     separator=None,
     single_chart=False,
+    subplot_titles=None,
 ):
     """
     Visualize the results of a multiple regression analysis across categories.
@@ -55,6 +56,12 @@ def multiple_reg_scatter(
         ncol = len(cat_rels)
     if nrow == 0:
         nrow = 1
+    if subplot_titles is not None:
+        if len(subplot_titles) != len(cat_rels):
+            raise ValueError(
+                "The length of subplot_titles must be equal to the length of cat_rels."
+            )
+
     # if ncol * nrow > len(cat_rels):
 
     if separator is not None:
@@ -77,6 +84,7 @@ def multiple_reg_scatter(
         else:
             ax = axes[i] if (ncol == 1 or nrow == 1) else axes[row, col]
         cat_rel.reg_scatter(
+            title=subplot_titles[i],
             labels=False,
             xlab="",
             ylab="",
