@@ -645,7 +645,7 @@ class TestDataQueryInterface(unittest.TestCase):
             "end_date": "2020-02-01",
             "show_progress": True,
             "endpoint": HEARTBEAT_ENDPOINT,
-            "calender": "CAL_ALLDAYS",
+            "calender": "CAL_WEEKDAYS",
             "frequency": "FREQ_DAY",
             "conversion": "CONV_LASTBUS_ABS",
             "nan_treatment": "NA_NOTHING",

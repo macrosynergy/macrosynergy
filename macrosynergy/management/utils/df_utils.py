@@ -911,7 +911,7 @@ def time_series_to_df(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
         columns=["real_date", metric],
     ).assign(cid=cid, xcat=xcat)
 
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y%m%d")
 
     return df
 
