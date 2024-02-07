@@ -55,6 +55,8 @@ def multiple_reg_scatter(
         ncol = len(cat_rels)
     if nrow == 0:
         nrow = 1
+    # if ncol * nrow > len(cat_rels):
+
     if separator is not None:
         if separator == "cids":
             raise ValueError(
@@ -68,7 +70,7 @@ def multiple_reg_scatter(
     fig.supylabel(ylabel)
 
     for i, cat_rel in enumerate(cat_rels):
-        row = i // nrow
+        row = i // ncol
         col = i % ncol
         if not isinstance(axes, np.ndarray):
             ax = axes
@@ -178,11 +180,37 @@ if __name__ == "__main__":
         years=None,
     )
 
+    cr5 = CategoryRelations(
+        dfdx,
+        xcats=["CRY", "INFL"],
+        # xcat1_chg="diff",
+        freq="Q",
+        lag=1,
+        cids=cidx,
+        xcat_aggs=["mean", "sum"],
+        start="2001-01-01",
+        blacklist=black,
+        years=None,
+    )
+
+    cr6 = CategoryRelations(
+        dfdx,
+        xcats=["CRY", "INFL"],
+        # xcat1_chg="diff",
+        freq="Q",
+        lag=1,
+        cids=cidx,
+        xcat_aggs=["mean", "sum"],
+        start="2001-01-01",
+        blacklist=black,
+        years=None,
+    )
+
     multiple_reg_scatter(
-        [cr1, cr2, cr3, cr4],
+        [cr1, cr2, cr3, cr4, cr5, cr6],
         title="Growth trend and subsequent sectoral equity returns.",
         xlabel="Real technical growth trend",
         ylabel="Excess Return",
-        ncol=2,
+        ncol=3,
         nrow=2
     )
