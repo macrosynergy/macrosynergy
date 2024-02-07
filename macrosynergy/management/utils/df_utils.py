@@ -13,7 +13,14 @@ import numpy as np
 import pandas as pd
 import requests
 import requests.compat
-from .core import get_cid, get_xcat, _map_to_business_day_frequency
+import functools
+from .core import (
+    get_cid,
+    get_xcat,
+    _map_to_business_day_frequency,
+    deconstruct_expression,
+    construct_expressions,
+)
 
 
 def standardise_dataframe(
@@ -348,6 +355,7 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
         df = update_categories(df, df_add)
 
     return df.reset_index(drop=True)
+
 
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     """
@@ -882,3 +890,49 @@ def get_eops(
     t_dates: pd.Series = dts["real_date"].loc[t_indices].reset_index(drop=True)
 
     return t_dates
+
+
+def time_series_to_df(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
+    """
+    Converts a dictionary of time series to a QuantamentalDataFrame.
+
+    :param <Dict[str, Any]> timeseries: A dictionary of time series.
+    :return <QuantamentalDataFrame>: The converted DataFrame.
+    """
+    if not isinstance(timeseries, dict):
+        raise TypeError("Argument `timeseries` must be a dictionary.")
+
+    cid, xcat, metric = deconstruct_expression(
+        timeseries["attributes"][0]["expression"]
+    )
+
+    df: pd.DataFrame = pd.DataFrame(
+        timeseries["attributes"][0]["time-series"],
+        columns=["real_date", metric],
+    ).assign(cid=cid, xcat=xcat)
+
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
+    return df
+
+
+def combine_qdfs(
+    df_list: List[QuantamentalDataFrame],
+):
+    """
+    Combines a list of Quantamental DataFrames into a single DataFrame.
+
+    :param <List[QuantamentalDataFrame]> df_list: A list of Quantamental DataFrames.
+    :return <QuantamentalDataFrame>: The combined DataFrame.
+    """
+    if not isinstance(df_list, list):
+        raise TypeError("Argument `df_list` must be a list.")
+
+    if not all([isinstance(df, QuantamentalDataFrame) for df in df_list]):
+        raise TypeError("All elements in `df_list` must be Quantamental DataFrames.")
+
+    # use pd.merge to join on QuantamentalDataFrame.IndexCols
+    df: pd.DataFrame = functools.reduce(
+        lambda left, right: pd.merge(left, right, on=QuantamentalDataFrame.IndexCols),
+        df_list,
+    )
