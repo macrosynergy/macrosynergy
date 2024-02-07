@@ -1,4 +1,4 @@
-from .jpmaqs import JPMaQSDownload
 from .dataquery import DataQueryInterface
+from .jpmaqs import JPMaQSDownload
 
-__all__ = ["JPMaQSDownload", "DataQueryInterface"]
+__all__ = ["DataQueryInterface", "JPMaQSDownload"]
