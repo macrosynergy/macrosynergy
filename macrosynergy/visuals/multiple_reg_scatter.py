@@ -31,7 +31,7 @@ def multiple_reg_scatter(cat_rels, ncol=0, nrow=0, figsize=(20, 15)):
     for i, cat_rel in enumerate(cat_rels):
         row = i // nrow
         col = i % ncol
-        if not isinstance(axes, list):
+        if not isinstance(axes, np.ndarray):
             ax = axes
         else:
             ax = axes[i] if (ncol == 1 or nrow == 1) else axes[row, col]
@@ -121,4 +121,4 @@ if __name__ == "__main__":
         years=None,
     )
 
-    multiple_reg_scatter([cr1])
+    multiple_reg_scatter([cr1, cr2, cr3])
