@@ -4,25 +4,61 @@ import pandas as pd
 from macrosynergy.management.simulate.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.category_relations import CategoryRelations
 
-def multiple_reg_scatter(cat_rels, ncol=0, nrow=0, figsize=(20, 15), title="", xlabel="", ylabel = ""):
+
+def multiple_reg_scatter(
+    cat_rels,
+    ncol=0,
+    nrow=0,
+    figsize=(20, 15),
+    title="",
+    xlabel="",
+    ylabel="",
+    fit_reg=True,
+    reg_ci=95,
+    reg_order=1,
+    reg_robust=False,
+    coef_box=None,
+    prob_est="pool",
+    separator=None,
+    single_chart=False,
+):
     """
     Visualize the results of a multiple regression analysis across categories.
 
     :param <List[CategoryRelations]> cat_rels: list of CategoryRelations objects.
-
-    :return: None
+    :param <int> ncol: number of columns in the grid. Default is 0, which will be set to 
+        the length of cat_rels.
+    :param <int> nrow: number of rows in the grid. Default is 0, which will be set to 1.
+    :param <Tuple[float]> figsize: size of the figure. Default is (20, 15).
+    :param <str> title: title of the figure. Default is an empty string.
+    :param <str> xlabel: label of the x-axis. Default is an empty string.
+    :param <str> ylabel: label of the y-axis. Default is an empty string.
+    :param <bool> fit_reg: if True (default) a linear regression line is fitted to the 
+        data.
+    :param <int> reg_ci: confidence interval for the regression line. Default is 95.
+    :param <int> reg_order: order of the regression line. Default is 1.
+    :param <bool> reg_robust: if True (default is False) robust standard errors are used.
+    :param <str> coef_box: if not None, a box with the coefficients of the regression is
+        displayed. Default is None.
+    :param <str> prob_est: method to estimate the probability. Default is 'pool'.
+    :param <int> separator: allows categorizing the scatter analysis by
+            integer. This is done by setting it to a year [2010, for instance] which will 
+            subsequently split the time-period into the sample before (not including) that
+            year and from (including) that year.
+    :param <bool> single_chart: if True (default is False) all the data is plotted in a
+        single chart. If False, a grid of charts is created.
     """
     if ncol == 0:
         ncol = len(cat_rels)
     if nrow == 0:
         nrow = 1
-
+    if separator is not None:
+        if separator == "cids":
+            raise ValueError(
+                "Separator 'cids' is not permitted in multiple_reg_scatter. To get a plot across multiple cids, please specify separator as cids inside reg_scatter."
+            )
     fig, axes = plt.subplots(
-        nrows=nrow, 
-        ncols=ncol, 
-        figsize=figsize, 
-        sharex=True, 
-        sharey=True
+        nrows=nrow, ncols=ncol, figsize=figsize, sharex=True, sharey=True
     )
     fig.suptitle(title)
     fig.supxlabel(xlabel)
@@ -39,14 +75,17 @@ def multiple_reg_scatter(cat_rels, ncol=0, nrow=0, figsize=(20, 15), title="", x
             labels=False,
             xlab="",
             ylab="",
-            coef_box="upper right",
-            prob_est="pool",
-            fit_reg=True,
-            reg_robust=False,
-            single_chart=True,
+            fit_reg=fit_reg,
+            reg_ci=reg_ci,
+            reg_order=reg_order,
+            reg_robust=reg_robust,
+            coef_box=coef_box,
+            prob_est=prob_est,
+            single_chart=single_chart,
             ax=ax,
         )
     plt.show()
+
 
 if __name__ == "__main__":
     cids = ["AUD", "CAD", "GBP", "NZD", "USD"]
@@ -121,4 +160,24 @@ if __name__ == "__main__":
         years=None,
     )
 
-    multiple_reg_scatter([cr1, cr2, cr3], title="Growth trend and subsequent sectoral equity returns.", xlabel="Real technical growth trend", ylabel="Excess Return")
+    cr4 = CategoryRelations(
+        dfdx,
+        xcats=["CRY", "INFL"],
+        # xcat1_chg="diff",
+        freq="Q",
+        lag=1,
+        cids=cidx,
+        xcat_aggs=["mean", "sum"],
+        start="2001-01-01",
+        blacklist=black,
+        years=None,
+    )
+
+    multiple_reg_scatter(
+        [cr1, cr2, cr3, cr4],
+        title="Growth trend and subsequent sectoral equity returns.",
+        xlabel="Real technical growth trend",
+        ylabel="Excess Return",
+        ncol=2,
+        nrow=2
+    )
