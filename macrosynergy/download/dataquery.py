@@ -5,6 +5,11 @@ macrosynergy.download.jpmaqs.py. However, for a use cases independent
 of JPMaQS, this module can be used directly to download data from the
 JPMorgan DataQuery API.
 """
+
+import sys
+
+sys.path.append(".")
+
 import concurrent.futures
 import time
 import os
@@ -33,6 +38,8 @@ from macrosynergy.download.exceptions import (
 from macrosynergy.management.utils import (
     is_valid_iso_date,
     form_full_url,
+    time_series_to_df,
+    combine_qdfs,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 
@@ -429,6 +436,7 @@ class CertAuth(object):
 
 def validate_download_args(
     expressions: List[str],
+    as_dataframe: bool,
     start_date: str,
     end_date: str,
     show_progress: bool,
@@ -461,6 +469,9 @@ def validate_download_args(
     if not all(isinstance(expr, str) for expr in expressions):
         raise TypeError("`expressions` must be a list of strings.")
 
+    if not isinstance(as_dataframe, bool):
+        raise TypeError("`as_dataframe` must be a boolean.")
+
     for varx, namex in zip([start_date, end_date], ["start_date", "end_date"]):
         if (varx is None) or not isinstance(varx, str):
             raise TypeError(f"`{namex}` must be a string.")
@@ -483,7 +494,8 @@ def validate_download_args(
             RuntimeWarning(
                 f"`delay_param` is too low; DataQuery API may reject requests. "
                 f"Minimum recommended value is 0.2 seconds. "
-            ))
+            )
+        )
     if delay_param < 0.0:
         raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
 
@@ -514,7 +526,8 @@ def validate_download_args(
 
 def _get_unavailable_expressions(
     expected_exprs: List[str],
-    dicts_list: List[Dict],
+    dicts_list: List[Dict] = None,
+    combined_df: pd.DataFrame = None,
 ) -> List[str]:
     """
     Method to get the expressions that are not available in the response.
@@ -526,12 +539,21 @@ def _get_unavailable_expressions(
 
     :return <List[str]>: list of expressions that were not found in the dicts.
     """
-    found_exprs: List[str] = [
-        curr_dict["attributes"][0]["expression"]
-        for curr_dict in dicts_list
-        if curr_dict["attributes"][0]["time-series"] is not None
-    ]
-    return list(set(expected_exprs) - set(found_exprs))
+    if dicts_list is not None:
+        found_exprs: List[str] = [
+            curr_dict["attributes"][0]["expression"]
+            for curr_dict in dicts_list
+            if curr_dict["attributes"][0]["time-series"] is not None
+        ]
+        return list(set(expected_exprs) - set(found_exprs))
+
+    if combined_df is not None:
+        found_tickers = list(set(combined_df["cid"] + "_" + combined_df["xcat"]))
+        founds_metrics = list(
+            set(combined_df.columns) - set(QuantamentalDataFrame.IndexCols)
+        )
+        return list(set(expected_exprs) - set(founds_metrics))
+    
 
 
 class DataQueryInterface(object):
@@ -759,17 +781,18 @@ class DataQueryInterface(object):
 
         return downloaded_data
 
-
     def _fetch_timeseries(
         self,
         as_dataframe: bool,
         url: str,
         params: dict,
         tracking_id: Optional[str] = None,
-    ) -> List[Union[Dict, QuantamentalDataFrame]]: 
-        
-        ...
+    ) -> List[Union[Dict, QuantamentalDataFrame]]:
+        r = self._fetch(url=url, params=params, tracking_id=tracking_id)
+        if as_dataframe:
+            return combine_qdfs([time_series_to_df(d) for d in r])
 
+        return r
 
     def get_catalogue(
         self,
@@ -816,6 +839,7 @@ class DataQueryInterface(object):
         url: str,
         tracking_id: str,
         delay_param: float,
+        as_dataframe: bool = False,
         show_progress: bool = False,
         retry_counter: int = 0,
     ) -> List[dict]:
@@ -855,10 +879,11 @@ class DataQueryInterface(object):
                 curr_params["expressions"] = expr_batch
                 future_objects.append(
                     executor.submit(
-                        self._fetch,
+                        self._fetch_timeseries,
                         url=url,
                         params=curr_params,
                         tracking_id=tracking_id,
+                        as_dataframe=as_dataframe,
                     )
                 )
                 time.sleep(delay_param)
@@ -890,7 +915,9 @@ class DataQueryInterface(object):
                     if self.debug:
                         raise exc
 
-        final_output: List[Dict] = list(itertools.chain.from_iterable(download_outputs))
+        final_output: List[Union[Dict, QuantamentalDataFrame]] = list(
+            itertools.chain.from_iterable(download_outputs)
+        )
 
         if len(failed_batches) > 0:
             flat_failed_batches: List[str] = list(
@@ -901,7 +928,7 @@ class DataQueryInterface(object):
                 len(failed_batches),
                 len(flat_failed_batches),
             )
-            retried_output: List[dict] = self._download(
+            retried_output: List[Union[Dict, QuantamentalDataFrame]] = self._download(
                 expressions=flat_failed_batches,
                 params=params,
                 url=url,
@@ -918,18 +945,18 @@ class DataQueryInterface(object):
     def download_data(
         self,
         expressions: List[str],
+        as_dataframe: bool = False,
         start_date: str = "2000-01-01",
         end_date: str = None,
         show_progress: bool = False,
         endpoint: str = TIMESERIES_ENDPOINT,
-        calender: str = "CAL_ALLDAYS",
+        calender: str = "CAL_WEEKDAYS",
         frequency: str = "FREQ_DAY",
         conversion: str = "CONV_LASTBUS_ABS",
         nan_treatment: str = "NA_NOTHING",
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
-        delay_param: float = API_DELAY_PARAM,   # TODO do we want the user to have access 
-                                                # to this?
+        delay_param: float = API_DELAY_PARAM,
     ) -> List[Dict]:
         """
         Download data from the DataQuery API.
@@ -969,6 +996,7 @@ class DataQueryInterface(object):
 
         validate_download_args(
             expressions=expressions,
+            as_dataframe=as_dataframe,
             start_date=start_date,
             end_date=end_date,
             show_progress=show_progress,
@@ -1032,6 +1060,7 @@ class DataQueryInterface(object):
             tracking_id=tracking_id,
             delay_param=delay_param,
             show_progress=show_progress,
+            as_dataframe=as_dataframe,
         )
 
         self.unavailable_expressions = _get_unavailable_expressions(
@@ -1065,9 +1094,13 @@ if __name__ == "__main__":
 
         data = dq.download_data(
             expressions=expressions,
-            start_date="2020-01-25",
-            end_date="2023-02-05",
+            start_date="2024-02-01",
+            end_date="2023-02-08",
             show_progress=True,
+            as_dataframe=True,
         )
+        
+        if isinstance(data, QuantamentalDataFrame):
+            data.head()
 
     print(f"Succesfully downloaded data for {len(data)} expressions.")
