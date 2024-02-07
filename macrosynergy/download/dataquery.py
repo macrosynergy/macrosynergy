@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Union, Tuple
 from timeit import default_timer as timer
 from tqdm import tqdm
+import pandas as pd
 
 from macrosynergy import __version__ as ms_version_info
 from macrosynergy.download.exceptions import (
@@ -33,6 +34,7 @@ from macrosynergy.management.utils import (
     is_valid_iso_date,
     form_full_url,
 )
+from macrosynergy.management.types import QuantamentalDataFrame
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 OAUTH_BASE_URL: str = (
@@ -756,6 +758,18 @@ class DataQueryInterface(object):
             )
 
         return downloaded_data
+
+
+    def _fetch_timeseries(
+        self,
+        as_dataframe: bool,
+        url: str,
+        params: dict,
+        tracking_id: Optional[str] = None,
+    ) -> List[Union[Dict, QuantamentalDataFrame]]: 
+        
+        ...
+
 
     def get_catalogue(
         self,
