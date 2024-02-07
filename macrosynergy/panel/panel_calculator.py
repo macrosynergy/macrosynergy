@@ -179,6 +179,9 @@ def panel_calculator(
     # If any of the elements of single_cids are not in cids, add them to cids.
     cids_used = list(set(single_cids + cids))
 
+    if np.all(cidx == single_cids):
+        cidx = cids
+
     # D. Reduce dataframe with intersection requirement.
 
     dfx = reduce_df(
