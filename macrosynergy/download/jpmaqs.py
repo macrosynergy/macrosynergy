@@ -1,5 +1,8 @@
 """ JPMaQS Download Interface 
 """
+import sys
+sys.path.append('.')
+
 
 import datetime
 import io
@@ -21,6 +24,7 @@ from macrosynergy.management.utils import (
     construct_expressions,
     deconstruct_expression,
 )
+from macrosynergy.management.types import QuantamentalDataFrame
 
 logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -181,7 +185,6 @@ class JPMaQSDownload(object):
         self,
         data_df: pd.DataFrame,
         expected_expressions: List[str],
-        found_expressions: List[str],
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         verbose: bool = True,
@@ -192,8 +195,6 @@ class JPMaQSDownload(object):
         :param <pd.DataFrame> data_df: dataframe containing the downloaded data.
         :param <list[str]> expected_expressions: list of expressions that were expected
             to be downloaded.
-        :param <list[str]> found_expressions: list of expressions that were actually
-            downloaded.
         :param <str> start_date: start date of the downloaded data.
         :param <str> end_date: end date of the downloaded data.
         :param <bool> verbose: whether to print the validation results.
@@ -208,8 +209,14 @@ class JPMaQSDownload(object):
         if data_df.empty:
             return False
 
-        # check if all expressions are present in the df
-        exprs_f = set(found_expressions)
+        found_tickers = list(set((data_df["cid"] + "_" + data_df["xcat"])))
+        found_metrics = list(
+            set(data_df.columns) - set(QuantamentalDataFrame.IndexCols)
+        )
+        exprs_f = set(
+            construct_expressions(tickers=found_tickers, metrics=found_metrics)
+        )
+
         expr_expected = set(expected_expressions)
         expr_missing = expr_expected - exprs_f
         self.unavailable_expressions += list(expr_missing)
@@ -273,184 +280,6 @@ class JPMaQSDownload(object):
                 print(log_str)
 
         return True
-
-    def time_series_to_df(
-        self,
-        dicts_list: List[Dict],
-        validate_df: bool = True,
-        expected_expressions: Optional[List[str]] = None,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        show_progress: bool = False,
-        verbose: bool = True,
-    ) -> pd.DataFrame:
-        """
-        Convert the downloaded data to a pandas DataFrame.
-
-        :param dicts_list <list>: List of dictionaries containing time series
-            data from the DataQuery API
-
-        :return <pd.DataFrame>: JPMaQS standard dataframe with columns:
-            real_date, cid, xcat, <metric>. The <metric> column contains the
-            observed data for the given cid and xcat on the given real_date.
-
-        :raises <InvalidDataError>: if the downloaded dataframe is invalid.
-        """
-        dfs_dict: Dict[str, List[pd.DataFrame]] = {}
-        cid: str
-        xcat: str
-        found_expressions: List[str] = []
-        found_metrics: List[str] = []
-        _missing_exprs: List[str] = []
-        self.unavailable_expr_messages = []
-        # _missing_exprs is just a sanity check to verify self.unavailable_expressions
-        for d in tqdm(dicts_list, desc="Processing data", disable=not show_progress):
-            cid, xcat, metricx = JPMaQSDownload.deconstruct_expression(
-                d["attributes"][0]["expression"]
-            )
-            found_metrics = list(set(found_metrics) | {metricx})
-            if d["attributes"][0]["time-series"] is not None:
-                found_expressions.append(d["attributes"][0]["expression"])
-                df: pd.DataFrame = (
-                    pd.DataFrame(
-                        d["attributes"][0]["time-series"],
-                        columns=["real_date", metricx],
-                    ).assign(cid=cid, xcat=xcat)
-                    # .rename(columns={metricx: "obs"})
-                )
-                df = df[["real_date", "cid", "xcat", metricx]]
-                dfs_dict[metricx] = dfs_dict.get(metricx, []) + [df]
-            else:
-                _missing_exprs.append(d["attributes"][0]["expression"])
-                if "message" in d["attributes"][0]:
-                    self.unavailable_expr_messages.append(d["attributes"][0]["message"])
-                else:
-                    self.unavailable_expr_messages.append(
-                        "DataQuery did not return data or error message for expression "
-                        f"{d['attributes'][0]['expression']}"
-                    )
-            d = None  # free up memory
-        dicts_list = None  # free up memory
-
-        if len(dfs_dict) == 0:
-            raise InvalidDataframeError(
-                "No data was downloaded. Check logger output for"
-                " complete list of missing expressions."
-            )
-
-        if show_progress:
-            print("Concatenating dataframes...")
-
-        final_df: pd.DataFrame = functools.reduce(
-            lambda left, right: pd.merge(
-                left,
-                right,
-                on=["real_date", "cid", "xcat"],
-            ),
-            list(
-                map(
-                    lambda metricx: pd.concat(dfs_dict[metricx], ignore_index=True),
-                    dfs_dict,
-                )
-            ),
-        )
-
-        dfs_dict = None  # free up memory
-
-        ## Check for duplicate data
-        ## As of now, we are not checking for duplicate data as DQ specifies that there
-        ## will only be one entry for each expression on each date.
-
-        # if final_df.duplicated(subset=["real_date", "cid", "xcat"], keep=False).any():
-        #     # report the expressions that have duplicate data
-        #     err_str: str = "Duplicate data found for the following expressions:\n"
-        #     for i in df.groupby(["cid", "xcat"]).groups:
-        #         dts_series: pd.Series = df.iloc[df.groupby(["cid", "xcat"]).groups[i]][
-        #             "real_date"
-        #         ]
-        #         dts: List[str] = dts_series.tolist()
-        #         max_date: str = pd.to_datetime(max(dts)).strftime("%Y-%m-%d")
-        #         min_date: str = pd.to_datetime(min(dts)).strftime("%Y-%m-%d")
-        #         expression: str = self.construct_expressions(
-        #             cids=[i[0]], xcats=[i[1]], metrics=[i[2]]
-        #         )[0]
-        #         err_str += (
-        #             f"Expression: {expression}, Dates: {min_date} to {max_date}\n"
-        #         )
-        #     raise InvalidDataframeError(err_str)
-
-        final_df["real_date"] = pd.to_datetime(final_df["real_date"])
-
-        # list expected business dates, and non-business dates
-        expc_bdates: pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
-        expc_nbdates: pd.DatetimeIndex = pd.DatetimeIndex(
-            list(set(pd.date_range(start=start_date, end=end_date)) - set(expc_bdates))
-        )
-
-        # check if any dates in the downloaded data are not in the expected dates
-        # (business + non-business)
-        dates_bools: pd.Series = final_df["real_date"].isin(expc_bdates) | final_df[
-            "real_date"
-        ].isin(expc_nbdates)
-
-        unexpected_dates: pd.DatetimeIndex = final_df[~dates_bools][
-            "real_date"
-        ].unique()
-
-        if any(~dates_bools):
-            raise InvalidDataframeError(
-                f"Unexpected dates were found in the downloaded data: {unexpected_dates}"
-            )
-        dates_bools, unexpected_dates, expc_nbdates = None, None, None  # free up memory
-
-        # finally, filter out the non-business dates
-        final_df = final_df[final_df["real_date"].isin(expc_bdates)]
-
-        # sort all metrics in the order of self.valid_metrics, all other metrics will be
-        # at the end
-        found_metrics = [
-            metricx for metricx in self.valid_metrics if metricx in found_metrics
-        ]
-        # sort found_metrics in the order of self.valid_metrics, then re-order the columns
-        final_df = final_df[["real_date", "cid", "xcat"] + found_metrics]
-
-        # IMPORTANT NOTE:
-        # Drop NA containing rows to be revisited when blacklisting is implemented
-
-        final_df = final_df.dropna(axis=0, how="any")
-
-        # sort by CID, XCAT, then real_date
-        final_df = final_df.sort_values(["cid", "xcat", "real_date"]).reset_index(
-            drop=True
-        )
-
-        if validate_df:
-            if show_progress:
-                print("Validating the downloaded data...")
-            vdf = self.validate_downloaded_df(
-                data_df=final_df,
-                expected_expressions=expected_expressions,
-                found_expressions=found_expressions,
-                start_date=start_date,
-                end_date=end_date,
-                verbose=verbose,
-            )
-            if not vdf:
-                self.downloaded_data: Dict = {
-                    "data_df": final_df,
-                    "expected_expressions": expected_expressions,
-                    "found_expressions": found_expressions,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                }
-
-                raise InvalidDataframeError(
-                    "The downloaded data is not valid. "
-                    "Please check JPMaQSDownload.downloaded_data "
-                    "(dict) for more information."
-                )
-
-        return final_df
 
     def check_connection(
         self, verbose: bool = False, raise_error: bool = False
@@ -748,28 +577,9 @@ class JPMaQSDownload(object):
                 )
 
         download_time_taken: float = timer() - download_time_taken
-        dfs_time_taken: float = timer()
-        if as_dataframe:
-            data_df: pd.DataFrame = self.time_series_to_df(
-                dicts_list=data,
-                validate_df=True,
-                expected_expressions=expressions,
-                start_date=start_date,
-                end_date=end_date,
-                verbose=not self.suppress_warning,
-                show_progress=show_progress,
-            )
-            data = data_df
-
-        dfs_time_taken: float = timer() - dfs_time_taken
 
         if report_time_taken:
             print(f"Time taken to download data: \t{download_time_taken:.2f} seconds.")
-            if as_dataframe:
-                print(
-                    "Time taken to convert to dataframe: "
-                    f"\t{dfs_time_taken:.2f} seconds."
-                )
 
         if len(self.msg_errors) > 0:
             if not self.suppress_warning:
@@ -823,7 +633,7 @@ if __name__ == "__main__":
             xcats=xcats,
             metrics=metrics,
             start_date=start_date,
-            get_catalogue=True,
+            # get_catalogue=True,
             end_date=end_date,
             show_progress=True,
             suppress_warning=False,

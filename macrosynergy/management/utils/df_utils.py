@@ -67,9 +67,8 @@ def standardise_dataframe(
     df["xcat"] = df["xcat"].astype(str)
     df = df.sort_values(by=["real_date", "cid", "xcat"]).reset_index(drop=True)
 
-    remaining_cols: Set[str] = set(df.columns) - set(idx_cols)
-
-    df = df[idx_cols + sorted(list(remaining_cols))]
+    # sort in the order of commonly used cols, and the rest alphabetically
+    remaining_cols = list((set(df.columns) - set(idx_cols)) - set(commonly_used_cols))
 
     # for every remaining col, try to convert to float
     for col in remaining_cols:
@@ -78,8 +77,9 @@ def standardise_dataframe(
         except:
             pass
 
-    non_idx_cols: list = sorted(list(set(df.columns) - set(idx_cols)))
-    return_df: pd.DataFrame = df[idx_cols + non_idx_cols]
+    return_df: pd.DataFrame = df[
+        idx_cols + [c for c in commonly_used_cols if c in df.columns] + remaining_cols
+    ]
     assert isinstance(
         return_df, QuantamentalDataFrame
     ), "Failed to standardize DataFrame"
@@ -902,6 +902,9 @@ def time_series_to_df(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
     if not isinstance(timeseries, dict):
         raise TypeError("Argument `timeseries` must be a dictionary.")
 
+    if timeseries["attributes"][0]["time-series"] is None:
+        return None
+
     cid, xcat, metric = deconstruct_expression(
         timeseries["attributes"][0]["expression"]
     )
@@ -923,7 +926,7 @@ def time_series_to_df(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
 
 def combine_single_metric_qdfs(
     df_list: List[QuantamentalDataFrame],
-):
+) -> QuantamentalDataFrame:
     """
     Combines a list of Quantamental DataFrames into a single DataFrame.
 
@@ -954,8 +957,8 @@ def combine_single_metric_qdfs(
     df: pd.DataFrame = functools.reduce(
         lambda left, right: pd.merge(left, right, on=["real_date", "cid", "xcat"]),
         map(
-            lambda fm: pd.concat(df_list[fm], axis=1, ignore_index=False), found_metrics
+            lambda fm: pd.concat(df_list[fm], axis=0, ignore_index=False), found_metrics
         ),
     )
 
-    return df
+    return standardise_dataframe(df)

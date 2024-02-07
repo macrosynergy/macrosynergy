@@ -799,7 +799,7 @@ class DataQueryInterface(object):
         r = self._fetch(url=url, params=params, tracking_id=tracking_id)
         if as_dataframe:
             l = map(time_series_to_df, r)
-            return []
+            return list([i for i in l if i is not None])
 
         return r
 
@@ -955,7 +955,7 @@ class DataQueryInterface(object):
     def download_data(
         self,
         expressions: List[str],
-        as_dataframe: bool = False,
+        as_dataframe: bool = True,
         start_date: str = "2000-01-01",
         end_date: str = None,
         show_progress: bool = False,
@@ -967,7 +967,7 @@ class DataQueryInterface(object):
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
         delay_param: float = API_DELAY_PARAM,
-    ) -> List[Dict]:
+    ) -> Union[List[Dict], QuantamentalDataFrame]:
         """
         Download data from the DataQuery API.
 
@@ -1149,6 +1149,7 @@ if __name__ == "__main__":
         if isinstance(data, QuantamentalDataFrame):
             print(data.head())
 
-        data.to_csv("dataquery_data.csv")
+        tickers = list(set(data["cid"] + "_" + data["xcat"]))
+        metrics = list(set(data.columns) - set(QuantamentalDataFrame.IndexCols))
 
-    print(f"Succesfully downloaded data for {len(data)} expressions.")
+    print(f"Succesfully downloaded data for {len(tickers) * len(metrics)} expressions.")
