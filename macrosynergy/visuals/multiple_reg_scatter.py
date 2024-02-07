@@ -4,7 +4,7 @@ import pandas as pd
 from macrosynergy.management.simulate.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.category_relations import CategoryRelations
 
-def multiple_reg_scatter(cat_rels, ncol=0, nrow=0, figsize=(20, 15)):
+def multiple_reg_scatter(cat_rels, ncol=0, nrow=0, figsize=(20, 15), title="", xlabel="", ylabel = ""):
     """
     Visualize the results of a multiple regression analysis across categories.
 
@@ -24,9 +24,9 @@ def multiple_reg_scatter(cat_rels, ncol=0, nrow=0, figsize=(20, 15)):
         sharex=True, 
         sharey=True
     )
-    fig.suptitle("Growth trend and subsequent sectoral equity returns.")
-    fig.supxlabel("Real technical growth trend, YoY, 3MMA")
-    fig.supylabel("Excess return, vol adjusted, next month %")
+    fig.suptitle(title)
+    fig.supxlabel(xlabel)
+    fig.supylabel(ylabel)
 
     for i, cat_rel in enumerate(cat_rels):
         row = i // nrow
@@ -121,4 +121,4 @@ if __name__ == "__main__":
         years=None,
     )
 
-    multiple_reg_scatter([cr1, cr2, cr3])
+    multiple_reg_scatter([cr1, cr2, cr3], title="Growth trend and subsequent sectoral equity returns.", xlabel="Real technical growth trend", ylabel="Excess Return")
