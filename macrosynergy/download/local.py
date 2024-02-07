@@ -800,6 +800,7 @@ def create_store(
     expressions: List[str] = None,
     test_mode: bool = False,
     check_download: bool = False,
+    check_connection: bool = False,
 ) -> None:
     DownloadTimeseries(
         store_path=store_path,
@@ -807,6 +808,7 @@ def create_store(
         client_secret=client_secret,
         store_format=fmt,
         test_mode=test_mode,
+        check_connection=check_connection,
     ).download_data(
         show_progress=True,
         expressions=expressions,
