@@ -322,3 +322,81 @@ def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type
                 return result
 
     return None
+
+
+def construct_expressions(
+    tickers: Optional[List[str]] = None,
+    cids: Optional[List[str]] = None,
+    xcats: Optional[List[str]] = None,
+    metrics: Optional[List[str]] = None,
+) -> List[str]:
+    """Construct expressions from the provided arguments.
+
+    :param <list[str]> tickers: list of tickers.
+    :param <list[str]> cids: list of cids.
+    :param <list[str]> xcats: list of xcats.
+    :param <list[str]> metrics: list of metrics.
+
+    :return <list[str]>: list of expressions.
+    """
+
+    if tickers is None:
+        tickers = []
+    if cids is not None and xcats is not None:
+        tickers += [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+
+    return [f"DB(JPMAQS,{tick},{metric})" for tick in tickers for metric in metrics]
+
+
+@overload
+def deconstruct_expression(expression: str) -> List[str]: ...
+
+
+@overload
+def deconstruct_expression(expression: List[str]) -> List[List[str]]: ...
+
+
+def deconstruct_expression(
+    expression: Union[str, List[str]]
+) -> Union[List[str], List[List[str]]]:
+    """
+    Deconstruct an expression into a list of cid, xcat, and metric.
+    Coupled with JPMaQSDownload.time_series_to_df(), achieves the inverse of
+    JPMaQSDownload.construct_expressions(). For non-JPMaQS expressions, the returned
+    list will be [expression, expression, 'value']. The metric is set to 'value' to
+    ensure the reported metric is consistent with the standard JPMaQS metrics
+    (JPMaQSDownload.valid_metrics).
+
+    :param <str> expression: expression to deconstruct. If a list is provided,
+        each element will be deconstructed and returned as a list of lists.
+
+    :return <list[str]>: list of cid, xcat, and metric.
+
+    :raises TypeError: if `expression` is not a string or a list of strings.
+    :raises ValueError: if `expression` is an empty list.
+    """
+    if not isinstance(expression, (str, list)):
+        raise TypeError("`expression` must be a string or a list of strings.")
+
+    if isinstance(expression, list):
+        if not all(isinstance(exprx, str) for exprx in expression):
+            raise TypeError("All elements of `expression` must be strings.")
+        elif len(expression) == 0:
+            raise ValueError("`expression` must be a non-empty list.")
+        return list(map(deconstruct_expression, expression))
+    else:
+        try:
+            exprx: str = expression.replace("DB(JPMAQS,", "").replace(")", "")
+            ticker, metric = exprx.split(",")
+            result: List[str] = ticker.split("_", 1) + [metric]
+            if len(result) != 3:
+                raise ValueError(f"{exprx} is not a valid JPMaQS expression.")
+            return ticker.split("_", 1) + [metric]
+        except Exception as e:
+            warnings.warn(
+                f"Failed to deconstruct expression `{expression}`: {e}",
+                UserWarning,
+            )
+            # fail safely, return list where cid = xcat = expression,
+            #  and metric = 'value'
+            return [expression, expression, "value"]
