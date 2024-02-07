@@ -5,6 +5,7 @@ macrosynergy.download.jpmaqs.py. However, for a use cases independent
 of JPMaQS, this module can be used directly to download data from the
 JPMorgan DataQuery API.
 """
+
 import concurrent.futures
 import time
 import os
@@ -481,7 +482,8 @@ def validate_download_args(
             RuntimeWarning(
                 f"`delay_param` is too low; DataQuery API may reject requests. "
                 f"Minimum recommended value is 0.2 seconds. "
-            ))
+            )
+        )
     if delay_param < 0.0:
         raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
 
@@ -668,6 +670,8 @@ class DataQueryInterface(object):
 
         :raises <HeartbeatError>: if the heartbeat fails.
         """
+        logger.debug(f"Sleep before checking connection - {API_DELAY_PARAM} seconds")
+        time.sleep(API_DELAY_PARAM)
         logger.debug("Check if connection can be established to JPMorgan DataQuery")
         js: dict = request_wrapper(
             url=self.base_url + HEARTBEAT_ENDPOINT,
@@ -914,8 +918,7 @@ class DataQueryInterface(object):
         nan_treatment: str = "NA_NOTHING",
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
-        delay_param: float = API_DELAY_PARAM,   # TODO do we want the user to have access 
-                                                # to this?
+        delay_param: float = API_DELAY_PARAM,
     ) -> List[Dict]:
         """
         Download data from the DataQuery API.
@@ -984,7 +987,7 @@ class DataQueryInterface(object):
 
         # check heartbeat before each "batch" of requests
         if self._check_connection:
-            if not self.check_connection():
+            if not self.check_connection(verbose=True):
                 raise ConnectionError(
                     HeartbeatError(
                         f"Heartbeat failed. Timestamp (UTC):"
