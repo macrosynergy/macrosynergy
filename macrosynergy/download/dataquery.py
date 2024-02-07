@@ -39,7 +39,8 @@ from macrosynergy.management.utils import (
     is_valid_iso_date,
     form_full_url,
     time_series_to_df,
-    combine_qdfs,
+    construct_expressions,
+    combine_single_metric_qdfs,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 
@@ -526,8 +527,7 @@ def validate_download_args(
 
 def _get_unavailable_expressions(
     expected_exprs: List[str],
-    dicts_list: List[Dict] = None,
-    combined_df: pd.DataFrame = None,
+    downloaded_data: List[Union[Dict, QuantamentalDataFrame]],
 ) -> List[str]:
     """
     Method to get the expressions that are not available in the response.
@@ -539,21 +539,27 @@ def _get_unavailable_expressions(
 
     :return <List[str]>: list of expressions that were not found in the dicts.
     """
-    if dicts_list is not None:
+    if not downloaded_data:
+        raise ValueError("Downloaded data is empty or None.")
+
+    if isinstance(downloaded_data[0], dict):
         found_exprs: List[str] = [
             curr_dict["attributes"][0]["expression"]
-            for curr_dict in dicts_list
+            for curr_dict in downloaded_data
             if curr_dict["attributes"][0]["time-series"] is not None
         ]
         return list(set(expected_exprs) - set(found_exprs))
 
-    if combined_df is not None:
-        found_tickers = list(set(combined_df["cid"] + "_" + combined_df["xcat"]))
-        founds_metrics = list(
-            set(combined_df.columns) - set(QuantamentalDataFrame.IndexCols)
-        )
-        return list(set(expected_exprs) - set(founds_metrics))
-    
+    if isinstance(downloaded_data[0], QuantamentalDataFrame):
+        _metric = lambda df: list(
+            set(df.columns) - set(QuantamentalDataFrame.IndexCols)
+        )[0]
+        _ticker = lambda df: df["cid"].iloc[0] + "_" + df["xcat"].iloc[0]
+        _expr = lambda df: construct_expressions(
+            tickers=[_ticker(df)], metrics=[_metric(df)]
+        )[0]
+        found_exprs: List[str] = [_expr(df) for df in downloaded_data]
+        return list(set(expected_exprs) - set(found_exprs))
 
 
 class DataQueryInterface(object):
@@ -792,7 +798,8 @@ class DataQueryInterface(object):
     ) -> List[Union[Dict, QuantamentalDataFrame]]:
         r = self._fetch(url=url, params=params, tracking_id=tracking_id)
         if as_dataframe:
-            return combine_qdfs([time_series_to_df(d) for d in r])
+            l = map(time_series_to_df, r)
+            return []
 
         return r
 
@@ -844,7 +851,7 @@ class DataQueryInterface(object):
         as_dataframe: bool = False,
         show_progress: bool = False,
         retry_counter: int = 0,
-    ) -> List[dict]:
+    ) -> List[Union[Dict, QuantamentalDataFrame]]:
         """
         Backend method to download data from the DataQuery API.
         Used by the `download_data()` method.
@@ -938,6 +945,7 @@ class DataQueryInterface(object):
                 delay_param=delay_param + 0.1,
                 show_progress=show_progress,
                 retry_counter=retry_counter + 1,
+                as_dataframe=as_dataframe,
             )
 
             final_output += retried_output  # extend retried output
@@ -1066,15 +1074,20 @@ class DataQueryInterface(object):
         )
 
         self.unavailable_expressions = _get_unavailable_expressions(
-            expected_exprs=expressions, dicts_list=final_output
+            expected_exprs=expressions, downloaded_data=final_output
         )
+
         logger.info(
             "Downloaded expressions: %d, unavailable: %d",
             len(final_output),
             len(self.unavailable_expressions),
         )
 
-        return final_output
+        return (
+            final_output
+            if (not as_dataframe)
+            else combine_single_metric_qdfs(df_list=final_output)
+        )
 
 
 if __name__ == "__main__":
@@ -1086,7 +1099,38 @@ if __name__ == "__main__":
     expressions = [
         "DB(JPMAQS,USD_EQXR_VT10,value)",
         "DB(JPMAQS,AUD_EXALLOPENNESS_NSA_1YMA,value)",
+        "DB(JPMAQS,AUD_EXALLOPENNESS_NSA_1YMA,mop_lag)",
+        "DB(JPMAQS,GBP_FXCRYUSD_NSA,value)",
     ]
+
+    cids = [
+        "AUD",
+        "BRL",
+        "CAD",
+        "CHF",
+        "CNY",
+        "EUR",
+        "GBP",
+        "JPY",
+        "MXN",
+        "NOK",
+        "NZD",
+        "SEK",
+        "SGD",
+        "USD",
+        "COP",
+    ]
+    xcats = [
+        "CDS05YSPRD_NSA",
+        "CTOT_NSAP1W4WL1",
+        "DU02YXRxEASD_NSA",
+        "FXCRRHvGDRB_NSA",
+        "FXCRRUSD_NSA",
+    ]
+
+    expressions = construct_expressions(
+        cids=cids, xcats=xcats, metrics=["value", "grading", "mop_lag", "eop_lag"]
+    )
 
     with DataQueryInterface(
         client_id=client_id,
@@ -1096,13 +1140,15 @@ if __name__ == "__main__":
 
         data = dq.download_data(
             expressions=expressions,
-            start_date="2024-02-01",
-            end_date="2023-02-08",
+            start_date="1990-01-01",
+            end_date="2024-02-08",
             show_progress=True,
             as_dataframe=True,
         )
-        
+
         if isinstance(data, QuantamentalDataFrame):
-            data.head()
+            print(data.head())
+
+        data.to_csv("dataquery_data.csv")
 
     print(f"Succesfully downloaded data for {len(data)} expressions.")

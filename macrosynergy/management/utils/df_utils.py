@@ -906,17 +906,22 @@ def time_series_to_df(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
         timeseries["attributes"][0]["expression"]
     )
 
-    df: pd.DataFrame = pd.DataFrame(
-        timeseries["attributes"][0]["time-series"],
-        columns=["real_date", metric],
-    ).assign(cid=cid, xcat=xcat)
+    df: pd.DataFrame = (
+        pd.DataFrame(
+            timeseries["attributes"][0]["time-series"],
+            columns=["real_date", metric],
+        )
+        .assign(cid=cid, xcat=xcat)
+        .dropna()
+    )
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y%m%d")
-
+    if df.empty:
+        return None
     return df
 
 
-def combine_qdfs(
+def combine_single_metric_qdfs(
     df_list: List[QuantamentalDataFrame],
 ):
     """
@@ -931,8 +936,26 @@ def combine_qdfs(
     if not all([isinstance(df, QuantamentalDataFrame) for df in df_list]):
         raise TypeError("All elements in `df_list` must be Quantamental DataFrames.")
 
+    def _get_metric(df: QuantamentalDataFrame) -> List[str]:
+        lx = list(set(df.columns) - set(QuantamentalDataFrame.IndexCols))
+        if len(lx) != 1:
+            raise ValueError(
+                "Each QuantamentalDataFrame must have exactly one metric column."
+            )
+        return lx
+
+    found_metrics = list(set(itertools.chain.from_iterable(map(_get_metric, df_list))))
+
+    df_list = {
+        fm: [df for df in df_list if fm in _get_metric(df)] for fm in found_metrics
+    }
+
     # use pd.merge to join on QuantamentalDataFrame.IndexCols
     df: pd.DataFrame = functools.reduce(
-        lambda left, right: pd.merge(left, right, on=QuantamentalDataFrame.IndexCols),
-        df_list,
+        lambda left, right: pd.merge(left, right, on=["real_date", "cid", "xcat"]),
+        map(
+            lambda fm: pd.concat(df_list[fm], axis=1, ignore_index=False), found_metrics
+        ),
     )
+
+    return df
