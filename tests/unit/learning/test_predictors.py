@@ -66,11 +66,27 @@ class TestLADRegressor(unittest.TestCase):
         self.X = df.drop(columns="XR")
         self.y = df["XR"]
 
+    def test_types_init(self):
+        # Check that incorrectly specified arguments raise exceptions
+        with self.assertRaises(TypeError):
+            model = LADRegressor(fit_intercept="fit_intercept")
+        with self.assertRaises(TypeError):
+            model = LADRegressor(positive="positive")
+        with self.assertRaises(TypeError):
+            model = LADRegressor(tol="tol")
+        with self.assertRaises(ValueError):
+            model = LADRegressor(tol=-2)
+
     @parameterized.expand(itertools.product([True, False], [True, False]))
     def test_valid_init(self, fit_intercept, positive):
         # Test that a the LAD regression model is successfully instantiated for each of the possible arguments
+        set_tol = np.random.choice([True, False])
+        if set_tol:
+            tol = np.random.choice([1e-2, 1e-1, 1])
+        else:
+            tol = None
         try:
-            model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+            model = LADRegressor(fit_intercept=fit_intercept, positive=positive, tol = tol)
         except Exception as e:
             self.fail(
                 "LADRegressor constructor with a LinearRegression object raised an exception: {}".format(
@@ -81,6 +97,7 @@ class TestLADRegressor(unittest.TestCase):
         self.assertIsInstance(model, LADRegressor)
         self.assertEqual(model.fit_intercept, fit_intercept)
         self.assertEqual(model.positive, positive)
+        self.assertEqual(model.tol, tol)
 
     def test_equiv_quantile_lad_fit(self):
         # Test that the LADRegressor is equivalent to a QuantileRegressor with q=0.5
@@ -95,30 +112,104 @@ class TestLADRegressor(unittest.TestCase):
             )
         sklearn_model = QuantileRegressor(quantile=0.5,alpha=0,solver="highs")
         sklearn_model.fit(self.X, self.y)
-        np.testing.assert_almost_equal(model.coef, sklearn_model.coef_,decimal=2)
-        np.testing.assert_almost_equal(model.intercept, sklearn_model.intercept_,decimal=2)
+        np.testing.assert_almost_equal(model.coef_, sklearn_model.coef_,decimal=2)
+        np.testing.assert_almost_equal(model.intercept_, sklearn_model.intercept_,decimal=2)
+
+    @parameterized.expand(itertools.product([True, False], [True, False]))
+    def test_types_fit(self, fit_intercept, positive):
+        # Look for the necessary type errors first
+        with self.assertRaises(TypeError):
+            model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+            model.fit("self.X", self.y)
+        with self.assertRaises(TypeError):
+            model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+            model.fit(self.X, "self.y")
+        try:
+            model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+            model.fit(self.X, self.y, [1 for i in range(len(self.y))])
+        except Exception as e:
+            self.fail(
+                "LADRegressor fit with a list of sample weights raised an exception: {}".format(
+                    e
+                )
+            )
+        with self.assertRaises(TypeError):
+            model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+            model.fit(self.X, self.y, sample_weight="sample_weight")
+        # Now check that the necessary value errors are raised
+        with self.assertRaises(ValueError):
+            model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+            model.fit(self.X.reset_index(), self.y)
+        with self.assertRaises(ValueError):
+            model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+            model.fit(self.X, self.y.reset_index())
+        with self.assertRaises(ValueError):
+            model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+            model.fit(self.X, self.y.iloc[1:])
+        with self.assertRaises(ValueError):
+            model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+            model.fit(self.X, self.y,sample_weight=np.ones(len(self.y)+1))
+        with self.assertRaises(ValueError):
+            model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+            model.fit(self.X, self.y,sample_weight=np.ones((len(self.y),2)))
 
     @parameterized.expand(itertools.product([True, False], [True, False]))
     def test_valid_fit(self, fit_intercept, positive):
         # Test that the LADRegressor fit is successful for each of the possible arguments
-        model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+        model1 = LADRegressor(fit_intercept=fit_intercept, positive=positive)
         try:
-            model.fit(self.X, self.y)
+            model1.fit(self.X, self.y)
         except Exception as e:
             self.fail(
                 "LADRegressor fit raised an exception: {}".format(
                     e
                 )
             )
-        self.assertIsInstance(model, LADRegressor)
-        self.assertEqual(model.fit_intercept, fit_intercept)
-        self.assertEqual(model.positive, positive)
-        self.assertIsInstance(model.coef, np.ndarray)
+        self.assertIsInstance(model1, LADRegressor)
+        self.assertEqual(model1.fit_intercept, fit_intercept)
+        self.assertEqual(model1.positive, positive)
+        self.assertIsInstance(model1.coef_, np.ndarray)
         if fit_intercept:
-            self.assertIsInstance(model.intercept, float)
+            self.assertIsInstance(model1.intercept_, float)
         else:
-            self.assertTrue(model.intercept is None)
+            self.assertTrue(model1.intercept_ is None)
+        # Repeat but set the samples weights to be the same for all samples
+        model2 = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+        sample_weights = np.ones(len(self.y))*2 
+        try:
+            model2.fit(self.X, self.y, sample_weight=sample_weights)
+        except Exception as e:
+            self.fail(
+                "LADRegressor fit with sample weights raised an exception: {}".format(
+                    e
+                )
+            )
+        self.assertIsInstance(model2, LADRegressor)
+        self.assertEqual(model2.fit_intercept, fit_intercept)
+        self.assertEqual(model2.positive, positive)
+        self.assertIsInstance(model2.coef_, np.ndarray)
+        if fit_intercept:
+            self.assertIsInstance(model2.intercept_, float)
+        else:
+            self.assertTrue(model2.intercept_ is None)
+        # check that both models are equivalent
+        np.testing.assert_almost_equal(model1.coef_, model2.coef_,decimal=2)
+        if fit_intercept:
+            np.testing.assert_almost_equal(model1.intercept_, model2.intercept_,decimal=2)
 
+    @parameterized.expand(itertools.product([True, False], [True, False]))
+    def test_types_predict(self, fit_intercept, positive):
+        # Look for the necessary type errors first
+        with self.assertRaises(TypeError):
+            model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+            model.fit(self.X, self.y)
+            model.predict("self.X")
+        # Now check that the necessary value errors are raised
+        with self.assertRaises(ValueError):
+            model = LADRegressor(fit_intercept=fit_intercept, positive=positive)
+            model.fit(self.X, self.y)
+            model.predict(self.X.reset_index())
+   
     @parameterized.expand(itertools.product([True, False], [True, False], [True, False]))
     def test_valid_predict(self, fit_intercept, positive, is_df):
         # Test that the LADRegressor predict is successful for each of the possible arguments
@@ -135,8 +226,7 @@ class TestLADRegressor(unittest.TestCase):
                     e
                 )
             )
-        self.assertIsInstance(y_pred, pd.Series)
-        self.assertIsInstance(y_pred.index, pd.MultiIndex)
+        self.assertIsInstance(y_pred, np.ndarray)
 
     def test_equiv_quantile_lad_predict(self):
         # Test that the LADRegressor is equivalent to a QuantileRegressor with q=0.5
@@ -154,7 +244,7 @@ class TestLADRegressor(unittest.TestCase):
         sklearn_model = QuantileRegressor(quantile=0.5,alpha=0,solver="highs")
         sklearn_model.fit(self.X, self.y)
         y_pred_sk = sklearn_model.predict(self.X)
-        np.testing.assert_almost_equal(y_pred.values, y_pred_sk,decimal=2)
+        np.testing.assert_almost_equal(y_pred, y_pred_sk,decimal=2)
 
 class TestSWLRegression(unittest.TestCase):
     @classmethod

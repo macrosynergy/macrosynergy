@@ -26,6 +26,8 @@ from .predictors import (
     NaivePredictor,
     SignWeightedLinearRegression,
     TimeWeightedLinearRegression,
+    SignWeightedLADRegressor,
+    TimeWeightedLADRegressor,
     LADRegressor,
 )
 
@@ -55,7 +57,9 @@ __all__ = [
     # predictors
     "LADRegressor",
     "NaivePredictor",
-    "SignWeightedRegressor",
-    "TimeWeightedRegressor",
+    "SignWeightedLADRegressor",
+    "TimeWeightedLADRegressor",
+    "SignWeightedLinearRegression",
+    "TimeWeightedLinearRegression",
 ]
  
