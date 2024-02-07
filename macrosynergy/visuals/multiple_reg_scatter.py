@@ -11,6 +11,9 @@ def multiple_reg_scatter(
     nrow=0,
     figsize=(20, 15),
     title="",
+    title_xadj=0.5,
+    title_yadj=0.99,
+    title_fontsize=20,
     xlabel="",
     ylabel="",
     fit_reg=True,
@@ -60,7 +63,7 @@ def multiple_reg_scatter(
     fig, axes = plt.subplots(
         nrows=nrow, ncols=ncol, figsize=figsize, sharex=True, sharey=True
     )
-    fig.suptitle(title)
+    fig.suptitle(title, x=title_xadj, y=title_yadj, fontsize=title_fontsize)
     fig.supxlabel(xlabel)
     fig.supylabel(ylabel)
 
@@ -84,6 +87,7 @@ def multiple_reg_scatter(
             single_chart=single_chart,
             ax=ax,
         )
+    plt.subplots_adjust(top=title_yadj - 0.01)
     plt.tight_layout()
     plt.show()
 
