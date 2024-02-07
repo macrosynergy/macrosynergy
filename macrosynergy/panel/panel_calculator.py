@@ -183,9 +183,6 @@ def panel_calculator(
     # If any of the elements of single_cids are not in cids, add them to cids.
     cids_used = cids + list(set(single_cids) - set(cids))
 
-    if np.all(cidx == single_cids):
-        cidx = cids
-
     # D. Reduce dataframe with intersection requirement.
 
     dfx = reduce_df(
@@ -198,6 +195,9 @@ def panel_calculator(
         intersect=False,
     )
     cidx = np.sort(dfx["cid"].unique())
+
+    if np.all(cidx == single_cids):
+        cidx = cids
 
     # E. Create all required wide dataframes with category names.
 
