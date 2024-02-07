@@ -726,7 +726,7 @@ class JPMaQSDownload(object):
                     "%Y-%m-%d %H:%M:%S"
                 ),
             )
-            self.dq_interface.check_connection(verbose=True)
+
             print(f"Number of expressions requested: {len(expressions)}")
             data = dq.download_data(
                 expressions=expressions,

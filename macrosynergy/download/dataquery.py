@@ -692,6 +692,8 @@ class DataQueryInterface(object):
 
         :raises <HeartbeatError>: if the heartbeat fails.
         """
+        logger.debug(f"Sleep before checking connection - {API_DELAY_PARAM} seconds")
+        time.sleep(API_DELAY_PARAM)
         logger.debug("Check if connection can be established to JPMorgan DataQuery")
         js: dict = request_wrapper(
             url=self.base_url + HEARTBEAT_ENDPOINT,
@@ -1026,7 +1028,7 @@ class DataQueryInterface(object):
 
         # check heartbeat before each "batch" of requests
         if self._check_connection:
-            if not self.check_connection():
+            if not self.check_connection(verbose=True):
                 raise ConnectionError(
                     HeartbeatError(
                         f"Heartbeat failed. Timestamp (UTC):"
