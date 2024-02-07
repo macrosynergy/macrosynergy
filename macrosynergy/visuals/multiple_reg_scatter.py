@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from macrosynergy.management.simulate.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.category_relations import CategoryRelations
+import textwrap
 
 
 def multiple_reg_scatter(
@@ -30,14 +31,14 @@ def multiple_reg_scatter(
     Visualize the results of a multiple regression analysis across categories.
 
     :param <List[CategoryRelations]> cat_rels: list of CategoryRelations objects.
-    :param <int> ncol: number of columns in the grid. Default is 0, which will be set to 
+    :param <int> ncol: number of columns in the grid. Default is 0, which will be set to
         the length of cat_rels.
     :param <int> nrow: number of rows in the grid. Default is 0, which will be set to 1.
     :param <Tuple[float]> figsize: size of the figure. Default is (20, 15).
     :param <str> title: title of the figure. Default is an empty string.
     :param <str> xlabel: label of the x-axis. Default is an empty string.
     :param <str> ylabel: label of the y-axis. Default is an empty string.
-    :param <bool> fit_reg: if True (default) a linear regression line is fitted to the 
+    :param <bool> fit_reg: if True (default) a linear regression line is fitted to the
         data.
     :param <int> reg_ci: confidence interval for the regression line. Default is 95.
     :param <int> reg_order: order of the regression line. Default is 1.
@@ -46,7 +47,7 @@ def multiple_reg_scatter(
         displayed. Default is None.
     :param <str> prob_est: method to estimate the probability. Default is 'pool'.
     :param <int> separator: allows categorizing the scatter analysis by
-            integer. This is done by setting it to a year [2010, for instance] which will 
+            integer. This is done by setting it to a year [2010, for instance] which will
             subsequently split the time-period into the sample before (not including) that
             year and from (including) that year.
     :param <bool> single_chart: if True (default is False) all the data is plotted in a
@@ -83,8 +84,30 @@ def multiple_reg_scatter(
             ax = axes
         else:
             ax = axes[i] if (ncol == 1 or nrow == 1) else axes[row, col]
+        
+        if subplot_titles is not None:
+            subplot_title = subplot_titles[i]
+        else:
+            if cat_rel.years is None:
+                dates = (
+                    cat_rel.df.index.get_level_values("real_date")
+                    .to_series()
+                    .dt.strftime("%Y-%m-%d")
+                )
+                subplot_title = (
+                    f"{cat_rel.xcats[0]} and {cat_rel.xcats[1]} "
+                    f"from {dates.min()} to {dates.max()}"
+                )
+            else:
+                subplot_title = f"{cat_rel.xcats[0]} and {cat_rel.xcats[1]}"
+
+        width = (figsize[0] // ncol) * 6
+
+        wrapped_title = "\n".join(
+            textwrap.wrap(subplot_title, width=width)
+        )
         cat_rel.reg_scatter(
-            title=subplot_titles[i],
+            title=wrapped_title,
             labels=False,
             xlab="",
             ylab="",
@@ -97,6 +120,7 @@ def multiple_reg_scatter(
             single_chart=single_chart,
             ax=ax,
         )
+
     plt.subplots_adjust(top=title_yadj - 0.01)
     plt.tight_layout()
     plt.show()
@@ -118,7 +142,14 @@ if __name__ == "__main__":
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
     df_xcats = pd.DataFrame(index=xcats, columns=cols)
     df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc["CRY"] = ["2000-01-01", "2020-10-30", 1, 2, 0.95, 1]
+    df_xcats.loc["CRY"] = [
+        "2000-01-01",
+        "2020-10-30",
+        1,
+        2,
+        0.95,
+        1,
+    ]
     df_xcats.loc["GROWTH"] = ["2001-01-01", "2020-10-30", 1, 2, 0.9, 1]
     df_xcats.loc["INFL"] = ["2001-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
 
@@ -220,5 +251,14 @@ if __name__ == "__main__":
         xlabel="Real technical growth trend",
         ylabel="Excess Return",
         ncol=3,
-        nrow=2
+        nrow=2,
+    )
+
+    multiple_reg_scatter(
+        [cr1, cr2, cr3, cr4, cr5, cr6],
+        title="Growth trend and subsequent sectoral equity returns.",
+        xlabel="Real technical growth trend",
+        ylabel="Excess Return",
+        ncol=6,
+        nrow=2,
     )
