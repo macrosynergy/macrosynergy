@@ -5,6 +5,7 @@ macrosynergy.download.jpmaqs.py. However, for a use cases independent
 of JPMaQS, this module can be used directly to download data from the
 JPMorgan DataQuery API.
 """
+
 import concurrent.futures
 import time
 import os
@@ -15,7 +16,7 @@ import uuid
 import io
 import warnings
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Union, Tuple
 from timeit import default_timer as timer
 from tqdm import tqdm
@@ -41,7 +42,7 @@ OAUTH_BASE_URL: str = (
 OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 JPMAQS_GROUP_ID: str = "JPMAQS"
-API_DELAY_PARAM: float = 0.3  # 300ms delay between requests
+API_DELAY_PARAM: float = 0.2  # 300ms delay between requests
 API_RETRY_COUNT: int = 5  # retry count for transient errors
 HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
 MAX_CONTINUOUS_FAILURES: int = 5  # max number of continuous errors before stopping
@@ -89,7 +90,7 @@ def validate_response(
         f"Response status code: {response.status_code}\n"
         f"Response headers: {response.headers}\n"
         f"Response text: {response.text}\n"
-        f"Timestamp (UTC): {datetime.utcnow().isoformat()}; \n"
+        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}; \n"
     )
     # TODO : Use response.raise_for_status() as a better way to check for errors
     if not response.ok:
@@ -312,7 +313,7 @@ class OAuth(object):
             seconds=self._stored_token["expires_in"]
         )
 
-        utcnow = datetime.utcnow()
+        utcnow = datetime.now(timezone.utc)
         is_active: bool = expires > utcnow
 
         logger.debug(
@@ -344,7 +345,7 @@ class OAuth(object):
 
             # NOTE : use UTC time for token expiry
             self._stored_token: dict = {
-                "created_at": datetime.utcnow(),
+                "created_at": datetime.now(timezone.utc),
                 "access_token": js["access_token"],
                 "expires_in": js["expires_in"],
             }
@@ -481,7 +482,8 @@ def validate_download_args(
             RuntimeWarning(
                 f"`delay_param` is too low; DataQuery API may reject requests. "
                 f"Minimum recommended value is 0.2 seconds. "
-            ))
+            )
+        )
     if delay_param < 0.0:
         raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
 
@@ -668,6 +670,8 @@ class DataQueryInterface(object):
 
         :raises <HeartbeatError>: if the heartbeat fails.
         """
+        logger.debug(f"Sleep before checking connection - {API_DELAY_PARAM} seconds")
+        time.sleep(API_DELAY_PARAM)
         logger.debug("Check if connection can be established to JPMorgan DataQuery")
         js: dict = request_wrapper(
             url=self.base_url + HEARTBEAT_ENDPOINT,
@@ -733,20 +737,20 @@ class DataQueryInterface(object):
                         f"Content was not found for the request: {response}\n"
                         f"User ID: {self.auth.get_auth()['user_id']}\n"
                         f"URL: {form_full_url(url, params)}\n"
-                        f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
+                        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}"
                     )
 
             raise InvalidResponseError(
                 f"Invalid response from DataQuery: {response}\n"
                 f"User ID: {self.auth.get_auth()['user_id']}\n"
                 f"URL: {form_full_url(url, params)}"
-                f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
+                f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}"
             )
 
         downloaded_data.extend(response["instruments"])
 
         if "links" in response.keys() and response["links"][1]["next"] is not None:
-            logger.info("DQ response paginated - get next response page")
+            logger.debug("DQ response paginated - get next response page")
             downloaded_data.extend(
                 self._fetch(
                     url=self.base_url + response["links"][1]["next"],
@@ -914,8 +918,7 @@ class DataQueryInterface(object):
         nan_treatment: str = "NA_NOTHING",
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
-        delay_param: float = API_DELAY_PARAM,   # TODO do we want the user to have access 
-                                                # to this?
+        delay_param: float = API_DELAY_PARAM,
     ) -> List[Dict]:
         """
         Download data from the DataQuery API.
@@ -984,11 +987,11 @@ class DataQueryInterface(object):
 
         # check heartbeat before each "batch" of requests
         if self._check_connection:
-            if not self.check_connection():
+            if not self.check_connection(verbose=True):
                 raise ConnectionError(
                     HeartbeatError(
                         f"Heartbeat failed. Timestamp (UTC):"
-                        f" {datetime.utcnow().isoformat()}\n"
+                        f" {datetime.now(timezone.utc).isoformat()}\n"
                         f"User ID: {self.auth.get_auth()['user_id']}\n"
                     )
                 )

@@ -17,7 +17,7 @@ from sklearn.pipeline import Pipeline
 from typing import List, Union, Dict, Optional, Callable, Tuple
 from tqdm import tqdm
 
-import logging
+import warnings
 
 from joblib import Parallel, delayed
 
@@ -33,7 +33,7 @@ class SignalOptimizer:
         self,
         inner_splitter: BasePanelSplit,
         X: pd.DataFrame,
-        y: Union[pd.DataFrame,pd.Series],
+        y: Union[pd.DataFrame, pd.Series],
         blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]] = None,
     ):
         """
@@ -44,13 +44,13 @@ class SignalOptimizer:
         a training and test set are created, and a grid search using the specified
         'inner_splitter' is performed to determine an optimal model amongst a set of
         candidate models. Once this is selected, the chosen model is used to make the test
-        set forecasts. Lastly, we cast these forecasts back by a frequency period to 
+        set forecasts. Lastly, we cast these forecasts back by a frequency period to
         account for the lagged features, creating point-in-time signals.
 
-        The features in the dataframe, X, are expected to be lagged quantamental 
-        indicators, at a single native frequency unit, with the targets, in y, being the 
-        cumulative returns at the native frequency. By providing a blacklisting 
-        dictionary, preferably through macrosynergy.management.make_blacklist, the user 
+        The features in the dataframe, X, are expected to be lagged quantamental
+        indicators, at a single native frequency unit, with the targets, in y, being the
+        cumulative returns at the native frequency. By providing a blacklisting
+        dictionary, preferably through macrosynergy.management.make_blacklist, the user
         can specify time periods to ignore.
 
         :param <BasePanelSplit> inner_splitter: Panel splitter that is used to split
@@ -116,7 +116,7 @@ class SignalOptimizer:
         )
         print(so.get_optimized_signals("KNN"))
 
-        # (3) Linear regression & KNN mixture signal with adaptive hyperparameter 
+        # (3) Linear regression & KNN mixture signal with adaptive hyperparameter
             optimisation
         so.calculate_predictions(
             name="MIX",
@@ -151,7 +151,7 @@ class SignalOptimizer:
             raise TypeError("The inner index of y must be datetime.date.")
         if not X.index.equals(y.index):
             raise ValueError(
-                "The indices of the input dataframe X and the output dataframe y don't " 
+                "The indices of the input dataframe X and the output dataframe y don't "
                 "match."
             )
         if blacklist is not None:
@@ -208,8 +208,8 @@ class SignalOptimizer:
     ) -> None:
         """
         Calculate, store and return sequentially optimized signals for a given process.
-        This method implements the nested cross-validation and subsequent signal 
-        generation. The name of the process, together with models to fit, hyperparameters 
+        This method implements the nested cross-validation and subsequent signal
+        generation. The name of the process, together with models to fit, hyperparameters
         to search over and a metric to optimize, are provided as compulsory arguments.
 
         :param <str> name: Label of signal optimization process.
@@ -250,7 +250,7 @@ class SignalOptimizer:
         :param <Optional[int]> max_periods: maximum length of each training set in units
             of the input data frequency. If this maximum is exceeded, the earliest periods
             are cut off. Default is None, which means that the full training history is
-            considered in each iteration. 
+            considered in each iteration.
         :param <int> n_iter: Number of iterations to run for random search. Default is 10.
         :param <int> n_jobs: Number of jobs to run in parallel. Default is -1, which uses
             all available cores.
@@ -264,14 +264,14 @@ class SignalOptimizer:
         is chosen and used for predicting the targets of the next period.
         """
         # Checks
-        if type(name) != str:
+        if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
         if models == {}:
             raise ValueError("The models dictionary cannot be empty.")
-        if type(models) != dict:
+        if not isinstance(models, dict):
             raise TypeError("The models argument must be a dictionary.")
         for key in models.keys():
-            if type(key) != str:
+            if not isinstance(key, str):
                 raise TypeError("The keys of the models dictionary must be strings.")
             if not isinstance(models[key], (BaseEstimator, Pipeline)):
                 raise TypeError(
@@ -280,7 +280,7 @@ class SignalOptimizer:
                 )
         if not callable(metric):
             raise TypeError("The metric argument must be a callable object.")
-        if type(hparam_type) != str:
+        if not isinstance(hparam_type, str):
             raise TypeError("The hparam_type argument must be a string.")
         if hparam_type not in ["grid", "random", "bayes"]:
             raise ValueError(
@@ -288,24 +288,26 @@ class SignalOptimizer:
             )
         if hparam_type == "bayes":
             raise NotImplementedError("Bayesian optimisation not yet implemented.")
-        if type(hparam_grid) != dict:
+        if not isinstance(hparam_grid, dict):
             raise TypeError("The hparam_grid argument must be a dictionary.")
         for pipe_name, pipe_params in hparam_grid.items():
-            if type(pipe_name) != str:
-                raise TypeError("The keys of the hparam_grid dictionary must be strings.")
-            if type(pipe_params) != dict:
+            if not isinstance(pipe_name, str):
+                raise TypeError(
+                    "The keys of the hparam_grid dictionary must be strings."
+                )
+            if not isinstance(pipe_params, dict):
                 raise TypeError(
                     "The values of the hparam_grid dictionary must be dictionaries."
                 )
             if pipe_params != {}:
                 for hparam_key, hparam_values in pipe_params.items():
-                    if type(hparam_key) != str:
+                    if not isinstance(hparam_key, str):
                         raise TypeError(
                             "The keys of the inner hparam_grid dictionaries must be "
                             "strings."
                         )
                     if hparam_type == "grid":
-                        if type(hparam_values) != list:
+                        if not isinstance(hparam_values, list):
                             raise TypeError(
                                 "The values of the inner hparam_grid dictionaries must be "
                                 "lists if hparam_type is 'grid'."
@@ -336,16 +338,16 @@ class SignalOptimizer:
                 "The keys in the hyperparameter grid must match those in the models "
                 "dictionary."
             )
-        if type(min_cids) != int:
+        if not isinstance(min_cids, int): 
             raise TypeError("The min_cids argument must be an integer.")
         if min_cids < 1:
             raise ValueError("The min_cids argument must be greater than zero.")
-        if type(min_periods) != int:
+        if not isinstance(min_periods, int):
             raise TypeError("The min_periods argument must be an integer.")
         if min_periods < 1:
             raise ValueError("The min_periods argument must be greater than zero.")
         if max_periods is not None:
-            if type(max_periods) != int:
+            if not isinstance(max_periods, int):
                 raise TypeError("The max_periods argument must be an integer.")
             if max_periods < 1:
                 raise ValueError("The max_periods argument must be greater than zero.")
@@ -354,14 +356,14 @@ class SignalOptimizer:
                 raise TypeError("The n_iter argument must be an integer.")
             if n_iter < 1:
                 raise ValueError("The n_iter argument must be greater than zero.")
-        if type(n_jobs) != int:
+        if not isinstance(n_jobs, int):
             raise TypeError("The n_jobs argument must be an integer.")
-        if ((n_jobs <= 0) and (n_jobs != -1)):
+        if (n_jobs <= 0) and (n_jobs != -1):
             raise ValueError("The n_jobs argument must be greater than zero or -1.")
-        
+
         # Calculate predictions
         # (1) Create a dataframe to store the signals induced by each model.
-        #     The index should be a multi-index with cross-sections equal to those in X 
+        #     The index should be a multi-index with cross-sections equal to those in X
         #     and business-day dates spanning the range of dates in X.
         signal_xs_levels: List[str] = sorted(self.X.index.get_level_values(0).unique())
         original_date_levels: List[pd.Timestamp] = sorted(
@@ -421,7 +423,14 @@ class SignalOptimizer:
         # Condense the collected data into a single dataframe
         for column_name, xs_levels, date_levels, predictions in prediction_data:
             idx = pd.MultiIndex.from_product([xs_levels, date_levels])
-            signal_df.loc[idx, column_name] = predictions
+            try:
+                signal_df.loc[idx, column_name] = predictions
+            except Exception as e:
+                warnings.warn(
+                    f"Error in signal calculation for {column_name}, date {str(date_levels[0])}. Setting to zero.",
+                    RuntimeWarning,
+                )
+                signal_df.loc[idx, column_name] = 0
 
         # Now convert signal_df into a quantamental dataframe
         # This will also ffill the last date of each cross-section as this will be an NA.
@@ -432,9 +441,10 @@ class SignalOptimizer:
             for cross_section, periods in self.blacklist.items():
                 cross_section_key = cross_section.split("_")[0]
                 # Set blacklisted periods to NaN
-                signal_df.loc[
-                    (cross_section_key, slice(periods[0], periods[1])), :
-                ] = np.nan
+                if cross_section_key in signal_xs_levels:
+                    signal_df.loc[
+                        (cross_section_key, slice(periods[0], periods[1])), :
+                    ] = np.nan
 
         signal_df_long: pd.DataFrame = pd.melt(
             frame=signal_df.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
@@ -567,7 +577,7 @@ class SignalOptimizer:
         """
         Returns optimized signals for one or more processes
 
-        :param <Optional[Union[str, List]]> name: Label of signal optimization process. 
+        :param <Optional[Union[str, List]]> name: Label of signal optimization process.
             Default is all stored in the class instance.
 
         :return <pd.DataFrame>: Pandas dataframe in JPMaQS format of working daily
@@ -576,9 +586,9 @@ class SignalOptimizer:
         if name is None:
             return self.preds
         else:
-            if type(name) == str:
+            if isinstance(name, str):
                 name = [name]
-            elif type(name) != list:
+            elif not isinstance(name, list):
                 raise TypeError(
                     "The process name must be a string or a list of strings."
                 )
@@ -609,9 +619,9 @@ class SignalOptimizer:
         if name is None:
             return self.chosen_models
         else:
-            if type(name) == str:
+            if isinstance(name, str):
                 name = [name]
-            elif type(name) != list:
+            elif not isinstance(name, list):
                 raise TypeError(
                     "The process name must be a string or a list of strings."
                 )
@@ -637,10 +647,10 @@ class SignalOptimizer:
         Visualized optimal models used for signal calculation.
 
         :param <str> name: Name of the prediction model.
-        :param <Optional[str]> title: Title of the heatmap. Default is None. This creates 
+        :param <Optional[str]> title: Title of the heatmap. Default is None. This creates
             a figure title of the form "Model Selection Heatmap for {name}".
-        :param <Optional[int]> cap: Maximum number of models to display. Default 
-            (and limit) is 5. The chosen models are the 'cap' most frequently occurring 
+        :param <Optional[int]> cap: Maximum number of models to display. Default
+            (and limit) is 5. The chosen models are the 'cap' most frequently occurring
             in the pipeline.
         :param <Optional[Tuple[Union[int, float], Union[int, float]]]> figsize: Tuple of
             floats or ints denoting the figure size. Default is (12, 8).
@@ -650,7 +660,7 @@ class SignalOptimizer:
         has been optimal and used for signal generation, as a binary heatmap.
         """
         # Checks
-        if type(name) != str:
+        if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
         if name not in self.chosen_models.name.unique():
             raise ValueError(
@@ -659,30 +669,32 @@ class SignalOptimizer:
                 run calculate_predictions() first.
                 """
             )
-        if type(cap) != int:
+        if not isinstance(cap, int):
             raise TypeError("The cap must be an integer.")
         if cap <= 0:
             raise ValueError("The cap must be greater than zero.")
         if cap > 20:
-            logging.warning(
+            warnings.warn(
                 f"The maximum number of models to display is 20. The cap has been set to "
-                "20."
+                "20.", RuntimeWarning,
             )
             cap = 20
 
         if title is None:
             title = f"Model Selection Heatmap for {name}"
-        if type(title) != str:
+        if not isinstance(title, str):
             raise TypeError("The figure title must be a string.")
-        
-        if type(figsize) != tuple:
+
+        if not isinstance(figsize, tuple):
             raise TypeError("The figsize argument must be a tuple.")
         if len(figsize) != 2:
             raise ValueError("The figsize argument must be a tuple of length 2.")
         for element in figsize:
-            if type(element) != float and type(element) != int:
-                raise TypeError("The elements of the figsize tuple must be floats or ints.")
-            
+            if not isinstance(element, (int, float)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
+
         # Get the chosen models for the specified pipeline to visualise selection.
         chosen_models = self.get_optimal_models()
         chosen_models = chosen_models[chosen_models.name == name].sort_values(
@@ -807,7 +819,7 @@ if __name__ == "__main__":
     print(so.get_optimized_signals("test"))
 
     # (2) Example SignalOptimizer usage.
-    #     Visualise the model selection heatmap for the two most frequently selected 
+    #     Visualise the model selection heatmap for the two most frequently selected
     #     models.
     so.models_heatmap(name="test", cap=5)
 
