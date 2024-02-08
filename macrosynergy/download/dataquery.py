@@ -587,14 +587,14 @@ class DataQueryInterface(object):
         check_connection: bool = True,
         base_url: str = OAUTH_BASE_URL,
         token_url: str = OAUTH_TOKEN_URL,
-        suppress_warnings: bool = True,
+        suppress_warning: bool = True,
     ):
         self._check_connection: bool = check_connection
         self.msg_errors: List[str] = []
         self.msg_warnings: List[str] = []
         self.unavailable_expressions: List[str] = []
         self.debug: bool = debug
-        self.suppress_warnings: bool = suppress_warnings
+        self.suppress_warning: bool = suppress_warning
         self.batch_size: int = batch_size
 
         for varx, namex, typex in [
@@ -659,7 +659,7 @@ class DataQueryInterface(object):
             logger.error("Exception %s - %s", exc_type, exc_value)
             print(f"Exception: {exc_type} {exc_value}")
 
-    def check_connection(self, verbose=False) -> bool:
+    def check_connection(self, verbose=False, raise_error: bool = False) -> bool:
         """
         Check the connection to the DataQuery API using the Heartbeat endpoint.
 
@@ -693,6 +693,8 @@ class DataQueryInterface(object):
 
         if verbose:
             print("Connection successful!" if result else "Connection failed.")
+        if raise_error and not result:
+            raise ConnectionError(HeartbeatError("Heartbeat failed."))
         return result
 
     def _fetch(
@@ -762,19 +764,15 @@ class DataQueryInterface(object):
         return downloaded_data
 
     def _fetch_timeseries(
-        self,
-        url: str,
-        params: dict,
-        tracking_id: Optional[str] = None,
-        *args, **kwargs
+        self, url: str, params: dict, tracking_id: Optional[str] = None, *args, **kwargs
     ) -> List[Dict]:
         """
         Exists to provide a wrapper for the `_fetch()` method that can be modified when
         inheriting from this class. This method is used by the `_download()` method.
         """
-        
+
         return self._fetch(url=url, params=params, tracking_id=tracking_id)
-    
+
     def get_catalogue(
         self,
         group_id: str = JPMAQS_GROUP_ID,
