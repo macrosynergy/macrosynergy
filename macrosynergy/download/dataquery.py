@@ -512,28 +512,6 @@ def validate_download_args(
     return True
 
 
-def _get_unavailable_expressions(
-    expected_exprs: List[str],
-    dicts_list: List[Dict],
-) -> List[str]:
-    """
-    Method to get the expressions that are not available in the response.
-    Looks at the dict["attributes"][0]["expression"] field of each dict
-    in the list.
-
-    :param <List[str]> expected_exprs: list of expressions that were requested.
-    :param <List[Dict]> dicts_list: list of dicts to search for the expressions.
-
-    :return <List[str]>: list of expressions that were not found in the dicts.
-    """
-    found_exprs: List[str] = [
-        curr_dict["attributes"][0]["expression"]
-        for curr_dict in dicts_list
-        if curr_dict["attributes"][0]["time-series"] is not None
-    ]
-    return list(set(expected_exprs) - set(found_exprs))
-
-
 class DataQueryInterface(object):
     """
     High level interface for the DataQuery API.
@@ -659,6 +637,28 @@ class DataQueryInterface(object):
             logger.error("Exception %s - %s", exc_type, exc_value)
             print(f"Exception: {exc_type} {exc_value}")
 
+    def _get_unavailable_expressions(
+        self,
+        expected_exprs: List[str],
+        dicts_list: List[Dict],
+    ) -> List[str]:
+        """
+        Method to get the expressions that are not available in the response.
+        Looks at the dict["attributes"][0]["expression"] field of each dict
+        in the list.
+
+        :param <List[str]> expected_exprs: list of expressions that were requested.
+        :param <List[Dict]> dicts_list: list of dicts to search for the expressions.
+
+        :return <List[str]>: list of expressions that were not found in the dicts.
+        """
+        found_exprs: List[str] = [
+            curr_dict["attributes"][0]["expression"]
+            for curr_dict in dicts_list
+            if curr_dict["attributes"][0]["time-series"] is not None
+        ]
+        return list(set(expected_exprs) - set(found_exprs))
+
     def check_connection(self, verbose=False, raise_error: bool = False) -> bool:
         """
         Check the connection to the DataQuery API using the Heartbeat endpoint.
@@ -764,7 +764,7 @@ class DataQueryInterface(object):
         return downloaded_data
 
     def _fetch_timeseries(
-        self, url: str, params: dict, tracking_id: Optional[str] = None, *args, **kwargs
+        self, url: str, params: dict, tracking_id: str = None, *args, **kwargs
     ) -> List[Dict]:
         """
         Exists to provide a wrapper for the `_fetch()` method that can be modified when
@@ -820,6 +820,8 @@ class DataQueryInterface(object):
         delay_param: float,
         show_progress: bool = False,
         retry_counter: int = 0,
+        *args,
+        **kwargs,
     ) -> List[dict]:
         """
         Backend method to download data from the DataQuery API.
@@ -861,6 +863,8 @@ class DataQueryInterface(object):
                         url=url,
                         params=curr_params,
                         tracking_id=tracking_id,
+                        *args,
+                        **kwargs,
                     )
                 )
                 time.sleep(delay_param)
@@ -931,6 +935,8 @@ class DataQueryInterface(object):
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
         delay_param: float = API_DELAY_PARAM,
+        *args,
+        **kwargs,
     ) -> List[Dict]:
         """
         Download data from the DataQuery API.
@@ -1033,16 +1039,23 @@ class DataQueryInterface(object):
             tracking_id=tracking_id,
             delay_param=delay_param,
             show_progress=show_progress,
+            *args,
+            **kwargs,
         )
 
-        self.unavailable_expressions = _get_unavailable_expressions(
-            expected_exprs=expressions, dicts_list=final_output
-        )
-        logger.info(
-            "Downloaded expressions: %d, unavailable: %d",
-            len(final_output),
-            len(self.unavailable_expressions),
-        )
+        if (
+            isinstance(final_output, list)
+            and (len(final_output) > 0)
+            and all(isinstance(d, dict) for d in final_output)
+        ):
+            self.unavailable_expressions = self._get_unavailable_expressions(
+                expected_exprs=expressions, dicts_list=final_output
+            )
+            logger.info(
+                "Downloaded expressions: %d, unavailable: %d",
+                len(final_output),
+                len(self.unavailable_expressions),
+            )
 
         return final_output
 

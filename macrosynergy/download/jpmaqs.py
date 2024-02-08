@@ -14,7 +14,7 @@ import warnings
 from timeit import default_timer as timer
 from typing import Dict, List, Optional, Tuple, Union, Any
 import functools
-from tqdm import tqdm
+import itertools
 
 import pandas as pd
 
@@ -102,6 +102,14 @@ def construct_expressions(
         tickers += [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
 
     return [f"DB(JPMAQS,{tick},{metric})" for tick in tickers for metric in metrics]
+
+
+def get_expression_from_df(df: QuantamentalDataFrame):
+    if isinstance(df, list):
+        return list(map(get_expression_from_df, df))
+    metrics = list(set(df.columns) - set(QuantamentalDataFrame.IndexCols))
+    tickers = list(set(df["cid"] + "_" + df["xcat"]))
+    return construct_expressions(tickers=tickers, metrics=metrics)
 
 
 def time_series_to_df(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
@@ -401,6 +409,24 @@ class JPMaQSDownload(DataQueryInterface):
 
     def __exit__(self, exc_type, exc_value, traceback): ...
 
+    def _get_unavailable_expressions(
+        self,
+        expected_exprs: List[str],
+        dicts_list: Optional[List[dict]] = None,
+        df_list: Optional[List[QuantamentalDataFrame]] = None,
+    ) -> List[str]:
+        assert (dicts_list is not None) ^ (df_list is not None)
+        if dicts_list is not None:
+            return super()._get_unavailable_expressions(
+                expected_exprs=expected_exprs, dicts_list=dicts_list
+            )
+
+        if df_list is not None:
+            return list(
+                set(expected_exprs)
+                - set(itertools.chain.from_iterable(get_expression_from_df(df_list)))
+            )
+
     @staticmethod
     def construct_expressions(
         tickers: Optional[List[str]] = None,
@@ -538,7 +564,7 @@ class JPMaQSDownload(DataQueryInterface):
         """
         print("Downloading the JPMaQS catalogue from DataQuery...")
         catalogue_tickers: List[str] = self.get_catalogue()
-        catalogue_expressions: List[str] = self.construct_expressions(
+        catalogue_expressions: List[str] = construct_expressions(
             tickers=catalogue_tickers, metrics=self.valid_metrics
         )
         r: List[str] = sorted(
@@ -553,6 +579,28 @@ class JPMaQSDownload(DataQueryInterface):
                 )
 
         return r
+
+    def _fetch_timeseries(
+        self,
+        url: str,
+        params: dict,
+        tracking_id: str,
+        as_dataframe: bool = True,
+        *args,
+        **kwargs,
+    ) -> Union[pd.DataFrame, List[Dict]]:
+        ts_list = self._fetch(url=url, params=params, tracking_id=tracking_id)
+        for its, ts in enumerate(ts_list):
+            if ts["attributes"][0]["time-series"] is None:
+                self.unavailable_expressions.append(ts["attributes"][0]["expression"])
+                self.msg_warnings.append(ts["attributes"][0]["message"])
+                ts_list[its] = None
+
+        ts_list = [ts for ts in ts_list if ts is not None]
+        return [time_series_to_df(ts) for ts in ts_list]
+
+    def download_data(self, *args, **kwargs):
+        return super().download_data(*args, **kwargs)
 
     def download(
         self,
@@ -667,7 +715,7 @@ class JPMaQSDownload(DataQueryInterface):
         if expressions is None:
             expressions: List[str] = []
 
-        expressions += self.construct_expressions(
+        expressions += construct_expressions(
             tickers=tickers,
             cids=cids,
             xcats=xcats,
@@ -681,57 +729,20 @@ class JPMaQSDownload(DataQueryInterface):
         # Download data.
         data: List[Dict] = []
         download_time_taken: float = timer()
-        with self.dq_interface as dq:
-            print(
-                "Downloading data from JPMaQS.\nTimestamp UTC: ",
-                datetime.datetime.now(datetime.timezone.utc).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                ),
-            )
-
-            print(f"Number of expressions requested: {len(expressions)}")
-            data = dq.download_data(
-                expressions=expressions,
-                start_date=start_date,
-                end_date=end_date,
-                show_progress=show_progress,
-                **self.dq_download_kwargs,
-            )
-
-            if len(self.dq_interface.msg_errors) > 0:
-                self.msg_errors += self.dq_interface.msg_errors
-
-            if len(self.dq_interface.msg_warnings) > 0:
-                self.msg_warnings += self.dq_interface.msg_warnings
-
-            if len(self.dq_interface.unavailable_expressions) > 0:
-                self.unavailable_expressions += (
-                    self.dq_interface.unavailable_expressions
-                )
+        data = self.download_data(
+            expressions=expressions,
+            start_date=start_date,
+            end_date=end_date,
+            show_progress=show_progress,
+            as_dataframe=as_dataframe,
+            *args,
+            **kwargs,
+        )
 
         download_time_taken: float = timer() - download_time_taken
-        dfs_time_taken: float = timer()
-        if as_dataframe:
-            data_df: pd.DataFrame = self.time_series_to_df(
-                dicts_list=data,
-                validate_df=True,
-                expected_expressions=expressions,
-                start_date=start_date,
-                end_date=end_date,
-                verbose=not self.suppress_warning,
-                show_progress=show_progress,
-            )
-            data = data_df
-
-        dfs_time_taken: float = timer() - dfs_time_taken
 
         if report_time_taken:
             print(f"Time taken to download data: \t{download_time_taken:.2f} seconds.")
-            if as_dataframe:
-                print(
-                    "Time taken to convert to dataframe: "
-                    f"\t{dfs_time_taken:.2f} seconds."
-                )
 
         if len(self.msg_errors) > 0:
             if not self.suppress_warning:
@@ -741,6 +752,10 @@ class JPMaQSDownload(DataQueryInterface):
                     f"Please check `JPMaQSDownload.msg_errors` for more information."
                 )
 
+        self.unavailable_expressions = self._get_unavailable_expressions(
+            expected_exprs=expressions, df_list=data
+        )
+        data = combine_single_metric_qdfs(df_list=data)
         return data
 
 
@@ -780,21 +795,19 @@ if __name__ == "__main__":
         client_secret=client_secret,
     ).check_connection()
 
-    # with JPMaQSDownload(
-    #     client_id=client_id,
-    #     client_secret=client_secret,
-    #     debug=True,
-    # ) as jpmaqs:
-    #     data = jpmaqs.download(
-    #         cids=cids,
-    #         xcats=xcats,
-    #         metrics=metrics,
-    #         start_date=start_date,
-    #         get_catalogue=True,
-    #         end_date=end_date,
-    #         show_progress=True,
-    #         suppress_warning=False,
-    #         report_time_taken=True,
-    #     )
+    with JPMaQSDownload(
+        client_id=client_id,
+        client_secret=client_secret,
+    ) as jpmaqs:
+        data = jpmaqs.download(
+            cids=cids,
+            xcats=xcats,
+            metrics=metrics,
+            start_date=start_date,
+            # get_catalogue=True,
+            end_date=end_date,
+            show_progress=True,
+            report_time_taken=True,
+        )
 
-    #     print(data.head())
+        print(data.head())
