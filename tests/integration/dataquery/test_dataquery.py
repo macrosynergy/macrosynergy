@@ -69,11 +69,16 @@ class TestDataQueryOAuth(unittest.TestCase):
             check_connection=False,
         ) as jpmaqs:
             data: pd.DataFrame = jpmaqs.download(
-                tickers=["EUR_FXXR_NSA"],
+                tickers=["EUR_FXXR_NSA", "USD_FXXR_NSA"],
                 start_date=(
                     datetime.date.today() - datetime.timedelta(days=30)
                 ).isoformat(),
             )
+            self.assertTrue(
+                len(jpmaqs.unavailable_expr_messages) == 1,
+            )
+            # check that USD_FXXR_NSA is in the unavailable_expr_messages
+            self.assertTrue("USD_FXXR_NSA" in jpmaqs.unavailable_expr_messages[0])
 
         self.assertIsInstance(data, pd.DataFrame)
 
@@ -89,6 +94,7 @@ class TestDataQueryOAuth(unittest.TestCase):
         ) as dq:
             data: List[str] = dq.download_data(
                 expressions=[test_expr],
+                as_dataframe=False,
             )
 
         self.assertIsInstance(data, list)

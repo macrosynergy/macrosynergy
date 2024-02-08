@@ -7,6 +7,8 @@ from macrosynergy.download.dataquery import (
     DataQueryInterface,
 )
 
+from macrosynergy.management.utils import combine_single_metric_qdfs, time_series_to_df
+
 
 def random_string() -> str:
     """
@@ -109,7 +111,13 @@ class MockDataQueryInterface(DataQueryInterface):
         return True
 
     def download_data(
-        self, expressions: List[str], start_date: str, end_date: str, **kwargs
+        self,
+        expressions: List[str],
+        start_date: str,
+        end_date: str,
+        as_dataframe: bool = False,
+        *args,
+        **kwargs,
     ) -> pd.DataFrame:
         ts: List[dict] = self.request_wrapper(expressions, start_date, end_date)
         if self.mask_expressions:
@@ -137,6 +145,18 @@ class MockDataQueryInterface(DataQueryInterface):
                 if any([c in d["attributes"][0]["expression"] for c in self.catalogue]):
                     tsc.append(d)
         ts = tsc if self.catalogue else ts
+
+        self.unavailable_expr_messages += [
+            d["attributes"][0]["message"]
+            for d in ts
+            if d["attributes"][0]["time-series"] is None
+        ]
+
+        if as_dataframe:
+            return combine_single_metric_qdfs(
+                df_list=[time_series_to_df(d) for d in ts],
+            )
+
         return ts
 
     def get_catalogue(self, group_id: str = None) -> List[str]:

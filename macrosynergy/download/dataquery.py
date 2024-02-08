@@ -32,6 +32,7 @@ from macrosynergy.download.exceptions import (
     DownloadError,
     InvalidResponseError,
     HeartbeatError,
+    InvalidDataframeError,
     NoContentError,
     KNOWN_EXCEPTIONS,
 )
@@ -621,6 +622,7 @@ class DataQueryInterface(object):
         self.msg_errors: List[str] = []
         self.msg_warnings: List[str] = []
         self.unavailable_expressions: List[str] = []
+        self.unavailable_expr_messages: List[str] = []
         self.debug: bool = debug
         self.suppress_warnings: bool = suppress_warnings
         self.batch_size: int = batch_size
@@ -797,8 +799,12 @@ class DataQueryInterface(object):
         tracking_id: Optional[str] = None,
     ) -> List[Union[Dict, QuantamentalDataFrame]]:
         r = self._fetch(url=url, params=params, tracking_id=tracking_id)
+        for i, d in enumerate(r):
+            if d["attributes"][0]["time-series"] is None:
+                self.unavailable_expr_messages.append(d["attributes"][0]["message"])
         if as_dataframe:
             l = map(time_series_to_df, r)
+
             return list([i for i in l if i is not None])
 
         return r
@@ -1082,12 +1088,21 @@ class DataQueryInterface(object):
             len(final_output),
             len(self.unavailable_expressions),
         )
-
-        return (
+        result = (
             final_output
             if (not as_dataframe)
             else combine_single_metric_qdfs(df_list=final_output)
         )
+        if result is None:
+            if as_dataframe:
+                raise InvalidDataframeError(
+                    "The downloaded data could not be combined into a single dataframe."
+                )
+            raise InvalidResponseError(
+                "The downloaded data is not in the expected format."
+            )
+
+        return result
 
 
 if __name__ == "__main__":
@@ -1126,6 +1141,7 @@ if __name__ == "__main__":
         "DU02YXRxEASD_NSA",
         "FXCRRHvGDRB_NSA",
         "FXCRRUSD_NSA",
+        "FXXR_NSA",
     ]
 
     expressions = construct_expressions(

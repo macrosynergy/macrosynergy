@@ -1,7 +1,9 @@
 """ JPMaQS Download Interface 
 """
+
 import sys
-sys.path.append('.')
+
+sys.path.append(".")
 
 
 import datetime
@@ -145,6 +147,7 @@ class JPMaQSDownload(object):
         self.msg_errors: List[str] = []
         self.msg_warnings: List[str] = []
         self.unavailable_expressions: List[str] = []
+        self.unavailable_expr_messages: List[str] = []
         self.downloaded_data: Dict = {}
 
         if self._check_connection:
@@ -562,6 +565,7 @@ class JPMaQSDownload(object):
                 start_date=start_date,
                 end_date=end_date,
                 show_progress=show_progress,
+                as_dataframe=as_dataframe,
                 **self.dq_download_kwargs,
             )
 
@@ -574,6 +578,9 @@ class JPMaQSDownload(object):
             if len(self.dq_interface.unavailable_expressions) > 0:
                 self.unavailable_expressions += (
                     self.dq_interface.unavailable_expressions
+                )
+                self.unavailable_expr_messages += (
+                    self.dq_interface.unavailable_expr_messages
                 )
 
         download_time_taken: float = timer() - download_time_taken

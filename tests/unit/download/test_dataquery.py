@@ -36,6 +36,7 @@ from macrosynergy.download.exceptions import (
     InvalidDataframeError,
     NoContentError,
 )
+from macrosynergy.management.utils import time_series_to_df, combine_single_metric_qdfs
 
 from .mock_helpers import mock_jpmaqs_value, mock_request_wrapper, random_string
 
@@ -455,7 +456,7 @@ class TestDataQueryInterface(unittest.TestCase):
             oauth=True,
             client_id="client_id",
             client_secret="client_secret",
-            check_connection=False,
+            check_connection=False, 
         )
 
         # First replicate the api.Interface()._request() method using the associated
@@ -474,12 +475,8 @@ class TestDataQueryInterface(unittest.TestCase):
             ts["attributes"][0]["expression"] for ts in timeseries_output
         ]
 
-        out_df: pd.DataFrame = jpmaqs_download.time_series_to_df(
-            dicts_list=timeseries_output,
-            expected_expressions=expressions_found,
-            start_date=start_date,
-            end_date=end_date,
-        )
+        out_df: pd.DataFrame = combine_single_metric_qdfs(
+            df_list=[time_series_to_df(ts) for ts in timeseries_output])
 
         # Check that the output is a Pandas DataFrame
         self.assertIsInstance(out_df, pd.DataFrame)
@@ -642,6 +639,7 @@ class TestDataQueryInterface(unittest.TestCase):
         good_args: Dict[str, Any] = {
             "expressions": ["DB(JPMAQS,EUR_FXXR_NSA,value)"],
             "start_date": "2020-01-01",
+            "as_dataframe": True,
             "end_date": "2020-02-01",
             "show_progress": True,
             "endpoint": HEARTBEAT_ENDPOINT,

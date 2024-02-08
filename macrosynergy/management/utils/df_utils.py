@@ -926,19 +926,33 @@ def time_series_to_df(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
 
 def combine_single_metric_qdfs(
     df_list: List[QuantamentalDataFrame],
+    errors: str = "ignore",
 ) -> QuantamentalDataFrame:
     """
     Combines a list of Quantamental DataFrames into a single DataFrame.
 
     :param <List[QuantamentalDataFrame]> df_list: A list of Quantamental DataFrames.
+    :param <str> errors: The error handling method to use. If 'raise', then invalid
+        items in the list will raise an error. If 'ignore', then invalid items will be
+        ignored. Default is 'ignore'.
     :return <QuantamentalDataFrame>: The combined DataFrame.
     """
     if not isinstance(df_list, list):
         raise TypeError("Argument `df_list` must be a list.")
 
-    if not all([isinstance(df, QuantamentalDataFrame) for df in df_list]):
-        raise TypeError("All elements in `df_list` must be Quantamental DataFrames.")
+    if errors not in ["raise", "ignore"]:
+        raise ValueError("`errors` must be one of 'raise' or 'ignore'.")
 
+    if errors == "raise":
+        if not all([isinstance(df, QuantamentalDataFrame) for df in df_list]):
+            raise TypeError(
+                "All elements in `df_list` must be Quantamental DataFrames."
+            )
+    else:
+        df_list = [df for df in df_list if isinstance(df, QuantamentalDataFrame)]
+        if len(df_list) == 0:
+            return None
+    
     def _get_metric(df: QuantamentalDataFrame) -> str:
         lx = list(set(df.columns) - set(QuantamentalDataFrame.IndexCols))
         if len(lx) != 1:
@@ -957,7 +971,7 @@ def combine_single_metric_qdfs(
         return r
 
     found_metrics = list(set(map(_get_metric, df_list)))
-
+    
     df_list = _group_by_metric(dfl=df_list, fm=found_metrics)
 
     # use pd.merge to join on QuantamentalDataFrame.IndexCols
