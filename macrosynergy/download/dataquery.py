@@ -761,6 +761,20 @@ class DataQueryInterface(object):
 
         return downloaded_data
 
+    def _fetch_timeseries(
+        self,
+        url: str,
+        params: dict,
+        tracking_id: Optional[str] = None,
+        *args, **kwargs
+    ) -> List[Dict]:
+        """
+        Exists to provide a wrapper for the `_fetch()` method that can be modified when
+        inheriting from this class. This method is used by the `_download()` method.
+        """
+        
+        return self._fetch(url=url, params=params, tracking_id=tracking_id)
+    
     def get_catalogue(
         self,
         group_id: str = JPMAQS_GROUP_ID,
@@ -845,7 +859,7 @@ class DataQueryInterface(object):
                 curr_params["expressions"] = expr_batch
                 future_objects.append(
                     executor.submit(
-                        self._fetch,
+                        self._fetch_timeseries,
                         url=url,
                         params=curr_params,
                         tracking_id=tracking_id,
