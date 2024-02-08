@@ -939,25 +939,33 @@ def combine_single_metric_qdfs(
     if not all([isinstance(df, QuantamentalDataFrame) for df in df_list]):
         raise TypeError("All elements in `df_list` must be Quantamental DataFrames.")
 
-    def _get_metric(df: QuantamentalDataFrame) -> List[str]:
+    def _get_metric(df: QuantamentalDataFrame) -> str:
         lx = list(set(df.columns) - set(QuantamentalDataFrame.IndexCols))
         if len(lx) != 1:
             raise ValueError(
                 "Each QuantamentalDataFrame must have exactly one metric column."
             )
-        return lx
+        return lx[0]
 
-    found_metrics = list(set(itertools.chain.from_iterable(map(_get_metric, df_list))))
+    def _group_by_metric(
+        dfl: List[QuantamentalDataFrame], fm: List[str]
+    ) -> List[List[QuantamentalDataFrame]]:
+        r = [[] for _ in range(len(fm))]
+        while dfl:
+            metric = _get_metric(df=dfl[0])
+            r[fm.index(metric)] += [dfl.pop(0)]
+        return r
 
-    df_list = {
-        fm: [df for df in df_list if fm in _get_metric(df)] for fm in found_metrics
-    }
+    found_metrics = list(set(map(_get_metric, df_list)))
+
+    df_list = _group_by_metric(dfl=df_list, fm=found_metrics)
 
     # use pd.merge to join on QuantamentalDataFrame.IndexCols
     df: pd.DataFrame = functools.reduce(
         lambda left, right: pd.merge(left, right, on=["real_date", "cid", "xcat"]),
         map(
-            lambda fm: pd.concat(df_list[fm], axis=0, ignore_index=False), found_metrics
+            lambda fm: pd.concat(df_list.pop(0), axis=0, ignore_index=False),
+            found_metrics,
         ),
     )
 
