@@ -12,7 +12,7 @@ import os
 import traceback as tb
 import warnings
 from timeit import default_timer as timer
-from typing import Dict, List, Optional, Tuple, Union, Any
+from typing import Dict, List, Optional, Tuple, Union, Any, Generator
 import functools
 import itertools
 
