@@ -903,6 +903,22 @@ class DataQueryInterface(object):
 
         return download_outputs, failed_batches
 
+    def _chain_download_outputs(
+        self,
+        download_outputs: List[Union[Dict, Any]],
+    ) -> List[Dict]:
+        """
+        Chain the download outputs from the concurrent loop into a single list.
+        Used by the `download_data()` method. Exists to provide a method that can be
+        modified when inheriting from this class.
+
+        :param <List[Union[Dict, Any]>> download_outputs: list of list of dictionaries/
+            other objects.
+        :return <List[Dict]>: list of dictionaries/other objects.
+        """
+
+        return list(itertools.chain.from_iterable(download_outputs))
+
     def _download(
         self,
         expressions: List[str],
@@ -948,7 +964,7 @@ class DataQueryInterface(object):
             **kwargs,
         )
 
-        final_output: List[Dict] = list(itertools.chain.from_iterable(download_outputs))
+        final_output = self._chain_download_outputs(download_outputs)
 
         if len(failed_batches) > 0:
             flat_failed_batches: List[str] = list(
@@ -967,9 +983,12 @@ class DataQueryInterface(object):
                 delay_param=delay_param + 0.1,
                 show_progress=show_progress,
                 retry_counter=retry_counter + 1,
+                *args,
+                **kwargs,
             )
 
-            final_output += retried_output  # extend retried output
+            # extend retried output
+            final_output = self._chain_download_outputs([final_output, retried_output])
 
         return final_output
 
