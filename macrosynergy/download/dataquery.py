@@ -852,6 +852,7 @@ class DataQueryInterface(object):
         download_outputs: List[Union[Dict, Any]] = []
         failed_batches: List[List[str]] = []
         last_five_exc: List[Exception] = []
+        continuous_failures: int = 0
         with concurrent.futures.ThreadPoolExecutor() as executor:
             for ib, expr_batch in tqdm(
                 enumerate(expr_batches),
