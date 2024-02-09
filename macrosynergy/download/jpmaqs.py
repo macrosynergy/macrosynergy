@@ -912,17 +912,13 @@ if __name__ == "__main__":
     client_id = os.getenv("DQ_CLIENT_ID")
     client_secret = os.getenv("DQ_CLIENT_SECRET")
 
-    catalogue = JPMaQSDownload(
-        client_id=client_id,
-        client_secret=client_secret,
-    ).get_catalogue()
-
     with JPMaQSDownload(
         client_id=client_id,
         client_secret=client_secret,
     ) as jpmaqs:
         data = jpmaqs.download(
-            tickers=catalogue,
+            cids=cids,
+            xcats=xcats,
             metrics='all',
             start_date=start_date,
             # get_catalogue=True,
