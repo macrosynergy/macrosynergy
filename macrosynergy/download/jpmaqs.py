@@ -104,14 +104,18 @@ def construct_expressions(
     return [f"DB(JPMAQS,{tick},{metric})" for tick in tickers for metric in metrics]
 
 
-def get_expression_from_df(df: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[str]:
+def get_expression_from_qdf(df: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[str]:
 
     if isinstance(df, list):
-        return list(itertools.chain.from_iterable(map(get_expression_from_df, df)))
+        return list(itertools.chain.from_iterable(map(get_expression_from_qdf, df)))
 
     metrics = list(set(df.columns) - set(QuantamentalDataFrame.IndexCols))
-    tickers = list(set(df["cid"] + "_" + df["xcat"]))
-    return construct_expressions(tickers=tickers, metrics=metrics)
+    exprs = []
+    for metric in metrics:
+        for cid, xcat in df[["cid", "xcat"]].drop_duplicates().values:
+            if any(~df.loc[(df["cid"] == cid) & (df["xcat"] == xcat), metric].isna()):
+                exprs.append(f"DB(JPMAQS,{cid}_{xcat},{metric})")
+    return exprs
 
 
 def get_expression_from_wide_df(
@@ -206,7 +210,9 @@ def combine_single_metric_qdfs(
 
     # use pd.merge to join on QuantamentalDataFrame.IndexCols
     df: pd.DataFrame = functools.reduce(
-        lambda left, right: pd.merge(left, right, on=["real_date", "cid", "xcat"]),
+        lambda left, right: pd.merge(
+            left, right, on=["real_date", "cid", "xcat"], how="outer"
+        ),
         map(
             lambda fm: pd.concat(df_list.pop(0), axis=0, ignore_index=False),
             found_metrics,
@@ -493,21 +499,21 @@ class JPMaQSDownload(DataQueryInterface):
         self,
         expected_exprs: List[str],
         dicts_list: Optional[List[dict]] = None,
-        df_list: Optional[List[QuantamentalDataFrame]] = None,
+        downloaded_df: Optional[Union[pd.DataFrame, QuantamentalDataFrame]] = None,
     ) -> List[str]:
-        assert (dicts_list is not None) ^ (df_list is not None)
+        assert (dicts_list is not None) ^ (downloaded_df is not None)
         if dicts_list is not None:
             return super()._get_unavailable_expressions(
                 expected_exprs=expected_exprs, dicts_list=dicts_list
             )
 
-        if df_list is not None:
-            if len(df_list) == 0:
+        if downloaded_df is not None:
+            if len(downloaded_df) == 0:
                 return expected_exprs
-            if isinstance(df_list[0], QuantamentalDataFrame):
-                found_expressions = get_expression_from_df(df_list)
+            if isinstance(downloaded_df, QuantamentalDataFrame):
+                found_expressions = get_expression_from_qdf(downloaded_df)
             else:
-                found_expressions = get_expression_from_wide_df(df_list)
+                found_expressions = get_expression_from_wide_df(downloaded_df)
             return list(set(expected_exprs) - set(found_expressions))
 
     @staticmethod
@@ -669,6 +675,28 @@ class JPMaQSDownload(DataQueryInterface):
 
         return r
 
+    def _chain_download_outputs(
+        self, download_outputs: Union[List[Dict], List[pd.DataFrame]]
+    ) -> Union[List[Dict], List[pd.DataFrame]]:
+        if not isinstance(download_outputs, list):
+            raise TypeError("`download_outputs` must be a list.")
+        if len(download_outputs) == 0:
+            return []
+        if isinstance(download_outputs[0], pd.DataFrame):
+            return concat_column_dfs(df_list=download_outputs)
+        
+        if isinstance(download_outputs[0][0], (dict, QuantamentalDataFrame)):
+            download_outputs = list(itertools.chain.from_iterable(download_outputs))
+        if isinstance(download_outputs[0], dict):
+            return download_outputs
+        if isinstance(download_outputs[0], QuantamentalDataFrame):
+            return combine_single_metric_qdfs(download_outputs)
+            # cannot chain QDFs with different metrics
+
+        raise NotImplementedError(
+            f"Cannot chain download outputs that are List of : {list(set(map(type, download_outputs)))}."
+        )
+
     def _fetch_timeseries(
         self,
         url: str,
@@ -690,9 +718,11 @@ class JPMaQSDownload(DataQueryInterface):
 
         if as_dataframe:
             if dataframe_format == "qdf":
-                return [time_series_to_qdf(ts) for ts in ts_list]
+                ts_list = list(filter([time_series_to_qdf(ts) for ts in ts_list]))
             elif dataframe_format == "wide":
-                return [time_series_to_column(ts) for ts in ts_list]
+                ts_list = concat_column_dfs(
+                    df_list=[time_series_to_column(ts) for ts in ts_list]
+                )
         return ts_list
 
     def download_data(self, *args, **kwargs):
@@ -860,78 +890,69 @@ class JPMaQSDownload(DataQueryInterface):
                 )
 
         _tmp_args = dict(expected_exprs=expressions)
-        _tmp_args.update({f"df_list": data} if as_dataframe else {f"dicts_list": data})
+        _tmp_args.update(
+            {f"downloaded_df": data} if as_dataframe else {f"dicts_list": data}
+        )
         self.unavailable_expressions = self._get_unavailable_expressions(**_tmp_args)
 
-        if not as_dataframe:
-            return data
-        found_expressions: List[str] = []
-        if dataframe_format == "qdf":
-            data = combine_single_metric_qdfs(df_list=data)
-            found_expressions = get_expression_from_df(data)
-        elif dataframe_format == "wide":
-            data: pd.DataFrame = concat_column_dfs(df_list=data)
-            found_expressions = data.columns.tolist()
+        if as_dataframe:
+            found_expressions: List[str] = list(
+                set(expressions) - set(self.unavailable_expressions)
+            )
 
-        if not validate_downloaded_df(
-            data_df=data,
-            expected_expressions=expressions,
-            found_expressions=found_expressions,
-            start_date=start_date,
-            end_date=end_date,
-            verbose=True,
-        ):
-            raise InvalidDataframeError("Downloaded data is invalid.")
+            if not validate_downloaded_df(
+                data_df=data,
+                expected_expressions=expressions,
+                found_expressions=found_expressions,
+                start_date=start_date,
+                end_date=end_date,
+                verbose=True,
+            ):
+                raise InvalidDataframeError("Downloaded data is invalid.")
         return data
 
 
 if __name__ == "__main__":
-    cids = [
-        "AUD",
-        "BRL",
-        "CAD",
-        "CHF",
-        "CLP",
-        "CNY",
-        "COP",
-        "CZK",
-        "DEM",
-        "ESP",
-        "EUR",
-        "FRF",
-        "GBP",
-        "USD",
-    ]
-    xcats = [
-        "RIR_NSA",
-        "FXXR_NSA",
-        "FXXR_VT10",
-        "DU05YXR_NSA",
-        "DU05YXR_VT10",
-    ]
-    metrics = "all"
-    start_date: str = "2023-01-01"
-    end_date: str = "2023-03-20"
+    cids = "AUD,BRL,CAD,CHF,CLP,CNY,COP,CZK,DEM,ESP,EUR,FRF,GBP,USD".split(",")
+    xcats = "RIR_NSA,FXXR_NSA,FXXR_VT10,DU05YXR_NSA,DU05YXR_VT10"
+    start_date: str = "2024-02-07"
+    end_date: str = "2024-02-09"
 
-    client_id = os.getenv("DQ_CLIENT_ID")
-    client_secret = os.getenv("DQ_CLIENT_SECRET")
+    argsX = dict(
+        client_id=os.getenv("DQ_CLIENT_ID"),
+        client_secret=os.getenv("DQ_CLIENT_SECRET"),
+        base_url=os.getenv("AWS_API_URL"),
+        token_url=os.getenv("AWS_API_TOKEN_URL"),
+    )
 
-    with JPMaQSDownload(
-        client_id=client_id,
-        client_secret=client_secret,
-    ) as jpmaqs:
+    import pickle
+
+    with open("dev/tickers.pkl", "rb") as f:
+        tickers = pickle.load(f)
+
+    tickers = tickers[:40]
+    expressions = construct_expressions(tickers=tickers, metrics=["value"])
+    expressions += [expressions[39].replace("value", "grading")]
+    argsD = dict(
+        expressions=expressions,
+        start_date=start_date,
+        end_date=end_date,
+        show_progress=True,
+    )
+
+    with JPMaQSDownload(**argsX) as jpmaqs:
         data = jpmaqs.download(
-            cids=cids,
-            xcats=xcats,
-            metrics="all",
-            start_date=start_date,
-            # get_catalogue=True,
-            end_date=end_date,
-            show_progress=True,
-            report_time_taken=True,
-            dataframe_format="wide",
+            as_dataframe=False,
+            **argsD,
         )
-
-        print(data.head())
-        # save to csv
-        data.to_csv("data.csv")
+    with JPMaQSDownload(**argsX) as jpmaqs:
+        data = jpmaqs.download(
+            dataframe_format="qdf",
+            **argsD,
+        )
+        data
+    with JPMaQSDownload(**argsX) as jpmaqs:
+        data = jpmaqs.download(
+            dataframe_format="wide",
+            **argsD,
+        )
