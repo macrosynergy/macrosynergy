@@ -354,10 +354,9 @@ def validate_downloaded_df(
         if isinstance(data_df, QuantamentalDataFrame)
         else data_df.index.unique()
     )
-    # dates_missing = difference between expected and found dates
-    dates_missing = len(list(set(dates_expected) - set(found_dates)))
+    dates_missing = list(set(dates_expected) - set(found_dates))
 
-    if dates_missing > 0:
+    if len(dates_missing) > 0:
         log_str = (
             f"Some dates are missing from the downloaded data. \n"
             f"{len(dates_missing)} out of {len(dates_expected)} dates are missing."
@@ -867,8 +866,8 @@ class JPMaQSDownload(DataQueryInterface):
             data = combine_single_metric_qdfs(df_list=data)
             found_expressions = get_expression_from_df(data)
         elif dataframe_format == "wide":
-            data = concat_column_dfs(df_list=data)
-            found_expressions = get_expression_from_wide_df(data)
+            data: pd.DataFrame = concat_column_dfs(df_list=data)
+            found_expressions = data.columns.tolist()
 
         if not validate_downloaded_df(
             data_df=data,
