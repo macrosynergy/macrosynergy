@@ -17,7 +17,7 @@ import io
 import warnings
 import requests
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Dict, Union, Tuple
+from typing import List, Optional, Dict, Union, Tuple, Any
 from timeit import default_timer as timer
 from tqdm import tqdm
 
@@ -659,6 +659,8 @@ class DataQueryInterface(object):
         ]
         return list(set(expected_exprs) - set(found_exprs))
 
+
+
     def check_connection(self, verbose=False, raise_error: bool = False) -> bool:
         """
         Check the connection to the DataQuery API using the Heartbeat endpoint.
@@ -706,7 +708,8 @@ class DataQueryInterface(object):
         """
         Make a request to the DataQuery API using the specified parameters.
         Used to wrap a request in a thread for concurrent requests, or to
-        simplify the code for single requests.
+        simplify the code for single requests. Used by the `_fetch_timeseries()`
+        method.
 
         :param <str> url: URL to request.
         :param <dict> params: parameters to send with the request.
@@ -768,7 +771,7 @@ class DataQueryInterface(object):
     ) -> List[Dict]:
         """
         Exists to provide a wrapper for the `_fetch()` method that can be modified when
-        inheriting from this class. This method is used by the `_download()` method.
+        inheriting from this class. This method is used by the `_concurrent_loop()` method.
         """
 
         return self._fetch(url=url, params=params, tracking_id=tracking_id)
@@ -811,43 +814,30 @@ class DataQueryInterface(object):
 
         return tickers
 
-    def _download(
+    def _concurrent_loop(
         self,
-        expressions: List[str],
-        params: dict,
+        expr_batches: List[List[str]],
+        show_progress: bool,
         url: str,
+        params: dict,
         tracking_id: str,
         delay_param: float,
-        show_progress: bool = False,
-        retry_counter: int = 0,
         *args,
         **kwargs,
-    ) -> List[dict]:
+    ) -> Tuple[List[Union[Dict, Any]], List[List[str]]]:
         """
-        Backend method to download data from the DataQuery API.
-        Used by the `download_data()` method.
+        Concurrent loop to download data from the DataQuery API.
+        Used by the `_download()` method.
+
+        :return <Tuple[List[Union[Dict, Any]], List[List[str]]]>: tuple of two lists.
+            The first list contains the downloaded data, and the second list
+            contains the failed batches.
         """
-
-        if retry_counter > 0:
-            print("Retrying failed downloads. Retry count:", retry_counter)
-
-        if retry_counter > HL_RETRY_COUNT:
-            raise DownloadError(
-                f"Failed {retry_counter} times to download data all requested data.\n"
-                f"No longer retrying."
-            )
-
-        expr_batches: List[List[str]] = [
-            expressions[i : i + self.batch_size]
-            for i in range(0, len(expressions), self.batch_size)
-        ]
-
-        download_outputs: List[List[Dict]] = []
-        failed_batches: List[List[str]] = []
-        continuous_failures: int = 0
-        last_five_exc: List[Exception] = []
 
         future_objects: List[concurrent.futures.Future] = []
+        download_outputs: List[Union[Dict, Any]] = []
+        failed_batches: List[List[str]] = []
+        last_five_exc: List[Exception] = []
         with concurrent.futures.ThreadPoolExecutor() as executor:
             for ib, expr_batch in tqdm(
                 enumerate(expr_batches),
@@ -895,6 +885,53 @@ class DataQueryInterface(object):
 
                     if self.debug:
                         raise exc
+
+        return download_outputs, failed_batches
+
+    def _download(
+        self,
+        expressions: List[str],
+        params: dict,
+        url: str,
+        tracking_id: str,
+        delay_param: float,
+        show_progress: bool = False,
+        retry_counter: int = 0,
+        *args,
+        **kwargs,
+    ) -> List[dict]:
+        """
+        Backend method to download data from the DataQuery API.
+        Used by the `download_data()` method.
+        """
+
+        if retry_counter > 0:
+            print("Retrying failed downloads. Retry count:", retry_counter)
+
+        if retry_counter > HL_RETRY_COUNT:
+            raise DownloadError(
+                f"Failed {retry_counter} times to download data all requested data.\n"
+                f"No longer retrying."
+            )
+
+        expr_batches: List[List[str]] = [
+            expressions[i : i + self.batch_size]
+            for i in range(0, len(expressions), self.batch_size)
+        ]
+
+        download_outputs: List[List[Dict]]
+        failed_batches: List[List[str]]
+
+        download_outputs, failed_batches = self._concurrent_loop(
+            expr_batches=expr_batches,
+            show_progress=show_progress,
+            url=url,
+            params=params,
+            tracking_id=tracking_id,
+            delay_param=delay_param,
+            *args,
+            **kwargs,
+        )
 
         final_output: List[Dict] = list(itertools.chain.from_iterable(download_outputs))
 
@@ -1046,7 +1083,7 @@ class DataQueryInterface(object):
         if (
             isinstance(final_output, list)
             and (len(final_output) > 0)
-            and all(isinstance(d, dict) for d in final_output)
+            and isinstance(final_output[0], dict)
         ):
             self.unavailable_expressions = self._get_unavailable_expressions(
                 expected_exprs=expressions, dicts_list=final_output
