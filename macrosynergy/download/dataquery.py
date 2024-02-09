@@ -160,7 +160,7 @@ def request_wrapper(
     # insert tracking info in headers
     if headers is None:
         headers: Dict = {}
-    headers["User-Agent"]: str = f"MacrosynergyPackage/{ms_version_info}"
+    headers["User-Agent"] = f"MacrosynergyPackage/{ms_version_info}"
 
     uuid_str: str = str(uuid.uuid4())
     if (tracking_id is None) or (tracking_id == ""):
@@ -168,7 +168,7 @@ def request_wrapper(
     else:
         tracking_id: str = f"uuid::{uuid_str}::{tracking_id}"
 
-    headers["X-Tracking-Id"]: str = tracking_id
+    headers["X-Tracking-Id"] = tracking_id
 
     log_url: str = form_full_url(url, params)
     logger.debug(f"Requesting URL: {log_url} with tracking_id: {tracking_id}")
