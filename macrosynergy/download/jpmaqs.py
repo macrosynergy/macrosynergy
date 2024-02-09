@@ -651,8 +651,8 @@ class JPMaQSDownload(DataQueryInterface):
 
         :return <List[str]>: list of tickers that are in the JPMaQS catalogue.
         """
-        print("Downloading the JPMaQS catalogue from DataQuery...")
-        catalogue_tickers: List[str] = self.get_catalogue()
+
+        catalogue_tickers: List[str] = self.get_catalogue(verbose=verbose)
         catalogue_expressions: List[str] = construct_expressions(
             tickers=catalogue_tickers, metrics=self.valid_metrics
         )
@@ -829,6 +829,10 @@ class JPMaQSDownload(DataQueryInterface):
             expressions = self.filter_expressions_from_catalogue(expressions)
 
         # Download data.
+        print(
+            "Downloading data from JPMaQS.\nTimestamp UTC: ",
+            datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        )
         data: List[Dict] = []
         download_time_taken: float = timer()
         data: List[Union[dict, QuantamentalDataFrame]] = self.download_data(
@@ -919,7 +923,7 @@ if __name__ == "__main__":
         data = jpmaqs.download(
             cids=cids,
             xcats=xcats,
-            metrics='all',
+            metrics="all",
             start_date=start_date,
             # get_catalogue=True,
             end_date=end_date,
