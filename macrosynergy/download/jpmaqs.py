@@ -104,15 +104,25 @@ def construct_expressions(
     return [f"DB(JPMAQS,{tick},{metric})" for tick in tickers for metric in metrics]
 
 
-def get_expression_from_df(df: QuantamentalDataFrame):
+def get_expression_from_df(df: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[str]:
+
     if isinstance(df, list):
-        return list(map(get_expression_from_df, df))
+        return list(itertools.chain.from_iterable(map(get_expression_from_df, df)))
+
     metrics = list(set(df.columns) - set(QuantamentalDataFrame.IndexCols))
     tickers = list(set(df["cid"] + "_" + df["xcat"]))
     return construct_expressions(tickers=tickers, metrics=metrics)
 
 
-def time_series_to_df(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
+def get_expression_from_wide_df(
+    df: Union[pd.DataFrame, List[pd.DataFrame]]
+) -> List[str]:
+    if isinstance(df, list):
+        return list(itertools.chain.from_iterable(map(get_expression_from_wide_df, df)))
+    return list(set(df.columns))
+
+
+def time_series_to_qdf(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
     """
     Converts a dictionary of time series to a QuantamentalDataFrame.
 
@@ -206,8 +216,71 @@ def combine_single_metric_qdfs(
     return standardise_dataframe(df)
 
 
+def time_series_to_column(
+    timeseries: Dict[str, Any], errors: str = "ignore"
+) -> pd.DataFrame:
+    """
+    Converts a dictionary of time series to a DataFrame with a single column.
+
+    :param <Dict[str, Any]> timeseries: A dictionary of time series.
+    :param <str> errors: The error handling method to use. If 'raise', then invalid
+        items in the list will raise an error. If 'ignore', then invalid items will be
+        ignored. Default is 'ignore'.
+    :return <pd.DataFrame>: The converted DataFrame.
+    """
+    if not isinstance(timeseries, dict):
+        raise TypeError("Argument `timeseries` must be a dictionary.")
+
+    if errors not in ["raise", "ignore"]:
+        raise ValueError("`errors` must be one of 'raise' or 'ignore'.")
+
+    expression = timeseries["attributes"][0]["expression"]
+
+    if timeseries["attributes"][0]["time-series"] is None:
+        if errors == "raise":
+            raise ValueError("Time series is empty.")
+        return None
+
+    df: pd.DataFrame = pd.DataFrame(
+        timeseries["attributes"][0]["time-series"], columns=["real_date", expression]
+    )
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y%m%d")
+    if df.empty:
+        if errors == "raise":
+            raise ValueError("Time series is empty.")
+        return None
+    return df.set_index("real_date")
+
+
+def concat_column_dfs(
+    df_list: List[pd.DataFrame], errors: str = "ignore"
+) -> pd.DataFrame:
+    """
+    Concatenates a list of DataFrames into a single DataFrame.
+
+    :param <List[pd.DataFrame]> df_list: A list of DataFrames.
+    :param <str> errors: The error handling method to use. If 'raise', then invalid
+        items in the list will raise an error. If 'ignore', then invalid items will be
+        ignored. Default is 'ignore'.
+    :return <pd.DataFrame>: The concatenated DataFrame.
+    """
+    if not isinstance(df_list, list):
+        raise TypeError("Argument `df_list` must be a list.")
+
+    if errors not in ["raise", "ignore"]:
+        raise ValueError("`errors` must be one of 'raise' or 'ignore'.")
+
+    if not all([isinstance(df, pd.DataFrame) for df in df_list]):
+        if errors == "raise":
+            raise TypeError("All elements in `df_list` must be DataFrames.")
+        df_list = [df for df in df_list if isinstance(df, pd.DataFrame)]
+
+    # all the dfs are indexed by real_date, so we can just concat them adn drop dates when all values are NaN
+    # df: pd.DataFrame = pd.concat(df_list, axis=1).dropna(how="all", axis=0)
+    return pd.concat(df_list, axis=1).dropna(how="all", axis=0)
+
+
 def validate_downloaded_df(
-    self,
     data_df: pd.DataFrame,
     expected_expressions: List[str],
     found_expressions: List[str],
@@ -232,7 +305,7 @@ def validate_downloaded_df(
     :raises <TypeError>: if `data_df` is not a dataframe.
     """
 
-    if not isinstance(data_df, QuantamentalDataFrame):
+    if not isinstance(data_df, pd.DataFrame):
         raise TypeError("`data_df` must be a dataframe.")
     if data_df.empty:
         return False
@@ -272,9 +345,13 @@ def validate_downloaded_df(
         start_date = "1950-01-01"
 
     dates_expected = pd.bdate_range(start=start_date, end=end_date)
-    dates_missing = len(data_df) - len(
-        data_df[data_df["real_date"].isin(dates_expected)]
+    found_dates = (
+        data_df["real_date"].unique()
+        if isinstance(data_df, QuantamentalDataFrame)
+        else data_df.index.unique()
     )
+    # dates_missing = difference between expected and found dates
+    dates_missing = len(list(set(dates_expected) - set(found_dates)))
 
     if dates_missing > 0:
         log_str = (
@@ -422,10 +499,13 @@ class JPMaQSDownload(DataQueryInterface):
             )
 
         if df_list is not None:
-            return list(
-                set(expected_exprs)
-                - set(itertools.chain.from_iterable(get_expression_from_df(df_list)))
-            )
+            if len(df_list) == 0:
+                return expected_exprs
+            if isinstance(df_list[0], QuantamentalDataFrame):
+                found_expressions = get_expression_from_df(df_list)
+            else:
+                found_expressions = get_expression_from_wide_df(df_list)
+            return list(set(expected_exprs) - set(found_expressions))
 
     @staticmethod
     def construct_expressions(
@@ -468,6 +548,7 @@ class JPMaQSDownload(DataQueryInterface):
         expressions: List[str],
         show_progress: bool,
         as_dataframe: bool,
+        dataframe_format: str,
         report_time_taken: bool,
     ) -> bool:
         """Validate the arguments passed to the download function.
@@ -489,6 +570,11 @@ class JPMaQSDownload(DataQueryInterface):
         ]:
             if not isinstance(var, bool):
                 raise TypeError(f"`{name}` must be a boolean.")
+
+        if not isinstance(dataframe_format, str):
+            raise TypeError("`dataframe_format` must be a string.")
+        elif dataframe_format.lower() not in ["qdf", "wide"]:
+            raise ValueError("`dataframe_format` must be one of 'qdf' or 'wide'.")
 
         if all([tickers is None, cids is None, xcats is None, expressions is None]):
             raise ValueError(
@@ -586,6 +672,7 @@ class JPMaQSDownload(DataQueryInterface):
         params: dict,
         tracking_id: str,
         as_dataframe: bool = True,
+        dataframe_format: str = "qdf",
         *args,
         **kwargs,
     ) -> Union[pd.DataFrame, List[Dict]]:
@@ -596,8 +683,14 @@ class JPMaQSDownload(DataQueryInterface):
                 self.msg_warnings.append(ts["attributes"][0]["message"])
                 ts_list[its] = None
 
-        ts_list = [ts for ts in ts_list if ts is not None]
-        return [time_series_to_df(ts) for ts in ts_list]
+        ts_list = list(filter(None, ts_list))
+
+        if as_dataframe:
+            if dataframe_format == "qdf":
+                return [time_series_to_qdf(ts) for ts in ts_list]
+            elif dataframe_format == "wide":
+                return [time_series_to_column(ts) for ts in ts_list]
+        return ts_list
 
     def download_data(self, *args, **kwargs):
         return super().download_data(*args, **kwargs)
@@ -616,6 +709,7 @@ class JPMaQSDownload(DataQueryInterface):
         debug: bool = False,
         suppress_warning: bool = False,
         as_dataframe: bool = True,
+        dataframe_format: str = "qdf",
         report_time_taken: bool = False,
         *args,
         **kwargs,
@@ -649,6 +743,9 @@ class JPMaQSDownload(DataQueryInterface):
             False if not (default). If debug=True, this is set to True.
         :param <bool> as_dataframe: Return a dataframe if True (default),
             a list of dictionaries if False.
+        :param <str> dataframe_format: Format of the dataframe to return, one of "qdf"
+            or "wide". QDF is the Quantamental Dataframe format, and wide is the wide
+            format with each expression as a column, and a single date column.
         :param <bool> report_time_taken: If True, the time taken to download
             and apply data transformations is reported.
 
@@ -698,6 +795,7 @@ class JPMaQSDownload(DataQueryInterface):
             get_catalogue=get_catalogue,
             show_progress=show_progress,
             as_dataframe=as_dataframe,
+            dataframe_format=dataframe_format,
             report_time_taken=report_time_taken,
         ):
             raise ValueError("Invalid arguments passed to download().")
@@ -711,6 +809,7 @@ class JPMaQSDownload(DataQueryInterface):
             )
             start_date, end_date = end_date, start_date
 
+        dataframe_format = dataframe_format.lower()
         # Construct expressions.
         if expressions is None:
             expressions: List[str] = []
@@ -729,12 +828,13 @@ class JPMaQSDownload(DataQueryInterface):
         # Download data.
         data: List[Dict] = []
         download_time_taken: float = timer()
-        data = self.download_data(
+        data: List[Union[dict, QuantamentalDataFrame]] = self.download_data(
             expressions=expressions,
             start_date=start_date,
             end_date=end_date,
             show_progress=show_progress,
             as_dataframe=as_dataframe,
+            dataframe_format=dataframe_format,
             *args,
             **kwargs,
         )
@@ -752,10 +852,29 @@ class JPMaQSDownload(DataQueryInterface):
                     f"Please check `JPMaQSDownload.msg_errors` for more information."
                 )
 
-        self.unavailable_expressions = self._get_unavailable_expressions(
-            expected_exprs=expressions, df_list=data
-        )
-        data = combine_single_metric_qdfs(df_list=data)
+        _tmp_args = dict(expected_exprs=expressions)
+        _tmp_args.update({f"df_list": data} if as_dataframe else {f"dicts_list": data})
+        self.unavailable_expressions = self._get_unavailable_expressions(**_tmp_args)
+
+        if not as_dataframe:
+            return data
+        found_expressions: List[str] = []
+        if dataframe_format == "qdf":
+            data = combine_single_metric_qdfs(df_list=data)
+            found_expressions = get_expression_from_df(data)
+        elif dataframe_format == "wide":
+            data = concat_column_dfs(df_list=data)
+            found_expressions = get_expression_from_wide_df(data)
+
+        if not validate_downloaded_df(
+            data_df=data,
+            expected_expressions=expressions,
+            found_expressions=found_expressions,
+            start_date=start_date,
+            end_date=end_date,
+            verbose=True,
+        ):
+            raise InvalidDataframeError("Downloaded data is invalid.")
         return data
 
 
@@ -790,24 +909,26 @@ if __name__ == "__main__":
     client_id = os.getenv("DQ_CLIENT_ID")
     client_secret = os.getenv("DQ_CLIENT_SECRET")
 
-    JPMaQSDownload(
+    catalogue = JPMaQSDownload(
         client_id=client_id,
         client_secret=client_secret,
-    ).check_connection()
+    ).get_catalogue()
 
     with JPMaQSDownload(
         client_id=client_id,
         client_secret=client_secret,
     ) as jpmaqs:
         data = jpmaqs.download(
-            cids=cids,
-            xcats=xcats,
-            metrics=metrics,
+            tickers=catalogue,
+            metrics='all',
             start_date=start_date,
             # get_catalogue=True,
             end_date=end_date,
             show_progress=True,
             report_time_taken=True,
+            dataframe_format="wide",
         )
 
         print(data.head())
+        # save to csv
+        data.to_csv("data.csv")
