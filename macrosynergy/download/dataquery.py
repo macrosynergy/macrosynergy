@@ -439,6 +439,7 @@ def validate_download_args(
     reference_data: str,
     retry_counter: int,
     delay_param: float,
+    batch_size: int,
 ):
     """
     Validate the arguments passed to the `download_data()` method.
@@ -486,6 +487,18 @@ def validate_download_args(
         )
     if delay_param < 0.0:
         raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
+
+    if not isinstance(batch_size, int):
+        raise TypeError("`batch_size` must be an integer.")
+    if batch_size < 1:
+        raise ValueError("`batch_size` must be an integer >=1.")
+    elif batch_size > 20:
+        warnings.warn(
+            RuntimeWarning(
+                f"`batch_size` is too high; DataQuery API's time-series endpoint "
+                f"accepts a maximum of 20 expressions per request. "
+            )
+        )
 
     vars_types_zip: zip = zip(
         [
@@ -658,8 +671,6 @@ class DataQueryInterface(object):
             if curr_dict["attributes"][0]["time-series"] is not None
         ]
         return list(set(expected_exprs) - set(found_exprs))
-
-
 
     def check_connection(self, verbose=False, raise_error: bool = False) -> bool:
         """
@@ -972,6 +983,7 @@ class DataQueryInterface(object):
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
         delay_param: float = API_DELAY_PARAM,
+        batch_size: Optional[int] = None,
         *args,
         **kwargs,
     ) -> List[Dict]:
@@ -1007,6 +1019,9 @@ class DataQueryInterface(object):
             # NOTE : if "future dates" are passed, they must be passed by parent functions
             # see jpmaqs.py
 
+        if batch_size is None:
+            batch_size = self.batch_size
+
         # NOTE : args validated only on first call, not on retries
         # this is because the args can be modified by the retry mechanism
         # (eg. date format)
@@ -1024,7 +1039,10 @@ class DataQueryInterface(object):
             reference_data=reference_data,
             retry_counter=retry_counter,
             delay_param=delay_param,
+            batch_size=batch_size,
         )
+
+        self.batch_size = batch_size
 
         if datetime.strptime(end_date, "%Y-%m-%d") < datetime.strptime(
             start_date, "%Y-%m-%d"
