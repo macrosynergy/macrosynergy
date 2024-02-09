@@ -790,6 +790,7 @@ class DataQueryInterface(object):
     def get_catalogue(
         self,
         group_id: str = JPMAQS_GROUP_ID,
+        verbose: bool = True,
     ) -> List[str]:
         """
         Method to get the JPMaQS catalogue.
@@ -803,6 +804,8 @@ class DataQueryInterface(object):
 
         :raises <ValueError>: if the response from the server is not valid.
         """
+        if verbose:
+            print("Downloading the JPMaQS catalogue from DataQuery...")
         try:
             response_list: Dict = self._fetch(
                 url=self.base_url + CATALOGUE_ENDPOINT,
