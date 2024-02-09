@@ -275,9 +275,13 @@ def concat_column_dfs(
             raise TypeError("All elements in `df_list` must be DataFrames.")
         df_list = [df for df in df_list if isinstance(df, pd.DataFrame)]
 
+    def _pop_df_list() -> Generator[pd.DataFrame, None, None]:
+        while df_list:
+            yield df_list.pop(0)
+
     # all the dfs are indexed by real_date, so we can just concat them adn drop dates when all values are NaN
     # df: pd.DataFrame = pd.concat(df_list, axis=1).dropna(how="all", axis=0)
-    return pd.concat(df_list, axis=1).dropna(how="all", axis=0)
+    return pd.concat(_pop_df_list(), axis=1).dropna(how="all", axis=0)
 
 
 def validate_downloaded_df(
