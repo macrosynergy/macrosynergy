@@ -126,7 +126,7 @@ def get_expression_from_wide_df(
     return list(set(df.columns))
 
 
-def time_series_to_qdf(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
+def timeseries_to_qdf(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
     """
     Converts a dictionary of time series to a QuantamentalDataFrame.
 
@@ -222,7 +222,7 @@ def combine_single_metric_qdfs(
     return standardise_dataframe(df)
 
 
-def time_series_to_column(
+def timeseries_to_column(
     timeseries: Dict[str, Any], errors: str = "ignore"
 ) -> pd.DataFrame:
     """
@@ -718,10 +718,10 @@ class JPMaQSDownload(DataQueryInterface):
 
         if as_dataframe:
             if dataframe_format == "qdf":
-                ts_list = list(filter([time_series_to_qdf(ts) for ts in ts_list]))
+                ts_list = list(filter([timeseries_to_qdf(ts) for ts in ts_list]))
             elif dataframe_format == "wide":
                 ts_list = concat_column_dfs(
-                    df_list=[time_series_to_column(ts) for ts in ts_list]
+                    df_list=[timeseries_to_column(ts) for ts in ts_list]
                 )
         return ts_list
 
