@@ -52,6 +52,7 @@ def multiple_reg_scatter(
             year and from (including) that year.
     :param <bool> single_chart: if True (default is False) all the data is plotted in a
         single chart. If False, a grid of charts is created.
+    :param <List[str]> subplot_titles: list of titles for each subplot. Default is None.
     """
     if ncol == 0:
         ncol = len(cat_rels)
