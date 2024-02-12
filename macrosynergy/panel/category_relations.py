@@ -421,6 +421,7 @@ class CategoryRelations(object):
                 colLabels=fields,
                 cellLoc="center",
                 loc=coef_box_loc,
+                zorder=10,
             )
         else:
             data_table = ax.table(
@@ -429,6 +430,7 @@ class CategoryRelations(object):
                 colLabels=fields,
                 cellLoc="center",
                 loc=coef_box_loc,
+                zorder=10,
             )
 
         return data_table
@@ -740,7 +742,6 @@ class CategoryRelations(object):
                 ax.set_xlabel(xlab)
             if ylab is not None:
                 ax.set_ylabel(ylab)
-
         else:
             ValueError("Separator must be either a valid year <int> or 'cids' <str>.")
 
