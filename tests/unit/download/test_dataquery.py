@@ -9,7 +9,17 @@ import logging
 from typing import List, Dict, Union, Any
 import requests
 
-from macrosynergy.download import dataquery, JPMaQSDownload
+from macrosynergy.download.jpmaqs import (
+    JPMaQSDownload,
+    deconstruct_expression,
+    construct_expressions,
+    get_expression_from_qdf,
+    get_expression_from_wide_df,
+    timeseries_to_column,
+    timeseries_to_qdf,
+    concat_column_dfs,
+    validate_downloaded_df,
+)
 from macrosynergy.download.dataquery import (
     DataQueryInterface,
     OAuth,
@@ -36,6 +46,8 @@ from macrosynergy.download.exceptions import (
     InvalidDataframeError,
     NoContentError,
 )
+
+from macrosynergy.management.types import QuantamentalDataFrame
 
 from .mock_helpers import mock_jpmaqs_value, mock_request_wrapper, random_string
 
@@ -271,7 +283,7 @@ class TestOAuth(unittest.TestCase):
             client_secret="SECRET",
             check_connection=False,
         )
-        self.assertEqual(jpmaqs.dq_interface.base_url, dataquery.OAUTH_BASE_URL)
+        self.assertEqual(jpmaqs.base_url, OAUTH_BASE_URL)
 
     def test_invalid_init_args(self):
         good_args: Dict[str, str] = {
@@ -302,7 +314,7 @@ class TestOAuth(unittest.TestCase):
             self.fail(f"Unexpected exception raised: {e}")
 
     def test_valid_token(self):
-        oauth = dataquery.OAuth(client_id="test-id", client_secret="SECRET")
+        oauth = OAuth(client_id="test-id", client_secret="SECRET")
         self.assertFalse(oauth._valid_token())
 
 
@@ -422,10 +434,10 @@ class TestDataQueryInterface(unittest.TestCase):
             oauth=True, client_id="client1", client_secret="123", check_connection=False
         )
 
-        self.assertIsInstance(
-            jpmaqs_download.dq_interface, dataquery.DataQueryInterface
-        )
-        self.assertIsInstance(jpmaqs_download.dq_interface.auth, dataquery.OAuth)
+        # check that jpmaqs_download is a superclass of dataquery interface
+        self.assertIsInstance(jpmaqs_download, DataQueryInterface)
+
+        self.assertIsInstance(jpmaqs_download.auth, OAuth)
 
     def test_certauth_condition(self):
         # Second check is that the DataQuery instance is using an CertAuth Object if the
@@ -445,22 +457,15 @@ class TestDataQueryInterface(unittest.TestCase):
             ) as downloader:
                 pass
 
-    def test_timeseries_to_df(self):
+    def test_timeseries_to_qdf(self):
         cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
         xcats = ["EQXR_NSA", "FXXR_NSA"]
 
         tickers = [cid + "_" + xcat for xcat in xcats for cid in cids_dmca]
 
-        jpmaqs_download = JPMaQSDownload(
-            oauth=True,
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
-
         # First replicate the api.Interface()._request() method using the associated
         # JPMaQS expression.
-        expression = jpmaqs_download.construct_expressions(
+        expression = construct_expressions(
             metrics=["value", "grading"], tickers=tickers
         )
         start_date: str = "2000-01-01"
@@ -470,32 +475,17 @@ class TestDataQueryInterface(unittest.TestCase):
             dq_expressions=expression, start_date=start_date, end_date=end_date
         )
 
-        expressions_found: List[str] = [
-            ts["attributes"][0]["expression"] for ts in timeseries_output
-        ]
+        def _test_output(ts: Dict, df: QuantamentalDataFrame):
+            expr = ts["attributes"][0]["expression"]
+            cid, xcat, metric = deconstruct_expression(expression=expr)
+            self.assertEqual(df["cid"].unique().tolist(), [cid])
+            self.assertEqual(df["xcat"].unique().tolist(), [xcat])
+            found_metrics = set(df.columns) - set(QuantamentalDataFrame.IndexCols)
+            self.assertEqual(found_metrics, set([metric]))
 
-        out_df: pd.DataFrame = jpmaqs_download.time_series_to_df(
-            dicts_list=timeseries_output,
-            expected_expressions=expressions_found,
-            start_date=start_date,
-            end_date=end_date,
-        )
-
-        # Check that the output is a Pandas DataFrame
-        self.assertIsInstance(out_df, pd.DataFrame)
-
-        # Check that the output has the correct number of rows and columns
-        # len(tickers)*len(pd.bdate_range(start_date, end_date)) = expected number of rows
-        # expected cols = [["real_date", "cid", "xcat", "value", "grading"]] = 5
-        self.assertEqual(
-            out_df.shape, (len(tickers) * len(pd.bdate_range(start_date, end_date)), 5)
-        )
-
-        # Check that the output has the correct columns
-        self.assertEqual(
-            set(out_df.columns.tolist()),
-            set(["real_date", "cid", "xcat", "value", "grading"]),
-        )
+        for ts in timeseries_output:
+            df = timeseries_to_qdf(ts)
+            _test_output(ts, df)
 
     def test_construct_expressions(self):
         jpmaqs_download = JPMaQSDownload(
@@ -521,24 +511,15 @@ class TestDataQueryInterface(unittest.TestCase):
         self.assertEqual(set(set_a), set(set_b))
 
     def test_deconstruct_expressions(self):
-        jpmaqs_download = JPMaQSDownload(
-            oauth=True,
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
-
         cids = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
         xcats = ["EQXR_NSA", "FXXR_NSA"]
         tickers = [cid + "_" + xcat for xcat in xcats for cid in cids]
         metrics = ["value", "grading"]
         tkms = [f"{ticker}_{metric}" for ticker in tickers for metric in metrics]
-        expressions = jpmaqs_download.construct_expressions(
+        expressions = construct_expressions(
             metrics=["value", "grading"], tickers=tickers
         )
-        deconstructed_expressions = jpmaqs_download.deconstruct_expression(
-            expression=expressions
-        )
+        deconstructed_expressions = deconstruct_expression(expression=expressions)
         dtkms = ["_".join(d) for d in deconstructed_expressions]
 
         self.assertEqual(set(tkms), set(dtkms))
@@ -546,21 +527,21 @@ class TestDataQueryInterface(unittest.TestCase):
         for tkm, expression in zip(tkms, expressions):
             self.assertEqual(
                 tkm,
-                "_".join(jpmaqs_download.deconstruct_expression(expression=expression)),
+                "_".join(deconstruct_expression(expression=expression)),
             )
 
         for expr in [1, [1, 2]]:
             # type error
             with self.assertRaises(TypeError):
-                jpmaqs_download.deconstruct_expression(expression=expr)
+                deconstruct_expression(expression=expr)
 
         with self.assertRaises(ValueError):
-            jpmaqs_download.deconstruct_expression(expression=[])
+            deconstruct_expression(expression=[])
 
         # now give it a bad expression. it should warn and return [expression, expression, expression]
         with self.assertWarns(UserWarning):
             self.assertEqual(
-                jpmaqs_download.deconstruct_expression(expression="bad_expression"),
+                deconstruct_expression(expression="bad_expression"),
                 ["bad_expression", "bad_expression", "value"],
             )
 
@@ -651,6 +632,7 @@ class TestDataQueryInterface(unittest.TestCase):
             "reference_data": "NO_REFERENCE_DATA",
             "retry_counter": 0,
             "delay_param": API_DELAY_PARAM,
+            "batch_size": 20,
         }
         self.assertTrue(validate_download_args(**good_args))
 
@@ -666,15 +648,17 @@ class TestDataQueryInterface(unittest.TestCase):
         with self.assertRaises(TypeError):
             validate_download_args(**bad_args)
 
+        # test all against an int (except retry_counter, batch_size)
         for key in good_args.keys():
             bad_value: Union[int, str] = 1
-            if key == "retry_counter":
+            if key in ["retry_counter", "batch_size"]:
                 bad_value = "1"
             bad_args: Dict[str, Any] = good_args.copy()
             bad_args[key] = bad_value
             with self.assertRaises(TypeError):
                 validate_download_args(**bad_args)
 
+        # test delay_param
         for delay_param in [-0.1, -1.0]:
             bad_args: Dict[str, Any] = good_args.copy()
             bad_args["delay_param"] = delay_param
@@ -691,6 +675,35 @@ class TestDataQueryInterface(unittest.TestCase):
             bad_args: Dict[str, Any] = good_args.copy()
             bad_args[date_arg] = "1-Jan-2023"
             with self.assertRaises(ValueError):
+                validate_download_args(**bad_args)
+
+        # if the batchsize if negative or non int, should raise type error
+        for batch_size in [0.1, "1", None, [], {}]:
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args["batch_size"] = batch_size
+            with self.assertRaises(TypeError):
+                validate_download_args(**bad_args)
+
+        for batch_size in [-1, 0]:
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args["batch_size"] = batch_size
+            with self.assertRaises(ValueError):
+                validate_download_args(**bad_args)
+
+        # test that no warnings are raised if 1<bath_size<20
+        for batch_size in [1, 19, 20]:
+            good_args: Dict[str, Any] = good_args.copy()
+            good_args["batch_size"] = batch_size
+            # assert no warnings raised
+            with warnings.catch_warnings(record=True) as w:
+                validate_download_args(**good_args)
+                self.assertEqual(len(w), 0)
+
+        # test that >20 batch_size raises warning
+        for batch_size in [21, 100]:
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args["batch_size"] = batch_size
+            with self.assertWarns(RuntimeWarning):
                 validate_download_args(**bad_args)
 
 
