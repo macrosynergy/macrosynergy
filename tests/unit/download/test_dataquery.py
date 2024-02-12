@@ -578,8 +578,7 @@ class TestDataQueryInterface(unittest.TestCase):
             {"attributes": [{"expression": "expression1"}]},
         ]
 
-        dq.auth: OAuth
-        dq.auth._stored_token: Dict = {
+        dq.auth._stored_token = {
             "created_at": datetime.datetime.now(datetime.timezone.utc),
             "access_token": random_string(),
             "expires_in": 3600,
