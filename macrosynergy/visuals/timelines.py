@@ -21,6 +21,7 @@ import pandas as pd
 from macrosynergy.management.utils import is_valid_iso_date
 from macrosynergy.visuals import FacetPlot, LinePlot
 from macrosynergy.management.types import Numeric
+import time
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
 
@@ -97,6 +98,7 @@ def timelines(
     :param <int> legend_fontsize: font size of legend. Default is 12.
 
     """
+    start_time = time.time()
     if not isinstance(df, pd.DataFrame):
         raise TypeError("`df` must be a pandas DataFrame.")
 
@@ -201,6 +203,12 @@ def timelines(
         xcat_grid: bool = False
         single_chart: bool = True
 
+    end_time = time.time()
+
+    print("Time taken to validate inputs: ", end_time - start_time, " seconds.")
+
+    start_time = time.time()
+
     if xcat_grid:
         if ncol > len(xcats):
             ncol: int = len(xcats)
@@ -296,6 +304,8 @@ def timelines(
                 legend_labels=xcat_labels or None,
                 legend_fontsize=legend_fontsize,
             )
+    end_time = time.time()
+    print("Time taken to plot: ", end_time - start_time, " seconds.")
 
 
 if __name__ == "__main__":
