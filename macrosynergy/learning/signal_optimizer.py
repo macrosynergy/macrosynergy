@@ -292,9 +292,196 @@ class SignalOptimizer:
         the `inner_splitter` argument. Based on inner cross-validation an optimal model
         is chosen and used for predicting the targets of the next period.
         """
-        # Checks
+        # Checks 
+        self._checks_calcpred_params(
+            name=name,
+            models=models,
+            metric=metric,
+            hparam_grid=hparam_grid,
+            hparam_type=hparam_type,
+            min_cids=min_cids,
+            min_periods=min_periods,
+            max_periods=max_periods,
+            n_iter=n_iter,
+            n_jobs=n_jobs,
+        )
+ 
+        # (1) Create a dataframe to store the signals induced by each model.
+        #     The index should be a multi-index with cross-sections equal to those in X
+        #     and business-day dates spanning the range of dates in X.
+        signal_xs_levels: List[str] = sorted(self.X.index.get_level_values(0).unique())
+        original_date_levels: List[pd.Timestamp] = sorted(
+            self.X.index.get_level_values(1).unique()
+        )
+        min_date: pd.Timestamp = min(original_date_levels)
+        max_date: pd.Timestamp = max(original_date_levels)
+        signal_date_levels: pd.DatetimeIndex = pd.bdate_range(
+            start=min_date, end=max_date, freq="B"
+        )
+
+        sig_idxs = pd.MultiIndex.from_product(
+            [signal_xs_levels, signal_date_levels], names=["cid", "real_date"]
+        )
+
+        signal_df: pd.MultiIndex = pd.DataFrame(
+            index=sig_idxs, columns=[name], data=np.nan, dtype="float64"
+        )
+
+        # (2) Set up the splitter, outputs to store the predictions and model choices,
+        #     and (if specified) calculations for adaptive n_splits in preparation 
+        #     for parallelising the historical model predictions. 
+        prediction_data = []
+        modelchoice_data = []
+
+        outer_splitter = ExpandingIncrementPanelSplit(
+            train_intervals=1,
+            test_size=1,
+            min_cids=min_cids,
+            min_periods=min_periods,
+            max_periods=max_periods,
+        )
+
+        X = self.X.copy()
+        y = self.y.copy()
+
+        if self.change_n_splits:
+            # calculate the initial unique training dates to n_splits proportion
+            for train_idx, _ in outer_splitter.split(X=X, y=y):
+                init_train_idx = train_idx
+                break
+            init_train_dates = X.iloc[init_train_idx].index.get_level_values(1).unique()
+            prop = len(init_train_dates) / inner_splitter.n_splits
+        else:
+            prop = None
+
+        # (3) Run the parallelised worker function to run the Macrosynergy signal 
+        #     optimization algorithm over the trading history. 
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(self._worker)(
+                train_idx=train_idx,
+                test_idx=test_idx,
+                name=name,
+                models=models,
+                metric=metric,
+                original_date_levels=original_date_levels,
+                hparam_type=hparam_type,
+                hparam_grid=hparam_grid,
+                n_iter=n_iter,
+                prop=prop,
+            )
+            for train_idx, test_idx in tqdm(
+                outer_splitter.split(X=X, y=y),
+            )
+        )
+
+        # (4) Collect the results from the parallelised worker function and store them 
+        #     as dataframes that can be accessed by the user to analyse models chosen 
+        #     and signals produced over time. If there was trouble with the signal
+        #     calculation, the user is warned and the signal is set to zero to indicate 
+        #     no action was taken.
+        prediction_data = []
+        modelchoice_data = []
+
+        for pred_data, model_data in results:
+            prediction_data.append(pred_data)
+            modelchoice_data.append(model_data)
+
+        # Condense the collected data into a single dataframe
+        for column_name, xs_levels, date_levels, predictions in prediction_data:
+            idx = pd.MultiIndex.from_product([xs_levels, date_levels])
+            try:
+                signal_df.loc[idx, column_name] = predictions
+            except Exception as e:
+                warnings.warn(
+                    f"Error in signal calculation for {column_name}, date {str(date_levels[0])}. Setting to zero.",
+                    RuntimeWarning,
+                )
+                signal_df.loc[idx, column_name] = 0
+
+        signal_df = signal_df.groupby(level=0).ffill()
+
+        # (5) Handle blacklisted periods and ensure the signal dataframe is 
+        #     a quantamental dataframe.
+        if self.blacklist is not None:
+            for cross_section, periods in self.blacklist.items():
+                cross_section_key = cross_section.split("_")[0]
+                # Set blacklisted periods to NaN
+                if cross_section_key in signal_xs_levels:
+                    signal_df.loc[
+                        (cross_section_key, slice(periods[0], periods[1])), :
+                    ] = np.nan
+
+        signal_df_long: pd.DataFrame = pd.melt(
+            frame=signal_df.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
+        )
+        self.preds = pd.concat((self.preds, signal_df_long), axis=0).astype(
+            {
+                "cid": "object",
+                "real_date": "datetime64[ns]",
+                "xcat": "object",
+                "value": np.float64,
+            }
+        )
+
+        # (6) Finally, store the model choices made at each time in a dataframe. If the
+        #     algorithm was initialised with change_n_splits=True, the number of splits
+        #     used in the inner splitter is also stored.
+        model_df_long = pd.DataFrame(
+            columns=self.chosen_models.columns, data=modelchoice_data
+        )
+        if self.change_n_splits:
+            self.chosen_models = pd.concat(
+                (
+                    self.chosen_models,
+                    model_df_long,
+                ),
+                axis=0,
+            ).astype(
+                {
+                    "real_date": "datetime64[ns]",
+                    "name": "object",
+                    "model_type": "object",
+                    "hparams": "object",
+                    "n_splits_used": "int",
+                }
+            )
+        else:
+            self.chosen_models = pd.concat(
+                (
+                    self.chosen_models,
+                    model_df_long,
+                ),
+                axis=0,
+            ).astype(
+                {
+                    "real_date": "datetime64[ns]",
+                    "name": "object",
+                    "model_type": "object",
+                    "hparams": "object",
+                }
+            )
+
+    def _checks_calcpred_params(
+        self,
+        name: str,
+        models: Dict[str, Union[BaseEstimator, Pipeline]],
+        metric: Callable,
+        hparam_grid: Dict[str, Dict[str, List]],
+        hparam_type: str,
+        min_cids: int,
+        min_periods: int,
+        max_periods: Optional[int],
+        n_iter: Optional[int],
+        n_jobs: Optional[int],
+    ):
+        """
+        Private method to check the calculate_predictions method parameters.
+        """
+        # Check the pipeline name is a string
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
+        
+        # Check that the models dictionary is correctly formatted
         if models == {}:
             raise ValueError("The models dictionary cannot be empty.")
         if not isinstance(models, dict):
@@ -307,8 +494,12 @@ class SignalOptimizer:
                     "The values of the models dictionary must be sklearn predictors or "
                     "pipelines."
                 )
+            
+        # Check that the metric is callable
         if not callable(metric):
             raise TypeError("The metric argument must be a callable object.")
+        
+        # Check the hyperparameter search type is a valid string
         if not isinstance(hparam_type, str):
             raise TypeError("The hparam_type argument must be a string.")
         if hparam_type not in ["grid", "random", "bayes"]:
@@ -317,6 +508,8 @@ class SignalOptimizer:
             )
         if hparam_type == "bayes":
             raise NotImplementedError("Bayesian optimisation not yet implemented.")
+        
+        # Check that the hyperparameter grid is correctly formatted
         if not isinstance(hparam_grid, dict):
             raise TypeError("The hparam_grid argument must be a dictionary.")
         for pipe_name, pipe_params in hparam_grid.items():
@@ -362,11 +555,16 @@ class SignalOptimizer:
                                     f"for hyperparameter {hparam_key}. The dictionary values "
                                     "must be scipy.stats distributions."
                                 )
+
+        # Check that the keys of the hyperparameter grid match those in the models dict
         if sorted(hparam_grid.keys()) != sorted(models.keys()):
             raise ValueError(
                 "The keys in the hyperparameter grid must match those in the models "
                 "dictionary."
             )
+        
+        # Check the min_cids, min_periods, max_periods, n_iter and n_jobs arguments
+        # are correctly formatted
         if not isinstance(min_cids, int): 
             raise TypeError("The min_cids argument must be an integer.")
         if min_cids < 1:
@@ -389,149 +587,6 @@ class SignalOptimizer:
             raise TypeError("The n_jobs argument must be an integer.")
         if (n_jobs <= 0) and (n_jobs != -1):
             raise ValueError("The n_jobs argument must be greater than zero or -1.")
-
-        # Calculate predictions
-        # (1) Create a dataframe to store the signals induced by each model.
-        #     The index should be a multi-index with cross-sections equal to those in X
-        #     and business-day dates spanning the range of dates in X.
-        signal_xs_levels: List[str] = sorted(self.X.index.get_level_values(0).unique())
-        original_date_levels: List[pd.Timestamp] = sorted(
-            self.X.index.get_level_values(1).unique()
-        )
-        min_date: pd.Timestamp = min(original_date_levels)
-        max_date: pd.Timestamp = max(original_date_levels)
-        signal_date_levels: pd.DatetimeIndex = pd.bdate_range(
-            start=min_date, end=max_date, freq="B"
-        )
-
-        sig_idxs = pd.MultiIndex.from_product(
-            [signal_xs_levels, signal_date_levels], names=["cid", "real_date"]
-        )
-
-        signal_df: pd.MultiIndex = pd.DataFrame(
-            index=sig_idxs, columns=[name], data=np.nan, dtype="float64"
-        )
-        prediction_data = []
-        modelchoice_data = []
-
-        outer_splitter = ExpandingIncrementPanelSplit(
-            train_intervals=1,
-            test_size=1,
-            min_cids=min_cids,
-            min_periods=min_periods,
-            max_periods=max_periods,
-        )
-
-        X = self.X.copy()
-        y = self.y.copy()
-
-        if self.change_n_splits:
-            # calculate the initial unique training dates to n_splits proportion
-            for train_idx, _ in outer_splitter.split(X=X, y=y):
-                init_train_idx = train_idx
-                break
-            init_train_dates = X.iloc[init_train_idx].index.get_level_values(1).unique()
-            prop = len(init_train_dates) / inner_splitter.n_splits
-        else:
-            prop = None
-
-        results = Parallel(n_jobs=n_jobs)(
-            delayed(self._worker)(
-                train_idx=train_idx,
-                test_idx=test_idx,
-                name=name,
-                models=models,
-                metric=metric,
-                original_date_levels=original_date_levels,
-                hparam_type=hparam_type,
-                hparam_grid=hparam_grid,
-                n_iter=n_iter,
-                prop=prop,
-            )
-            for train_idx, test_idx in tqdm(
-                outer_splitter.split(X=X, y=y),
-            )
-        )
-
-        prediction_data = []
-        modelchoice_data = []
-
-        for pred_data, model_data in results:
-            prediction_data.append(pred_data)
-            modelchoice_data.append(model_data)
-
-        # Condense the collected data into a single dataframe
-        for column_name, xs_levels, date_levels, predictions in prediction_data:
-            idx = pd.MultiIndex.from_product([xs_levels, date_levels])
-            try:
-                signal_df.loc[idx, column_name] = predictions
-            except Exception as e:
-                warnings.warn(
-                    f"Error in signal calculation for {column_name}, date {str(date_levels[0])}. Setting to zero.",
-                    RuntimeWarning,
-                )
-                signal_df.loc[idx, column_name] = 0
-
-        # Now convert signal_df into a quantamental dataframe
-        # This will also ffill the last date of each cross-section as this will be an NA.
-        signal_df = signal_df.groupby(level=0).ffill()
-
-        # For each blacklisted period, set the signal to NaN
-        if self.blacklist is not None:
-            for cross_section, periods in self.blacklist.items():
-                cross_section_key = cross_section.split("_")[0]
-                # Set blacklisted periods to NaN
-                if cross_section_key in signal_xs_levels:
-                    signal_df.loc[
-                        (cross_section_key, slice(periods[0], periods[1])), :
-                    ] = np.nan
-
-        signal_df_long: pd.DataFrame = pd.melt(
-            frame=signal_df.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
-        )
-        self.preds = pd.concat((self.preds, signal_df_long), axis=0).astype(
-            {
-                "cid": "object",
-                "real_date": "datetime64[ns]",
-                "xcat": "object",
-                "value": np.float64,
-            }
-        )
-
-        model_df_long = pd.DataFrame(
-            columns=self.chosen_models.columns, data=modelchoice_data
-        )
-        if self.change_n_splits:
-            self.chosen_models = pd.concat(
-                (
-                    self.chosen_models,
-                    model_df_long,
-                ),
-                axis=0,
-            ).astype(
-                {
-                    "real_date": "datetime64[ns]",
-                    "name": "object",
-                    "model_type": "object",
-                    "hparams": "object",
-                    "n_splits_used": "int",
-                }
-            )
-        else:
-            self.chosen_models = pd.concat(
-                (
-                    self.chosen_models,
-                    model_df_long,
-                ),
-                axis=0,
-            ).astype(
-                {
-                    "real_date": "datetime64[ns]",
-                    "name": "object",
-                    "model_type": "object",
-                    "hparams": "object",
-                }
-            )
 
     def _worker(
         self,
@@ -574,13 +629,14 @@ class SignalOptimizer:
         # Set up training and test sets
         X_train_i: pd.DataFrame = self.X.iloc[train_idx]
         y_train_i: pd.Series = self.y.iloc[train_idx]
-
         X_test_i: pd.DataFrame = self.X.iloc[test_idx]
+
         # Get correct indices to match with
         test_xs_levels: List[str] = X_test_i.index.get_level_values(0).unique()
         test_date_levels: List[pd.Timestamp] = sorted(
             X_test_i.index.get_level_values(1).unique()
         )
+
         # Since the features lag behind the targets, the dates need to be adjusted
         # by a single frequency unit
         locs: np.ndarray = (
@@ -627,12 +683,13 @@ class SignalOptimizer:
             if score > optim_score:
                 optim_score = score
                 optim_name = model_name
-                optim_model = search_object.best_estimator_  # refit = True
+                optim_model = search_object.best_estimator_ 
                 optim_params = search_object.best_params_
 
         # Store the best estimator predictions
         preds: np.ndarray = optim_model.predict(X_test_i)
         prediction_date = [name, test_xs_levels, test_date_levels, preds]
+        
         # Store information about the chosen model at each time.
         if self.change_n_splits:
             modelchoice_data = [test_date_levels.date[0], name, optim_name, optim_params, int(n_splits)]
