@@ -209,9 +209,14 @@ class SignalOptimizer:
 
         # Create an initial dataframes to store quantamental predictions and model choices
         self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
-        self.chosen_models = pd.DataFrame(
-            columns=["real_date", "name", "model_type", "hparams"]
-        )
+        if self.change_n_splits:
+            self.chosen_models = pd.DataFrame(
+                columns=["real_date", "name", "model_type", "hparams", "n_splits_used"]
+            )
+        else:
+            self.chosen_models = pd.DataFrame(
+                columns=["real_date", "name", "model_type", "hparams"]
+            )
 
     def calculate_predictions(
         self,
@@ -492,20 +497,37 @@ class SignalOptimizer:
         model_df_long = pd.DataFrame(
             columns=self.chosen_models.columns, data=modelchoice_data
         )
-        self.chosen_models = pd.concat(
-            (
-                self.chosen_models,
-                model_df_long,
-            ),
-            axis=0,
-        ).astype(
-            {
-                "real_date": "datetime64[ns]",
-                "name": "object",
-                "model_type": "object",
-                "hparams": "object",
-            }
-        )
+        if self.change_n_splits:
+            self.chosen_models = pd.concat(
+                (
+                    self.chosen_models,
+                    model_df_long,
+                ),
+                axis=0,
+            ).astype(
+                {
+                    "real_date": "datetime64[ns]",
+                    "name": "object",
+                    "model_type": "object",
+                    "hparams": "object",
+                    "n_splits_used": "int",
+                }
+            )
+        else:
+            self.chosen_models = pd.concat(
+                (
+                    self.chosen_models,
+                    model_df_long,
+                ),
+                axis=0,
+            ).astype(
+                {
+                    "real_date": "datetime64[ns]",
+                    "name": "object",
+                    "model_type": "object",
+                    "hparams": "object",
+                }
+            )
 
     def _worker(
         self,
@@ -608,7 +630,10 @@ class SignalOptimizer:
         preds: np.ndarray = optim_model.predict(X_test_i)
         prediction_date = [name, test_xs_levels, test_date_levels, preds]
         # Store information about the chosen model at each time.
-        modelchoice_data = [test_date_levels.date[0], name, optim_name, optim_params]
+        if self.change_n_splits:
+            modelchoice_data = [test_date_levels.date[0], name, optim_name, optim_params, int(n_splits)]
+        else:
+            modelchoice_data = [test_date_levels.date[0], name, optim_name, optim_params]
 
         return prediction_date, modelchoice_data
 
@@ -898,7 +923,7 @@ if __name__ == "__main__":
         metric=metric,
         hparam_grid=hparam_grid,
         hparam_type="grid",
-        n_jobs = 1,
+        n_jobs = -1,
     )
     end_time = timeit.default_timer()
     print(f"Elapsed time: {end_time - start_time}")
