@@ -684,7 +684,7 @@ class JPMaQSDownload(DataQueryInterface):
             return []
         if isinstance(download_outputs[0], pd.DataFrame):
             return concat_column_dfs(df_list=download_outputs)
-        
+
         if isinstance(download_outputs[0][0], (dict, QuantamentalDataFrame)):
             download_outputs = list(itertools.chain.from_iterable(download_outputs))
         if isinstance(download_outputs[0], dict):
@@ -921,8 +921,8 @@ if __name__ == "__main__":
     argsX = dict(
         client_id=os.getenv("DQ_CLIENT_ID"),
         client_secret=os.getenv("DQ_CLIENT_SECRET"),
-        base_url=os.getenv("AWS_API_URL"),
-        token_url=os.getenv("AWS_API_TOKEN_URL"),
+        # base_url=os.getenv("AWS_API_URL"),
+        # token_url=os.getenv("AWS_API_TOKEN_URL"),
     )
 
     import pickle
@@ -945,14 +945,17 @@ if __name__ == "__main__":
             as_dataframe=False,
             **argsD,
         )
+        print(data)
     with JPMaQSDownload(**argsX) as jpmaqs:
         data = jpmaqs.download(
             dataframe_format="qdf",
             **argsD,
         )
-        data
+        print(data.head())
+
     with JPMaQSDownload(**argsX) as jpmaqs:
         data = jpmaqs.download(
             dataframe_format="wide",
             **argsD,
         )
+        print(data.head())

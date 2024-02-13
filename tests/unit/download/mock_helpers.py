@@ -128,7 +128,7 @@ class MockDataQueryInterface(DataQueryInterface):
                     dupls: List[List[str, float]] = d["attributes"][0]["time-series"][
                         : len_ts // 2
                     ]
-                    d["attributes"][0]["time-series"]: List[List[str, float]] = (
+                    d["attributes"][0]["time-series"] = (
                         d["attributes"][0]["time-series"] + dupls
                     )
         tsc = []
