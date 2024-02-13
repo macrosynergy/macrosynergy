@@ -523,8 +523,6 @@ class FacetPlot(Plotter):
         # Plotting
         ##############################
 
-        start_time = time.time()
-
         fig = plt.figure(figsize=figsize)
 
         outer_gs: GridSpec = GridSpec(
@@ -559,11 +557,18 @@ class FacetPlot(Plotter):
             re_adj[3] = (
                 re_adj[3] - title_height + fig_height / fig.get_window_extent().height
             )
+        
+        start_time = time.time()
 
         axs: Union[np.ndarray, plt.Axes] = outer_gs.subplots(
             sharex=share_x,
             sharey=share_y,
         )
+
+        end_time = time.time() 
+        print(f"FacetPlot.lineplot subplots took {end_time - start_time} seconds.")
+
+        start_time = time.time()
 
         if not isinstance(axs, np.ndarray):
             axs: np.ndarray = np.array([axs])
