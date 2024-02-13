@@ -8,6 +8,7 @@ import warnings
 import logging
 from typing import List, Dict, Union, Any
 import requests
+import numpy as np
 
 from macrosynergy.download.jpmaqs import (
     JPMaQSDownload,
@@ -285,6 +286,9 @@ class TestOAuth(unittest.TestCase):
         )
         self.assertEqual(jpmaqs.base_url, OAUTH_BASE_URL)
 
+        with self.assertRaises(TypeError):
+            OAuth(client_id="test-id", client_secret="SECRET", proxy="proxy")
+
     def test_invalid_init_args(self):
         good_args: Dict[str, str] = {
             "client_id": "test-id",
@@ -340,8 +344,31 @@ class TestDataQueryInterface(unittest.TestCase):
         )
 
     def test_init(self):
+        def mock_isfile(path: str) -> bool:
+            return path in ["path/key.key", "path/crt.crt"]
+
         with self.assertRaises(TypeError):
             DataQueryInterface(client_id=1, client_secret="SECRET")
+
+        with self.assertRaises(ValueError):
+            with self.assertWarns(UserWarning):
+                dq_interface: DataQueryInterface = DataQueryInterface(
+                    client_id=None,
+                    client_secret=None,
+                    oauth=True,
+                )
+        with mock.patch("os.path.isfile", side_effect=lambda x: mock_isfile(x)):
+            with self.assertWarns(UserWarning):
+                dq_interface: DataQueryInterface = DataQueryInterface(
+                    client_id=None,
+                    client_secret=None,
+                    check_connection=False,
+                    oauth=True,
+                    username="user",
+                    password="pass",
+                    crt="path/crt.crt",
+                    key="path/key.key",
+                )
 
     @mock.patch(
         "macrosynergy.download.dataquery.OAuth._get_token",
@@ -358,13 +385,21 @@ class TestDataQueryInterface(unittest.TestCase):
         # 200. Therefore, use the Interface Object's method to check DataQuery
         # connections.
 
-        with DataQueryInterface(
-            client_id=random_string(), client_secret=random_string()
-        ) as dq:
-            self.assertTrue(dq.check_connection())
+        def _test(verbose: bool, raise_error: bool):
+            with DataQueryInterface(
+                client_id=random_string(), client_secret=random_string()
+            ) as dq:
+                self.assertTrue(
+                    dq.check_connection(verbose=verbose, raise_error=raise_error)
+                )
 
-        mock_p_request.assert_called_once()
-        mock_p_get_token.assert_called_once()
+            mock_p_request.assert_called_once()
+            mock_p_get_token.assert_called_once()
+            return True
+
+        for verbose in [True, False]:
+            for raise_error in [True, False]:
+                self.assertTrue(_test(verbose, raise_error))
 
     @mock.patch(
         "macrosynergy.download.dataquery.OAuth._get_token",
@@ -705,6 +740,41 @@ class TestDataQueryInterface(unittest.TestCase):
             bad_args["batch_size"] = batch_size
             with self.assertWarns(RuntimeWarning):
                 validate_download_args(**bad_args)
+
+    def test_get_unavailable_expressions(self):
+
+        dq_interface = DataQueryInterface(
+            client_id=random_string(),
+            client_secret=random_string(),
+            oauth=True,
+            check_connection=False,
+        )
+
+        cids = ["AUD", "CAD", "CHF", "EUR"]
+        xcats = ["EQXR_NSA", "FXXR_NSA"]
+        metrics = ["value", "grading", "eop_lag", "mop_lag"]
+
+        expression = construct_expressions(
+            metrics=metrics,
+            cids=cids,
+            xcats=xcats,
+        )
+
+        # slect 10 random expressions
+        unavailable_expressions = list(np.random.choice(expression, 10))
+        expression = list(set(expression) - set(unavailable_expressions))
+
+        dicts_list = self.request_wrapper(
+            dq_expressions=expression,
+            start_date="2000-01-01",
+            end_date="2001-01-01",
+        )
+
+        mexprs = dq_interface._get_unavailable_expressions(
+            expected_exprs=expression + unavailable_expressions,
+            dicts_list=dicts_list,
+        )
+        self.assertEqual(set(mexprs), set(unavailable_expressions))
 
 
 if __name__ == "__main__":
