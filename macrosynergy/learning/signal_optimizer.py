@@ -29,6 +29,7 @@ from macrosynergy.learning.panel_time_series_split import (
     ExpandingKFoldPanelSplit,
 )
 
+from macrosynergy.management.validation import _validate_Xy_learning
 
 class SignalOptimizer:
     def __init__(
@@ -142,27 +143,47 @@ class SignalOptimizer:
         ```
         """
         # Checks
+        self._checks_init_params(inner_splitter, X, y, blacklist, change_n_splits)
+
+        # Set instance attributes
+        self.inner_splitter = inner_splitter
+        self.X = X
+        self.y = y
+        self.blacklist = blacklist
+        self.change_n_splits = change_n_splits
+
+        # Create initial dataframes to store quantamental predictions and model choices
+        self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
+        if self.change_n_splits:
+            self.chosen_models = pd.DataFrame(
+                columns=["real_date", "name", "model_type", "hparams", "n_splits_used"]
+            )
+        else:
+            self.chosen_models = pd.DataFrame(
+                columns=["real_date", "name", "model_type", "hparams"]
+            )
+
+    def _checks_init_params(
+        self,
+        inner_splitter: BasePanelSplit,
+        X: pd.DataFrame,
+        y: Union[pd.DataFrame, pd.Series],
+        blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]],
+        change_n_splits: bool,
+    ):
+        """
+        Private method to check the initialisation parameters of the class.
+        """
+        # Check X and y
+        _validate_Xy_learning(X, y)
+
+        # Check inner_splitter
         if not isinstance(inner_splitter, BasePanelSplit):
             raise TypeError(
                 "The inner_splitter argument must be an instance of BasePanelSplit."
             )
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError("The X argument must be a pandas DataFrame.")
-        if not isinstance(y, pd.Series) and not isinstance(y, pd.DataFrame):
-            raise TypeError("The y argument must be a pandas Series or DataFrame.")
-        if not isinstance(X.index, pd.MultiIndex):
-            raise ValueError("X must be multi-indexed.")
-        if not isinstance(y.index, pd.MultiIndex):
-            raise ValueError("y must be multi-indexed.")
-        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
-            raise TypeError("The inner index of X must be datetime.date.")
-        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
-            raise TypeError("The inner index of y must be datetime.date.")
-        if not X.index.equals(y.index):
-            raise ValueError(
-                "The indices of the input dataframe X and the output dataframe y don't "
-                "match."
-            )
+        
+        # Check blacklisting
         if blacklist is not None:
             if not isinstance(blacklist, dict):
                 raise TypeError("The blacklist argument must be a dictionary.")
@@ -190,6 +211,7 @@ class SignalOptimizer:
                             "pandas Timestamps."
                         )
                     
+        # Check change_n_splits
         if not isinstance(change_n_splits, bool):
             raise TypeError("The change_n_splits argument must be a boolean.")
         if change_n_splits:
@@ -199,24 +221,6 @@ class SignalOptimizer:
                     RuntimeWarning,
                 )
                 change_n_splits = False
-
-        self.inner_splitter = inner_splitter
-
-        self.X = X
-        self.y = y
-        self.blacklist = blacklist
-        self.change_n_splits = change_n_splits
-
-        # Create an initial dataframes to store quantamental predictions and model choices
-        self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
-        if self.change_n_splits:
-            self.chosen_models = pd.DataFrame(
-                columns=["real_date", "name", "model_type", "hparams", "n_splits_used"]
-            )
-        else:
-            self.chosen_models = pd.DataFrame(
-                columns=["real_date", "name", "model_type", "hparams"]
-            )
 
     def calculate_predictions(
         self,
