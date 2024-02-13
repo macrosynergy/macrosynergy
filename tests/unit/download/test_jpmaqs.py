@@ -2,8 +2,20 @@ import unittest
 import warnings
 import pandas as pd
 
+import sys
+sys.path.append('.')
+
+
 from typing import List, Dict, Any
-from macrosynergy.download.jpmaqs import JPMaQSDownload, construct_expressions
+from macrosynergy.download.jpmaqs import (
+    JPMaQSDownload,
+    construct_expressions,
+    get_expression_from_qdf,
+    get_expression_from_wide_df,
+    concat_column_dfs,
+    timeseries_to_qdf,
+    timeseries_to_column,
+)
 
 from macrosynergy.download.exceptions import InvalidDataframeError
 from .mock_helpers import (
@@ -315,6 +327,42 @@ class TestJPMaQSDownload(unittest.TestCase):
 
         with self.assertRaises(InvalidDataframeError):
             jpmaqs.download(expressions=un_avail_exprs)
+
+
+class TestFunctions(unittest.TestCase):
+    def setUp(self) -> None:
+        self.cids: List[str] = ["GBP", "EUR", "CAD"]
+        self.xcats: List[str] = ["FXXR_NSA", "EQXR_NSA"]
+        self.metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+        self.expressions: List[str] = construct_expressions(
+            cids=self.cids, xcats=self.xcats, metrics=self.metrics
+        )
+
+    def test_get_expression_from_qdf(self):
+        dicts_list = mock_request_wrapper(
+            dq_expressions=[self.expressions[0]],
+            start_date="2019-01-01",
+            end_date="2019-01-31",
+        )
+        qdf: pd.DataFrame = timeseries_to_qdf(dicts_list[0])
+        expr: str = get_expression_from_qdf(qdf)
+        self.assertEqual(expr, [self.expressions[0]])
+
+    def test_get_expression_from_wide_df(self):
+        exprs = self.expressions[:10]
+        wdf = concat_column_dfs(
+            [
+                timeseries_to_column(
+                    mock_request_wrapper(
+                        dq_expressions=[expr],
+                        start_date="2019-01-01",
+                        end_date="2019-01-31",
+                    )[0]
+                )
+                for expr in exprs
+            ]
+        )
+        self.assertEqual(set(get_expression_from_wide_df(wdf)), set(exprs))
 
 
 if __name__ == "__main__":
