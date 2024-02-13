@@ -3,6 +3,7 @@ Class to handle the calculation of quantamental predictions based on adaptive
 hyperparameter and model selection.
 """
 
+import timeit
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -25,6 +26,7 @@ from macrosynergy.learning.panel_time_series_split import (
     BasePanelSplit,
     ExpandingIncrementPanelSplit,
     RollingKFoldPanelSplit,
+    ExpandingKFoldPanelSplit,
 )
 
 
@@ -35,6 +37,7 @@ class SignalOptimizer:
         X: pd.DataFrame,
         y: Union[pd.DataFrame, pd.Series],
         blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]] = None,
+        change_n_splits: bool = False,
     ):
         """
         Class for sequential optimization of raw signals based on quantamental features.
@@ -69,6 +72,12 @@ class SignalOptimizer:
             corresponding with a time index equal to the features in `X`.
         :param <Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]> blacklist: cross-sections
             with date ranges that should be excluded from the data frame.
+        :param <Optional[bool> change_n_splits: If True and the inner_splitter is an instance of 
+            `RollingKFoldPanelSplit` or `ExpandingKFoldPanelSplit`, the proportion between
+            the number of unique dates in the initial training set and the number of splits
+            specified in the splitter is calculated and maintained over the iterations of
+            the outer splitter. This means that the number of cross-validation splits 
+            increases as more training data becomes available. Default is False.
 
         Note:
         Optimization is based on expanding time series panels and maximizes a defined
@@ -180,12 +189,23 @@ class SignalOptimizer:
                             "The values of the blacklist argument must be tuples of "
                             "pandas Timestamps."
                         )
+                    
+        if not isinstance(change_n_splits, bool):
+            raise TypeError("The change_n_splits argument must be a boolean.")
+        if change_n_splits:
+            if not isinstance(inner_splitter, RollingKFoldPanelSplit) and not isinstance(inner_splitter, ExpandingKFoldPanelSplit):
+                warnings.warn(
+                    f"The chosen splitter isn't an instance of RollingKFoldPanelSplit or ExpandingKFoldPanelSplit. The change_n_splits argument will be set to False.",
+                    RuntimeWarning,
+                )
+                change_n_splits = False
 
         self.inner_splitter = inner_splitter
 
         self.X = X
         self.y = y
         self.blacklist = blacklist
+        self.change_n_splits = change_n_splits
 
         # Create an initial dataframes to store quantamental predictions and model choices
         self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
@@ -396,6 +416,16 @@ class SignalOptimizer:
         X = self.X.copy()
         y = self.y.copy()
 
+        if self.change_n_splits:
+            # calculate the initial unique training dates to n_splits proportion
+            for train_idx, _ in outer_splitter.split(X=X, y=y):
+                init_train_idx = train_idx
+                break
+            init_train_dates = X.iloc[init_train_idx].index.get_level_values(1).unique()
+            prop = len(init_train_dates) / inner_splitter.n_splits
+        else:
+            prop = None
+
         results = Parallel(n_jobs=n_jobs)(
             delayed(self._worker)(
                 train_idx=train_idx,
@@ -407,6 +437,7 @@ class SignalOptimizer:
                 hparam_type=hparam_type,
                 hparam_grid=hparam_grid,
                 n_iter=n_iter,
+                prop=prop,
             )
             for train_idx, test_idx in tqdm(
                 outer_splitter.split(X=X, y=y),
@@ -487,6 +518,7 @@ class SignalOptimizer:
         hparam_grid: Dict[str, Dict[str, List]],
         n_iter: int = 10,
         hparam_type: str = "grid",
+        prop: Optional[float] = None,
     ):
         """
         Private helper function to run the grid search for a single (train, test) pair
@@ -510,6 +542,8 @@ class SignalOptimizer:
         :param <int> n_iter: Number of iterations to run for random search. Default is 10.
         :param <str> hparam_type: Hyperparameter search type.
             This must be either "grid", "random" or "bayes". Default is "grid".
+        :param <Optional[float]> prop: Proportion of unique training dates in the initial 
+            training set to the number of splits specified by the user.
         """
         # Set up training and test sets
         X_train_i: pd.DataFrame = self.X.iloc[train_idx]
@@ -532,6 +566,13 @@ class SignalOptimizer:
         optim_name = None
         optim_model = None
         optim_score = -np.inf
+
+        # If prop is provided, adjust the number of splits in the inner splitter
+        # appropriately 
+        if prop is not None:
+            n_splits = np.floor(len(X_train_i.index.get_level_values(1).unique()) / prop)
+            self.inner_splitter.n_splits = int(n_splits)
+
         # For each model, run a grid search over the hyperparameters to optimise
         # the provided metric. The best model is then used to make predictions.
         for model_name, model in models.items():
@@ -801,6 +842,7 @@ if __name__ == "__main__":
         "KNN": {"n_neighbors": [1, 2, 5]},
     }
 
+    start_time = timeit.default_timer()
     so = SignalOptimizer(
         inner_splitter=inner_splitter,
         X=X_train,
@@ -814,13 +856,54 @@ if __name__ == "__main__":
         metric=metric,
         hparam_grid=hparam_grid,
         hparam_type="grid",
+        n_jobs = -1,
     )
+    end_time = timeit.default_timer()
+    print(f"Elapsed time: {end_time - start_time}")
 
     print(so.get_optimized_signals("test"))
+    so.models_heatmap(name="test", cap=5)
 
     # (2) Example SignalOptimizer usage.
-    #     Visualise the model selection heatmap for the two most frequently selected
-    #     models.
+    #     We get adaptive signals for a linear regression and a KNN regressor, with the
+    #     hyperparameters for the latter optimised across regression balanced accuracy.
+    #     This time, enforce that the number of cross-validation splits increases with 
+    #     the data size.
+
+    models = {
+        "OLS": LinearRegression(),
+        "KNN": KNeighborsRegressor(),
+    }
+    metric = make_scorer(regression_balanced_accuracy, greater_is_better=True)
+
+    inner_splitter = RollingKFoldPanelSplit(n_splits=4)
+
+    hparam_grid = {
+        "OLS": {},
+        "KNN": {"n_neighbors": [1, 2, 5]},
+    }
+
+    start_time = timeit.default_timer()
+    so = SignalOptimizer(
+        inner_splitter=inner_splitter,
+        X=X_train,
+        y=y_train,
+        blacklist=black,
+        change_n_splits=True,
+    )
+
+    so.calculate_predictions(
+        name="test",
+        models=models,
+        metric=metric,
+        hparam_grid=hparam_grid,
+        hparam_type="grid",
+        n_jobs = 1,
+    )
+    end_time = timeit.default_timer()
+    print(f"Elapsed time: {end_time - start_time}")
+
+    print(so.get_optimized_signals("test"))
     so.models_heatmap(name="test", cap=5)
 
     # (3) Example SignalOptimizer usage.
