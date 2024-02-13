@@ -39,10 +39,9 @@ def deconstruct_expression(
 ) -> Union[List[str], List[List[str]]]:
     """
     Deconstruct an expression into a list of cid, xcat, and metric.
-    Coupled with JPMaQSDownload.time_series_to_df(), achieves the inverse of
-    JPMaQSDownload.construct_expressions(). For non-JPMaQS expressions, the returned
-    list will be [expression, expression, 'value']. The metric is set to 'value' to
-    ensure the reported metric is consistent with the standard JPMaQS metrics
+    Achieves the inverse of construct_expressions(). For non-JPMaQS expressions, 
+    the returned list will be [expression, expression, 'value']. The metric is set to
+    'value' to ensure the reported metric is consistent with the standard JPMaQS metrics
     (JPMaQSDownload.valid_metrics).
 
     :param <str> expression: expression to deconstruct. If a list is provided,
@@ -515,35 +514,6 @@ class JPMaQSDownload(DataQueryInterface):
             else:
                 found_expressions = get_expression_from_wide_df(downloaded_df)
             return list(set(expected_exprs) - set(found_expressions))
-
-    @staticmethod
-    def construct_expressions(
-        tickers: Optional[List[str]] = None,
-        cids: Optional[List[str]] = None,
-        xcats: Optional[List[str]] = None,
-        metrics: Optional[List[str]] = None,
-    ) -> List[str]:
-        """Construct expressions from the provided arguments.
-
-        :param <list[str]> tickers: list of tickers.
-        :param <list[str]> cids: list of cids.
-        :param <list[str]> xcats: list of xcats.
-        :param <list[str]> metrics: list of metrics.
-
-        :return <list[str]>: list of expressions.
-        """
-        return construct_expressions(
-            tickers=tickers, cids=cids, xcats=xcats, metrics=metrics
-        )
-
-    @staticmethod
-    def deconstruct_expression(
-        expression: Union[str, List[str]]
-    ) -> Union[List[str], List[List[str]]]:
-        """
-        See `macrosynergy.download.jpmaqs.deconstruct_expression()`.
-        """
-        return deconstruct_expression(expression)
 
     def validate_download_args(
         self,
