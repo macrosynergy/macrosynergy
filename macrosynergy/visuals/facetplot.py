@@ -95,7 +95,6 @@ class FacetPlot(Plotter):
         *args,
         **kwargs,
     ):
-        start_time = time.time()
         super().__init__(
             df=df,
             cids=cids,
@@ -109,8 +108,6 @@ class FacetPlot(Plotter):
             *args,
             **kwargs,
         )
-        end_time = time.time()
-        print(f"FacetPlot.__init__ took {end_time - start_time} seconds.")
 
     def _get_grid_dim(
         self,
@@ -371,6 +368,8 @@ class FacetPlot(Plotter):
         :param <int> dpi: DPI of the saved image. Default is `300`.
         :param <bool> return_figure: Return the figure object. Default is `False`.
         """
+
+        start_time = time.time()
         comp_series_flag: bool = False
 
         if compare_series:
@@ -517,9 +516,14 @@ class FacetPlot(Plotter):
         }
         plot_dict: Dict[str, Dict[str, Union[str, List[str]]]] = _plot_dict.copy()
 
+        end_time = time.time() 
+        print(f"FacetPlot.lineplot init took {end_time - start_time} seconds.")
+
         ##############################
         # Plotting
         ##############################
+
+        start_time = time.time()
 
         fig = plt.figure(figsize=figsize)
 
@@ -701,6 +705,9 @@ class FacetPlot(Plotter):
 
         if return_figure:
             return fig
+        
+        end_time = time.time() 
+        print(f"FacetPlot.lineplot plotting took {end_time - start_time} seconds.")
 
 
 if __name__ == "__main__":

@@ -153,6 +153,7 @@ def timelines(
         cids: List[str] = df["cid"].unique().tolist()
 
     if cumsum:
+        df = df.copy()
         df[val] = (
             df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
             .groupby(["cid", "xcat"])
@@ -161,6 +162,7 @@ def timelines(
 
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
+        df = df.copy()
         if len(xcats) > 1:
             raise ValueError("`cs_mean` cannot be True for multiple categories.")
 
@@ -201,8 +203,6 @@ def timelines(
     if xcat_grid and (len(xcats) == 1):
         xcat_grid: bool = False
         single_chart: bool = True
-
-    start_time = time.time()
 
     if xcat_grid:
         if ncol > len(xcats):
@@ -274,7 +274,6 @@ def timelines(
             start=start,
             end=end,
         ) as fp:
-            start_time = time.time()
             show_legend: bool = True if cross_mean_series else False
             show_legend = show_legend or (len(xcats) > 1)
             if ncol > len(cids):
@@ -300,10 +299,6 @@ def timelines(
                 legend_labels=xcat_labels or None,
                 legend_fontsize=legend_fontsize,
             )
-            end_time = time.time()
-            print("Time taken to call lineplot: ", end_time - start_time, " seconds.")
-    end_time = time.time()
-    print("Time taken to plot: ", end_time - start_time, " seconds.")
 
 
 if __name__ == "__main__":
