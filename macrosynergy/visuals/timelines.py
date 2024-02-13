@@ -98,7 +98,6 @@ def timelines(
     :param <int> legend_fontsize: font size of legend. Default is 12.
 
     """
-    start_time = time.time()
     if not isinstance(df, pd.DataFrame):
         raise TypeError("`df` must be a pandas DataFrame.")
 
@@ -203,10 +202,6 @@ def timelines(
         xcat_grid: bool = False
         single_chart: bool = True
 
-    end_time = time.time()
-
-    print("Time taken to validate inputs: ", end_time - start_time, " seconds.")
-
     start_time = time.time()
 
     if xcat_grid:
@@ -279,6 +274,7 @@ def timelines(
             start=start,
             end=end,
         ) as fp:
+            start_time = time.time()
             show_legend: bool = True if cross_mean_series else False
             show_legend = show_legend or (len(xcats) > 1)
             if ncol > len(cids):
@@ -304,6 +300,8 @@ def timelines(
                 legend_labels=xcat_labels or None,
                 legend_fontsize=legend_fontsize,
             )
+            end_time = time.time()
+            print("Time taken to call lineplot: ", end_time - start_time, " seconds.")
     end_time = time.time()
     print("Time taken to plot: ", end_time - start_time, " seconds.")
 

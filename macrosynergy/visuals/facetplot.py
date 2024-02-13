@@ -16,6 +16,8 @@ from matplotlib.gridspec import GridSpec
 from macrosynergy.visuals.plotter import Plotter
 from macrosynergy.management.types import Numeric, NoneType
 
+import time
+
 
 def _get_square_grid(
     num_plots: int,
@@ -93,6 +95,7 @@ class FacetPlot(Plotter):
         *args,
         **kwargs,
     ):
+        start_time = time.time()
         super().__init__(
             df=df,
             cids=cids,
@@ -106,6 +109,8 @@ class FacetPlot(Plotter):
             *args,
             **kwargs,
         )
+        end_time = time.time()
+        print(f"FacetPlot.__init__ took {end_time - start_time} seconds.")
 
     def _get_grid_dim(
         self,
