@@ -590,8 +590,8 @@ class FacetPlot(Plotter):
                 is_empty_plot = is_empty_plot and not is_valid_series
 
                 if is_valid_series:
-                    X = selected_df[plt_dct["X"]].tolist()
-                    Y = selected_df[metric].tolist()
+                    X = selected_df[plt_dct["X"]].values
+                    Y = selected_df[metric].values
                 else:
                     X, Y = [], []
 
