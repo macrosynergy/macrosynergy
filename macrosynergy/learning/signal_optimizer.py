@@ -31,6 +31,7 @@ from macrosynergy.learning.panel_time_series_split import (
 
 from macrosynergy.management.validation import _validate_Xy_learning
 
+
 class SignalOptimizer:
     def __init__(
         self,
@@ -73,11 +74,11 @@ class SignalOptimizer:
             corresponding with a time index equal to the features in `X`.
         :param <Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]> blacklist: cross-sections
             with date ranges that should be excluded from the data frame.
-        :param <Optional[bool> change_n_splits: If True and the inner_splitter is an instance of 
+        :param <Optional[bool> change_n_splits: If True and the inner_splitter is an instance of
             `RollingKFoldPanelSplit` or `ExpandingKFoldPanelSplit`, the proportion between
             the number of unique dates in the initial training set and the number of splits
             specified in the splitter is calculated and maintained over the iterations of
-            the outer splitter. This means that the number of cross-validation splits 
+            the outer splitter. This means that the number of cross-validation splits
             increases as more training data becomes available. Default is False.
 
         Note:
@@ -182,7 +183,7 @@ class SignalOptimizer:
             raise TypeError(
                 "The inner_splitter argument must be an instance of BasePanelSplit."
             )
-        
+
         # Check blacklisting
         if blacklist is not None:
             if not isinstance(blacklist, dict):
@@ -210,12 +211,14 @@ class SignalOptimizer:
                             "The values of the blacklist argument must be tuples of "
                             "pandas Timestamps."
                         )
-                    
+
         # Check change_n_splits
         if not isinstance(change_n_splits, bool):
             raise TypeError("The change_n_splits argument must be a boolean.")
         if change_n_splits:
-            if not isinstance(inner_splitter, RollingKFoldPanelSplit) and not isinstance(inner_splitter, ExpandingKFoldPanelSplit):
+            if not isinstance(
+                inner_splitter, RollingKFoldPanelSplit
+            ) and not isinstance(inner_splitter, ExpandingKFoldPanelSplit):
                 warnings.warn(
                     f"The chosen splitter isn't an instance of RollingKFoldPanelSplit or ExpandingKFoldPanelSplit. The change_n_splits argument will be set to False.",
                     RuntimeWarning,
@@ -292,7 +295,7 @@ class SignalOptimizer:
         the `inner_splitter` argument. Based on inner cross-validation an optimal model
         is chosen and used for predicting the targets of the next period.
         """
-        # Checks 
+        # Checks
         self._checks_calcpred_params(
             name=name,
             models=models,
@@ -305,7 +308,7 @@ class SignalOptimizer:
             n_iter=n_iter,
             n_jobs=n_jobs,
         )
- 
+
         # (1) Create a dataframe to store the signals induced by each model.
         #     The index should be a multi-index with cross-sections equal to those in X
         #     and business-day dates spanning the range of dates in X.
@@ -328,8 +331,8 @@ class SignalOptimizer:
         )
 
         # (2) Set up the splitter, outputs to store the predictions and model choices,
-        #     and (if specified) calculations for adaptive n_splits in preparation 
-        #     for parallelising the historical model predictions. 
+        #     and (if specified) calculations for adaptive n_splits in preparation
+        #     for parallelising the historical model predictions.
         prediction_data = []
         modelchoice_data = []
 
@@ -354,8 +357,8 @@ class SignalOptimizer:
         else:
             prop = None
 
-        # (3) Run the parallelised worker function to run the Macrosynergy signal 
-        #     optimization algorithm over the trading history. 
+        # (3) Run the parallelised worker function to run the Macrosynergy signal
+        #     optimization algorithm over the trading history.
         results = Parallel(n_jobs=n_jobs)(
             delayed(self._worker)(
                 train_idx=train_idx,
@@ -374,10 +377,10 @@ class SignalOptimizer:
             )
         )
 
-        # (4) Collect the results from the parallelised worker function and store them 
-        #     as dataframes that can be accessed by the user to analyse models chosen 
+        # (4) Collect the results from the parallelised worker function and store them
+        #     as dataframes that can be accessed by the user to analyse models chosen
         #     and signals produced over time. If there was trouble with the signal
-        #     calculation, the user is warned and the signal is set to zero to indicate 
+        #     calculation, the user is warned and the signal is set to zero to indicate
         #     no action was taken.
         prediction_data = []
         modelchoice_data = []
@@ -400,7 +403,7 @@ class SignalOptimizer:
 
         signal_df = signal_df.groupby(level=0).ffill()
 
-        # (5) Handle blacklisted periods and ensure the signal dataframe is 
+        # (5) Handle blacklisted periods and ensure the signal dataframe is
         #     a quantamental dataframe.
         if self.blacklist is not None:
             for cross_section, periods in self.blacklist.items():
@@ -480,7 +483,7 @@ class SignalOptimizer:
         # Check the pipeline name is a string
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
-        
+
         # Check that the models dictionary is correctly formatted
         if models == {}:
             raise ValueError("The models dictionary cannot be empty.")
@@ -494,11 +497,11 @@ class SignalOptimizer:
                     "The values of the models dictionary must be sklearn predictors or "
                     "pipelines."
                 )
-            
+
         # Check that the metric is callable
         if not callable(metric):
             raise TypeError("The metric argument must be a callable object.")
-        
+
         # Check the hyperparameter search type is a valid string
         if not isinstance(hparam_type, str):
             raise TypeError("The hparam_type argument must be a string.")
@@ -508,7 +511,7 @@ class SignalOptimizer:
             )
         if hparam_type == "bayes":
             raise NotImplementedError("Bayesian optimisation not yet implemented.")
-        
+
         # Check that the hyperparameter grid is correctly formatted
         if not isinstance(hparam_grid, dict):
             raise TypeError("The hparam_grid argument must be a dictionary.")
@@ -562,10 +565,10 @@ class SignalOptimizer:
                 "The keys in the hyperparameter grid must match those in the models "
                 "dictionary."
             )
-        
+
         # Check the min_cids, min_periods, max_periods, n_iter and n_jobs arguments
         # are correctly formatted
-        if not isinstance(min_cids, int): 
+        if not isinstance(min_cids, int):
             raise TypeError("The min_cids argument must be an integer.")
         if min_cids < 1:
             raise ValueError("The min_cids argument must be greater than zero.")
@@ -623,7 +626,7 @@ class SignalOptimizer:
         :param <int> n_iter: Number of iterations to run for random search. Default is 10.
         :param <str> hparam_type: Hyperparameter search type.
             This must be either "grid", "random" or "bayes". Default is "grid".
-        :param <Optional[float]> prop: Proportion of unique training dates in the initial 
+        :param <Optional[float]> prop: Proportion of unique training dates in the initial
             training set to the number of splits specified by the user.
         """
         # Set up training and test sets
@@ -650,9 +653,11 @@ class SignalOptimizer:
         optim_score = -np.inf
 
         # If prop is provided, adjust the number of splits in the inner splitter
-        # appropriately 
+        # appropriately
         if prop is not None:
-            n_splits = np.floor(len(X_train_i.index.get_level_values(1).unique()) / prop)
+            n_splits = np.floor(
+                len(X_train_i.index.get_level_values(1).unique()) / prop
+            )
             self.inner_splitter.n_splits = int(n_splits)
 
         # For each model, run a grid search over the hyperparameters to optimise
@@ -683,18 +688,29 @@ class SignalOptimizer:
             if score > optim_score:
                 optim_score = score
                 optim_name = model_name
-                optim_model = search_object.best_estimator_ 
+                optim_model = search_object.best_estimator_
                 optim_params = search_object.best_params_
 
         # Store the best estimator predictions
         preds: np.ndarray = optim_model.predict(X_test_i)
         prediction_date = [name, test_xs_levels, test_date_levels, preds]
-        
+
         # Store information about the chosen model at each time.
         if self.change_n_splits:
-            modelchoice_data = [test_date_levels.date[0], name, optim_name, optim_params, int(n_splits)]
+            modelchoice_data = [
+                test_date_levels.date[0],
+                name,
+                optim_name,
+                optim_params,
+                int(n_splits),
+            ]
         else:
-            modelchoice_data = [test_date_levels.date[0], name, optim_name, optim_params]
+            modelchoice_data = [
+                test_date_levels.date[0],
+                name,
+                optim_name,
+                optim_params,
+            ]
 
         return prediction_date, modelchoice_data
 
@@ -803,7 +819,8 @@ class SignalOptimizer:
         if cap > 20:
             warnings.warn(
                 f"The maximum number of models to display is 20. The cap has been set to "
-                "20.", RuntimeWarning,
+                "20.",
+                RuntimeWarning,
             )
             cap = 20
 
@@ -942,7 +959,7 @@ if __name__ == "__main__":
         metric=metric,
         hparam_grid=hparam_grid,
         hparam_type="grid",
-        n_jobs = -1,
+        n_jobs=-1,
     )
     end_time = timeit.default_timer()
     print(f"Elapsed time: {end_time - start_time}")
@@ -953,7 +970,7 @@ if __name__ == "__main__":
     # (2) Example SignalOptimizer usage.
     #     We get adaptive signals for a linear regression and a KNN regressor, with the
     #     hyperparameters for the latter optimised across regression balanced accuracy.
-    #     This time, enforce that the number of cross-validation splits increases with 
+    #     This time, enforce that the number of cross-validation splits increases with
     #     the data size.
 
     models = {
@@ -984,7 +1001,7 @@ if __name__ == "__main__":
         metric=metric,
         hparam_grid=hparam_grid,
         hparam_type="grid",
-        n_jobs = -1,
+        n_jobs=-1,
     )
     end_time = timeit.default_timer()
     print(f"Elapsed time: {end_time - start_time}")
