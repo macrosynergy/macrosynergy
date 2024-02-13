@@ -537,9 +537,9 @@ class TestDataQueryInterface(unittest.TestCase):
 
         metrics = ["value", "grading"]
 
-        set_a = jpmaqs_download.construct_expressions(metrics=metrics, tickers=tickers)
+        set_a = construct_expressions(metrics=metrics, tickers=tickers)
 
-        set_b = jpmaqs_download.construct_expressions(
+        set_b = construct_expressions(
             metrics=metrics, cids=cids, xcats=xcats
         )
 

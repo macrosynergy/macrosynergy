@@ -3,7 +3,7 @@ import warnings
 import pandas as pd
 
 from typing import List, Dict, Any
-from macrosynergy.download import JPMaQSDownload
+from macrosynergy.download.jpmaqs import JPMaQSDownload, construct_expressions
 
 from macrosynergy.download.exceptions import InvalidDataframeError
 from .mock_helpers import (
@@ -213,7 +213,7 @@ class TestJPMaQSDownload(unittest.TestCase):
             self.fail("Unexpected exception raised: {}".format(e))
 
         # now test with fail condition where no expressions are available
-        test_exprs: List[str] = JPMaQSDownload.construct_expressions(
+        test_exprs: List[str] = construct_expressions(
             cids=["GBP", "EUR", "CAD"],
             xcats=["FXXR_NSA", "EQXR_NSA"],
             metrics=[
