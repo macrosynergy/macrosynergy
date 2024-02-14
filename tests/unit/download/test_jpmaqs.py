@@ -364,6 +364,15 @@ class TestFunctions(unittest.TestCase):
         )
         self.assertEqual(set(get_expression_from_wide_df(wdf)), set(exprs))
 
+    def timeseries_to_qdf(self):
+        dicts_list = mock_request_wrapper(
+            dq_expressions=self.expressions,
+            start_date="2019-01-01",
+            end_date="2019-01-31",
+        )
+        qdf: pd.DataFrame = timeseries_to_qdf(dicts_list)
+        ...
+
 
 if __name__ == "__main__":
     unittest.main()
