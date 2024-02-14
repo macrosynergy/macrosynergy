@@ -100,7 +100,8 @@ def timelines(
     if not isinstance(df, pd.DataFrame):
         raise TypeError("`df` must be a pandas DataFrame.")
     
-    df = df.copy().reset_index()
+    if len(df.columns) < 4:
+        df = df.copy().reset_index()
     
     if val not in df.columns:
         if len(df.columns) == len(IDX_COLS) + 1:
