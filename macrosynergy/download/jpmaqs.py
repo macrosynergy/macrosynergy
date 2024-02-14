@@ -688,7 +688,7 @@ class JPMaQSDownload(DataQueryInterface):
 
         if as_dataframe:
             if dataframe_format == "qdf":
-                ts_list = list(filter([timeseries_to_qdf(ts) for ts in ts_list]))
+                ts_list = [timeseries_to_qdf(ts) for ts in ts_list if ts is not None]
             elif dataframe_format == "wide":
                 ts_list = concat_column_dfs(
                     df_list=[timeseries_to_column(ts) for ts in ts_list]
@@ -884,7 +884,7 @@ class JPMaQSDownload(DataQueryInterface):
 
 if __name__ == "__main__":
     cids = "AUD,BRL,CAD,CHF,CLP,CNY,COP,CZK,DEM,ESP,EUR,FRF,GBP,USD".split(",")
-    xcats = "RIR_NSA,FXXR_NSA,FXXR_VT10,DU05YXR_NSA,DU05YXR_VT10"
+    xcats = "RIR_NSA,FXXR_NSA,FXXR_VT10,DU05YXR_NSA,DU05YXR_VT10".split(",")
     start_date: str = "2024-02-07"
     end_date: str = "2024-02-09"
 
