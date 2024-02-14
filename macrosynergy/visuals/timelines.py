@@ -18,13 +18,12 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
-from macrosynergy.management.utils import is_valid_iso_date
+from macrosynergy.management.utils import standardise_dataframe
 from macrosynergy.visuals import FacetPlot, LinePlot
 from macrosynergy.management.types import Numeric
 import time
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
-
 
 def timelines(
     df: pd.DataFrame,
@@ -100,7 +99,9 @@ def timelines(
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("`df` must be a pandas DataFrame.")
-
+    
+    df = df.copy().reset_index()
+    
     if val not in df.columns:
         if len(df.columns) == len(IDX_COLS) + 1:
             val: str = list(set(df.columns) - set(IDX_COLS))[0]
@@ -153,7 +154,6 @@ def timelines(
         cids: List[str] = df["cid"].unique().tolist()
 
     if cumsum:
-        df = df.copy()
         df[val] = (
             df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
             .groupby(["cid", "xcat"])
@@ -218,6 +218,7 @@ def timelines(
             start=start,
             end=end,
         ) as fp:
+            
             fp.lineplot(
                 share_y=same_y,
                 share_x=not all_xticks,
