@@ -3,7 +3,8 @@ import warnings
 import pandas as pd
 
 import sys
-sys.path.append('.')
+
+sys.path.append(".")
 
 
 from typing import List, Dict, Any
@@ -18,6 +19,7 @@ from macrosynergy.download.jpmaqs import (
 )
 
 from macrosynergy.download.exceptions import InvalidDataframeError
+from macrosynergy.management.types import QuantamentalDataFrame
 from .mock_helpers import (
     mock_jpmaqs_value,
     mock_request_wrapper,
@@ -364,15 +366,45 @@ class TestFunctions(unittest.TestCase):
         )
         self.assertEqual(set(get_expression_from_wide_df(wdf)), set(exprs))
 
-    def timeseries_to_qdf(self):
+    def test_timeseries_to_qdf(self):
         dicts_list = mock_request_wrapper(
             dq_expressions=self.expressions,
             start_date="2019-01-01",
             end_date="2019-01-31",
         )
-        qdf: pd.DataFrame = timeseries_to_qdf(dicts_list)
-        ...
 
+        def _test_qdf(_qdf: pd.DataFrame, expr: str):
+            self.assertIsInstance(_qdf, QuantamentalDataFrame)
+            cid = _qdf["cid"].unique()
+            xcat = _qdf["xcat"].unique()
+            metrics = list(set(_qdf.columns) - set(QuantamentalDataFrame.IndexCols))
+            self.assertEqual(len(cid), 1)
+            self.assertEqual(len(xcat), 1)
+            self.assertEqual(len(metrics), 1)
+            self.assertEqual(expr, f"DB(JPMAQS,{cid[0]}_{xcat[0]},{metrics[0]})")
+
+        for dictx in dicts_list:
+            expression = dictx["attributes"][0]["expression"]
+            _test_qdf(timeseries_to_qdf(dictx), expression)
+
+    def test_timeseries_to_column(self):
+        dicts_list = mock_request_wrapper(
+            dq_expressions=self.expressions,
+            start_date="2019-01-01",
+            end_date="2019-01-31",
+        )
+
+        def _test_column(_column: pd.DataFrame, expr: str):
+            self.assertIsInstance(_column, pd.DataFrame)
+            self.assertEqual(_column.index.name, "real_date")
+            self.assertEqual(len(_column.columns), 1)
+            self.assertEqual(_column.columns[0], expr)
+
+        for dictx in dicts_list:
+            expression = dictx["attributes"][0]["expression"]
+            _test_column(timeseries_to_column(dictx), expression)
+
+    
 
 if __name__ == "__main__":
     unittest.main()
