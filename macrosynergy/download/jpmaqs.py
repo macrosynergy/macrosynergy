@@ -157,7 +157,7 @@ def timeseries_to_qdf(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
     return df
 
 
-def combine_single_metric_qdfs(
+def concat_single_metric_qdfs(
     df_list: List[QuantamentalDataFrame],
     errors: str = "ignore",
 ) -> QuantamentalDataFrame:
@@ -250,6 +250,7 @@ def timeseries_to_column(
         timeseries["attributes"][0]["time-series"], columns=["real_date", expression]
     )
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y%m%d")
+    df = df.dropna()
     if df.empty:
         if errors == "raise":
             raise ValueError("Time series is empty.")
@@ -660,7 +661,7 @@ class JPMaQSDownload(DataQueryInterface):
         if isinstance(download_outputs[0], dict):
             return download_outputs
         if isinstance(download_outputs[0], QuantamentalDataFrame):
-            return combine_single_metric_qdfs(download_outputs)
+            return concat_single_metric_qdfs(download_outputs)
             # cannot chain QDFs with different metrics
 
         raise NotImplementedError(
