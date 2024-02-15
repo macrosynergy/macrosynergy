@@ -18,12 +18,12 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
-from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date, reduce_df
+from macrosynergy.management.utils import standardise_dataframe
 from macrosynergy.visuals import FacetPlot, LinePlot
 from macrosynergy.management.types import Numeric
+import time
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
-
 
 def timelines(
     df: pd.DataFrame,
@@ -99,9 +99,10 @@ def timelines(
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("`df` must be a pandas DataFrame.")
-
-    df: pd.DataFrame = standardise_dataframe(df.copy())
-
+    
+    if len(df.columns) < 4:
+        df = df.copy().reset_index()
+    
     if val not in df.columns:
         if len(df.columns) == len(IDX_COLS) + 1:
             val: str = list(set(df.columns) - set(IDX_COLS))[0]
@@ -116,20 +117,11 @@ def timelines(
                 "none/many other numeric columns in the DataFrame."
             )
 
-    for dx, nx in [(start, "start"), (end, "end")]:
-        if dx is not None:
-            if not is_valid_iso_date(dx):
-                raise ValueError(f"`{nx}` must be a valid ISO date string.")
-
     if start is None:
         start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
 
     if end is None:
         end: str = pd.Timestamp(df["real_date"].max()).strftime("%Y-%m-%d")
-
-    df: pd.DataFrame = df.loc[
-        (df["real_date"] >= start) & (df["real_date"] <= end), :
-    ].copy()
 
     if isinstance(xcats, str):
         xcats: List[str] = [xcats]
@@ -161,10 +153,9 @@ def timelines(
 
     if cids is None:
         cids: List[str] = df["cid"].unique().tolist()
-    else:
-        df = reduce_df(df, cids=cids)
 
     if cumsum:
+        df = df.copy()
         df[val] = (
             df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
             .groupby(["cid", "xcat"])
@@ -173,6 +164,7 @@ def timelines(
 
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
+        df = df.copy()
         if len(xcats) > 1:
             raise ValueError("`cs_mean` cannot be True for multiple categories.")
 
@@ -228,6 +220,7 @@ def timelines(
             start=start,
             end=end,
         ) as fp:
+            
             fp.lineplot(
                 share_y=same_y,
                 share_x=not all_xticks,
