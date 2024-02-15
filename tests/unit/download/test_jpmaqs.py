@@ -11,11 +11,14 @@ from typing import List, Dict, Any
 from macrosynergy.download.jpmaqs import (
     JPMaQSDownload,
     construct_expressions,
+    deconstruct_expression,
     get_expression_from_qdf,
     get_expression_from_wide_df,
     concat_column_dfs,
     timeseries_to_qdf,
     timeseries_to_column,
+    concat_single_metric_qdfs,
+    validate_downloaded_df,
 )
 
 from macrosynergy.download.exceptions import InvalidDataframeError
@@ -65,6 +68,19 @@ class TestJPMaQSDownload(unittest.TestCase):
                 bad_args[argx] = -1  # 1 would evaluate to True for bools
                 JPMaQSDownload(**bad_args)
 
+        with self.assertRaises(ValueError):
+            bad_args = good_args.copy()
+            for vx in [
+                "client_id",
+                "client_secret",
+                "crt",
+                "key",
+                "username",
+                "password",
+            ]:
+                bad_args[vx] = None
+            JPMaQSDownload(**bad_args)
+
     def test_download_arg_validation(self):
         good_args: Dict[str, Any] = {
             "tickers": ["EUR_FXXR_NSA", "USD_FXXR_NSA"],
@@ -81,6 +97,7 @@ class TestJPMaQSDownload(unittest.TestCase):
             "as_dataframe": True,
             "report_time_taken": True,
             "get_catalogue": True,
+            "dataframe_format": "qdf",
         }
         bad_args: Dict[str, Any] = {}
         jpmaqs: JPMaQSDownload = JPMaQSDownload(
@@ -275,61 +292,6 @@ class TestJPMaQSDownload(unittest.TestCase):
 
     warnings.resetwarnings()
 
-    def test_validate_downloaded_df(self):
-        good_args: Dict[str, Any] = {
-            "tickers": ["EUR_FXXR_NSA", "USD_FXXR_NSA"],
-            "cids": ["GBP", "EUR"],
-            "xcats": ["FXXR_NSA", "EQXR_NSA"],
-            "metrics": ["value", "grading", "eop_lag", "mop_lag"],
-            "start_date": "2019-01-01",
-            "end_date": "2019-01-31",
-            "expressions": [
-                "DB(JPMAQS,AUD_FXXR_NSA,value)",
-                "DB(JPMAQS,CAD_FXXR_NSA,value)",
-            ],
-            "show_progress": True,
-            "as_dataframe": True,
-            "report_time_taken": True,
-            "get_catalogue": False,
-        }
-
-        jpmaqs: JPMaQSDownload = JPMaQSDownload(
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
-
-        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(
-            client_id="client_id", client_secret="client_secret"
-        )
-        un_avail_exprs: List[str] = [
-            "DB(JPMAQS,USD_FXXR_NSA,value)",
-            "DB(JPMAQS,USD_FXXR_NSA,grading)",
-            "DB(JPMAQS,USD_FXXR_NSA,eop_lag)",
-            "DB(JPMAQS,USD_FXXR_NSA,mop_lag)",
-        ]
-        dupl_exprs: List[str] = [
-            "DB(JPMAQS,EUR_EQXR_NSA,value)",
-        ]
-        mock_dq_interface._gen_attributes(
-            unavailable_expressions=un_avail_exprs,
-            mask_expressions=un_avail_exprs,
-            duplicate_entries=dupl_exprs,
-        )
-        jpmaqs.dq_interface = mock_dq_interface
-        # with self.assertRaises(InvalidDataframeError):
-        #     jpmaqs.download(**good_args)
-
-        mock_dq_interface._gen_attributes(
-            unavailable_expressions=un_avail_exprs,
-            mask_expressions=un_avail_exprs,
-            duplicate_entries=[],
-        )
-        jpmaqs.dq_interface = mock_dq_interface
-
-        with self.assertRaises(InvalidDataframeError):
-            jpmaqs.download(expressions=un_avail_exprs)
-
 
 class TestFunctions(unittest.TestCase):
     def setUp(self) -> None:
@@ -339,6 +301,63 @@ class TestFunctions(unittest.TestCase):
         self.expressions: List[str] = construct_expressions(
             cids=self.cids, xcats=self.xcats, metrics=self.metrics
         )
+
+    def test_construct_expressions(self):
+        cids = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
+        xcats = ["EQXR_NSA", "FXXR_NSA"]
+        tickers = [cid + "_" + xcat for xcat in xcats for cid in cids]
+        metrics = ["value", "grading"]
+
+        set_a = construct_expressions(metrics=metrics, tickers=tickers)
+        set_b = construct_expressions(metrics=metrics, cids=cids, xcats=xcats)
+        self.assertEqual(set(set_a), set(set_b))
+
+        exprs = set(
+            [
+                f"DB(JPMAQS,{ticker},{metric})"
+                for ticker in tickers
+                for metric in metrics
+            ]
+        )
+        self.assertEqual(set(set_a), exprs)
+
+    def test_deconstruct_expressions(self):
+        cids = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
+        xcats = ["EQXR_NSA", "FXXR_NSA"]
+        tickers = [cid + "_" + xcat for xcat in xcats for cid in cids]
+        metrics = ["value", "grading"]
+        tkms = [f"{ticker}_{metric}" for ticker in tickers for metric in metrics]
+        expressions = construct_expressions(
+            metrics=["value", "grading"], tickers=tickers
+        )
+        deconstructed_expressions = deconstruct_expression(expression=expressions)
+        dtkms = ["_".join(d) for d in deconstructed_expressions]
+
+        self.assertEqual(set(tkms), set(dtkms))
+
+        for tkm, expression in zip(tkms, expressions):
+            self.assertEqual(
+                tkm,
+                "_".join(deconstruct_expression(expression=expression)),
+            )
+
+        for expr in [1, [1, 2]]:
+            # type error
+            with self.assertRaises(TypeError):
+                deconstruct_expression(expression=expr)
+
+        with self.assertRaises(ValueError):
+            deconstruct_expression(expression=[])
+
+        # now give it a bad expression. it should warn and return [expression, expression, expression]
+        with self.assertWarns(UserWarning):
+            self.assertEqual(
+                deconstruct_expression(expression="bad_expression"),
+                ["bad_expression", "bad_expression", "value"],
+            )
+
+        with self.assertWarns(UserWarning):
+            deconstruct_expression(expression="badexpression,metric")
 
     def test_get_expression_from_qdf(self):
         dicts_list = mock_request_wrapper(
@@ -350,8 +369,14 @@ class TestFunctions(unittest.TestCase):
         expr: str = get_expression_from_qdf(qdf)
         self.assertEqual(expr, [self.expressions[0]])
 
+        qdfs = list(map(timeseries_to_qdf, dicts_list))
+        exprs = get_expression_from_qdf(qdfs)
+        self.assertIsInstance(exprs, list)
+        for expr, _qdf in zip(exprs, qdfs):
+            self.assertEqual(expr, get_expression_from_qdf(_qdf)[0])
+
     def test_get_expression_from_wide_df(self):
-        exprs = self.expressions[:10]
+        exprs = self.expressions
         wdf = concat_column_dfs(
             [
                 timeseries_to_column(
@@ -366,7 +391,13 @@ class TestFunctions(unittest.TestCase):
         )
         self.assertEqual(set(get_expression_from_wide_df(wdf)), set(exprs))
 
+        wList = [wdf, wdf]
+        self.assertEqual(set(get_expression_from_wide_df(wList)), set(exprs))
+
     def test_timeseries_to_qdf(self):
+        with self.assertRaises(TypeError):
+            timeseries_to_qdf("")
+
         dicts_list = mock_request_wrapper(
             dq_expressions=self.expressions,
             start_date="2019-01-01",
@@ -387,12 +418,35 @@ class TestFunctions(unittest.TestCase):
             expression = dictx["attributes"][0]["expression"]
             _test_qdf(timeseries_to_qdf(dictx), expression)
 
+        for mts in [None, [(None, None)]]:
+            dicts_list[0]["attributes"][0]["time-series"] = mts
+            self.assertIsNone(timeseries_to_qdf(dicts_list[0]))
+
     def test_timeseries_to_column(self):
+
+        with self.assertRaises(TypeError):
+            timeseries_to_column("")
+
+        with self.assertRaises(ValueError):
+            timeseries_to_column({}, errors=True)
+
         dicts_list = mock_request_wrapper(
             dq_expressions=self.expressions,
             start_date="2019-01-01",
             end_date="2019-01-31",
         )
+
+        ts_values = [None, [(None, None)]]
+
+        for ts in ts_values:
+            bad_ts = mock_request_wrapper(
+                self.expressions[0], "2019-01-01", "2019-01-31"
+            )[0]
+            bad_ts["attributes"][0]["time-series"] = ts
+            with self.assertRaises(ValueError):
+                timeseries_to_column(bad_ts, errors="raise")
+
+            self.assertIsNone(timeseries_to_column(bad_ts, errors="ignore"))
 
         def _test_column(_column: pd.DataFrame, expr: str):
             self.assertIsInstance(_column, pd.DataFrame)
@@ -404,7 +458,127 @@ class TestFunctions(unittest.TestCase):
             expression = dictx["attributes"][0]["expression"]
             _test_column(timeseries_to_column(dictx), expression)
 
-    
+    def test_concat_single_metric_qdfs(self):
+
+        with self.assertRaises(TypeError):
+            concat_single_metric_qdfs("")
+
+        with self.assertRaises(ValueError):
+            concat_single_metric_qdfs([], errors=True)
+
+        dicts_lists = mock_request_wrapper(
+            dq_expressions=self.expressions,
+            start_date="2019-01-01",
+            end_date="2019-01-31",
+        )
+
+        qdfs = [timeseries_to_qdf(dicts) for dicts in dicts_lists]
+        combined = concat_single_metric_qdfs(qdfs)
+        self.assertIsInstance(combined, QuantamentalDataFrame)
+
+        bad_qdfs = qdfs.copy()
+        bad_qdfs[0]["newcol"] = 1
+        with self.assertRaises(ValueError):
+            concat_single_metric_qdfs(bad_qdfs)
+
+        ## different metrics
+
+        test_exprs = [
+            "DB(JPMAQS,GBP_FXXR_NSA,value)",
+            "DB(JPMAQS,GBP_EQXR_NSA,grading)",
+        ]
+        dicts_lists = mock_request_wrapper(
+            dq_expressions=test_exprs,
+            start_date="2019-01-01",
+            end_date="2019-01-31",
+        )
+
+        qdfs = [timeseries_to_qdf(dicts) for dicts in dicts_lists]
+        combined = concat_single_metric_qdfs(qdfs)
+        self.assertIsInstance(combined, QuantamentalDataFrame)
+        self.assertEqual(set(combined["xcat"].unique()), set(["FXXR_NSA", "EQXR_NSA"]))
+        self.assertEqual(set(combined["cid"].unique()), set(["GBP"]))
+        metrics = list(set(combined.columns) - set(QuantamentalDataFrame.IndexCols))
+        self.assertEqual(set(metrics), set(["value", "grading"]))
+
+        for xcat in ["FXXR_NSA", "EQXR_NSA"]:
+            tgt = "grading" if xcat == "FXXR_NSA" else "value"
+            dfn = combined[combined["xcat"] == xcat].copy()
+            self.assertTrue(dfn[tgt].isna().all())
+
+        with self.assertRaises(TypeError):
+            concat_single_metric_qdfs(qdfs + [None], errors="raise")
+
+        self.assertIsNone(concat_single_metric_qdfs([None, None], errors="ignore"))
+
+    def test_concat_column_dfs(self):
+        dicts_list = mock_request_wrapper(
+            dq_expressions=self.expressions,
+            start_date="2019-01-01",
+            end_date="2019-01-31",
+        )
+        ts_cols = [timeseries_to_column(dicts) for dicts in dicts_list]
+        wdf = concat_column_dfs(ts_cols)
+
+        self.assertIsInstance(wdf, pd.DataFrame)
+        self.assertEqual(set(wdf.columns), set(self.expressions))
+
+        # test that there is an index called "real_date"
+        self.assertEqual(wdf.index.name, "real_date")
+
+        # test errors
+        with self.assertRaises(TypeError):
+            concat_column_dfs({})
+
+        with self.assertRaises(ValueError):
+            concat_column_dfs(ts_cols, errors=True)
+
+        bad_ts_cols = list(map(timeseries_to_column, dicts_list))
+        bad_ts_cols[0] = None
+
+        with self.assertRaises(TypeError):
+            concat_column_dfs(bad_ts_cols, errors="raise")
+
+        _exprs = [ts["attributes"][0]["expression"] for ts in dicts_list if ts]
+        _exprs.pop(0)
+        wdf = concat_column_dfs(bad_ts_cols, errors="ignore")
+        self.assertEqual(set(wdf.columns), set(_exprs))
+
+    def test_validate_downloaded_df(self):
+
+        # generate for all expressions
+        dicts_list = mock_request_wrapper(
+            dq_expressions=self.expressions,
+            start_date="2019-01-01",
+            end_date="2019-01-31",
+        )
+
+        missing_exprs = [d["attributes"][0]["expression"] for d in dicts_list[:3]]
+        data_df = concat_single_metric_qdfs(list(map(timeseries_to_qdf, dicts_list)))
+
+        found_expressions = get_expression_from_qdf(data_df)
+        start_date = "2019-01-01"
+        end_date = "2019-01-31"
+
+        with self.assertRaises(TypeError):
+            validate_downloaded_df(
+                data_df="",
+                expected_expressions=self.expressions,
+                found_expressions=found_expressions,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+        self.assertFalse(
+            validate_downloaded_df(
+                data_df=pd.DataFrame(),
+                expected_expressions=self.expressions,
+                found_expressions=found_expressions,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
