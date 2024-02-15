@@ -634,7 +634,7 @@ class JPMaQSDownload(DataQueryInterface):
             tickers=catalogue_tickers, metrics=self.valid_metrics
         )
         r: List[str] = sorted(
-            list(set(expressions).intersection(catalogue_expressions))
+            list(set(expressions).intersection(set(catalogue_expressions)))
         )
         if verbose:
             filtered: int = len(expressions) - len(r)
