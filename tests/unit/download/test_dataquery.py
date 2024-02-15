@@ -395,6 +395,9 @@ class TestDataQueryInterface(unittest.TestCase):
 
             mock_p_request.assert_called_once()
             mock_p_get_token.assert_called_once()
+            # reset the mocks
+            mock_p_request.reset_mock()
+            mock_p_get_token.reset_mock()
             return True
 
         for verbose in [True, False]:
