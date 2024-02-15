@@ -9,6 +9,7 @@ import logging
 from typing import List, Dict, Union, Any
 import requests
 import numpy as np
+import itertools
 
 from macrosynergy.download.jpmaqs import (
     JPMaQSDownload,
@@ -495,7 +496,6 @@ class TestDataQueryInterface(unittest.TestCase):
             ) as downloader:
                 pass
 
- 
     def test_dq_fetch(self):
         cfg: dict = dict(
             client_id=random_string(),
@@ -539,6 +539,31 @@ class TestDataQueryInterface(unittest.TestCase):
                     url=OAUTH_BASE_URL + CATALOGUE_ENDPOINT,
                     params={"group": "group-name"},
                 )
+
+    def test_chain_download_outputs(self):
+        dq = DataQueryInterface(
+            client_id=random_string(),
+            client_secret=random_string(),
+            check_connection=False,
+            oauth=True,
+        )
+        exprs = construct_expressions(
+            cids=["AUD", "CAD"], xcats=["EQXR_NSA"], metrics=["value"]
+        )
+        responses = mock_request_wrapper(
+            dq_expressions=exprs,
+            start_date="2000-01-01",
+            end_date="2001-01-01",
+        )
+
+        for i in range(len(responses)):
+            responses[i] = [responses[i]]
+
+        lA = dq._chain_download_outputs(download_outputs=responses)
+        lB = itertools.chain.from_iterable(responses)
+        lA = str(sorted([str(x) for x in lA]))
+        lB = str(sorted([str(x) for x in lB]))
+        self.assertEqual(lA, lB)
 
     def test_download(self):
         good_args: Dict[str, Any] = {
