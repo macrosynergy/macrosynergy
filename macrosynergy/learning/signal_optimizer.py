@@ -356,7 +356,7 @@ class SignalOptimizer:
                 init_train_idx = train_idx
                 break
             init_train_dates = X.iloc[init_train_idx].index.get_level_values(1).unique()
-            prop = len(init_train_dates) / inner_splitter.n_splits
+            prop = len(init_train_dates) / self.inner_splitter.n_splits
         else:
             prop = None
 
