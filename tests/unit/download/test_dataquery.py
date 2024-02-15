@@ -327,6 +327,17 @@ class TestOAuth(unittest.TestCase):
 
 
 class TestDataQueryInterface(unittest.TestCase):
+    def setUp(self) -> None:
+        self.cids: List[str] = ["GBP", "EUR", "CAD"]
+        self.xcats: List[str] = ["FXXR_NSA", "EQXR_NSA"]
+        self.metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+        self.tickers: List[str] = [
+            cid + "_" + xcat for xcat in self.xcats for cid in self.cids
+        ]
+        self.expressions: List[str] = construct_expressions(
+            cids=self.cids, xcats=self.xcats, metrics=self.metrics
+        )
+
     @staticmethod
     def jpmaqs_value(elem: str) -> float:
         """
@@ -716,6 +727,89 @@ class TestDataQueryInterface(unittest.TestCase):
             dicts_list=dicts_list,
         )
         self.assertEqual(set(mexprs), set(unavailable_expressions))
+
+    def test_concurrent_loop(self):
+
+        params_dict: Dict = {
+            "format": "JSON",
+            "start-date": "1990-01-01",
+            "end-date": "2020-01-01",
+        }
+
+        def _rw(url, params, tracking_id, **kwargs):
+            return self.request_wrapper(
+                dq_expressions=params["expressions"],
+                start_date=params["start-date"],
+                end_date=params["end-date"],
+            )
+
+        expr_batches = [
+            self.expressions[i : i + 20] for i in range(0, len(self.expressions), 20)
+        ]
+        show_progress = False
+        delay_param = 0.25
+
+        arguments = dict(
+            url=random_string(),
+            params=params_dict,
+            tracking_id=random_string(),
+            delay_param=delay_param,
+            expr_batches=expr_batches,
+            show_progress=show_progress,
+        )
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch_timeseries",
+            side_effect=Exception,
+        ):
+            dq = DataQueryInterface(
+                client_id=random_string(),
+                client_secret=random_string(),
+                oauth=True,
+                check_connection=False,
+            )
+
+            results = dq._concurrent_loop(
+                **arguments,
+            )
+
+            self.assertEqual(len(results), len(expr_batches))
+
+        ## test complete failure
+        arguments['expr_batches'] += [None for _ in range(10)]
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch_timeseries",
+            side_effect=_rw,
+        ):
+            dq = DataQueryInterface(
+                client_id=random_string(),
+                client_secret=random_string(),
+                oauth=True,
+                check_connection=False,
+            )
+            with self.assertRaises(DownloadError):
+                results = dq._concurrent_loop(
+                    **arguments,
+                )
+        
+        arguments['expr_batches'][0] += ['KEYBOARD_INTERRUPT']
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch_timeseries",
+            side_effect=KeyboardInterrupt,
+        ):
+            dq = DataQueryInterface(
+                client_id=random_string(),
+                client_secret=random_string(),
+                oauth=True,
+                check_connection=False,
+            )
+
+            with self.assertRaises(KeyboardInterrupt):
+                results = dq._concurrent_loop(
+                    **arguments,
+                )
+                
+            
 
 
 if __name__ == "__main__":
