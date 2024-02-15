@@ -151,7 +151,10 @@ class SignalOptimizer:
         self.X = X
         self.y = y
         self.blacklist = blacklist
-        self.change_n_splits = change_n_splits
+        
+        if not hasattr(self, "change_n_splits"):
+            # Then change_n_splits wasn't adjusted in the checks
+            self.change_n_splits = change_n_splits
 
         # Create initial dataframes to store quantamental predictions and model choices
         self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
@@ -223,7 +226,7 @@ class SignalOptimizer:
                     f"The chosen splitter isn't an instance of RollingKFoldPanelSplit or ExpandingKFoldPanelSplit. The change_n_splits argument will be set to False.",
                     RuntimeWarning,
                 )
-                change_n_splits = False
+                self.change_n_splits = False
 
     def calculate_predictions(
         self,

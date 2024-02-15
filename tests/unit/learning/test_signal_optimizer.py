@@ -140,8 +140,8 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         matplotlib.use(self.mpl_backend)
 
-    @parameterized.expand(itertools.product([0, 1, 2], [True, False]))
-    def test_valid_init(self, idx, use_blacklist):
+    @parameterized.expand(itertools.product([0, 1, 2], [True, False], [True, False]))
+    def test_valid_init(self, idx, use_blacklist, change_n_splits):
         # Test standard instantiation of the SignalOptimizer works as expected
         inner_splitter = self.splitters[idx]
         try:
@@ -151,6 +151,7 @@ class TestAll(unittest.TestCase):
                 X=self.X_train,
                 y=self.y_train,
                 blacklist=blacklist,
+                change_n_splits=change_n_splits,
             )
         except Exception as e:
             self.fail(f"Instantiation of the SignalOptimizer raised an exception: {e}")
@@ -159,6 +160,12 @@ class TestAll(unittest.TestCase):
         pd.testing.assert_frame_equal(so.X, self.X_train)
         pd.testing.assert_series_equal(so.y, self.y_train)
         self.assertEqual(so.blacklist, blacklist)
+        if idx != 2:
+            self.assertEqual(so.change_n_splits, change_n_splits)
+        else:
+            self.assertEqual(so.change_n_splits, False)
+
+        # Test 
 
     def test_types_init(self):
         inner_splitter = KFold(n_splits=5, shuffle=False)
@@ -227,6 +234,22 @@ class TestAll(unittest.TestCase):
                 X=self.X_train,
                 y=self.y_train,
                 blacklist=self.black_invalid4,
+            )
+
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[1],
+                X=self.X_train,
+                y=self.y_train,
+                change_n_splits="change_n_splits",
+            )
+
+        with self.assertWarns(Warning):
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[2],
+                X=self.X_train,
+                y=self.y_train,
+                change_n_splits=True,
             )
 
     def test_valid_calculate_predictions(self):
