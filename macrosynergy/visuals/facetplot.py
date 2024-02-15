@@ -16,8 +16,6 @@ from matplotlib.gridspec import GridSpec
 from macrosynergy.visuals.plotter import Plotter
 from macrosynergy.management.types import Numeric, NoneType
 
-import time
-
 
 def _get_square_grid(
     num_plots: int,
@@ -368,8 +366,6 @@ class FacetPlot(Plotter):
         :param <int> dpi: DPI of the saved image. Default is `300`.
         :param <bool> return_figure: Return the figure object. Default is `False`.
         """
-
-        start_time = time.time()
         comp_series_flag: bool = False
 
         if compare_series:
@@ -515,9 +511,6 @@ class FacetPlot(Plotter):
             i: ditem for i, ditem in enumerate(_plot_dict.values())
         }
         plot_dict: Dict[str, Dict[str, Union[str, List[str]]]] = _plot_dict.copy()
-
-        end_time = time.time() 
-        print(f"FacetPlot.lineplot init took {end_time - start_time} seconds.")
 
         ##############################
         # Plotting
