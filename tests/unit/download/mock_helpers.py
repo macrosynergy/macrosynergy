@@ -42,6 +42,10 @@ def mock_request_wrapper(
     aggregator: List[dict] = []
     dates: pd.DatetimeIndex = pd.bdate_range(start_date, end_date)
     for i, elem in enumerate(dq_expressions):
+        if elem is None:
+            raise ValueError("Expression cannot be None")
+        if elem in ["KEYBOARD_INTERRUPT"]:
+            raise KeyboardInterrupt
         elem_dict = {
             "item": (i + 1),
             "group": None,
