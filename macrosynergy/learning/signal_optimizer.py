@@ -803,41 +803,7 @@ class SignalOptimizer:
         has been optimal and used for signal generation, as a binary heatmap.
         """
         # Checks
-        if not isinstance(name, str):
-            raise TypeError("The pipeline name must be a string.")
-        if name not in self.chosen_models.name.unique():
-            raise ValueError(
-                f"""The pipeline name {name} is not in the list of already-calculated 
-                pipelines. Please check the pipeline name carefully. If correct, please 
-                run calculate_predictions() first.
-                """
-            )
-        if not isinstance(cap, int):
-            raise TypeError("The cap must be an integer.")
-        if cap <= 0:
-            raise ValueError("The cap must be greater than zero.")
-        if cap > 20:
-            warnings.warn(
-                f"The maximum number of models to display is 20. The cap has been set to "
-                "20.",
-                RuntimeWarning,
-            )
-            cap = 20
-
-        if title is None:
-            title = f"Model Selection Heatmap for {name}"
-        if not isinstance(title, str):
-            raise TypeError("The figure title must be a string.")
-
-        if not isinstance(figsize, tuple):
-            raise TypeError("The figsize argument must be a tuple.")
-        if len(figsize) != 2:
-            raise ValueError("The figsize argument must be a tuple of length 2.")
-        for element in figsize:
-            if not isinstance(element, (int, float)):
-                raise TypeError(
-                    "The elements of the figsize tuple must be floats or ints."
-                )
+        self._checks_models_heatmap(name=name, title=title, cap=cap, figsize=figsize)
 
         # Get the chosen models for the specified pipeline to visualise selection.
         chosen_models = self.get_optimal_models()
@@ -873,6 +839,48 @@ class SignalOptimizer:
         plt.title(title)
         plt.show()
 
+    def _checks_models_heatmap(
+            self,
+            name: str,
+            title: Optional[str] = None,
+            cap: Optional[int] = 5,
+            figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
+        ):
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.chosen_models.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
+        if not isinstance(cap, int):
+            raise TypeError("The cap must be an integer.")
+        if cap <= 0:
+            raise ValueError("The cap must be greater than zero.")
+        if cap > 20:
+            warnings.warn(
+                f"The maximum number of models to display is 20. The cap has been set to "
+                "20.",
+                RuntimeWarning,
+            )
+            cap = 20
+
+        if title is None:
+            title = f"Model Selection Heatmap for {name}"
+        if not isinstance(title, str):
+            raise TypeError("The figure title must be a string.")
+
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, (int, float)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
@@ -916,7 +924,6 @@ if __name__ == "__main__":
             pd.Timestamp(year=2100, month=1, day=1),
         ),
     }
-
     train = msm.categories_df(
         df=dfd, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
     ).dropna()
@@ -1008,6 +1015,10 @@ if __name__ == "__main__":
 
     print(so.get_optimized_signals("test"))
     so.models_heatmap(name="test", cap=5)
+
+    plt.title("Number of splits chosen over time")
+    plt.plot(so.chosen_models.real_date, so.chosen_models.n_splits_used)
+    plt.show()
 
     # (3) Example SignalOptimizer usage.
     #     We get adaptive signals for two KNN regressors.
