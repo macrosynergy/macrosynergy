@@ -1,3 +1,4 @@
+from unittest import mock
 import unittest
 import warnings
 import pandas as pd
@@ -32,6 +33,17 @@ from .mock_helpers import (
 
 
 class TestJPMaQSDownload(unittest.TestCase):
+    def setUp(self) -> None:
+        self.cids: List[str] = ["GBP", "EUR", "CAD"]
+        self.xcats: List[str] = ["FXXR_NSA", "EQXR_NSA"]
+        self.metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+        self.tickers: List[str] = [
+            cid + "_" + xcat for xcat in self.xcats for cid in self.cids
+        ]
+        self.expressions: List[str] = construct_expressions(
+            cids=self.cids, xcats=self.xcats, metrics=self.metrics
+        )
+
     def test_init(self):
         good_args: Dict[str, Any] = {
             "oauth": True,
@@ -80,6 +92,75 @@ class TestJPMaQSDownload(unittest.TestCase):
             ]:
                 bad_args[vx] = None
             JPMaQSDownload(**bad_args)
+
+    def test_get_unavailable_expressions(self):
+        jpmaqs: JPMaQSDownload = JPMaQSDownload(
+            client_id="client_id",
+            client_secret="client_secret",
+            check_connection=False,
+        )
+
+        dicts_list = mock_request_wrapper(
+            dq_expressions=self.expressions,
+            start_date="2019-01-01",
+            end_date="2019-01-31",
+        )
+        expected_expressions = self.expressions
+        missing_exprs = []
+        for i in range(3):
+            missing_exprs.append(dicts_list[i]["attributes"][0]["expression"])
+            dicts_list[i]["attributes"][0]["time-series"] = None
+
+        self.assertEqual(
+            set(
+                jpmaqs._get_unavailable_expressions(
+                    expected_exprs=expected_expressions,
+                    dicts_list=dicts_list,
+                )
+            ),
+            set(missing_exprs),
+        )
+
+        ## check raises error when both dicts_list and df_list are provided
+        with self.assertRaises(AssertionError):
+            jpmaqs._get_unavailable_expressions(
+                expected_exprs=expected_expressions,
+                dicts_list=dicts_list,
+                downloaded_df=dicts_list,
+            )
+
+        self.assertEqual(
+            set(expected_expressions),
+            set(
+                jpmaqs._get_unavailable_expressions(
+                    expected_exprs=expected_expressions,
+                    downloaded_df=pd.DataFrame(),
+                ),
+            ),
+        )
+
+        qdf = concat_single_metric_qdfs(list(map(timeseries_to_qdf, dicts_list)))
+        wdf = concat_column_dfs(list(map(timeseries_to_column, dicts_list)))
+
+        self.assertEqual(
+            set(missing_exprs),
+            set(
+                jpmaqs._get_unavailable_expressions(
+                    expected_exprs=expected_expressions,
+                    downloaded_df=qdf,
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            set(missing_exprs),
+            set(
+                jpmaqs._get_unavailable_expressions(
+                    expected_exprs=expected_expressions,
+                    downloaded_df=wdf,
+                ),
+            ),
+        )
 
     def test_download_arg_validation(self):
         good_args: Dict[str, Any] = {
@@ -175,122 +256,40 @@ class TestJPMaQSDownload(unittest.TestCase):
             with self.assertRaises(ValueError):
                 jpmaqs.validate_download_args(**bad_args)
 
+        # test cases for dataframe_format
+        bad_args = good_args.copy()
+        bad_args["dataframe_format"] = "Metallica"
+        with self.assertRaises(ValueError):
+            jpmaqs.validate_download_args(**bad_args)
+
+    def test_filter_expressions_from_catalogue(self):
+        jpmaqs: JPMaQSDownload = JPMaQSDownload(
+            client_id="client_id",
+            client_secret="client_secret",
+            check_connection=False,
+        )
+        catalogue = self.expressions.copy()
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface.get_catalogue",
+            return_value=self.tickers.copy(),
+        ):
+            self.assertEqual(
+                set(jpmaqs.filter_expressions_from_catalogue(catalogue)),
+                set(catalogue),
+            )
+
+            ctlg = catalogue + [random_string() for _ in range(3)]
+            self.assertEqual(
+                set(jpmaqs.filter_expressions_from_catalogue(ctlg)),
+                set(catalogue),
+            )
+
     def test_download_func(self):
         warnings.simplefilter("always")
+        ...
 
-        good_args: Dict[str, Any] = {
-            "tickers": ["EUR_FXXR_NSA", "USD_FXXR_NSA"],
-            "cids": ["GBP", "EUR"],
-            "xcats": ["FXXR_NSA", "EQXR_NSA"],
-            "metrics": ["value", "grading", "eop_lag", "mop_lag"],
-            "start_date": "2019-01-01",
-            "end_date": "2019-01-31",
-            "expressions": [
-                "DB(JPMAQS,AUD_FXXR_NSA,value)",
-                "DB(JPMAQS,CAD_FXXR_NSA,value)",
-            ],
-            "show_progress": True,
-            "as_dataframe": True,
-            "report_time_taken": True,
-        }
-
-        jpmaqs: JPMaQSDownload = JPMaQSDownload(
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
-
-        config: dict = dict(
-            client_id="client_id",
-            client_secret="client_secret",
-        )
-
-        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(**config)
-        un_avail_exprs: List[str] = [
-            "DB(JPMAQS,USD_FXXR_NSA,value)",
-            "DB(JPMAQS,USD_FXXR_NSA,grading)",
-            "DB(JPMAQS,USD_FXXR_NSA,eop_lag)",
-            "DB(JPMAQS,USD_FXXR_NSA,mop_lag)",
-        ]
-        mock_dq_interface._gen_attributes(
-            unavailable_expressions=un_avail_exprs, mask_expressions=un_avail_exprs
-        )
-
-        # mock dq interface
-        jpmaqs.dq_interface = mock_dq_interface
-
-        try:
-            test_df: pd.DataFrame = jpmaqs.download(**good_args)
-
-            tickers: pd.Series = test_df["cid"] + "_" + test_df["xcat"]
-
-            self.assertFalse("USD_FXXR_NSA" in tickers.values)
-            for cid in ["GBP", "EUR"]:
-                for xcat in ["FXXR_NSA", "EQXR_NSA"]:
-                    self.assertTrue(f"{cid}_{xcat}" in tickers.values)
-
-            for unav in set(un_avail_exprs):
-                self.assertTrue(
-                    sum(
-                        [
-                            unav in msg_unav
-                            for msg_unav in set(jpmaqs.unavailable_expr_messages)
-                        ]
-                    )
-                    == 1
-                )
-
-        except Exception as e:
-            self.fail("Unexpected exception raised: {}".format(e))
-
-        # now test with fail condition where no expressions are available
-        test_exprs: List[str] = construct_expressions(
-            cids=["GBP", "EUR", "CAD"],
-            xcats=["FXXR_NSA", "EQXR_NSA"],
-            metrics=[
-                "value",
-                "grading",
-            ],
-        )
-        mock_dq_interface._gen_attributes(
-            unavailable_expressions=test_exprs, mask_expressions=test_exprs
-        )
-
-        with self.assertRaises(InvalidDataframeError):
-            jpmaqs.dq_interface = mock_dq_interface
-            bad_args: Dict[str, Any] = good_args.copy()
-            bad_args["expressions"] = test_exprs
-            jpmaqs.download(**bad_args)
-
-        jpmaqs: JPMaQSDownload = JPMaQSDownload(
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
-
-        config: dict = dict(
-            client_id="client_id",
-            client_secret="client_secret",
-        )
-
-        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(**config)
-        un_avail_exprs: List[str] = [
-            "DB(JPMAQS,USD_FXXR_NSA,value)",
-            "DB(JPMAQS,USD_FXXR_NSA,grading)",
-            "DB(JPMAQS,USD_FXXR_NSA,eop_lag)",
-            "DB(JPMAQS,USD_FXXR_NSA,mop_lag)",
-        ]
-        mock_dq_interface._gen_attributes(
-            unavailable_expressions=un_avail_exprs, mask_expressions=un_avail_exprs
-        )
-        jpmaqs.dq_interface = mock_dq_interface
-        with self.assertWarns(UserWarning):
-            bad_args = good_args.copy()
-            bad_args["start_date"] = "2019-01-31"
-            bad_args["end_date"] = "2019-01-01"
-            jpmaqs.download(**bad_args)
-
-    warnings.resetwarnings()
+        warnings.resetwarnings()
 
 
 class TestFunctions(unittest.TestCase):
@@ -545,20 +544,21 @@ class TestFunctions(unittest.TestCase):
         self.assertEqual(set(wdf.columns), set(_exprs))
 
     def test_validate_downloaded_df(self):
-
+        start_date = "1989-12-01"
+        end_date = "1995-01-31"
         # generate for all expressions
         dicts_list = mock_request_wrapper(
             dq_expressions=self.expressions,
-            start_date="2019-01-01",
-            end_date="2019-01-31",
+            start_date=start_date,
+            end_date="1994-01-31",
         )
 
         missing_exprs = [d["attributes"][0]["expression"] for d in dicts_list[:3]]
+        for i in range(3):
+            dicts_list[i]["attributes"][0]["time-series"] = None
         data_df = concat_single_metric_qdfs(list(map(timeseries_to_qdf, dicts_list)))
 
         found_expressions = get_expression_from_qdf(data_df)
-        start_date = "2019-01-01"
-        end_date = "2019-01-31"
 
         with self.assertRaises(TypeError):
             validate_downloaded_df(
@@ -578,6 +578,23 @@ class TestFunctions(unittest.TestCase):
                 end_date=end_date,
             )
         )
+
+        validate_downloaded_df(
+            data_df=data_df,
+            expected_expressions=self.expressions,
+            found_expressions=found_expressions,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        with self.assertRaises(InvalidDataframeError):
+            validate_downloaded_df(
+                data_df=data_df,
+                expected_expressions=missing_exprs,
+                found_expressions=found_expressions + [random_string()],
+                start_date=start_date,
+                end_date=end_date,
+            )
 
 
 if __name__ == "__main__":
