@@ -2,6 +2,7 @@ from unittest import mock
 import unittest
 import warnings
 import pandas as pd
+import itertools
 
 import sys
 
@@ -284,6 +285,57 @@ class TestJPMaQSDownload(unittest.TestCase):
                 set(jpmaqs.filter_expressions_from_catalogue(ctlg)),
                 set(catalogue),
             )
+
+    def test_chain_download_outputs(self):
+        jpmaqsdownload = JPMaQSDownload(
+            client_id="client_id",
+            client_secret="client_secret",
+            check_connection=False,
+        )
+
+        with self.assertRaises(TypeError):
+            jpmaqsdownload._chain_download_outputs("")
+
+        self.assertEqual([], jpmaqsdownload._chain_download_outputs([]))
+
+        ts_list = mock_request_wrapper(
+            dq_expressions=self.expressions,
+            start_date="2019-01-01",
+            end_date="2019-01-31",
+        )
+
+        ts_list_list = [ts_list[:10], ts_list[10:]]
+        ## Test for timeseries list
+
+        self.assertEqual(
+            list(itertools.chain.from_iterable(ts_list_list)),
+            jpmaqsdownload._chain_download_outputs(ts_list_list),
+        )
+
+        ## Test for QDF list
+
+        qdf_list_list = [
+            list(map(timeseries_to_qdf, _ts_list)) for _ts_list in ts_list_list
+        ]
+
+        _dfA = concat_single_metric_qdfs(
+            list(itertools.chain.from_iterable(qdf_list_list.copy()))
+        )  #
+        _dfB = jpmaqsdownload._chain_download_outputs(qdf_list_list)
+        self.assertTrue(_dfA.equals(_dfB))
+
+        ## Test for column list
+
+        cdf_list = list(map(timeseries_to_column, ts_list))
+        _dfA = concat_column_dfs(df_list=cdf_list.copy())
+        _dfB = jpmaqsdownload._chain_download_outputs(cdf_list)
+        self.assertTrue(_dfA.equals(_dfB))
+        
+        ts_LLL = [ts_list_list, ts_list_list]
+        
+        with self.assertRaises(NotImplementedError):
+            jpmaqsdownload._chain_download_outputs(ts_LLL)
+        
 
     def test_download_func(self):
         warnings.simplefilter("always")
