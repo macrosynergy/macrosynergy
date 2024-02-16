@@ -335,6 +335,8 @@ class TestDataQueryInterface(unittest.TestCase):
         self.cids: List[str] = ["GBP", "EUR", "CAD"]
         self.xcats: List[str] = ["FXXR_NSA", "EQXR_NSA"]
         self.metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+        self.start_date = "2000-01-01"
+        self.end_date = "2000-02-01"
         self.tickers: List[str] = [
             cid + "_" + xcat for xcat in self.xcats for cid in self.cids
         ]
@@ -859,6 +861,108 @@ class TestDataQueryInterface(unittest.TestCase):
         ):
             with self.assertRaises(KeyboardInterrupt):
                 cat = self.dq.get_catalogue()
+
+    def test_download(self):
+
+        def _mock_concurrent_loop(*args, **kwargs):
+            if "expr_batches" in kwargs:
+                if len(kwargs["expr_batches"]) > 1:
+                    m = mock_request_wrapper(
+                        dq_expressions=itertools.chain.from_iterable(
+                            kwargs["expr_batches"][:-1]
+                        ),
+                        start_date=self.start_date,
+                        end_date=self.end_date,
+                    )
+                    m = [[u] for u in m]
+                    return m, [kwargs["expr_batches"][-1]]
+                else:
+                    m = mock_request_wrapper(
+                        dq_expressions=kwargs["expr_batches"][0],
+                        start_date=self.start_date,
+                        end_date=self.end_date,
+                    )
+                    return [[u] for u in m], []
+
+        def _bad_mock_concurrent_loop(*args, **kwargs):
+            return [], [kwargs["expr_batches"]]
+
+        good_args = dict(
+            expressions=self.expressions,
+            params={},
+            url=random_string(),
+            tracking_id=random_string(),
+            delay_param=0.25,
+        )
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._concurrent_loop",
+            side_effect=_mock_concurrent_loop,
+        ):
+            result = self.dq._download(**good_args)
+            self.assertIsInstance(result, list)
+            self.assertEqual(len(result), len(self.expressions))
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._concurrent_loop",
+            side_effect=_bad_mock_concurrent_loop,
+        ):
+            with self.assertRaises(DownloadError):
+                result = self.dq._download(**good_args)
+
+    def test_download_data(self):
+
+        good_args: Dict[str, Any] = dict(
+            expressions=self.expressions,
+            start_date="2020-01-01",
+            end_date=None,
+            show_progress=False,
+        )
+
+        def _mock_fetch(*args, **kwargs):
+            return mock_request_wrapper(
+                dq_expressions=self.expressions,
+                start_date=self.start_date,
+                end_date=datetime.datetime.today().strftime("%Y-%m-%d"),
+            )
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface.check_connection",
+            return_value=True,
+        ):
+            with mock.patch(
+                "macrosynergy.download.dataquery.DataQueryInterface._fetch_timeseries",
+                side_effect=_mock_fetch,
+            ):
+                with DataQueryInterface(
+                    client_id=random_string(),
+                    client_secret=random_string(),
+                    oauth=True,
+                ) as dq:
+                    result = dq.download_data(**good_args)
+                    self.assertIsInstance(result, list)
+
+                with self.assertWarns(UserWarning):
+                    bad_args = good_args.copy()
+                    bad_args["start_date"] = self.end_date
+                    bad_args["end_date"] = self.start_date
+                    result = dq.download_data(**bad_args)
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface.check_connection",
+            return_value=False,
+        ):
+            with mock.patch(
+                "macrosynergy.download.dataquery.OAuth.get_auth",
+                return_value={"user_id": random_string()},
+            ):
+                with self.assertRaises(ConnectionError):
+                    with DataQueryInterface(
+                        client_id=random_string(),
+                        client_secret=random_string(),
+                        oauth=True,
+                    ) as dq:
+                        result = dq.download_data(**good_args)
 
 
 if __name__ == "__main__":
