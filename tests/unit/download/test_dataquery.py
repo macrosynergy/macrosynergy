@@ -341,6 +341,12 @@ class TestDataQueryInterface(unittest.TestCase):
         self.expressions: List[str] = construct_expressions(
             cids=self.cids, xcats=self.xcats, metrics=self.metrics
         )
+        self.dq = DataQueryInterface(
+            client_id=random_string(),
+            client_secret=random_string(),
+            oauth=True,
+            check_connection=False,
+        )
 
     @staticmethod
     def jpmaqs_value(elem: str) -> float:
@@ -402,9 +408,7 @@ class TestDataQueryInterface(unittest.TestCase):
         # connections.
 
         def _test(verbose: bool, raise_error: bool):
-            with DataQueryInterface(
-                client_id=random_string(), client_secret=random_string()
-            ) as dq:
+            with self.dq as dq:
                 self.assertTrue(
                     dq.check_connection(verbose=verbose, raise_error=raise_error)
                 )
@@ -419,31 +423,6 @@ class TestDataQueryInterface(unittest.TestCase):
         for verbose in [True, False]:
             for raise_error in [True, False]:
                 self.assertTrue(_test(verbose, raise_error))
-
-    @mock.patch(
-        "macrosynergy.download.dataquery.OAuth._get_token",
-        return_value=("SOME_TEST_TOKEN"),
-    )
-    @mock.patch(
-        "macrosynergy.download.dataquery.request_wrapper",
-        return_value=({"info": {"code": 200, "message": "Service Available."}}),
-    )
-    def test_check_connection_on_init(
-        self, mock_p_request: mock.MagicMock, mock_p_get_token: mock.MagicMock
-    ):
-        # If the connection to DataQuery is working, the response code will invariably be
-        # 200. Therefore, use the Interface Object's method to check DataQuery
-        # connections.
-
-        with JPMaQSDownload(
-            client_id="client1",
-            client_secret="123",
-            oauth=True,
-        ) as jpmaqs:
-            pass
-
-        mock_p_request.assert_called_once()
-        mock_p_get_token.assert_called_once()
 
     @mock.patch(
         "macrosynergy.download.dataquery.OAuth._get_token",
@@ -462,17 +441,17 @@ class TestDataQueryInterface(unittest.TestCase):
             },
         ),
     )
-    def test_check_connection_fail(self, mock_p_fail, mock_p_get_token):
+    def test_check_connection_fail(
+        self, mock_p_fail: mock.MagicMock, mock_p_get_token: mock.MagicMock
+    ):
         # Opposite of above method: if the connection to DataQuery fails, the error code
         # will be 400.
         curr_logger_level: int = logging.getLogger().getEffectiveLevel()
         logging.getLogger().setLevel(logging.ERROR)
-        with JPMaQSDownload(
-            client_id="client1", client_secret="123", oauth=True, check_connection=False
-        ) as jpmaqs_download:
-            # Method returns a Boolean. In this instance, the method should return False
+        with self.dq as dq:
+            # Method returns a BoolFean. In this instance, the method should return False
             # (unable to connect).
-            self.assertFalse(jpmaqs_download.check_connection())
+            self.assertFalse(dq.check_connection())
         mock_p_fail.assert_called_once()
         mock_p_get_token.assert_called_once()
         logging.getLogger().setLevel(curr_logger_level)
@@ -501,7 +480,7 @@ class TestDataQueryInterface(unittest.TestCase):
         # Given the certificate and key will not point to valid directories, the expected
         # behaviour is for an OSError to be thrown.
         with self.assertRaises(FileNotFoundError):
-            with JPMaQSDownload(
+            with DataQueryInterface(
                 username="user1",
                 password="123",
                 crt="/api_macrosynergy_com.crt",
@@ -516,7 +495,6 @@ class TestDataQueryInterface(unittest.TestCase):
             client_id=random_string(),
             client_secret=random_string(),
         )
-        dq: DataQueryInterface = DataQueryInterface(oauth=True, **cfg)
 
         invl_responses: List[Any] = [
             None,
@@ -525,7 +503,7 @@ class TestDataQueryInterface(unittest.TestCase):
             {"attributes": [{"expression": "expression1"}]},
         ]
 
-        dq.auth._stored_token = {
+        self.dq.auth._stored_token = {
             "created_at": datetime.datetime.now(datetime.timezone.utc),
             "access_token": random_string(),
             "expires_in": 3600,
@@ -537,7 +515,7 @@ class TestDataQueryInterface(unittest.TestCase):
                 return_value=invl_response,
             ):
                 with self.assertRaises(InvalidResponseError):
-                    dq._fetch(
+                    self.dq._fetch(
                         url=OAUTH_BASE_URL + TIMESERIES_ENDPOINT,
                         params={"expr": "expression1"},
                     )
@@ -550,18 +528,12 @@ class TestDataQueryInterface(unittest.TestCase):
             return_value=invl_response,
         ):
             with self.assertRaises(NoContentError):
-                dq._fetch(
+                self.dq._fetch(
                     url=OAUTH_BASE_URL + CATALOGUE_ENDPOINT,
                     params={"group": "group-name"},
                 )
 
     def test_chain_download_outputs(self):
-        dq = DataQueryInterface(
-            client_id=random_string(),
-            client_secret=random_string(),
-            check_connection=False,
-            oauth=True,
-        )
         exprs = construct_expressions(
             cids=["AUD", "CAD"], xcats=["EQXR_NSA"], metrics=["value"]
         )
@@ -574,7 +546,7 @@ class TestDataQueryInterface(unittest.TestCase):
         for i in range(len(responses)):
             responses[i] = [responses[i]]
 
-        lA = dq._chain_download_outputs(download_outputs=responses)
+        lA = self.dq._chain_download_outputs(download_outputs=responses)
         lB = itertools.chain.from_iterable(responses)
         lA = str(sorted([str(x) for x in lA]))
         lB = str(sorted([str(x) for x in lB]))
@@ -599,11 +571,7 @@ class TestDataQueryInterface(unittest.TestCase):
                 return_value={"attributes": []},
             ):
                 with self.assertRaises(DownloadError):
-                    DataQueryInterface(
-                        client_id="client_id",
-                        client_secret="client_secret",
-                        oauth=True,
-                    )._download(**bad_args)
+                    self.dq._download(**bad_args)
             err_string_1: str = (
                 f"Retrying failed downloads. Retry count: {bad_args['retry_counter']}"
             )
@@ -699,13 +667,6 @@ class TestDataQueryInterface(unittest.TestCase):
 
     def test_get_unavailable_expressions(self):
 
-        dq_interface = DataQueryInterface(
-            client_id=random_string(),
-            client_secret=random_string(),
-            oauth=True,
-            check_connection=False,
-        )
-
         cids = ["AUD", "CAD", "CHF", "EUR"]
         xcats = ["EQXR_NSA", "FXXR_NSA"]
         metrics = ["value", "grading", "eop_lag", "mop_lag"]
@@ -726,7 +687,7 @@ class TestDataQueryInterface(unittest.TestCase):
             end_date="2001-01-01",
         )
 
-        mexprs = dq_interface._get_unavailable_expressions(
+        mexprs = self.dq._get_unavailable_expressions(
             expected_exprs=expression + unavailable_expressions,
             dicts_list=dicts_list,
         )
@@ -766,14 +727,7 @@ class TestDataQueryInterface(unittest.TestCase):
             "macrosynergy.download.dataquery.DataQueryInterface._fetch_timeseries",
             side_effect=Exception,
         ):
-            dq = DataQueryInterface(
-                client_id=random_string(),
-                client_secret=random_string(),
-                oauth=True,
-                check_connection=False,
-            )
-
-            results = dq._concurrent_loop(
+            results = self.dq._concurrent_loop(
                 **arguments,
             )
 
@@ -785,14 +739,9 @@ class TestDataQueryInterface(unittest.TestCase):
             "macrosynergy.download.dataquery.DataQueryInterface._fetch_timeseries",
             side_effect=_rw,
         ):
-            dq = DataQueryInterface(
-                client_id=random_string(),
-                client_secret=random_string(),
-                oauth=True,
-                check_connection=False,
-            )
+
             with self.assertRaises(DownloadError):
-                results = dq._concurrent_loop(
+                results = self.dq._concurrent_loop(
                     **arguments,
                 )
 
@@ -801,15 +750,8 @@ class TestDataQueryInterface(unittest.TestCase):
             "macrosynergy.download.dataquery.DataQueryInterface._fetch_timeseries",
             side_effect=KeyboardInterrupt,
         ):
-            dq = DataQueryInterface(
-                client_id=random_string(),
-                client_secret=random_string(),
-                oauth=True,
-                check_connection=False,
-            )
-
             with self.assertRaises(KeyboardInterrupt):
-                results = dq._concurrent_loop(
+                results = self.dq._concurrent_loop(
                     **arguments,
                 )
 
@@ -847,12 +789,6 @@ class TestDataQueryInterface(unittest.TestCase):
             "end-date": "2020-02-01",
         }
 
-        dq = DataQueryInterface(
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
-
         with mock.patch(
             "macrosynergy.download.dataquery.OAuth.get_auth",
             return_value={"headers": "headers", "cert": "cert"},
@@ -861,7 +797,7 @@ class TestDataQueryInterface(unittest.TestCase):
                 "macrosynergy.download.dataquery.request_wrapper",
                 side_effect=_rw,
             ):
-                lst = dq._fetch(url=random_string(), params=params_dict)
+                lst = self.dq._fetch(url=random_string(), params=params_dict)
                 self.assertIsInstance(lst, list)
                 for l in lst:
                     self.assertIsInstance(l, dict)
@@ -870,6 +806,23 @@ class TestDataQueryInterface(unittest.TestCase):
                         in self.expressions + ["DB(JPMAQS,A_B_C,value)"]
                     )
 
+    def test_fetch_timeseries(self):
+        def _mock_fetch(*args, **kwargs):
+            return [str(i) for i in range(1, 11)]
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch",
+            side_effect=_mock_fetch,
+        ):
+            self.assertEqual(
+                self.dq._fetch_timeseries(
+                    url=random_string(),
+                    params={},
+                    tracking_id=random_string(),
+                ),
+                [str(i) for i in range(1, 11)],
+            )
+
     def test_get_catalogue(self):
 
         def _mock_fetch(*args, **kwargs):
@@ -877,41 +830,35 @@ class TestDataQueryInterface(unittest.TestCase):
                 {"item": i, "instrument-id": f"ID_{i}", "instrument-name": f"NAME_{i}"}
                 for i in range(1, 11)
             ]
-            
+
         def _bad_mock_fetch(*args, **kwargs):
             return [
                 {"item": i, "instrument-id": f"ID_{i}", "instrument-name": f"NAME_{i}"}
                 for i in range(1, 11)
             ] + [{"item": 10, "instrument-id": f"ID_10", "instrument-name": f"NAME_10"}]
 
-        dq = DataQueryInterface(
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
-
         with mock.patch(
             "macrosynergy.download.dataquery.DataQueryInterface._fetch",
             side_effect=_mock_fetch,
         ):
-            cat = dq.get_catalogue()
+            cat = self.dq.get_catalogue()
             self.assertIsInstance(cat, list)
 
             self.assertEqual(set(cat), set([f"NAME_{i}" for i in range(1, 11)]))
-            
+
         with mock.patch(
             "macrosynergy.download.dataquery.DataQueryInterface._fetch",
             side_effect=_bad_mock_fetch,
         ):
             with self.assertRaises(ValueError):
-                cat = dq.get_catalogue()
-                
+                cat = self.dq.get_catalogue()
+
         with mock.patch(
             "macrosynergy.download.dataquery.DataQueryInterface._fetch",
             side_effect=KeyboardInterrupt,
         ):
             with self.assertRaises(KeyboardInterrupt):
-                cat = dq.get_catalogue()
+                cat = self.dq.get_catalogue()
 
 
 if __name__ == "__main__":
