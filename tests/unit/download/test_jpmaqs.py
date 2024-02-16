@@ -45,6 +45,12 @@ class TestJPMaQSDownload(unittest.TestCase):
             cids=self.cids, xcats=self.xcats, metrics=self.metrics
         )
 
+        self.jpmaqs_download = JPMaQSDownload(
+            client_id="client_id",
+            client_secret="client_secret",
+            check_connection=False,
+        )
+
     def test_init(self):
         good_args: Dict[str, Any] = {
             "oauth": True,
@@ -120,12 +126,6 @@ class TestJPMaQSDownload(unittest.TestCase):
         mock_p_get_token.assert_called_once()
 
     def test_get_unavailable_expressions(self):
-        jpmaqs: JPMaQSDownload = JPMaQSDownload(
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
-
         dicts_list = mock_request_wrapper(
             dq_expressions=self.expressions,
             start_date="2019-01-01",
@@ -139,7 +139,7 @@ class TestJPMaQSDownload(unittest.TestCase):
 
         self.assertEqual(
             set(
-                jpmaqs._get_unavailable_expressions(
+                self.jpmaqs_download._get_unavailable_expressions(
                     expected_exprs=expected_expressions,
                     dicts_list=dicts_list,
                 )
@@ -149,7 +149,7 @@ class TestJPMaQSDownload(unittest.TestCase):
 
         ## check raises error when both dicts_list and df_list are provided
         with self.assertRaises(AssertionError):
-            jpmaqs._get_unavailable_expressions(
+            self.jpmaqs_download._get_unavailable_expressions(
                 expected_exprs=expected_expressions,
                 dicts_list=dicts_list,
                 downloaded_df=dicts_list,
@@ -158,7 +158,7 @@ class TestJPMaQSDownload(unittest.TestCase):
         self.assertEqual(
             set(expected_expressions),
             set(
-                jpmaqs._get_unavailable_expressions(
+                self.jpmaqs_download._get_unavailable_expressions(
                     expected_exprs=expected_expressions,
                     downloaded_df=pd.DataFrame(),
                 ),
@@ -171,7 +171,7 @@ class TestJPMaQSDownload(unittest.TestCase):
         self.assertEqual(
             set(missing_exprs),
             set(
-                jpmaqs._get_unavailable_expressions(
+                self.jpmaqs_download._get_unavailable_expressions(
                     expected_exprs=expected_expressions,
                     downloaded_df=qdf,
                 ),
@@ -181,7 +181,7 @@ class TestJPMaQSDownload(unittest.TestCase):
         self.assertEqual(
             set(missing_exprs),
             set(
-                jpmaqs._get_unavailable_expressions(
+                self.jpmaqs_download._get_unavailable_expressions(
                     expected_exprs=expected_expressions,
                     downloaded_df=wdf,
                 ),
@@ -207,14 +207,9 @@ class TestJPMaQSDownload(unittest.TestCase):
             "dataframe_format": "qdf",
         }
         bad_args: Dict[str, Any] = {}
-        jpmaqs: JPMaQSDownload = JPMaQSDownload(
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
 
         try:
-            if not jpmaqs.validate_download_args(**good_args):
+            if not self.jpmaqs_download.validate_download_args(**good_args):
                 self.fail("Unexpected validation failure")
         except Exception as e:
             self.fail("Unexpected exception raised: {}".format(e))
@@ -223,7 +218,7 @@ class TestJPMaQSDownload(unittest.TestCase):
             with self.assertRaises(TypeError):
                 bad_args = good_args.copy()
                 bad_args[argx] = -1
-                jpmaqs.validate_download_args(**bad_args)
+                self.jpmaqs_download.validate_download_args(**bad_args)
 
         # value error for tickers==cids==xcats==expressions == None
         with self.assertRaises(ValueError):
@@ -232,68 +227,64 @@ class TestJPMaQSDownload(unittest.TestCase):
             bad_args["cids"] = None
             bad_args["xcats"] = None
             bad_args["expressions"] = None
-            jpmaqs.validate_download_args(**bad_args)
+            self.jpmaqs_download.validate_download_args(**bad_args)
 
         for lvarx in ["tickers", "cids", "xcats", "expressions"]:
             with self.assertRaises(ValueError):
                 bad_args = good_args.copy()
                 bad_args[lvarx] = []
-                jpmaqs.validate_download_args(**bad_args)
+                self.jpmaqs_download.validate_download_args(**bad_args)
 
             with self.assertRaises(TypeError):
                 bad_args = good_args.copy()
                 bad_args[lvarx] = [1]
-                jpmaqs.validate_download_args(**bad_args)
+                self.jpmaqs_download.validate_download_args(**bad_args)
 
         # test cases for metrics arg
         bad_args = good_args.copy()
         bad_args["metrics"] = None
         with self.assertRaises(ValueError):
-            jpmaqs.validate_download_args(**bad_args)
+            self.jpmaqs_download.validate_download_args(**bad_args)
 
         bad_args = good_args.copy()
         bad_args["metrics"] = ["Metallica"]
         with self.assertRaises(ValueError):
-            jpmaqs.validate_download_args(**bad_args)
+            self.jpmaqs_download.validate_download_args(**bad_args)
 
         # cid AND xcat cases
         with self.assertRaises(ValueError):
             bad_args = good_args.copy()
             bad_args["xcats"] = None
-            jpmaqs.validate_download_args(**bad_args)
+            self.jpmaqs_download.validate_download_args(**bad_args)
 
         with self.assertRaises(ValueError):
             bad_args = good_args.copy()
             bad_args["cids"] = None
-            jpmaqs.validate_download_args(**bad_args)
+            self.jpmaqs_download.validate_download_args(**bad_args)
 
         for date_args in ["start_date", "end_date"]:
             bad_args = good_args.copy()
             bad_args[date_args] = "Metallica"
             with self.assertRaises(ValueError):
-                jpmaqs.validate_download_args(**bad_args)
+                self.jpmaqs_download.validate_download_args(**bad_args)
 
             bad_args[date_args] = "1900-01-01"
             with self.assertWarns(UserWarning):
-                jpmaqs.validate_download_args(**bad_args)
+                self.jpmaqs_download.validate_download_args(**bad_args)
 
             # pd.Timestamp extreme cases
             bad_args[date_args] = "1200-01-01"
             with self.assertRaises(ValueError):
-                jpmaqs.validate_download_args(**bad_args)
+                self.jpmaqs_download.validate_download_args(**bad_args)
 
         # test cases for dataframe_format
         bad_args = good_args.copy()
         bad_args["dataframe_format"] = "Metallica"
         with self.assertRaises(ValueError):
-            jpmaqs.validate_download_args(**bad_args)
+            self.jpmaqs_download.validate_download_args(**bad_args)
 
     def test_filter_expressions_from_catalogue(self):
-        jpmaqs: JPMaQSDownload = JPMaQSDownload(
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
+
         catalogue = self.expressions.copy()
 
         with mock.patch(
@@ -301,27 +292,22 @@ class TestJPMaQSDownload(unittest.TestCase):
             return_value=self.tickers.copy(),
         ):
             self.assertEqual(
-                set(jpmaqs.filter_expressions_from_catalogue(catalogue)),
+                set(self.jpmaqs_download.filter_expressions_from_catalogue(catalogue)),
                 set(catalogue),
             )
 
             ctlg = catalogue + [random_string() for _ in range(3)]
             self.assertEqual(
-                set(jpmaqs.filter_expressions_from_catalogue(ctlg)),
+                set(self.jpmaqs_download.filter_expressions_from_catalogue(ctlg)),
                 set(catalogue),
             )
 
     def test_chain_download_outputs(self):
-        jpmaqsdownload = JPMaQSDownload(
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
 
         with self.assertRaises(TypeError):
-            jpmaqsdownload._chain_download_outputs("")
+            self.jpmaqs_download._chain_download_outputs("")
 
-        self.assertEqual([], jpmaqsdownload._chain_download_outputs([]))
+        self.assertEqual([], self.jpmaqs_download._chain_download_outputs([]))
 
         ts_list = mock_request_wrapper(
             dq_expressions=self.expressions,
@@ -334,7 +320,7 @@ class TestJPMaQSDownload(unittest.TestCase):
 
         self.assertEqual(
             list(itertools.chain.from_iterable(ts_list_list)),
-            jpmaqsdownload._chain_download_outputs(ts_list_list),
+            self.jpmaqs_download._chain_download_outputs(ts_list_list),
         )
 
         ## Test for QDF list
@@ -346,19 +332,19 @@ class TestJPMaQSDownload(unittest.TestCase):
         _dfA = concat_single_metric_qdfs(
             list(itertools.chain.from_iterable(qdf_list_list.copy()))
         )  #
-        _dfB = jpmaqsdownload._chain_download_outputs(qdf_list_list)
+        _dfB = self.jpmaqs_download._chain_download_outputs(qdf_list_list)
         self.assertTrue(_dfA.equals(_dfB))
 
         ## Test for column list
 
         cdf_list = list(map(timeseries_to_column, ts_list))
         _dfA = concat_column_dfs(df_list=cdf_list.copy())
-        _dfB = jpmaqsdownload._chain_download_outputs(cdf_list)
+        _dfB = self.jpmaqs_download._chain_download_outputs(cdf_list)
         self.assertTrue(_dfA.equals(_dfB))
         ts_LLL = [ts_list_list, ts_list_list]
-        
+
         with self.assertRaises(NotImplementedError):
-            jpmaqsdownload._chain_download_outputs(ts_LLL)
+            self.jpmaqs_download._chain_download_outputs(ts_LLL)
 
     def test_download_func(self):
         warnings.simplefilter("always")
