@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append(".")
+
 from unittest import mock
 import unittest
 import pandas as pd
@@ -776,7 +780,7 @@ class TestDataQueryInterface(unittest.TestCase):
             self.assertEqual(len(results), len(expr_batches))
 
         ## test complete failure
-        arguments['expr_batches'] += [None for _ in range(10)]
+        arguments["expr_batches"] += [None for _ in range(10)]
         with mock.patch(
             "macrosynergy.download.dataquery.DataQueryInterface._fetch_timeseries",
             side_effect=_rw,
@@ -791,8 +795,8 @@ class TestDataQueryInterface(unittest.TestCase):
                 results = dq._concurrent_loop(
                     **arguments,
                 )
-        
-        arguments['expr_batches'][0] += ['KEYBOARD_INTERRUPT']
+
+        arguments["expr_batches"][0] += ["KEYBOARD_INTERRUPT"]
         with mock.patch(
             "macrosynergy.download.dataquery.DataQueryInterface._fetch_timeseries",
             side_effect=KeyboardInterrupt,
@@ -808,8 +812,106 @@ class TestDataQueryInterface(unittest.TestCase):
                 results = dq._concurrent_loop(
                     **arguments,
                 )
-                
+
+    def test_fetch(self):
+        def _rw(url: str = "", params: Dict = {}, tracking_id: str = "", **kwargs):
+            if len(params) > 0:
+                d = {
+                    "instruments": mock_request_wrapper(
+                        dq_expressions=params["expressions"],
+                        start_date=params["start-date"],
+                        end_date=params["end-date"],
+                    ),
+                    "links": [
+                        {"self": "SELF"},
+                        {"next": "NEXT"},
+                    ],
+                }
+            else:
+                d = {
+                    "instruments": mock_request_wrapper(
+                        dq_expressions=["DB(JPMAQS,A_B_C,value)"],
+                        start_date="2020-01-01",
+                        end_date="2020-02-01",
+                    ),
+                    "links": [
+                        {"self": "SELF"},
+                        {"next": None},
+                    ],
+                }
+            return d
+
+        params_dict = {
+            "expressions": self.expressions,
+            "start-date": "2020-01-01",
+            "end-date": "2020-02-01",
+        }
+
+        dq = DataQueryInterface(
+            client_id="client_id",
+            client_secret="client_secret",
+            check_connection=False,
+        )
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.OAuth.get_auth",
+            return_value={"headers": "headers", "cert": "cert"},
+        ):
+            with mock.patch(
+                "macrosynergy.download.dataquery.request_wrapper",
+                side_effect=_rw,
+            ):
+                lst = dq._fetch(url=random_string(), params=params_dict)
+                self.assertIsInstance(lst, list)
+                for l in lst:
+                    self.assertIsInstance(l, dict)
+                    self.assertTrue(
+                        l["attributes"][0]["expression"]
+                        in self.expressions + ["DB(JPMAQS,A_B_C,value)"]
+                    )
+
+    def test_get_catalogue(self):
+
+        def _mock_fetch(*args, **kwargs):
+            return [
+                {"item": i, "instrument-id": f"ID_{i}", "instrument-name": f"NAME_{i}"}
+                for i in range(1, 11)
+            ]
             
+        def _bad_mock_fetch(*args, **kwargs):
+            return [
+                {"item": i, "instrument-id": f"ID_{i}", "instrument-name": f"NAME_{i}"}
+                for i in range(1, 11)
+            ] + [{"item": 10, "instrument-id": f"ID_10", "instrument-name": f"NAME_10"}]
+
+        dq = DataQueryInterface(
+            client_id="client_id",
+            client_secret="client_secret",
+            check_connection=False,
+        )
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch",
+            side_effect=_mock_fetch,
+        ):
+            cat = dq.get_catalogue()
+            self.assertIsInstance(cat, list)
+
+            self.assertEqual(set(cat), set([f"NAME_{i}" for i in range(1, 11)]))
+            
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch",
+            side_effect=_bad_mock_fetch,
+        ):
+            with self.assertRaises(ValueError):
+                cat = dq.get_catalogue()
+                
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch",
+            side_effect=KeyboardInterrupt,
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                cat = dq.get_catalogue()
 
 
 if __name__ == "__main__":
