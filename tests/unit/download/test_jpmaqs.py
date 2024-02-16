@@ -779,7 +779,7 @@ class TestFunctions(unittest.TestCase):
 
         found_expressions = get_expression_from_qdf(data_df)
 
-        with self.assertRaises(TypeError):
+        with self.assertRaises(InvalidDataframeError):
             validate_downloaded_df(
                 data_df="",
                 expected_expressions=self.expressions,
