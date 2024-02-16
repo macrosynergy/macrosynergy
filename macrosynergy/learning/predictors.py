@@ -392,6 +392,69 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
 
         return self
 
+from scipy.optimize import linprog
+
+class LADLinearRegressor(BaseEstimator, RegressorMixin):
+    def __init__(self, positive=False, fit_intercept=True):
+        self.positive = positive
+        self.fit_intercept = fit_intercept
+    
+    def fit(self, X, y):
+        # Number of features and samples
+        n_samples, n_features = X.shape
+        
+        # If fit_intercept is True, add a column of ones to X for the intercept term
+        if self.fit_intercept:
+            X = np.hstack([np.ones((n_samples, 1)), X])
+            n_features += 1
+        
+        # Objective: Minimize the sum of absolute residuals
+        # Variables for linprog: [beta, slack_pos, slack_neg]
+        # slack_pos and slack_neg represent the positive and negative parts of the residuals
+        
+        # Coefficients for the objective function (only slack variables contribute to the cost)
+        c = np.hstack([np.zeros(n_features), np.ones(2 * n_samples)])
+        
+        # Constraints matrix (A_eq) and right-hand side (b_eq) for the equality Ax = b
+        # Each row corresponds to: x_i'beta - slack_pos + slack_neg = y_i
+        A_eq = np.hstack([X, np.eye(n_samples), -np.eye(n_samples)])
+        b_eq = y
+        
+        # Bounds for beta and slack variables
+        # By default, beta has no bounds (-inf, inf), unless positive is True
+        if self.positive:
+            beta_bounds = [(0, None)] * n_features
+        else:
+            beta_bounds = [(None, None)] * n_features
+        slack_bounds = [(0, None)] * (2 * n_samples)  # slack variables are non-negative
+        
+        # Combine bounds for all variables
+        bounds = beta_bounds + slack_bounds
+        
+        # Solve the linear programming problem
+        res = linprog(c, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
+        
+        # Extract the coefficients (beta) from the solution
+        self.coef_ = res.x[:n_features]
+        
+        # If fit_intercept is True, separate the intercept from the slopes
+        if self.fit_intercept:
+            self.intercept_ = self.coef_[0]
+            self.coef_ = self.coef_[1:]
+        else:
+            self.intercept_ = 0.0  # No intercept
+        
+        return self
+    
+    def predict(self, X):
+        # If fit_intercept is True, add a column of ones to X for the intercept term
+        if self.fit_intercept:
+            X = np.hstack([np.ones((X.shape[0], 1)), X])
+        
+        # Calculate predictions: y_pred = X * beta + intercept
+        y_pred = np.dot(X, np.hstack([self.intercept_, self.coef_]))
+        return y_pred
+
 class LADRegressor(BaseEstimator, RegressorMixin):
     def __init__(self, fit_intercept=True, positive=False, tol=None, ):
         """
@@ -705,6 +768,15 @@ if __name__ == "__main__":
     dfd = dfd.pivot(index=["cid", "real_date"], columns="xcat", values="value")
     X = dfd.drop(columns=["XR"])
     y = dfd["XR"]
+
+    # LAD linear regression
+
+    lad = LADLinearRegressor()
+    lad.fit(X, y)
+    lad_preds = lad.predict(X)
+    lad2 = LADLinearRegressor(positive=True)
+    lad2.fit(X, y)
+    lad2_preds = lad2.predict(X)
 
     # OLS Linear Regression
     lm = LinearRegression()
