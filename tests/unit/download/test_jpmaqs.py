@@ -38,6 +38,8 @@ class TestJPMaQSDownload(unittest.TestCase):
         self.cids: List[str] = ["GBP", "EUR", "CAD"]
         self.xcats: List[str] = ["FXXR_NSA", "EQXR_NSA"]
         self.metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+        self.start_date = "2019-01-01"
+        self.end_date = "2019-01-31"
         self.tickers: List[str] = [
             cid + "_" + xcat for xcat in self.xcats for cid in self.cids
         ]
@@ -346,9 +348,171 @@ class TestJPMaQSDownload(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             self.jpmaqs_download._chain_download_outputs(ts_LLL)
 
+    def test_fetch_timeseries(self):
+        static_ts_list = mock_request_wrapper(
+            dq_expressions=self.expressions,
+            start_date="2019-01-01",
+            end_date="2019-01-31",
+        )
+
+        good_args = dict(
+            url="",
+            params={},
+            tracking_id="",
+        )
+
+        # test for "good" conditions
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch",
+            return_value=static_ts_list.copy(),
+        ):
+            ts_list = self.jpmaqs_download._fetch_timeseries(
+                as_dataframe=False,
+                **good_args,
+            )
+            self.assertIsInstance(ts_list, list)
+            _test_list = sorted([str(t) for t in static_ts_list])
+            self.assertEqual(
+                set(sorted([str(t) for t in ts_list])),
+                set(_test_list),
+            )
+
+            qdf_list = self.jpmaqs_download._fetch_timeseries(
+                as_dataframe=True,
+                dataframe_format="qdf",
+                **good_args,
+            )
+
+            self.assertIsInstance(qdf_list, list)
+            self.assertEqual(len(qdf_list), len(ts_list))
+            for qdf in qdf_list:
+                self.assertIsInstance(qdf, QuantamentalDataFrame)
+
+            wdf = self.jpmaqs_download._fetch_timeseries(
+                as_dataframe=True,
+                dataframe_format="wide",
+                **good_args,
+            )
+
+            self.assertIsInstance(wdf, pd.DataFrame)
+            self.assertEqual(wdf.index.name, "real_date")
+            self.assertEqual(set(wdf.columns), set(self.expressions))
+
+        bad_ts_list = static_ts_list.copy()
+        bad_ts_list[0]["attributes"][0]["time-series"] = None
+        bad_ts_list[1]["attributes"][0]["time-series"] = None
+        bad_ts_list[0]["attributes"][0]["message"] = "No data available"
+        missing_expr = [bad_ts_list[i]["attributes"][0]["expression"] for i in range(2)]
+
+        def bad_ts_list_func(*args, **kwargs):
+            # ts_list gets modified in place by _fetch_timeseries
+            return bad_ts_list.copy()
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch",
+            side_effect=bad_ts_list_func,
+        ):
+            ts_list = self.jpmaqs_download._fetch_timeseries(
+                as_dataframe=False,
+                **good_args,
+            )
+            self.assertIsInstance(ts_list, list)
+            self.assertEqual(len(ts_list), len(bad_ts_list) - 2)
+            self.assertEqual(
+                set([str(t) for t in ts_list]),
+                set([str(t) for t in bad_ts_list[2:]]),
+            )
+
+            qdf_list = self.jpmaqs_download._fetch_timeseries(
+                as_dataframe=True,
+                dataframe_format="qdf",
+                **good_args,
+            )
+
+            self.assertIsInstance(qdf_list, list)
+            self.assertEqual(len(qdf_list), len(bad_ts_list) - 2)
+            for qdf in qdf_list:
+                self.assertIsInstance(qdf, QuantamentalDataFrame)
+
+            wdf = self.jpmaqs_download._fetch_timeseries(
+                as_dataframe=True,
+                dataframe_format="wide",
+                **good_args,
+            )
+
+            self.assertIsInstance(wdf, pd.DataFrame)
+            self.assertEqual(wdf.index.name, "real_date")
+            self.assertEqual(
+                set(wdf.columns), set(self.expressions) - set(missing_expr)
+            )
+
+            self.assertEqual(
+                set(missing_expr), set(self.jpmaqs_download.unavailable_expressions)
+            )
+
     def test_download_func(self):
+        def _mock_fetch(
+            url: str = "", params: Dict = {}, tracking_id: str = "", **kwargs
+        ):
+            if len(params) > 0:
+                return mock_request_wrapper(
+                    dq_expressions=params["expressions"],
+                    start_date=params["start-date"],
+                    end_date=params["end-date"],
+                )
+            else:
+                return []
+
         warnings.simplefilter("always")
-        ...
+        good_args = dict(
+            # tickers=None,
+            cids=self.cids,
+            xcats=self.xcats,
+            metrics=["all"],
+            end_date=self.end_date,
+            start_date=self.start_date,
+            # expressions=None,
+            get_catalogue=True,
+            show_progress=False,
+            debug=False,
+            suppress_warning=False,
+            as_dataframe=True,
+            dataframe_format="qdf",
+            report_time_taken=True,
+        )
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface.get_catalogue",
+            return_value=self.tickers,
+        ):
+            with mock.patch(
+                "macrosynergy.download.dataquery.DataQueryInterface._fetch",
+                side_effect=_mock_fetch,
+            ):
+                self.jpmaqs_download.download(**good_args)
+
+                # swap dates and see if it raises a warning
+                good_args["start_date"], good_args["end_date"] = (
+                    good_args["end_date"],
+                    good_args["start_date"],
+                )
+                with self.assertWarns(UserWarning):
+                    self.jpmaqs_download.download(**good_args)
+
+                # patch validate_download_args to return False
+                with mock.patch(
+                    "macrosynergy.download.jpmaqs.JPMaQSDownload.validate_download_args",
+                    return_value=False,
+                ):
+                    with self.assertRaises(ValueError):
+                        self.jpmaqs_download.download(**good_args)
+
+                # mock validate_downloaded_df to return False
+                with mock.patch(
+                    "macrosynergy.download.jpmaqs.validate_downloaded_df",
+                    return_value=False,
+                ):
+                    with self.assertRaises(InvalidDataframeError):
+                        self.jpmaqs_download.download(**good_args)
 
         warnings.resetwarnings()
 
