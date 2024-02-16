@@ -39,7 +39,7 @@ def deconstruct_expression(
 ) -> Union[List[str], List[List[str]]]:
     """
     Deconstruct an expression into a list of cid, xcat, and metric.
-    Achieves the inverse of construct_expressions(). For non-JPMaQS expressions, 
+    Achieves the inverse of construct_expressions(). For non-JPMaQS expressions,
     the returned list will be [expression, expression, 'value']. The metric is set to
     'value' to ensure the reported metric is consistent with the standard JPMaQS metrics
     (JPMaQSDownload.valid_metrics).
@@ -682,7 +682,13 @@ class JPMaQSDownload(DataQueryInterface):
         for its, ts in enumerate(ts_list):
             if ts["attributes"][0]["time-series"] is None:
                 self.unavailable_expressions.append(ts["attributes"][0]["expression"])
-                self.msg_warnings.append(ts["attributes"][0]["message"])
+                if "message" in ts["attributes"][0]:
+                    self.msg_warnings.append(ts["attributes"][0]["message"])
+                else:
+                    self.msg_warnings.append(
+                        f"Time series for expression {ts['attributes'][0]['expression']} is empty. "
+                        " No explanation was provided."
+                    )
                 ts_list[its] = None
 
         ts_list = list(filter(None, ts_list))
