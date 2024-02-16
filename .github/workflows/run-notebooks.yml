@@ -48,5 +48,9 @@ jobs:
           echo "${{ secrets.NOTEBOOK_RUNNER_PEM }}" > $cert_file
 
       - name: Run notebook script
+        env: 
+          EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
         run: |
-          python .github/scripts/run_notebooks.py
+          python .github/scripts/run_notebooks.py 
+

@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+import os
 import re
 import time
 import boto3
@@ -29,22 +30,22 @@ bucket = s3.Bucket("macrosynergy-notebook-prod")
 objects_info = [(obj.key, obj.size) for obj in bucket.objects.all()]
 
 # Filter for notebook files
-notebooks_info = [(key, size) for key, size in objects_info if key.endswith(".ipynb")]
+notebooks_info = [(key, size) for key, size in objects_info if key.endswith(".ipynb") and key != "Signal_optimization_basics.ipynb"]
 notebooks = [obj.key for obj in bucket.objects.filter(Prefix="")]
 notebooks = [notebook for notebook in notebooks if notebook.endswith(".ipynb")]
 sorted_notebooks_info = sorted(notebooks_info, key=lambda x: x[1])
 notebooks = [name for name, size in sorted_notebooks_info]
 print(f"Found {len(notebooks)} notebooks in the s3 bucket")
 
+
+# Uncomment if you want to run a small batch for test purposes
 # batch_size = 2
-# Get remainder too
-remainder = len(notebooks) % len(list(instances))
 
 # Batch the notebooks
 batches = []
 for i in range(len(list(instances))):
     batch = notebooks[i::len(list(instances))]
-#    batch = batch[:batch_size]
+    # batch = batch[:batch_size]
     batches.append(batch)
 bucket_url = "https://macrosynergy-notebook-prod.s3.eu-west-2.amazonaws.com/"
 
@@ -96,29 +97,36 @@ def connect_to_instance(instance):
 def run_commands_on_ec2(instance, notebooks):
     ssh_client = connect_to_instance(instance)
     outputs = {"succeeded": [], "failed": []}
-    commands = [
+    
+    # Initial cleanup commands
+    cleanup_commands = [
         "rm -rf notebooks",
         "rm -rf failed_notebooks.txt",
         "rm -rf successful_notebooks.txt",
         "rm -rf nohup.out",
-        " && ".join(
-            ["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks]
-        ),
-        "source myvenv/bin/activate \n pip install linearmodels --upgrade \n pip install jupyter --upgrade \n pip install git+https://github.com/macrosynergy/macrosynergy@test --upgrade \n nohup python run_notebooks.py &",
     ]
-    for command in commands:
-        print("Executing {}".format(command))
-        if command != commands[-1]:
-            stdin, stdout, stderr = ssh_client.exec_command(command)
-        else:
-            # Does not wait for output of python3 run_notebooks.py
-            ssh_client.exec_command(command)
     
-    print("Getting output from instance...")
+    for cmd in cleanup_commands:
+        stdin, stdout, stderr = ssh_client.exec_command(cmd)
+        stdout.channel.recv_exit_status()  # Wait for command to complete
+
+    # Wget commands
+    wget_commands = " && ".join(["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks])
+    stdin, stdout, stderr = ssh_client.exec_command(f"bash -c '{wget_commands}'")
+    stdout.channel.recv_exit_status()
+    # Consider adding a delay or checking for command completion if necessary
+    
+    # Pip and nohup commands
+    complex_command = """
+    source myvenv/bin/activate; pip install linearmodels --upgrade; pip install jupyter --upgrade; pip install git+https://github.com/macrosynergy/macrosynergy@develop --upgrade; nohup python run_notebooks.py > nohup.out 2>&1 &
+    """
+    ssh_client.exec_command(f"bash -c \"{complex_command}\"")
+    
+    print(f"Getting output from instance... {instance.public_ip_address}")
     successful_notebooks, failed_notebooks = get_output_from_instance(ssh_client)
     outputs["succeeded"].extend(successful_notebooks)
     outputs["failed"].extend(failed_notebooks)
-    print("Stopping instance...")
+    print(f"Stopping instance... {instance.public_ip_address}")
     ssh_client.close()
     instance.stop()
     return outputs
@@ -134,18 +142,26 @@ def check_output(ssh_client):
 
 def get_output_from_instance(ssh_client):
     python_running = True
+    start_time = time.time()
     while python_running:
-        print("Executing command to check if python is still running...")
+        #print(f"Python process is still running on instance, waiting for it to finish...")
         command = "ps -ef | grep python"
         stdin, stdout, stderr = ssh_client.exec_command(command)
         output = stdout.read().decode("utf-8")
         error = stderr.read().decode("utf-8")
 
         if "run_notebooks.py" in output:
-            print("Python process still running, waiting 10 seconds...")
-            time.sleep(10)
+            if time.time() - start_time > 6000:
+                print("Python process has been running for over 100 minutes, stopping instance...")
+                python_running = False
+            time.sleep(5)
         else:
             print("Python process has finished")
+            command = "cat nohup.out"
+            stdin, stdout, stderr = ssh_client.exec_command(command)
+            output = stdout.read().decode("utf-8")
+            error = stderr.read().decode("utf-8")
+            print(output)
             python_running = False
     
     print("Python process has finished, getting failed notebooks...")
@@ -167,13 +183,26 @@ def get_output_from_instance(ssh_client):
 def process_instance(instance):
     instance_ip = instance.public_ip_address
     print(f"Running notebooks on {instance_ip}")
-    return run_commands_on_ec2(instance, batches.pop())
+    try:
+        batch = batches.pop()
+        output = run_commands_on_ec2(instance, batch)
+    except Exception as e:
+        print(f"Failed to run notebooks: {batch} on {instance_ip}")
+        print(e)
+        instance.stop()
+        return {"succeeded": [], "failed": batch}
+    return output
 
 max_threads = min(len(list(instances)), len(batches))
 with ThreadPoolExecutor(max_threads) as executor:
     # Use executor.map to run the process_instance function concurrently on each instance
     output = executor.map(process_instance, list(instances))
 
+# output = []
+# for instance in instances:
+#     output.append(process_instance(instance))
+
+print("FINSIHED RUNNING ALL NOTEBOOKS")
 merged_dict = {}
 
 # Merge dictionaries
@@ -212,11 +241,7 @@ def send_email(subject, body, recipient, sender):
 
 email_subject = "Notebook Failures"
 email_body = f"Please note that the following notebooks failed when ran on the branch: \n{pd.DataFrame(merged_dict['failed']).to_html()}\nThe total time to run all notebooks was {end_time - start_time} seconds."
-recipient_email = [
-    "sandresen@macrosynergy.com",
-    "ebrine@macrosynergy.com",
-    "ptyagi@macrosynergy.com",
-]
-sender_email = "machine@macrosynergy.com"
+recipient_email = ["sandresen@macrosynergy.com"] #os.getenv("EMAIL_RECIPIENTS").split(",")
+sender_email = "machine@macrosynergy.com" #os.getenv("ENDER_EMAIL")
 
 send_email(email_subject, email_body, recipient_email, sender_email)
