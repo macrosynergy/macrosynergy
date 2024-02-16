@@ -313,7 +313,9 @@ def validate_downloaded_df(
     """
 
     if not isinstance(data_df, pd.DataFrame):
-        raise TypeError("`data_df` must be a dataframe.")
+        raise InvalidDataframeError(
+            "Empty or invalid dataframe, please check download parameters."
+        )
     if data_df.empty:
         return False
 
@@ -648,8 +650,11 @@ class JPMaQSDownload(DataQueryInterface):
     ) -> Union[List[Dict], List[pd.DataFrame]]:
         if not isinstance(download_outputs, list):
             raise TypeError("`download_outputs` must be a list.")
+
+        download_outputs = [x for x in download_outputs if len(x) > 0]
         if len(download_outputs) == 0:
             return []
+
         if isinstance(download_outputs[0], pd.DataFrame):
             return concat_column_dfs(df_list=download_outputs)
 
