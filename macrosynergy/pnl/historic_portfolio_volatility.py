@@ -212,15 +212,11 @@ def _hist_vol(
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
 
     ## Multiply the returns by weight_signals
-    r_series_list = df_wide[
-        df_wide.columns[
-            df_wide.columns.str.endswith(f"{rstring}_{rstring}_CSIG_{sname}")
-        ]
+    r_series_list = df_wide.columns[
+        df_wide.columns.str.endswith(f"{rstring}_{rstring}_CSIG_{sname}")
     ]
-    w_series_list = df_wide[
-        df_wide.columns[
-            df_wide.columns.str.endswith(f"{rstring}_{weight_signal}_CSIG_{sname}")
-        ]
+    w_series_list = df_wide.columns[
+        df_wide.columns.str.endswith(f"{rstring}_{weight_signal}_CSIG_{sname}")
     ]
 
     for r_series, w_series in zip(r_series_list, w_series_list):
@@ -409,7 +405,7 @@ def historic_portfolio_vol(
     if not isinstance(sname, str):
         raise ValueError("`sname` must be a string.")
 
-    df["ticker"]: str = df["cid"] + "_" + df["xcat"]
+    df["ticker"] = df["cid"] + "_" + df["xcat"]
 
     ## Check that there is atleast one contract signal for the strategy
     if not any(df["ticker"].str.endswith(f"_CSIG_{sname}")):
