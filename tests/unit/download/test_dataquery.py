@@ -405,10 +405,12 @@ class TestDataQueryInterface(unittest.TestCase):
         # 200. Therefore, use the Interface Object's method to check DataQuery
         # connections.
 
-        def _test(verbose: bool, raise_error: bool):
+        def _test(verbose: bool):
             with self.dq as dq:
                 self.assertTrue(
-                    dq.check_connection(verbose=verbose, raise_error=raise_error)
+                    dq.check_connection(
+                        verbose=verbose,
+                    )
                 )
 
             mock_p_request.assert_called_once()
@@ -419,8 +421,16 @@ class TestDataQueryInterface(unittest.TestCase):
             return True
 
         for verbose in [True, False]:
-            for raise_error in [True, False]:
-                self.assertTrue(_test(verbose, raise_error))
+            self.assertTrue(_test(verbose))
+            
+        with mock.patch(
+            "macrosynergy.download.dataquery.request_wrapper",
+            return_value=None,
+        ):
+            with self.dq as dq:
+                with self.assertRaises(ConnectionError):
+                    dq.check_connection(raise_error=True)
+            
 
     @mock.patch(
         "macrosynergy.download.dataquery.OAuth._get_token",
@@ -853,9 +863,9 @@ class TestDataQueryInterface(unittest.TestCase):
 
         with mock.patch(
             "macrosynergy.download.dataquery.DataQueryInterface._fetch",
-            side_effect=KeyboardInterrupt,
+            side_effect=Exception,
         ):
-            with self.assertRaises(KeyboardInterrupt):
+            with self.assertRaises(Exception):
                 cat = self.dq.get_catalogue()
 
     def test_download(self):
