@@ -469,7 +469,7 @@ class TestJPMaQSDownload(unittest.TestCase):
             cids=self.cids,
             xcats=self.xcats,
             metrics=["all"],
-            end_date=self.end_date,
+            end_date=None,
             start_date=self.start_date,
             # expressions=None,
             get_catalogue=True,
@@ -491,12 +491,11 @@ class TestJPMaQSDownload(unittest.TestCase):
                 self.jpmaqs_download.download(**good_args)
 
                 # swap dates and see if it raises a warning
-                good_args["start_date"], good_args["end_date"] = (
-                    good_args["end_date"],
-                    good_args["start_date"],
-                )
+                bad_args = good_args.copy()
+                bad_args["start_date"] = self.end_date
+                bad_args["end_date"] = self.start_date
                 with self.assertWarns(UserWarning):
-                    self.jpmaqs_download.download(**good_args)
+                    self.jpmaqs_download.download(**bad_args)
 
                 # patch validate_download_args to return False
                 with mock.patch(
