@@ -1,7 +1,3 @@
-import sys
-
-sys.path.append(".")
-
 from unittest import mock
 import unittest
 import pandas as pd

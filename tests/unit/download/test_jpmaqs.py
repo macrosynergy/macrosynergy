@@ -4,11 +4,6 @@ import warnings
 import pandas as pd
 import itertools
 
-import sys
-
-sys.path.append(".")
-
-
 from typing import List, Dict, Any
 from macrosynergy.download.jpmaqs import (
     JPMaQSDownload,

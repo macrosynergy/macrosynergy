@@ -1,9 +1,6 @@
-""" JPMaQS Download Interface 
 """
-
-import sys
-
-sys.path.append(".")
+JPMaQS Download Interface 
+"""
 
 import datetime
 import io
