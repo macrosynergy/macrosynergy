@@ -94,6 +94,31 @@ class TestJPMaQSDownload(unittest.TestCase):
                 bad_args[vx] = None
             JPMaQSDownload(**bad_args)
 
+    @mock.patch(
+        "macrosynergy.download.dataquery.OAuth._get_token",
+        return_value=("SOME_TEST_TOKEN"),
+    )
+    @mock.patch(
+        "macrosynergy.download.dataquery.request_wrapper",
+        return_value=({"info": {"code": 200, "message": "Service Available."}}),
+    )
+    def test_check_connection_on_init(
+        self, mock_p_request: mock.MagicMock, mock_p_get_token: mock.MagicMock
+    ):
+        # If the connection to DataQuery is working, the response code will invariably be
+        # 200. Therefore, use the Interface Object's method to check DataQuery
+        # connections.
+
+        with JPMaQSDownload(
+            client_id="client1",
+            client_secret="123",
+            oauth=True,
+        ) as jpmaqs:
+            pass
+
+        mock_p_request.assert_called_once()
+        mock_p_get_token.assert_called_once()
+
     def test_get_unavailable_expressions(self):
         jpmaqs: JPMaQSDownload = JPMaQSDownload(
             client_id="client_id",
@@ -330,12 +355,10 @@ class TestJPMaQSDownload(unittest.TestCase):
         _dfA = concat_column_dfs(df_list=cdf_list.copy())
         _dfB = jpmaqsdownload._chain_download_outputs(cdf_list)
         self.assertTrue(_dfA.equals(_dfB))
-        
         ts_LLL = [ts_list_list, ts_list_list]
         
         with self.assertRaises(NotImplementedError):
             jpmaqsdownload._chain_download_outputs(ts_LLL)
-        
 
     def test_download_func(self):
         warnings.simplefilter("always")
