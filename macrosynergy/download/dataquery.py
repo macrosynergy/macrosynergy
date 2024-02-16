@@ -1070,11 +1070,9 @@ class DataQueryInterface(object):
         if datetime.strptime(end_date, "%Y-%m-%d") < datetime.strptime(
             start_date, "%Y-%m-%d"
         ):
-            logger.warning(
-                "Start date (%s) is after end-date (%s): swap them!",
-                start_date,
-                end_date,
-            )
+            wStr = "Start date ({}) is after end-date ({}): swapping them!"
+            logger.warning(wStr.format(start_date, end_date))
+            warnings.warn(wStr.format(start_date, end_date), UserWarning)
             start_date, end_date = end_date, start_date
 
         # remove dashes from dates to match DQ format
