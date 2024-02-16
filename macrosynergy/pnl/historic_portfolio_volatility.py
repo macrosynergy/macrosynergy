@@ -6,9 +6,8 @@ from typing import List, Optional, Callable
 import pandas as pd
 import numpy as np
 
-import os, sys
-
-sys.path.append(os.getcwd())
+#import os, sys
+#sys.path.append(os.getcwd())
 
 
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
@@ -205,7 +204,7 @@ def _hist_vol(
     """
 
     lback_meth = lback_meth.lower()
-    if not lback_meth in ["ma", "xma"]:
+    if lback_meth not in ["ma", "xma"]:
         raise NotImplementedError(
             f"`lback_meth` must be 'ma' or 'xma'; got {lback_meth}"
         )
@@ -275,6 +274,7 @@ def _hist_vol(
         # TODO: Contradiction to other condition above
 
     else:
+        # TODO batch up...
         for r_date in trigger_indices:
             dfw_calc.loc[r_date, :] = _rolling_window_calc(
                 real_date_pdt=r_date,
@@ -504,8 +504,8 @@ if __name__ == "__main__":
     df.loc[(df["cid"] == "USD") & (df["xcat"] == "SIG"), "value"] = 1.0
     ctypes = ["FXXR_XR", "IRSXR_XR", "CDSXR_XR"]
     ctypes += [c.replace("_XR", "_WEIGHTS") for c in ctypes]
-    cscales = [1.0, 0.5, 0.1]
-    csigns = [1, -1, 1]
+    cscales = [1.0, 0.5, 0.1, 1, 1, 1]
+    csigns = [1, -1, 1, 1, 1, 1]
 
     hbasket = ["USD_EQXR_XR", "EUR_EQXR_XR"]
     hscales = [0.7, 0.3]

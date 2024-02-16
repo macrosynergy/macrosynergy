@@ -1,13 +1,13 @@
 
 ####### Custom ignore files #######
 dev/
-
 data/
 
 macrosynergy/version.py
 
 .vscode/
 .vs/
+launch.json
 
 # RST files for documentation
 docs/source/gen_rsts/
