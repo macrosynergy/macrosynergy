@@ -213,15 +213,11 @@ def _hist_vol(
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
 
     ## Multiply the returns by weight_signals
-    r_series_list = df_wide[
-        df_wide.columns[
-            df_wide.columns.str.endswith(f"{rstring}_{rstring}_CSIG_{sname}")
-        ]
+    r_series_list = df_wide.columns[
+        df_wide.columns.str.endswith(f"{rstring}_{rstring}_CSIG_{sname}")
     ]
-    w_series_list = df_wide[
-        df_wide.columns[
-            df_wide.columns.str.endswith(f"{rstring}_{weight_signal}_CSIG_{sname}")
-        ]
+    w_series_list = df_wide.columns[
+        df_wide.columns.str.endswith(f"{rstring}_{weight_signal}_CSIG_{sname}")
     ]
 
     for r_series, w_series in zip(r_series_list, w_series_list):
@@ -409,7 +405,7 @@ def historic_portfolio_vol(
     if not isinstance(sname, str):
         raise ValueError("`sname` must be a string.")
 
-    df["ticker"]: str = df["cid"] + "_" + df["xcat"]
+    df["ticker"] = df["cid"] + "_" + df["xcat"]
 
     ## Check that there is atleast one contract signal for the strategy
     if not any(df["ticker"].str.endswith(f"_CSIG_{sname}")):
@@ -504,8 +500,8 @@ if __name__ == "__main__":
     df.loc[(df["cid"] == "USD") & (df["xcat"] == "SIG"), "value"] = 1.0
     ctypes = ["FXXR_XR", "IRSXR_XR", "CDSXR_XR"]
     ctypes += [c.replace("_XR", "_WEIGHTS") for c in ctypes]
-    cscales = [1.0, 0.5, 0.1]
-    csigns = [1, -1, 1]
+    cscales = [1.0, 0.5, 0.1, 1, 1, 1]
+    csigns = [1, -1, 1, 1, 1, 1]
 
     hbasket = ["USD_EQXR_XR", "EUR_EQXR_XR"]
     hscales = [0.7, 0.3]
