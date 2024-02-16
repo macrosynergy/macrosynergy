@@ -516,6 +516,14 @@ class TestSWLRegression(unittest.TestCase):
         self.assertTrue(len(df_models.name.unique()) == 1)
         self.assertEqual(df_models.name.unique()[0], "test")
 
+    @parameterized.expand(itertools.product([True, False], [True, False]))
+    def test_valid_set_params(self, fit_intercept, positive):
+        mdl = SignWeightedLinearRegression()
+        mdl.set_params(fit_intercept=fit_intercept,positive=positive)
+        self.assertTrue(mdl.fit_intercept == fit_intercept)
+        self.assertTrue(mdl.positive == positive)
+        self.assertTrue(mdl.model.fit_intercept == fit_intercept)
+        self.assertTrue(mdl.model.positive == positive)
 
 class TestTWLRegression(unittest.TestCase):
     @classmethod
@@ -796,3 +804,13 @@ class TestTWLRegression(unittest.TestCase):
         )
         self.assertTrue(len(df_models.name.unique()) == 1)
         self.assertEqual(df_models.name.unique()[0], "test")
+
+    @parameterized.expand(itertools.product([6,12,36],[True, False], [True, False]))
+    def test_valid_set_params(self, half_life, fit_intercept, positive):
+        mdl = TimeWeightedLinearRegression()
+        mdl.set_params(half_life=half_life, fit_intercept=fit_intercept, positive=positive)
+        self.assertTrue(mdl.half_life == half_life)
+        self.assertTrue(mdl.fit_intercept == fit_intercept)
+        self.assertTrue(mdl.positive == positive)
+        self.assertTrue(mdl.model.fit_intercept == fit_intercept)
+        self.assertTrue(mdl.model.positive == positive)
