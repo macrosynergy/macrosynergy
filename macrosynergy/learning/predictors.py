@@ -527,7 +527,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 sample_weight=sample_weight,
             ),
             x0=init_weights,
-            method="L-BFGS-B", # TODO: make this an option in the constructor.
+            method="SLSQP", # TODO: make this an option in the constructor.
             bounds=bounds,
             tol=self.tol,
         )
