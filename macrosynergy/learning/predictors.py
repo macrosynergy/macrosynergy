@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from scipy.optimize import minimize, linprog
+from scipy.optimize import minimize
 
 from functools import partial
 import warnings
