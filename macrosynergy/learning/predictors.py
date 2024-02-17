@@ -185,7 +185,6 @@ class TimeWeightedRegressor(BaseWeightedRegressor):
         dates = sorted(targets.index.get_level_values(1).unique(), reverse=True)
         num_dates = len(dates)
         weights = np.power(2, -np.arange(num_dates) / self.half_life)
-        weights = weights / np.sum(weights)
 
         weight_map = dict(zip(dates, weights))
         self.sample_weights = targets.index.get_level_values(1).map(weight_map).to_numpy()
@@ -391,152 +390,6 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
             )
 
         return self
-
-class SignWeightedLADLinearRegressor(SignWeightedRegressor):
-    def __init__(
-        self,
-        fit_intercept: bool = True,
-        positive: bool = False,
-    ):
-        """
-        Custom class to create a weighted LAD linear regression model, with the sample weights
-        chosen by inverse frequency of the label's sign in the training set.
-
-        :param <bool> fit_intercept: Whether to calculate the intercept for this model. If set to False, no intercept will be used in calculation.
-        :param <bool> positive: When set to True, forces the coefficients to be positive.
-
-        NOTE: By weighting the contribution of different training samples based on the
-        sign of the label, the model is encouraged to learn equally from both positive and negative return samples,
-        irrespective of class imbalance. If there are more positive targets than negative
-        targets in the training set, then the negative target samples are given a higher
-        weight in the model training process. The opposite is true if there are more
-        negative targets than positive targets.
-        """
-
-        if not isinstance(fit_intercept, bool):
-            raise TypeError("fit_intercept must be a boolean.")
-        if not isinstance(positive, bool):
-            raise TypeError("positive must be a boolean.")
-
-        self.fit_intercept = fit_intercept
-        self.positive = positive
-        model = LADLinearRegressor(
-            fit_intercept=self.fit_intercept,
-            positive=self.positive,
-        )
-        super().__init__(model)
-
-    def set_params(self, **params):
-        super().set_params(**params)
-        if 'fit_intercept' in params or 'positive' in params:
-            # Re-initialize the LinearRegression instance with updated parameters
-            self.model = LADLinearRegressor(
-                fit_intercept=self.fit_intercept,
-                positive=self.positive
-            )
-
-        return self
-
-
-class TimeWeightedLADLinearRegressor(TimeWeightedRegressor):
-    def __init__(
-        self,
-        fit_intercept: bool = True,
-        positive: bool = False,
-        half_life: Union[float, int] = 21 * 12,
-    ):
-        """
-        Custom class to create a weighted LAD linear regression model, where the training sample
-        weights exponentially decay by sample recency, given a prescribed half_life.
-
-        :param <bool> fit_intercept: Whether to calculate the intercept for this model. If set to False, no intercept will be used in calculations.
-        :param <bool> positive: When set to True, forces the coefficients to be positive. This option is only supported for dense arrays.
-        :param <Union[float, int]> half_life: The number of time periods in units of the native data frequency for the weight attributed to the most recent sample (one) to decay by half.
-        """
-        if not isinstance(fit_intercept, bool):
-            raise TypeError("fit_intercept must be a boolean.")
-        if not isinstance(positive, bool):
-            raise TypeError("positive must be a boolean.")
-
-        self.fit_intercept = fit_intercept
-        self.positive = positive
-        model = LADLinearRegressor(
-            fit_intercept=self.fit_intercept,
-            positive=self.positive,
-        )
-        super().__init__(half_life=half_life, model=model)
-
-    def set_params(self, **params):
-        super().set_params(**params)
-        if 'fit_intercept' in params or 'positive' in params:
-            # Re-initialize the LinearRegression instance with updated parameters
-            self.model = LADLinearRegressor(
-                fit_intercept=self.fit_intercept,
-                positive=self.positive
-            )
-
-        return self
-
-class LADLinearRegressor(BaseEstimator, RegressorMixin):
-    def __init__(self, positive=False, fit_intercept=True):
-        self.positive = positive
-        self.fit_intercept = fit_intercept
-    
-    def fit(self, X, y):
-        # Number of features and samples
-        n_samples, n_features = X.shape
-        
-        # If fit_intercept is True, add a column of ones to X for the intercept term
-        if self.fit_intercept:
-            X = np.hstack([np.ones((n_samples, 1)), X])
-            n_features += 1
-        
-        # Objective: Minimize the sum of absolute residuals
-        # Variables for linprog: [beta, slack_pos, slack_neg]
-        # slack_pos and slack_neg represent the positive and negative parts of the residuals
-        
-        # Coefficients for the objective function (only slack variables contribute to the cost)
-        c = np.hstack([np.zeros(n_features), np.ones(2 * n_samples)])
-        
-        # Constraints matrix (A_eq) and right-hand side (b_eq) for the equality Ax = b
-        # Each row corresponds to: x_i'beta - slack_pos + slack_neg = y_i
-        A_eq = np.hstack([X, np.eye(n_samples), -np.eye(n_samples)])
-        b_eq = y
-        
-        # Bounds for beta and slack variables
-        # By default, beta has no bounds (-inf, inf), unless positive is True
-        if self.positive:
-            beta_bounds = [(0, None)] * n_features
-        else:
-            beta_bounds = [(None, None)] * n_features
-        slack_bounds = [(0, None)] * (2 * n_samples)  # slack variables are non-negative
-        
-        # Combine bounds for all variables
-        bounds = beta_bounds + slack_bounds
-        
-        # Solve the linear programming problem
-        res = linprog(c, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
-        
-        # Extract the coefficients (beta) from the solution
-        self.coef_ = res.x[:n_features]
-        
-        # If fit_intercept is True, separate the intercept from the slopes
-        if self.fit_intercept:
-            self.intercept_ = self.coef_[0]
-            self.coef_ = self.coef_[1:]
-        else:
-            self.intercept_ = 0.0  # No intercept
-        
-        return self
-    
-    def predict(self, X):
-        # If fit_intercept is True, add a column of ones to X for the intercept term
-        if self.fit_intercept:
-            X = np.hstack([np.ones((X.shape[0], 1)), X])
-        
-        # Calculate predictions: y_pred = X * beta + intercept
-        y_pred = np.dot(X, np.hstack([self.intercept_, self.coef_]))
-        return y_pred
 
 class LADRegressor(BaseEstimator, RegressorMixin):
     def __init__(self, fit_intercept=True, positive=False, tol=None, ):
@@ -851,15 +704,6 @@ if __name__ == "__main__":
     dfd = dfd.pivot(index=["cid", "real_date"], columns="xcat", values="value")
     X = dfd.drop(columns=["XR"])
     y = dfd["XR"]
-
-    # LAD linear regression
-
-    lad = LADLinearRegressor()
-    lad.fit(X, y)
-    lad_preds = lad.predict(X)
-    lad2 = LADLinearRegressor(positive=True)
-    lad2.fit(X, y)
-    lad2_preds = lad2.predict(X)
 
     # OLS Linear Regression
     lm = LinearRegression()
