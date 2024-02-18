@@ -862,7 +862,7 @@ class JPMaQSDownload(DataQueryInterface):
 
         if len(self.msg_errors) > 0:
             if not self.suppress_warning:
-                print(
+                warnings.warn(
                     f"{len(self.msg_errors)} errors encountered during the download. \n"
                     f"The errors did not compromise the download. \n"
                     f"Please check `JPMaQSDownload.msg_errors` for more information."
