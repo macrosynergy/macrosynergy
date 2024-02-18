@@ -635,7 +635,6 @@ class TestTWLRegression(unittest.TestCase):
         num_dates = len(unique_dates)
         scale = 21 / np.log(2)
         expected_weights = expon.pdf(np.arange(num_dates), scale=scale)
-        expected_weights /= np.sum(expected_weights)
         weight_map = dict(zip(unique_dates, expected_weights))
         expected_weights = (
             self.y.index.get_level_values("real_date").map(weight_map).values
