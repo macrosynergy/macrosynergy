@@ -122,6 +122,20 @@ class TestRequestWrapper(unittest.TestCase):
                 user_id=user_id,
             )
 
+        # mock a response.Response with 200, and json content. assert returns response
+        response: requests.Response = self.mock_response(
+            url=OAUTH_TOKEN_URL,
+            status_code=200,
+            content=b'{"access_token": "SOME_TOKEN", "expires_in": 3600}',
+        )
+        self.assertEqual(validate_response(response, user_id=user_id), response.json())
+
+        # mock the call to response.json() to return None. assert raises invalid response error
+        with mock.patch("requests.Response.json", return_value=None):
+            with self.assertRaises(InvalidResponseError):
+                validate_response(response, user_id=user_id)
+
+
     def test_request_wrapper(self):
         warnings.filterwarnings("ignore", category=UserWarning, module="logger")
         curr_logger_level: int = logging.getLogger().getEffectiveLevel()
@@ -186,6 +200,7 @@ class TestRequestWrapper(unittest.TestCase):
                 request_wrapper(
                     method="get",
                     url=OAUTH_BASE_URL + HEARTBEAT_ENDPOINT,
+                    tracking_id=random_string(),
                 )
 
         warnings.resetwarnings()
@@ -322,6 +337,23 @@ class TestOAuth(unittest.TestCase):
         oauth = OAuth(client_id="test-id", client_secret="SECRET")
         self.assertFalse(oauth._valid_token())
 
+    def test_get_token(self):
+        oauth = OAuth(client_id="test-id", client_secret="SECRET")
+
+        token_data: Dict[str, str] = {
+            "access_token": "SOME_TOKEN",
+            "expires_in": 3600,
+        }
+        with mock.patch(
+            "macrosynergy.download.dataquery.request_wrapper",
+            return_value=token_data,
+        ):
+            with mock.patch(
+                "macrosynergy.download.dataquery.OAuth._valid_token",
+                return_value=False,
+            ):
+                self.assertEqual(oauth._get_token(), token_data["access_token"])
+
 
 ##############################################
 
@@ -422,7 +454,7 @@ class TestDataQueryInterface(unittest.TestCase):
 
         for verbose in [True, False]:
             self.assertTrue(_test(verbose))
-            
+
         with mock.patch(
             "macrosynergy.download.dataquery.request_wrapper",
             return_value=None,
@@ -430,7 +462,6 @@ class TestDataQueryInterface(unittest.TestCase):
             with self.dq as dq:
                 with self.assertRaises(ConnectionError):
                     dq.check_connection(raise_error=True)
-            
 
     @mock.patch(
         "macrosynergy.download.dataquery.OAuth._get_token",
