@@ -892,49 +892,22 @@ class JPMaQSDownload(DataQueryInterface):
 
 
 if __name__ == "__main__":
-    cids = "AUD,BRL,CAD,CHF,CLP,CNY,COP,CZK,DEM,ESP,EUR,FRF,GBP,USD".split(",")
-    xcats = "RIR_NSA,FXXR_NSA,FXXR_VT10,DU05YXR_NSA,DU05YXR_VT10".split(",")
+    cids = ["AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "EUR", "GBP", "USD"]
+    xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
     start_date: str = "2024-02-07"
     end_date: str = "2024-02-09"
 
-    argsX = dict(
+    with JPMaQSDownload(
         client_id=os.getenv("DQ_CLIENT_ID"),
         client_secret=os.getenv("DQ_CLIENT_SECRET"),
-        # base_url=os.getenv("AWS_API_URL"),
-        # token_url=os.getenv("AWS_API_TOKEN_URL"),
-    )
-
-    import pickle
-
-    with open("dev/tickers.pkl", "rb") as f:
-        tickers = pickle.load(f)
-
-    tickers = tickers[:40]
-    expressions = construct_expressions(tickers=tickers, metrics=["value"])
-    expressions += [expressions[39].replace("value", "grading")]
-    argsD = dict(
-        expressions=expressions,
-        start_date=start_date,
-        end_date=end_date,
-        show_progress=True,
-    )
-
-    with JPMaQSDownload(**argsX) as jpmaqs:
+    ) as jpmaqs:
         data = jpmaqs.download(
-            as_dataframe=False,
-            **argsD,
+            cids=cids,
+            xcats=xcats,
+            start_date=start_date,
+            end_date=end_date,
+            show_progress=True,
+            report_time_taken=True,
         )
+        print(data.info())
         print(data)
-    with JPMaQSDownload(**argsX) as jpmaqs:
-        data = jpmaqs.download(
-            dataframe_format="qdf",
-            **argsD,
-        )
-        print(data.head())
-
-    with JPMaQSDownload(**argsX) as jpmaqs:
-        data = jpmaqs.download(
-            dataframe_format="wide",
-            **argsD,
-        )
-        print(data.head())
