@@ -508,6 +508,16 @@ class TestJPMaQSDownload(unittest.TestCase):
                     with self.assertRaises(InvalidDataframeError):
                         self.jpmaqs_download.download(**good_args)
 
+                with self.assertWarns(UserWarning):
+                    with JPMaQSDownload(
+                        client_id="client1",
+                        client_secret="123",
+                        oauth=True,
+                        check_connection=False,
+                    ) as jpmaqs:
+                        jpmaqs.msg_errors = ["Some error"]
+                        jpmaqs.download(**good_args)
+
         warnings.resetwarnings()
 
 
