@@ -37,7 +37,6 @@ sorted_notebooks_info = sorted(notebooks_info, key=lambda x: x[1])
 notebooks = [name for name, size in sorted_notebooks_info]
 print(f"Found {len(notebooks)} notebooks in the s3 bucket")
 
-
 # Uncomment if you want to run a small batch for test purposes
 # batch_size = 2
 
@@ -158,7 +157,7 @@ def get_output_from_instance(ssh_client):
         else:
             print("Python process has finished")
             command = "cat nohup.out"
-            stdin, stdout, stderr = ssh_client.exec_command(command)
+            stdin, stdout, stderr = ssh_client.exec_command(command, timeout=10)
             output = stdout.read().decode("utf-8")
             error = stderr.read().decode("utf-8")
             print(output)
