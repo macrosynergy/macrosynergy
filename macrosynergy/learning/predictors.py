@@ -392,7 +392,7 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
         return self
 
 class LADRegressor(BaseEstimator, RegressorMixin):
-    def __init__(self, fit_intercept=True, positive=False, tol=None, ):
+    def __init__(self, fit_intercept=True, positive=False, tol=None):
         """
         Custom class to create a linear regression model with model fit determined
         by minimising L1 (absolute) loss.
