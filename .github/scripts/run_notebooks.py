@@ -117,7 +117,7 @@ def run_commands_on_ec2(instance, notebooks):
     
     # Pip and nohup commands
     complex_command = """
-    source myvenv/bin/activate; pip install linearmodels --upgrade; pip install jupyter --upgrade; pip install git+https://github.com/macrosynergy/macrosynergy@develop --upgrade; nohup python run_notebooks.py > nohup.out 2>&1 &
+    source myvenv/bin/activate; pip install linearmodels --upgrade; pip install jupyter --upgrade; pip install git+https://github.com/macrosynergy/macrosynergy@feature/download_refactor --upgrade; nohup python run_notebooks.py > nohup.out 2>&1 &
     """
     ssh_client.exec_command(f"bash -c \"{complex_command}\"")
     
@@ -188,6 +188,7 @@ def process_instance(instance):
     except Exception as e:
         print(f"Failed to run notebooks: {batch} on {instance_ip}")
         print(e)
+        # Add run notebooks to s3 bucket alongside nohup.out if the notebook failed 
         instance.stop()
         return {"succeeded": [], "failed": batch}
     return output
@@ -214,7 +215,7 @@ for d in list(output):
 
 print(merged_dict)
 
-end_time = time.time()
+end_time = time.time() 
 
 def send_email(subject, body, recipient, sender):
     # Specify your AWS region
@@ -240,7 +241,7 @@ def send_email(subject, body, recipient, sender):
 
 email_subject = "Notebook Failures"
 email_body = f"Please note that the following notebooks failed when ran on the branch: \n{pd.DataFrame(merged_dict['failed']).to_html()}\nThe total time to run all notebooks was {end_time - start_time} seconds."
-recipient_email = ["sandresen@macrosynergy.com"] #os.getenv("EMAIL_RECIPIENTS").split(",")
-sender_email = "machine@macrosynergy.com" #os.getenv("ENDER_EMAIL")
+recipient_email = os.getenv("EMAIL_RECIPIENTS").split(",")
+sender_email = os.getenv("SENDER_EMAIL")
 
 send_email(email_subject, email_body, recipient_email, sender_email)
