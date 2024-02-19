@@ -639,6 +639,11 @@ class FacetPlot(Plotter):
 
         for ax in ax_list[len(plot_dict):]:
             fig.delaxes(ax)
+        ax_list = ax_list[:len(plot_dict)]
+        
+        if share_x:
+            for target_ax in ax_list[(len(plot_dict) - grid_dim[0]):]:
+                target_ax.xaxis.set_tick_params(labelbottom=True)
 
         if legend:
             if "lower" in legend_loc and legend_ncol < grid_dim[0]:
@@ -747,7 +752,7 @@ if __name__ == "__main__":
             ),
             # save_to_file="test_0.png",
             ax_hline=75,
-            show=False,
+            show=True,
         )
 
         fp.lineplot(
@@ -758,14 +763,15 @@ if __name__ == "__main__":
             cid_grid=True,
             title="Another test title",
             # save_to_file="test_1.png",
-            show=False,
+            show=True,
+            share_x=True
         )
         fp.lineplot(
             cids=cids_C,
             xcats=xcats_D,
             cid_xcat_grid=True,
             title="Another test title",
-            show=False,
+            show=True,
         )
 
     print(f"Time taken: {time.time() - timer_start}")
