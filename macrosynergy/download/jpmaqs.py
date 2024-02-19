@@ -868,16 +868,6 @@ class JPMaQSDownload(DataQueryInterface):
                     f"Please check `JPMaQSDownload.msg_errors` for more information."
                 )
 
-        self.unavailable_expressions: List[str]
-        if as_dataframe:
-            self.unavailable_expressions = self._get_unavailable_expressions(
-                expected_exprs=expressions, downloaded_df=data
-            )
-        else:
-            self.unavailable_expressions = self._get_unavailable_expressions(
-                expected_exprs=expressions, dicts_list=data
-            )
-
         if as_dataframe:
             found_expressions: List[str] = list(
                 set(expressions) - set(self.unavailable_expressions)
