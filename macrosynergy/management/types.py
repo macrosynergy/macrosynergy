@@ -55,7 +55,7 @@ class QuantamentalDataFrameMeta(type):
     MetaClass to support type checks for `QuantamentalDataFrame`.
     """
 
-    IndexCols: List[str] = ["cid", "xcat", "real_date"]
+    IndexCols: List[str] = ["real_date", "cid", "xcat"]
 
     def __instancecheck__(cls, instance):
         IDX_COLS = QuantamentalDataFrame.IndexCols
