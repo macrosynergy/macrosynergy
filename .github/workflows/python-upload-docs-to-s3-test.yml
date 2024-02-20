@@ -36,6 +36,7 @@ jobs:
 
       - name: Build docs
         run: |
+          pip install -r docs/requirements.txt
           python docs/gen.py
 
       - name: Configure AWS credentials from AWS account
