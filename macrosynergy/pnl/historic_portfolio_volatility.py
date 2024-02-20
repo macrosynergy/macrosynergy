@@ -6,10 +6,6 @@ from typing import List, Optional, Callable
 import pandas as pd
 import numpy as np
 
-#import os, sys
-#sys.path.append(os.getcwd())
-
-
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.management.utils import (
     reduce_df,
@@ -22,79 +18,10 @@ from macrosynergy.management.utils import (
     get_xcat,
 )
 
+# TODO move to a macrosynergy.utils.maths module
+from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
+
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
-
-
-def expo_weights(lback_periods: int = 21, half_life: int = 11):
-    """
-    Calculates exponential series weights for finite horizon, normalized to 1.
-
-    :param <int>  lback_periods: Number of lookback periods over which volatility is
-        calculated. Default is 21.
-    :param <int> half_life: Refers to the half-time for "xma" and full lookback period
-        for "ma". Default is 11.
-
-    :return <np.ndarray>: An Array of weights determined by the length of the lookback
-        period.
-
-    Note: 50% of the weight allocation will be applied to the number of days delimited by
-        the half_life.
-    """
-    # Copied from macrosynergy.panel.historic_vol
-    decf = 2 ** (-1 / half_life)
-    weights = (1 - decf) * np.array(
-        [decf ** (lback_periods - ii - 1) for ii in range(lback_periods)]
-    )
-    weights = weights / sum(weights)
-
-    return weights
-
-
-def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True) -> float:
-    """
-    Estimate standard deviation of returns based on exponentially weighted absolute
-    values.
-
-    :param <np.ndarray> x: array of returns
-    :param <np.ndarray> w: array of exponential weights (same length as x); will be
-        normalized to 1.
-    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
-        effective window.
-
-    :return <float>: exponentially weighted mean absolute value (as proxy of return
-        standard deviation).
-
-    """
-    # Copied from macrosynergy.panel.historic_vol
-
-    assert len(x) == len(w), "weights and window must have same length"
-    if remove_zeros:
-        x = x[x != 0]
-        w = w[0 : len(x)] / sum(w[0 : len(x)])
-    w = w / sum(w)  # weights are normalized
-    mabs = np.sum(np.multiply(w, np.abs(x)))
-    return mabs
-
-
-def flat_std(x: np.ndarray, remove_zeros: bool = True) -> float:
-    """
-    Estimate standard deviation of returns based on exponentially weighted absolute
-    values.
-
-    :param <np.ndarray> x: array of returns
-    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
-        effective window.
-
-    :return <float>: flat weighted mean absolute value (as proxy of return standard
-        deviation).
-
-    """
-    # Copied from macrosynergy.panel.historic_vol
-
-    if remove_zeros:
-        x = x[x != 0]
-    mabs = np.mean(np.abs(x))
-    return mabs
 
 
 def _rolling_window_calc(
@@ -158,8 +85,8 @@ def _rolling_window_calc(
 
     univariate_vol[~mask] = np.nan
 
-    ## Inversed univariate volatility
-    inv_univariate_vol = 1 / univariate_vol
+    # Inversed univariate volatility
+    # inv_univariate_vol = 1 / univariate_vol
 
     vcv: pd.DataFrame = df_wide.cov()
     total_variance: float = vcv.to_numpy().sum()
@@ -333,7 +260,7 @@ def historic_portfolio_vol(
         "xma", for exponential moving average.
     :param <str> rstring: a general string of the return category. This identifies
         the contract returns that are required for the volatility-targeting method, based
-        on the category identifier format <cid>_<ctype><rstring>_<rstring>_CSIG_<sname>
+        on the category identifier format <cid>_<ctype><rstring>
         in accordance with JPMaQS conventions. Default is 'XR'.
     :param <str> weight_signal: the name of the signal (time series) to use as weights
         for the volatility calculation. Default is None, which means that the weights
@@ -453,6 +380,7 @@ def historic_portfolio_vol(
             df = pd.concat([df, ndf])
 
     df: pd.DataFrame = df.loc[df["ticker"].isin(filt_tickers + filt_weights)]
+    # pivot_signals = df.loc[df["ticker".isin(filt_tickers)]].pivot(index="real)
 
     if df.empty:
         raise ValueError(
@@ -498,8 +426,8 @@ if __name__ == "__main__":
     )
 
     df.loc[(df["cid"] == "USD") & (df["xcat"] == "SIG"), "value"] = 1.0
-    ctypes = ["FXXR_XR", "IRSXR_XR", "CDSXR_XR"]
-    ctypes += [c.replace("_XR", "_WEIGHTS") for c in ctypes]
+    ctypes = ["FX", "IRS", "CDS"]
+    # ctypes += [c.replace("_XR", "_WEIGHTS") for c in ctypes]
     cscales = [1.0, 0.5, 0.1, 1, 1, 1]
     csigns = [1, -1, 1, 1, 1, 1]
 
@@ -520,11 +448,11 @@ if __name__ == "__main__":
     )
     ## `df_cs` looks like:
     #        cid                   xcat  real_date         value
-    # 0      AUD  CDSXR_XR_CSIG_mySTRAT 2000-01-03      0.001825
-    # 1      AUD   FXXR_XR_CSIG_mySTRAT 2000-01-03      0.018252
+    # 0      AUD  CDS_CSIG_mySTRAT 2000-01-03      0.001825
+    # 1      AUD  FXXR_XR_CSIG_mySTRAT 2000-01-03      0.018252
     # 2      AUD  IRSXR_XR_CSIG_mySTRAT 2000-01-03     -0.009126
     # 3      CAD  CDSXR_XR_CSIG_mySTRAT 2000-01-03      5.005734
-    # 4      CAD   FXXR_XR_CSIG_mySTRAT 2000-01-03     50.057339
+    # 4      CAD  FXXR_XR_CSIG_mySTRAT 2000-01-03     50.057339
     # ...    ...                    ...        ...           ...
     # 54785  USD   EQXR_XR_CSIG_mySTRAT 2020-12-31  22749.226123
     # 54786  USD   EQXR_XR_CSIG_mySTRAT 2020-12-31  22749.226123
@@ -561,3 +489,4 @@ if __name__ == "__main__":
     # 5457  mySTRAT  PNL_USD1S_ASD 2020-12-30  1016.964736
     # 5458  mySTRAT  PNL_USD1S_ASD 2020-12-31  1000.390667
     # [5459 rows x 4 columns]
+    print("all done")

@@ -2,7 +2,7 @@
 Subpackage for calculating Profits and Loss (PnL) of positions (portfolios).
 
 ## Naive PnL
-The module `naive_pnl.py` is the entry point. 
+The module `naive_pnl.py` is the entry point.
 
 ## Proxy PnL
 The purpose of this set of functions or class is to facilitate PnL estimation under the consideration of

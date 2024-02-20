@@ -5,15 +5,10 @@ and hedging them with a basket of contracts. Main function is `contract_signals`
 ::docs::contract_signals::sort_first::
 """
 
-import numpy as np
 import pandas as pd
 import warnings
 
-from typing import List, Union, Tuple, Optional, Set
-
-import os, sys
-
-sys.path.append(os.getcwd())
+from typing import List, Union, Optional, Set
 
 from macrosynergy.management.types import NoneType, Numeric, QuantamentalDataFrame
 from macrosynergy.management.utils import (
@@ -22,9 +17,6 @@ from macrosynergy.management.utils import (
     ticker_df_to_qdf,
     qdf_to_ticker_df,
     reduce_df,
-    update_df,
-    get_cid,
-    get_xcat,
 )
 
 
@@ -308,7 +300,7 @@ def contract_signals(
 
     :return <pd.DataFrame>: with the contract signals for all traded contracts and the
         specified strategy. It has the standard JPMaQS DataFrame. The contract signals
-        have the following format "<cid>_<ctype>_<sname>_CSIG".
+        have the following format "<cid>_<ctype>_CSIG_<sname>".
     """
     ## basic type and value checks
     for varx, namex, typex in [
@@ -456,6 +448,7 @@ if __name__ == "__main__":
 
     hbasket = ["USD_EQ", "EUR_EQ"]
     hscales = [0.7, 0.3]
+    # TODO inputs: FX
 
     df_cs: pd.DataFrame = contract_signals(
         df=df,
