@@ -455,6 +455,7 @@ class CategoryRelations(object):
         xlab: str = None,
         ylab: str = None,
         coef_box: str = None,
+        coef_box_font_size: int = 0,
         prob_est: str = "pool",
         fit_reg: bool = True,
         reg_ci: int = 95,
@@ -548,6 +549,13 @@ class CategoryRelations(object):
         else:
             show_plot = True
 
+        set_font_size = False
+        if not (isinstance(coef_box_font_size, int) and coef_box_font_size >= 0):
+            raise ValueError("coef_box_font_size must be a non-negative integer.")
+        if coef_box_font_size == 0:
+            set_font_size = True
+            coef_box_font_size = 12
+        
         # If "separator" is type Integer, the scatter plot is split across two
         # time-periods where the divisor is the received year.
         if isinstance(separator, int):
@@ -605,7 +613,8 @@ class CategoryRelations(object):
                     ax=ax,
                 )
                 data_table.scale(0.4, 2.5)
-                data_table.set_fontsize(14)
+                data_table.auto_set_font_size(set_font_size)
+                data_table.set_fontsize(coef_box_font_size)
 
             ax.legend(loc="upper right")
             ax.set_title(title, fontsize=14)
@@ -711,7 +720,8 @@ class CategoryRelations(object):
                     ax=ax,
                 )
                 data_table.scale(0.4, 2.5)
-                data_table.set_fontsize(12)
+                data_table.auto_set_font_size(set_font_size)
+                data_table.set_fontsize(coef_box_font_size)
 
             if labels:
                 error_freq = "Labels only available for monthly or lower frequencies."
