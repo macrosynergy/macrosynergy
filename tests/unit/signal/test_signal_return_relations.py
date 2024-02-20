@@ -672,8 +672,8 @@ class TestAll(unittest.TestCase):
             freqs="M",
             blacklist=self.blacklist,
         )
-        self.assertTrue(srr.cross_section_table().shape == (8, 12))
-        self.assertTrue(srr.yearly_table().shape == (16, 12))
+        self.assertTrue(srr.cross_section_table().shape == (8, 11))
+        self.assertTrue(srr.yearly_table().shape == (16, 11))
 
     def test_accuracy_and_correlation_bars(self):
         plt.close("all")
@@ -761,7 +761,7 @@ class TestAll(unittest.TestCase):
             blacklist=self.blacklist,
         )
 
-        self.assertTrue(srr.summary_table().shape == (5, 12))
+        self.assertTrue(srr.summary_table().shape == (5, 11))
 
     def test_single_relation_table(self):
         sr = SignalReturnRelations(
@@ -928,7 +928,7 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.isclose(val1, val2))
 
     def test_multiple_relation_table(self):
-        num_of_acc_cols = 12
+        num_of_acc_cols = 11
 
         sr_unsigned = SignalReturnRelations(
             df=self.dfd,
