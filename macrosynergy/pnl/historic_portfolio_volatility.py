@@ -174,7 +174,6 @@ def _hist_vol(
     df: pd.DataFrame,
     sname: str,
     rstring: str,
-    weight_signal: str,
     est_freq: str = "m",
     lback_periods: int = 21,
     lback_meth: str = "ma",
@@ -216,12 +215,6 @@ def _hist_vol(
     r_series_list = df_wide.columns[
         df_wide.columns.str.endswith(f"{rstring}_{rstring}_CSIG_{sname}")
     ]
-    w_series_list = df_wide.columns[
-        df_wide.columns.str.endswith(f"{rstring}_{weight_signal}_CSIG_{sname}")
-    ]
-
-    for r_series, w_series in zip(r_series_list, w_series_list):
-        df_wide[r_series] = df_wide[r_series] * df_wide[w_series]
 
     df_wide = df_wide[r_series_list]
 
@@ -304,7 +297,6 @@ def historic_portfolio_vol(
     lback_meth: str = "ma",
     half_life=11,
     rstring: str = "XR",
-    weight_signal: str = "XRWGT",
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
@@ -335,9 +327,6 @@ def historic_portfolio_vol(
         the contract returns that are required for the volatility-targeting method, based
         on the category identifier format <cid>_<ctype><rstring>_<rstring>_CSIG_<sname>
         in accordance with JPMaQS conventions. Default is 'XR'.
-    :param <str> weight_signal: the name of the signal (time series) to use as weights
-        for the volatility calculation. Default is None, which means that the weights
-        are equal. The signal must be in the format <cid>_<ctype>_<rstring>_<weight_signal>_CSIG_<sname>.
     :param <str> start: the start date of the data. Default is None, which means that
         the start date is taken from the dataframe.
     :param <str> end: the end date of the data. Default is None, which means that
@@ -431,42 +420,19 @@ def historic_portfolio_vol(
         )
     ]
 
-    filt_weights: List[str] = []
-    filt_weights = [
-        f"{get_cid(tx)}_{rstring}_{weight_signal}_CSIG_{sname}" for tx in filt_tickers
-    ]
-
-    # missing weights - fill with 1
-    for w in filt_weights:
-        if w not in df["ticker"].unique():
-            dtr = df.loc[
-                df["ticker"].str.contains(f"{get_cid(w)}_{rstring}"), "real_date"
-            ]
-            ndf = pd.DataFrame(
-                {
-                    "cid": get_cid(w),
-                    "xcat": get_xcat(w),
-                    "real_date": dtr,
-                    "value": 1,
-                }
-            )
-            df = pd.concat([df, ndf])
-
-    df: pd.DataFrame = df.loc[df["ticker"].isin(filt_tickers + filt_weights)]
+    df: pd.DataFrame = df.loc[df["ticker"].isin(filt_tickers)]
 
     if df.empty:
         raise ValueError(
             "No data available for the given strategy and contract identifiers."
             "Please check the inputs. \n"
             f"Strategy: {sname}\nContract identifiers: {fids} \n"
-            f"Return string: {rstring}\nWeight signal: {weight_signal}"
         )
 
     hist_port_vol: pd.DataFrame = _hist_vol(
         df=df,
         sname=sname,
         rstring=rstring,
-        weight_signal=weight_signal,
         est_freq=est_freq,
         lback_periods=lback_periods,
         lback_meth=lback_meth,
@@ -498,12 +464,12 @@ if __name__ == "__main__":
     )
 
     df.loc[(df["cid"] == "USD") & (df["xcat"] == "SIG"), "value"] = 1.0
-    ctypes = ["FXXR_XR", "IRSXR_XR", "CDSXR_XR"]
-    ctypes += [c.replace("_XR", "_WEIGHTS") for c in ctypes]
-    cscales = [1.0, 0.5, 0.1, 1, 1, 1]
-    csigns = [1, -1, 1, 1, 1, 1]
+    ctypes = ["FXXR", "FXXRUSDxEASD"]
 
-    hbasket = ["USD_EQXR_XR", "EUR_EQXR_XR"]
+    cscales = [1.0, 0.5]
+    csigns = [1, -1]
+
+    hbasket = ["USD_FXXR", "EUR_FXXR"]
     hscales = [0.7, 0.3]
 
     df_cs: pd.DataFrame = contract_signals(
@@ -518,24 +484,26 @@ if __name__ == "__main__":
         hratios="HR",
         sname="mySTRAT",
     )
+
+    dfX = pd.concat([df, df_cs], axis=0)
+
     ## `df_cs` looks like:
-    #        cid                   xcat  real_date         value
-    # 0      AUD  CDSXR_XR_CSIG_mySTRAT 2000-01-03      0.001825
-    # 1      AUD   FXXR_XR_CSIG_mySTRAT 2000-01-03      0.018252
-    # 2      AUD  IRSXR_XR_CSIG_mySTRAT 2000-01-03     -0.009126
-    # 3      CAD  CDSXR_XR_CSIG_mySTRAT 2000-01-03      5.005734
-    # 4      CAD   FXXR_XR_CSIG_mySTRAT 2000-01-03     50.057339
-    # ...    ...                    ...        ...           ...
-    # 54785  USD   EQXR_XR_CSIG_mySTRAT 2020-12-31  22749.226123
-    # 54786  USD   EQXR_XR_CSIG_mySTRAT 2020-12-31  22749.226123
-    # 54787  USD   EQXR_XR_CSIG_mySTRAT 2020-12-31  22749.226123
-    # 54788  USD   EQXR_XR_CSIG_mySTRAT 2020-12-31  22749.226123
-    # 54789  USD   EQXR_XR_CSIG_mySTRAT 2020-12-31  22749.226123
-    # [136975 rows x 4 columns]
+    #       cid                       xcat  real_date         value
+    # 0      AUD  FXXRUSDxEASD_CSIG_mySTRAT 2000-01-03     -0.009126
+    # 1      AUD          FXXR_CSIG_mySTRAT 2000-01-03      0.018252
+    # 2      CAD  FXXRUSDxEASD_CSIG_mySTRAT 2000-01-03    -49.999984
+    # 3      CAD          FXXR_CSIG_mySTRAT 2000-01-03     99.999967
+    # 4      EUR  FXXRUSDxEASD_CSIG_mySTRAT 2000-01-03     -0.009126
+    # ...    ...                        ...        ...           ...
+    # 54785  USD          FXXR_CSIG_mySTRAT 2020-12-31  21026.058628
+    # 54786  USD          FXXR_CSIG_mySTRAT 2020-12-31  21026.058628
+    # 54787  USD          FXXR_CSIG_mySTRAT 2020-12-31  21026.058628
+    # 54788  USD          FXXR_CSIG_mySTRAT 2020-12-31  21026.058628
+    # 54789  USD          FXXR_CSIG_mySTRAT 2020-12-31  21026.058628
 
     fids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
     df_vol: pd.DataFrame = historic_portfolio_vol(
-        df=df_cs,
+        df=dfX,
         sname="mySTRAT",
         fids=fids,
         est_freq="m",
