@@ -6,6 +6,10 @@ import boto3
 import pandas as pd
 import paramiko
 from botocore.exceptions import ClientError
+# import logging
+
+# logging.basicConfig(level=logging.DEBUG)
+# paramiko.util.log_to_file('paramiko.log')
 
 # Get ec2 instance with name notebook-runner-* and state isnt terminated
 
@@ -81,9 +85,9 @@ def connect_to_instance(instance):
             ssh_client = paramiko.SSHClient()
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             ssh_client.connect(
-                hostname=instance_ip, username="ubuntu", key_filename="./notebook_runner.pem"
+                hostname=instance_ip, username="ubuntu", key_filename="./notebook_runner.pem", timeout=30
             )
-            print("Connection Succeeded!!!")
+            print(f"Connection to {instance.id} Succeeded!!!")
             return ssh_client
         except:
             retries += 1
@@ -98,34 +102,47 @@ def run_commands_on_ec2(instance, notebooks):
     outputs = {"succeeded": [], "failed": []}
     
     # Initial cleanup commands
-    cleanup_commands = [
-        "rm -rf notebooks",
-        "rm -rf failed_notebooks.txt",
-        "rm -rf successful_notebooks.txt",
-        "rm -rf nohup.out",
-    ]
-    
-    for cmd in cleanup_commands:
-        stdin, stdout, stderr = ssh_client.exec_command(cmd)
-        stdout.channel.recv_exit_status()  # Wait for command to complete
+    cleanup_commands = "rm -rf notebooks failed_notebooks.txt successful_notebooks.txt nohup.out"
+    print(f"Running cleanup commands on {instance.id}...")
+    stdin, stdout, stderr = ssh_client.exec_command(cleanup_commands, timeout=10)
+    stdout.channel.recv_exit_status()  # Wait for command to complete
+    print(f"Cleanup commands completed on {instance.id}")
+
+
+    # HAVE A LOOK AT ADDING THIS SINCE IT MAY ALLOW TO CATCH IF TOO MANY SSH CHANNELS ARE OPEN AT ONCE
+    """
+    while attempt < max_retries:
+        try:
+            # Attempt to execute command
+            stdin, stdout, stderr = ssh_client.exec_command(command, timeout=10)
+            # If successful, break out of the loop
+            print("Command executed successfully")
+            return stdout.read()
+        except (paramiko.ssh_exception.SSHException, paramiko.ssh_exception.NoValidConnectionsError) as e:
+            print(f"Attempt {attempt + 1} failed with error: {e}")
+            time.sleep(retry_delay)  # Wait for a bit before retrying
+            attempt += 1
+    """
 
     # Wget commands
+    print(f"Running wget commands on {instance.id}...")
     wget_commands = " && ".join(["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks])
-    stdin, stdout, stderr = ssh_client.exec_command(f"bash -c '{wget_commands}'")
+    stdin, stdout, stderr = ssh_client.exec_command(f"bash -c '{wget_commands}'", timeout=10)
     stdout.channel.recv_exit_status()
     # Consider adding a delay or checking for command completion if necessary
     
     # Pip and nohup commands
     complex_command = """
-    source myvenv/bin/activate; pip install linearmodels --upgrade; pip install jupyter --upgrade; pip install git+https://github.com/macrosynergy/macrosynergy@feature/download_refactor --upgrade; nohup python run_notebooks.py > nohup.out 2>&1 &
+    source myvenv/bin/activate; pip install linearmodels --upgrade; pip install jupyter --upgrade; pip install git+https://github.com/macrosynergy/macrosynergy@feature/srr-ammendments --upgrade; nohup python run_notebooks.py > nohup.out 2>&1 &
     """
-    ssh_client.exec_command(f"bash -c \"{complex_command}\"")
+    print(f"Running notebook runner commands on {instance.id}...")
+    ssh_client.exec_command(f"bash -c \"{complex_command}\"", timeout=10)
     
-    print(f"Getting output from instance... {instance.public_ip_address}")
+    print(f"Getting output from instance... {instance.id}")
     successful_notebooks, failed_notebooks = get_output_from_instance(ssh_client)
     outputs["succeeded"].extend(successful_notebooks)
     outputs["failed"].extend(failed_notebooks)
-    print(f"Stopping instance... {instance.public_ip_address}")
+    print(f"Stopping instance... {instance.id}")
     ssh_client.close()
     instance.stop()
     return outputs
@@ -181,14 +198,13 @@ def get_output_from_instance(ssh_client):
 
 def process_instance(instance):
     instance_ip = instance.public_ip_address
-    print(f"Running notebooks on {instance_ip}")
+    print(f"Running notebooks on {instance.id}")
     try:
         batch = batches.pop()
         output = run_commands_on_ec2(instance, batch)
     except Exception as e:
-        print(f"Failed to run notebooks: {batch} on {instance_ip}")
+        print(f"Failed to run notebooks: {batch} on {instance.id}")
         print(e)
-        # Add run notebooks to s3 bucket alongside nohup.out if the notebook failed 
         instance.stop()
         return {"succeeded": [], "failed": batch}
     return output
@@ -215,7 +231,7 @@ for d in list(output):
 
 print(merged_dict)
 
-end_time = time.time() 
+end_time = time.time()
 
 def send_email(subject, body, recipient, sender):
     # Specify your AWS region
@@ -241,7 +257,7 @@ def send_email(subject, body, recipient, sender):
 
 email_subject = "Notebook Failures"
 email_body = f"Please note that the following notebooks failed when ran on the branch: \n{pd.DataFrame(merged_dict['failed']).to_html()}\nThe total time to run all notebooks was {end_time - start_time} seconds."
-recipient_email = os.getenv("EMAIL_RECIPIENTS").split(",")
-sender_email = os.getenv("SENDER_EMAIL")
+recipient_email = ["sandresen@macrosynergy.com"] #os.getenv("EMAIL_RECIPIENTS").split(",")
+sender_email = "machine@macrosynergy.com" #os.getenv("ENDER_EMAIL")
 
 send_email(email_subject, email_body, recipient_email, sender_email)
