@@ -52,5 +52,7 @@ jobs:
 
       - name: Upload to S3
         run: |
-          mv docs/build/html docs/build/${{ steps.branch.outputs.branch }}
-          aws s3 cp --recursive docs/build/${{ steps.branch.outputs.branch }} s3://${{ env.BUCKET_NAME }}/${{ steps.branch.outputs.branch }}
+          BRANCH=${{ steps.branch.outputs.branch }}
+          BRANCH=${BRANCH//\//-}
+          mv docs/build/html docs/build/${BRANCH}
+          aws s3 cp --recursive docs/build/${BRANCH} s3://${{ env.BUCKET_NAME }}/${BRANCH}
