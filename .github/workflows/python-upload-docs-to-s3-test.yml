@@ -1,4 +1,4 @@
-name: Package documentation - check build
+name: Package documentation - push to AWS test bucket
 
 permissions:
   id-token: write # This is required for aws oidc connection
@@ -7,7 +7,6 @@ permissions:
 env:
   TF_LOG: INFO
   AWS_REGION: eu-west-2
-  GITHUB_ENVIRONMENT: "prod"
 
 on:
   push:
@@ -29,8 +28,7 @@ jobs:
 
       - name: Run Flake8
         run: |
-          # Options: exluding docs, scripts and build folders. Also, treating
-          certain errors as warnings.
+          # Options: exluding docs, scripts and build folders. Also, treating certain errors as warnings.
 
           flake8 --count --select=E9,F63,F7,F82 --show-source
           --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
@@ -46,10 +44,14 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE }} # Choose test or prod role
-          aws-region: eu-west-2
-          role-session-name: GitHub-OIDC-TERRAFORM
-      
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHub-Macrosynergy-Package
+
+      - name: Get branch name
+        id: branch
+        run: echo ::set-output name=branch::${GITHUB_REF#refs/heads/}
+
       - name: Upload to S3
         run: |
-          # rename build/html to build/<branch>
-          $
+          mv docs/build/html docs/build/${{ steps.branch.outputs.branch }}
+          aws s3 cp --recursive docs/build/${{ steps.branch.outputs.branch }} s3://${{ env.BUCKET_NAME }}/${{ steps.branch.outputs.branch }}
