@@ -1,0 +1,55 @@
+name: Package documentation - check build
+
+permissions:
+  id-token: write # This is required for aws oidc connection
+  contents: read # This is required for actions/checkout
+  pull-requests: write # This is required for gh bot to comment PR
+env:
+  TF_LOG: INFO
+  AWS_REGION: eu-west-2
+  GITHUB_ENVIRONMENT: "prod"
+
+on:
+  push:
+    branches: [main, test, develop, feature/aws_docs]
+  workflow_dispatch:
+
+jobs:
+  build-docs-test:
+    env:
+      BUCKET_NAME: ${{ secrets.AWS_DOCS_TEST_BUCKET }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Restore caches
+        uses: ./.github/actions/restore-pip-cache
+        with:
+          python-version: 3.11
+
+      - name: Run Flake8
+        run: |
+          # Options: exluding docs, scripts and build folders. Also, treating
+          certain errors as warnings.
+
+          flake8 --count --select=E9,F63,F7,F82 --show-source
+          --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
+
+          flake8 --count --exit-zero --max-complexity=10 --max-line-length=127
+          --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
+
+      - name: Build docs
+        run: |
+          python docs/gen.py
+
+      - name: Configure AWS credentials from AWS account
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }} # Choose test or prod role
+          aws-region: eu-west-2
+          role-session-name: GitHub-OIDC-TERRAFORM
+      
+      - name: Upload to S3
+        run: |
+          # rename build/html to build/<branch>
+          $
