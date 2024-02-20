@@ -248,7 +248,7 @@ def notional_positions(
 
     ## Check the contract identifiers and contract signals
 
-    df["ticker"]: str = df["cid"] + "_" + df["xcat"]
+    df["ticker"] = df["cid"] + "_" + df["xcat"]
 
     # There must be atleast one contract signal with the strategy name
     if not any(df["ticker"].str.endswith(f"_CSIG_{sname}")):
