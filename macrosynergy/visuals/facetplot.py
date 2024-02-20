@@ -367,6 +367,7 @@ class FacetPlot(Plotter):
         :param <bool> return_figure: Return the figure object. Default is `False`.
         """
         comp_series_flag: bool = False
+
         if compare_series:
             if compare_series not in set(
                 (kwargs["df"] if "df" in kwargs else self.df)[["cid", "xcat"]]
@@ -554,41 +555,48 @@ class FacetPlot(Plotter):
             sharex=share_x,
             sharey=share_y,
         )
+
         if not isinstance(axs, np.ndarray):
-            axs: np.ndarray = np.array([axs])
-        ax_list: List[plt.Axes] = axs.flatten().tolist()
-        for i, plt_dct, ax_i in zip(plot_dict.keys(), plot_dict.values(), ax_list):
+            axs = np.array([axs])
+        ax_list = axs.flatten().tolist()
+
+        self.df.set_index(["cid", "xcat"], inplace=True)
+        self.df.sort_index(inplace=True)
+
+        for i, (key, plt_dct) in enumerate(plot_dict.items()):
+            ax_i = ax_list[i]
+
             if plt_dct["X"] != "real_date":
                 raise NotImplementedError(
                     "Only `real_date` is supported for the X axis."
                 )
 
-            is_empty_plot: bool = False
+            is_empty_plot = False
 
             for iy, y in enumerate(plt_dct["Y"]):
-                # split on the first underscore
                 cidx, xcatx = str(y).split("_", 1)
-                sel_bools: pd.Series = (self.df["cid"] == cidx) & (
-                    self.df["xcat"] == xcatx
-                )
-                is_empty_plot = is_empty_plot and not sel_bools.any()
-                plot_func_args: Dict = {}
+                try:
+                    selected_df = self.df.loc[cidx, xcatx]
+                    is_valid_series = True
+                except KeyError:
+                    is_valid_series = False
+                is_empty_plot = is_empty_plot and not is_valid_series
 
-                # lineplot
+                if is_valid_series:
+                    X = selected_df[plt_dct["X"]].values
+                    Y = selected_df[metric].values
+                else:
+                    X, Y = [], []
+
+                plot_func_args = {}
                 if legend_color_map:
-                    plot_func_args["color"] = legend_color_map[
-                        xcatx if cid_grid else cidx
-                    ]
+                    plot_func_args["color"] = legend_color_map.get(xcatx if cid_grid else cidx)
+
                 if y == compare_series:
                     plot_func_args["color"] = "red"
                     plot_func_args["linestyle"] = "--"
 
-                ax_i.plot(
-                    self.df[sel_bools][plt_dct["X"]].reset_index(drop=True).tolist(),
-                    self.df[sel_bools][metric].reset_index(drop=True).tolist(),
-                    **plot_func_args,
-                    **kwargs,
-                )
+                ax_i.plot(X, Y, **plot_func_args)
 
             if not cid_xcat_grid:
                 if facet_titles:
@@ -602,25 +610,19 @@ class FacetPlot(Plotter):
                     ax_i.set_xlabel(x_axis_label, fontsize=axis_fontsize)
                 if y_axis_label is not None:
                     ax_i.set_ylabel(y_axis_label, fontsize=axis_fontsize)
-
             else:
                 if i < grid_dim[0]:
                     ax_i.set_title(
                         plt_dct["Y"][0].split("_", 1)[1],
                         fontsize=axis_fontsize,
                     )
-
                 if i % grid_dim[0] == 0:
-                    # this is the left column, and it gets a axis ylabel of the cid
                     ax_i.set_ylabel(
                         plt_dct["Y"][0].split("_", 1)[0],
                         fontsize=axis_fontsize,
                     )
 
-            # if it's an empty plot, remove the axis labels and ticks
             if is_empty_plot:
-                ax_i.set_xticklabels([])
-                ax_i.set_yticklabels([])
                 ax_i.set_xticks([])
                 ax_i.set_yticks([])
             else:
@@ -629,20 +631,23 @@ class FacetPlot(Plotter):
                 if ax_hline is not None:
                     ax_i.axhline(ax_hline, color="black", linestyle="--")
                 if ax_vline is not None:
-                    # ax_i.axvline(ax_vline, color="black", linestyle="--")
                     raise NotImplementedError(
                         "Vertical axis lines are not supported at this time."
                     )
 
-        # if there are more axes than ax_i, remove them
-        for ax in ax_list[len(plot_dict) :]:
-            fig.delaxes(ax)
+        self.df.reset_index(inplace=True)
 
-        # re_adj: List[float] = (0, 0, 0, 0)
+        for ax in ax_list[len(plot_dict):]:
+            fig.delaxes(ax)
+        ax_list = ax_list[:len(plot_dict)]
+        
+        if share_x:
+            for target_ax in ax_list[(len(plot_dict) - grid_dim[0]):]:
+                target_ax.xaxis.set_tick_params(labelbottom=True)
+
         if legend:
-            if "lower" in legend_loc:
-                if legend_ncol < grid_dim[0]:
-                    legend_ncol: int = grid_dim[0]
+            if "lower" in legend_loc and legend_ncol < grid_dim[0]:
+                legend_ncol = grid_dim[0]
 
             leg = fig.legend(
                 labels=legend_labels,
@@ -653,28 +658,22 @@ class FacetPlot(Plotter):
                 frameon=legend_frame,
             )
 
-            leg_width, leg_height = (
-                leg.get_window_extent().width,
-                leg.get_window_extent().height,
-            )
-            fig_width, fig_height = (
-                fig.get_window_extent().width,
-                fig.get_window_extent().height,
-            )
+            leg_width, leg_height = leg.get_window_extent().width, leg.get_window_extent().height
+            fig_width, fig_height = fig.get_window_extent().width, fig.get_window_extent().height
 
             if "lower" in legend_loc:
-                re_adj[1] = re_adj[1] + leg_height / fig_height
+                re_adj[1] += leg_height / fig_height
             if "upper" in legend_loc:
-                re_adj[3] = re_adj[3] - leg_height / fig_height
+                re_adj[3] -= leg_height / fig_height
             if "left" in legend_loc:
-                re_adj[0] = re_adj[0] + leg_width / fig_width
+                re_adj[0] += leg_width / fig_width
             if "right" in legend_loc:
-                re_adj[2] = re_adj[2] - leg_width / fig_width
+                re_adj[2] -= leg_width / fig_width
 
         outer_gs.tight_layout(fig, rect=re_adj)
 
         if save_to_file is not None:
-            fig.savefig(save_to_file, dpi=dpi)  # , bbox_inches="tight")
+            fig.savefig(save_to_file, dpi=dpi)
 
         if show:
             plt.show()
@@ -688,6 +687,8 @@ if __name__ == "__main__":
     from macrosynergy.management.simulate import make_test_df
 
     import time
+
+    np.random.seed(0)
 
     cids_A: List[str] = ["AUD", "CAD", "EUR", "GBP", "USD"]
     cids_B: List[str] = ["CHF", "INR", "JPY", "NOK", "NZD", "SEK"]
@@ -716,13 +717,14 @@ if __name__ == "__main__":
         "FXTARGETED_NSA",
         "FXUNTRADABLE_NSA",
     ]
-    all_cids: List[str] = list(set(cids_A + cids_B + cids_C))
-    all_xcats: List[str] = list(set(xcats_A + xcats_B + xcats_C + xcats_D))
+    all_cids: List[str] = sorted(list(set(cids_A + cids_B + cids_C)))
+    all_xcats: List[str] = sorted(list(set(xcats_A + xcats_B + xcats_C + xcats_D)))
 
     df: pd.DataFrame = make_test_df(
         cids=all_cids,
         xcats=all_xcats,
     )
+
     # remove data for USD_FXXR_NSA and CHF _EQXR_NSA and _FXXR_NSA
     df: pd.DataFrame = df[
         ~((df["cid"] == "USD") & (df["xcat"] == "FXXR_NSA"))
@@ -752,6 +754,7 @@ if __name__ == "__main__":
             ax_hline=75,
             show=True,
         )
+
         fp.lineplot(
             cids=cids_B,
             xcats=xcats_A,
@@ -761,6 +764,7 @@ if __name__ == "__main__":
             title="Another test title",
             # save_to_file="test_1.png",
             show=True,
+            share_x=True
         )
         fp.lineplot(
             cids=cids_C,

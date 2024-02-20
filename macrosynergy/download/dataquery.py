@@ -5,6 +5,7 @@ macrosynergy.download.jpmaqs.py. However, for a use cases independent
 of JPMaQS, this module can be used directly to download data from the
 JPMorgan DataQuery API.
 """
+
 import concurrent.futures
 import time
 import os
@@ -15,8 +16,8 @@ import uuid
 import io
 import warnings
 import requests
-from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Union, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional, Dict, Union, Tuple, Any
 from timeit import default_timer as timer
 from tqdm import tqdm
 
@@ -41,7 +42,7 @@ OAUTH_BASE_URL: str = (
 OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 JPMAQS_GROUP_ID: str = "JPMAQS"
-API_DELAY_PARAM: float = 0.3  # 300ms delay between requests
+API_DELAY_PARAM: float = 0.2  # 300ms delay between requests
 API_RETRY_COUNT: int = 5  # retry count for transient errors
 HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
 MAX_CONTINUOUS_FAILURES: int = 5  # max number of continuous errors before stopping
@@ -89,7 +90,7 @@ def validate_response(
         f"Response status code: {response.status_code}\n"
         f"Response headers: {response.headers}\n"
         f"Response text: {response.text}\n"
-        f"Timestamp (UTC): {datetime.utcnow().isoformat()}; \n"
+        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}; \n"
     )
     # TODO : Use response.raise_for_status() as a better way to check for errors
     if not response.ok:
@@ -159,7 +160,7 @@ def request_wrapper(
     # insert tracking info in headers
     if headers is None:
         headers: Dict = {}
-    headers["User-Agent"]: str = f"MacrosynergyPackage/{ms_version_info}"
+    headers["User-Agent"] = f"MacrosynergyPackage/{ms_version_info}"
 
     uuid_str: str = str(uuid.uuid4())
     if (tracking_id is None) or (tracking_id == ""):
@@ -167,7 +168,7 @@ def request_wrapper(
     else:
         tracking_id: str = f"uuid::{uuid_str}::{tracking_id}"
 
-    headers["X-Tracking-Id"]: str = tracking_id
+    headers["X-Tracking-Id"] = tracking_id
 
     log_url: str = form_full_url(url, params)
     logger.debug(f"Requesting URL: {log_url} with tracking_id: {tracking_id}")
@@ -312,7 +313,7 @@ class OAuth(object):
             seconds=self._stored_token["expires_in"]
         )
 
-        utcnow = datetime.utcnow()
+        utcnow = datetime.now(timezone.utc)
         is_active: bool = expires > utcnow
 
         logger.debug(
@@ -344,7 +345,7 @@ class OAuth(object):
 
             # NOTE : use UTC time for token expiry
             self._stored_token: dict = {
-                "created_at": datetime.utcnow(),
+                "created_at": datetime.now(timezone.utc),
                 "access_token": js["access_token"],
                 "expires_in": js["expires_in"],
             }
@@ -438,6 +439,7 @@ def validate_download_args(
     reference_data: str,
     retry_counter: int,
     delay_param: float,
+    batch_size: int,
 ):
     """
     Validate the arguments passed to the `download_data()` method.
@@ -475,8 +477,28 @@ def validate_download_args(
 
     if not isinstance(delay_param, float):
         raise TypeError("`delay_param` must be a float >=0.2 (seconds).")
-    elif delay_param < 0.2:
+
+    if delay_param < 0.2:
+        warnings.warn(
+            RuntimeWarning(
+                f"`delay_param` is too low; DataQuery API may reject requests. "
+                f"Minimum recommended value is 0.2 seconds. "
+            )
+        )
+    if delay_param < 0.0:
         raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
+
+    if not isinstance(batch_size, int):
+        raise TypeError("`batch_size` must be an integer.")
+    if batch_size < 1:
+        raise ValueError("`batch_size` must be an integer >=1.")
+    elif batch_size > 20:
+        warnings.warn(
+            RuntimeWarning(
+                f"`batch_size` is too high; DataQuery API's time-series endpoint "
+                f"accepts a maximum of 20 expressions per request. "
+            )
+        )
 
     vars_types_zip: zip = zip(
         [
@@ -501,28 +523,6 @@ def validate_download_args(
             raise TypeError(f"`{namex}` must be a string.")
 
     return True
-
-
-def _get_unavailable_expressions(
-    expected_exprs: List[str],
-    dicts_list: List[Dict],
-) -> List[str]:
-    """
-    Method to get the expressions that are not available in the response.
-    Looks at the dict["attributes"][0]["expression"] field of each dict
-    in the list.
-
-    :param <List[str]> expected_exprs: list of expressions that were requested.
-    :param <List[Dict]> dicts_list: list of dicts to search for the expressions.
-
-    :return <List[str]>: list of expressions that were not found in the dicts.
-    """
-    found_exprs: List[str] = [
-        curr_dict["attributes"][0]["expression"]
-        for curr_dict in dicts_list
-        if curr_dict["attributes"][0]["time-series"] is not None
-    ]
-    return list(set(expected_exprs) - set(found_exprs))
 
 
 class DataQueryInterface(object):
@@ -578,14 +578,14 @@ class DataQueryInterface(object):
         check_connection: bool = True,
         base_url: str = OAUTH_BASE_URL,
         token_url: str = OAUTH_TOKEN_URL,
-        suppress_warnings: bool = True,
+        suppress_warning: bool = True,
     ):
         self._check_connection: bool = check_connection
         self.msg_errors: List[str] = []
         self.msg_warnings: List[str] = []
         self.unavailable_expressions: List[str] = []
         self.debug: bool = debug
-        self.suppress_warnings: bool = suppress_warnings
+        self.suppress_warning: bool = suppress_warning
         self.batch_size: int = batch_size
 
         for varx, namex, typex in [
@@ -650,7 +650,29 @@ class DataQueryInterface(object):
             logger.error("Exception %s - %s", exc_type, exc_value)
             print(f"Exception: {exc_type} {exc_value}")
 
-    def check_connection(self, verbose=False) -> bool:
+    def _get_unavailable_expressions(
+        self,
+        expected_exprs: List[str],
+        dicts_list: List[Dict],
+    ) -> List[str]:
+        """
+        Method to get the expressions that are not available in the response.
+        Looks at the dict["attributes"][0]["expression"] field of each dict
+        in the list.
+
+        :param <List[str]> expected_exprs: list of expressions that were requested.
+        :param <List[Dict]> dicts_list: list of dicts to search for the expressions.
+
+        :return <List[str]>: list of expressions that were not found in the dicts.
+        """
+        found_exprs: List[str] = [
+            curr_dict["attributes"][0]["expression"]
+            for curr_dict in dicts_list
+            if curr_dict["attributes"][0]["time-series"] is not None
+        ]
+        return list(set(expected_exprs) - set(found_exprs))
+
+    def check_connection(self, verbose=False, raise_error: bool = False) -> bool:
         """
         Check the connection to the DataQuery API using the Heartbeat endpoint.
 
@@ -661,6 +683,8 @@ class DataQueryInterface(object):
 
         :raises <HeartbeatError>: if the heartbeat fails.
         """
+        logger.debug(f"Sleep before checking connection - {API_DELAY_PARAM} seconds")
+        time.sleep(API_DELAY_PARAM)
         logger.debug("Check if connection can be established to JPMorgan DataQuery")
         js: dict = request_wrapper(
             url=self.base_url + HEARTBEAT_ENDPOINT,
@@ -682,6 +706,8 @@ class DataQueryInterface(object):
 
         if verbose:
             print("Connection successful!" if result else "Connection failed.")
+        if raise_error and not result:
+            raise ConnectionError(HeartbeatError("Heartbeat failed."))
         return result
 
     def _fetch(
@@ -693,7 +719,8 @@ class DataQueryInterface(object):
         """
         Make a request to the DataQuery API using the specified parameters.
         Used to wrap a request in a thread for concurrent requests, or to
-        simplify the code for single requests.
+        simplify the code for single requests. Used by the `_fetch_timeseries()`
+        method.
 
         :param <str> url: URL to request.
         :param <dict> params: parameters to send with the request.
@@ -726,20 +753,20 @@ class DataQueryInterface(object):
                         f"Content was not found for the request: {response}\n"
                         f"User ID: {self.auth.get_auth()['user_id']}\n"
                         f"URL: {form_full_url(url, params)}\n"
-                        f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
+                        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}"
                     )
 
             raise InvalidResponseError(
                 f"Invalid response from DataQuery: {response}\n"
                 f"User ID: {self.auth.get_auth()['user_id']}\n"
                 f"URL: {form_full_url(url, params)}"
-                f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
+                f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}"
             )
 
         downloaded_data.extend(response["instruments"])
 
         if "links" in response.keys() and response["links"][1]["next"] is not None:
-            logger.info("DQ response paginated - get next response page")
+            logger.debug("DQ response paginated - get next response page")
             downloaded_data.extend(
                 self._fetch(
                     url=self.base_url + response["links"][1]["next"],
@@ -750,9 +777,20 @@ class DataQueryInterface(object):
 
         return downloaded_data
 
+    def _fetch_timeseries(
+        self, url: str, params: dict, tracking_id: str = None, *args, **kwargs
+    ) -> List[Dict]:
+        """
+        Exists to provide a wrapper for the `_fetch()` method that can be modified when
+        inheriting from this class. This method is used by the `_concurrent_loop()` method.
+        """
+
+        return self._fetch(url=url, params=params, tracking_id=tracking_id)
+
     def get_catalogue(
         self,
         group_id: str = JPMAQS_GROUP_ID,
+        verbose: bool = True,
     ) -> List[str]:
         """
         Method to get the JPMaQS catalogue.
@@ -766,6 +804,8 @@ class DataQueryInterface(object):
 
         :raises <ValueError>: if the response from the server is not valid.
         """
+        if verbose:
+            print("Downloading the JPMaQS catalogue from DataQuery...")
         try:
             response_list: Dict = self._fetch(
                 url=self.base_url + CATALOGUE_ENDPOINT,
@@ -788,41 +828,31 @@ class DataQueryInterface(object):
 
         return tickers
 
-    def _download(
+    def _concurrent_loop(
         self,
-        expressions: List[str],
-        params: dict,
+        expr_batches: List[List[str]],
+        show_progress: bool,
         url: str,
+        params: dict,
         tracking_id: str,
         delay_param: float,
-        show_progress: bool = False,
-        retry_counter: int = 0,
-    ) -> List[dict]:
+        *args,
+        **kwargs,
+    ) -> Tuple[List[Union[Dict, Any]], List[List[str]]]:
         """
-        Backend method to download data from the DataQuery API.
-        Used by the `download_data()` method.
+        Concurrent loop to download data from the DataQuery API.
+        Used by the `_download()` method.
+
+        :return <Tuple[List[Union[Dict, Any]], List[List[str]]]>: tuple of two lists.
+            The first list contains the downloaded data, and the second list
+            contains the failed batches.
         """
-
-        if retry_counter > 0:
-            print("Retrying failed downloads. Retry count:", retry_counter)
-
-        if retry_counter > HL_RETRY_COUNT:
-            raise DownloadError(
-                f"Failed {retry_counter} times to download data all requested data.\n"
-                f"No longer retrying."
-            )
-
-        expr_batches: List[List[str]] = [
-            expressions[i : i + self.batch_size]
-            for i in range(0, len(expressions), self.batch_size)
-        ]
-
-        download_outputs: List[List[Dict]] = []
-        failed_batches: List[List[str]] = []
-        continuous_failures: int = 0
-        last_five_exc: List[Exception] = []
 
         future_objects: List[concurrent.futures.Future] = []
+        download_outputs: List[Union[Dict, Any]] = []
+        failed_batches: List[List[str]] = []
+        last_five_exc: List[Exception] = []
+        continuous_failures: int = 0
         with concurrent.futures.ThreadPoolExecutor() as executor:
             for ib, expr_batch in tqdm(
                 enumerate(expr_batches),
@@ -834,10 +864,12 @@ class DataQueryInterface(object):
                 curr_params["expressions"] = expr_batch
                 future_objects.append(
                     executor.submit(
-                        self._fetch,
+                        self._fetch_timeseries,
                         url=url,
                         params=curr_params,
                         tracking_id=tracking_id,
+                        *args,
+                        **kwargs,
                     )
                 )
                 time.sleep(delay_param)
@@ -869,7 +901,70 @@ class DataQueryInterface(object):
                     if self.debug:
                         raise exc
 
-        final_output: List[Dict] = list(itertools.chain.from_iterable(download_outputs))
+        return download_outputs, failed_batches
+
+    def _chain_download_outputs(
+        self,
+        download_outputs: List[Union[Dict, Any]],
+    ) -> List[Dict]:
+        """
+        Chain the download outputs from the concurrent loop into a single list.
+        Used by the `download_data()` method. Exists to provide a method that can be
+        modified when inheriting from this class.
+
+        :param <List[Union[Dict, Any]>> download_outputs: list of list of dictionaries/
+            other objects.
+        :return <List[Dict]>: list of dictionaries/other objects.
+        """
+
+        return list(itertools.chain.from_iterable(download_outputs))
+
+    def _download(
+        self,
+        expressions: List[str],
+        params: dict,
+        url: str,
+        tracking_id: str,
+        delay_param: float,
+        show_progress: bool = False,
+        retry_counter: int = 0,
+        *args,
+        **kwargs,
+    ) -> List[dict]:
+        """
+        Backend method to download data from the DataQuery API.
+        Used by the `download_data()` method.
+        """
+
+        if retry_counter > 0:
+            print("Retrying failed downloads. Retry count:", retry_counter)
+
+        if retry_counter > HL_RETRY_COUNT:
+            raise DownloadError(
+                f"Failed {retry_counter} times to download data all requested data.\n"
+                f"No longer retrying."
+            )
+
+        expr_batches: List[List[str]] = [
+            expressions[i : i + self.batch_size]
+            for i in range(0, len(expressions), self.batch_size)
+        ]
+
+        download_outputs: List[List[Dict]]
+        failed_batches: List[List[str]]
+
+        download_outputs, failed_batches = self._concurrent_loop(
+            expr_batches=expr_batches,
+            show_progress=show_progress,
+            url=url,
+            params=params,
+            tracking_id=tracking_id,
+            delay_param=delay_param,
+            *args,
+            **kwargs,
+        )
+
+        final_output = self._chain_download_outputs(download_outputs)
 
         if len(failed_batches) > 0:
             flat_failed_batches: List[str] = list(
@@ -888,9 +983,12 @@ class DataQueryInterface(object):
                 delay_param=delay_param + 0.1,
                 show_progress=show_progress,
                 retry_counter=retry_counter + 1,
+                *args,
+                **kwargs,
             )
 
-            final_output += retried_output  # extend retried output
+            # extend retried output
+            final_output = self._chain_download_outputs([final_output, retried_output])
 
         return final_output
 
@@ -907,8 +1005,10 @@ class DataQueryInterface(object):
         nan_treatment: str = "NA_NOTHING",
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
-        delay_param: float = API_DELAY_PARAM,   # TODO do we want the user to have access 
-                                                # to this?
+        delay_param: float = API_DELAY_PARAM,
+        batch_size: Optional[int] = None,
+        *args,
+        **kwargs,
     ) -> List[Dict]:
         """
         Download data from the DataQuery API.
@@ -942,6 +1042,9 @@ class DataQueryInterface(object):
             # NOTE : if "future dates" are passed, they must be passed by parent functions
             # see jpmaqs.py
 
+        if batch_size is None:
+            batch_size = self.batch_size
+
         # NOTE : args validated only on first call, not on retries
         # this is because the args can be modified by the retry mechanism
         # (eg. date format)
@@ -959,16 +1062,17 @@ class DataQueryInterface(object):
             reference_data=reference_data,
             retry_counter=retry_counter,
             delay_param=delay_param,
+            batch_size=batch_size,
         )
+
+        self.batch_size = batch_size
 
         if datetime.strptime(end_date, "%Y-%m-%d") < datetime.strptime(
             start_date, "%Y-%m-%d"
         ):
-            logger.warning(
-                "Start date (%s) is after end-date (%s): swap them!",
-                start_date,
-                end_date,
-            )
+            wStr = "Start date ({}) is after end-date ({}): swapping them!"
+            logger.warning(wStr.format(start_date, end_date))
+            warnings.warn(wStr.format(start_date, end_date), UserWarning)
             start_date, end_date = end_date, start_date
 
         # remove dashes from dates to match DQ format
@@ -977,11 +1081,11 @@ class DataQueryInterface(object):
 
         # check heartbeat before each "batch" of requests
         if self._check_connection:
-            if not self.check_connection():
+            if not self.check_connection(verbose=True):
                 raise ConnectionError(
                     HeartbeatError(
                         f"Heartbeat failed. Timestamp (UTC):"
-                        f" {datetime.utcnow().isoformat()}\n"
+                        f" {datetime.now(timezone.utc).isoformat()}\n"
                         f"User ID: {self.auth.get_auth()['user_id']}\n"
                     )
                 )
@@ -1011,16 +1115,23 @@ class DataQueryInterface(object):
             tracking_id=tracking_id,
             delay_param=delay_param,
             show_progress=show_progress,
+            *args,
+            **kwargs,
         )
 
-        self.unavailable_expressions = _get_unavailable_expressions(
-            expected_exprs=expressions, dicts_list=final_output
-        )
-        logger.info(
-            "Downloaded expressions: %d, unavailable: %d",
-            len(final_output),
-            len(self.unavailable_expressions),
-        )
+        if (
+            isinstance(final_output, list)
+            and (len(final_output) > 0)
+            and isinstance(final_output[0], dict)
+        ):
+            self.unavailable_expressions = self._get_unavailable_expressions(
+                expected_exprs=expressions, dicts_list=final_output
+            )
+            logger.info(
+                "Downloaded expressions: %d, unavailable: %d",
+                len(final_output),
+                len(self.unavailable_expressions),
+            )
 
         return final_output
 

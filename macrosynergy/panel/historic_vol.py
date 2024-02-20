@@ -95,7 +95,7 @@ def historic_vol(
     Controls the functionality.
 
     :param <pd.DataFrame> df: standardized DataFrame with the following necessary columns:
-        'cid', 'xcats', 'real_date' and 'value'. Will contain all of the data across all
+        'cid', 'xcat', 'real_date' and 'value'. Will contain all of the data across all
         macroeconomic fields.
     :param <str> xcat:  extended category denoting the return series for which volatility
         should be calculated.

@@ -8,8 +8,20 @@ import warnings
 import logging
 from typing import List, Dict, Union, Any
 import requests
+import numpy as np
+import itertools
 
-from macrosynergy.download import dataquery, JPMaQSDownload
+from macrosynergy.download.jpmaqs import (
+    JPMaQSDownload,
+    deconstruct_expression,
+    construct_expressions,
+    get_expression_from_qdf,
+    get_expression_from_wide_df,
+    timeseries_to_column,
+    timeseries_to_qdf,
+    concat_column_dfs,
+    validate_downloaded_df,
+)
 from macrosynergy.download.dataquery import (
     DataQueryInterface,
     OAuth,
@@ -36,6 +48,8 @@ from macrosynergy.download.exceptions import (
     InvalidDataframeError,
     NoContentError,
 )
+
+from macrosynergy.management.types import QuantamentalDataFrame
 
 from .mock_helpers import mock_jpmaqs_value, mock_request_wrapper, random_string
 
@@ -108,6 +122,20 @@ class TestRequestWrapper(unittest.TestCase):
                 user_id=user_id,
             )
 
+        # mock a response.Response with 200, and json content. assert returns response
+        response: requests.Response = self.mock_response(
+            url=OAUTH_TOKEN_URL,
+            status_code=200,
+            content=b'{"access_token": "SOME_TOKEN", "expires_in": 3600}',
+        )
+        self.assertEqual(validate_response(response, user_id=user_id), response.json())
+
+        # mock the call to response.json() to return None. assert raises invalid response error
+        with mock.patch("requests.Response.json", return_value=None):
+            with self.assertRaises(InvalidResponseError):
+                validate_response(response, user_id=user_id)
+
+
     def test_request_wrapper(self):
         warnings.filterwarnings("ignore", category=UserWarning, module="logger")
         curr_logger_level: int = logging.getLogger().getEffectiveLevel()
@@ -172,6 +200,7 @@ class TestRequestWrapper(unittest.TestCase):
                 request_wrapper(
                     method="get",
                     url=OAUTH_BASE_URL + HEARTBEAT_ENDPOINT,
+                    tracking_id=random_string(),
                 )
 
         warnings.resetwarnings()
@@ -271,7 +300,10 @@ class TestOAuth(unittest.TestCase):
             client_secret="SECRET",
             check_connection=False,
         )
-        self.assertEqual(jpmaqs.dq_interface.base_url, dataquery.OAUTH_BASE_URL)
+        self.assertEqual(jpmaqs.base_url, OAUTH_BASE_URL)
+
+        with self.assertRaises(TypeError):
+            OAuth(client_id="test-id", client_secret="SECRET", proxy="proxy")
 
     def test_invalid_init_args(self):
         good_args: Dict[str, str] = {
@@ -302,14 +334,50 @@ class TestOAuth(unittest.TestCase):
             self.fail(f"Unexpected exception raised: {e}")
 
     def test_valid_token(self):
-        oauth = dataquery.OAuth(client_id="test-id", client_secret="SECRET")
+        oauth = OAuth(client_id="test-id", client_secret="SECRET")
         self.assertFalse(oauth._valid_token())
+
+    def test_get_token(self):
+        oauth = OAuth(client_id="test-id", client_secret="SECRET")
+
+        token_data: Dict[str, str] = {
+            "access_token": "SOME_TOKEN",
+            "expires_in": 3600,
+        }
+        with mock.patch(
+            "macrosynergy.download.dataquery.request_wrapper",
+            return_value=token_data,
+        ):
+            with mock.patch(
+                "macrosynergy.download.dataquery.OAuth._valid_token",
+                return_value=False,
+            ):
+                self.assertEqual(oauth._get_token(), token_data["access_token"])
 
 
 ##############################################
 
 
 class TestDataQueryInterface(unittest.TestCase):
+    def setUp(self) -> None:
+        self.cids: List[str] = ["GBP", "EUR", "CAD"]
+        self.xcats: List[str] = ["FXXR_NSA", "EQXR_NSA"]
+        self.metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+        self.start_date = "2000-01-01"
+        self.end_date = "2000-02-01"
+        self.tickers: List[str] = [
+            cid + "_" + xcat for xcat in self.xcats for cid in self.cids
+        ]
+        self.expressions: List[str] = construct_expressions(
+            cids=self.cids, xcats=self.xcats, metrics=self.metrics
+        )
+        self.dq = DataQueryInterface(
+            client_id=random_string(),
+            client_secret=random_string(),
+            oauth=True,
+            check_connection=False,
+        )
+
     @staticmethod
     def jpmaqs_value(elem: str) -> float:
         """
@@ -328,8 +396,31 @@ class TestDataQueryInterface(unittest.TestCase):
         )
 
     def test_init(self):
+        def mock_isfile(path: str) -> bool:
+            return path in ["path/key.key", "path/crt.crt"]
+
         with self.assertRaises(TypeError):
             DataQueryInterface(client_id=1, client_secret="SECRET")
+
+        with self.assertRaises(ValueError):
+            with self.assertWarns(UserWarning):
+                dq_interface: DataQueryInterface = DataQueryInterface(
+                    client_id=None,
+                    client_secret=None,
+                    oauth=True,
+                )
+        with mock.patch("os.path.isfile", side_effect=lambda x: mock_isfile(x)):
+            with self.assertWarns(UserWarning):
+                dq_interface: DataQueryInterface = DataQueryInterface(
+                    client_id=None,
+                    client_secret=None,
+                    check_connection=False,
+                    oauth=True,
+                    username="user",
+                    password="pass",
+                    crt="path/crt.crt",
+                    key="path/key.key",
+                )
 
     @mock.patch(
         "macrosynergy.download.dataquery.OAuth._get_token",
@@ -346,38 +437,31 @@ class TestDataQueryInterface(unittest.TestCase):
         # 200. Therefore, use the Interface Object's method to check DataQuery
         # connections.
 
-        with DataQueryInterface(
-            client_id=random_string(), client_secret=random_string()
-        ) as dq:
-            self.assertTrue(dq.check_connection())
+        def _test(verbose: bool):
+            with self.dq as dq:
+                self.assertTrue(
+                    dq.check_connection(
+                        verbose=verbose,
+                    )
+                )
 
-        mock_p_request.assert_called_once()
-        mock_p_get_token.assert_called_once()
+            mock_p_request.assert_called_once()
+            mock_p_get_token.assert_called_once()
+            # reset the mocks
+            mock_p_request.reset_mock()
+            mock_p_get_token.reset_mock()
+            return True
 
-    @mock.patch(
-        "macrosynergy.download.dataquery.OAuth._get_token",
-        return_value=("SOME_TEST_TOKEN"),
-    )
-    @mock.patch(
-        "macrosynergy.download.dataquery.request_wrapper",
-        return_value=({"info": {"code": 200, "message": "Service Available."}}),
-    )
-    def test_check_connection_on_init(
-        self, mock_p_request: mock.MagicMock, mock_p_get_token: mock.MagicMock
-    ):
-        # If the connection to DataQuery is working, the response code will invariably be
-        # 200. Therefore, use the Interface Object's method to check DataQuery
-        # connections.
+        for verbose in [True, False]:
+            self.assertTrue(_test(verbose))
 
-        with JPMaQSDownload(
-            client_id="client1",
-            client_secret="123",
-            oauth=True,
-        ) as jpmaqs:
-            pass
-
-        mock_p_request.assert_called_once()
-        mock_p_get_token.assert_called_once()
+        with mock.patch(
+            "macrosynergy.download.dataquery.request_wrapper",
+            return_value=None,
+        ):
+            with self.dq as dq:
+                with self.assertRaises(ConnectionError):
+                    dq.check_connection(raise_error=True)
 
     @mock.patch(
         "macrosynergy.download.dataquery.OAuth._get_token",
@@ -396,17 +480,17 @@ class TestDataQueryInterface(unittest.TestCase):
             },
         ),
     )
-    def test_check_connection_fail(self, mock_p_fail, mock_p_get_token):
+    def test_check_connection_fail(
+        self, mock_p_fail: mock.MagicMock, mock_p_get_token: mock.MagicMock
+    ):
         # Opposite of above method: if the connection to DataQuery fails, the error code
         # will be 400.
         curr_logger_level: int = logging.getLogger().getEffectiveLevel()
         logging.getLogger().setLevel(logging.ERROR)
-        with JPMaQSDownload(
-            client_id="client1", client_secret="123", oauth=True, check_connection=False
-        ) as jpmaqs_download:
-            # Method returns a Boolean. In this instance, the method should return False
+        with self.dq as dq:
+            # Method returns a BoolFean. In this instance, the method should return False
             # (unable to connect).
-            self.assertFalse(jpmaqs_download.check_connection())
+            self.assertFalse(dq.check_connection())
         mock_p_fail.assert_called_once()
         mock_p_get_token.assert_called_once()
         logging.getLogger().setLevel(curr_logger_level)
@@ -422,10 +506,10 @@ class TestDataQueryInterface(unittest.TestCase):
             oauth=True, client_id="client1", client_secret="123", check_connection=False
         )
 
-        self.assertIsInstance(
-            jpmaqs_download.dq_interface, dataquery.DataQueryInterface
-        )
-        self.assertIsInstance(jpmaqs_download.dq_interface.auth, dataquery.OAuth)
+        # check that jpmaqs_download is a superclass of dataquery interface
+        self.assertIsInstance(jpmaqs_download, DataQueryInterface)
+
+        self.assertIsInstance(jpmaqs_download.auth, OAuth)
 
     def test_certauth_condition(self):
         # Second check is that the DataQuery instance is using an CertAuth Object if the
@@ -435,7 +519,7 @@ class TestDataQueryInterface(unittest.TestCase):
         # Given the certificate and key will not point to valid directories, the expected
         # behaviour is for an OSError to be thrown.
         with self.assertRaises(FileNotFoundError):
-            with JPMaQSDownload(
+            with DataQueryInterface(
                 username="user1",
                 password="123",
                 crt="/api_macrosynergy_com.crt",
@@ -445,131 +529,11 @@ class TestDataQueryInterface(unittest.TestCase):
             ) as downloader:
                 pass
 
-    def test_timeseries_to_df(self):
-        cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
-        xcats = ["EQXR_NSA", "FXXR_NSA"]
-
-        tickers = [cid + "_" + xcat for xcat in xcats for cid in cids_dmca]
-
-        jpmaqs_download = JPMaQSDownload(
-            oauth=True,
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
-
-        # First replicate the api.Interface()._request() method using the associated
-        # JPMaQS expression.
-        expression = jpmaqs_download.construct_expressions(
-            metrics=["value", "grading"], tickers=tickers
-        )
-        start_date: str = "2000-01-01"
-        end_date: str = "2020-01-01"
-
-        timeseries_output = self.request_wrapper(
-            dq_expressions=expression, start_date=start_date, end_date=end_date
-        )
-
-        expressions_found: List[str] = [
-            ts["attributes"][0]["expression"] for ts in timeseries_output
-        ]
-
-        out_df: pd.DataFrame = jpmaqs_download.time_series_to_df(
-            dicts_list=timeseries_output,
-            expected_expressions=expressions_found,
-            start_date=start_date,
-            end_date=end_date,
-        )
-
-        # Check that the output is a Pandas DataFrame
-        self.assertIsInstance(out_df, pd.DataFrame)
-
-        # Check that the output has the correct number of rows and columns
-        # len(tickers)*len(pd.bdate_range(start_date, end_date)) = expected number of rows
-        # expected cols = [["real_date", "cid", "xcat", "value", "grading"]] = 5
-        self.assertEqual(
-            out_df.shape, (len(tickers) * len(pd.bdate_range(start_date, end_date)), 5)
-        )
-
-        # Check that the output has the correct columns
-        self.assertEqual(
-            set(out_df.columns.tolist()),
-            set(["real_date", "cid", "xcat", "value", "grading"]),
-        )
-
-    def test_construct_expressions(self):
-        jpmaqs_download = JPMaQSDownload(
-            oauth=True,
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
-
-        cids = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
-        xcats = ["EQXR_NSA", "FXXR_NSA"]
-
-        tickers = [cid + "_" + xcat for xcat in xcats for cid in cids]
-
-        metrics = ["value", "grading"]
-
-        set_a = jpmaqs_download.construct_expressions(metrics=metrics, tickers=tickers)
-
-        set_b = jpmaqs_download.construct_expressions(
-            metrics=metrics, cids=cids, xcats=xcats
-        )
-
-        self.assertEqual(set(set_a), set(set_b))
-
-    def test_deconstruct_expressions(self):
-        jpmaqs_download = JPMaQSDownload(
-            oauth=True,
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
-
-        cids = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
-        xcats = ["EQXR_NSA", "FXXR_NSA"]
-        tickers = [cid + "_" + xcat for xcat in xcats for cid in cids]
-        metrics = ["value", "grading"]
-        tkms = [f"{ticker}_{metric}" for ticker in tickers for metric in metrics]
-        expressions = jpmaqs_download.construct_expressions(
-            metrics=["value", "grading"], tickers=tickers
-        )
-        deconstructed_expressions = jpmaqs_download.deconstruct_expression(
-            expression=expressions
-        )
-        dtkms = ["_".join(d) for d in deconstructed_expressions]
-
-        self.assertEqual(set(tkms), set(dtkms))
-
-        for tkm, expression in zip(tkms, expressions):
-            self.assertEqual(
-                tkm,
-                "_".join(jpmaqs_download.deconstruct_expression(expression=expression)),
-            )
-
-        for expr in [1, [1, 2]]:
-            # type error
-            with self.assertRaises(TypeError):
-                jpmaqs_download.deconstruct_expression(expression=expr)
-
-        with self.assertRaises(ValueError):
-            jpmaqs_download.deconstruct_expression(expression=[])
-
-        # now give it a bad expression. it should warn and return [expression, expression, expression]
-        with self.assertWarns(UserWarning):
-            self.assertEqual(
-                jpmaqs_download.deconstruct_expression(expression="bad_expression"),
-                ["bad_expression", "bad_expression", "value"],
-            )
-
     def test_dq_fetch(self):
         cfg: dict = dict(
             client_id=random_string(),
             client_secret=random_string(),
         )
-        dq: DataQueryInterface = DataQueryInterface(oauth=True, **cfg)
 
         invl_responses: List[Any] = [
             None,
@@ -578,9 +542,8 @@ class TestDataQueryInterface(unittest.TestCase):
             {"attributes": [{"expression": "expression1"}]},
         ]
 
-        dq.auth: OAuth
-        dq.auth._stored_token: Dict = {
-            "created_at": datetime.datetime.utcnow(),
+        self.dq.auth._stored_token = {
+            "created_at": datetime.datetime.now(datetime.timezone.utc),
             "access_token": random_string(),
             "expires_in": 3600,
         }
@@ -591,7 +554,7 @@ class TestDataQueryInterface(unittest.TestCase):
                 return_value=invl_response,
             ):
                 with self.assertRaises(InvalidResponseError):
-                    dq._fetch(
+                    self.dq._fetch(
                         url=OAUTH_BASE_URL + TIMESERIES_ENDPOINT,
                         params={"expr": "expression1"},
                     )
@@ -604,10 +567,29 @@ class TestDataQueryInterface(unittest.TestCase):
             return_value=invl_response,
         ):
             with self.assertRaises(NoContentError):
-                dq._fetch(
+                self.dq._fetch(
                     url=OAUTH_BASE_URL + CATALOGUE_ENDPOINT,
                     params={"group": "group-name"},
                 )
+
+    def test_chain_download_outputs(self):
+        exprs = construct_expressions(
+            cids=["AUD", "CAD"], xcats=["EQXR_NSA"], metrics=["value"]
+        )
+        responses = mock_request_wrapper(
+            dq_expressions=exprs,
+            start_date="2000-01-01",
+            end_date="2001-01-01",
+        )
+
+        for i in range(len(responses)):
+            responses[i] = [responses[i]]
+
+        lA = self.dq._chain_download_outputs(download_outputs=responses)
+        lB = itertools.chain.from_iterable(responses)
+        lA = str(sorted([str(x) for x in lA]))
+        lB = str(sorted([str(x) for x in lB]))
+        self.assertEqual(lA, lB)
 
     def test_download(self):
         good_args: Dict[str, Any] = {
@@ -628,11 +610,7 @@ class TestDataQueryInterface(unittest.TestCase):
                 return_value={"attributes": []},
             ):
                 with self.assertRaises(DownloadError):
-                    DataQueryInterface(
-                        client_id="client_id",
-                        client_secret="client_secret",
-                        oauth=True,
-                    )._download(**bad_args)
+                    self.dq._download(**bad_args)
             err_string_1: str = (
                 f"Retrying failed downloads. Retry count: {bad_args['retry_counter']}"
             )
@@ -652,6 +630,7 @@ class TestDataQueryInterface(unittest.TestCase):
             "reference_data": "NO_REFERENCE_DATA",
             "retry_counter": 0,
             "delay_param": API_DELAY_PARAM,
+            "batch_size": 20,
         }
         self.assertTrue(validate_download_args(**good_args))
 
@@ -667,19 +646,27 @@ class TestDataQueryInterface(unittest.TestCase):
         with self.assertRaises(TypeError):
             validate_download_args(**bad_args)
 
+        # test all against an int (except retry_counter, batch_size)
         for key in good_args.keys():
             bad_value: Union[int, str] = 1
-            if key == "retry_counter":
+            if key in ["retry_counter", "batch_size"]:
                 bad_value = "1"
             bad_args: Dict[str, Any] = good_args.copy()
             bad_args[key] = bad_value
             with self.assertRaises(TypeError):
                 validate_download_args(**bad_args)
 
-        for delay_param in [0.1, -1.0]:
+        # test delay_param
+        for delay_param in [-0.1, -1.0]:
             bad_args: Dict[str, Any] = good_args.copy()
             bad_args["delay_param"] = delay_param
             with self.assertRaises(ValueError):
+                validate_download_args(**bad_args)
+
+        for delay_param in [0.0, 0.1, 0.15]:
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args["delay_param"] = delay_param
+            with self.assertWarns(RuntimeWarning):
                 validate_download_args(**bad_args)
 
         for date_arg in ["start_date", "end_date"]:
@@ -687,6 +674,332 @@ class TestDataQueryInterface(unittest.TestCase):
             bad_args[date_arg] = "1-Jan-2023"
             with self.assertRaises(ValueError):
                 validate_download_args(**bad_args)
+
+        # if the batchsize if negative or non int, should raise type error
+        for batch_size in [0.1, "1", None, [], {}]:
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args["batch_size"] = batch_size
+            with self.assertRaises(TypeError):
+                validate_download_args(**bad_args)
+
+        for batch_size in [-1, 0]:
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args["batch_size"] = batch_size
+            with self.assertRaises(ValueError):
+                validate_download_args(**bad_args)
+
+        # test that no warnings are raised if 1<bath_size<20
+        for batch_size in [1, 19, 20]:
+            good_args: Dict[str, Any] = good_args.copy()
+            good_args["batch_size"] = batch_size
+            # assert no warnings raised
+            with warnings.catch_warnings(record=True) as w:
+                validate_download_args(**good_args)
+                self.assertEqual(len(w), 0)
+
+        # test that >20 batch_size raises warning
+        for batch_size in [21, 100]:
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args["batch_size"] = batch_size
+            with self.assertWarns(RuntimeWarning):
+                validate_download_args(**bad_args)
+
+    def test_get_unavailable_expressions(self):
+
+        cids = ["AUD", "CAD", "CHF", "EUR"]
+        xcats = ["EQXR_NSA", "FXXR_NSA"]
+        metrics = ["value", "grading", "eop_lag", "mop_lag"]
+
+        expression = construct_expressions(
+            metrics=metrics,
+            cids=cids,
+            xcats=xcats,
+        )
+
+        # slect 10 random expressions
+        unavailable_expressions = list(np.random.choice(expression, 10))
+        expression = list(set(expression) - set(unavailable_expressions))
+
+        dicts_list = self.request_wrapper(
+            dq_expressions=expression,
+            start_date="2000-01-01",
+            end_date="2001-01-01",
+        )
+
+        mexprs = self.dq._get_unavailable_expressions(
+            expected_exprs=expression + unavailable_expressions,
+            dicts_list=dicts_list,
+        )
+        self.assertEqual(set(mexprs), set(unavailable_expressions))
+
+    def test_concurrent_loop(self):
+
+        params_dict: Dict = {
+            "format": "JSON",
+            "start-date": "1990-01-01",
+            "end-date": "2020-01-01",
+        }
+
+        def _rw(url, params, tracking_id, **kwargs):
+            return self.request_wrapper(
+                dq_expressions=params["expressions"],
+                start_date=params["start-date"],
+                end_date=params["end-date"],
+            )
+
+        expr_batches = [
+            self.expressions[i : i + 20] for i in range(0, len(self.expressions), 20)
+        ]
+        show_progress = False
+        delay_param = 0.25
+
+        arguments = dict(
+            url=random_string(),
+            params=params_dict,
+            tracking_id=random_string(),
+            delay_param=delay_param,
+            expr_batches=expr_batches,
+            show_progress=show_progress,
+        )
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch_timeseries",
+            side_effect=Exception,
+        ):
+            results = self.dq._concurrent_loop(
+                **arguments,
+            )
+
+            self.assertEqual(len(results), len(expr_batches))
+
+        ## test complete failure
+        arguments["expr_batches"] += [None for _ in range(10)]
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch_timeseries",
+            side_effect=_rw,
+        ):
+
+            with self.assertRaises(DownloadError):
+                results = self.dq._concurrent_loop(
+                    **arguments,
+                )
+
+        arguments["expr_batches"][0] += ["KEYBOARD_INTERRUPT"]
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch_timeseries",
+            side_effect=KeyboardInterrupt,
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                results = self.dq._concurrent_loop(
+                    **arguments,
+                )
+
+    def test_fetch(self):
+        def _rw(url: str = "", params: Dict = {}, tracking_id: str = "", **kwargs):
+            if len(params) > 0:
+                d = {
+                    "instruments": mock_request_wrapper(
+                        dq_expressions=params["expressions"],
+                        start_date=params["start-date"],
+                        end_date=params["end-date"],
+                    ),
+                    "links": [
+                        {"self": "SELF"},
+                        {"next": "NEXT"},
+                    ],
+                }
+            else:
+                d = {
+                    "instruments": mock_request_wrapper(
+                        dq_expressions=["DB(JPMAQS,A_B_C,value)"],
+                        start_date="2020-01-01",
+                        end_date="2020-02-01",
+                    ),
+                    "links": [
+                        {"self": "SELF"},
+                        {"next": None},
+                    ],
+                }
+            return d
+
+        params_dict = {
+            "expressions": self.expressions,
+            "start-date": "2020-01-01",
+            "end-date": "2020-02-01",
+        }
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.OAuth.get_auth",
+            return_value={"headers": "headers", "cert": "cert"},
+        ):
+            with mock.patch(
+                "macrosynergy.download.dataquery.request_wrapper",
+                side_effect=_rw,
+            ):
+                lst = self.dq._fetch(url=random_string(), params=params_dict)
+                self.assertIsInstance(lst, list)
+                for l in lst:
+                    self.assertIsInstance(l, dict)
+                    self.assertTrue(
+                        l["attributes"][0]["expression"]
+                        in self.expressions + ["DB(JPMAQS,A_B_C,value)"]
+                    )
+
+    def test_fetch_timeseries(self):
+        def _mock_fetch(*args, **kwargs):
+            return [str(i) for i in range(1, 11)]
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch",
+            side_effect=_mock_fetch,
+        ):
+            self.assertEqual(
+                self.dq._fetch_timeseries(
+                    url=random_string(),
+                    params={},
+                    tracking_id=random_string(),
+                ),
+                [str(i) for i in range(1, 11)],
+            )
+
+    def test_get_catalogue(self):
+
+        def _mock_fetch(*args, **kwargs):
+            return [
+                {"item": i, "instrument-id": f"ID_{i}", "instrument-name": f"NAME_{i}"}
+                for i in range(1, 11)
+            ]
+
+        def _bad_mock_fetch(*args, **kwargs):
+            return [
+                {"item": i, "instrument-id": f"ID_{i}", "instrument-name": f"NAME_{i}"}
+                for i in range(1, 11)
+            ] + [{"item": 10, "instrument-id": f"ID_10", "instrument-name": f"NAME_10"}]
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch",
+            side_effect=_mock_fetch,
+        ):
+            cat = self.dq.get_catalogue()
+            self.assertIsInstance(cat, list)
+
+            self.assertEqual(set(cat), set([f"NAME_{i}" for i in range(1, 11)]))
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch",
+            side_effect=_bad_mock_fetch,
+        ):
+            with self.assertRaises(ValueError):
+                cat = self.dq.get_catalogue()
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._fetch",
+            side_effect=Exception,
+        ):
+            with self.assertRaises(Exception):
+                cat = self.dq.get_catalogue()
+
+    def test_download(self):
+
+        def _mock_concurrent_loop(*args, **kwargs):
+            if "expr_batches" in kwargs:
+                if len(kwargs["expr_batches"]) > 1:
+                    m = mock_request_wrapper(
+                        dq_expressions=itertools.chain.from_iterable(
+                            kwargs["expr_batches"][:-1]
+                        ),
+                        start_date=self.start_date,
+                        end_date=self.end_date,
+                    )
+                    m = [[u] for u in m]
+                    return m, [kwargs["expr_batches"][-1]]
+                else:
+                    m = mock_request_wrapper(
+                        dq_expressions=kwargs["expr_batches"][0],
+                        start_date=self.start_date,
+                        end_date=self.end_date,
+                    )
+                    return [[u] for u in m], []
+
+        def _bad_mock_concurrent_loop(*args, **kwargs):
+            return [], [kwargs["expr_batches"]]
+
+        good_args = dict(
+            expressions=self.expressions,
+            params={},
+            url=random_string(),
+            tracking_id=random_string(),
+            delay_param=0.25,
+        )
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._concurrent_loop",
+            side_effect=_mock_concurrent_loop,
+        ):
+            result = self.dq._download(**good_args)
+            self.assertIsInstance(result, list)
+            self.assertEqual(len(result), len(self.expressions))
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface._concurrent_loop",
+            side_effect=_bad_mock_concurrent_loop,
+        ):
+            with self.assertRaises(DownloadError):
+                result = self.dq._download(**good_args)
+
+    def test_download_data(self):
+
+        good_args: Dict[str, Any] = dict(
+            expressions=self.expressions,
+            start_date="2020-01-01",
+            end_date=None,
+            show_progress=False,
+        )
+
+        def _mock_fetch(*args, **kwargs):
+            return mock_request_wrapper(
+                dq_expressions=self.expressions,
+                start_date=self.start_date,
+                end_date=datetime.datetime.today().strftime("%Y-%m-%d"),
+            )
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface.check_connection",
+            return_value=True,
+        ):
+            with mock.patch(
+                "macrosynergy.download.dataquery.DataQueryInterface._fetch_timeseries",
+                side_effect=_mock_fetch,
+            ):
+                with DataQueryInterface(
+                    client_id=random_string(),
+                    client_secret=random_string(),
+                    oauth=True,
+                ) as dq:
+                    result = dq.download_data(**good_args)
+                    self.assertIsInstance(result, list)
+
+                with self.assertWarns(UserWarning):
+                    bad_args = good_args.copy()
+                    bad_args["start_date"] = self.end_date
+                    bad_args["end_date"] = self.start_date
+                    result = dq.download_data(**bad_args)
+
+        with mock.patch(
+            "macrosynergy.download.dataquery.DataQueryInterface.check_connection",
+            return_value=False,
+        ):
+            with mock.patch(
+                "macrosynergy.download.dataquery.OAuth.get_auth",
+                return_value={"user_id": random_string()},
+            ):
+                with self.assertRaises(ConnectionError):
+                    with DataQueryInterface(
+                        client_id=random_string(),
+                        client_secret=random_string(),
+                        oauth=True,
+                    ) as dq:
+                        result = dq.download_data(**good_args)
 
 
 if __name__ == "__main__":

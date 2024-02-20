@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import requests
 import requests.compat
-from .core import get_cid, get_xcat
+from .core import get_cid, get_xcat, _map_to_business_day_frequency
 
 
 def standardise_dataframe(
@@ -259,7 +259,7 @@ def downsample_df_on_real_date(
     Downsample JPMaQS DataFrame.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
     :param <List> groupby_columns: a list of columns used to group the DataFrame.
     :param <str> freq: frequency option. Per default the correlations are calculated
         based on the native frequency of the datetimes in 'real_date', which is business
@@ -349,20 +349,6 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
 
     return df.reset_index(drop=True)
 
-
-def df_tickers(df: pd.DataFrame):
-    """
-    Helper function used to delimit the tickers defined in a received DataFrame.
-
-    :param <pd.DataFrame> df: standardised DataFrame.
-    """
-    cids_append = list(map(lambda c: c + "_", set(df["cid"])))
-    tickers = list(itertools.product(cids_append, set(df["xcat"])))
-    tickers = [c[0] + c[1] for c in tickers]
-
-    return tickers
-
-
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     """
     Method used to update aggregate DataFrame on a ticker level.
@@ -371,10 +357,10 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     :param <pd.DataFrame> df_add: DataFrame with the latest values.
 
     """
-    agg_df_tick = set(df_tickers(df))
-    add_df_tick = set(df_tickers(df_add))
-
     df["ticker"] = df["cid"] + "_" + df["xcat"]
+    df_add["ticker"] = df_add["cid"] + "_" + df_add["xcat"]
+    agg_df_tick = set(df["ticker"])
+    add_df_tick = set(df_add["ticker"])
 
     # If the ticker is already defined in the DataFrame, replace with the new series
     # otherwise append the series to the aggregate DataFrame.
@@ -383,6 +369,7 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     df = pd.concat([df, df_add], axis=0, ignore_index=True)
 
     df = df.drop(["ticker"], axis=1)
+    df_add = df_add.drop(["ticker"], axis=1)
 
     return df.sort_values(["xcat", "cid", "real_date"])
 
@@ -429,7 +416,7 @@ def reduce_df(
     Filter DataFrame by xcats and cids and notify about missing xcats and cids.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and 'value'.
+        'cid', 'xcat', 'real_date' and 'value'.
     :param <Union[str, List[str]]> xcats: extended categories to be filtered on. Default is
         all in the DataFrame.
     :param <List[str]> cids: cross sections to be checked on. Default is all in the
@@ -515,7 +502,7 @@ def reduce_df_by_ticker(
     Filter dataframe by xcats and cids and notify about missing xcats and cids
 
     :param <pd.Dataframe> df: standardized dataframe with the following columns:
-        'cid', 'xcats', 'real_date'.
+        'cid', 'xcat', 'real_date'.
     :param <List[str]> ticks: tickers (cross sections + base categories)
     :param <str> start: string in ISO 8601 representing earliest date. Default is None.
     :param <str> end: string ISO 8601 representing the latest date. Default is None.
@@ -632,7 +619,7 @@ def categories_df(
     if applicable, lags.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the following necessary
-        columns: 'cid', 'xcats', 'real_date' and at least one column with values of
+        columns: 'cid', 'xcat', 'real_date' and at least one column with values of
         interest.
     :param <List[str]> xcats: extended categories involved in the custom DataFrame. The
         last category in the list represents the dependent variable, and the (n - 1)
@@ -801,26 +788,6 @@ def categories_df(
     # how is set to "any", a potential unnecessary loss of data on certain categories
     # could arise.
     return dfc.dropna(axis=0, how="all")
-
-
-def _map_to_business_day_frequency(freq: str, valid_freqs: List[str] = None) -> str:
-    """
-    Maps a frequency string to a business frequency string.
-
-    :param <str> freq: The frequency string to be mapped.
-    :param <List[str]> valid_freqs: The valid frequency strings. If None, defaults to
-        ["D", "W". "M", "Q", "A"].
-    """
-    freq = freq.upper()
-
-    if valid_freqs is None:
-        valid_freqs = list(FREQUENCY_MAP.keys())
-
-    if freq not in valid_freqs:
-        raise ValueError(
-            f"Frequency must be one of {valid_freqs}, but received {freq}."
-        )
-    return FREQUENCY_MAP[freq]
 
 
 def years_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:

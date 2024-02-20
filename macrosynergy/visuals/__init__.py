@@ -10,6 +10,7 @@ from .view_panel_dates import view_panel_dates
 from .correlation import view_correlation
 from .ranges import view_ranges
 from .table import view_table
+from .multiple_reg_scatter import multiple_reg_scatter
 
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "view_table",
     "timelines",
     "view_panel_dates",
+    "multiple_reg_scatter"
 ]

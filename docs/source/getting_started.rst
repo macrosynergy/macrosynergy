@@ -44,4 +44,19 @@ Usage
 
 The package is designed to be used in conjunction with JPMaQS Quantamental Data from the 
 J.P. Morgan DataQuery API. If you do not have access to the DataQuery API, you can still 
-use the package with simulated data from `macrosynergy.management.simulate <../gen_rsts/macrosynergy.management.simulate.html>`_.
+use the package with simulated data from `macrosynergy.management.simulate <macrosynergy.management.simulate.html>`_.
+
+Development and Contribution
+----------------------------
+
+The Macrosynergy package is an open-source project. We welcome
+contributions of all kinds, from simple bug reports through to new
+features and documentation improvements. This document outlines the
+process for contributing to the project.
+
+You can find the source code for the package on GitHub at: https://github.com/macrosynergy/macrosynergy.
+
+If you would like to contribute to the project, please read the
+`Contribution guide <contribution_guide.html>`_ .
+
+
