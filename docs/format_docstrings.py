@@ -1,8 +1,6 @@
 import argparse
 import glob
 
-DOCTYPES = ["param", "return", "raises"]
-
 
 def format_docstring(docstr: str):
     """
@@ -10,8 +8,8 @@ def format_docstring(docstr: str):
     :param <str> docstr: The docstring to format.
     :return <str>: The formatted docstring.
     """
-    # assert that it starts with one of the DOCTYPES
-    if not docstr.strip().startswith(tuple([f":{x}" for x in DOCTYPES])):
+    # only works with param; not with return, raises, etc.
+    if not docstr.strip().startswith(":param"):
         return docstr
 
     first_colon: int = docstr.find(":")
