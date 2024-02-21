@@ -3,7 +3,7 @@ Tools to produce, visualise and use walk-forward validation splits across panels
 """
 
 import datetime
-from typing import Optional, List, Tuple, Iterator
+from typing import Optional, List, Tuple, Iterable
 
 import numpy as np
 import pandas as pd
@@ -252,7 +252,7 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
 
     def split(
         self, X: pd.DataFrame, y: pd.DataFrame, groups=None
-    ) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
+    ) -> Iterable[Tuple[np.ndarray, np.ndarray]]:
         """
         Method that produces pairs of training and test indices as intended by the
         ExpandingKFoldPanelSplit class. Wide format Pandas (panel) dataframes are 
@@ -266,8 +266,8 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
             (cross-section, date). The dates must be in datetime format.
         :param <int> groups: Always ignored, exists for compatibility with scikit-learn.
 
-        :return <Iterator[Tuple[np.ndarray[int],np.ndarray[int]]]> splits:
-            iterator of (train,test) indices.
+        :return <Iterable[Tuple[np.ndarray[int],np.ndarray[int]]]> splits:
+            Iterable of (train,test) indices.
         """
         self.train_indices: List[int] = []
         self.test_indices: List[int] = []
@@ -320,7 +320,7 @@ class RollingKFoldPanelSplit(BasePanelSplit):
 
     def split(
         self, X: pd.DataFrame, y: pd.DataFrame, groups=None
-    ) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
+    ) -> Iterable[Tuple[np.ndarray, np.ndarray]]:
         """
         Method that produces pairs of training and test indices as intended by the
         RollingKFoldPanelSplit class. Wide format Pandas (panel) dataframes are expected,
@@ -334,7 +334,7 @@ class RollingKFoldPanelSplit(BasePanelSplit):
             (cross-section, date). The dates must be in datetime format.
         :param <int> groups: Always ignored, exists for compatibility with scikit-learn.
 
-        :return <Iterator[Tuple[np.ndarray[int],np.ndarray[int]]]> splits: iterator of 
+        :return <Iterable[Tuple[np.ndarray[int],np.ndarray[int]]]> splits: Iterable of 
             (train,test) indices.
         """
         self._validate_Xy(X, y)
@@ -521,7 +521,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
 
     def split(
         self, X: pd.DataFrame, y: pd.DataFrame, groups=None
-    ) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
+    ) -> Iterable[Tuple[np.ndarray, np.ndarray]]:
         """
         Method that produces pairs of training and test indices as intended by the
         ExpandingIncrementPanelSplit class. Wide format Pandas (panel) dataframes are 
@@ -535,7 +535,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
             (cross-section, date). The dates must be in datetime format.
         :param <int> groups: Always ignored, exists for compatibility with scikit-learn.
 
-        :return <Iterator[Tuple[np.ndarray[int],np.ndarray[int]]]> splits: iterator of 
+        :return <Iterable[Tuple[np.ndarray[int],np.ndarray[int]]]> splits: Iterable of 
             (train,test) indices.
         """
         train_indices: List[int] = []
