@@ -131,7 +131,6 @@ def _hist_vol(
         freq=est_freq,
     )
 
-    
     # dfw_calc: pd.DataFrame = pd.DataFrame(
     #     index=trigger_indices, columns=[return_series], dtype=float
     # )
@@ -179,20 +178,43 @@ def _hist_vol(
     # fills = {"d": 1, "w": 5, "m": 24, "q": 64}
     # dfw_calc = dfw_calc.reindex(df_wide.index).ffill(limit=fills[est_freq])
 
-
     # TODO get the correct rebalance dates
     # TODO allow for multiple estimation frequency
-    list_vcv: List[Tuple[pd.Timestamp, pd.DataFrame, pd.Series]] = [
-        (trigger_date, _estimate_variance_covariance(pivot=pivot_returns.loc[pivot_returns.index <= trigger_date].iloc[-lback_periods:]), pivot_signals.loc[trigger_date, :])
-        for trigger_date in trigger_indices
-    ]
 
-    list_pvol = [(tt, signal.T.dot(vcv).dot(signal)) for tt, vcv, signal in list_vcv]
+    def _pvol_tuples(
+        trigger_indices: pd.DatetimeIndex,
+        pivot_returns: pd.DataFrame,
+        pivot_signals: pd.DataFrame,
+        lback_periods: int,
+    ):
+        # r = []
+        for trigger_date in trigger_indices:
+            td = trigger_date
+            pivot = pivot_returns.loc[pivot_returns.index <= td].iloc[-lback_periods:]
+            vcv = _estimate_variance_covariance(pivot=pivot)
+            signal = pivot_signals.loc[td, :]
+            # r.append((td, vcv, signal))
+            yield td, vcv, signal
+
+    list_pvol = [
+        (tt, signal.T.dot(vcv).dot(signal))
+        for tt, vcv, signal in _pvol_tuples(
+            trigger_indices=trigger_indices,
+            pivot_returns=pivot_returns,
+            pivot_signals=pivot_signals,
+            lback_periods=lback_periods,
+        )
+    ]
     portfolio_return_name = f"{sname}{RETURN_SERIES_XCAT}"
-    df_out = pd.DataFrame(list_pvol, columns=["real_date", portfolio_return_name]).set_index("real_date")
+    df_out = pd.DataFrame(
+        list_pvol,
+        columns=["real_date", portfolio_return_name],
+    ).set_index("real_date")
 
     # Annualised standard deviation (ASD)
-    df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name]) * np.sqrt(252)
+    df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name]) * np.sqrt(
+        252
+    )
 
     return ticker_df_to_qdf(df=df_out)
 
@@ -329,14 +351,22 @@ def historic_portfolio_vol(
     ## Filter DF and select CSIGs and XR
     filt_csigs: List[str] = [tx for tx in u_tickers if tx.endswith(f"_CSIG_{sname}")]
 
-    filt_xrs: List[str] = [
-        tx for tx in u_tickers if tx.endswith(f"{rstring}")
-    ]
+    filt_xrs: List[str] = [tx for tx in u_tickers if tx.endswith(f"{rstring}")]
 
     # df: pd.DataFrame = df.loc[df["ticker"].isin(filt_csigs + filt_xrs)]
-    df["fid"] = df["cid"] + "_" + df["xcat"].str.split("_").map(lambda x: x[0][:-2] if x[0].endswith("XR") else x[0])
-    pivot_signals: pd.DataFrame = df.loc[df.ticker.isin(filt_csigs)].pivot(index="real_date", columns="fid", values="value")
-    pivot_returns: pd.DataFrame = df.loc[df.ticker.isin(filt_xrs)].pivot(index="real_date", columns="fid", values="value")
+    df["fid"] = (
+        df["cid"]
+        + "_"
+        + df["xcat"]
+        .str.split("_")
+        .map(lambda x: x[0][:-2] if x[0].endswith("XR") else x[0])
+    )
+    pivot_signals: pd.DataFrame = df.loc[df["ticker"].isin(filt_csigs)].pivot(
+        index="real_date", columns="fid", values="value"
+    )
+    pivot_returns: pd.DataFrame = df.loc[df["ticker"].isin(filt_xrs)].pivot(
+        index="real_date", columns="fid", values="value"
+    )
     assert set(pivot_signals.columns) == set(pivot_returns.columns)
 
     # TODO the same?
@@ -441,7 +471,6 @@ if __name__ == "__main__":
     fids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
     # fids = ['EUR_FXXR', 'EUR_EQXR', 'GBP_FXXR', 'GBP_EQXR', 'AUD_FXXR', 'AUD_EQXR', 'CAD_FXXR', 'CAD_EQXR']
 
-    
     df_vol: pd.DataFrame = historic_portfolio_vol(
         df=dfX,
         sname="mySTRAT",
