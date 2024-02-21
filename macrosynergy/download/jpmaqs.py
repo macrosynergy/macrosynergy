@@ -682,7 +682,9 @@ class JPMaQSDownload(DataQueryInterface):
         if len(download_outputs) == 0:
             return []
 
-        if isinstance(download_outputs[0], pd.DataFrame):
+        if isinstance(download_outputs[0], pd.DataFrame) and not isinstance(
+            download_outputs[0], QuantamentalDataFrame
+        ):
             return concat_column_dfs(df_list=download_outputs)
 
         if isinstance(download_outputs[0][0], (dict, QuantamentalDataFrame)):
