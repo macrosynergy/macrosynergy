@@ -461,6 +461,8 @@ def reduce_df(
             combined_mask = pd.concat(masks, axis=1).any(axis=1)
             dfx = dfx[~combined_mask]
 
+    print(dfx.head())
+    print(dfx["xcat"])
     xcats_in_df = dfx["xcat"].unique()
     if xcats is None:
         xcats = sorted(xcats_in_df)
