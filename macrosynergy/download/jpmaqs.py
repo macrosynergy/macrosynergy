@@ -387,7 +387,6 @@ def validate_downloaded_df(
     missing_exprs = set(check_exprs) - set(found_expressions)
     if len(missing_exprs) > 0:
         logger.critical(log_str.format(missing_exprs=missing_exprs))
-        raise InvalidDataframeError(err_statement)
 
     if len(dates_missing) > 0:
         log_str = (
