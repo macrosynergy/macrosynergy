@@ -925,6 +925,9 @@ class JPMaQSDownload(DataQueryInterface):
             ):
                 raise InvalidDataframeError("Downloaded data is invalid.")
 
+            if dataframe_format == "qdf":
+                assert isinstance(data, QuantamentalDataFrame)
+
         return data
 
 
