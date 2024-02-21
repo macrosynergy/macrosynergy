@@ -366,6 +366,80 @@ def make_test_df(
     return pd.concat(df_list).reset_index(drop=True)
 
 
+def simulate_returns_and_signals(periods: int = 252*20):
+    """Simulate returns and signals
+    
+    Equations for return and signal generation:
+    1. r(t+1,i) = sigma(t+1,i)*(alpha(t+1,i) + beta(t+1,i)*rb(t+1) + epsilon(t+1,i))
+
+    epsilon(t+1,i) ~ N(0, 1)
+    
+    2. ln(sigma(t+1,i)) = ln(sigma(t,i)) + eta(t+1,i), eta(t+1,i) ~ N(0, sigma_eta^2)
+
+    3. alpha(t+1,i) = signal(t,i) + eta_alpha(t+1,i), eta_alpha(t+1,i) ~ N(0, sigma_alpha^2)
+
+    4. beta(t+1,i) = beta(t,i) + eta_beta(t+1,i), eta_beta(t+1,i) ~ N(0, sigma_beta^2)
+
+    5. rb(t+1) = mu + eta_rb(t+1), eta_rb(t+1) ~ N(0, sigma_rb^2)
+
+    """
+    periods = 252*20
+    n_cids = 4
+
+    def simulate_volatility(periods: int = 252*20, sigma_eta: float = 0.01, sigma_0: float = 0.1):
+        sigma = np.empty(shape=(periods+1))
+        sigma[0] = sigma_0  # Daily volatility (10 percent ASD)
+        eta_sigma = np.random.normal(0, sigma_eta, periods)
+        for ii, ee in enumerate(eta_sigma):
+            sigma[ii+1] = np.exp(np.log(sigma[ii]) + ee)
+        return sigma[1:]
+
+    # Generate volatility
+    print("Generate volatility (shared???)")
+    volatility = np.empty(shape=(periods, n_cids))
+    for nn in range(20):
+        volatility[:, nn] = simulate_volatility(periods=periods, sigma_eta=0.01, sigma_0=0.1)
+
+    # Generate signals: persistent?
+    signals = np.random.randn(periods, n_cids)  # Unit variance, zero mean
+
+    # Generate alpha
+    # TODO alpha needs to be a function of lagged signal and not necessarily continous?
+    # TODO signal and alpha can't be concurrent!
+    # TODO signal proxy/captures a slow moving trend in the alpha (risk-premium)
+    for ii in range(int(periods/20)):
+        signals[ii*20:ii*20+20, :] = signals[ii*20, :]
+    alpha = signals + np.random.randn(periods, n_cids)  # Unit variance, zero mean
+
+    # Generate benchmark return
+    rb = 0.4/252 + np.random.randn(periods, 1)  # 4% annual returns, unit variance
+
+    # Generate beta
+    beta = np.empty(shape=(1, n_cids, periods+1))
+    beta[:, :, 0] = 0.6  # Initial beta value
+
+    for ii in range(periods):
+        beta[:, :, ii+1] = beta[:, :, ii] + 0.005 * np.random.randn(1, n_cids)
+    beta = beta[:, :, 1:]
+    print("Final values of beta")
+    print(pd.Series(beta[0,:,-1]).describe())
+
+    # TODO get with kron-product?
+    rb_factor = np.array([rb[tt] * beta[0, :, tt] for tt in range(periods)])
+
+    # Calculate returns
+    rtn = volatility * (alpha + rb_factor + np.random.randn(periods, 1))
+
+    # TODO test simulated returns matches random walk hypothesis on the face of it
+
+    dates = pd.bdate_range(end=pd.Timestamp.today() + pd.offsets.BDay(n=0), periods=periods)
+    df_rtn = pd.DataFrame(index=dates, data=rtn)
+    df_signals = pd.DataFrame(index=dates, data=signals)  # TODO change dates to be previous month...
+
+    # TODO stack into quantamental dataframe
+    return df_rtn, df_signals
+
+
 if __name__ == "__main__":
     ser_ar = simulate_ar(100, mean=0, sd_mult=1, ar_coef=0.75)
 
