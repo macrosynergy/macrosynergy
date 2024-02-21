@@ -163,7 +163,7 @@ def timelines(
 
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
-        df = df.copy()
+        df = reduce_df(df, xcats=xcats, cids=cids, start=start, end=end)
         if len(xcats) > 1:
             raise ValueError("`cs_mean` cannot be True for multiple categories.")
 
