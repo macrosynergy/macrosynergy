@@ -478,8 +478,8 @@ class SignalOptimizer:
 
     def _worker(
         self,
-        train_idx: np.array,
-        test_idx: np.array,
+        train_idx: np.ndarrayay,
+        test_idx: np.ndarray,
         name: str,
         models: Dict[str, Union[BaseEstimator, Pipeline]],
         metric: Callable,
@@ -492,8 +492,8 @@ class SignalOptimizer:
         Private helper function to run the grid search for a single (train, test) pair
         and a collection of models. It is used to parallelise the pipeline.
 
-        :param <np.array> train_idx: Array of indices corresponding to the training set.
-        :param <np.array> test_idx: Array of indices corresponding to the test set.
+        :param <np.ndarray> train_idx: Array of indices corresponding to the training set.
+        :param <np.ndarray> test_idx: Array of indices corresponding to the test set.
         :param <str> name: Name of the prediction model.
         :param <Dict[str, Union[BaseEstimator,Pipeline]]> models: dictionary of sklearn
             predictors.

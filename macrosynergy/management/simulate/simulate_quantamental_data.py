@@ -22,7 +22,7 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
         This affects non-zero means.
     :param <float> ar_coef: autoregression coefficient (between 0 and 1): default is 0.75.
 
-    :return <np.array>: autocorrelated data series.
+    :return <np.ndarray>: autocorrelated data series.
     """
 
     # Define relative parameters for creating an AR process.

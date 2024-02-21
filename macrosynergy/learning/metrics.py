@@ -20,7 +20,7 @@ from typing import Union
 
 
 def panel_significance_probability(
-    y_true: pd.Series, y_pred: Union[pd.Series, np.array]
+    y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]
 ) -> float:
     """
     Function to create a linear mixed effects model between the ground truth returns and
@@ -32,7 +32,7 @@ def panel_significance_probability(
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
         multi-indexed by cross-section and date. The dates must be in datetime format.
-    :param <Union[pd.Series,np.array]> y_pred: Either a pandas series or numpy array
+    :param <Union[pd.Series,np.ndarray]> y_pred: Either a pandas series or numpy array
         of predicted targets. This must have the same length as y_true.
 
     :return <float> significance_prob: 1 - p-value of the regression slope parameter,
@@ -70,13 +70,13 @@ def panel_significance_probability(
     return 1 - pval
 
 
-def regression_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
+def regression_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> float:
     """
     Function to return the accuracy between the signs of the predictions and targets.
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
         multi-indexed by cross-section and date. The dates must be in datetime format.
-    :param <Union[pd.Series,np.array]> y_pred: Either a pandas series or numpy array
+    :param <Union[pd.Series,np.ndarray]> y_pred: Either a pandas series or numpy array
         of predicted targets. This must have the same length as y_true.
 
     :return <float>: Accuracy between the signs of the predictions and targets.
@@ -99,7 +99,7 @@ def regression_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -
 
 
 def regression_balanced_accuracy(
-    y_true: pd.Series, y_pred: Union[pd.Series, np.array]
+    y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]
 ) -> float:
     """
     Function to return the balanced accuracy between the signs
@@ -107,7 +107,7 @@ def regression_balanced_accuracy(
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
         multi-indexed by cross-section and date. The dates must be in datetime format.
-    :param <Union[pd.Series,np.array]> y_pred: Either a pandas series or numpy array
+    :param <Union[pd.Series,np.ndarray]> y_pred: Either a pandas series or numpy array
         of predicted targets. This must have the same length as y_true.
 
     :return <float>: Balanced accuracy between the signs of the predictions and targets.
@@ -129,14 +129,14 @@ def regression_balanced_accuracy(
     return balanced_accuracy_score(y_true < 0, y_pred < 0)
 
 
-def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
+def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> float:
     """
     Function to return a Sharpe ratio for a strategy where we go long if the predictions
     are positive and short if the predictions are negative.
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
         multi-indexed by cross-section and date. The dates must be in datetime format.
-    :param <Union[pd.Series,np.array]> y_pred: Either a pandas series or numpy array
+    :param <Union[pd.Series,np.ndarray]> y_pred: Either a pandas series or numpy array
         of predicted targets. This must have the same length as y_true.
 
     :return <float>: Sharpe ratio for the binary strategy.
@@ -170,14 +170,14 @@ def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float
     return sharpe_ratio
 
 
-def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
+def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> float:
     """
     Function to return a Sortino ratio for a strategy where we go long if the predictions
     are positive and short if the predictions are negative.
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
         multi-indexed by cross-section and date. The dates must be in datetime format.
-    :param <Union[pd.Series,np.array]> y_pred: Either a pandas series or numpy array
+    :param <Union[pd.Series,np.ndarray]> y_pred: Either a pandas series or numpy array
         of predicted targets. This must have the same length as y_true.
 
     :return <float>: Sortino ratio for the binary strategy.
