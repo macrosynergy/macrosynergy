@@ -11,10 +11,6 @@ import warnings
 
 from typing import List, Union, Tuple, Optional, Set
 
-import os, sys
-
-sys.path.append(os.getcwd())
-
 from macrosynergy.management.types import NoneType, Numeric, QuantamentalDataFrame
 from macrosynergy.management.utils import (
     is_valid_iso_date,
