@@ -11,12 +11,6 @@ import seaborn as sns
 
 from typing import List, Union, Tuple, Optional
 
-
-import os, sys
-
-sys.path.append(os.getcwd())
-
-
 from macrosynergy.management.utils import (
     standardise_dataframe,
     reduce_df,
@@ -31,6 +25,7 @@ from macrosynergy.management.utils import (
 
 from macrosynergy.management.types import Numeric, NoneType, QuantamentalDataFrame
 from macrosynergy.pnl.historic_portfolio_volatility import historic_portfolio_vol
+
 
 def _apply_slip(
     df: pd.DataFrame,
@@ -98,10 +93,9 @@ def _leverage_positions(
     for ic, contx in enumerate(fids):
         pos_col: str = contx + "_" + pname
         cont_name: str = contx + sig_ident
-        # NOTE: this should be 
+        # NOTE: this should be
         # dfw_pos = dfw_sigs * aum * leverage / rowsums(dfw_sigs)
         df_wide[pos_col] = df_wide[cont_name] * aum * leverage / rowsums
-
 
     # filter df to only contain position columns
     df_wide = df_wide.loc[:, [f"{contx}_{pname}" for contx in fids]]
