@@ -251,6 +251,24 @@ def _apply_hedge_ratios(
     return ticker_df_to_qdf(df=df_wide)
 
 
+def _add_hedged_signals(
+    df_contract_signals: QuantamentalDataFrame,
+    df_hedge_signals: Optional[QuantamentalDataFrame] = None,
+) -> QuantamentalDataFrame:
+    if df_hedge_signals is None:
+        return df_contract_signals
+
+    dfC: pd.DataFrame = qdf_to_ticker_df(df_contract_signals)
+    dfH: pd.DataFrame = qdf_to_ticker_df(df_hedge_signals)
+
+    for _col in set(dfH.columns):
+        if _col not in dfC.columns:
+            dfC[_col] = 0.0
+        dfC[_col] += dfH[_col]
+
+    return ticker_df_to_qdf(df=dfC)
+
+
 def contract_signals(
     df: pd.DataFrame,
     sig: str,
@@ -289,8 +307,8 @@ def contract_signals(
         These can be either a list of floats or a list of category tickers that serve
         as basis of translation. The former are fixed across time, the latter variable.
         The list `cscales` must be of the same length as the list `ctypes`.
-    :param <List[int]> csigns: list of signs that determine the direction of the 
-        contract signals. Contract signal is sign x cross section signal. 
+    :param <List[int]> csigns: list of signs that determine the direction of the
+        contract signals. Contract signal is sign x cross section signal.
         The signs must be either 1 or -1.
         The list `csigns` must be of the same length as `ctypes` and `cscales`.
     :param <List[str]> hbasket: list of contract identifiers in the format "<cid>_<ctype>"
@@ -300,7 +318,7 @@ def contract_signals(
         as basis of translation. The former are fixed across time, the latter variable.
     :param <str> hratios: category name for cross-section-specific hedge ratios.
         The values of this category determine direction and size of the hedge basket
-        per unit of the cross section-specific signal. 
+        per unit of the cross section-specific signal.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
@@ -427,9 +445,11 @@ def contract_signals(
             hratios=hratios,
         )
 
-    # Append the (rows of) the hedge signals to the contract signals
-    df_out: pd.DataFrame = pd.concat([df_contract_signals, df_hedge_signals], axis=0)
-
+    # Add the hedge signals to the contract signals
+    df_out: pd.DataFrame = _add_hedged_signals(
+        df_contract_signals=df_contract_signals,
+        df_hedge_signals=df_hedge_signals,
+    )
     # Append the strategy name to all the xcats
     df_out["xcat"] = df_out["xcat"] + "_" + sname
 
@@ -471,4 +491,4 @@ if __name__ == "__main__":
         hscales=hscales,
         hratios="HR",
     )
-    df_cs['xcat'].unique()
+    df_cs["xcat"].unique()
