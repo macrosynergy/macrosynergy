@@ -5,12 +5,7 @@ Module for calculating the historic portfolio volatility for a given strategy.
 from typing import List, Optional, Callable
 import pandas as pd
 import numpy as np
-
-import os, sys
-
-sys.path.append(os.getcwd())
-
-
+from macrosynergy.panel.historic_vol import expo_std, flat_std, expo_weights
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.management.utils import (
     reduce_df,
@@ -26,76 +21,50 @@ from macrosynergy.management.utils import (
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
 
 
-def expo_weights(lback_periods: int = 21, half_life: int = 11):
+def _univariate_volatility(
+    df_wide: pd.DataFrame,
+    roll_func: Callable,
+    lback_periods: int,
+    nan_tolerance: float,
+    remove_zeros: bool,
+    weights: Optional[np.ndarray],
+):
     """
-    Calculates exponential series weights for finite horizon, normalized to 1.
+    Calculates the univariate volatility for a given dataframe.
 
-    :param <int>  lback_periods: Number of lookback periods over which volatility is
-        calculated. Default is 21.
-    :param <int> half_life: Refers to the half-time for "xma" and full lookback period
-        for "ma". Default is 11.
-
-    :return <np.ndarray>: An Array of weights determined by the length of the lookback
-        period.
-
-    Note: 50% of the weight allocation will be applied to the number of days delimited by
-        the half_life.
-    """
-    # Copied from macrosynergy.panel.historic_vol
-    decf = 2 ** (-1 / half_life)
-    weights = (1 - decf) * np.array(
-        [decf ** (lback_periods - ii - 1) for ii in range(lback_periods)]
-    )
-    weights = weights / sum(weights)
-
-    return weights
-
-
-def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True) -> float:
-    """
-    Estimate standard deviation of returns based on exponentially weighted absolute
-    values.
-
-    :param <np.ndarray> x: array of returns
-    :param <np.ndarray> w: array of exponential weights (same length as x); will be
-        normalized to 1.
+    :param <pd.DataFrame> df_wide: the wide dataframe of all the tickers in the strategy.
+    :param <callable> roll_func: the function to use for the rolling window calculation.
+        The function must have a signature of (np.ndarray, *, remove_zeros: bool) -> float.
+        See `expo_std` and `flat_std` for examples.
     :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
         effective window.
-
-    :return <float>: exponentially weighted mean absolute value (as proxy of return
-        standard deviation).
-
+    :param <np.ndarray> weights: array of exponential weights for each period in the
+        lookback window. Default is None, which means that the weights are equal.
     """
-    # Copied from macrosynergy.panel.historic_vol
+    if weights is None:
+        weights = np.ones(df_wide.shape[0]) / df_wide.shape[0]
+        univariate_vol: pd.Series = df_wide.agg(roll_func, remove_zeros=remove_zeros)
+    else:
+        if len(weights) == len(df_wide):
+            univariate_vol = df_wide.agg(
+                roll_func, w=weights, remove_zeros=remove_zeros
+            )
+        else:
+            return pd.Series(np.nan, index=df_wide.columns)
 
-    assert len(x) == len(w), "weights and window must have same length"
-    if remove_zeros:
-        x = x[x != 0]
-        w = w[0 : len(x)] / sum(w[0 : len(x)])
-    w = w / sum(w)  # weights are normalized
-    mabs = np.sum(np.multiply(w, np.abs(x)))
-    return mabs
+        ## Creating a mask to fill series `nan_tolerance`
+    mask = (
+        (
+            df_wide.isna().sum(axis=0)
+            + (df_wide == 0).sum(axis=0)
+            + (lback_periods - len(df_wide))
+        )
+        / lback_periods
+    ) <= nan_tolerance
 
+    univariate_vol[~mask] = np.nan
 
-def flat_std(x: np.ndarray, remove_zeros: bool = True) -> float:
-    """
-    Estimate standard deviation of returns based on exponentially weighted absolute
-    values.
-
-    :param <np.ndarray> x: array of returns
-    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
-        effective window.
-
-    :return <float>: flat weighted mean absolute value (as proxy of return standard
-        deviation).
-
-    """
-    # Copied from macrosynergy.panel.historic_vol
-
-    if remove_zeros:
-        x = x[x != 0]
-    mabs = np.mean(np.abs(x))
-    return mabs
+    return univariate_vol
 
 
 def _rolling_window_calc(
@@ -105,6 +74,8 @@ def _rolling_window_calc(
     nan_tolerance: float,
     roll_func: Callable,
     remove_zeros: bool,
+    rstring: str,
+    sname: str,
     weights: Optional[np.ndarray] = None,
 ):
     """
@@ -132,37 +103,17 @@ def _rolling_window_calc(
     ]
 
     ## Calculate univariate volatility
+    df_cs = df_wide.loc[:, df_wide.columns.str.endswith(f"_CSIG_{sname}")]
 
-    univariate_vol: pd.Series
-    if weights is None:
-        weights = np.ones(lback_periods) / lback_periods
-        univariate_vol = np.sqrt(252) * df_wide.agg(
-            roll_func, remove_zeros=remove_zeros
-        )
-    else:
-        if len(weights) == len(df_wide):
-            univariate_vol = np.sqrt(252) * df_wide.agg(
-                roll_func, w=weights, remove_zeros=remove_zeros
-            )
-        else:
-            return pd.Series(np.nan, index=df_wide.columns)
+    # univariate_vol: pd.Series = _univariate_volatility(...)
 
-    ## Creating a mask to fill series `nan_tolerance`
-    mask = (
-        (
-            df_wide.isna().sum(axis=0)
-            + (df_wide == 0).sum(axis=0)
-            + (lback_periods - len(df_wide))
-        )
-        / lback_periods
-    ) <= nan_tolerance
+    # multiply contract signals by the returns
+    for _cs in df_cs.columns.tolist():
+        asset = _cs.replace(f"_CSIG_{sname}", "")
+        df_cs.loc[:, _cs] = df_cs[_cs] * df_wide[f"{asset}_{rstring}"]
+        # already ends in _XR
 
-    univariate_vol[~mask] = np.nan
-
-    ## Inversed univariate volatility
-    inv_univariate_vol = 1 / univariate_vol
-
-    vcv: pd.DataFrame = df_wide.cov()
+    vcv = df_cs.cov()
     total_variance: float = vcv.to_numpy().sum()
     period_volatility: float = np.sqrt(total_variance)
     annualized_vol: pd.Series = period_volatility * np.sqrt(252)
@@ -211,12 +162,7 @@ def _hist_vol(
 
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
 
-    ## Multiply the returns by weight_signals
-    r_series_list = df_wide.columns[
-        df_wide.columns.str.endswith(f"{rstring}_{rstring}_CSIG_{sname}")
-    ]
-
-    df_wide = df_wide[r_series_list]
+    df_wide = df_wide[sorted(df_wide.columns)]  # Sort columns to keep debugging easier
 
     # NOTE: `get_eops` helps identify the dates for which the volatility calculation
     # will be performed. This is done by identifying the last date of each cycle.
@@ -240,18 +186,20 @@ def _hist_vol(
             half_life=half_life,
         )
 
+    _args: dict = dict(remove_zeros=remove_zeros, rstring=rstring, sname=sname)
+
     if est_freq == "d":
-        _args: dict = dict(remove_zeros=remove_zeros)
         if lback_meth == "xma":
             _args.update(dict(func=expo_std, w=expo_weights_arr))
         elif lback_meth == "ma":
             _args.update(dict(func=flat_std))
 
     else:
-        _args = dict(
-            remove_zeros=remove_zeros,
-            lback_periods=lback_periods,
-            nan_tolerance=nan_tolerance,
+        _args.update(
+            dict(
+                lback_periods=lback_periods,
+                nan_tolerance=nan_tolerance,
+            )
         )
         if lback_meth == "xma":
             _args.update(dict(roll_func=expo_std, w=expo_weights_arr))
@@ -407,20 +355,26 @@ def historic_portfolio_vol(
         ):
             raise ValueError(f"Contract identifier `{contx}` not in dataframe.")
 
-    ## Filter DF such that all timeseries have the correct return category, strategy name
-    ## and contract identifier
-    _cfids = get_cid(ticker=fids)
-    filt_tickers: List[str] = [
-        tx
-        for tx in u_tickers
-        if (
-            tx.endswith(f"_CSIG_{sname}")
-            and (f"{rstring}_{rstring}" in tx)
-            and (get_cid(tx) in _cfids)
+    if not all([f"{contx}_{rstring}" in u_tickers for contx in fids]):
+        missing_tickers = [
+            f"{contx}_{rstring}"
+            for contx in fids
+            if f"{contx}_{rstring}" not in u_tickers
+        ]
+        raise ValueError(
+            f"The dataframe is missing the following return series: {missing_tickers}"
         )
+
+    ## Filter DF and select CSIGs and XR_XRs
+    _cfids = list(set(get_cid(ticker=fids)))
+
+    filt_csigs: List[str] = [tx for tx in u_tickers if tx.endswith(f"_CSIG_{sname}")]
+
+    filt_xrs: List[str] = [
+        tx for tx in u_tickers if tx.endswith(f"{rstring}_{rstring}")
     ]
 
-    df: pd.DataFrame = df.loc[df["ticker"].isin(filt_tickers)]
+    df: pd.DataFrame = df.loc[df["ticker"].isin(filt_csigs + filt_xrs)]
 
     if df.empty:
         raise ValueError(
@@ -450,7 +404,7 @@ if __name__ == "__main__":
     from macrosynergy.management.simulate import make_test_df
     from contract_signals import contract_signals
 
-    cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
+    cids: List[str] = ["EUR", "GBP", "AUD", "CAD"]
     xcats: List[str] = ["SIG", "HR"]
 
     start: str = "2000-01-01"
@@ -464,12 +418,11 @@ if __name__ == "__main__":
     )
 
     df.loc[(df["cid"] == "USD") & (df["xcat"] == "SIG"), "value"] = 1.0
-    ctypes = ["FXXR", "FXXRUSDxEASD"]
-
+    ctypes = ["FXXR", "EQXR"]
     cscales = [1.0, 0.5]
     csigns = [1, -1]
 
-    hbasket = ["USD_FXXR", "EUR_FXXR"]
+    hbasket = ["GBP_FXXR", "EUR_FXXR"]
     hscales = [0.7, 0.3]
 
     df_cs: pd.DataFrame = contract_signals(
@@ -485,23 +438,49 @@ if __name__ == "__main__":
         sname="mySTRAT",
     )
 
-    dfX = pd.concat([df, df_cs], axis=0)
-
     ## `df_cs` looks like:
-    #       cid                       xcat  real_date         value
-    # 0      AUD  FXXRUSDxEASD_CSIG_mySTRAT 2000-01-03     -0.009126
-    # 1      AUD          FXXR_CSIG_mySTRAT 2000-01-03      0.018252
-    # 2      CAD  FXXRUSDxEASD_CSIG_mySTRAT 2000-01-03    -49.999984
-    # 3      CAD          FXXR_CSIG_mySTRAT 2000-01-03     99.999967
-    # 4      EUR  FXXRUSDxEASD_CSIG_mySTRAT 2000-01-03     -0.009126
-    # ...    ...                        ...        ...           ...
-    # 54785  USD          FXXR_CSIG_mySTRAT 2020-12-31  21026.058628
-    # 54786  USD          FXXR_CSIG_mySTRAT 2020-12-31  21026.058628
-    # 54787  USD          FXXR_CSIG_mySTRAT 2020-12-31  21026.058628
-    # 54788  USD          FXXR_CSIG_mySTRAT 2020-12-31  21026.058628
-    # 54789  USD          FXXR_CSIG_mySTRAT 2020-12-31  21026.058628
+    #       real_date  cid               xcat         value
+    # 0     2000-01-03  AUD  EQXR_CSIG_mySTRAT     -0.009126
+    # 1     2000-01-03  AUD  FXXR_CSIG_mySTRAT      0.018252
+    # 2     2000-01-03  CAD  EQXR_CSIG_mySTRAT    -25.028669
+    # 3     2000-01-03  CAD  FXXR_CSIG_mySTRAT     50.057339
+    # 4     2000-01-03  EUR  EQXR_CSIG_mySTRAT    -50.000000
+    # ...          ...  ...                ...           ...
+    # 43827 2020-12-31  CAD  FXXR_CSIG_mySTRAT     50.000000
+    # 43828 2020-12-31  EUR  EQXR_CSIG_mySTRAT    -49.926954
+    # 43829 2020-12-31  EUR  FXXR_CSIG_mySTRAT   9088.903408
+    # 43830 2020-12-31  GBP  EQXR_CSIG_mySTRAT    -25.000000
+    # 43831 2020-12-31  GBP  FXXR_CSIG_mySTRAT  21024.448833
+
+    df_xr = make_test_df(
+        cids=cids,
+        xcats=["EQXR_XR", "FXXR_XR"],
+        start=start,
+        end=end,
+    )
+
+    ## `df_xr` looks like:
+    #         real_date  cid     xcat       value
+    # 0     2000-01-03  EUR  EQXR_XR  100.000000
+    # 1     2000-01-04  EUR  EQXR_XR   99.853908
+    # 2     2000-01-05  EUR  EQXR_XR   99.707816
+    # 3     2000-01-06  EUR  EQXR_XR   99.561724
+    # 4     2000-01-07  EUR  EQXR_XR   99.415632
+    # ...          ...  ...      ...         ...
+    # 43827 2020-12-25  CAD  FXXR_XR   99.269540
+    # 43828 2020-12-28  CAD  FXXR_XR   99.415632
+    # 43829 2020-12-29  CAD  FXXR_XR   99.561724
+    # 43830 2020-12-30  CAD  FXXR_XR   99.707816
+    # 43831 2020-12-31  CAD  FXXR_XR   99.853908
+
+    ...
+
+    ## Concatenate the dataframes
+    dfX = pd.concat([df_cs, df_xr], axis=0)
 
     fids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
+    # fids = ['EUR_FXXR', 'EUR_EQXR', 'GBP_FXXR', 'GBP_EQXR', 'AUD_FXXR', 'AUD_EQXR', 'CAD_FXXR', 'CAD_EQXR']
+
     df_vol: pd.DataFrame = historic_portfolio_vol(
         df=dfX,
         sname="mySTRAT",
@@ -516,16 +495,15 @@ if __name__ == "__main__":
     )
 
     ## `df_vol` looks like:
-    #         cid           xcat  real_date        value
-    # 0     mySTRAT  PNL_USD1S_ASD 2000-01-31   331.875030
-    # 1     mySTRAT  PNL_USD1S_ASD 2000-02-01   331.875030
-    # 2     mySTRAT  PNL_USD1S_ASD 2000-02-02   331.875030
-    # 3     mySTRAT  PNL_USD1S_ASD 2000-02-03   331.875030
-    # 4     mySTRAT  PNL_USD1S_ASD 2000-02-04   331.875030
-    # ...       ...            ...        ...          ...
-    # 5454  mySTRAT  PNL_USD1S_ASD 2020-12-25  1016.964736
-    # 5455  mySTRAT  PNL_USD1S_ASD 2020-12-28  1016.964736
-    # 5456  mySTRAT  PNL_USD1S_ASD 2020-12-29  1016.964736
-    # 5457  mySTRAT  PNL_USD1S_ASD 2020-12-30  1016.964736
-    # 5458  mySTRAT  PNL_USD1S_ASD 2020-12-31  1000.390667
-    # [5459 rows x 4 columns]
+    #       real_date      cid           xcat         value
+    # 0    2000-01-31  mySTRAT  PNL_USD1S_ASD    519.638295
+    # 1    2000-02-01  mySTRAT  PNL_USD1S_ASD    519.638295
+    # 2    2000-02-02  mySTRAT  PNL_USD1S_ASD    519.638295
+    # 3    2000-02-03  mySTRAT  PNL_USD1S_ASD    519.638295
+    # 4    2000-02-04  mySTRAT  PNL_USD1S_ASD    519.638295
+    # ...         ...      ...            ...           ...
+    # 5454 2020-12-25  mySTRAT  PNL_USD1S_ASD  80932.561430
+    # 5455 2020-12-28  mySTRAT  PNL_USD1S_ASD  80932.561430
+    # 5456 2020-12-29  mySTRAT  PNL_USD1S_ASD  80932.561430
+    # 5457 2020-12-30  mySTRAT  PNL_USD1S_ASD  80932.561430
+    # 5458 2020-12-31  mySTRAT  PNL_USD1S_ASD  79138.839677
