@@ -156,11 +156,10 @@ def timelines(
 
     if cumsum:
         df = df.copy()
-        df[val] = (
-            df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
+        df[val] = (df.sort_values(["cid", "xcat", "real_date"])
+            [["cid", "xcat", val]]
             .groupby(["cid", "xcat"])
-            .cumsum()
-        )
+            .cumsum())
 
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
