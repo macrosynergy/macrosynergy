@@ -137,7 +137,7 @@ def run_commands_on_ec2(instance, notebooks):
     stdout.channel.recv_exit_status()
 
     print(f"Running pip commands on {instance.id}...")
-    venv_commands = "myvenv/bin/python -m pip install linearmodels jupyter git+https://github.com/macrosynergy/macrosynergy@main --upgrade"
+    venv_commands = "myvenv/bin/python -m pip install linearmodels jupyter git+https://github.com/macrosynergy/macrosynergy@feature/srr-ammendments --upgrade"
     stdin, stdout, stderr = ssh_client.exec_command(venv_commands, timeout=10)
     stdout.channel.recv_exit_status()
 
@@ -237,7 +237,7 @@ for d in list(output):
         else:
             merged_dict[key] = value
 
-print(merged_dict)
+print(f"Successful notebooks: {merged_dict['succeeded']}\nFailed notebooks: {merged_dict['failed']}")
 
 end_time = time.time()
 
@@ -266,6 +266,6 @@ def send_email(subject, body, recipient, sender):
 email_subject = "Notebook Failures"
 email_body = f"Please note that the following notebooks failed when ran on the branch: \n{pd.DataFrame(merged_dict['failed']).to_html()}\nThe total time to run all notebooks was {end_time - start_time} seconds."
 recipient_email = ["sandresen@macrosynergy.com"] #os.getenv("EMAIL_RECIPIENTS").split(",")
-sender_email = "machine@macrosynergy.com" #os.getenv("ENDER_EMAIL")
+sender_email = "machine@macrosynergy.com" #os.getenv("SENDER_EMAIL")
 
 send_email(email_subject, email_body, recipient_email, sender_email)
