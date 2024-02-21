@@ -18,7 +18,7 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
-from macrosynergy.management.utils import standardise_dataframe
+from macrosynergy.management.utils import standardise_dataframe, reduce_df
 from macrosynergy.visuals import FacetPlot, LinePlot
 from macrosynergy.management.types import Numeric
 import time
@@ -155,11 +155,11 @@ def timelines(
         cids: List[str] = df["cid"].unique().tolist()
 
     if cumsum:
-        df = df.copy()
+        reduce_df(df, xcats=xcats, cids=cids, start=start, end=end)
         df[val] = (df.sort_values(["cid", "xcat", "real_date"])
             [["cid", "xcat", val]]
             .groupby(["cid", "xcat"])
-            .cumsum().to_numpy())
+            .cumsum())
 
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
