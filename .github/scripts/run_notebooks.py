@@ -102,7 +102,7 @@ def run_commands_on_ec2(instance, notebooks):
     outputs = {"succeeded": [], "failed": []}
     
     # Initial cleanup commands
-    cleanup_commands = "rm -rf notebooks failed_notebooks.txt successful_notebooks.txt nohup.out"
+    cleanup_commands = "rm -rf notebooks failed_notebooks.txt successful_notebooks.txt nohup.out myvenv"
     print(f"Running cleanup commands on {instance.id}...")
     stdin, stdout, stderr = ssh_client.exec_command(cleanup_commands, timeout=10)
     stdout.channel.recv_exit_status()  # Wait for command to complete
@@ -127,16 +127,24 @@ def run_commands_on_ec2(instance, notebooks):
     # Wget commands
     print(f"Running wget commands on {instance.id}...")
     wget_commands = " && ".join(["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks])
-    stdin, stdout, stderr = ssh_client.exec_command(f"bash -c '{wget_commands}'", timeout=10)
+    stdin, stdout, stderr = ssh_client.exec_command(f"bash -c '{wget_commands}'", timeout=50)
     stdout.channel.recv_exit_status()
     # Consider adding a delay or checking for command completion if necessary
     
+    print(f"Running venv commands on {instance.id}...")
+    venv_commands = "python3 -m venv myvenv"
+    stdin, stdout, stderr = ssh_client.exec_command(venv_commands, timeout=10)
+    stdout.channel.recv_exit_status()
+
+    print(f"Running pip commands on {instance.id}...")
+    venv_commands = "myvenv/bin/python -m pip install linearmodels jupyter git+https://github.com/macrosynergy/macrosynergy@main --upgrade"
+    stdin, stdout, stderr = ssh_client.exec_command(venv_commands, timeout=10)
+    stdout.channel.recv_exit_status()
+
     # Pip and nohup commands
-    complex_command = """
-    source myvenv/bin/activate; pip install linearmodels --upgrade; pip install jupyter --upgrade; pip install git+https://github.com/macrosynergy/macrosynergy@feature/srr-ammendments --upgrade; nohup python run_notebooks.py > nohup.out 2>&1 &
-    """
+    notebook_runner_cmd = "nohup myvenv/bin/python run_notebooks.py > nohup.out 2>&1 &"
     print(f"Running notebook runner commands on {instance.id}...")
-    ssh_client.exec_command(f"bash -c \"{complex_command}\"", timeout=10)
+    ssh_client.exec_command(notebook_runner_cmd, timeout=10)
     
     print(f"Getting output from instance... {instance.id}")
     successful_notebooks, failed_notebooks = get_output_from_instance(ssh_client)
