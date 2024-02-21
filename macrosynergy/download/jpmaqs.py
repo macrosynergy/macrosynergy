@@ -359,24 +359,35 @@ def validate_downloaded_df(
         else data_df.index.unique()
     )
     dates_missing = list(set(dates_expected) - set(found_dates))
-
+    log_str = (
+        "The expressions in the downloaded data are not a subset of the expected expressions."
+        " Missing expressions: {missing_exprs}"
+    )
+    err_statement = (
+        "The expressions in the downloaded data are not a subset of the "
+        "expected expressions."
+    )
+    check_exprs = set()
     if isinstance(data_df, QuantamentalDataFrame):
         found_metrics = list(
             set(data_df.columns) - set(QuantamentalDataFrame.IndexCols)
         )
         for col in QuantamentalDataFrame.IndexCols:
-            if not data_df[col].unique() > 0:
+            if not len(data_df[col].unique()) > 0:
                 raise InvalidDataframeError(f"Column {col} is empty.")
 
         check_exprs = construct_expressions(
             tickers=(data_df["cid"] + "_" + data_df["xcat"]).unique(),
             metrics=found_metrics,
         )
-        if not set(check_exprs).issubset(set(expected_expressions)):
-            raise InvalidDataframeError(
-                "The expressions in the downloaded data are not a subset of the "
-                "expected expressions."
-            )
+
+    else:
+        check_exprs = data_df.columns.tolist()
+
+    missing_exprs = set(check_exprs) - set(found_expressions)
+    if len(missing_exprs) > 0:
+        logger.critical(log_str.format(missing_exprs=missing_exprs))
+        raise InvalidDataframeError(err_statement)
 
     if len(dates_missing) > 0:
         log_str = (
