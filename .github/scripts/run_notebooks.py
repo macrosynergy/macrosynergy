@@ -13,6 +13,8 @@ from botocore.exceptions import ClientError
 
 # Get ec2 instance with name notebook-runner-* and state isnt terminated
 
+branch_name = "feature/srr-ammendments"
+
 start_time = time.time()
 
 aws_region = "eu-west-2"
@@ -137,7 +139,7 @@ def run_commands_on_ec2(instance, notebooks):
     stdout.channel.recv_exit_status()
 
     print(f"Running pip commands on {instance.id}...")
-    venv_commands = "myvenv/bin/python -m pip install linearmodels jupyter git+https://github.com/macrosynergy/macrosynergy@bugfix/jpmaqs_download  --upgrade"
+    venv_commands = f"myvenv/bin/python -m pip install linearmodels jupyter git+https://github.com/macrosynergy/macrosynergy@{branch_name}  --upgrade"
     stdin, stdout, stderr = ssh_client.exec_command(venv_commands, timeout=50)
     stdout.channel.recv_exit_status()
 
@@ -264,7 +266,7 @@ def send_email(subject, body, recipient, sender):
         print(f"Error sending email: {e.response['Error']['Message']}")
 
 email_subject = "Notebook Failures"
-email_body = f"Please note that the following notebooks failed when ran on the branch: \n{pd.DataFrame(merged_dict['failed']).to_html()}\nThe total time to run all notebooks was {end_time - start_time} seconds."
+email_body = f"Please note that the following notebooks failed when ran on the branch {branch_name}: \n{pd.DataFrame(merged_dict['failed']).to_html()}\nThe total time to run all notebooks was {end_time - start_time} seconds."
 recipient_email = ["sandresen@macrosynergy.com"] #os.getenv("EMAIL_RECIPIENTS").split(",")
 sender_email = "machine@macrosynergy.com" #os.getenv("SENDER_EMAIL")
 
