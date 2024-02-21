@@ -66,9 +66,37 @@ def _univariate_volatility(
     return univariate_vol
 
 
-def _estimate_variance_covariance(pivot: pd.DataFrame) -> pd.DataFrame:
+def _estimate_variance_covariance(
+    piv_ret: pd.DataFrame,
+    roll_func: str,
+    remove_zeros: bool,
+    nan_tolerance: float,
+    lback_periods: int,
+    weights: Optional[np.ndarray],
+) -> pd.DataFrame:
     # TODO add complexity of weighting and estimation methods
-    vcv = pivot.cov()
+
+    if weights is None:
+        piv_ret = piv_ret.agg(roll_func, remove_zeros=remove_zeros)
+    else:
+        if len(weights) == len(piv_ret):
+            piv_ret = piv_ret.agg(roll_func, w=weights, remove_zeros=remove_zeros)
+        else:
+            piv_ret = pd.Series(np.nan, index=piv_ret.index)
+
+    mask = (
+        (
+            piv_ret.isna().sum(axis=0)
+            + (piv_ret == 0).sum(axis=0)
+            + (lback_periods - len(piv_ret))
+        )
+        / lback_periods
+    ) <= nan_tolerance
+
+    piv_ret[~mask] = np.nan
+
+    vcv = piv_ret.cov()
+
     return vcv
 
 
@@ -76,7 +104,6 @@ def _hist_vol(
     pivot_signals: pd.DataFrame,
     pivot_returns: pd.DataFrame,
     sname: str,
-    rstring: str,
     est_freq: str = "m",
     lback_periods: int = 21,
     lback_meth: str = "ma",
@@ -131,78 +158,54 @@ def _hist_vol(
         freq=est_freq,
     )
 
-    # dfw_calc: pd.DataFrame = pd.DataFrame(
-    #     index=trigger_indices, columns=[return_series], dtype=float
-    # )
-
-    # expo_weights_arr: Optional[np.ndarray] = None
-    # if lback_meth == "xma":
-    #     expo_weights_arr: np.ndarray = expo_weights(
-    #         lback_periods=lback_periods,
-    #         half_life=half_life,
-    #     )
-
-    # _args: dict = dict(remove_zeros=remove_zeros, rstring=rstring, sname=sname)
-
-    # if est_freq == "d":
-    #     if lback_meth == "xma":
-    #         _args.update(dict(func=expo_std, w=expo_weights_arr))
-    #     elif lback_meth == "ma":
-    #         _args.update(dict(func=flat_std))
-
-    # else:
-    #     _args.update(
-    #         dict(
-    #             lback_periods=lback_periods,
-    #             nan_tolerance=nan_tolerance,
-    #         )
-    #     )
-    #     if lback_meth == "xma":
-    #         _args.update(dict(roll_func=expo_std, w=expo_weights_arr))
-    #     elif lback_meth == "ma":
-    #         _args.update(dict(roll_func=flat_std))
-
-    # if est_freq == "d":
-    #     # dfw_calc = df_wide.rolling(lback_periods).agg(**_args)
-    #     raise NotImplementedError("Daily volatility not implemented yet.")
-    #     # TODO: Contradiction to other condition above
-
-    # else:
-    #     for r_date in trigger_indices:
-    #         dfw_calc.loc[r_date, :] = _rolling_window_calc(
-    #             real_date_pdt=r_date,
-    #             ticker_df=df_wide,
-    #             **_args,
-    #         )
-
     # fills = {"d": 1, "w": 5, "m": 24, "q": 64}
     # dfw_calc = dfw_calc.reindex(df_wide.index).ffill(limit=fills[est_freq])
 
     # TODO get the correct rebalance dates
     # TODO allow for multiple estimation frequency
 
+    expo_weights_arr: Optional[np.ndarray] = None
+    if lback_meth == "xma":
+        expo_weights_arr: np.ndarray = expo_weights(
+            lback_periods=lback_periods,
+            half_life=half_life,
+        )
+
+    roll_func: Callable = expo_std if lback_meth == "xma" else flat_std
+
     def _pvol_tuples(
         trigger_indices: pd.DatetimeIndex,
         pivot_returns: pd.DataFrame,
         pivot_signals: pd.DataFrame,
         lback_periods: int,
+        **kwargs,
+        # roll_func: str,
+        # remove_zeros: bool,
+        # nan_tolerance: float,
+        # weights: Optional[np.ndarray],
     ):
-        # r = []
         for trigger_date in trigger_indices:
             td = trigger_date
-            pivot = pivot_returns.loc[pivot_returns.index <= td].iloc[-lback_periods:]
-            vcv = _estimate_variance_covariance(pivot=pivot)
-            signal = pivot_signals.loc[td, :]
-            # r.append((td, vcv, signal))
-            yield td, vcv, signal
+            piv_ret = pivot_returns.loc[pivot_returns.index <= td].iloc[-lback_periods:]
+            vcv: pd.DataFrame = _estimate_variance_covariance(
+                piv_ret=piv_ret, lback_periods=lback_periods, **kwargs
+            )
+            piv_sig: pd.DataFrame = pivot_signals.loc[td, :]
+
+            # yield td, vcv, piv_sig
+            yield td, piv_sig.T.dot(vcv).dot(piv_sig)
 
     list_pvol = [
-        (tt, signal.T.dot(vcv).dot(signal))
-        for tt, vcv, signal in _pvol_tuples(
+        (td, pvol)
+        for td, pvol in _pvol_tuples(
             trigger_indices=trigger_indices,
             pivot_returns=pivot_returns,
             pivot_signals=pivot_signals,
             lback_periods=lback_periods,
+            roll_func=roll_func,
+            remove_zeros=remove_zeros,
+            nan_tolerance=nan_tolerance,
+            weights=expo_weights_arr,
         )
     ]
     portfolio_return_name = f"{sname}{RETURN_SERIES_XCAT}"
@@ -216,7 +219,7 @@ def _hist_vol(
         252
     )
 
-    return ticker_df_to_qdf(df=df_out)
+    return df_out
 
 
 def historic_portfolio_vol(
@@ -338,7 +341,7 @@ def historic_portfolio_vol(
         ):
             raise ValueError(f"Contract identifier `{contx}` not in dataframe.")
 
-    if not all([f"{contx}{rstring}" in u_tickers for contx in fids]):
+    if not all([f"{contx}_{rstring}" in u_tickers for contx in fids]):
         missing_tickers = [
             f"{contx}_{rstring}"
             for contx in fids
@@ -351,7 +354,7 @@ def historic_portfolio_vol(
     ## Filter DF and select CSIGs and XR
     filt_csigs: List[str] = [tx for tx in u_tickers if tx.endswith(f"_CSIG_{sname}")]
 
-    filt_xrs: List[str] = [tx for tx in u_tickers if tx.endswith(f"{rstring}")]
+    filt_xrs: List[str] = [tx for tx in u_tickers if tx.endswith(f"_{rstring}")]
 
     # df: pd.DataFrame = df.loc[df["ticker"].isin(filt_csigs + filt_xrs)]
     df["fid"] = (
@@ -369,14 +372,11 @@ def historic_portfolio_vol(
     )
     assert set(pivot_signals.columns) == set(pivot_returns.columns)
 
-    # TODO the same?
-    assert all(pivot_signals.columns == pivot_returns.columns)
-
     hist_port_vol: pd.DataFrame = _hist_vol(
         pivot_returns=pivot_returns,
         pivot_signals=pivot_signals,
         sname=sname,
-        rstring=rstring,
+        # rstring=rstring,
         est_freq=est_freq,
         lback_periods=lback_periods,
         lback_meth=lback_meth,
@@ -387,12 +387,15 @@ def historic_portfolio_vol(
 
     assert isinstance(hist_port_vol, QuantamentalDataFrame)
 
-    return hist_port_vol
+    return ticker_df_to_qdf(df=hist_port_vol)
 
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_test_df
     from contract_signals import contract_signals
+
+    # Signals: FXCRY_NSA, EQCRY_NSA (rename to FX_CSIG_STRAT, EQ_CSIG_STRAT)
+    # Returns: FXXR_NSA, EQXR_NSA (renamed to FXXR, EQXR)
 
     cids: List[str] = ["EUR", "GBP", "AUD", "CAD"]
     xcats: List[str] = ["SIG", "HR"]
