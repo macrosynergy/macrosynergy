@@ -155,7 +155,7 @@ def timelines(
         cids: List[str] = df["cid"].unique().tolist()
 
     if cumsum:
-        reduce_df(df, xcats=xcats, cids=cids, start=start, end=end)
+        df = reduce_df(df, xcats=xcats, cids=cids, start=start, end=end)
         df[val] = (df.sort_values(["cid", "xcat", "real_date"])
             [["cid", "xcat", val]]
             .groupby(["cid", "xcat"])
