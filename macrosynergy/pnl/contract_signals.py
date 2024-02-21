@@ -175,7 +175,7 @@ def _gen_contract_signals(
             new_conts.append(new_cont_name)
 
     # Only return the new contract signals
-    df_wide = df_wide[new_conts]
+    df_wide = df_wide.loc[:, new_conts]
 
     return ticker_df_to_qdf(df=df_wide)
 
@@ -243,7 +243,10 @@ def _apply_hedge_ratios(
 
             hedged_assets_list.append(basket_pos)
 
-    df_wide = df_wide[hedged_assets_list]
+    # List(Set(hedged_assets_list)) to remove duplicates
+    hedged_assets_list: List[str] = list(set(hedged_assets_list))
+
+    df_wide = df_wide.loc[:, hedged_assets_list]
 
     return ticker_df_to_qdf(df=df_wide)
 
