@@ -137,7 +137,7 @@ class BasePanelSplit(BaseCrossValidator):
         """
         sns.set_theme(style="whitegrid", palette="colorblind")
         Xy: pd.DataFrame = pd.concat([X, y], axis=1).dropna()
-        cross_sections: np.array[str] = np.array(
+        cross_sections: np.ndarray[str] = np.array(
             sorted(Xy.index.get_level_values(0).unique())
         )
         real_dates = Xy.index.get_level_values(1).unique().sort_values()
@@ -145,7 +145,7 @@ class BasePanelSplit(BaseCrossValidator):
         freq_est = pd.infer_freq(real_dates)
         freq_offset = pd.tseries.frequencies.to_offset(freq_est)
 
-        splits: List[Tuple[np.array[int], np.array[int]]] = list(self.split(X, y))
+        splits: List[Tuple[np.ndarray[int], np.ndarray[int]]] = list(self.split(X, y))
 
         split_idxs: List[int] = (
             [0, len(splits) // 4, len(splits) // 2, 3 * len(splits) // 4, -1]
@@ -252,7 +252,7 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
 
     def split(
         self, X: pd.DataFrame, y: pd.DataFrame, groups=None
-    ) -> Iterator[Tuple[np.array, np.array]]:
+    ) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
         """
         Method that produces pairs of training and test indices as intended by the
         ExpandingKFoldPanelSplit class. Wide format Pandas (panel) dataframes are 
@@ -266,7 +266,7 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
             (cross-section, date). The dates must be in datetime format.
         :param <int> groups: Always ignored, exists for compatibility with scikit-learn.
 
-        :return <Iterator[Tuple[np.array[int],np.array[int]]]> splits:
+        :return <Iterator[Tuple[np.ndarray[int],np.ndarray[int]]]> splits:
             iterator of (train,test) indices.
         """
         self.train_indices: List[int] = []
@@ -320,7 +320,7 @@ class RollingKFoldPanelSplit(BasePanelSplit):
 
     def split(
         self, X: pd.DataFrame, y: pd.DataFrame, groups=None
-    ) -> Iterator[Tuple[np.array, np.array]]:
+    ) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
         """
         Method that produces pairs of training and test indices as intended by the
         RollingKFoldPanelSplit class. Wide format Pandas (panel) dataframes are expected,
@@ -334,7 +334,7 @@ class RollingKFoldPanelSplit(BasePanelSplit):
             (cross-section, date). The dates must be in datetime format.
         :param <int> groups: Always ignored, exists for compatibility with scikit-learn.
 
-        :return <Iterator[Tuple[np.array[int],np.array[int]]]> splits: iterator of 
+        :return <Iterator[Tuple[np.ndarray[int],np.ndarray[int]]]> splits: iterator of 
             (train,test) indices.
         """
         self._validate_Xy(X, y)
@@ -521,7 +521,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
 
     def split(
         self, X: pd.DataFrame, y: pd.DataFrame, groups=None
-    ) -> Iterator[Tuple[np.array, np.array]]:
+    ) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
         """
         Method that produces pairs of training and test indices as intended by the
         ExpandingIncrementPanelSplit class. Wide format Pandas (panel) dataframes are 
@@ -535,7 +535,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
             (cross-section, date). The dates must be in datetime format.
         :param <int> groups: Always ignored, exists for compatibility with scikit-learn.
 
-        :return <Iterator[Tuple[np.array[int],np.array[int]]]> splits: iterator of 
+        :return <Iterator[Tuple[np.ndarray[int],np.ndarray[int]]]> splits: iterator of 
             (train,test) indices.
         """
         train_indices: List[int] = []
@@ -543,7 +543,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
 
         splits, Xy = self._determine_unique_time_splits(X, y)
 
-        train_splits: List[np.array] = [
+        train_splits: List[np.ndarray] = [
             splits[0] if not self.max_periods else splits[0][-self.max_periods :]
         ]
         for i in range(1, self.n_splits):
