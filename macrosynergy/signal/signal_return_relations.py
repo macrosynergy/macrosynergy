@@ -316,7 +316,7 @@ class SignalReturnRelations:
     ):
         """
         Plot bar chart for the overall and balanced accuracy metrics. For types:
-        cross_section and yearsIf sigs is not specified, then the first signal in the
+        cross_section and years. If sigs is not specified, then the first signal in the
         list of signals will be used.
 
         :param <str> type: type of segment over which bars are drawn. Either
@@ -370,7 +370,7 @@ class SignalReturnRelations:
         dfx = df_xs[~df_xs.index.isin(["PosRatio"])]
 
         if title is None:
-            refsig = "various signals" if type == "signals" else self.sigs
+            refsig = "various signals" if type == "signals" else sigs[0]
             title = (
                 f"Accuracy for sign prediction of {self.rets} based on {refsig} "
                 f"at {self.dic_freq[self.freqs[0]]} frequency."
@@ -497,7 +497,7 @@ class SignalReturnRelations:
         kprobs[kprobs == 0] = 0.01
 
         if title is None:
-            refsig = "various signals" if type == "signals" else sigs
+            refsig = "various signals" if type == "signals" else sigs[0]
             title = (
                 f"Positive correlation probability of {ret} "
                 f"and lagged {refsig} at {self.dic_freq[freq]} frequency."
