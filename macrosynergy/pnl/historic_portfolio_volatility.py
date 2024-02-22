@@ -427,47 +427,44 @@ if __name__ == "__main__":
     )
 
     ## `df_cs` looks like:
-    #       real_date  cid              xcat         value
-    # 0     2000-01-03  AUD  EQ_CSIG_mySTRAT     -0.009126
-    # 1     2000-01-03  AUD  FX_CSIG_mySTRAT      0.018252
-    # 2     2000-01-03  CAD  EQ_CSIG_mySTRAT    -25.028669
-    # 3     2000-01-03  CAD  FX_CSIG_mySTRAT     50.057339
+    #        real_date  cid             xcat         value
+    # 0     2000-01-03  AUD  EQ_CSIG_mySTRAT    -50.000000
+    # 1     2000-01-03  AUD  FX_CSIG_mySTRAT    100.000000
+    # 2     2000-01-03  CAD  EQ_CSIG_mySTRAT     -0.009126
+    # 3     2000-01-03  CAD  FX_CSIG_mySTRAT      0.018252
     # 4     2000-01-03  EUR  EQ_CSIG_mySTRAT    -50.000000
     # ...          ...  ...              ...           ...
-    # 43827 2020-12-31  CAD  FX_CSIG_mySTRAT     50.000000
-    # 43828 2020-12-31  EUR  EQ_CSIG_mySTRAT    -49.926954
-    # 43829 2020-12-31  EUR  FX_CSIG_mySTRAT   9088.903408
-    # 43830 2020-12-31  GBP  EQ_CSIG_mySTRAT    -25.000000
-    # 43831 2020-12-31  GBP  FX_CSIG_mySTRAT  21024.448833
+    # 43827 2020-12-31  CAD  FX_CSIG_mySTRAT     99.963497
+    # 43828 2020-12-31  EUR  EQ_CSIG_mySTRAT     -0.009126
+    # 43829 2020-12-31  EUR  FX_CSIG_mySTRAT   5994.266827
+    # 43830 2020-12-31  GBP  EQ_CSIG_mySTRAT    -50.000000
+    # 43831 2020-12-31  GBP  FX_CSIG_mySTRAT  14086.580010
 
     df_xr = make_test_df(
         cids=cids,
-        xcats=["EQXR", "FXXR"],
+        xcats=["EQ_XR", "FX_XR"],
         start=start,
         end=end,
     )
     #   TODO returns need to be daily percent changes, and sensible values...
     ## `df_xr` looks like:
-    #         real_date  cid xcat       value
-    # 0     2000-01-03  EUR  EQXR  100.000000
-    # 1     2000-01-04  EUR  EQXR   99.853908
-    # 2     2000-01-05  EUR  EQXR   99.707816
-    # 3     2000-01-06  EUR  EQXR   99.561724
-    # 4     2000-01-07  EUR  EQXR   99.415632
-    # ...          ...  ...  ...         ...
-    # 43827 2020-12-25  CAD  FXXR   99.269540
-    # 43828 2020-12-28  CAD  FXXR   99.415632
-    # 43829 2020-12-29  CAD  FXXR   99.561724
-    # 43830 2020-12-30  CAD  FXXR   99.707816
-    # 43831 2020-12-31  CAD  FXXR   99.853908
-
-    ...
+    #        real_date  cid   xcat       value
+    # 0     2000-01-03  EUR  EQ_XR   99.999967
+    # 1     2000-01-04  EUR  EQ_XR   99.999868
+    # 2     2000-01-05  EUR  EQ_XR   99.999704
+    # 3     2000-01-06  EUR  EQ_XR   99.999474
+    # 4     2000-01-07  EUR  EQ_XR   99.999178
+    # ...          ...  ...    ...         ...
+    # 43827 2020-12-25  CAD  FX_XR   99.999474
+    # 43828 2020-12-28  CAD  FX_XR   99.999704
+    # 43829 2020-12-29  CAD  FX_XR   99.999868
+    # 43830 2020-12-30  CAD  FX_XR   99.999967
+    # 43831 2020-12-31  CAD  FX_XR  100.000000
 
     ## Concatenate the dataframes
     dfX = pd.concat([df_cs, df_xr], axis=0)
 
     fids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
-    # fids = ['EUR_FXXR', 'EUR_EQXR', 'GBP_FXXR', 'GBP_EQXR', 'AUD_FXXR', 'AUD_EQXR', 'CAD_FXXR', 'CAD_EQXR']
 
     df_vol: pd.DataFrame = historic_portfolio_vol(
         df=dfX,
@@ -483,15 +480,15 @@ if __name__ == "__main__":
     )
 
     ## `df_vol` looks like:
-    #       real_date      cid           xcat         value
-    # 0    2000-01-31  mySTRAT  PNL_USD1S_ASD    519.638295
-    # 1    2000-02-01  mySTRAT  PNL_USD1S_ASD    519.638295
-    # 2    2000-02-02  mySTRAT  PNL_USD1S_ASD    519.638295
-    # 3    2000-02-03  mySTRAT  PNL_USD1S_ASD    519.638295
-    # 4    2000-02-04  mySTRAT  PNL_USD1S_ASD    519.638295
-    # ...         ...      ...            ...           ...
-    # 5454 2020-12-25  mySTRAT  PNL_USD1S_ASD  80932.561430
-    # 5455 2020-12-28  mySTRAT  PNL_USD1S_ASD  80932.561430
-    # 5456 2020-12-29  mySTRAT  PNL_USD1S_ASD  80932.561430
-    # 5457 2020-12-30  mySTRAT  PNL_USD1S_ASD  80932.561430
-    # 5458 2020-12-31  mySTRAT  PNL_USD1S_ASD  79138.839677
+    #       real_date      cid           xcat          value
+    # 0    2000-01-31  mySTRAT  PNL_USD1S_ASD    2310.014803
+    # 1    2000-02-01  mySTRAT  PNL_USD1S_ASD    2310.014803
+    # 2    2000-02-02  mySTRAT  PNL_USD1S_ASD    2310.014803
+    # 3    2000-02-03  mySTRAT  PNL_USD1S_ASD    2310.014803
+    # 4    2000-02-04  mySTRAT  PNL_USD1S_ASD    2310.014803
+    # ...         ...      ...            ...            ...
+    # 5454 2020-12-25  mySTRAT  PNL_USD1S_ASD  232588.526508
+    # 5455 2020-12-28  mySTRAT  PNL_USD1S_ASD  232588.526508
+    # 5456 2020-12-29  mySTRAT  PNL_USD1S_ASD  232588.526508
+    # 5457 2020-12-30  mySTRAT  PNL_USD1S_ASD  232588.526508
+    # 5458 2020-12-31  mySTRAT  PNL_USD1S_ASD  239593.522003
