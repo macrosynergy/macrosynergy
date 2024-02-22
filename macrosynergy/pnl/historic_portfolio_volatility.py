@@ -194,22 +194,10 @@ def _hist_vol(
             # yield td, vcv, piv_sig
             yield td, piv_sig.T.dot(vcv).dot(piv_sig)
 
-    list_pvol = [
-        (td, pvol)
-        for td, pvol in _pvol_tuples(
-            trigger_indices=trigger_indices,
-            pivot_returns=pivot_returns,
-            pivot_signals=pivot_signals,
-            lback_periods=lback_periods,
-            roll_func=roll_func,
-            remove_zeros=remove_zeros,
-            nan_tolerance=nan_tolerance,
-            weights=expo_weights_arr,
-        )
-    ]
+    # list_pvol = [(td, pvol) for td, pvol in _pvol_tuples(**vol_args)]
     portfolio_return_name = f"{sname}{RETURN_SERIES_XCAT}"
     df_out = pd.DataFrame(
-        list_pvol,
+        _pvol_tuples(**vol_args),
         columns=["real_date", portfolio_return_name],
     ).set_index("real_date")
 
