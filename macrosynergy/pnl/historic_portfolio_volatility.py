@@ -189,10 +189,6 @@ def _hist_vol(
         pivot_signals: pd.DataFrame,
         lback_periods: int,
         **kwargs,
-        # roll_func: str,
-        # remove_zeros: bool,
-        # nan_tolerance: float,
-        # weights: Optional[np.ndarray],
     ):
         for trigger_date in trigger_indices:
             td = trigger_date
@@ -216,6 +212,9 @@ def _hist_vol(
     df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name]) * np.sqrt(
         252
     )
+
+    fills = {"d": 1, "w": 5, "m": 24, "q": 64}
+    df_out = df_out.reindex(pivot_returns.index).ffill(limit=fills[est_freq]).dropna()
 
     return df_out
 
@@ -382,8 +381,6 @@ def historic_portfolio_vol(
         nan_tolerance=nan_tolerance,
         remove_zeros=remove_zeros,
     )
-
-    assert isinstance(hist_port_vol, QuantamentalDataFrame)
 
     return ticker_df_to_qdf(df=hist_port_vol)
 
