@@ -16,6 +16,7 @@ from .core import (
 
 from .df_utils import (
     standardise_dataframe,
+    create_results_dataframe,
     drop_nan_series,
     qdf_to_ticker_df,
     ticker_df_to_qdf,
@@ -78,4 +79,5 @@ __all__ = [
     "quarters_btwn_dates",
     "get_eops",
     "expanding_mean_with_nan",
+    "create_results_dataframe",
 ]

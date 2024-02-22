@@ -54,29 +54,33 @@ def create_results_dataframe(
         end=end,
         blacklist=blacklist,
         freqs=freqs,
-        agg_sigs = agg_sigs,
+        agg_sigs=agg_sigs,
         fwin=fwin,
         slip=slip,
     )
-    sigs_df = srr.signals_table().astype("float")[["accuracy", "bal_accuracy", "pearson", "kendall"]].round(3)
+    sigs_df = (
+        srr.signals_table()
+        .astype("float")[["accuracy", "bal_accuracy", "pearson", "kendall"]]
+        .round(3)
+    )
 
-    # Get the evaluated PnL statistics and isolate relevant performance metrics 
+    # Get the evaluated PnL statistics and isolate relevant performance metrics
     freq_dict = {
-        "D":"daily",
-        "W":"weekly",
-        "M":"monthly",
+        "D": "daily",
+        "W": "weekly",
+        "M": "monthly",
     }
     pnl_freq = lambda x: freq_dict[x] if x in freq_dict.keys() else "monthly"
 
     pnl = NaivePnL(
-        df = df,
-        ret = ret,
-        sigs = sorted(sigs),
-        cids = cids,
-        bms = bm,
-        start = start,
-        end = end,
-        blacklist = blacklist,
+        df=df,
+        ret=ret,
+        sigs=sorted(sigs),
+        cids=cids,
+        bms=bm,
+        start=start,
+        end=end,
+        blacklist=blacklist,
     )
     for idx, sig in enumerate(sigs):
         pnl.make_pnl(
@@ -85,7 +89,9 @@ def create_results_dataframe(
             sig_add=(sig_adds if isinstance(sig_adds, (float, int)) else sig_adds[idx]),
             sig_neg=(sig_negs if isinstance(sig_negs, bool) else sig_negs[idx]),
             pnl_name=sig,
-            rebal_freq=(pnl_freq(freqs) if isinstance(freqs, str) else pnl_freq(freqs[idx])),
+            rebal_freq=(
+                pnl_freq(freqs) if isinstance(freqs, str) else pnl_freq(freqs[idx])
+            ),
             rebal_slip=slip,
             vol_scale=10,
             neutral=(neutrals if isinstance(neutrals, str) else neutrals[idx]),
@@ -93,27 +99,53 @@ def create_results_dataframe(
         )
 
     if bm is not None:
-        pnl_df = pnl.evaluate_pnls(pnl_cats=sigs).transpose()[["Sharpe Ratio", "Sortino Ratio", f"{bm} correl"]]
+        pnl_df = (
+            pnl.evaluate_pnls(pnl_cats=sigs)
+            .transpose()[["Sharpe Ratio", "Sortino Ratio", f"{bm} correl"]]
+            .astype("float")
+            .round(3)
+        )
     else:
-        pnl_df = pnl.evaluate_pnls(pnl_cats=sigs).transpose()[["Sharpe Ratio", "Sortino Ratio"]]
+        pnl_df = (
+            pnl.evaluate_pnls(pnl_cats=sigs)
+            .transpose()[["Sharpe Ratio", "Sortino Ratio"]]
+            .astype("float")
+            .round(3)
+        )
 
     # Concatenate them and clean them
-    res_df = pd.concat([sigs_df, pnl_df], axis=1).round(3)
+    res_df = pd.concat([sigs_df, pnl_df], axis=1)
 
-    metric_map = {"Sharpe Ratio": "Sharpe", "Sortino Ratio": "Sortino", "accuracy": "Accuracy", "bal_accuracy": "Bal. Accuracy", "pearson": "Pearson", "kendall": "Kendall"}
+    metric_map = {
+        "Sharpe Ratio": "Sharpe",
+        "Sortino Ratio": "Sortino",
+        "accuracy": "Accuracy",
+        "bal_accuracy": "Bal. Accuracy",
+        "pearson": "Pearson",
+        "kendall": "Kendall",
+    }
     if bm is not None:
         metric_map[f"{bm} correl"] = "Market corr."
-        
-    res_df.rename(columns = metric_map, inplace=True)
+
+    res_df.rename(columns=metric_map, inplace=True)
 
     if sigs_renamed:
-        res_df.rename(index = sigs_renamed, inplace = True)
+        res_df.rename(index=sigs_renamed, inplace=True)
 
-    with pd.option_context('display.precision', 3):
-        res_df = res_df.astype("float64").round(3)
-        res_df = res_df.style.set_caption(title)
+    res_df = (
+        res_df.style.format("{:.3f}")
+        .set_caption(title)
+        .set_table_styles(
+            [
+                {
+                    "selector": "caption",
+                    "props": [("text-align", "center"), ("font-weight", "bold")],
+                }
+            ]
+        )
+    )
 
-        return res_df
+    return res_df
 
 def standardise_dataframe(
     df: pd.DataFrame, verbose: bool = False
