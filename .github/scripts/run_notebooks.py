@@ -6,14 +6,14 @@ import boto3
 import pandas as pd
 import paramiko
 from botocore.exceptions import ClientError
-# import logging
+import logging
 
-# logging.basicConfig(level=logging.DEBUG)
-# paramiko.util.log_to_file('paramiko.log')
+#logging.basicConfig(level=logging.DEBUG)
+#paramiko.util.log_to_file('paramiko.log')
 
 # Get ec2 instance with name notebook-runner-* and state isnt terminated
 
-branch_name = "feature/srr-ammendments"
+branch_name = "bugfix/jpmaqs_download"
 
 start_time = time.time()
 
@@ -87,7 +87,7 @@ def connect_to_instance(instance):
             ssh_client = paramiko.SSHClient()
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             ssh_client.connect(
-                hostname=instance_ip, username="ubuntu", key_filename="./notebook_runner.pem", timeout=30
+                hostname=instance_ip, username="ubuntu", key_filename="./notebook_runner.pem"
             )
             print(f"Connection to {instance.id} Succeeded!!!")
             return ssh_client
@@ -102,59 +102,62 @@ def connect_to_instance(instance):
 def run_commands_on_ec2(instance, notebooks):
     ssh_client = connect_to_instance(instance)
     outputs = {"succeeded": [], "failed": []}
-    
-    # Initial cleanup commands
-    cleanup_commands = "rm -rf notebooks failed_notebooks.txt successful_notebooks.txt nohup.out myvenv"
-    print(f"Running cleanup commands on {instance.id}...")
-    stdin, stdout, stderr = ssh_client.exec_command(cleanup_commands, timeout=50)
-    stdout.channel.recv_exit_status()  # Wait for command to complete
-    print(f"Cleanup commands completed on {instance.id}")
+    try:
+        # Initial cleanup commands
+        cleanup_commands = "rm -rf notebooks failed_notebooks.txt successful_notebooks.txt nohup.out myvenv"
+        print(f"Running cleanup commands on {instance.id}...")
+        ssh_client.exec_command(cleanup_commands, timeout=3)
+        time.sleep(3)
+        print(f"Cleanup commands completed on {instance.id}")
 
+        # HAVE A LOOK AT ADDING THIS SINCE IT MAY ALLOW TO CATCH IF TOO MANY SSH CHANNELS ARE OPEN AT ONCE
+        """
+        while attempt < max_retries:
+            try:
+                # Attempt to execute command
+                stdin, stdout, stderr = ssh_client.exec_command(command, timeout=10)
+                # If successful, break out of the loop
+                print("Command executed successfully")
+                return stdout.read()
+            except (paramiko.ssh_exception.SSHException, paramiko.ssh_exception.NoValidConnectionsError) as e:
+                print(f"Attempt {attempt + 1} failed with error: {e}")
+                time.sleep(retry_delay)  # Wait for a bit before retrying
+                attempt += 1
+        """
 
-    # HAVE A LOOK AT ADDING THIS SINCE IT MAY ALLOW TO CATCH IF TOO MANY SSH CHANNELS ARE OPEN AT ONCE
-    """
-    while attempt < max_retries:
-        try:
-            # Attempt to execute command
-            stdin, stdout, stderr = ssh_client.exec_command(command, timeout=10)
-            # If successful, break out of the loop
-            print("Command executed successfully")
-            return stdout.read()
-        except (paramiko.ssh_exception.SSHException, paramiko.ssh_exception.NoValidConnectionsError) as e:
-            print(f"Attempt {attempt + 1} failed with error: {e}")
-            time.sleep(retry_delay)  # Wait for a bit before retrying
-            attempt += 1
-    """
+        # Wget commands
+        print(f"Running wget commands on {instance.id}...")
+        wget_commands = " && ".join(["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks])
+        stdin, stdout, stderr = ssh_client.exec_command(f"bash -c '{wget_commands}'", timeout=50)
+        stdout.channel.recv_exit_status()
+        print(f"Wget commands completed on {instance.id}")
+        # Consider adding a delay or checking for command completion if necessary
+        
+        print(f"Running venv commands on {instance.id}...")
+        venv_commands = "python3 -m venv myvenv"
+        stdin, stdout, stderr = ssh_client.exec_command(venv_commands, timeout=50)
+        stdout.channel.recv_exit_status()
+        print(f"Venv commands completed on {instance.id}")
 
-    # Wget commands
-    print(f"Running wget commands on {instance.id}...")
-    wget_commands = " && ".join(["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks])
-    stdin, stdout, stderr = ssh_client.exec_command(f"bash -c '{wget_commands}'", timeout=50)
-    stdout.channel.recv_exit_status()
-    # Consider adding a delay or checking for command completion if necessary
-    
-    print(f"Running venv commands on {instance.id}...")
-    venv_commands = "python3 -m venv myvenv"
-    stdin, stdout, stderr = ssh_client.exec_command(venv_commands, timeout=50)
-    stdout.channel.recv_exit_status()
+        print(f"Running pip commands on {instance.id}...")
+        pip_commands = f"myvenv/bin/python -m pip install linearmodels jupyter git+https://github.com/macrosynergy/macrosynergy@{branch_name}  --upgrade"
+        stdin, stdout, stderr = ssh_client.exec_command(pip_commands, timeout=50)
+        stdout.channel.recv_exit_status()
+        print(f"Pip commands completed on {instance.id}")
 
-    print(f"Running pip commands on {instance.id}...")
-    venv_commands = f"myvenv/bin/python -m pip install linearmodels jupyter git+https://github.com/macrosynergy/macrosynergy@{branch_name}  --upgrade"
-    stdin, stdout, stderr = ssh_client.exec_command(venv_commands, timeout=50)
-    stdout.channel.recv_exit_status()
-
-    # Pip and nohup commands
-    notebook_runner_cmd = "nohup myvenv/bin/python run_notebooks.py > nohup.out 2>&1 &"
-    print(f"Running notebook runner commands on {instance.id}...")
-    ssh_client.exec_command(notebook_runner_cmd, timeout=50)
-    
-    print(f"Getting output from instance... {instance.id}")
-    successful_notebooks, failed_notebooks = get_output_from_instance(ssh_client)
-    outputs["succeeded"].extend(successful_notebooks)
-    outputs["failed"].extend(failed_notebooks)
-    print(f"Stopping instance... {instance.id}")
-    ssh_client.close()
-    instance.stop()
+        # Pip and nohup commands
+        notebook_runner_cmd = "nohup myvenv/bin/python run_notebooks.py > nohup.out 2>&1 &"
+        print(f"Running notebook runner commands on {instance.id}...")
+        ssh_client.exec_command(notebook_runner_cmd, timeout=50)
+        
+        print(f"Getting output from instance... {instance.id}")
+        successful_notebooks, failed_notebooks = get_output_from_instance(ssh_client)
+        outputs["succeeded"].extend(successful_notebooks)
+        outputs["failed"].extend(failed_notebooks)
+        print(f"Stopping instance... {instance.id}")
+    finally:
+        ssh_client.close()
+        instance.stop()
     return outputs
 
 
