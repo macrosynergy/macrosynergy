@@ -331,13 +331,12 @@ def validate_downloaded_df(
 
     if expr_missing:
         log_str = (
-            f"Some expressions are missing from the downloaded data."
-            " Check logger output for complete list. \n"
-            f"{len(expr_missing)} out of {len(expr_expected)} expressions are "
-            "missing."
-            f"To download the catalogue of all available expressions and filter the"
-            " unavailable expressions, set `get_catalogue=True` in the "
-            " call to `JPMaQSDownload.download()`."
+            f"Some expressions are missing from the downloaded data. "
+            "Check logger output for complete list.\n"
+            f"{len(expr_missing)} out of {len(expr_expected)} expressions are missing. "
+            f"To download the catalogue of all available expressions and filter the "
+            "unavailable expressions, set `get_catalogue=True` in the "
+            "call to `JPMaQSDownload.download()`."
         )
 
         logger.info(log_str)
@@ -360,6 +359,34 @@ def validate_downloaded_df(
         else data_df.index.unique()
     )
     dates_missing = list(set(dates_expected) - set(found_dates))
+    log_str = (
+        "The expressions in the downloaded data are not a subset of the expected expressions."
+        " Missing expressions: {missing_exprs}"
+    )
+    err_statement = (
+        "The expressions in the downloaded data are not a subset of the "
+        "expected expressions."
+    )
+    check_exprs = set()
+    if isinstance(data_df, QuantamentalDataFrame):
+        found_metrics = list(
+            set(data_df.columns) - set(QuantamentalDataFrame.IndexCols)
+        )
+        for col in QuantamentalDataFrame.IndexCols:
+            if not len(data_df[col].unique()) > 0:
+                raise InvalidDataframeError(f"Column {col} is empty.")
+
+        check_exprs = construct_expressions(
+            tickers=(data_df["cid"] + "_" + data_df["xcat"]).unique(),
+            metrics=found_metrics,
+        )
+
+    else:
+        check_exprs = data_df.columns.tolist()
+
+    missing_exprs = set(check_exprs) - set(found_expressions)
+    if len(missing_exprs) > 0:
+        logger.critical(log_str.format(missing_exprs=missing_exprs))
 
     if len(dates_missing) > 0:
         log_str = (
@@ -659,7 +686,16 @@ class JPMaQSDownload(DataQueryInterface):
             return concat_column_dfs(df_list=download_outputs)
 
         if isinstance(download_outputs[0][0], (dict, QuantamentalDataFrame)):
+            logger.debug(f"Chaining {len(download_outputs)} outputs.")
+            _ch_types = list(
+                itertools.chain.from_iterable(
+                    [list(map(type, x)) for x in download_outputs]
+                )
+            )
+            logger.debug(f"Object types in the downloaded data: {_ch_types}")
+
             download_outputs = list(itertools.chain.from_iterable(download_outputs))
+
         if isinstance(download_outputs[0], dict):
             return download_outputs
         if isinstance(download_outputs[0], QuantamentalDataFrame):
@@ -702,6 +738,12 @@ class JPMaQSDownload(DataQueryInterface):
                 ts_list = concat_column_dfs(
                     df_list=[timeseries_to_column(ts) for ts in ts_list]
                 )
+        logger.debug(f"Downloaded data for {len(ts_list)} expressions.")
+        logger.debug(f"Unavailble expressions: {self.unavailable_expressions}")
+
+        downloaded_types = list(set(map(type, ts_list)))
+        logger.debug(f"Object types in the downloaded data: {downloaded_types}")
+
         return ts_list
 
     def download_data(self, *args, **kwargs):
@@ -882,6 +924,10 @@ class JPMaQSDownload(DataQueryInterface):
                 verbose=True,
             ):
                 raise InvalidDataframeError("Downloaded data is invalid.")
+
+            if dataframe_format == "qdf":
+                assert isinstance(data, QuantamentalDataFrame)
+
         return data
 
 
