@@ -728,7 +728,10 @@ class SignalOptimizer:
 
         # Display the heatmap.
         plt.figure(figsize=figsize)
-        sns.heatmap(binary_matrix, cmap="binary", cbar=False)
+        if binary_matrix.shape[0] == 1:
+            sns.heatmap(binary_matrix, cmap="binary_r", cbar=False)
+        else:
+            sns.heatmap(binary_matrix, cmap="binary", cbar=False)
         plt.title(title)
         plt.show()
 
