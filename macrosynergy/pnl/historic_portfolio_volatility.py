@@ -172,6 +172,17 @@ def _hist_vol(
 
     roll_func: Callable = expo_std if lback_meth == "xma" else flat_std
 
+    vol_args = dict(
+        trigger_indices=trigger_indices,
+        pivot_returns=pivot_returns,
+        pivot_signals=pivot_signals,
+        lback_periods=lback_periods,
+        roll_func=roll_func,
+        remove_zeros=remove_zeros,
+        nan_tolerance=nan_tolerance,
+        weights=expo_weights_arr,
+    )
+
     def _pvol_tuples(
         trigger_indices: pd.DatetimeIndex,
         pivot_returns: pd.DataFrame,
