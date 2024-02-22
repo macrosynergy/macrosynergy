@@ -372,7 +372,7 @@ class SignalReturnRelations:
         if title is None:
             refsig = "various signals" if type == "signals" else sigs[0]
             title = (
-                f"Accuracy for sign prediction of {self.rets} based on {refsig} "
+                f"Accuracy for sign prediction of {ret} based on {refsig} "
                 f"at {self.dic_freq[self.freqs[0]]} frequency."
             )
         if size is None:
