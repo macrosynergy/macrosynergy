@@ -76,13 +76,11 @@ def _estimate_variance_covariance(
 ) -> pd.DataFrame:
     # TODO add complexity of weighting and estimation methods
 
-    if weights is None:
-        piv_ret = piv_ret.agg(roll_func, remove_zeros=remove_zeros)
-    else:
-        if len(weights) == len(piv_ret):
-            piv_ret = piv_ret.agg(roll_func, w=weights, remove_zeros=remove_zeros)
-        else:
-            piv_ret = pd.Series(np.nan, index=piv_ret.index)
+    if weights is not None:
+        #  Len(Weights) != Len(piv_ret) != lback_periods
+        assert len(weights) == len(piv_ret)
+        for tks in piv_ret.columns:
+            piv_ret[tks] = piv_ret[tks] * weights
 
     mask = (
         (
@@ -93,7 +91,8 @@ def _estimate_variance_covariance(
         / lback_periods
     ) <= nan_tolerance
 
-    piv_ret[~mask] = np.nan
+    # mask_cols where all values are NaN
+    piv_ret[mask[~mask].index.tolist()] = np.nan
 
     vcv = piv_ret.cov()
 
