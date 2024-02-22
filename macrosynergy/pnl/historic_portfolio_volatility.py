@@ -66,6 +66,41 @@ def _univariate_volatility(
     return univariate_vol
 
 
+def general_expo_std(
+    x: np.ndarray, w: np.ndarray, y: np.ndarray = None, remove_zeros: bool = True
+):
+    """
+    Estimate standard deviation of returns based on exponentially weighted absolute
+    values.
+
+    :param <np.ndarray> x: array of returns
+    :param <np.ndarray> w: array of exponential weights (same length as x); will be
+        normalized to 1.
+    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
+        effective window.
+
+    :return <float>: exponentially weighted mean absolute value (as proxy of return
+        standard deviation).
+
+    """
+    assert len(x) == len(w), "weights and window must have same length"
+    if remove_zeros:
+        x = x[x != 0]
+        w = w[0 : len(x)] / sum(w[0 : len(x)])
+    w = w / sum(w)  # weights are normalized
+
+    if y is not None:
+        rss = (x - x.mean()) * (y - y.mean())
+        # rss = x * y
+    else:
+        # rss = x**2
+        # rss = np.abs(x)
+        # rss = np.abs(x - x.mean())
+        rss = (x - x.mean()) ** 2
+
+    return w.T.dot(rss)
+
+
 def _estimate_variance_covariance(
     piv_ret: pd.DataFrame,
     roll_func: str,
@@ -75,13 +110,6 @@ def _estimate_variance_covariance(
     weights: Optional[np.ndarray],
 ) -> pd.DataFrame:
     # TODO add complexity of weighting and estimation methods
-
-    if weights is not None:
-        #  Len(Weights) != Len(piv_ret) != lback_periods
-        assert len(weights) == len(piv_ret)
-        for tks in piv_ret.columns:
-            piv_ret[tks] = piv_ret[tks] * weights
-
     mask = (
         (
             piv_ret.isna().sum(axis=0)
@@ -91,7 +119,19 @@ def _estimate_variance_covariance(
         / lback_periods
     ) <= nan_tolerance
 
-    # mask_cols where all values are NaN
+    est_vol = [
+        [
+            general_expo_std(
+                x=piv_ret[cA].values,
+                y=piv_ret[cB].values,
+                w=weights,
+                remove_zeros=remove_zeros,
+            )
+            for cA in piv_ret.columns
+        ]
+        for cB in piv_ret.columns
+    ]
+
     piv_ret[mask[~mask].index.tolist()] = np.nan
 
     vcv = piv_ret.cov()
@@ -143,9 +183,6 @@ def _hist_vol(
             f"`lback_meth` must be 'ma' or 'xma'; got {lback_meth}"
         )
 
-    # df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
-    # df_wide = df_wide[sorted(df_wide.columns)]  # Sort columns to keep debugging easier
-
     # NOTE: `get_eops` helps identify the dates for which the volatility calculation
     # will be performed. This is done by identifying the last date of each cycle.
     # We use `get_eops` primarily because it has a clear and defined behaviour for all frequencies.
@@ -156,9 +193,6 @@ def _hist_vol(
         dates=pivot_signals.index,
         freq=est_freq,
     )
-
-    # fills = {"d": 1, "w": 5, "m": 24, "q": 64}
-    # dfw_calc = dfw_calc.reindex(df_wide.index).ffill(limit=fills[est_freq])
 
     # TODO get the correct rebalance dates
     # TODO allow for multiple estimation frequency
@@ -197,11 +231,8 @@ def _hist_vol(
                 piv_ret=piv_ret, lback_periods=lback_periods, **kwargs
             )
             piv_sig: pd.DataFrame = pivot_signals.loc[td, :]
-
-            # yield td, vcv, piv_sig
             yield td, piv_sig.T.dot(vcv).dot(piv_sig)
 
-    # list_pvol = [(td, pvol) for td, pvol in _pvol_tuples(**vol_args)]
     portfolio_return_name = f"{sname}{RETURN_SERIES_XCAT}"
     df_out = pd.DataFrame(
         _pvol_tuples(**vol_args),
@@ -213,8 +244,8 @@ def _hist_vol(
         252
     )
 
-    fills = {"d": 1, "w": 5, "m": 24, "q": 64}
-    df_out = df_out.reindex(pivot_returns.index).ffill(limit=fills[est_freq]).dropna()
+    ffills = {"d": 1, "w": 5, "m": 24, "q": 64}
+    df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[est_freq]).dropna()
 
     return df_out
 
@@ -373,7 +404,6 @@ def historic_portfolio_vol(
         pivot_returns=pivot_returns,
         pivot_signals=pivot_signals,
         sname=sname,
-        # rstring=rstring,
         est_freq=est_freq,
         lback_periods=lback_periods,
         lback_meth=lback_meth,
