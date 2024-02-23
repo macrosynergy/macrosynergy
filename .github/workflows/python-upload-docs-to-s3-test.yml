@@ -62,7 +62,10 @@ jobs:
         # store list of folders separeted by comma
         run: |
           aws s3 ls s3://${{ env.BUCKET_NAME }} --recursive | awk '{print $2}' | awk -F'/' '{print $1}' | sort -u | tr '\n' ',' | sed 's/,$//' > folders.txt
+          echo $(cat folders.txt)
 
+      - name: Generate version switcher
+        run: |
           BRANCHES=$(cat folders.txt)
           python ./.github/scripts/gen_docs_switcher.py \
             -d http://macrosynergy-docs-test.s3-website.eu-west-2.amazonaws.com \
