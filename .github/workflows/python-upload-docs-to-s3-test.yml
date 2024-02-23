@@ -63,6 +63,7 @@ jobs:
         run: |
           aws s3 ls s3://${{ env.BUCKET_NAME }} --recursive > folders.txt
           echo $(cat folders.txt)
+          aws s3 cp folders.txt s3://${{ env.BUCKET_NAME }}/folders.txt
 
       - name: Generate version switcher
         run: |
