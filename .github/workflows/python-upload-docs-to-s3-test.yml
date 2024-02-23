@@ -26,42 +26,42 @@ jobs:
         with:
           python-version: 3.11
 
-      - name: Run Flake8
-        run: |
-          # Options: exluding docs, scripts and build folders. Also, treating certain errors as warnings.
+      # - name: Run Flake8
+      #   run: |
+      #     # Options: exluding docs, scripts and build folders. Also, treating certain errors as warnings.
 
-          flake8 --count --select=E9,F63,F7,F82 --show-source --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
+      #     flake8 --count --select=E9,F63,F7,F82 --show-source --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
 
-          flake8 --count --exit-zero --max-complexity=10 --max-line-length=127 --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
+      #     flake8 --count --exit-zero --max-complexity=10 --max-line-length=127 --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
 
-      - name: Build docs
-        run: |
-          pip install -r docs/requirements.txt
-          pip install .
-          python docs/gen.py
+      # - name: Build docs
+      #   run: |
+      #     pip install -r docs/requirements.txt
+      #     pip install .
+      #     python docs/gen.py
 
-      - name: Configure AWS credentials from AWS account
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE }} # Choose test or prod role
-          aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHub-Macrosynergy-Package
+      # - name: Configure AWS credentials from AWS account
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     role-to-assume: ${{ secrets.AWS_ROLE }} # Choose test or prod role
+      #     aws-region: ${{ env.AWS_REGION }}
+      #     role-session-name: GitHub-Macrosynergy-Package
 
-      - name: Get branch name
-        id: branch
-        run: echo ::set-output name=branch::${GITHUB_REF#refs/heads/}
+      # - name: Get branch name
+      #   id: branch
+      #   run: echo ::set-output name=branch::${GITHUB_REF#refs/heads/}
 
-      - name: Upload to S3
-        run: |
-          BRANCH=${{ steps.branch.outputs.branch }}
-          BRANCH=${BRANCH//\//-}
-          mv docs/build/html docs/build/${BRANCH}
-          aws s3 cp --recursive docs/build/${BRANCH} s3://${{ env.BUCKET_NAME }}/${BRANCH}
+      # - name: Upload to S3
+      #   run: |
+      #     BRANCH=${{ steps.branch.outputs.branch }}
+      #     BRANCH=${BRANCH//\//-}
+      #     mv docs/build/html docs/build/${BRANCH}
+      #     aws s3 cp --recursive docs/build/${BRANCH} s3://${{ env.BUCKET_NAME }}/${BRANCH}
 
       - name: Get names of folders in S3
         # store list of folders separeted by comma
         run: |
-          aws s3 ls s3://${{ env.BUCKET_NAME }} --recursive | awk '{print $2}' | awk -F'/' '{print $1}' | sort -u | tr '\n' ',' | sed 's/,$//' > folders.txt
+          aws s3 ls s3://${{ env.BUCKET_NAME }} --recursive > folders.txt
           echo $(cat folders.txt)
 
       - name: Generate version switcher
