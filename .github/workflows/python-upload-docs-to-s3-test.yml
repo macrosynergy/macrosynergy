@@ -40,12 +40,12 @@ jobs:
       #     pip install .
       #     python docs/gen.py
 
-      # - name: Configure AWS credentials from AWS account
-      #   uses: aws-actions/configure-aws-credentials@v4
-      #   with:
-      #     role-to-assume: ${{ secrets.AWS_ROLE }} # Choose test or prod role
-      #     aws-region: ${{ env.AWS_REGION }}
-      #     role-session-name: GitHub-Macrosynergy-Package
+      - name: Configure AWS credentials from AWS account
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }} # Choose test or prod role
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHub-Macrosynergy-Package
 
       # - name: Get branch name
       #   id: branch
