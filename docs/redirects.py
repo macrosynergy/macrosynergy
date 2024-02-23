@@ -62,6 +62,7 @@ def create_redirect(
     if outfile:
         old_path = outfile
     with open(old_path, "w", encoding="utf-8") as f:
+        print(f"Creating redirect for {old_path}")
         f.write(html_content)
 
 
@@ -85,7 +86,6 @@ def create_dirstucture(html_path: str = HTML_PATH):
     # copy all files starting from macrosynergy. to the new folder
     package_files = glob.glob(html_path + "/*.html", recursive=True)
 
-
     for file in package_files:
         create_redirect(package_file=file, html_path=html_path)
 
@@ -95,6 +95,7 @@ def create_dirstucture(html_path: str = HTML_PATH):
         os.makedirs(os.path.dirname(old_path), exist_ok=True)
         html_content = create_html(new_path=new_path, old_path=old_path)
         with open(old_path, "w", encoding="utf-8") as f:
+            print(f"Creating redirect for {old_path}")
             f.write(html_content)
 
 
