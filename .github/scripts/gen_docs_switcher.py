@@ -1,5 +1,6 @@
 import json
 import requests
+import os
 
 REPO: str = "macrosynergy/macrosynergy"
 STABLE_BRANCH: str = "main"
@@ -74,6 +75,20 @@ def generate_json(
         data.append(_json(branch, version, url))
 
     return json.dumps(data, indent=4)
+
+
+def parse_aws_ls_output_file(file: str) -> dict:
+    if not os.path.exists(file):
+        raise FileNotFoundError(f"File not found: {file}")
+    with open(file, "r", encoding="utf8") as f:
+        data = f.readlines()
+
+    get_file = lambda x: str(x).split(" ")[-1].strip().split("/")[0] if "/" in x else ""
+    data = [x for x in set(map(get_file, data)) if x.strip() != ""]
+    return data
+
+
+# print(','.join([x for x in set(map(lambda x: str(x).split(' ')[-1].strip().split('/')[0] if '/' in x else '', open(r'C:\Users\PalashTyagi\Downloads\folders.txt').readlines())) if x.strip() != '']))
 
 
 def main(

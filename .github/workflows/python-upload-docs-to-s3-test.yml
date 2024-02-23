@@ -62,19 +62,16 @@ jobs:
         # store list of folders separeted by comma
         run: |
           aws s3 ls s3://${{ env.BUCKET_NAME }} --recursive > folders.txt
-          echo $(cat folders.txt)
-          aws s3 cp folders.txt s3://${{ env.BUCKET_NAME }}/folders.txt
+          python -c "print(','.join([x for x in set(map(lambda x: str(x).split(' ')[-1].strip().split('/')[0] if '/' in x else '', open('folders.txt').readlines())) if x.strip() != '']))" > folders.txt
 
       - name: Generate version switcher
         run: |
-          BRANCHES=$(cat folders.txt)
           python ./.github/scripts/gen_docs_switcher.py \
             -d http://macrosynergy-docs-test.s3-website.eu-west-2.amazonaws.com \
-            -b $BRANCHES \
+            -b $(cat folders.txt) \
             -o version_switcher.json 
 
       - name: Upload version switcher
         run: |
           aws s3 cp version_switcher.json s3://${{ env.BUCKET_NAME }}/version_switcher.json
-
 
