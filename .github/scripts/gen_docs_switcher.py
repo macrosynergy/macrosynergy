@@ -13,6 +13,22 @@ def setuppy_url(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
     return f"https://raw.githubusercontent.com/{repo}/{branch}/setup.py"
 
 
+def getpyfile(
+    repo: str = REPO,
+    branch: str = STABLE_BRANCH,
+) -> str:
+    try:
+        url = setuppy_url(repo, branch)
+        r = requests.get(url)
+        r.raise_for_status()
+        return r.text
+    except Exception as exc:
+        try:
+            return getpyfile(repo, branch.replace("-", "/", 1))
+        except Exception as exc:
+            raise exc
+
+
 def get_version_from_py(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
     def find_line(line: str, breakline=None):
         for i, iterline in enumerate(pyfile.split("\n")):
@@ -22,10 +38,7 @@ def get_version_from_py(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
                 return None
         return None
 
-    url = setuppy_url(repo, branch)
-    r = requests.get(url)
-    r.raise_for_status()
-    pyfile = r.text
+    pyfile = getpyfile(repo, branch)
     VERSION_LINES = ["MAJOR", "MINOR", "MICRO"]
     breakline = "# The first version not in the `Programming Language :: Python :: ...` classifiers above"
 
