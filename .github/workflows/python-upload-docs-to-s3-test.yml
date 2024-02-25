@@ -26,19 +26,10 @@ jobs:
         with:
           python-version: 3.11
 
-      - name: Run Flake8
-        run: |
-          # Options: exluding docs, scripts and build folders. Also, treating certain errors as warnings.
+      - name: Get branch name
+        id: branch
+        run: echo ::set-output name=branch::${GITHUB_REF#refs/heads/}
 
-          flake8 --count --select=E9,F63,F7,F82 --show-source --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
-
-          flake8 --count --exit-zero --max-complexity=10 --max-line-length=127 --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
-
-      - name: Build docs
-        run: |
-          pip install -r docs/requirements.txt
-          pip install .
-          python docs/gen.py
 
       - name: Configure AWS credentials from AWS account
         uses: aws-actions/configure-aws-credentials@v4
@@ -47,29 +38,40 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHub-Macrosynergy-Package
 
-      - name: Get branch name
-        id: branch
-        run: echo ::set-output name=branch::${GITHUB_REF#refs/heads/}
+      # - name: Run Flake8
+      #   run: |
+      #     # Options: exluding docs, scripts and build folders. Also, treating certain errors as warnings.
 
-      - name: Upload to S3
-        run: |
-          BRANCH=${{ steps.branch.outputs.branch }}
-          BRANCH=${BRANCH//\//-}
-          mv docs/build/html docs/build/${BRANCH}
-          aws s3 cp --recursive docs/build/${BRANCH} s3://${{ env.BUCKET_NAME }}/${BRANCH}
+      #     flake8 --count --select=E9,F63,F7,F82 --show-source --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
+
+      #     flake8 --count --exit-zero --max-complexity=10 --max-line-length=127 --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
+
+      # - name: Build docs
+      #   run: |
+      #     pip install -r docs/requirements.txt
+      #     pip install .
+      #     python docs/gen.py
+
+      # - name: Upload to S3
+      #   run: |
+      #     BRANCH=${{ steps.branch.outputs.branch }}
+      #     BRANCH=${BRANCH//\//-}
+      #     mv docs/build/html docs/build/${BRANCH}
+      #     aws s3 cp --recursive docs/build/${BRANCH} s3://${{ env.BUCKET_NAME }}/${BRANCH}
 
       - name: Get names of folders in S3
         # store list of folders separeted by comma
         run: |
           aws s3 ls s3://${{ env.BUCKET_NAME }} --recursive > folders.txt
           python -c "print(','.join([x for x in set(map(lambda x: str(x).split(' ')[-1].strip().split('/')[0] if '/' in x else '', open('folders.txt').readlines())) if x.strip() != '']), end='')" > folders.txt
+          echo $(cat folders.txt)
 
       - name: Generate version switcher
         run: |
           BRANCHES=$(cat folders.txt)
           python ./.github/scripts/gen_docs_switcher.py \
             -d http://macrosynergy-docs-test.s3-website.eu-west-2.amazonaws.com \
-            -bf folders.txt \
+            -b $BRANCHES \
             -o version_switcher.json 
 
       - name: Upload version switcher
