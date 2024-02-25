@@ -43,7 +43,8 @@ def getpyfile(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
 
 
 def get_latest_commit_sha(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
-    return _gh_request(repo, branch, get_latest_commit_url, "json")["sha"]
+    js = _gh_request(repo, branch, get_latest_commit_url, "json")
+    return js["sha"]
 
 
 def get_version_from_py(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
