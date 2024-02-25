@@ -33,7 +33,7 @@ def _gh_request(
         return r.json()
     except Exception as exc:
         try:
-            return _gh_request(repo, branch.replace("-", "/", 1), funcx)
+            return _gh_request(repo, branch.replace("-", "/", 1), funcx, rtype)
         except Exception as exc:
             raise exc
 
