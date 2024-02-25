@@ -13,20 +13,33 @@ def setuppy_url(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
     return f"https://raw.githubusercontent.com/{repo}/{branch}/setup.py"
 
 
-def getpyfile(
+def get_latest_commit_url(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
+    return f"https://api.github.com/repos/{repo}/commits/{branch}"
+
+
+def _gh_request(
     repo: str = REPO,
     branch: str = STABLE_BRANCH,
-) -> str:
+    funcx=setuppy_url,
+):
     try:
-        url = setuppy_url(repo, branch)
+        url = funcx(repo, branch)
         r = requests.get(url)
         r.raise_for_status()
         return r.text
     except Exception as exc:
         try:
-            return getpyfile(repo, branch.replace("-", "/", 1))
+            return _gh_request(repo, branch.replace("-", "/", 1), funcx)
         except Exception as exc:
             raise exc
+
+
+def getpyfile(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
+    return _gh_request(repo, branch, setuppy_url)
+
+
+def get_latest_commit(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
+    return _gh_request(repo, branch, get_latest_commit_url)
 
 
 def get_version_from_py(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
@@ -50,7 +63,7 @@ def get_version_from_py(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
         [str(_proc(find_line(f"{vx} = ", breakline))) for vx in VERSION_LINES]
     )
     if not _proc(isreleased):
-        vStr += "rc" if branch == TEST_BRANCH else "dev"
+        vStr += "dev0+" + get_latest_commit(repo, branch)[:7]
 
     return vStr
 
