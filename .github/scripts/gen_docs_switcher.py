@@ -44,7 +44,13 @@ def getpyfile(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
 
 def get_latest_commit_sha(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
     js = _gh_request(repo, branch, get_latest_commit_url, "json")
-    return js["sha"]
+    try:
+        return js["sha"]
+    except Exception as exc:
+        err_info = f"Type of js: {type(js)}\njs: {js} \n"
+        err_info += f"Content of js: {js}\n"
+        err_info += f"Error: {exc}"
+        raise ValueError(err_info)
 
 
 def get_version_from_py(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
