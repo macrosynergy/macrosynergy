@@ -62,7 +62,7 @@ jobs:
         # store list of folders separeted by comma
         run: |
           aws s3 ls s3://${{ env.BUCKET_NAME }} --recursive > folders.txt
-          python -c "print(','.join([x for x in set(map(lambda x: str(x).split(' ')[-1].strip().split('/')[0] if '/' in x else '', open('folders.txt').readlines())) if x.strip() != '']), endl='')" > folders.txt
+          python -c "print(','.join([x for x in set(map(lambda x: str(x).split(' ')[-1].strip().split('/')[0] if '/' in x else '', open('folders.txt').readlines())) if x.strip() != '']), end='')" > folders.txt
 
       - name: Generate version switcher
         run: |
