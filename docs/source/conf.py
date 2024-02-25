@@ -52,6 +52,9 @@ html_theme_options = {
     "header_links_before_dropdown": 4,
     "content_footer_items": ["last-updated"],
     "github_url": "https://github.com/macrosynergy/macrosynergy",
+    "switcher": {
+        "json_url": "https://macrosynergy-docs-test.s3.eu-west-2.amazonaws.com/version_switcher.json",
+    },
     "logo": {
         "image_light": "MACROSYNERGY_Logo_Primary.png",
         "image_dark": "MACROSYNERGY_Logo_White.png",
