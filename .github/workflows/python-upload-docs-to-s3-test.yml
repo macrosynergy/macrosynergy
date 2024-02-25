@@ -69,7 +69,7 @@ jobs:
           BRANCHES=$(cat folders.txt)
           python ./.github/scripts/gen_docs_switcher.py \
             -d http://macrosynergy-docs-test.s3-website.eu-west-2.amazonaws.com \
-            -b $BRANCHES \
+            -bf folders.txt \
             -o version_switcher.json 
 
       - name: Upload version switcher

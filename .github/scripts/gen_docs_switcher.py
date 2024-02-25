@@ -91,6 +91,13 @@ def parse_aws_ls_output_file(file: str) -> dict:
 # print(','.join([x for x in set(map(lambda x: str(x).split(' ')[-1].strip().split('/')[0] if '/' in x else '', open(r'C:\Users\PalashTyagi\Downloads\folders.txt').readlines())) if x.strip() != '']))
 
 
+def parse_branches_file(file: str) -> list:
+    with open(file, "r", encoding="utf8") as f:
+        return (",".join([x.strip() for x in f.readlines() if x.strip() != ""])).split(
+            ","
+        )
+
+
 def main(
     docs_site_url: str,
     repo: str = REPO,
@@ -133,14 +140,25 @@ if __name__ == "__main__":
         help="Comma-separated list of branches to generate versions for.",
     )
     parser.add_argument(
+        "-bf",
+        "--branches-file",
+        default=None,
+        help="File path to read the branches from.",
+    )
+    parser.add_argument(
         "-o",
         "--outfile",
         default="versionswitcher.json",
         help="File path to write the JSON to.",
     )
     args = parser.parse_args()
+
+    if args.branches_file is not None:
+        branches = parse_branches_file(args.branches_file)
+    else:
+        branches = str(args.branches).split(",")
+
     docs_site_url = args.docs_site_url
     repo = args.repo
-    branches = str(args.branches).split(",")
     outfile = args.outfile
     main(docs_site_url, repo, branches, outfile)
