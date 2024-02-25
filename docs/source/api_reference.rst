@@ -32,46 +32,39 @@ Subpackages
 .. grid:: 4
 
    .. grid-item-card:: download
-      :link: macrosynergy.download
-      :link-type: ref
+      :link: macrosynergy.download.html
 
       Downloading data from JP Morgan DataQuery.
 
    .. grid-item-card:: learning
-      :link: macrosynergy.learning
-      :link-type: ref
+      :link: macrosynergy.learning.html
       
       Creating ML solutions with quantamental data.
 
    .. grid-item-card:: management
-      :link: macrosynergy.management
-      :link-type: ref
+      :link: macrosynergy.management.html
 
       Managing, reshaping, and analyzing quantamental data.
 
    .. grid-item-card:: panel
-      :link: macrosynergy.panel
-      :link-type: ref
+      :link: macrosynergy.panel.html
 
       Panel methods for quantamental data.
 
 .. grid:: 4
 
    .. grid-item-card:: pnl
-      :link: macrosynergy.pnl
-      :link-type: ref
+      :link: macrosynergy.pnl.html
    
       Constructing portfolios based on signals and analyzing PnLs.
 
    .. grid-item-card:: signal
-      :link: macrosynergy.signal
-      :link-type: ref
+      :link: macrosynergy.signal.html
 
       Transforming quantamental indicators into trading signals.
 
    .. grid-item-card:: visuals
-      :link: macrosynergy.visuals
-      :link-type: ref
+      :link: macrosynergy.visuals.html
 
       Methods for visualizing quantamental data.
 
