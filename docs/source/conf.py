@@ -4,6 +4,15 @@
 import os
 import sys
 
+import macrosynergy
+
+ms_version = macrosynergy.__version__
+if "+" in ms_version:
+    _a, _b = ms_version.split("+")
+    _, _c = _b.split("_")
+    ms_version = _a + "+" + _c
+
+
 sys.path.insert(0, os.path.abspath("../../"))
 
 # -- Project information -----------------------------------------------------
@@ -54,6 +63,7 @@ html_theme_options = {
     "github_url": "https://github.com/macrosynergy/macrosynergy",
     "switcher": {
         "json_url": "https://macrosynergy-docs-test.s3.eu-west-2.amazonaws.com/version_switcher.json",
+        "version_match": ms_version,
     },
     "logo": {
         "image_light": "MACROSYNERGY_Logo_Primary.png",
