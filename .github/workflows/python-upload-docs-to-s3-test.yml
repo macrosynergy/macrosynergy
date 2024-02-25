@@ -65,7 +65,8 @@ jobs:
           aws s3 ls s3://${{ env.BUCKET_NAME }} --recursive > folders.txt
           cp folders.txt aws_s3_ls.txt
           
-          python -c "print(','.join([x for x in set(map(lambda x: str(x).split(' ')[-1].strip().split('/')[0] if '/' in x else '', open('folders.txt').readlines())) if x.strip() != '']))" > folders.txt
+          python -c "print(','.join([x for x in set(map(lambda x: str(x).split(' ')[-1].strip().split('/')[0] if '/' in x else '', open('aws_s3_ls.txt').readlines())) if x.strip() != '']))" > folders.txt
+
           echo $(cat folders.txt)
 
       - uses: actions/upload-artifact@v4
