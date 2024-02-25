@@ -21,12 +21,16 @@ def _gh_request(
     repo: str = REPO,
     branch: str = STABLE_BRANCH,
     funcx=setuppy_url,
+    rtype="text",
 ):
+    assert rtype in ["text", "json"]
     try:
         url = funcx(repo, branch)
         r = requests.get(url)
         r.raise_for_status()
-        return r.text
+        if rtype == "text":
+            return r.text
+        return r.json()
     except Exception as exc:
         try:
             return _gh_request(repo, branch.replace("-", "/", 1), funcx)
@@ -38,8 +42,8 @@ def getpyfile(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
     return _gh_request(repo, branch, setuppy_url)
 
 
-def get_latest_commit(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
-    return _gh_request(repo, branch, get_latest_commit_url)
+def get_latest_commit_sha(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
+    return _gh_request(repo, branch, get_latest_commit_url)["sha"]
 
 
 def get_version_from_py(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
@@ -63,7 +67,7 @@ def get_version_from_py(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
         [str(_proc(find_line(f"{vx} = ", breakline))) for vx in VERSION_LINES]
     )
     if not _proc(isreleased):
-        vStr += "dev0+" + get_latest_commit(repo, branch)[:7]
+        vStr += "dev0+" + get_latest_commit_sha(repo, branch)[:7]
 
     return vStr
 
