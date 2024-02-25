@@ -59,6 +59,7 @@ html_theme = "pydata_sphinx_theme"
 html_theme_options = {
     "show_toc_level": 5,
     "header_links_before_dropdown": 4,
+    "navbar_start": ["navbar-logo", "version-switcher"],
     "content_footer_items": ["last-updated"],
     "github_url": "https://github.com/macrosynergy/macrosynergy",
     "switcher": {
