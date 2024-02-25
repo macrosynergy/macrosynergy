@@ -14,9 +14,6 @@ def setuppy_url(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
 
 
 def get_version_from_py(repo: str = REPO, branch: str = STABLE_BRANCH) -> str:
-    if not branch in [STABLE_BRANCH, TEST_BRANCH, LATEST_BRANCH]:
-        return setuppy_url(repo, LATEST_BRANCH)
-
     def find_line(line: str, breakline=None):
         for i, iterline in enumerate(pyfile.split("\n")):
             if iterline.strip().startswith(line):
