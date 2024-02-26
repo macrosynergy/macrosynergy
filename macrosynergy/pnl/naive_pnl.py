@@ -1002,7 +1002,7 @@ def create_results_dataframe(
     neutrals: Union[str, List[str]],
     threshs: Union[float, List[float]],
     bm: str = None,
-    sig_negs: Union[bool, List[bool]] = False,
+    sig_negs: Union[bool, List[bool]] = None,
     cosp: bool = False,
     start: str = None,
     end: str = None,
