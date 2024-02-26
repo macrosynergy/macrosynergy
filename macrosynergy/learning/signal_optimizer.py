@@ -40,7 +40,6 @@ class SignalOptimizer:
         y: Union[pd.DataFrame, pd.Series],
         blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]] = None,
         change_n_splits: bool = False,
-        store_params: bool = False,
     ):
         """
         Class for sequential optimization of raw signals based on quantamental features.
@@ -81,8 +80,6 @@ class SignalOptimizer:
             specified in the splitter is calculated and maintained over the iterations of
             the outer splitter. This means that the number of cross-validation splits
             increases as more training data becomes available. Default is False.
-        :param <Optional[bool]> store_params: If True, model coefficients are stored where 
-            possible. Default is False.
 
         Note:
         Optimization is based on expanding time series panels and maximizes a defined
@@ -154,7 +151,6 @@ class SignalOptimizer:
         self.X = X
         self.y = y
         self.blacklist = blacklist
-        self.store_params = store_params
         
         if not hasattr(self, "change_n_splits"):
             # Then change_n_splits wasn't adjusted in the checks
@@ -163,7 +159,7 @@ class SignalOptimizer:
         # Create initial dataframes to store quantamental predictions and model choices
         self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
         self.chosen_models = pd.DataFrame(
-            columns=["real_date", "name", "model_type", "hparams", "n_splits_used"]
+            columns=["real_date", "name", "model_type", "hparams", "n_splits_used", "coefs", "intercepts"]
         )
 
     def _checks_init_params(
@@ -447,6 +443,8 @@ class SignalOptimizer:
                 "model_type": "object",
                 "hparams": "object",
                 "n_splits_used": "int",
+                "coefs": "object",
+                "intercepts": "object",
             }
         )
 
@@ -683,6 +681,16 @@ class SignalOptimizer:
         preds: np.ndarray = optim_model.predict(X_test_i)
         prediction_date = [name, test_xs_levels, test_date_levels, preds]
 
+        # See if the best model has coefficients and intercepts
+        if hasattr(optim_model, "coef_"):
+            coefs = optim_model.coef_
+        else:
+            coefs = None
+        if hasattr(optim_model, "intercept_"):
+            intercepts = optim_model.intercept_
+        else:
+            intercepts = None
+
         # Store information about the chosen model at each time.
         modelchoice_data = [
             test_date_levels.date[0],
@@ -690,6 +698,8 @@ class SignalOptimizer:
             optim_name,
             optim_params,
             int(n_splits),
+            coefs,
+            intercepts,
         ]
 
 
