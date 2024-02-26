@@ -6,6 +6,7 @@ import itertools
 
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.constants import FREQUENCY_MAP
+
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
 
@@ -14,7 +15,6 @@ import pandas as pd
 import requests
 import requests.compat
 from .core import get_cid, get_xcat, _map_to_business_day_frequency
-
 
 def standardise_dataframe(
     df: pd.DataFrame, verbose: bool = False

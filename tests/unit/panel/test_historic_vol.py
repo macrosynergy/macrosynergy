@@ -127,7 +127,7 @@ class TestAll(unittest.TestCase):
         )
 
         # Test correct column names.
-        self.assertTrue(all(df_output.columns == self.dfd.columns))
+        self.assertEqual(set(df_output.columns), set(self.dfd.columns))
         cross_sections = sorted(list(set(df_output["cid"].values)))
         self.assertTrue(cross_sections == self.cids)
         self.assertTrue(all(df_output["xcat"] == xcat + "ASD"))

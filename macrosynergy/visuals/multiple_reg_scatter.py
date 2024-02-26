@@ -22,6 +22,7 @@ def multiple_reg_scatter(
     reg_order=1,
     reg_robust=False,
     coef_box=None,
+    coef_box_font_size=12,
     prob_est="pool",
     separator=None,
     single_chart=False,
@@ -45,6 +46,8 @@ def multiple_reg_scatter(
     :param <bool> reg_robust: if True (default is False) robust standard errors are used.
     :param <str> coef_box: if not None, a box with the coefficients of the regression is
         displayed. Default is None.
+    :param <int> coef_box_font_size: font size of the coefficients box. Default is 12. If 
+        set to 0 it automatically sets the fontsize according to matplotlib.
     :param <str> prob_est: method to estimate the probability. Default is 'pool'.
     :param <int> separator: allows categorizing the scatter analysis by
             integer. This is done by setting it to a year [2010, for instance] which will
@@ -63,8 +66,6 @@ def multiple_reg_scatter(
             raise ValueError(
                 "The length of subplot_titles must be equal to the length of cat_rels."
             )
-
-    # if ncol * nrow > len(cat_rels):
 
     if separator is not None:
         if separator == "cids":
@@ -117,6 +118,7 @@ def multiple_reg_scatter(
             reg_order=reg_order,
             reg_robust=reg_robust,
             coef_box=coef_box,
+            coef_box_font_size=coef_box_font_size,
             prob_est=prob_est,
             single_chart=single_chart,
             ax=ax,
@@ -253,6 +255,7 @@ if __name__ == "__main__":
         ylabel="Excess Return",
         ncol=3,
         nrow=2,
+        coef_box="upper right"
     )
 
     multiple_reg_scatter(
