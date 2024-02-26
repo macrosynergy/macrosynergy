@@ -382,9 +382,13 @@ def simulate_returns_and_signals(periods: int = 252*20):
 
     5. rb(t+1) = mu + eta_rb(t+1), eta_rb(t+1) ~ N(0, sigma_rb^2)
 
+    6. signal(t, i) =  ...  mean zero, but persistence....
+
     """
     periods = 252*20
-    n_cids = 4
+    n_cids = 4  # keep number of cross section manageable for now
+    # Single contract type (CTYPE) for now
+
 
     def simulate_volatility(periods: int = 252*20, sigma_eta: float = 0.01, sigma_0: float = 0.1):
         sigma = np.empty(shape=(periods+1))
@@ -394,14 +398,23 @@ def simulate_returns_and_signals(periods: int = 252*20):
             sigma[ii+1] = np.exp(np.log(sigma[ii]) + ee)
         return sigma[1:]
 
+
+    dates = pd.bdate_range(end=pd.Timestamp.today() + pd.offsets.BDay(n=0), periods=periods)
     # Generate volatility
     print("Generate volatility (shared???)")
     volatility = np.empty(shape=(periods, n_cids))
-    for nn in range(20):
+    for nn in range(n_cids):
         volatility[:, nn] = simulate_volatility(periods=periods, sigma_eta=0.01, sigma_0=0.1)
 
     # Generate signals: persistent?
-    signals = np.random.randn(periods, n_cids)  # Unit variance, zero mean
+    rho_signal = 0.9
+    mean_signal = 0
+    signals = np.empty(shape=(periods+1, n_cids))
+    signals[0,:] = mean_signal
+    for tt in range(periods):
+        signals[tt+1,:] = (1 - rho_signal) * mean_signal + rho_signal * signals[tt,:] + np.random.normal(0, 0.01, n_cids)
+    # signals = np.random.randn(periods, n_cids)  # Unit variance, zero mean
+    signals = signals[1:,:]
 
     # Generate alpha
     # TODO alpha needs to be a function of lagged signal and not necessarily continous?
