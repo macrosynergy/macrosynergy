@@ -5,6 +5,7 @@ from .simulate_quantamental_data import (
     generate_lines,
     make_qdf_black,
     simulate_ar,
+    simulate_returns_and_signals,
 )
 
 from .simulate_vintage_data import VintageData
@@ -17,5 +18,6 @@ __all__ = [
     "generate_lines",
     "make_qdf_black",
     "simulate_ar",
+    "simulate_returns_and_signals",
     "VintageData",
 ]
