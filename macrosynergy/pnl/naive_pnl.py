@@ -1002,7 +1002,7 @@ def create_results_dataframe(
     neutrals: Union[str, List[str]],
     threshs: Union[float, List[float]],
     bm: str = None,
-    sig_negs: Union[bool, List[bool]] = False,
+    sig_negs: Union[bool, List[bool]] = None,
     cosp: bool = False,
     start: str = None,
     end: str = None,
@@ -1042,6 +1042,9 @@ def create_results_dataframe(
         "M": "monthly",
     }
     pnl_freq = lambda x: freq_dict[x] if x in freq_dict.keys() else "monthly"
+
+    if sig_negs is None:
+        sig_negs = [False] * len(sigs)
 
     pnl = NaivePnL(
         df=df,
