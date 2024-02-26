@@ -422,89 +422,33 @@ def historic_portfolio_vol(
 
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate import make_test_df
+    from macrosynergy.management.simulate import simulate_returns_and_signals
     from contract_signals import contract_signals
 
     # Signals: FXCRY_NSA, EQCRY_NSA (rename to FX_CSIG_STRAT, EQ_CSIG_STRAT)
     # Returns: FXXR_NSA, EQXR_NSA (renamed to FXXR, EQXR)
 
     cids: List[str] = ["EUR", "GBP", "AUD", "CAD"]
-    xcats: List[str] = ["SIG", "HR"]
-
+    xcats: List[str] = ["EQ"]
+    ctypes = xcats.copy()
     start: str = "2000-01-01"
-    end: str = "2020-12-31"
-
-    df: pd.DataFrame = make_test_df(
-        cids=cids,
-        xcats=xcats,
-        start=start,
-        end=end,
-    )
-
-    df.loc[(df["cid"] == "USD") & (df["xcat"] == "SIG"), "value"] = 1.0
-    ctypes = ["FX", "EQ"]
-    cscales = [1.0, 0.5]
-    csigns = [1, -1]
-
-    hbasket = ["GBP_FX", "EUR_FX"]
-    hscales = [0.7, 0.3]
-
-    df_cs: pd.DataFrame = contract_signals(
-        df=df,
-        sig="SIG",
-        cids=cids,
-        ctypes=ctypes,
-        cscales=cscales,
-        csigns=csigns,
-        hbasket=hbasket,
-        hscales=hscales,
-        hratios="HR",
-        sname="mySTRAT",
-    )
-
-    ## `df_cs` looks like:
-    #        real_date  cid             xcat         value
-    # 0     2000-01-03  AUD  EQ_CSIG_mySTRAT    -50.000000
-    # 1     2000-01-03  AUD  FX_CSIG_mySTRAT    100.000000
-    # 2     2000-01-03  CAD  EQ_CSIG_mySTRAT     -0.009126
-    # 3     2000-01-03  CAD  FX_CSIG_mySTRAT      0.018252
-    # 4     2000-01-03  EUR  EQ_CSIG_mySTRAT    -50.000000
-    # ...          ...  ...              ...           ...
-    # 43827 2020-12-31  CAD  FX_CSIG_mySTRAT     99.963497
-    # 43828 2020-12-31  EUR  EQ_CSIG_mySTRAT     -0.009126
-    # 43829 2020-12-31  EUR  FX_CSIG_mySTRAT   5994.266827
-    # 43830 2020-12-31  GBP  EQ_CSIG_mySTRAT    -50.000000
-    # 43831 2020-12-31  GBP  FX_CSIG_mySTRAT  14086.580010
-
-    df_xr = make_test_df(
-        cids=cids,
-        xcats=["EQ_XR", "FX_XR"],
-        start=start,
-        end=end,
-    )
-    #   TODO returns need to be daily percent changes, and sensible values...
-    ## `df_xr` looks like:
-    #        real_date  cid   xcat       value
-    # 0     2000-01-03  EUR  EQ_XR   99.999967
-    # 1     2000-01-04  EUR  EQ_XR   99.999868
-    # 2     2000-01-05  EUR  EQ_XR   99.999704
-    # 3     2000-01-06  EUR  EQ_XR   99.999474
-    # 4     2000-01-07  EUR  EQ_XR   99.999178
-    # ...          ...  ...    ...         ...
-    # 43827 2020-12-25  CAD  FX_XR   99.999474
-    # 43828 2020-12-28  CAD  FX_XR   99.999704
-    # 43829 2020-12-29  CAD  FX_XR   99.999868
-    # 43830 2020-12-30  CAD  FX_XR   99.999967
-    # 43831 2020-12-31  CAD  FX_XR  100.000000
-
-    ## Concatenate the dataframes
-    dfX = pd.concat([df_cs, df_xr], axis=0)
-
+    xr_tickers = [f"{cid}_{xcat}XR" for cid in cids for xcat in xcats]
+    cs_tickers = [f"{cid}_{xcat}_CSIG_STRAT" for cid in cids for xcat in xcats]
     fids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
 
+    df = simulate_returns_and_signals(
+        cids=cids,
+        xcat=xcats[0],
+        return_suffix="XR",
+        signal_suffix="CSIG_STRAT",
+        start=start,
+        years=20,
+    )
+    end = df["real_date"].max().strftime("%Y-%m-%d")
+
     df_vol: pd.DataFrame = historic_portfolio_vol(
-        df=dfX,
-        sname="mySTRAT",
+        df=df,
+        sname="STRAT",
         fids=fids,
         est_freq="m",
         lback_periods=15,
@@ -514,17 +458,3 @@ if __name__ == "__main__":
         start=start,
         end=end,
     )
-
-    ## `df_vol` looks like:
-    #       real_date      cid           xcat          value
-    # 0    2000-01-31  mySTRAT  PNL_USD1S_ASD    2310.014803
-    # 1    2000-02-01  mySTRAT  PNL_USD1S_ASD    2310.014803
-    # 2    2000-02-02  mySTRAT  PNL_USD1S_ASD    2310.014803
-    # 3    2000-02-03  mySTRAT  PNL_USD1S_ASD    2310.014803
-    # 4    2000-02-04  mySTRAT  PNL_USD1S_ASD    2310.014803
-    # ...         ...      ...            ...            ...
-    # 5454 2020-12-25  mySTRAT  PNL_USD1S_ASD  232588.526508
-    # 5455 2020-12-28  mySTRAT  PNL_USD1S_ASD  232588.526508
-    # 5456 2020-12-29  mySTRAT  PNL_USD1S_ASD  232588.526508
-    # 5457 2020-12-30  mySTRAT  PNL_USD1S_ASD  232588.526508
-    # 5458 2020-12-31  mySTRAT  PNL_USD1S_ASD  239593.522003
