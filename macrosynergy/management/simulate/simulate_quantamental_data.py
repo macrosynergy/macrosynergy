@@ -11,6 +11,7 @@ from collections import defaultdict
 import datetime
 import warnings
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.utils import ticker_df_to_qdf
 
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
@@ -368,10 +369,16 @@ def make_test_df(
 
 
 def simulate_returns_and_signals(
-    periods: int = 252 * 20,
-    n_cids: int = 4,
+    # n_cids: int = 4,
+    cids=["AUD", "CAD", "GBP", "USD"],
+    xcat="EQ",
+    return_suffix: str = "XR",
+    signal_suffix: str = "_CSIG_STRAT",
+    years: int = 20,
     sigma_eta: float = 0.01,
     sigma_0: float = 0.1,
+    start: str = None,
+    end: str = None,
 ):
     """Simulate returns and signals
 
@@ -389,6 +396,8 @@ def simulate_returns_and_signals(
     5. rb(t+1) = mu + eta_rb(t+1), eta_rb(t+1) ~ N(0, sigma_rb^2)
 
     """
+    n_cids = len(cids)
+    periods = 252 * years
     assert (periods > 0) and (n_cids > 0)
 
     def simulate_volatility(
@@ -404,7 +413,7 @@ def simulate_returns_and_signals(
     # Generate volatility
     print("Generate volatility (shared???)")
     volatility = np.empty(shape=(periods, n_cids))
-    for nn in range(20):
+    for nn in range(n_cids):
         volatility[:, nn] = simulate_volatility(
             periods=periods, sigma_eta=sigma_eta, sigma_0=sigma_0
         )
@@ -416,8 +425,8 @@ def simulate_returns_and_signals(
     # TODO alpha needs to be a function of lagged signal and not necessarily continous?
     # TODO signal and alpha can't be concurrent!
     # TODO signal proxy/captures a slow moving trend in the alpha (risk-premium)
-    for ii in range(int(periods / 20)):
-        signals[ii * 20 : ii * 20 + 20, :] = signals[ii * 20, :]
+    for ii in range(int(periods / years)):
+        signals[ii * years : ii * years + years, :] = signals[ii * years, :]
     alpha = signals + np.random.randn(periods, n_cids)  # Unit variance, zero mean
 
     # Generate benchmark return
@@ -441,16 +450,26 @@ def simulate_returns_and_signals(
 
     # TODO test simulated returns matches random walk hypothesis on the face of it
 
-    dates = pd.bdate_range(
-        end=pd.Timestamp.today() + pd.offsets.BDay(n=0), periods=periods
-    )
+    assert bool(start) ^ bool(end), "Only one of `start` or `end` is allowed."
+    dtx = pd.Timestamp(start) if start else pd.Timestamp(end)
+    dtx = pd.Timestamp(start) if start else pd.Timestamp(end) + pd.offsets.BDay(0)
+    if start:
+        dates = pd.bdate_range(start=dtx, periods=periods)
+    else:
+        dates = pd.bdate_range(end=dtx, periods=periods)
+
     df_rtn = pd.DataFrame(index=dates, data=rtn)
-    df_signals = pd.DataFrame(
-        index=dates, data=signals
-    )  # TODO change dates to be previous month...
+    df_signals = pd.DataFrame(index=dates, data=signals)
+    # TODO change dates to be previous month...
 
     # TODO stack into quantamental dataframe
-    return df_rtn, df_signals
+    # return df_rtn, df_signals
+    xr_tickers = [f"{cid}_{xcat}_{return_suffix}" for cid in cids]
+    csig_tickers = [f"{cid}_{xcat}_{signal_suffix}" for cid in cids]
+    dfR = pd.concat([df_rtn, df_signals], axis=1)
+    dfR.columns = xr_tickers + csig_tickers
+    dfR.index.name = "real_date"
+    return ticker_df_to_qdf(dfR)
 
 
 if __name__ == "__main__":
