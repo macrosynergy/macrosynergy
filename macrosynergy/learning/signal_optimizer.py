@@ -40,6 +40,7 @@ class SignalOptimizer:
         y: Union[pd.DataFrame, pd.Series],
         blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]] = None,
         change_n_splits: bool = False,
+        store_params: bool = False,
     ):
         """
         Class for sequential optimization of raw signals based on quantamental features.
@@ -80,6 +81,8 @@ class SignalOptimizer:
             specified in the splitter is calculated and maintained over the iterations of
             the outer splitter. This means that the number of cross-validation splits
             increases as more training data becomes available. Default is False.
+        :param <Optional[bool]> store_params: If True, model coefficients are stored where 
+            possible. Default is False.
 
         Note:
         Optimization is based on expanding time series panels and maximizes a defined
@@ -151,6 +154,7 @@ class SignalOptimizer:
         self.X = X
         self.y = y
         self.blacklist = blacklist
+        self.store_params = store_params
         
         if not hasattr(self, "change_n_splits"):
             # Then change_n_splits wasn't adjusted in the checks
@@ -158,14 +162,9 @@ class SignalOptimizer:
 
         # Create initial dataframes to store quantamental predictions and model choices
         self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
-        if self.change_n_splits:
-            self.chosen_models = pd.DataFrame(
-                columns=["real_date", "name", "model_type", "hparams", "n_splits_used"]
-            )
-        else:
-            self.chosen_models = pd.DataFrame(
-                columns=["real_date", "name", "model_type", "hparams"]
-            )
+        self.chosen_models = pd.DataFrame(
+            columns=["real_date", "name", "model_type", "hparams", "n_splits_used"]
+        )
 
     def _checks_init_params(
         self,
@@ -435,37 +434,21 @@ class SignalOptimizer:
         model_df_long = pd.DataFrame(
             columns=self.chosen_models.columns, data=modelchoice_data
         )
-        if self.change_n_splits:
-            self.chosen_models = pd.concat(
-                (
-                    self.chosen_models,
-                    model_df_long,
-                ),
-                axis=0,
-            ).astype(
-                {
-                    "real_date": "datetime64[ns]",
-                    "name": "object",
-                    "model_type": "object",
-                    "hparams": "object",
-                    "n_splits_used": "int",
-                }
-            )
-        else:
-            self.chosen_models = pd.concat(
-                (
-                    self.chosen_models,
-                    model_df_long,
-                ),
-                axis=0,
-            ).astype(
-                {
-                    "real_date": "datetime64[ns]",
-                    "name": "object",
-                    "model_type": "object",
-                    "hparams": "object",
-                }
-            )
+        self.chosen_models = pd.concat(
+            (
+                self.chosen_models,
+                model_df_long,
+            ),
+            axis=0,
+        ).astype(
+            {
+                "real_date": "datetime64[ns]",
+                "name": "object",
+                "model_type": "object",
+                "hparams": "object",
+                "n_splits_used": "int",
+            }
+        )
 
     def _checks_calcpred_params(
         self,
@@ -662,6 +645,8 @@ class SignalOptimizer:
                 len(X_train_i.index.get_level_values(1).unique()) / prop
             )
             self.inner_splitter.n_splits = int(n_splits)
+        else:
+            n_splits = self.inner_splitter.n_splits
 
         # For each model, run a grid search over the hyperparameters to optimise
         # the provided metric. The best model is then used to make predictions.
@@ -699,21 +684,14 @@ class SignalOptimizer:
         prediction_date = [name, test_xs_levels, test_date_levels, preds]
 
         # Store information about the chosen model at each time.
-        if self.change_n_splits:
-            modelchoice_data = [
-                test_date_levels.date[0],
-                name,
-                optim_name,
-                optim_params,
-                int(n_splits),
-            ]
-        else:
-            modelchoice_data = [
-                test_date_levels.date[0],
-                name,
-                optim_name,
-                optim_params,
-            ]
+        modelchoice_data = [
+            test_date_levels.date[0],
+            name,
+            optim_name,
+            optim_params,
+            int(n_splits),
+        ]
+
 
         return prediction_date, modelchoice_data
 
