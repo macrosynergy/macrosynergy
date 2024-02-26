@@ -683,13 +683,13 @@ class SignalOptimizer:
 
         # See if the best model has coefficients and intercepts
         if hasattr(optim_model, "coef_"):
-            coefs = optim_model.coef_
+            coefs = list(optim_model.coef_)
         else:
-            coefs = None
+            coefs = [np.nan for _ in range(X_train_i.shape[1])]
         if hasattr(optim_model, "intercept_"):
             intercepts = optim_model.intercept_
         else:
-            intercepts = None
+            intercepts = np.nan
 
         # Store information about the chosen model at each time.
         modelchoice_data = [
