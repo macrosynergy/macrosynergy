@@ -596,8 +596,8 @@ class SignalOptimizer:
 
     def _worker(
         self,
-        train_idx: np.array,
-        test_idx: np.array,
+        train_idx: np.ndarray,
+        test_idx: np.ndarray,
         name: str,
         models: Dict[str, Union[BaseEstimator, Pipeline]],
         metric: Callable,
@@ -611,8 +611,8 @@ class SignalOptimizer:
         Private helper function to run the grid search for a single (train, test) pair
         and a collection of models. It is used to parallelise the pipeline.
 
-        :param <np.array> train_idx: Array of indices corresponding to the training set.
-        :param <np.array> test_idx: Array of indices corresponding to the test set.
+        :param <np.ndarray> train_idx: Array of indices corresponding to the training set.
+        :param <np.ndarray> test_idx: Array of indices corresponding to the test set.
         :param <str> name: Name of the prediction model.
         :param <Dict[str, Union[BaseEstimator,Pipeline]]> models: dictionary of sklearn
             predictors.
@@ -814,10 +814,12 @@ class SignalOptimizer:
             by="real_date"
         )
         chosen_models["model_hparam_id"] = chosen_models.apply(
-            lambda row: row["model_type"]
-            if row["hparams"] == {}
-            else f"{row['model_type']}_"
-            + "_".join([f"{key}={value}" for key, value in row["hparams"].items()]),
+            lambda row: (
+                row["model_type"]
+                if row["hparams"] == {}
+                else f"{row['model_type']}_"
+                + "_".join([f"{key}={value}" for key, value in row["hparams"].items()])
+            ),
             axis=1,
         )
         chosen_models["real_date"] = chosen_models["real_date"].dt.date
@@ -838,7 +840,10 @@ class SignalOptimizer:
 
         # Display the heatmap.
         plt.figure(figsize=figsize)
-        sns.heatmap(binary_matrix, cmap="binary", cbar=False)
+        if binary_matrix.shape[0] == 1:
+            sns.heatmap(binary_matrix, cmap="binary_r", cbar=False)
+        else:
+            sns.heatmap(binary_matrix, cmap="binary", cbar=False)
         plt.title(title)
         plt.show()
 
