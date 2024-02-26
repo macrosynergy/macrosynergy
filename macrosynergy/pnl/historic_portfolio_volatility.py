@@ -67,15 +67,17 @@ def _univariate_volatility(
 
 
 def general_expo_std(
-    x: np.ndarray, w: np.ndarray, y: np.ndarray = None, remove_zeros: bool = True
+    x: np.ndarray, y: np.ndarray, w: np.ndarray = None, remove_zeros: bool = True
 ):
     """
     Estimate standard deviation of returns based on exponentially weighted absolute
     values.
 
-    :param <np.ndarray> x: array of returns
+    :param <np.ndarray> x: array of returns.
+    :param <np.ndarray> y: array of returns for a second asset (same length as x).
     :param <np.ndarray> w: array of exponential weights (same length as x); will be
         normalized to 1.
+    :param <np.ndarray> y: array of returns for a second asset (same length as x).
     :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
         effective window.
 
@@ -109,6 +111,10 @@ def _estimate_variance_covariance(
     lback_periods: int,
     weights: Optional[np.ndarray],
 ) -> pd.DataFrame:
+    # If weights is None, then the weights are equal
+    if weights is None:
+        weights = np.ones(piv_ret.shape[0]) / piv_ret.shape[0]
+
     # TODO add complexity of weighting and estimation methods
     mask = (
         (
@@ -119,24 +125,22 @@ def _estimate_variance_covariance(
         / lback_periods
     ) <= nan_tolerance
 
-    est_vol = [
-        [
-            general_expo_std(
+    cov_matr = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
+
+    for iB, cB in enumerate(piv_ret.columns):
+        for iA, cA in enumerate(piv_ret.columns[: iB + 1]):
+            est_vol = general_expo_std(
                 x=piv_ret[cA].values,
                 y=piv_ret[cB].values,
                 w=weights,
                 remove_zeros=remove_zeros,
             )
-            for cA in piv_ret.columns
-        ]
-        for cB in piv_ret.columns
-    ]
+            cov_matr[iA, iB] = est_vol
+            cov_matr[iB, iA] = est_vol
 
-    piv_ret[mask[~mask].index.tolist()] = np.nan
+    assert np.all((cov_matr.T == cov_matr) ^ np.isnan(cov_matr))
 
-    vcv = piv_ret.cov()
-
-    return vcv
+    return pd.DataFrame(cov_matr, index=piv_ret.columns, columns=piv_ret.columns)
 
 
 def _hist_vol(
@@ -197,12 +201,14 @@ def _hist_vol(
     # TODO get the correct rebalance dates
     # TODO allow for multiple estimation frequency
 
-    expo_weights_arr: Optional[np.ndarray] = None
+    weights_arr: Optional[np.ndarray] = None
     if lback_meth == "xma":
-        expo_weights_arr: np.ndarray = expo_weights(
+        weights_arr: np.ndarray = expo_weights(
             lback_periods=lback_periods,
             half_life=half_life,
         )
+    else:
+        weights_arr = np.ones(lback_periods) / lback_periods
 
     roll_func: Callable = expo_std if lback_meth == "xma" else flat_std
 
@@ -214,7 +220,7 @@ def _hist_vol(
         roll_func=roll_func,
         remove_zeros=remove_zeros,
         nan_tolerance=nan_tolerance,
-        weights=expo_weights_arr,
+        weights=weights_arr,
     )
 
     def _pvol_tuples(
