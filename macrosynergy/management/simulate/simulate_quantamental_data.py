@@ -398,16 +398,11 @@ def simulate_returns_and_signals(
     6. signal(t, i) =  ...  mean zero, but persistence....
 
     """
-<<<<<<< HEAD
-    periods = 252*20
-    n_cids = 4  # keep number of cross section manageable for now
-    # Single contract type (CTYPE) for now
 
-=======
     n_cids = len(cids)
     periods = 252 * years
     assert (periods > 0) and (n_cids > 0)
->>>>>>> origin/feature/proxy_pnl
+
 
     def simulate_volatility(
         periods: int = 252 * 20, sigma_eta: float = 0.01, sigma_0: float = 0.1
@@ -425,13 +420,9 @@ def simulate_returns_and_signals(
     print("Generate volatility (shared???)")
     volatility = np.empty(shape=(periods, n_cids))
     for nn in range(n_cids):
-<<<<<<< HEAD
-        volatility[:, nn] = simulate_volatility(periods=periods, sigma_eta=0.01, sigma_0=0.1)
-=======
         volatility[:, nn] = simulate_volatility(
             periods=periods, sigma_eta=sigma_eta, sigma_0=sigma_0
         )
->>>>>>> origin/feature/proxy_pnl
 
     # Generate signals: persistent?
     rho_signal = 0.9
