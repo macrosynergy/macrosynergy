@@ -13,7 +13,7 @@ import logging
 
 # Get ec2 instance with name notebook-runner-* and state isnt terminated
 
-branch_name = "bugfix/jpmaqs_download"
+branch_name = "develop"
 
 start_time = time.time()
 
@@ -29,14 +29,13 @@ instances = ec2.instances.filter(
 
 print(f"Found {len(list(instances))} instances")
 
-
 # Get the number of ipynb files in the s3 bucket notebooks
 s3 = boto3.resource("s3")
 bucket = s3.Bucket("macrosynergy-notebook-prod")
 objects_info = [(obj.key, obj.size) for obj in bucket.objects.all()]
 
 # Filter for notebook files
-notebooks_info = [(key, size) for key, size in objects_info if key.endswith(".ipynb") and key != "Signal_optimization_basics.ipynb"]
+notebooks_info = [(key, size) for key, size in objects_info if key.endswith(".ipynb") and key != "Signal_optimization_basics.ipynb" and key != "Regression-based_macro_trading_signals.ipynb"]
 notebooks = [obj.key for obj in bucket.objects.filter(Prefix="")]
 notebooks = [notebook for notebook in notebooks if notebook.endswith(".ipynb")]
 sorted_notebooks_info = sorted(notebooks_info, key=lambda x: x[1])
@@ -62,6 +61,8 @@ print(len(list(instances)))
 # Start the ec2 instances
 
 for instance in instances:
+    if instance.state["Name"] == "stopping":
+        instance.wait_until_stopped()
     instance.start()
 
 for instance in instances:
@@ -89,9 +90,13 @@ def connect_to_instance(instance):
             ssh_client.connect(
                 hostname=instance_ip, username="ubuntu", key_filename="./notebook_runner.pem"
             )
+            ssh_client.get_transport().is_active()
+            ssh_client.get_transport().open_session()
             print(f"Connection to {instance.id} Succeeded!!!")
             return ssh_client
         except:
+            if ssh_client:
+                ssh_client.close()
             retries += 1
             print("Failed to connect, retrying...")
             time.sleep(2)
@@ -140,7 +145,7 @@ def run_commands_on_ec2(instance, notebooks):
         print(f"Venv commands completed on {instance.id}")
 
         print(f"Running pip commands on {instance.id}...")
-        pip_commands = f"myvenv/bin/python -m pip install linearmodels jupyter git+https://github.com/macrosynergy/macrosynergy@{branch_name}  --upgrade"
+        pip_commands = f"myvenv/bin/python -m pip install linearmodels jupyter nbformat git+https://github.com/macrosynergy/macrosynergy@{branch_name}  --upgrade"
         stdin, stdout, stderr = ssh_client.exec_command(pip_commands, timeout=50)
         stdout.channel.recv_exit_status()
         print(f"Pip commands completed on {instance.id}")
