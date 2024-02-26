@@ -1043,6 +1043,9 @@ def create_results_dataframe(
     }
     pnl_freq = lambda x: freq_dict[x] if x in freq_dict.keys() else "monthly"
 
+    if sig_negs is None:
+        sig_negs = [False] * len(sigs)
+
     pnl = NaivePnL(
         df=df,
         ret=ret,
