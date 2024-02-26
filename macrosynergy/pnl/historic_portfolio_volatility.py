@@ -66,9 +66,76 @@ def _univariate_volatility(
     return univariate_vol
 
 
-def _estimate_variance_covariance(pivot: pd.DataFrame) -> pd.DataFrame:
+def general_expo_std(
+    x: np.ndarray, w: np.ndarray, y: np.ndarray = None, remove_zeros: bool = True
+):
+    """
+    Estimate standard deviation of returns based on exponentially weighted absolute
+    values.
+
+    :param <np.ndarray> x: array of returns
+    :param <np.ndarray> w: array of exponential weights (same length as x); will be
+        normalized to 1.
+    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
+        effective window.
+
+    :return <float>: exponentially weighted mean absolute value (as proxy of return
+        standard deviation).
+
+    """
+    assert len(x) == len(w), "weights and window must have same length"
+    if remove_zeros:
+        x = x[x != 0]
+        w = w[0 : len(x)] / sum(w[0 : len(x)])
+    w = w / sum(w)  # weights are normalized
+
+    if y is not None:
+        rss = (x - x.mean()) * (y - y.mean())
+        # rss = x * y
+    else:
+        # rss = x**2
+        # rss = np.abs(x)
+        # rss = np.abs(x - x.mean())
+        rss = (x - x.mean()) ** 2
+
+    return w.T.dot(rss)
+
+
+def _estimate_variance_covariance(
+    piv_ret: pd.DataFrame,
+    roll_func: str,
+    remove_zeros: bool,
+    nan_tolerance: float,
+    lback_periods: int,
+    weights: Optional[np.ndarray],
+) -> pd.DataFrame:
     # TODO add complexity of weighting and estimation methods
-    vcv = pivot.cov()
+    mask = (
+        (
+            piv_ret.isna().sum(axis=0)
+            + (piv_ret == 0).sum(axis=0)
+            + (lback_periods - len(piv_ret))
+        )
+        / lback_periods
+    ) <= nan_tolerance
+
+    est_vol = [
+        [
+            general_expo_std(
+                x=piv_ret[cA].values,
+                y=piv_ret[cB].values,
+                w=weights,
+                remove_zeros=remove_zeros,
+            )
+            for cA in piv_ret.columns
+        ]
+        for cB in piv_ret.columns
+    ]
+
+    piv_ret[mask[~mask].index.tolist()] = np.nan
+
+    vcv = piv_ret.cov()
+
     return vcv
 
 
@@ -76,7 +143,6 @@ def _hist_vol(
     pivot_signals: pd.DataFrame,
     pivot_returns: pd.DataFrame,
     sname: str,
-    rstring: str,
     est_freq: str = "m",
     lback_periods: int = 21,
     lback_meth: str = "ma",
@@ -117,9 +183,6 @@ def _hist_vol(
             f"`lback_meth` must be 'ma' or 'xma'; got {lback_meth}"
         )
 
-    # df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
-    # df_wide = df_wide[sorted(df_wide.columns)]  # Sort columns to keep debugging easier
-
     # NOTE: `get_eops` helps identify the dates for which the volatility calculation
     # will be performed. This is done by identifying the last date of each cycle.
     # We use `get_eops` primarily because it has a clear and defined behaviour for all frequencies.
@@ -131,70 +194,60 @@ def _hist_vol(
         freq=est_freq,
     )
 
-    
-    # dfw_calc: pd.DataFrame = pd.DataFrame(
-    #     index=trigger_indices, columns=[return_series], dtype=float
-    # )
-
-    # expo_weights_arr: Optional[np.ndarray] = None
-    # if lback_meth == "xma":
-    #     expo_weights_arr: np.ndarray = expo_weights(
-    #         lback_periods=lback_periods,
-    #         half_life=half_life,
-    #     )
-
-    # _args: dict = dict(remove_zeros=remove_zeros, rstring=rstring, sname=sname)
-
-    # if est_freq == "d":
-    #     if lback_meth == "xma":
-    #         _args.update(dict(func=expo_std, w=expo_weights_arr))
-    #     elif lback_meth == "ma":
-    #         _args.update(dict(func=flat_std))
-
-    # else:
-    #     _args.update(
-    #         dict(
-    #             lback_periods=lback_periods,
-    #             nan_tolerance=nan_tolerance,
-    #         )
-    #     )
-    #     if lback_meth == "xma":
-    #         _args.update(dict(roll_func=expo_std, w=expo_weights_arr))
-    #     elif lback_meth == "ma":
-    #         _args.update(dict(roll_func=flat_std))
-
-    # if est_freq == "d":
-    #     # dfw_calc = df_wide.rolling(lback_periods).agg(**_args)
-    #     raise NotImplementedError("Daily volatility not implemented yet.")
-    #     # TODO: Contradiction to other condition above
-
-    # else:
-    #     for r_date in trigger_indices:
-    #         dfw_calc.loc[r_date, :] = _rolling_window_calc(
-    #             real_date_pdt=r_date,
-    #             ticker_df=df_wide,
-    #             **_args,
-    #         )
-
-    # fills = {"d": 1, "w": 5, "m": 24, "q": 64}
-    # dfw_calc = dfw_calc.reindex(df_wide.index).ffill(limit=fills[est_freq])
-
-
     # TODO get the correct rebalance dates
     # TODO allow for multiple estimation frequency
-    list_vcv: List[Tuple[pd.Timestamp, pd.DataFrame, pd.Series]] = [
-        (trigger_date, _estimate_variance_covariance(pivot=pivot_returns.loc[pivot_returns.index <= trigger_date].iloc[-lback_periods:]), pivot_signals.loc[trigger_date, :])
-        for trigger_date in trigger_indices
-    ]
 
-    list_pvol = [(tt, signal.T.dot(vcv).dot(signal)) for tt, vcv, signal in list_vcv]
+    expo_weights_arr: Optional[np.ndarray] = None
+    if lback_meth == "xma":
+        expo_weights_arr: np.ndarray = expo_weights(
+            lback_periods=lback_periods,
+            half_life=half_life,
+        )
+
+    roll_func: Callable = expo_std if lback_meth == "xma" else flat_std
+
+    vol_args = dict(
+        trigger_indices=trigger_indices,
+        pivot_returns=pivot_returns,
+        pivot_signals=pivot_signals,
+        lback_periods=lback_periods,
+        roll_func=roll_func,
+        remove_zeros=remove_zeros,
+        nan_tolerance=nan_tolerance,
+        weights=expo_weights_arr,
+    )
+
+    def _pvol_tuples(
+        trigger_indices: pd.DatetimeIndex,
+        pivot_returns: pd.DataFrame,
+        pivot_signals: pd.DataFrame,
+        lback_periods: int,
+        **kwargs,
+    ):
+        for trigger_date in trigger_indices:
+            td = trigger_date
+            piv_ret = pivot_returns.loc[pivot_returns.index <= td].iloc[-lback_periods:]
+            vcv: pd.DataFrame = _estimate_variance_covariance(
+                piv_ret=piv_ret, lback_periods=lback_periods, **kwargs
+            )
+            piv_sig: pd.DataFrame = pivot_signals.loc[td, :]
+            yield td, piv_sig.T.dot(vcv).dot(piv_sig)
+
     portfolio_return_name = f"{sname}{RETURN_SERIES_XCAT}"
-    df_out = pd.DataFrame(list_pvol, columns=["real_date", portfolio_return_name]).set_index("real_date")
+    df_out = pd.DataFrame(
+        _pvol_tuples(**vol_args),
+        columns=["real_date", portfolio_return_name],
+    ).set_index("real_date")
 
     # Annualised standard deviation (ASD)
-    df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name]) * np.sqrt(252)
+    df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name]) * np.sqrt(
+        252
+    )
 
-    return ticker_df_to_qdf(df=df_out)
+    ffills = {"d": 1, "w": 5, "m": 24, "q": 64}
+    df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[est_freq]).dropna()
+
+    return df_out
 
 
 def historic_portfolio_vol(
@@ -316,7 +369,7 @@ def historic_portfolio_vol(
         ):
             raise ValueError(f"Contract identifier `{contx}` not in dataframe.")
 
-    if not all([f"{contx}{rstring}" in u_tickers for contx in fids]):
+    if not all([f"{contx}_{rstring}" in u_tickers for contx in fids]):
         missing_tickers = [
             f"{contx}_{rstring}"
             for contx in fids
@@ -329,24 +382,28 @@ def historic_portfolio_vol(
     ## Filter DF and select CSIGs and XR
     filt_csigs: List[str] = [tx for tx in u_tickers if tx.endswith(f"_CSIG_{sname}")]
 
-    filt_xrs: List[str] = [
-        tx for tx in u_tickers if tx.endswith(f"{rstring}")
-    ]
+    filt_xrs: List[str] = [tx for tx in u_tickers if tx.endswith(f"_{rstring}")]
 
     # df: pd.DataFrame = df.loc[df["ticker"].isin(filt_csigs + filt_xrs)]
-    df["fid"] = df["cid"] + "_" + df["xcat"].str.split("_").map(lambda x: x[0][:-2] if x[0].endswith("XR") else x[0])
-    pivot_signals: pd.DataFrame = df.loc[df.ticker.isin(filt_csigs)].pivot(index="real_date", columns="fid", values="value")
-    pivot_returns: pd.DataFrame = df.loc[df.ticker.isin(filt_xrs)].pivot(index="real_date", columns="fid", values="value")
+    df["fid"] = (
+        df["cid"]
+        + "_"
+        + df["xcat"]
+        .str.split("_")
+        .map(lambda x: x[0][:-2] if x[0].endswith("XR") else x[0])
+    )
+    pivot_signals: pd.DataFrame = df.loc[df["ticker"].isin(filt_csigs)].pivot(
+        index="real_date", columns="fid", values="value"
+    )
+    pivot_returns: pd.DataFrame = df.loc[df["ticker"].isin(filt_xrs)].pivot(
+        index="real_date", columns="fid", values="value"
+    )
     assert set(pivot_signals.columns) == set(pivot_returns.columns)
-
-    # TODO the same?
-    assert all(pivot_signals.columns == pivot_returns.columns)
 
     hist_port_vol: pd.DataFrame = _hist_vol(
         pivot_returns=pivot_returns,
         pivot_signals=pivot_signals,
         sname=sname,
-        rstring=rstring,
         est_freq=est_freq,
         lback_periods=lback_periods,
         lback_meth=lback_meth,
@@ -355,14 +412,15 @@ def historic_portfolio_vol(
         remove_zeros=remove_zeros,
     )
 
-    assert isinstance(hist_port_vol, QuantamentalDataFrame)
-
-    return hist_port_vol
+    return ticker_df_to_qdf(df=hist_port_vol)
 
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_test_df
     from contract_signals import contract_signals
+
+    # Signals: FXCRY_NSA, EQCRY_NSA (rename to FX_CSIG_STRAT, EQ_CSIG_STRAT)
+    # Returns: FXXR_NSA, EQXR_NSA (renamed to FXXR, EQXR)
 
     cids: List[str] = ["EUR", "GBP", "AUD", "CAD"]
     xcats: List[str] = ["SIG", "HR"]
@@ -399,49 +457,45 @@ if __name__ == "__main__":
     )
 
     ## `df_cs` looks like:
-    #       real_date  cid              xcat         value
-    # 0     2000-01-03  AUD  EQ_CSIG_mySTRAT     -0.009126
-    # 1     2000-01-03  AUD  FX_CSIG_mySTRAT      0.018252
-    # 2     2000-01-03  CAD  EQ_CSIG_mySTRAT    -25.028669
-    # 3     2000-01-03  CAD  FX_CSIG_mySTRAT     50.057339
+    #        real_date  cid             xcat         value
+    # 0     2000-01-03  AUD  EQ_CSIG_mySTRAT    -50.000000
+    # 1     2000-01-03  AUD  FX_CSIG_mySTRAT    100.000000
+    # 2     2000-01-03  CAD  EQ_CSIG_mySTRAT     -0.009126
+    # 3     2000-01-03  CAD  FX_CSIG_mySTRAT      0.018252
     # 4     2000-01-03  EUR  EQ_CSIG_mySTRAT    -50.000000
     # ...          ...  ...              ...           ...
-    # 43827 2020-12-31  CAD  FX_CSIG_mySTRAT     50.000000
-    # 43828 2020-12-31  EUR  EQ_CSIG_mySTRAT    -49.926954
-    # 43829 2020-12-31  EUR  FX_CSIG_mySTRAT   9088.903408
-    # 43830 2020-12-31  GBP  EQ_CSIG_mySTRAT    -25.000000
-    # 43831 2020-12-31  GBP  FX_CSIG_mySTRAT  21024.448833
+    # 43827 2020-12-31  CAD  FX_CSIG_mySTRAT     99.963497
+    # 43828 2020-12-31  EUR  EQ_CSIG_mySTRAT     -0.009126
+    # 43829 2020-12-31  EUR  FX_CSIG_mySTRAT   5994.266827
+    # 43830 2020-12-31  GBP  EQ_CSIG_mySTRAT    -50.000000
+    # 43831 2020-12-31  GBP  FX_CSIG_mySTRAT  14086.580010
 
     df_xr = make_test_df(
         cids=cids,
-        xcats=["EQXR", "FXXR"],
+        xcats=["EQ_XR", "FX_XR"],
         start=start,
         end=end,
     )
     #   TODO returns need to be daily percent changes, and sensible values...
     ## `df_xr` looks like:
-    #         real_date  cid xcat       value
-    # 0     2000-01-03  EUR  EQXR  100.000000
-    # 1     2000-01-04  EUR  EQXR   99.853908
-    # 2     2000-01-05  EUR  EQXR   99.707816
-    # 3     2000-01-06  EUR  EQXR   99.561724
-    # 4     2000-01-07  EUR  EQXR   99.415632
-    # ...          ...  ...  ...         ...
-    # 43827 2020-12-25  CAD  FXXR   99.269540
-    # 43828 2020-12-28  CAD  FXXR   99.415632
-    # 43829 2020-12-29  CAD  FXXR   99.561724
-    # 43830 2020-12-30  CAD  FXXR   99.707816
-    # 43831 2020-12-31  CAD  FXXR   99.853908
-
-    ...
+    #        real_date  cid   xcat       value
+    # 0     2000-01-03  EUR  EQ_XR   99.999967
+    # 1     2000-01-04  EUR  EQ_XR   99.999868
+    # 2     2000-01-05  EUR  EQ_XR   99.999704
+    # 3     2000-01-06  EUR  EQ_XR   99.999474
+    # 4     2000-01-07  EUR  EQ_XR   99.999178
+    # ...          ...  ...    ...         ...
+    # 43827 2020-12-25  CAD  FX_XR   99.999474
+    # 43828 2020-12-28  CAD  FX_XR   99.999704
+    # 43829 2020-12-29  CAD  FX_XR   99.999868
+    # 43830 2020-12-30  CAD  FX_XR   99.999967
+    # 43831 2020-12-31  CAD  FX_XR  100.000000
 
     ## Concatenate the dataframes
     dfX = pd.concat([df_cs, df_xr], axis=0)
 
     fids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
-    # fids = ['EUR_FXXR', 'EUR_EQXR', 'GBP_FXXR', 'GBP_EQXR', 'AUD_FXXR', 'AUD_EQXR', 'CAD_FXXR', 'CAD_EQXR']
 
-    
     df_vol: pd.DataFrame = historic_portfolio_vol(
         df=dfX,
         sname="mySTRAT",
@@ -456,15 +510,15 @@ if __name__ == "__main__":
     )
 
     ## `df_vol` looks like:
-    #       real_date      cid           xcat         value
-    # 0    2000-01-31  mySTRAT  PNL_USD1S_ASD    519.638295
-    # 1    2000-02-01  mySTRAT  PNL_USD1S_ASD    519.638295
-    # 2    2000-02-02  mySTRAT  PNL_USD1S_ASD    519.638295
-    # 3    2000-02-03  mySTRAT  PNL_USD1S_ASD    519.638295
-    # 4    2000-02-04  mySTRAT  PNL_USD1S_ASD    519.638295
-    # ...         ...      ...            ...           ...
-    # 5454 2020-12-25  mySTRAT  PNL_USD1S_ASD  80932.561430
-    # 5455 2020-12-28  mySTRAT  PNL_USD1S_ASD  80932.561430
-    # 5456 2020-12-29  mySTRAT  PNL_USD1S_ASD  80932.561430
-    # 5457 2020-12-30  mySTRAT  PNL_USD1S_ASD  80932.561430
-    # 5458 2020-12-31  mySTRAT  PNL_USD1S_ASD  79138.839677
+    #       real_date      cid           xcat          value
+    # 0    2000-01-31  mySTRAT  PNL_USD1S_ASD    2310.014803
+    # 1    2000-02-01  mySTRAT  PNL_USD1S_ASD    2310.014803
+    # 2    2000-02-02  mySTRAT  PNL_USD1S_ASD    2310.014803
+    # 3    2000-02-03  mySTRAT  PNL_USD1S_ASD    2310.014803
+    # 4    2000-02-04  mySTRAT  PNL_USD1S_ASD    2310.014803
+    # ...         ...      ...            ...            ...
+    # 5454 2020-12-25  mySTRAT  PNL_USD1S_ASD  232588.526508
+    # 5455 2020-12-28  mySTRAT  PNL_USD1S_ASD  232588.526508
+    # 5456 2020-12-29  mySTRAT  PNL_USD1S_ASD  232588.526508
+    # 5457 2020-12-30  mySTRAT  PNL_USD1S_ASD  232588.526508
+    # 5458 2020-12-31  mySTRAT  PNL_USD1S_ASD  239593.522003

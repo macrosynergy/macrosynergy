@@ -964,8 +964,6 @@ class DataQueryInterface(object):
             **kwargs,
         )
 
-        final_output = self._chain_download_outputs(download_outputs)
-
         if len(failed_batches) > 0:
             flat_failed_batches: List[str] = list(
                 itertools.chain.from_iterable(failed_batches)
@@ -986,11 +984,12 @@ class DataQueryInterface(object):
                 *args,
                 **kwargs,
             )
+            download_outputs.extend(retried_output)
 
-            # extend retried output
-            final_output = self._chain_download_outputs([final_output, retried_output])
+        if retry_counter == 0:
+            return self._chain_download_outputs(download_outputs)
 
-        return final_output
+        return download_outputs
 
     def download_data(
         self,
