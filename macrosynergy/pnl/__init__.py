@@ -12,4 +12,5 @@ __all__ = [
     "notional_positions",
     "historic_portfolio_vol",
     "proxy_pnl_calc",
+    "ProxyPnL",
 ]
