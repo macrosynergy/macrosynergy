@@ -64,4 +64,3 @@ def download_transaction_costs(
     return dfd
 
 
-download_transaction_costs()
