@@ -93,11 +93,7 @@ def general_expo_std(
 
     if y is not None:
         rss = (x - x.mean()) * (y - y.mean())
-        # rss = x * y
     else:
-        # rss = x**2
-        # rss = np.abs(x)
-        # rss = np.abs(x - x.mean())
         rss = (x - x.mean()) ** 2
 
     return w.T.dot(rss)
@@ -246,9 +242,7 @@ def _hist_vol(
     ).set_index("real_date")
 
     # Annualised standard deviation (ASD)
-    df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name]) * np.sqrt(
-        252
-    )
+    df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name] * 252)
 
     ffills = {"d": 1, "w": 5, "m": 24, "q": 64}
     df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[est_freq]).dropna()
@@ -445,6 +439,8 @@ if __name__ == "__main__":
         years=20,
     )
     end = df["real_date"].max().strftime("%Y-%m-%d")
+    # randomly make 10% of the entires NaN
+    df.loc[df.sample(frac=0.1).index, "value"] = np.nan
 
     df_vol: pd.DataFrame = historic_portfolio_vol(
         df=df,
