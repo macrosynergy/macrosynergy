@@ -4,6 +4,7 @@ from macrosynergy.pnl.contract_signals import contract_signals
 from macrosynergy.pnl.notional_positions import notional_positions
 from macrosynergy.pnl.historic_portfolio_volatility import historic_portfolio_vol
 from macrosynergy.pnl.proxy_pnl_calc import proxy_pnl_calc
+from macrosynergy.pnl.proxy_pnl import ProxyPnL
 
 __all__ = [
     "NaivePnL",

@@ -18,7 +18,7 @@ from macrosynergy.pnl import notional_positions, contract_signals, proxy_pnl_cal
 from macrosynergy.download.transaction_costs import download_transaction_costs
 
 
-class ProxyPNL(object):
+class ProxyPnL(object):
     def __init__(
         self,
         df: QuantamentalDataFrame,
