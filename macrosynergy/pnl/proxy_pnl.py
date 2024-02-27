@@ -13,7 +13,7 @@ from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
 
 
-def proxy_pnl(
+def proxy_pnl_calc(
     df: pd.DataFrame,
     spos: str,
     fids: List[str],
@@ -106,3 +106,4 @@ def proxy_pnl(
     ]:
         if not isinstance(_varx, _typex):
             raise TypeError(f"{_namex} must be {_typex}")
+
