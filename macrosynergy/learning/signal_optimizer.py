@@ -159,8 +159,11 @@ class SignalOptimizer:
         # Create initial dataframes to store quantamental predictions and model choices
         self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
         self.chosen_models = pd.DataFrame(
-            columns=["real_date", "name", "model_type", "hparams", "n_splits_used", "coefs", "intercepts"]
+            columns=["real_date", "name", "model_type", "hparams", "n_splits_used"]
         )
+        # Create initial dataframe to store model coefficients, if available
+        self.ftr_coefficients = pd.DataFrame(columns = ["real_date", "name"] + list(X.columns))
+        self.intercepts = pd.DataFrame(columns = ["real_date", "name", "intercepts"])
 
     def _checks_init_params(
         self,
@@ -331,8 +334,7 @@ class SignalOptimizer:
         # (2) Set up the splitter, outputs to store the predictions and model choices,
         #     and (if specified) calculations for adaptive n_splits in preparation
         #     for parallelising the historical model predictions.
-        prediction_data = []
-        modelchoice_data = []
+   
 
         outer_splitter = ExpandingIncrementPanelSplit(
             train_intervals=1,
@@ -382,10 +384,14 @@ class SignalOptimizer:
         #     no action was taken.
         prediction_data = []
         modelchoice_data = []
+        ftrcoeff_data = []
+        intercept_data = []
 
-        for pred_data, model_data in results:
+        for pred_data, model_data, ftr_data, inter_data in results:
             prediction_data.append(pred_data)
             modelchoice_data.append(model_data)
+            ftrcoeff_data.append(ftr_data)
+            intercept_data.append(inter_data)
 
         # Condense the collected data into a single dataframe
         for column_name, xs_levels, date_levels, predictions in prediction_data:
@@ -424,12 +430,18 @@ class SignalOptimizer:
             }
         )
 
-        # (6) Finally, store the model choices made at each time in a dataframe. If the
-        #     algorithm was initialised with change_n_splits=True, the number of splits
-        #     used in the inner splitter is also stored.
+        # (6) Finally, store the model choices made at each time in a dataframe.
+
         model_df_long = pd.DataFrame(
             columns=self.chosen_models.columns, data=modelchoice_data
         )
+        coef_df_long = pd.DataFrame(
+            columns=self.ftr_coefficients.columns, data=ftrcoeff_data
+        )
+        intercept_df_long = pd.DataFrame(
+            columns=self.intercepts.columns, data=intercept_data
+        )
+
         self.chosen_models = pd.concat(
             (
                 self.chosen_models,
@@ -443,8 +455,34 @@ class SignalOptimizer:
                 "model_type": "object",
                 "hparams": "object",
                 "n_splits_used": "int",
-                "coefs": "object",
-                "intercepts": "object",
+            }
+        )
+
+        ftr_coef_types = {col: "float" for col in self.X.columns}
+        ftr_coef_types["real_date"] = "datetime64[ns]"
+        ftr_coef_types["name"] = "object"
+
+        self.ftr_coefficients = pd.concat(
+            (
+                self.ftr_coefficients,
+                coef_df_long,
+            ),
+            axis=0,
+        ).astype(
+            ftr_coef_types
+        )
+
+        self.intercepts = pd.concat(
+            (
+                self.intercepts,
+                intercept_df_long,
+            ),
+            axis=0,
+        ).astype(
+            {
+                "real_date": "datetime64[ns]",
+                "name": "object",
+                "intercepts": "float",
             }
         )
 
@@ -682,15 +720,20 @@ class SignalOptimizer:
         prediction_date = [name, test_xs_levels, test_date_levels, preds]
 
         # See if the best model has coefficients and intercepts
-        if hasattr(optim_model, "coef_"):
-            coefs = list(optim_model.coef_)
+        # First see if the best model is a pipeline object 
+        if isinstance(optim_model, Pipeline):
+            # TODO: handle case where features were selected before the linear regression
+            final_estimator = optim_model[-1]
+        else:
+            final_estimator = optim_model
+        if hasattr(final_estimator, "coef_"):
+            coefs = list(final_estimator.coef_)
         else:
             coefs = [np.nan for _ in range(X_train_i.shape[1])]
-        if hasattr(optim_model, "intercept_"):
-            intercepts = optim_model.intercept_
+        if hasattr(final_estimator, "intercept_"):
+            intercepts = final_estimator.intercept_
         else:
             intercepts = np.nan
-
         # Store information about the chosen model at each time.
         modelchoice_data = [
             test_date_levels.date[0],
@@ -698,12 +741,19 @@ class SignalOptimizer:
             optim_name,
             optim_params,
             int(n_splits),
-            coefs,
-            intercepts,
+        ]
+        coefficients_data = [
+            test_date_levels.date[0],
+            name,
+        ] + coefs
+        intercept_data = [
+            test_date_levels.date[0],
+            name,
+            intercepts
         ]
 
 
-        return prediction_date, modelchoice_data
+        return prediction_date, modelchoice_data, coefficients_data, intercept_data
 
     def get_optimized_signals(
         self, name: Optional[Union[str, List]] = None
@@ -877,6 +927,22 @@ class SignalOptimizer:
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
+            
+    def get_parameter_stats(self, name, include_intercept=False):
+        """
+        Function to return the means and standard deviations of linear model feature 
+        coefficients and intercepts (if available) for a given pipeline.
+        """
+        chosen_models = self.get_optimal_models(name=name)
+        coefs_series = np.array(list(chosen_models["coefs"]))
+        coef_means = np.nanmean(coefs_series, axis=0)
+        coef_stds = np.nanstd(coefs_series, axis=0)
+        if include_intercept:
+            intercepts_series = np.array(chosen_models["intercepts"])
+            intercept_means = np.nanmean(intercepts_series)
+            intercept_stds = np.nanstd(intercepts_series)
+            return coef_means, coef_stds, intercept_means, intercept_stds
+        return coef_means, coef_stds
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
