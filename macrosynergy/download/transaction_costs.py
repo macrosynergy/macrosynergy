@@ -4,13 +4,14 @@ import warnings
 import requests
 import numpy as np
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.utils import get_cid, get_xcat
 from io import StringIO
 
 MAX_RETRIES = 3
 CSV_URL = "https://macrosynergy-trading-costs.s3.eu-west-2.amazonaws.com/transaction-costs.csv"
 
 
-def _request_wrapper(url: str, verbose: bool = True, **kwargs) -> requests.Response:
+def _request_wrapper(url: str, verbose: bool = True, **kwargs) -> str:
     """
     Wrapper around `requests.get` to handle errors and retries.
     Any additional keyword arguments are passed to `requests.get`. Purpose is to allow
@@ -23,7 +24,7 @@ def _request_wrapper(url: str, verbose: bool = True, **kwargs) -> requests.Respo
         try:
             r = requests.get(url, **kwargs)
             r.raise_for_status()
-            return r
+            return r.text
         except requests.exceptions.RequestException as e:
             if verbose:
                 print(f"Error downloading {url}: {e}")
@@ -48,19 +49,22 @@ def download_transaction_costs(
         print(f"Timestamp (UTC): {datetime.datetime.now(datetime.timezone.utc)}")
         print(f"Downloading trading costs data from {csv_url}")
     dfd: pd.DataFrame = pd.read_csv(
-        StringIO(_request_wrapper(csv_url, **kwargs).text),
+        StringIO(_request_wrapper(csv_url, **kwargs)),
         parse_dates=["real_date"],
-        dtype={"ticker": str, "real_date": str, "value": np.float64},
-        usecols=["ticker", "real_date", "value"],
-        header=0,
-        engine="c",
     )
-    if not isinstance(dfd, pd.DataFrame):
+    dfd["cid"], dfd["xcat"] = get_cid(dfd["ticker"]), get_xcat(dfd["ticker"])
+    dfd = dfd[QuantamentalDataFrame.IndexCols + ["value"]]
+    if not isinstance(dfd, pd.DataFrame) or dfd.empty:
         raise ValueError("Failed to download trading costs data")
 
     if not isinstance(dfd, QuantamentalDataFrame):
-        warnings.warn("Downloaded dataframe is not a QuantamentalDataFrame.")
+        ers = "Downloaded dataframe is not a QuantamentalDataFrame."
+        warnings.warn(ers, UserWarning)
+        if verbose:
+            print(ers)
 
     return dfd
 
 
+if __name__ == "__main__":
+    print(download_transaction_costs(verbose=True).head())
