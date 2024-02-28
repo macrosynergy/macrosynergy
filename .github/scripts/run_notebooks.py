@@ -51,7 +51,7 @@ for i in range(len(list(instances))):
     batch = notebooks[i::len(list(instances))]
     # batch = batch[:batch_size]
     batches.append(batch)
-bucket_url = "https://macrosynergy-notebook-prod.s3.eu-west-2.amazonaws.com/"
+bucket_url = os.getenv("AWS_NOTEBOOK_BUCKET")
 
 print(len(batches))
 print(len(batches[0]))
@@ -114,21 +114,6 @@ def run_commands_on_ec2(instance, notebooks):
         ssh_client.exec_command(cleanup_commands, timeout=3)
         time.sleep(3)
         print(f"Cleanup commands completed on {instance.id}")
-
-        # HAVE A LOOK AT ADDING THIS SINCE IT MAY ALLOW TO CATCH IF TOO MANY SSH CHANNELS ARE OPEN AT ONCE
-        """
-        while attempt < max_retries:
-            try:
-                # Attempt to execute command
-                stdin, stdout, stderr = ssh_client.exec_command(command, timeout=10)
-                # If successful, break out of the loop
-                print("Command executed successfully")
-                return stdout.read()
-            except (paramiko.ssh_exception.SSHException, paramiko.ssh_exception.NoValidConnectionsError) as e:
-                print(f"Attempt {attempt + 1} failed with error: {e}")
-                time.sleep(retry_delay)  # Wait for a bit before retrying
-                attempt += 1
-        """
 
         # Wget commands
         print(f"Running wget commands on {instance.id}...")
@@ -232,10 +217,6 @@ with ThreadPoolExecutor(max_threads) as executor:
     # Use executor.map to run the process_instance function concurrently on each instance
     output = executor.map(process_instance, list(instances))
 
-# output = []
-# for instance in instances:
-#     output.append(process_instance(instance))
-
 print("FINSIHED RUNNING ALL NOTEBOOKS")
 merged_dict = {}
 
@@ -275,7 +256,7 @@ def send_email(subject, body, recipient, sender):
 
 email_subject = "Notebook Failures"
 email_body = f"Please note that the following notebooks failed when ran on the branch {branch_name}: \n{pd.DataFrame(merged_dict['failed']).to_html()}\nThe total time to run all notebooks was {end_time - start_time} seconds."
-recipient_email = ["sandresen@macrosynergy.com"] #os.getenv("EMAIL_RECIPIENTS").split(",")
-sender_email = "machine@macrosynergy.com" #os.getenv("SENDER_EMAIL")
+recipient_email = os.getenv("EMAIL_RECIPIENTS").split(",")
+sender_email = os.getenv("SENDER_EMAIL")
 
 send_email(email_subject, email_body, recipient_email, sender_email)
