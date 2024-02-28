@@ -40,7 +40,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE }}
           aws-region: eu-west-2
           role-session-name: GitHub-OIDC-TERRAFORM
-          role-duration-seconds: 86400 # 2 Hours
+          role-duration-seconds: 7200 # 2 Hours
 
       - name: Save PEM certificate
         env:
@@ -49,11 +49,11 @@ jobs:
         run: |
           echo "${{ secrets.NOTEBOOK_RUNNER_PEM }}" > $cert_file
 
-      - name: Run notebook script
-        env: 
-          EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
-          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-          AWS_NOTEBOOK_BUCKET: ${{ secrets.AWS_NOTEBOOK_BUCKET }}
-        run: |
-          python .github/scripts/run_notebooks.py 
+      # - name: Run notebook script
+      #   env: 
+      #     EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
+      #     SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+      #     AWS_NOTEBOOK_BUCKET: ${{ secrets.AWS_NOTEBOOK_BUCKET }}
+      #   run: |
+      #     python .github/scripts/run_notebooks.py 
 
