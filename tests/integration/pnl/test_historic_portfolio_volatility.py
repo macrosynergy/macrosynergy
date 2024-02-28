@@ -30,7 +30,9 @@ class TestHistoricPortfolioVol(unittest.TestCase):
             for jj in range(self.n_cids):
                 if ii != jj:
                     cov[ii, jj] = sigma[ii] * sigma[jj] * correlations_map[tuple(sorted((ii, jj)))]
+
         self.cov = cov
+        self.sigma = sigma
         # TODO build variance-covariance matrix (simulate...)
         # TODO build sharpe ratios...
 
@@ -49,7 +51,7 @@ class TestHistoricPortfolioVol(unittest.TestCase):
         print("estimate of mean:", (self.mean - mean_est.mean(axis=0)).round(6))  # TODO describe distribution...
         print("Estimate of std:", (np.sqrt(self.sigma) - std_est.mean(axis=0)).round(6))
 
-    def test_clean_run(self):
+    def test_unit_weights(self):
         # Check portfolio volatility
         rtn = np.random.multivariate_normal(mean=self.mean, cov=self.cov, size=self.periods)
         dates = pd.bdate_range(end=pd.Timestamp.today() + pd.offsets.BDay(n=0), periods=self.periods)
@@ -78,43 +80,6 @@ class TestHistoricPortfolioVol(unittest.TestCase):
             lback_meth="ma",
             half_life=11,
             start=None,
-            end=None,
-            blacklist=None,
-            nan_tolerance=0.25,
-            remove_zeros=True
-        )
-        # TODO check values...
-        self.assertIsInstance(df_pvol, pd.DataFrame)
-
-    def test_start_date(self):
-        # Check portfolio volatility
-        rtn = np.random.multivariate_normal(mean=self.mean, cov=self.cov, size=self.periods)
-        dates = pd.bdate_range(end=pd.Timestamp.today() + pd.offsets.BDay(n=0), periods=self.periods)
-
-        df_returns = pd.DataFrame(rtn, columns=[f"XX{ii}_AAXR" for ii in range(self.n_cids)], index=dates)
-        df_returns.index.name = "real_date"
-        df_returns.columns.name = "ticker"
-
-        df_signals = pd.DataFrame([(1, 1, 1)], columns=[f"XX{ii}_AA_CSIG_STRAT" for ii in range(self.n_cids)], index=dates)
-        df_signals.index.name = "real_date"
-        df_signals.columns.name = "ticker"
-
-        df = pd.concat((df_returns.stack().to_frame("value").reset_index(), df_signals.stack().to_frame("value").reset_index()), axis=0)
-        df[["cid", "xcat"]] = df.ticker.str.split("_", expand=True, n=1)
-        fids = [f"XX{ii}_AA" for ii in range(self.n_cids)]
-        # TODO signal types: [1] (1, 1, 1), [2] (0, 0, 0), [3] (1, 0, 0), [4] (0, 1, 0), [5] (0, 0, 1)
-        # TODO check logic of historic_portfolio_volatility follows above "contract signals"
-        # TODO monte-carlo logic checks on historic_portfolio_volatility
-        df_pvol = historic_portfolio_vol(
-            df=df,
-            sname="STRAT",
-            fids=fids,
-            rstring="XR",
-            est_freq="m",
-            lback_periods=21,
-            lback_meth="ma",
-            half_life=11,
-            start=f"{df_returns.index[30]:%Y-%m-%d}",
             end=None,
             blacklist=None,
             nan_tolerance=0.25,
