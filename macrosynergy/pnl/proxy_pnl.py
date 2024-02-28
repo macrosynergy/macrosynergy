@@ -1,7 +1,3 @@
-"""
-Module for calculating an approximate nominal PnL under consideration of transaction costs.
-"""
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -10,99 +6,149 @@ import seaborn as sns
 from typing import List, Union, Tuple, Optional
 
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.utils import (
+    reduce_df,
+    standardise_dataframe,
+    is_valid_iso_date,
+)
+from macrosynergy.management.types import Numeric, QuantamentalDataFrame
+
+from macrosynergy.pnl import notional_positions, contract_signals, proxy_pnl_calc
+
+from macrosynergy.download.transaction_costs import download_transaction_costs
 
 
-def proxy_pnl(
-    df: pd.DataFrame,
-    spos: str,
-    fids: List[str],
-    tcost_n: Optional[str] = None,
-    rcost_n: Optional[str] = None,
-    size_n: Optional[str] = None,
-    tcost_l: Optional[str] = None,
-    rcost_l: Optional[str] = None,
-    size_l: Optional[str] = None,
-    roll_freqs: Optional[dict] = None,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    blacklist: Optional[dict] = None,
-):
-    """
-    Calculates an approximate nominal PnL under consideration of transaction costs
+class ProxyPnL(object):
+    def __init__(
+        self,
+        df: QuantamentalDataFrame,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        blacklist: Optional[dict] = None,
+        sname: str = "STRAT",
+        pname: str = "POS",
+    ):
+        self.sname = sname
+        self.pname = pname
+        self.blacklist = blacklist
+        self.cs_df = None
+        self.npos_df = None
+        self.df = reduce_df(df=standardise_dataframe(df), blacklist=blacklist)
+        self.start = start or df["real_date"].min().strftime("%Y-%m-%d")
+        self.end = end or df["real_date"].max().strftime("%Y-%m-%d")
+        if not all(map(is_valid_iso_date, [self.start, self.end])):
+            raise ValueError(f"Invalid date format: {self.start}, {self.end}")
 
-    :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
-        columns: 'cid', 'xcat', 'real_date' and 'value'.
-        This dataframe must contain the contract-specific signals and possibly
-        related return series (for vol-targeting).
-    :param <str> spos: the name of the strategy positions in the dataframe in
-        the format "<sname>_<pname>".
-        This must correspond to contract positions in the dataframe, which are categories
-        of the format "<cid>_<ctype>_<sname>_<pname>". The strategy name <sname> has
-        usually been set by the `contract_signals` function and the string for <pname> by
-        the `notional_positions` function.
-    :param <list[str]> fids: list of contract identifiers in the format
-        "<cid>_<ctype>". It must correspond to contract signals in the dataframe in the
-        format "<cid>_<ctype>_<sname>_<pname>".
-    :param <str> tcost_n: the postfix of the trading cost category for normal size. Values
-        are defined as the full bid-offer spread for a normal position size.
-        This must correspond to trading a cost category "<cid>_<ctype>_<tcost_n>"
-        in the dataframe.
-        Default is None: no trading costs are considered.
-    :param <str> rcost_n: the postfix of the roll cost category for normal size. Values
-        are defined as the roll charges for a normal position size.
-        This must correspond to a roll cost category "<cid>_<ctype>_<rcost_n>"
-        in the dataframe.
-        Default is None: no trading costs are considered.
-    :param <str> size_n: Normal size in USD million This must correspond to a normal
-        trade size category "<cid>_<ctype>_<size_n>" in the dataframe.
-        Default is None: all costs are are applied independent of size.
-    :param <str> tcost_l: the postfix of the trading cost category for large size.
-        Large here is defined as 90% percentile threshold of trades in the market.
-        Default is None: trading costs are are applied independent of size.
-    :param <str> rcost_l: the postfix of the roll cost category for large size. Values
-        are defined as the roll charges for a large position size.
-        This must correspond to a roll cost category "<cid>_<ctype>_<rcost_l>"
-        in the dataframe.
-        Default is None: no trading costs are considered.
-    :param <str> size_l: Large size in USD million. Default is None: all costs are
-        are applied independent of size.
-    :param <dict> roll_freqs: dictionary of roll frequencies for each contract type.
-        This must use the contract types as keys and frequency string ("w", "m", or "q")
-        as values. The default frequency for all contracts not in the dictionary is
-        "m" for monthly. Default is None: all contracts are rolled monthly.
-    :param <str> start: the start date of the data. Default is None, which means that
-        the start date is taken from the dataframe.
-    :param <str> end: the end date of the data. Default is None, which means that
-        the end date is taken from the dataframe.
-    :param <dict> blacklist: a dictionary of contract identifiers to exclude from
-        the calculation. Default is None, which means that no contracts are excluded.
+    def contract_signals(
+        self,
+        sig: str,
+        cids: List[str],
+        ctypes: List[str],
+        cscales: Optional[List[Union[Numeric, str]]] = None,
+        csigns: Optional[List[int]] = None,
+        hbasket: Optional[List[str]] = None,
+        hscales: Optional[List[Union[Numeric, str]]] = None,
+        hratios: Optional[str] = None,
+        *args,
+        **kwargs,
+    ) -> QuantamentalDataFrame:
+        cs_args = dict(
+            df=self.df,
+            sig=sig,
+            cids=cids,
+            ctypes=ctypes,
+            cscales=cscales,
+            csigns=csigns,
+            hbasket=hbasket,
+            hscales=hscales,
+            hratios=hratios,
+            start=self.start,
+            end=self.end,
+            blacklist=self.blacklist,
+            sname=self.sname,
+        )
+        cs_args.update(kwargs)
+        self.fids = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
 
-    return: <pd.DataFrame> of the standard JPMaQS format with "GLB" (Global) as cross
-        section and three categories "<sname>_<pname>_PNL" (total PnL in USD terms under
-        consideration of transaction costs), "<sname>_<pname>_COST" (all imputed trading
-        and roll costs in USD terms), and "<sname>_<pname>_PNLX" (total PnL in USD terms
-        without consideration of transaction costs).
+        cs_df: QuantamentalDataFrame = contract_signals(**cs_args)
+        self.cs_df = cs_df
+        return cs_df
 
-    N.B.: Transaction costs as % of notional are considered to be a linear function of
-        size, with the slope determined by the normal and large positions, if all relevant
-        series are applied.
-    """
+    def notional_positions(
+        self,
+        df: QuantamentalDataFrame = None,
+        sname: str = None,
+        fids: List[str] = None,
+        aum: Numeric = 100,
+        dollar_per_signal: Numeric = 1.0,
+        leverage: Optional[Numeric] = None,
+        vol_target: Optional[Numeric] = None,
+        rebal_freq: str = "m",
+        slip: int = 1,
+        lback_periods: int = 21,
+        lback_meth: str = "ma",
+        half_life=11,
+        rstring: str = "XR",
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        blacklist: Optional[dict] = None,
+        pname: str = "POS",
+    ):
+        fids = fids or self.fids
+        df = df or self.cs_df or self.contract_signals()
+        np_args = dict(
+            df=df,
+            sname=sname or self.sname,
+            fids=fids,
+            aum=aum,
+            dollar_per_signal=dollar_per_signal,
+            leverage=leverage,
+            vol_target=vol_target,
+            rebal_freq=rebal_freq,
+            slip=slip,
+            lback_periods=lback_periods,
+            lback_meth=lback_meth,
+            half_life=half_life,
+            rstring=rstring,
+            start=start or self.start,
+            end=end or self.end,
+            blacklist=blacklist or self.blacklist,
+            pname=pname,
+        )
+        np_df: QuantamentalDataFrame = notional_positions(**np_args)
+        self.npos_df = np_df
+        return np_df
 
-    for _varx, _namex, _typex in [
-        (df, "df", pd.DataFrame),
-        (spos, "spos", str),
-        (fids, "fids", list),
-        (tcost_n, "tcost_n", (str, type(None))),
-        (rcost_n, "rcost_n", (str, type(None))),
-        (size_n, "size_n", (str, type(None))),
-        (tcost_l, "tcost_l", (str, type(None))),
-        (rcost_l, "rcost_l", (str, type(None))),
-        (size_l, "size_l", (str, type(None))),
-        (roll_freqs, "roll_freqs", (dict, type(None))),
-        (start, "start", (str, type(None))),
-        (end, "end", (str, type(None))),
-        (blacklist, "blacklist", (dict, type(None))),
-    ]:
-        if not isinstance(_varx, _typex):
-            raise TypeError(f"{_namex} must be {_typex}")
+    def proxy_pnl_calc(
+        self,
+        spos: str,
+        df: QuantamentalDataFrame = None,
+        fids: List[str] = None,
+        tcost_n: Optional[str] = None,
+        rcost_n: Optional[str] = None,
+        size_n: Optional[str] = None,
+        tcost_l: Optional[str] = None,
+        rcost_l: Optional[str] = None,
+        size_l: Optional[str] = None,
+        roll_freqs: Optional[dict] = None,
+    ):
+        df = df or self.npos_df or self.notional_positions()
+        spos = spos or self.sname + "_" + self.pname
+        fids = fids or self.fids
+        pp_args = dict(
+            df=df,
+            spos=spos,
+            fids=fids,
+            tcost_n=tcost_n,
+            rcost_n=rcost_n,
+            size_n=size_n,
+            tcost_l=tcost_l,
+            rcost_l=rcost_l,
+            size_l=size_l,
+            roll_freqs=roll_freqs,
+            start=self.start,
+            end=self.end,
+            blacklist=self.blacklist,
+        )
+
+        return proxy_pnl_calc(**pp_args)
