@@ -111,6 +111,12 @@ def _estimate_variance_covariance(
     lback_periods: int,
     weights: Optional[np.ndarray],
 ) -> pd.DataFrame:
+    """Estimation of the variance-covariance matrix needs to have the following configuration options
+
+    1. Absolutely vs squared deviations,
+    2. Flat weights (equal) vs. exponential weights,
+    3. Frequency of estimation (daily, weekly, monthly, quarterly) and their weights.
+    """
     # If weights is None, then the weights are equal
     if weights is None:
         weights = np.ones(piv_ret.shape[0]) / piv_ret.shape[0]
@@ -124,6 +130,7 @@ def _estimate_variance_covariance(
         )
         / lback_periods
     ) <= nan_tolerance
+    # TODO assert length...
 
     cov_matr = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
 
@@ -260,29 +267,33 @@ def historic_portfolio_vol(
     df: pd.DataFrame,
     sname: str,
     fids: List[str],
+    rstring: str = "XR",
     est_freq: str = "m",
     lback_periods: int = 21,
     lback_meth: str = "ma",
     half_life=11,
-    rstring: str = "XR",
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
     nan_tolerance: float = 0.25,
     remove_zeros: bool = True,
 ):
-    """
+    """Historical portfolio volatility.
+
     Estimates annualized standard deviations of a portfolio, based on historic
     variances and co-variances.
 
-    :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
-        columns: 'cid', 'xcat', 'real_date' and 'value'.
-        This dataframe must contain contract-specific signals and return series.
+    :param <QuantamentalDataFrame> df: JPMaQS standard DataFrame containing contract-specific signals and return series.
     :param <str> sname: the name of the strategy. It must correspond to contract
         signals in the dataframe, which have the format "<cid>_<ctype>_CSIG_<sname>", and
         which are typically calculated by the function contract_signals().
     :param <List[str]> fids: list of financial contract identifiers in the format
         "<cid>_<ctype>". It must correspond to contract signals in the dataframe.
+        
+    :param <str> rstring: a general string of the return category. This identifies
+        the contract returns that are required for the volatility-targeting method, based
+        on the category identifier format <cid>_<ctype><rstring> in accordance with
+        JPMaQS conventions. Default is 'XR'.       
     :param <str> est_freq: the frequency of the volatility estimation. Default is 'm'
         for monthly. Alternatives are 'w' for business weekly, 'd' for daily, and 'q'
         for quarterly. Estimations are conducted for the end of the period.
@@ -291,10 +302,6 @@ def historic_portfolio_vol(
     :param <str> lback_meth: the method to use for the lookback period of the
         volatility-targeting method. Default is 'ma' for moving average. Alternative is
         "xma", for exponential moving average.
-    :param <str> rstring: a general string of the return category. This identifies
-        the contract returns that are required for the volatility-targeting method, based
-        on the category identifier format <cid>_<ctype><rstring> in accordance with
-        JPMaQS conventions. Default is 'XR'.
     :param <str> start: the start date of the data. Default is None, which means that
         the start date is taken from the dataframe.
     :param <str> end: the end date of the data. Default is None, which means that
@@ -375,7 +382,7 @@ def historic_portfolio_vol(
         ):
             raise ValueError(f"Contract identifier `{contx}` not in dataframe.")
 
-    if not all([f"{contx}_{rstring}" in u_tickers for contx in fids]):
+    if not all([f"{contx}{rstring}" in u_tickers for contx in fids]):
         missing_tickers = [
             f"{contx}_{rstring}"
             for contx in fids
@@ -388,7 +395,7 @@ def historic_portfolio_vol(
     ## Filter DF and select CSIGs and XR
     filt_csigs: List[str] = [tx for tx in u_tickers if tx.endswith(f"_CSIG_{sname}")]
 
-    filt_xrs: List[str] = [tx for tx in u_tickers if tx.endswith(f"_{rstring}")]
+    filt_xrs: List[str] = [tx for tx in u_tickers if tx.endswith(rstring)]
 
     # df: pd.DataFrame = df.loc[df["ticker"].isin(filt_csigs + filt_xrs)]
     df["fid"] = (
@@ -444,6 +451,7 @@ if __name__ == "__main__":
         start=start,
         years=20,
     )
+    # TODO simulate_returns_and_signals are risk-signals, not contract signals. We need to adjust for volatility and common (observed) factor.
     end = df["real_date"].max().strftime("%Y-%m-%d")
 
     df_vol: pd.DataFrame = historic_portfolio_vol(

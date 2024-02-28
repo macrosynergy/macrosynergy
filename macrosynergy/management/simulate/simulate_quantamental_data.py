@@ -477,7 +477,7 @@ def simulate_returns_and_signals(
 
     # TODO stack into quantamental dataframe
     # return df_rtn, df_signals
-    xr_tickers = [f"{cid}_{xcat}_{return_suffix}" for cid in cids]
+    xr_tickers = [f"{cid}_{xcat}{return_suffix}" for cid in cids]
     csig_tickers = [f"{cid}_{xcat}_{signal_suffix}" for cid in cids]
     dfR = pd.concat([df_rtn, df_signals], axis=1)
     dfR.columns = xr_tickers + csig_tickers
