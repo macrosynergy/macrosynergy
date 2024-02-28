@@ -32,7 +32,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install boto3 paramiko
+          pip install boto3 paramiko pandas
 
       - name: Configure AWS credentials from AWS account
         uses: aws-actions/configure-aws-credentials@v4
