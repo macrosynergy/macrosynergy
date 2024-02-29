@@ -957,21 +957,42 @@ class SignalOptimizer:
                     "The elements of the figsize tuple must be floats or ints."
                 )
             
+    def get_ftr_coefficients(self, name):
+        """
+        Method to return the feature coefficients for a given pipeline.
+        """
+        ftrcoef_df = self.ftr_coefficients
+        return ftrcoef_df[ftrcoef_df.name == name].sort_values(by="real_date")
+    
+    def get_intercepts(self, name):
+        """
+        Method to return the intercepts for a given pipeline.
+        """
+        intercepts_df = self.intercepts
+        return intercepts_df[intercepts_df.name == name].sort_values(by="real_date")
+
     def get_parameter_stats(self, name, include_intercept=False):
         """
         Function to return the means and standard deviations of linear model feature 
         coefficients and intercepts (if available) for a given pipeline.
         """
-        chosen_models = self.get_optimal_models(name=name)
-        coefs_series = np.array(list(chosen_models["coefs"]))
-        coef_means = np.nanmean(coefs_series, axis=0)
-        coef_stds = np.nanstd(coefs_series, axis=0)
+        ftrcoef_df = self.get_ftr_coefficients(name).iloc[:, 2:]
         if include_intercept:
-            intercepts_series = np.array(chosen_models["intercepts"])
-            intercept_means = np.nanmean(intercepts_series)
-            intercept_stds = np.nanstd(intercepts_series)
-            return coef_means, coef_stds, intercept_means, intercept_stds
-        return coef_means, coef_stds
+            intercepts_df = self.get_intercepts(name).iloc[:, 2:]
+            return ftrcoef_df.mean(skipna=True), ftrcoef_df.std(skipna=True), intercepts_df.mean(skipna=True), intercepts_df.std(skipna=True)
+        return ftrcoef_df.mean(skipna=True), ftrcoef_df.std(skipna=True)
+    
+    def coefs_timeplot(self, name):
+        """
+        Function to plot the time series of feature coefficients for a given pipeline.
+        """
+        plt.style.use("seaborn-v0_8-darkgrid")
+        ftrcoef_df = self.get_ftr_coefficients(name)
+        ftrcoef_df = ftrcoef_df.set_index("real_date")
+        ftrcoef_df = ftrcoef_df.iloc[:, 1:]
+        ftrcoef_df.plot()
+        plt.title(f"Feature coefficients for pipeline: {name}")
+        plt.show()
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
@@ -1049,7 +1070,7 @@ if __name__ == "__main__":
         hparam_type="grid",
         n_jobs=-1,
     )
-    so.ftr_coefficients
+    so.coefs_timeplot("test")
     # (1) Example SignalOptimizer usage.
     #     We get adaptive signals for a linear regression and a KNN regressor, with the
     #     hyperparameters for the latter optimised across regression balanced accuracy.
