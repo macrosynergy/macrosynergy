@@ -1,0 +1,58 @@
+name: Run Notebooks
+
+on:
+  workflow_dispatch:
+
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  id-token: write # This is required for aws oidc connection
+  contents: read # This is required for actions/checkout
+  pull-requests: write # This is required for gh bot to comment PR
+
+env:
+  TF_LOG: INFO
+  AWS_REGION: eu-west-2
+
+jobs:
+  build:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12
+
+      - name: Install dependencies
+        run: |
+          pip install boto3 paramiko pandas
+
+      - name: Configure AWS credentials from AWS account
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+          aws-region: eu-west-2
+          role-session-name: GitHub-OIDC-TERRAFORM
+          role-duration-seconds: 7200 # 2 Hours, role is set so can be max 4 hours
+
+      - name: Save PEM certificate
+        env:
+          cert_variable: NOTEBOOK_RUNNER_PEM
+          cert_file: ./notebook_runner.pem
+        run: |
+          echo "${{ secrets.NOTEBOOK_RUNNER_PEM }}" > $cert_file
+
+      - name: Run notebook script
+        env: 
+          EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          AWS_NOTEBOOK_BUCKET: ${{ secrets.AWS_NOTEBOOK_BUCKET }}
+        run: |
+          python .github/scripts/run_notebooks.py 
+

@@ -15,8 +15,8 @@ def multiple_reg_scatter(
     title_xadj=0.5,
     title_yadj=0.99,
     title_fontsize=20,
-    xlabel="",
-    ylabel="",
+    xlab="",
+    ylab="",
     fit_reg=True,
     reg_ci=95,
     reg_order=1,
@@ -37,8 +37,8 @@ def multiple_reg_scatter(
     :param <int> nrow: number of rows in the grid. Default is 0, which will be set to 1.
     :param <Tuple[float]> figsize: size of the figure. Default is (20, 15).
     :param <str> title: title of the figure. Default is an empty string.
-    :param <str> xlabel: label of the x-axis. Default is an empty string.
-    :param <str> ylabel: label of the y-axis. Default is an empty string.
+    :param <str> xlab: label of the x-axis. Default is an empty string.
+    :param <str> ylab: label of the y-axis. Default is an empty string.
     :param <bool> fit_reg: if True (default) a linear regression line is fitted to the
         data.
     :param <int> reg_ci: confidence interval for the regression line. Default is 95.
@@ -76,8 +76,8 @@ def multiple_reg_scatter(
         nrows=nrow, ncols=ncol, figsize=figsize, sharex=True, sharey=True
     )
     fig.suptitle(title, x=title_xadj, y=title_yadj, fontsize=title_fontsize)
-    fig.supxlabel(xlabel)
-    fig.supylabel(ylabel)
+    fig.supxlabel(xlab)
+    fig.supylabel(ylab)
 
     for i, cat_rel in enumerate(cat_rels):
         row = i // ncol
@@ -251,8 +251,8 @@ if __name__ == "__main__":
     multiple_reg_scatter(
         [cr1, cr2, cr3, cr4, cr5, cr6],
         title="Growth trend and subsequent sectoral equity returns.",
-        xlabel="Real technical growth trend",
-        ylabel="Excess Return",
+        xlab="Real technical growth trend",
+        ylab="Excess Return",
         ncol=3,
         nrow=2,
         coef_box="upper right"
@@ -261,8 +261,8 @@ if __name__ == "__main__":
     multiple_reg_scatter(
         [cr1, cr2, cr3, cr4, cr5, cr6],
         title="Growth trend and subsequent sectoral equity returns.",
-        xlabel="Real technical growth trend",
-        ylabel="Excess Return",
+        xlab="Real technical growth trend",
+        ylab="Excess Return",
         ncol=6,
         nrow=2,
     )
