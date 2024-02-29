@@ -15,7 +15,7 @@ from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
 
 from typing import List, Union, Dict, Optional, Callable, Tuple
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 import warnings
 
