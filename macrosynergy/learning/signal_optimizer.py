@@ -335,7 +335,6 @@ class SignalOptimizer:
         #     and (if specified) calculations for adaptive n_splits in preparation
         #     for parallelising the historical model predictions.
    
-
         outer_splitter = ExpandingIncrementPanelSplit(
             train_intervals=1,
             test_size=1,
@@ -359,6 +358,8 @@ class SignalOptimizer:
 
         # (3) Run the parallelised worker function to run the Macrosynergy signal
         #     optimization algorithm over the trading history.
+        train_test_splits = list(outer_splitter.split(X=X, y=y))
+
         results = Parallel(n_jobs=n_jobs)(
             delayed(self._worker)(
                 train_idx=train_idx,
@@ -373,7 +374,8 @@ class SignalOptimizer:
                 prop=prop,
             )
             for train_idx, test_idx in tqdm(
-                outer_splitter.split(X=X, y=y),
+                train_test_splits,
+                total=len(train_test_splits),
             )
         )
 
@@ -754,13 +756,24 @@ class SignalOptimizer:
             final_estimator = optim_model
 
         if hasattr(final_estimator, "coef_"):
-            coefs = np.array(final_estimator.coef_)
+            if np.array(final_estimator.coef_).squeeze().ndim == 1:
+                coefs = np.array(final_estimator.coef_).squeeze()
+            else:
+                coefs = np.array([np.nan for _ in range(X_train_i.shape[1])])
         else:
             coefs = np.array([np.nan for _ in range(X_train_i.shape[1])])
         coef_ftr_map = {ftr : coef for ftr, coef in zip(ftr_names, coefs)}
         coefs = [coef_ftr_map[ftr] if ftr in coef_ftr_map else np.nan for ftr in X_train_i.columns]
         if hasattr(final_estimator, "intercept_"):
-            intercepts = final_estimator.intercept_
+            if isinstance(final_estimator.intercept_, np.ndarray):
+                # Store the intercept if it has length one
+                if len(final_estimator.intercept_) == 1:
+                    intercepts = final_estimator.intercept_[0]
+                else:
+                    intercepts = np.nan
+            else:
+                # The intercept will be a float/integer
+                intercepts = final_estimator.intercept_
         else:
             intercepts = np.nan
         # Store information about the chosen model at each time.
@@ -994,6 +1007,18 @@ class SignalOptimizer:
         plt.title(f"Feature coefficients for pipeline: {name}")
         plt.show()
 
+    def intercepts_timeplot(self, name):
+        """
+        Function to plot the time series of intercepts for a given pipeline.
+        """
+        plt.style.use("seaborn-v0_8-darkgrid")
+        intercepts_df = self.get_intercepts(name)
+        intercepts_df = intercepts_df.set_index("real_date")
+        intercepts_df = intercepts_df.iloc[:, 1]
+        intercepts_df.plot()
+        plt.title(f"Intercepts for pipeline: {name}")
+        plt.show()
+
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
     import macrosynergy.management as msm
@@ -1071,6 +1096,7 @@ if __name__ == "__main__":
         n_jobs=-1,
     )
     so.coefs_timeplot("test")
+    so.intercepts_timeplot("test")
     # (1) Example SignalOptimizer usage.
     #     We get adaptive signals for a linear regression and a KNN regressor, with the
     #     hyperparameters for the latter optimised across regression balanced accuracy.
