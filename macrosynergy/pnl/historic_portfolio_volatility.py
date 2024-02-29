@@ -3,6 +3,7 @@ Module for calculating the historic portfolio volatility for a given strategy.
 """
 
 from typing import List, Optional, Callable, Tuple
+from functools import lru_cache
 import pandas as pd
 import numpy as np
 import logging
@@ -21,6 +22,21 @@ from macrosynergy.management.utils import (
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
 logger = logging.getLogger(__name__)
+
+cache = lru_cache(maxsize=None)
+
+
+@cache
+def flat_weights_arr(lback_periods: int, *args, **kwargs) -> np.ndarray:
+    """Flat weights for the lookback period."""
+    return np.ones(lback_periods) / lback_periods
+
+
+@cache
+def expo_weights_arr(lback_periods: int, half_life: int, *args, **kwargs) -> np.ndarray:
+    """Exponential weights for the lookback period."""
+    return expo_weights(lback_periods=lback_periods, half_life=half_life)
+
 
 def _univariate_volatility(
     df_wide: pd.DataFrame,
@@ -68,26 +84,14 @@ def _univariate_volatility(
     return univariate_vol
 
 
-def general_expo_std(
+def weighted_covariance(
     x: np.ndarray, y: np.ndarray, w: np.ndarray = None, remove_zeros: bool = True
 ):
     """
-    Estimate standard deviation of returns based on exponentially weighted absolute
-    values.
-
-    :param <np.ndarray> x: array of returns.
-    :param <np.ndarray> y: array of returns for a second asset (same length as x).
-    :param <np.ndarray> w: array of exponential weights (same length as x); will be
-        normalized to 1.
-    :param <np.ndarray> y: array of returns for a second asset (same length as x).
-    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
-        effective window.
-
-    :return <float>: exponentially weighted mean absolute value (as proxy of return
-        standard deviation).
+    Estimate covariance between two series after applying weights.
 
     """
-    assert len(x) == len(w), "weights and window must have same length"
+    # assert len(x) == len(w), "weights and window must have same length"
     if remove_zeros:
         x = x[x != 0]
         w = w[0 : len(x)] / sum(w[0 : len(x)])
@@ -103,11 +107,10 @@ def general_expo_std(
 
 def _estimate_variance_covariance(
     piv_ret: pd.DataFrame,
-    roll_func: str,
     remove_zeros: bool,
     nan_tolerance: float,
     lback_periods: int,
-    weights: Optional[np.ndarray],
+    weights_arr: Optional[np.ndarray],
 ) -> pd.DataFrame:
     """Estimation of the variance-covariance matrix needs to have the following configuration options
 
@@ -116,8 +119,8 @@ def _estimate_variance_covariance(
     3. Frequency of estimation (daily, weekly, monthly, quarterly) and their weights.
     """
     # If weights is None, then the weights are equal
-    if weights is None:
-        weights = np.ones(piv_ret.shape[0]) / piv_ret.shape[0]
+    if weights_arr is None:
+        weights_arr = np.ones(piv_ret.shape[0]) / piv_ret.shape[0]
 
     # TODO add complexity of weighting and estimation methods
     mask = (
@@ -134,10 +137,10 @@ def _estimate_variance_covariance(
 
     for iB, cB in enumerate(piv_ret.columns):
         for iA, cA in enumerate(piv_ret.columns[: iB + 1]):
-            est_vol = general_expo_std(
+            est_vol = weighted_covariance(
                 x=piv_ret[cA].values,
                 y=piv_ret[cB].values,
-                w=weights,
+                w=weights_arr,
                 remove_zeros=remove_zeros,
             )
             cov_matr[iA, iB] = est_vol  # TODO (iA, iB) is same as (iB, iA) 
@@ -206,26 +209,16 @@ def _hist_vol(
     # TODO get the correct rebalance dates
     # TODO allow for multiple estimation frequency
 
-    weights_arr: Optional[np.ndarray] = None
-    if lback_meth == "xma":
-        weights_arr: np.ndarray = expo_weights(
-            lback_periods=lback_periods,
-            half_life=half_life,
-        )
-    else:
-        weights_arr = np.ones(lback_periods) / lback_periods
-
-    roll_func: Callable = expo_std if lback_meth == "xma" else flat_std
+    weights_func = flat_weights_arr if lback_meth == "ma" else expo_weights_arr
 
     vol_args = dict(
         trigger_indices=trigger_indices,
         pivot_returns=pivot_returns,
         pivot_signals=pivot_signals,
         lback_periods=lback_periods,
-        roll_func=roll_func,
         remove_zeros=remove_zeros,
         nan_tolerance=nan_tolerance,
-        weights=weights_arr,
+        weights_func=weights_func,
     )
 
     def _pvol_tuples(
@@ -233,13 +226,26 @@ def _hist_vol(
         pivot_returns: pd.DataFrame,
         pivot_signals: pd.DataFrame,
         lback_periods: int,
+        weights_func: Optional[np.ndarray],
         **kwargs,
     ):
         for trigger_date in trigger_indices:
             td = trigger_date
-            piv_ret = pivot_returns.loc[pivot_returns.index <= td].iloc[-lback_periods:]
+            piv_ret = (
+                pivot_returns.loc[pivot_returns.index <= td]
+                .iloc[-lback_periods:]
+                .dropna()
+            )
+            weights_arr = weights_func(
+                lback_periods=min(lback_periods, len(piv_ret)),
+                half_life=min(half_life, len(piv_ret)),
+            ) # inherently fast, and cached anyway
+
             vcv: pd.DataFrame = _estimate_variance_covariance(
-                piv_ret=piv_ret, lback_periods=lback_periods, **kwargs
+                piv_ret=piv_ret,
+                lback_periods=lback_periods,
+                weights_arr=weights_arr,
+                **kwargs,
             )
             piv_sig: pd.DataFrame = pivot_signals.loc[td, :]
             yield td, piv_sig.T.dot(vcv).dot(piv_sig)
@@ -285,11 +291,11 @@ def historic_portfolio_vol(
         which are typically calculated by the function contract_signals().
     :param <List[str]> fids: list of financial contract identifiers in the format
         "<cid>_<ctype>". It must correspond to contract signals in the dataframe.
-        
+
     :param <str> rstring: a general string of the return category. This identifies
         the contract returns that are required for the volatility-targeting method, based
         on the category identifier format <cid>_<ctype><rstring> in accordance with
-        JPMaQS conventions. Default is 'XR'.       
+        JPMaQS conventions. Default is 'XR'.
     :param <str> est_freq: the frequency of the volatility estimation. Default is 'm'
         for monthly. Alternatives are 'w' for business weekly, 'd' for daily, and 'q'
         for quarterly. Estimations are conducted for the end of the period.
