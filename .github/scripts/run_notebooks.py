@@ -13,7 +13,7 @@ import logging
 
 # Get ec2 instance with name notebook-runner-* and state isnt terminated
 
-branch_name = "develop"
+branch_name = "main"
 
 start_time = time.time()
 
@@ -52,10 +52,6 @@ for i in range(len(list(instances))):
     # batch = batch[:batch_size]
     batches.append(batch)
 bucket_url = os.getenv("AWS_NOTEBOOK_BUCKET")
-
-print(len(batches))
-print(len(batches[0]))
-print(len(list(instances)))
 
 # If len(notebooks) < len(instances), then don't use all instances
 # Start the ec2 instances
@@ -254,9 +250,13 @@ def send_email(subject, body, recipient, sender):
     except ClientError as e:
         print(f"Error sending email: {e.response['Error']['Message']}")
 
-email_subject = "Notebook Failures"
-email_body = f"Please note that the following notebooks failed when ran on the branch {branch_name}: \n{pd.DataFrame(merged_dict['failed']).to_html()}\nThe total time to run all notebooks was {end_time - start_time} seconds."
-recipient_email = os.getenv("EMAIL_RECIPIENTS").split(",")
-sender_email = os.getenv("SENDER_EMAIL")
+if len(merged_dict["failed"]) == 0:
+    exit(0)
+else:
+    email_subject = "Notebook Failures"
+    email_body = f"Please note that the following notebooks failed when ran on the branch {branch_name}: \n{pd.DataFrame(merged_dict['failed']).to_html()}\nThe total time to run all notebooks was {end_time - start_time} seconds."
+    recipient_email = os.getenv("EMAIL_RECIPIENTS").split(",")
+    sender_email = os.getenv("SENDER_EMAIL")
 
-send_email(email_subject, email_body, recipient_email, sender_email)
+    send_email(email_subject, email_body, recipient_email, sender_email)
+    exit(1)
