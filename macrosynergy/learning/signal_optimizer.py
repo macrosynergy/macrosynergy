@@ -396,7 +396,7 @@ class SignalOptimizer:
         X = self.X.copy()
         y = self.y.copy()
 
-        results = Parallel(n_jobs=n_jobs, verbose=10)(
+        results = Parallel(n_jobs=n_jobs, verbose=20)(
             delayed(self._worker)(
                 train_idx=train_idx,
                 test_idx=test_idx,
@@ -408,9 +408,7 @@ class SignalOptimizer:
                 hparam_grid=hparam_grid,
                 n_iter=n_iter,
             )
-            # for train_idx, test_idx in tqdm(
-            #     outer_splitter.split(X=X, y=y),
-            # )
+            for train_idx, test_idx in outer_splitter.split(X=X, y=y)
         )
 
         prediction_data = []
