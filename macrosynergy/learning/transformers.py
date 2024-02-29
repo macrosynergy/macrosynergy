@@ -88,7 +88,7 @@ class LassoSelector(BaseEstimator, TransformerMixin):
             )
 
         self.feature_names_in_ = np.array(X.columns)
-        self.p = X.shape[-1]
+        self.p = X.shape[1]
 
         if self.positive:
             self.lasso = Lasso(alpha=self.alpha, positive=True).fit(X, y)
@@ -153,7 +153,8 @@ class LassoSelector(BaseEstimator, TransformerMixin):
             # Then no features were selected
             # Then at the given time, no trading decisions can be made based on these features
             warnings.warn(
-                "No features were selected. At the given time, no trading decisions can be made based on these features."
+                "No features were selected. At the given time, no trading decisions can be made based on these features.",
+                UserWarning,
             )
             return X.iloc[:, :0]
 

@@ -16,6 +16,7 @@ from statsmodels.tools.tools import add_constant
 from statsmodels.regression.mixed_linear_model import MixedLM
 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.linear_model import Lasso
 
 class TestLassoSelector(unittest.TestCase):
     @classmethod
@@ -58,7 +59,13 @@ class TestLassoSelector(unittest.TestCase):
         selector1 = LassoSelector(alpha=1, positive=True)
         selector2 = LassoSelector(alpha=1, positive=False)
         self.assertIsInstance(selector1, LassoSelector)
+        self.assertEqual(selector1.positive, True)
+        self.assertEqual(selector1.alpha, 1)
+        self.assertEqual(selector1.feature_names_in_, None)
         self.assertIsInstance(selector2, LassoSelector)
+        self.assertEqual(selector2.positive, False)
+        self.assertEqual(selector2.alpha, 1)
+        self.assertEqual(selector2.feature_names_in_, None)
 
     def test_types_init(self):
         # Test that non float/int alphas raise TypeError
@@ -85,11 +92,25 @@ class TestLassoSelector(unittest.TestCase):
             selector.fit(self.X, self.y)
         except Exception as e:
             self.fail(f"Fit method for the Lasso selector raised an exception: {e}")
+        self.assertTrue(np.all(selector.feature_names_in_ == np.array(self.X.columns)))
+        self.assertEqual(selector.p, self.X.shape[1])
+        lasso = Lasso(alpha=0.1,positive=False)
+        lasso.fit(self.X, self.y)
+        chosen_ftrs = [i for i in range(len(lasso.coef_)) if lasso.coef_[i] != 0]
+        self.assertTrue(np.all(selector.selected_ftr_idxs == chosen_ftrs))
+
         # Test that fitting with a pandas target dataframe works
         try:
             selector.fit(self.X, self.y.to_frame())
         except Exception as e:
             self.fail(f"Fit method for the Lasso selector raised an exception: {e}")
+        self.assertTrue(np.all(selector.feature_names_in_ == np.array(self.X.columns)))
+        self.assertEqual(selector.p, self.X.shape[1])
+        lasso = Lasso(alpha=0.1,positive=False)
+        lasso.fit(self.X, self.y)
+        chosen_ftrs = [i for i in range(len(lasso.coef_)) if lasso.coef_[i] != 0]
+        self.assertTrue(np.all(selector.selected_ftr_idxs == chosen_ftrs))
+
         # positive = True
         selector_restrict = LassoSelector(alpha=0.1, positive=True)
         # Test that fitting with a pandas target series works
@@ -97,12 +118,23 @@ class TestLassoSelector(unittest.TestCase):
             selector_restrict.fit(self.X, self.y)
         except Exception as e:
             self.fail(f"Fit method for the Lasso selector raised an exception: {e}")
+        self.assertTrue(np.all(selector_restrict.feature_names_in_ == np.array(self.X.columns)))
+        self.assertEqual(selector_restrict.p, self.X.shape[1])
+        lasso = Lasso(alpha=0.1,positive=True)
+        lasso.fit(self.X, self.y)
+        chosen_ftrs = [i for i in range(len(lasso.coef_)) if lasso.coef_[i] != 0]
+        self.assertTrue(np.all(selector_restrict.selected_ftr_idxs == chosen_ftrs))
         # Test that fitting with a pandas target dataframe works
         try:
             selector_restrict.fit(self.X, self.y.to_frame())
         except Exception as e:
             self.fail(f"Fit method for the Lasso selector raised an exception: {e}")
-
+        self.assertTrue(np.all(selector_restrict.feature_names_in_ == np.array(self.X.columns)))
+        self.assertEqual(selector_restrict.p, self.X.shape[1])
+        lasso = Lasso(alpha=0.1,positive=True)
+        lasso.fit(self.X, self.y)
+        chosen_ftrs = [i for i in range(len(lasso.coef_)) if lasso.coef_[i] != 0]
+        self.assertTrue(np.all(selector_restrict.selected_ftr_idxs == chosen_ftrs))
         # Test that the selected_ftr_idxs attribute is a list
         self.assertIsInstance(selector.selected_ftr_idxs, list)
         self.assertIsInstance(selector_restrict.selected_ftr_idxs, list)
@@ -160,12 +192,13 @@ class TestLassoSelector(unittest.TestCase):
         self.assertTrue(
             np.all(X_transformed.columns == self.X.columns[selector.selected_ftr_idxs])
         )
-        # Test that if no features were selected, a dataframe with a zeros column is returned
+        # Test that if no features were selected, a dataframe with no columns is returned
         selector = LassoSelector(alpha=1e6, positive=positive)
         selector.fit(self.X, self.y)
-        X_transformed = selector.transform(self.X)
-        self.assertTrue(np.all(X_transformed.columns == ["no_signal"]))
-        self.assertTrue(np.all(X_transformed.values == 0))
+        with self.assertWarns(UserWarning):
+            X_transformed = selector.transform(self.X)
+        self.assertTrue(X_transformed.columns.size == 0)
+        self.assertTrue(X_transformed.values.size == 0)
 
     def test_types_transform(self):
         # Test that non np.ndarray X or dataframe raises TypeError
