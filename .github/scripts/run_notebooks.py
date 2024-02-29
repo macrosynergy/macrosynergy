@@ -13,7 +13,7 @@ import logging
 
 # Get ec2 instance with name notebook-runner-* and state isnt terminated
 
-branch_name = "main"
+branch_name = "test"
 
 start_time = time.time()
 
