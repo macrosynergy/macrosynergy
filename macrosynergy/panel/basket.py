@@ -491,8 +491,8 @@ class Basket(object):
                 returns.
             [4] "values": weights proportionate to a panel of values of exogenous weight
                 category.
-            [5] "inv_values": weights are inversely proportionate to of values of exogenous
-                weight category.
+            [5] "inv_values": weights are inversely proportionate to of values of 
+                exogenous weight category.
         :param <List[float]> weights: single list of weights corresponding to the base
             tickers in `contracts` argument. This is only relevant for the fixed weight
             method.
@@ -730,7 +730,7 @@ class Basket(object):
             the instance are selected.
 
         :return <pd.Dataframe>: standardized DataFrame with the basket return and
-            (possibly) carry data in standard form, i.e. columns 'cid', 'xcats',
+            (possibly) carry data in standard form, i.e. columns 'cid', 'xcat',
             'real_date' and 'value'.
         """
 

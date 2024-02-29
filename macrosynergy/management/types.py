@@ -55,25 +55,26 @@ class QuantamentalDataFrameMeta(type):
     MetaClass to support type checks for `QuantamentalDataFrame`.
     """
 
-    IndexCols: List[str] = ["cid", "xcat", "real_date"]
+    IndexCols: List[str] = ["real_date", "cid", "xcat"]
 
     def __instancecheck__(cls, instance):
         IDX_COLS = QuantamentalDataFrame.IndexCols
         result: bool = True
         try:
-            # the try except offers a safety net in case the instance is not a pd.DataFrame
-            # and one of the checks raises an error
+            # the try except offers a safety net in case the instance is not a
+            # pd.DataFrame and one of the checks raises an error
             result = result and isinstance(instance, pd.DataFrame)
             result = result and instance.index.name is None
             result = result and not isinstance(instance.columns, pd.MultiIndex)
             result = result and all([col in instance.columns for col in IDX_COLS])
             result = result and len(instance.columns) > len(IDX_COLS)
+            result = result and len(instance.columns) == len(set(instance.columns))
 
-            correct_date_type: bool = instance[
-                "real_date"
-            ].dtype == "datetime64[ns]" or isinstance(
-                instance["real_date"].dtype, pd.DatetimeTZDtype
-            ) or instance.empty
+            correct_date_type: bool = (
+                instance["real_date"].dtype == "datetime64[ns]"
+                or isinstance(instance["real_date"].dtype, pd.DatetimeTZDtype)
+                or instance.empty
+            )
             result = result and correct_date_type
 
             # # check if the cid col is all str
@@ -84,8 +85,10 @@ class QuantamentalDataFrameMeta(type):
             return result
 
 
-class QuantamentalDataFrame(metaclass=QuantamentalDataFrameMeta):
+class QuantamentalDataFrame(pd.DataFrame, metaclass=QuantamentalDataFrameMeta):
     """
+    ## Type extension of `pd.DataFrame` for Quantamental DataFrames.
+
     Class definition for a QuantamentalDataFrame that supports type checks for
     `QuantamentalDataFrame`.
     Returns True if the instance is a `pd.DataFrame` with the standard Quantamental
@@ -98,4 +101,10 @@ class QuantamentalDataFrame(metaclass=QuantamentalDataFrameMeta):
     True
     """
 
-    pass
+    def __init__(self, df: Optional[pd.DataFrame] = None):
+        if df is not None:
+            if not (
+                isinstance(df, pd.DataFrame) and isinstance(df, QuantamentalDataFrame)
+            ):
+                raise TypeError("Input must be a QuantamentalDataFrame (pd.DataFrame).")
+        super().__init__(df)

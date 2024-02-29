@@ -70,7 +70,7 @@ def modify_signals(
     or conversion to signs (digital method).
 
     :param <pd.Dataframe> df: standardized DataFrame containing the following columns:
-        'cid', 'xcats', 'real_date' and 'value'.
+        'cid', 'xcat', 'real_date' and 'value'.
     :param <List[str]> cids: cross sections of markets or currency areas in which
         positions should be taken.
     :param <str> xcat_sig: category that serves as signal across markets.
@@ -134,7 +134,7 @@ def cs_unit_returns(
     Calculate returns of composite unit positions (that jointly depend on one signal).
 
     :param <pd.Dataframe> df: standardized DataFrame containing the following columns:
-        'cid', 'xcats', 'real_date' and 'value'.
+        'cid', 'xcat', 'real_date' and 'value'.
     :param <List[str]> contract_returns: list of the contract return types.
     :param <List[float]> sigrels: respective signal for each contract type.
     :param <str> ret: postfix denoting the returns in % applied to the contract types.
@@ -231,8 +231,8 @@ def date_alignment(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
     :param <pd.DataFrame> panel_df:
     :param <pd.DataFrame> basket_df:
 
-    :return <Tuple[pd.DataFrame, pd.DataFrame]>: returns the two received dataframes defined over
-        the same period.
+    :return <Tuple[pd.DataFrame, pd.DataFrame]>: returns the two received dataframes
+        defined over the same period.
     """
 
     p_dates = panel_df["real_date"].to_numpy()
@@ -267,7 +267,8 @@ def consolidation_help(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
     :param <pd.DataFrame> panel_df:
     :param <pd.DataFrame> basket_df:
 
-    :return <Tuple[pd.DataFrame, pd.DataFrame]>: returns the consolidated and reduced dataframes.
+    :return <Tuple[pd.DataFrame, pd.DataFrame]>: returns the consolidated and reduced
+        dataframes.
     """
 
     basket_cids = basket_df["cid"].unique()
@@ -345,7 +346,7 @@ def target_positions(
     Converts signals into contract-specific target positions.
 
     :param <pd.Dataframe> df: standardized DataFrame containing at least the following
-        columns: 'cid', 'xcats', 'real_date' and 'value'.
+        columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <List[str]> cids: cross-sections of markets or currency areas in which
         positions should be taken.
     :param <str> xcat_sig: category that serves as signal across markets.
@@ -402,14 +403,14 @@ def target_positions(
         in USD, using the columns 'cid', 'xcat', 'real_date' and 'value'.
 
     Note: A target position differs from a signal insofar as it is a dollar amount and
-          determines to what extent the size of signal (as opposed to direction) matters.
-          Further, if the modified signal has a NaN value, the target position will be
-          converted to zero: a position will not be taken given the signal was not
-          available for that respective date.
-          A target position also differs from an actual position in two ways. First,
-          the actual position can only be aligned with the target with some lag. Second,
-          the actual position will be affected by other considerations, such as
-          risk management and assets under management.
+        determines to what extent the size of signal (as opposed to direction) matters.
+        Further, if the modified signal has a NaN value, the target position will be
+        converted to zero: a position will not be taken given the signal was not
+        available for that respective date.
+        A target position also differs from an actual position in two ways. First,
+        the actual position can only be aligned with the target with some lag. Second,
+        the actual position will be affected by other considerations, such as
+        risk management and assets under management.
     """
 
     # A. Initial checks

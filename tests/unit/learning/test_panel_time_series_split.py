@@ -5,6 +5,9 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.model_selection import cross_val_score
+import matplotlib
+import matplotlib.pyplot as plt
+from unittest.mock import patch
 from parameterized import parameterized
 
 from macrosynergy.learning import (
@@ -15,7 +18,12 @@ from macrosynergy.learning import (
 
 
 class TestAll(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(self):
+        self.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+        self.mock_show = patch("matplotlib.pyplot.show").start()
+
         cids = ["AUD", "CAD", "GBP", "USD"]
         xcats = ["XR", "CPI", "GROWTH", "RIR"]
 
@@ -48,6 +56,12 @@ class TestAll(unittest.TestCase):
 
         self.X = df.drop(columns="XR")
         self.y = df["XR"]
+
+    @classmethod
+    def tearDownClass(self) -> None:
+        patch.stopall()
+        plt.close("all")
+        matplotlib.use(self.mpl_backend)
 
     def test_crossval_application(self):
         # Given a generated panel with a true linear relationship between features and target,
@@ -175,6 +189,30 @@ class TestAll(unittest.TestCase):
             # Test sets for each cid
             self.assertEqual(test_set[0], i + 2)
             self.assertEqual(test_set[1], i + periods1 + 1)
+
+    def test_valid_visualise_splits(self):
+        # ExpandingIncrementPanelSplit
+        splitter1 = ExpandingIncrementPanelSplit(
+            train_intervals=21 * 12,
+            test_size=1,
+        )
+        try:
+            splitter1.visualise_splits(self.X, self.y)
+        except Exception as e:
+            self.fail(f"ExpandingIncrementPanelSplit.visualise_splits() raised {e}")
+
+        # RollingKFoldPanelSplit
+        splitter2 = RollingKFoldPanelSplit(n_splits=5)
+        try:
+            splitter2.visualise_splits(self.X, self.y)
+        except Exception as e:
+            self.fail(f"RollingKFoldPanelSplit.visualise_splits() raised {e}")
+        # ExpandingKFoldPanelSplit
+        splitter3 = ExpandingKFoldPanelSplit(n_splits=5)
+        try:
+            splitter3.visualise_splits(self.X, self.y)
+        except Exception as e:
+            self.fail(f"ExpandingKFoldPanelSplit.visualise_splits() raised {e}")
 
     def make_simple_df(
         self,

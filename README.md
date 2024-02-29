@@ -1,4 +1,4 @@
-![Macrosynergy](https://raw.githubusercontent.com/macrosynergy/macrosynergy/main/docs/assets/MACROSYNERGY_Logo_Primary.png?raw=True)
+![Macrosynergy](https://raw.githubusercontent.com/macrosynergy/macrosynergy/main/docs/source/_static/MACROSYNERGY_Logo_Primary.png?raw=True)
 
 # Macrosynergy Quant Research
 [![PyPI Latest Release](https://img.shields.io/pypi/v/macrosynergy.svg)](https://pypi.org/project/macrosynergy/)
@@ -8,14 +8,13 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![codecov](https://codecov.io/github/macrosynergy/macrosynergy/branch/develop/graph/badge.svg?token=BX4IKVD07R)](https://codecov.io/github/macrosynergy/macrosynergy)
 
-The Macrosynergy package supports financial market research and the development of trading strategies based on formats and conventions of the J.P. Morgan Macrosynergy  Quantamental System (JPMaQS). JPMaQS provides quantitative-fundamental (quantamental) and market data in simple daily formats in accordance with the information state of markets. The Macrosynergy package consists of six sub-packages:
+The Macrosynergy package supports financial market research and the development of trading strategies based on formats and conventions of the J.P. Morgan Macrosynergy  Quantamental System (JPMaQS). JPMaQS provides quantitative-fundamental (quantamental) and market data in simple daily formats in accordance with the information state of markets. The Macrosynergy package consists of five sub-packages:
 
 1. [management](./macrosynergy/management): simulates, analyses and reshapes standard quantamental dataframes.
 2. [panel](./macrosynergy/panel): analyses and visualizes panels of quantamental data.
 3. [signal](./macrosynergy/signal): transforms quantamental indicators into trading signals and does naive analysis.
 4. [pnl](./macrosynergy/pnl): constructs portfolios based on signals, applies risk management and analyses realistic PnLs.
 5. [download](./macrosynergy/download): interface for downloading data from JP Morgan DataQuery, with main module [jpmaqs.py](./macrosynergy/download/jpmaqs.py). 
-6. [dataquery](./macrosynergy/dataquery): [DEPRECATED] interface for downloading data from JP Morgan DataQuery, with main module [api.py](./macrosynergy/dataquery/api.py). 
 
 ## Installation
 The easiest method for installing the package is to use the [PyPI](https://pypi.org/project/macrosynergy/) installation method:
@@ -23,7 +22,7 @@ The easiest method for installing the package is to use the [PyPI](https://pypi.
 pip install macrosynergy
 ```
  Alternatively for the cutting edge development version, install the package from the
- [develop](https://github.com/macrosynergy/macrosynergy/tree/develop) branch as
+ [`develop`](https://github.com/macrosynergy/macrosynergy/tree/develop) branch as
 ```shell script
 pip install git+https://github.com/macrosynergy/macrosynergy@develop
 ```
@@ -307,11 +306,14 @@ If you find that the package raises an `HTTPConnection`/`HTTPSConnectionPool` er
 You would most likely need to pass your proxy settings to the `JPMaQSDownload` object, as shown in the [Connecting via a proxy server](#connecting-via-a-proxy-server) section.
 If you are accessing DataQuery from an institutional/enterprise network, please contact your IT department to ensure that you have the correct proxy settings.
 
-For organizations using ZScaler - you may have to manually add the ZScaler certificates (copy-pasta) to the `certifi` certificate store (typically called `cacert.pem`). You can find the location of the `certifi` certificate store by running the following in your Python environment:
+For organizations using ZScaler - you may have to manually add the ZScaler certificates to the `certifi` certificate store (typically called `cacert.pem`). You can find the location of the `certifi` certificate store by running the following in your Python environment:
 ```python
 import certifi
 print(certifi.where())
 ```
+Here's a link to [ZScaler's official documentation and FAQs](https://help.zscaler.com/zia/adding-custom-certificate-application-specific-trust-store) on how to add certificates to application specific trust stores.
+
+- https://help.zscaler.com/zia/adding-custom-certificate-application-specific-trust-store
 
 ### A function is not working as expected
 

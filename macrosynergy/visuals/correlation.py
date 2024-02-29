@@ -1,8 +1,6 @@
 """
 Functions used to visualize correlations across categories or cross-sections of
 panels.
-
-::docs::correl_matrix::sort_first::
 """
 import itertools
 import pandas as pd
@@ -40,7 +38,7 @@ def view_correlation(
     Visualize correlation across categories or cross-sections of panels.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to be correlated. Default is all in the
         DataFrame. If xcats contains only one category the correlation coefficients
         across cross sections are displayed. If xcats contains more than one category,
@@ -140,7 +138,8 @@ def view_correlation(
 
             if title is None:
                 title = (
-                    f"Cross-sectional correlation of {xcats[0]} and {xcats_secondary[0]} from {s_date} to "
+                    f"Cross-sectional correlation of {xcats[0]} and {xcats_secondary[0]} "
+                    f"from {s_date} to "
                     f"{e_date}"
                 )
             xlabel = f"{xcats[0]} cross-sections"
@@ -157,10 +156,7 @@ def view_correlation(
             )
 
             if title is None:
-                title = (
-                    f"Cross-category correlation from {s_date} to "
-                    f"{e_date}"
-                )
+                title = f"Cross-category correlation from {s_date} to " f"{e_date}"
         corr = (
             pd.concat([df_w1, df_w2], axis=1, keys=["df_w1", "df_w2"])
             .corr()
@@ -168,7 +164,8 @@ def view_correlation(
         )
 
         if cluster:
-            # Since the correlation matrix is not necessarily symmetric, clustering is done in two stages.
+            # Since the correlation matrix is not necessarily symmetric, clustering is
+            # done in two stages.
             if corr.shape[0] > 1:
                 corr = _cluster_correlations(corr=corr, is_symmetric=False)
 
@@ -243,7 +240,8 @@ def _transform_df_for_cross_sectional_corr(
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame.
     :param <str> val: name of column that contains the values of interest. Default is
         'value'.
-    :param <str> freq: Down-sampling frequency option. By default values are not down-sampled.
+    :param <str> freq: Down-sampling frequency option. By default values are not
+        down-sampled.
 
     :return <pd.Dataframe>: The transformed dataframe.
     """
@@ -362,7 +360,7 @@ def _cluster_correlations(
 
     :param <pd.Dataframe> corr: dataframe representing a correlation matrix.
     :param <bool> is_symmetric: if True, rows and columns are rearranged identically.
-                                If False, only rows are reordered.
+        If False, only rows are reordered.
 
     :return <pd.Dataframe>: The sorted correlation dataframe.
     """
