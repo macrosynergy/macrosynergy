@@ -40,7 +40,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE }}
           aws-region: eu-west-2
           role-session-name: GitHub-OIDC-TERRAFORM
-          role-duration-seconds: 7200 # 2 Hours
+          role-duration-seconds: 7200 # 2 Hours, role is set so can be max 4 hours
 
       - name: Save PEM certificate
         env:
