@@ -396,7 +396,7 @@ class SignalOptimizer:
         X = self.X.copy()
         y = self.y.copy()
 
-        results = Parallel(n_jobs=n_jobs)(
+        results = Parallel(n_jobs=n_jobs, verbose=10)(
             delayed(self._worker)(
                 train_idx=train_idx,
                 test_idx=test_idx,
