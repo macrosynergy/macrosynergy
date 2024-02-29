@@ -15,7 +15,7 @@ from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
 
 from typing import List, Union, Dict, Optional, Callable, Tuple
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 import warnings
 
@@ -396,7 +396,9 @@ class SignalOptimizer:
         X = self.X.copy()
         y = self.y.copy()
 
-        results = Parallel(n_jobs=n_jobs, verbose=20)(
+        train_test_splits = list(outer_splitter.split(X=X, y=y))
+
+        results = Parallel(n_jobs=n_jobs)(
             delayed(self._worker)(
                 train_idx=train_idx,
                 test_idx=test_idx,
@@ -408,7 +410,10 @@ class SignalOptimizer:
                 hparam_grid=hparam_grid,
                 n_iter=n_iter,
             )
-            for train_idx, test_idx in outer_splitter.split(X=X, y=y)
+            for train_idx, test_idx in tqdm(
+                train_test_splits,
+                total=len(train_test_splits),
+            )
         )
 
         prediction_data = []
