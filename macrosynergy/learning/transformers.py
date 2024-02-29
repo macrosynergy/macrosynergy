@@ -15,7 +15,7 @@ from statsmodels.regression.mixed_linear_model import MixedLM
 
 from typing import Union, Any, List, Optional
 
-import logging
+import warnings
 
 
 class LassoSelector(BaseEstimator, TransformerMixin):
@@ -152,9 +152,10 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         if len(self.selected_ftr_idxs) == 0:
             # Then no features were selected
             # Then at the given time, no trading decisions can be made based on these features
-            raise ValueError(
+            warnings.warn(
                 "No features were selected. At the given time, no trading decisions can be made based on these features."
             )
+            return X.iloc[:, :0]
 
         return X.iloc[:, self.selected_ftr_idxs]
 
@@ -293,9 +294,10 @@ class MapSelector(BaseEstimator, TransformerMixin):
         if self.ftrs == []:
             # Then no features were selected
             # Then at the given time, no trading decisions can be made based on these features
-            raise ValueError(
+            warnings.warn(
                 "No features were selected. At the given time, no trading decisions can be made based on these features."
             )
+            return X.iloc[:, :0]
 
         return X[self.ftrs]
 
@@ -709,13 +711,15 @@ if __name__ == "__main__":
     X = dfd2.drop(columns=["XR"])
     y = dfd2["XR"]
 
-    selector = MapSelector(1e-20)
-    selector.fit(X, y)
-    print(selector.transform(X).columns)
 
     selector = LassoSelector(0.2)
     selector.fit(X, y)
     print(selector.transform(X).columns)
+    
+    selector = MapSelector(1e-20)
+    selector.fit(X, y)
+    print(selector.transform(X).columns)
+
 
 
     # Split X and y into training and test sets

@@ -396,14 +396,7 @@ class SignalOptimizer:
         # Condense the collected data into a single dataframe
         for column_name, xs_levels, date_levels, predictions in prediction_data:
             idx = pd.MultiIndex.from_product([xs_levels, date_levels])
-            try:
-                signal_df.loc[idx, column_name] = predictions
-            except Exception as e:
-                warnings.warn(
-                    f"Error in signal calculation for {column_name}, date {str(date_levels[0])}. Setting to zero.",
-                    RuntimeWarning,
-                )
-                signal_df.loc[idx, column_name] = 0
+            signal_df.loc[idx, column_name] = predictions
 
         signal_df = signal_df.groupby(level=0).ffill()
 
@@ -707,7 +700,10 @@ class SignalOptimizer:
                     n_jobs=1,
                 )
             # Run the grid search
-            search_object.fit(X_train_i, y_train_i)
+            try: 
+                search_object.fit(X_train_i, y_train_i)
+            except Exception as e:
+                continue
             score = search_object.best_score_
             if score > optim_score:
                 optim_score = score
@@ -715,21 +711,54 @@ class SignalOptimizer:
                 optim_model = search_object.best_estimator_
                 optim_params = search_object.best_params_
 
+        # Handle case where no model was chosen
+        if optim_model is None:
+            warnings.warn(
+                f"No model was chosen for {name} at date {test_date_levels[0]}. Setting to zero.",
+                RuntimeWarning,
+            )
+            preds = np.zeros(X_test_i.shape[0])
+            prediction_date = [name, test_xs_levels, test_date_levels, preds]
+            modelchoice_data = [
+                test_date_levels.date[0],
+                name,
+                None,
+                None,
+                int(n_splits),
+            ]
+            coefficients_data = [
+                test_date_levels.date[0],
+                name,
+            ] + [np.nan for _ in range(X_train_i.shape[1])]
+            intercept_data = [
+                test_date_levels.date[0],
+                name,
+                np.nan
+            ]
+            return prediction_date, modelchoice_data, coefficients_data, intercept_data
         # Store the best estimator predictions
         preds: np.ndarray = optim_model.predict(X_test_i)
         prediction_date = [name, test_xs_levels, test_date_levels, preds]
 
         # See if the best model has coefficients and intercepts
         # First see if the best model is a pipeline object 
+        ftr_names = np.array(X_train_i.columns)
         if isinstance(optim_model, Pipeline):
-            # TODO: handle case where features were selected before the linear regression
+            # Check whether a feature selector was used and get the output features if so
             final_estimator = optim_model[-1]
+            for _, transformer in reversed(optim_model.steps):
+                if hasattr(transformer, "get_feature_names_out"):
+                    ftr_names = transformer.get_feature_names_out()
+                    break
         else:
             final_estimator = optim_model
+
         if hasattr(final_estimator, "coef_"):
-            coefs = list(final_estimator.coef_)
+            coefs = np.array(final_estimator.coef_)
         else:
-            coefs = [np.nan for _ in range(X_train_i.shape[1])]
+            coefs = np.array([np.nan for _ in range(X_train_i.shape[1])])
+        coef_ftr_map = {ftr : coef for ftr, coef in zip(ftr_names, coefs)}
+        coefs = [coef_ftr_map[ftr] if ftr in coef_ftr_map else np.nan for ftr in X_train_i.columns]
         if hasattr(final_estimator, "intercept_"):
             intercepts = final_estimator.intercept_
         else:
@@ -947,6 +976,7 @@ class SignalOptimizer:
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
     import macrosynergy.management as msm
+    from macrosynergy.learning import MapSelector
     from sklearn.linear_model import LinearRegression
     from sklearn.neighbors import KNeighborsRegressor
     from sklearn.metrics import make_scorer
@@ -996,7 +1026,30 @@ if __name__ == "__main__":
     y_long_train = pd.melt(
         frame=y_train.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
     )
-
+    
+    models = {
+        "OLS": Pipeline([("selector", MapSelector(0.1)), ("regressor", LinearRegression(fit_intercept=False))]),
+    }
+    metric = make_scorer(regression_balanced_accuracy, greater_is_better=True)
+    inner_splitter = RollingKFoldPanelSplit(n_splits=4)
+    grid = {
+        "OLS": {},
+    }
+    so = SignalOptimizer(
+        inner_splitter=inner_splitter,
+        X=X_train,
+        y=y_train,
+        blacklist=black,
+    )
+    so.calculate_predictions(
+        name="test",
+        models=models,
+        metric=metric,
+        hparam_grid=grid,
+        hparam_type="grid",
+        n_jobs=-1,
+    )
+    so.ftr_coefficients
     # (1) Example SignalOptimizer usage.
     #     We get adaptive signals for a linear regression and a KNN regressor, with the
     #     hyperparameters for the latter optimised across regression balanced accuracy.
@@ -1028,7 +1081,7 @@ if __name__ == "__main__":
         metric=metric,
         hparam_grid=hparam_grid,
         hparam_type="grid",
-        n_jobs=-1,
+        n_jobs=1,
     )
     end_time = timeit.default_timer()
     print(f"Elapsed time: {end_time - start_time}")
