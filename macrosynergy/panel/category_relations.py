@@ -254,7 +254,7 @@ class CategoryRelations(object):
         metrics: List[str],
     ) -> pd.DataFrame:
         return apply_slip_util(
-            df=df, slip=slip, cids=cids, xcats=xcats, metrics=metrics, raise_error=True
+            df=df, slip=slip, cids=cids, xcats=xcats, metrics=metrics, raise_error=False
         )
 
     @classmethod
@@ -811,7 +811,7 @@ if __name__ == "__main__":
     dfdx["ERA"]: str = "before 2007"
     dfdx.loc[dfdx["real_date"].dt.year > 2007, "ERA"] = "from 2010"
 
-    cidx = ["AUD", "CAD", "GBP", "USD"]
+    cidx = ["AUD", "CAD", "GBP", "USD", "PRY"]
 
     cr = CategoryRelations(
         dfdx,

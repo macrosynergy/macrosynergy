@@ -42,3 +42,4 @@ jobs:
           pip uninstall -y macrosynergy
           pip install .[all] 
           python -c "import macrosynergy; print(macrosynergy.__version__)"
+          
