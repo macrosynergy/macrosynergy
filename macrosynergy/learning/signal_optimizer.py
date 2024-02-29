@@ -408,9 +408,9 @@ class SignalOptimizer:
                 hparam_grid=hparam_grid,
                 n_iter=n_iter,
             )
-            for train_idx, test_idx in tqdm(
-                outer_splitter.split(X=X, y=y),
-            )
+            # for train_idx, test_idx in tqdm(
+            #     outer_splitter.split(X=X, y=y),
+            # )
         )
 
         prediction_data = []
