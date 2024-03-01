@@ -1086,12 +1086,16 @@ class SignalOptimizer:
             raise TypeError("The pipeline name must be a string.")
         if name not in self.ftr_coefficients.name.unique():
             raise ValueError(
-                f"""The pipeline name {name} is not in the list of already-calculated 
-                pipelines. Please check the pipeline name carefully. If correct, please 
-                run calculate_predictions() first.
+                f"""Feature coefficients were not stored for the pipeline {name}.
+                This may be because the pipeline was not run or the feature coefficients
+                were not stored. The latter occurs, as an example, when all coefficients
+                are NaN. This can happen when the chosen models do not contain coef_ 
+                attributes.
                 """
             )
         ftrcoef_df = self.get_ftr_coefficients(name)
+        # TODO: the next line will be made redundament once the signal optimiser checks for this
+        # and removes any pipelines with all NaN coefficients
         if ftrcoef_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
                 f"""There are no non-NA coefficients for the pipeline {name}.
@@ -1145,12 +1149,17 @@ class SignalOptimizer:
             raise TypeError("The pipeline name must be a string.")
         if name not in self.intercepts.name.unique():
             raise ValueError(
-                f"""The pipeline name {name} is not in the list of already-calculated 
-                pipelines. Please check the pipeline name carefully. If correct, please 
-                run calculate_predictions() first.
-                """
-            )
+                    f"""Intercepts were not stored for the pipeline {name}.
+                    This may be because the pipeline was not run or the intercepts were not
+                    stored. The latter occurs, as an example, when all intercepts are NaN. 
+                    This can happen when the chosen models do not contain intercept_ 
+                    attributes.
+                    """
+                )
         intercepts_df = self.get_intercepts(name)
+
+        # TODO: the next line will be made redundament once the signal optimiser checks for this
+        # and removes any pipelines with all NaN intercepts
         if intercepts_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
                 f"""There are no non-NA intercepts for the pipeline {name}.
@@ -1205,11 +1214,15 @@ class SignalOptimizer:
             raise TypeError("The pipeline name must be a string.")
         if name not in self.ftr_coefficients.name.unique():
             raise ValueError(
-                f"""The pipeline name {name} is not in the list of already-calculated 
-                pipelines. Please check the pipeline name carefully. If correct, please 
-                run calculate_predictions() first.
+                f"""Feature coefficients were not stored for the pipeline {name}.
+                This may be because the pipeline was not run or the feature coefficients
+                were not stored. The latter occurs, as an example, when all coefficients
+                are NaN. This can happen when the chosen models do not contain coef_ 
+                attributes.
                 """
             )
+        # TODO: the next line will be made redundament once the signal optimiser checks for this
+        # and removes any pipelines with all NaN coefficients
         ftrcoef_df = self.get_ftr_coefficients(name)
         if ftrcoef_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
