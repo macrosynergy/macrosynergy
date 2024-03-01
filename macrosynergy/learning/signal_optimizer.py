@@ -974,14 +974,51 @@ class SignalOptimizer:
     def get_ftr_coefficients(self, name):
         """
         Method to return the feature coefficients for a given pipeline.
+
+        :param <str> name: Name of the pipeline.
+
+        :return <pd.DataFrame>: Pandas dataframe of the changing feature coefficients
+            over time for the specified pipeline.
         """
+        # Checks
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.ftr_coefficients.name.unique():
+            raise ValueError(
+                f"""Feature coefficients were not stored for the pipeline {name}.
+                This may be because the pipeline was not run or the feature coefficients
+                were not stored. The latter occurs, as an example, when all coefficients
+                are NaN. This can happen when the chosen models do not contain coef_ 
+                attributes.
+                """
+            )
+        
+        # Return the feature coefficients for the specified pipeline
         ftrcoef_df = self.ftr_coefficients
         return ftrcoef_df[ftrcoef_df.name == name].sort_values(by="real_date")
     
     def get_intercepts(self, name):
         """
         Method to return the intercepts for a given pipeline.
+
+        :param <str> name: Name of the pipeline.
+
+        :return <pd.DataFrame>: Pandas dataframe of the changing intercepts over time
+            for the specified pipeline.
         """
+        # Checks 
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.intercepts.name.unique():
+            raise ValueError(
+                f"""Intercepts were not stored for the pipeline {name}.
+                This may be because the pipeline was not run or the intercepts were not
+                stored. The latter occurs, as an example, when all intercepts are NaN. This
+                can happen when the chosen models do not contain intercept_ attributes.
+                """
+            )
+        
+        # Return the intercepts for the specified pipeline
         intercepts_df = self.intercepts
         return intercepts_df[intercepts_df.name == name].sort_values(by="real_date")
 
@@ -989,11 +1026,47 @@ class SignalOptimizer:
         """
         Function to return the means and standard deviations of linear model feature 
         coefficients and intercepts (if available) for a given pipeline.
+
+        :param <str> name: Name of the pipeline.
+        :param <Optional[bool]> include_intercept: Whether to include the intercepts in
+            the output. Default is False.
+
+        :return Tuple of means and standard deviations of feature coefficients and
+            intercepts (if chosen) for the specified pipeline.
         """
+        # Checks 
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.ftr_coefficients.name.unique():
+            raise ValueError(
+                f"""Feature coefficients were not stored for the pipeline {name}.
+                This may be because the pipeline was not run or the feature coefficients
+                were not stored. The latter occurs, as an example, when all coefficients
+                are NaN. This can happen when the chosen models do not contain coef_ 
+                attributes.
+                """
+            )
+        if not isinstance(include_intercept, (bool, np.bool_)):
+            raise TypeError("The include_intercept argument must be a boolean.")
+        if include_intercept:
+            if name not in self.intercepts.name.unique():
+                raise ValueError(
+                    f"""Intercepts were not stored for the pipeline {name}.
+                    This may be because the pipeline was not run or the intercepts were not
+                    stored. The latter occurs, as an example, when all intercepts are NaN. 
+                    This can happen when the chosen models do not contain intercept_ 
+                    attributes.
+                    """
+                )
+            
+        # Return the means and standard deviations of the feature coefficients and
+        # intercepts (if chosen) for the specified pipeline
+
         ftrcoef_df = self.get_ftr_coefficients(name).iloc[:, 2:]
         if include_intercept:
             intercepts_df = self.get_intercepts(name).iloc[:, 2:]
             return ftrcoef_df.mean(skipna=True), ftrcoef_df.std(skipna=True), intercepts_df.mean(skipna=True), intercepts_df.std(skipna=True)
+
         return ftrcoef_df.mean(skipna=True), ftrcoef_df.std(skipna=True)
     
     def coefs_timeplot(self, name, title=None, figsize=(10, 6)):
@@ -1048,7 +1121,7 @@ class SignalOptimizer:
         # Create time series plot
         fig, ax = plt.subplots()
         ftrcoef_df.plot(ax=ax, figsize=figsize)
-        
+
         if title is not None:
             plt.title(title)
         else:
