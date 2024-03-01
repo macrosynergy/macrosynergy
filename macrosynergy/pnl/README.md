@@ -23,3 +23,47 @@ In particular, the class allows proceeding in three separate steps, implemented 
 - The method `notional_positions` transforms contract signals into USD positions. This can be done with two principal methods. The first is to assign an AUM number and a leveraging rule. This means that the total sum of the positions is limited to a specified multiple of the set AUM. The second principal method targets the expected volatility of the portfolio based on the estimated volatility of the contract returns and their correlation. The second method will require an estimate_portfolio_vol function that estimates portfolio volatility based on contract sizes and historical returns.
 
 - The method `proxy_pnl` multiplies positions with proxy returns and estimates transaction costs. In particular, it uses a trading_cost method to apply transaction costs and their size dependency to discretionary position changes. And it applies a roll_cost method to apply roll costs to positions at certain intervals. This function also should provide some analytics as to estimated PnLs across sections and the impact of trading costs.
+
+### Flow
+
+An example of a typical flow for using the `ProxyPnL` class is as follows:
+
+```mermaid
+  flowchart TD;
+      Sig[Signals]
+      HR[Hedge-Ratios]
+      CSf["`contract_signals()`"]
+      CS[Contract Signals]
+      AUM[AUM]
+      LVG[Leverage]
+      LVGP[Leverage Position]
+      VT[Volatility Target]
+      NPx(Notional Positions)
+      HPV[Historical Portfolio Volatility]
+
+      Sig-->CSf
+      HR-->CSf
+
+      CSf-->CS
+      VT-->HPV
+      CS-->HPV
+      CS-->LVGP
+      LVG-->LVGP
+      AUM-->LVGP
+
+      subgraph "`notional_positions()`"
+        HPV
+        LVGP
+      end
+
+      HPV-->NPx
+      LVGP-->NPx
+
+    
+
+```
+
+
+
+
+
