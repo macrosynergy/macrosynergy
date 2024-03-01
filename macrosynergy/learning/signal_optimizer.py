@@ -7,6 +7,7 @@ import timeit
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import seaborn as sns
 
 import datetime
@@ -995,34 +996,228 @@ class SignalOptimizer:
             return ftrcoef_df.mean(skipna=True), ftrcoef_df.std(skipna=True), intercepts_df.mean(skipna=True), intercepts_df.std(skipna=True)
         return ftrcoef_df.mean(skipna=True), ftrcoef_df.std(skipna=True)
     
-    def coefs_timeplot(self, name):
+    def coefs_timeplot(self, name, title=None, figsize=(10, 6)):
         """
         Function to plot the time series of feature coefficients for a given pipeline.
+
+        :param <str> name: Name of the pipeline.
+        :param <Optional[str]> title: Title of the plot. Default is None. This creates
+            a figure title of the form "Feature coefficients for pipeline: {name}".
+        :param <Tuple[Union[float, int], Union[float,int]]> figsize: Tuple of floats or
+            ints denoting the figure size.
+
+        :return Time series plot of feature coefficients for the given pipeline.
         """
+        # Checks 
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.ftr_coefficients.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
+        ftrcoef_df = self.get_ftr_coefficients(name)
+        if ftrcoef_df.iloc[:, 2:].isna().all().all():
+            raise ValueError(
+                f"""There are no non-NA coefficients for the pipeline {name}.
+                Cannot display a time series plot.
+                """
+            )
+        if not isinstance(title, str) and title is not None:
+            raise TypeError("The title must be a string.")
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, (int, float)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
+            
+        # Set the style
         plt.style.use("seaborn-v0_8-darkgrid")
+
+        # Reshape dataframe for plotting
         ftrcoef_df = self.get_ftr_coefficients(name)
         ftrcoef_df = ftrcoef_df.set_index("real_date")
         ftrcoef_df = ftrcoef_df.iloc[:, 1:]
-        ftrcoef_df.plot()
-        plt.title(f"Feature coefficients for pipeline: {name}")
+
+        # Create time series plot
+        fig, ax = plt.subplots()
+        ftrcoef_df.plot(ax=ax, figsize=figsize)
+        
+        if title is not None:
+            plt.title(title)
+        else:
+            plt.title(f"Feature coefficients for pipeline: {name}")
         plt.show()
 
-    def intercepts_timeplot(self, name):
+    def intercepts_timeplot(self, name, title=None, figsize=(10, 6)):
         """
         Function to plot the time series of intercepts for a given pipeline.
+
+        :param <str> name: Name of the pipeline.
+        :param <Optional[str]> title: Title of the plot. Default is None. This creates
+            a figure title of the form "Intercepts for pipeline: {name}".
+        :param <Tuple[Union[float, int], Union[float,int]]> figsize: Tuple of floats or
+            ints denoting the figure size.
+
+        :return: Time series plot of intercepts for the given pipeline.
         """
-        plt.style.use("seaborn-v0_8-darkgrid")
+        # Checks
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.intercepts.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
         intercepts_df = self.get_intercepts(name)
+        if intercepts_df.iloc[:, 2:].isna().all().all():
+            raise ValueError(
+                f"""There are no non-NA intercepts for the pipeline {name}.
+                Cannot display a time series plot.
+                """
+            )
+        if not isinstance(title, str) and title is not None:
+            raise TypeError("The title must be a string.")
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, (int, float)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
+        
+        # Set the style
+        plt.style.use("seaborn-v0_8-darkgrid")
+        
+        # Reshape dataframe for plotting
         intercepts_df = intercepts_df.set_index("real_date")
         intercepts_df = intercepts_df.iloc[:, 1]
-        intercepts_df.plot()
-        plt.title(f"Intercepts for pipeline: {name}")
+
+        # Create time series plot
+        fig, ax = plt.subplots()
+        intercepts_df.plot(ax=ax, figsize=figsize)
+        if title is not None:
+            plt.title(title)
+        else:
+            plt.title(f"Intercepts for pipeline: {name}")
+
+        plt.show()
+
+    def coefs_stackedbarplot(self, name, title=None, ftrs_renamed: dict = None, figsize=(10, 6)):
+        """
+        Function to create a stacked bar plot of feature coefficients for a given pipeline.
+
+        :param <str> name: Name of the pipeline.
+        :param <Optional[str]> title: Title of the plot. Default is None. This creates
+            a figure title of the form "Stacked bar plot of model coefficients: {name}".
+        :param <Optional[dict]> ftrs_renamed: Dictionary to rename the feature names for 
+            visualisation in the plot legend. Default is None, which uses the original
+            feature names.
+        :param <Tuple[int, int]> figsize: Tuple of floats or ints denoting the figure size.
+
+        :return: Stacked bar plot of feature coefficients for the given pipeline.
+        """
+        # Checks 
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.ftr_coefficients.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
+        ftrcoef_df = self.get_ftr_coefficients(name)
+        if ftrcoef_df.iloc[:, 2:].isna().all().all():
+            raise ValueError(
+                f"""There are no non-NA coefficients for the pipeline {name}.
+                Cannot display a stacked bar plot.
+                """
+            )
+        
+        if not isinstance(title, str) and title is not None:
+            raise TypeError("The title must be a string.")
+        if ftrs_renamed is not None:
+            if not isinstance(ftrs_renamed, dict):
+                raise TypeError("The ftrs_renamed argument must be a dictionary.")
+            for key, value in ftrs_renamed.items():
+                if not isinstance(key, str):
+                    raise TypeError("The keys of the ftrs_renamed dictionary must be strings.")
+                if not isinstance(value, str):
+                    raise TypeError("The values of the ftrs_renamed dictionary must be strings.")
+                if key not in ftrcoef_df.columns:
+                    raise ValueError(
+                        f"""The feature name {key} is not in the list of features for this pipeline.
+                        Please check the feature renaming dictionary carefully.
+                        """
+                    )
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, (int, float)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
+        
+        # Set the style
+        plt.style.use("seaborn-v0_8-darkgrid")
+
+        # Get positive coefficient colour map
+        cmap_pos = plt.get_cmap('Greens')
+        colors_pos = cmap_pos(np.linspace(0.3, 1, cmap_pos.N))
+        cmap_pos = mcolors.LinearSegmentedColormap.from_list('coef_green', colors_pos)
+
+        # Get negative coefficient colour map
+        cmap_neg = plt.get_cmap('Reds')
+        colors_neg = cmap_neg(np.linspace(0.3, 1, cmap_neg.N))
+        cmap_neg = mcolors.LinearSegmentedColormap.from_list('coef_red', colors_neg)
+
+
+        ftrcoef_df = self.get_ftr_coefficients(name)
+        ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
+        ftrcoef_df.drop(columns=["real_date", "name"], inplace=True)
+
+        # Average the coefficients for each year
+        avg_coefs = ftrcoef_df.groupby("year").mean()
+        pos_coefs = avg_coefs.clip(lower=0)
+        neg_coefs = avg_coefs.clip(upper=0)
+
+        # Rename columns so that the legend later informs on whether a coefficient is positive or negative
+        pos_coefs.columns = ['POS_' + col for col in pos_coefs.columns]
+        neg_coefs.columns = ['NEG_' + col for col in neg_coefs.columns]
+
+        # Create stacked bar plot
+        # For each year, plot the positive coefficients if they exist
+        ax = pos_coefs.loc[:, pos_coefs.sum() > 0].plot(kind='bar', stacked=True, figsize=figsize, colormap=cmap_pos, alpha=0.75)
+        neg_coefs.loc[:, neg_coefs.sum() < 0].plot(kind='bar', stacked=True, figsize=figsize, colormap=cmap_neg, alpha=0.75, ax=ax)
+
+        if title is None:
+            plt.title(f'Stacked bar plot of model coefficients: {name}')
+        else:
+            plt.title(title)
+
+        plt.xlabel('Year')
+        plt.ylabel('Average Coefficient Value')
+        plt.axhline(0, color='black', linewidth=0.8) # Adds a line at zero
+        plt.legend(title='Coefficients', bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.tight_layout()
         plt.show()
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
     import macrosynergy.management as msm
-    from macrosynergy.learning import MapSelector
     from sklearn.linear_model import LinearRegression
     from sklearn.neighbors import KNeighborsRegressor
     from sklearn.metrics import make_scorer
@@ -1048,7 +1243,7 @@ if __name__ == "__main__":
     df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
     df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
     df_xcats.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
-    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", 1, 2, 0.8, 0.5]
+    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfd["grading"] = np.ones(dfd.shape[0])
@@ -1062,6 +1257,7 @@ if __name__ == "__main__":
             pd.Timestamp(year=2100, month=1, day=1),
         ),
     }
+
     train = msm.categories_df(
         df=dfd, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
     ).dropna()
@@ -1073,13 +1269,27 @@ if __name__ == "__main__":
         frame=y_train.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
     )
     
+    # (1) Example SignalOptimizer usage.
+    #     We get adaptive signals for a linear regression and a KNN regressor, with the
+    #     hyperparameters for the latter optimised across regression balanced accuracy.
+
     models = {
-        "OLS": Pipeline([("selector", MapSelector(0.1)), ("regressor", LinearRegression(fit_intercept=False))]),
+        "OLS": LinearRegression(fit_intercept=False),
     }
     metric = make_scorer(regression_balanced_accuracy, greater_is_better=True)
     inner_splitter = RollingKFoldPanelSplit(n_splits=4)
     grid = {
         "OLS": {},
+    }
+    black = {
+        "GBP": (
+            pd.Timestamp(year=2009, month=1, day=1),
+            pd.Timestamp(year=2012, month=6, day=30),
+        ),
+        "CAD": (
+            pd.Timestamp(year=2015, month=1, day=1),
+            pd.Timestamp(year=2100, month=1, day=1),
+        ),
     }
     so = SignalOptimizer(
         inner_splitter=inner_splitter,
@@ -1097,6 +1307,7 @@ if __name__ == "__main__":
     )
     so.coefs_timeplot("test")
     so.intercepts_timeplot("test")
+    so.coefs_stackedbarplot("test")
     # (1) Example SignalOptimizer usage.
     #     We get adaptive signals for a linear regression and a KNN regressor, with the
     #     hyperparameters for the latter optimised across regression balanced accuracy.
