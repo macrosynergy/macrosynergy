@@ -37,8 +37,9 @@ class TestContractSignals(unittest.TestCase):
         self.hbasket: List[str] = ["USD_EQ", "EUR_EQ"]
         self.hscales: List[Numeric] = [0.7, 0.3]
         self.sig = "SIG"
+        self.hratios = "HR"
 
-    def testDF(self) -> QuantamentalDataFrame:
+    def _testDF(self) -> QuantamentalDataFrame:
         return make_test_df(
             cids=self.cids,
             xcats=self.xcats,
@@ -67,7 +68,7 @@ class TestContractSignals(unittest.TestCase):
             self.assertFalse(_check_arg_types(**{arg: 1}))
 
     def test_gen_contract_signals(self):
-        test_df = self.testDF()
+        test_df = self._testDF()
         good_args = dict(
             df=test_df,
             sig=self.sig,
@@ -78,6 +79,7 @@ class TestContractSignals(unittest.TestCase):
         )
 
         df = _gen_contract_signals(**good_args)
+        self.assertIsInstance(df, QuantamentalDataFrame)
         # self.assertEqual(set(tickers_in_test_df), set(tickers_in_df))
         self.assertAlmostEqual(
             len(set(qdf_to_ticker_df(test_df).columns))
@@ -113,7 +115,45 @@ class TestContractSignals(unittest.TestCase):
         df = _gen_contract_signals(**bad_args)
         self.assertTrue(df[df["value"].apply(bool)]["xcat"].unique()[0] == "FX_CSIG")
 
-        print(df)
+    def test_apply_hedge_ratios(self):
+        test_df = self._testDF()
+        good_args = dict(
+            df=test_df,
+            sig=self.sig,
+            cids=self.cids,
+            hbasket=self.hbasket,
+            hscales=self.hscales,
+            hratios=self.hratios,
+        )
+
+        df = _apply_hedge_ratios(**good_args)
+        self.assertIsInstance(df, QuantamentalDataFrame)
+
+        # should all be 0 when hscales are 0
+        bad_args = good_args.copy()
+        bad_args["df"]["value"] = 1
+        bad_args["hscales"] = [0, 0]
+        df = _apply_hedge_ratios(**bad_args)
+        self.assertTrue((df["value"] == 0).all())
+
+        # should be len(cids) * 1 (5) (adding 1 for each)
+        bad_args = good_args.copy()
+        bad_args["df"]["value"] = 1
+        bad_args["hscales"] = [1, 1]
+        df = _apply_hedge_ratios(**bad_args)
+        self.assertTrue((df["value"] == len(self.cids)).all())
+
+        bad_args = good_args.copy()
+        bad_args["df"]["value"] = 1
+        bad_args["hscales"] = [-1, 0]
+        # bad_args["hbasket"] = ["USD_EQ", "EUR_EQ"]
+        df = _apply_hedge_ratios(**bad_args)
+        nz_bool = df["value"].apply(bool)
+        nz_tickers = (df["cid"] + "_" + df["xcat"])[nz_bool].unique().tolist()
+        self.assertTrue(len(nz_tickers) == 1)
+        self.assertTrue(nz_tickers[0] == "USD_EQ_CSIG")
+        self.assertTrue((df[nz_bool]["value"] == -5.0).all())
+
 
 
 if __name__ == "__main__":
