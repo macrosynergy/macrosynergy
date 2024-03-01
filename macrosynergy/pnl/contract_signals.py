@@ -65,17 +65,20 @@ def _check_arg_types(
         ]
     )
 
-    non_empty_iterables: bool = all(
-        [
-            df is None or len(df) > 0,
-            cids is None or len(cids) > 0,
-            ctypes is None or len(ctypes) > 0,
-            cscales is None or len(cscales) > 0,
-            csigns is None or len(csigns) > 0,
-            hbasket is None or len(hbasket) > 0,
-            hscales is None or len(hscales) > 0,
-        ]
-    )
+    try:
+        non_empty_iterables: bool = all(
+            [
+                df is None or len(df) > 0,
+                cids is None or len(cids) > 0,
+                ctypes is None or len(ctypes) > 0,
+                cscales is None or len(cscales) > 0,
+                csigns is None or len(csigns) > 0,
+                hbasket is None or len(hbasket) > 0,
+                hscales is None or len(hscales) > 0,
+            ]
+        )
+    except TypeError:
+        non_empty_iterables: bool = False
 
     correct_nested_types: bool = (
         correct_types

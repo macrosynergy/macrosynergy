@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 
 from macrosynergy.pnl.historic_portfolio_volatility import historic_portfolio_vol
+from macrosynergy.panel.historic_vol import historic_vol
 from macrosynergy.management.types import QuantamentalDataFrame
 
 
@@ -107,6 +108,8 @@ class TestHistoricPortfolioVol(unittest.TestCase):
         dates = pd.bdate_range(
             end=pd.Timestamp.today() + pd.offsets.BDay(n=0), periods=self.periods
         )
+        start = dates.min()
+        end = dates.max()
 
         def _get_test_df(dates, sig_type):
             _dfx = pd.concat(
@@ -140,16 +143,27 @@ class TestHistoricPortfolioVol(unittest.TestCase):
 
         df_pvol = historic_portfolio_vol(df=df, **good_args)
         self.assertIsInstance(df_pvol, QuantamentalDataFrame)
-        self.assertEqual(sum(df["value"] == 0), len(df["value"]))
+        self.assertTrue(all(df_pvol["value"] == 0))
 
         results = {}
         for i in range(3):
             rtn_df = self._gen_rtn_df(dates=dates)
-            sig_df = self._gen_sig_df(dates=dates, sig_type=signal_types[2+i])
+            sig_df = self._gen_sig_df(dates=dates, sig_type=signal_types[2 + i])
             df_pvol = historic_portfolio_vol(
                 df=pd.concat((rtn_df, sig_df), axis=0), **good_args
             )
             results[i] = dict(df_pvol=df_pvol, rtn_df=rtn_df, sig_df=sig_df)
+            hvol = historic_vol(
+                df=rtn_df,
+                xcat="AAXR",
+                est_freq="m",
+                lback_periods=21,
+                lback_meth="ma",
+                cids=['XX' + str(list(signal_types[2 + i]).index(1))],
+                start=start.strftime("%Y-%m-%d"),
+                end=end.strftime("%Y-%m-%d"),
+            ).dropna().reset_index(drop=True)
+            hvol, df_pvol
 
         results
 
