@@ -28,7 +28,7 @@ In particular, the class allows proceeding in three separate steps, implemented 
 
 An example of a typical flow for using the `ProxyPnL` class is as follows:
 
-```mermaid
+```{mermaid}
   flowchart TD;
       Sig[Signals]
       HR[Hedge-Ratios]
@@ -53,10 +53,6 @@ An example of a typical flow for using the `ProxyPnL` class is as follows:
       LVG-->LVGP
       AUM-->LVGP
 
-      subgraph "`notional_positions()`"
-        HPV
-        LVGP
-      end
 
       HPV-->NP
       LVGP-->NP
