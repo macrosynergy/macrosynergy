@@ -154,6 +154,26 @@ class TestContractSignals(unittest.TestCase):
         self.assertTrue(nz_tickers[0] == "USD_EQ_CSIG")
         self.assertTrue((df[nz_bool]["value"] == -5.0).all())
 
+    def test_add_hedged_signals(self):
+        dfcs = make_test_df(
+            cids=self.cids,
+            xcats=[f"{ct}_CSIG" for ct in self.ctypes],
+            start=self.start,
+            end=self.end,
+        )
+        dfcs["value"] = 1
+        dfhr = make_test_df(
+            cids=get_cid(self.hbasket),
+            xcats=[f"{xc}_CSIG" for xc in list(set(get_xcat(self.hbasket)))],
+            start=self.start,
+            end=self.end,
+        )
+        dfhr["value"] = 1
+        df = _add_hedged_signals(dfcs, dfhr)
+        # all should be ones
+        self.assertTrue((df["value"] == 1).all())
+        
+        self.assertTrue(dfcs.eq(_add_hedged_signals(dfcs, None)).all().all())
 
 
 if __name__ == "__main__":
