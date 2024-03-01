@@ -118,16 +118,10 @@ def _estimate_variance_covariance(
     if weights_arr is None:
         weights_arr = np.ones(piv_ret.shape[0]) / piv_ret.shape[0]
 
-    # TODO add complexity of weighting and estimation methods
-    mask = (
-        (
-            piv_ret.isna().sum(axis=0)
-            + (piv_ret == 0).sum(axis=0)
-            + (lback_periods - len(piv_ret))
-        )
-        / lback_periods
-    ) <= nan_tolerance
-    # TODO assert length...
+    assert len(weights_arr) == len(piv_ret), "weights and window must have same length"
+    assert not (
+        piv_ret.isna().any().any()
+    ), "NaN should have been removed by this stage"
 
     cov_matr = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
 
@@ -235,7 +229,7 @@ def _hist_vol(
             weights_arr = weights_func(
                 lback_periods=min(lback_periods, len(piv_ret)),
                 half_life=min(half_life, len(piv_ret)),
-            ) # inherently fast, and cached anyway
+            )  # inherently fast, and cached anyway
 
             vcv: pd.DataFrame = _estimate_variance_covariance(
                 piv_ret=piv_ret,
@@ -466,3 +460,5 @@ if __name__ == "__main__":
         start=start,
         end=end,
     )
+    print(df_vol.head(10))
+    print(df_vol.tail(10))
