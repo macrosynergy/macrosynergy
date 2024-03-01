@@ -173,7 +173,7 @@ class LassoSelector(BaseEstimator, TransformerMixin):
 
 
 class MapSelector(BaseEstimator, TransformerMixin):
-    def __init__(self, threshold: float):
+    def __init__(self, threshold: float, positive: bool = False):
         """
         Transformer class to select features from a training set
         based on the Macrosynergy panel test. This test involves creating
@@ -183,16 +183,20 @@ class MapSelector(BaseEstimator, TransformerMixin):
 
         :param <float> threshold: Significance threshold. This should be in
             the interval (0,1).
+        :param <bool> positive: Boolean indicating whether or not to only keep features
+            with positive estimated model coefficients.
         """
         if type(threshold) != float:
             raise TypeError("The threshold must be a float.")
-
         if (threshold <= 0) or (threshold > 1):
             raise ValueError(
                 "The threshold must be in between 0 (inclusive) and 1 (exclusive)."
             )
+        if not isinstance(positive, (bool, np.bool_)):
+            raise TypeError("The 'positive' parameter must be a boolean.")
 
         self.threshold = threshold
+        self.positive = positive
         self.feature_names_in_ = None
 
     def fit(self, X: pd.DataFrame, y: Union[pd.Series, pd.DataFrame]):
@@ -248,8 +252,12 @@ class MapSelector(BaseEstimator, TransformerMixin):
             model = MixedLM(y.values, ftr, groups).fit(reml=False)
             est = model.params.iloc[1]
             pval = model.pvalues.iloc[1]
-            if (pval < self.threshold) & (est > 0):
-                self.ftrs.append(col)
+            if (pval < self.threshold):
+                if self.positive:
+                    if est > 0:
+                        self.ftrs.append(col)
+                else:
+                    self.ftrs.append(col)
 
         return self
     
@@ -261,6 +269,14 @@ class MapSelector(BaseEstimator, TransformerMixin):
         
         :return <np.ndarray>: Boolean mask or integer index of the selected features
         """
+        if not isinstance(indices, (bool, np.bool_)):
+            raise TypeError(
+                "The 'indices' parameter must be a boolean."
+            )
+        if self.feature_names_in_ is None:
+            raise NotFittedError(
+                "The MAP selector has not been fitted. Please fit the selector before calling get_support()."
+            )
         mask = [col in self.ftrs for col in self.feature_names_in_]
 
         if indices:

@@ -316,7 +316,8 @@ class TestMapSelector(unittest.TestCase):
         self.y = df["XR"]
 
         # determine the 95% significant features according to the MAP test
-        self.ftrs = []
+        self.est = []
+        self.pval = []
         for col in self.X.columns:
             ftr = self.X[col]
             ftr = add_constant(ftr)
@@ -324,15 +325,21 @@ class TestMapSelector(unittest.TestCase):
             model = MixedLM(self.y,ftr,groups).fit(reml=False)
             est = model.params.iloc[1]
             pval = model.pvalues.iloc[1]
-            if (pval < 0.05) & (est > 0):
-                self.ftrs.append(col)
+            self.est.append(est)
+            self.pval.append(pval)
+
+        # get chosen features with and without the positive restriction 
+        self.restr_ftrs = [self.X.columns[idx] for idx, est in enumerate(self.est) if self.pval[idx] < 0.05 and est > 0]
+        self.unrestr_ftrs = [self.X.columns[idx] for idx, est in enumerate(self.est) if self.pval[idx] < 0.05]
 
     @parameterized.expand([0.01, 0.05, 0.1, 1.0])
     def test_valid_init(self, threshold):
+        positive = bool(np.random.choice([True, False]))
         # Test that the MapSelector class can be instantiated
-        selector = MapSelector(threshold=threshold)
+        selector = MapSelector(threshold=threshold, positive=positive)
         self.assertIsInstance(selector, MapSelector)
         self.assertEqual(selector.threshold, threshold)
+        self.assertEqual(selector.positive, positive)
 
     def test_types_init(self):
         # Test that non float/int thresholds raise TypeError
@@ -341,11 +348,15 @@ class TestMapSelector(unittest.TestCase):
         # Test that negative thresholds raise ValueError
         with self.assertRaises(ValueError):
             selector = MapSelector(threshold=-1.0)
+        # Test that an incorrect 'positive' type results in a TypeError
+        with self.assertRaises(TypeError):
+            selector = MapSelector(threshold=0.05, positive="True")
 
-    def test_valid_fit(self):
+    @parameterized.expand([True, False])
+    def test_valid_fit(self, positive):
         # Test that the fit() method works as expected
         threshold = 0.05
-        selector = MapSelector(threshold=threshold)
+        selector = MapSelector(threshold=threshold, positive=positive)
         # Test that fitting with a pandas target series works
         try:
             selector.fit(self.X, self.y)
@@ -360,7 +371,10 @@ class TestMapSelector(unittest.TestCase):
         self.assertIsInstance(selector.ftrs, list)
         # check that the self.ftrs attribute comprises the correct features
         self.cols = self.X.columns
-        self.assertTrue(np.all(selector.ftrs == self.ftrs))
+        if positive:
+            self.assertTrue(np.all(selector.ftrs == self.restr_ftrs))
+        else:
+            self.assertTrue(np.all(selector.ftrs == self.unrestr_ftrs))
 
     def test_types_fit(self):
         # Test that non dataframe X raises TypeError
@@ -384,6 +398,52 @@ class TestMapSelector(unittest.TestCase):
             selector = MapSelector(threshold=0.05)
             selector.fit(self.X, self.X)
 
+    @parameterized.expand([True, False])
+    def test_valid_get_support(self, indices):
+        # Test that the get_support() method works as expected
+        threshold = 0.05
+        positive = np.random.choice([True, False])
+        selector = MapSelector(threshold=threshold, positive=positive)
+        selector.fit(self.X, self.y)
+        support = selector.get_support(indices=indices)
+        # check that the get_support method returns the correct features
+        if positive:
+            mask = [col in self.restr_ftrs for col in self.X.columns]
+        else:
+            mask = [col in self.unrestr_ftrs for col in self.X.columns]
+
+        if indices:
+            true_support = np.where(mask)[0]
+        else:
+            true_support = np.array(mask)
+
+        self.assertTrue(np.all(support == true_support))
+
+    def test_types_get_support(self):
+        threshold = 0.05
+        positive = np.random.choice([True, False])
+        selector = MapSelector(threshold=threshold, positive=positive)
+        # Raise a NotFittedError if get_support is called without fitting
+        with self.assertRaises(NotFittedError):
+            selector.get_support()
+        # Test that a TypeError is raised if a non-boolean indices parameter is entered
+        selector.fit(self.X, self.y)
+        with self.assertRaises(TypeError):
+            selector.get_support(indices="indices")
+
+    def test_valid_get_feature_names_out(self):
+        # Test that the get_feature_names_out() method works as expected
+        threshold = 0.05
+        positive = np.random.choice([True, False])
+        selector = MapSelector(threshold=threshold, positive=positive)
+        selector.fit(self.X, self.y)
+        feature_names_out = selector.get_feature_names_out()
+        # check that the get_feature_names_out method returns the correct features
+        if positive:
+            self.assertTrue(np.all(feature_names_out == self.restr_ftrs))
+        else:
+            self.assertTrue(np.all(feature_names_out == self.unrestr_ftrs))
+            
     def test_valid_transform(self):
         # Test that the transform() method works as expected
         selector = MapSelector(threshold=0.05)
