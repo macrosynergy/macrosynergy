@@ -192,7 +192,6 @@ class TestLassoSelector(unittest.TestCase):
         our_selector.fit(self.X, self.y)
         supp_our_selector = our_selector.get_support(indices=indices)
         lasso = Lasso(alpha=alpha, positive=positive)
-        lasso.fit(self.X, self.y)
         their_selector = SelectFromModel(lasso,threshold=1e-10)
         their_selector.fit(self.X, self.y)
         supp_their_selector = their_selector.get_support(indices=indices)
@@ -215,6 +214,27 @@ class TestLassoSelector(unittest.TestCase):
             our_selector.get_support(indices="indices")
         with self.assertRaises(ValueError):
             our_selector.get_support(indices=1)
+
+    def test_valid_get_feature_names_out(self):
+        # Sample alpha between zero and 10000 and binary 'positive'
+        alpha = np.random.uniform(0.0001, 10000)
+        positive = bool(np.random.choice([True, False]))
+        # Check that the LASSO selector with these hparams chooses the same
+        # features that the LASSO would
+        our_selector = LassoSelector(alpha=alpha, positive = positive)
+        our_selector.fit(self.X, self.y)
+        lasso = Lasso(alpha=alpha, positive=positive)
+        their_selector = SelectFromModel(lasso,threshold=1e-10)
+        their_selector.fit(self.X, self.y)
+        self.assertTrue(np.all(our_selector.get_feature_names_out() == their_selector.get_feature_names_out()))
+
+    def test_types_get_feature_names_out(self):
+        # Check that a NotFittedError is raised if get_feature_names_out is called without fitting
+        alpha = np.random.uniform(0.0001, 10000)
+        positive = bool(np.random.choice([True, False]))
+        our_selector = LassoSelector(alpha=alpha, positive = positive)
+        with self.assertRaises(NotFittedError):
+            our_selector.get_feature_names_out()
 
     @parameterized.expand([True, False])
     def test_valid_transform(self, positive):

@@ -111,7 +111,7 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         """
         if self.feature_names_in_ is None:
             raise NotFittedError(
-                "The LASSO selector has not been fitted. Please fit the transformer before calling get_support()."
+                "The LASSO selector has not been fitted. Please fit the selector before calling get_support()."
             )
         if not isinstance(indices, (bool, np.bool_)):
             raise ValueError(
@@ -129,7 +129,9 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         Method to mask feature names according to selected features.
         """
         if self.feature_names_in_ is None:
-            raise ValueError("The feature names are not available. Please fit the transformer first.")
+            raise NotFittedError(
+                "The LASSO selector has not been fitted. Please fit the selector before calling get_feature_names_out()."
+            )
         
         return self.feature_names_in_[self.get_support(indices=False)]
 
