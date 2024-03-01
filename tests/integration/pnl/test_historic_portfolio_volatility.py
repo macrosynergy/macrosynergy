@@ -162,7 +162,7 @@ class TestHistoricPortfolioVol(unittest.TestCase):
                 cids=['XX' + str(list(signal_types[2 + i]).index(1))],
                 start=start.strftime("%Y-%m-%d"),
                 end=end.strftime("%Y-%m-%d"),
-            )
+            ).dropna().reset_index(drop=True)
             hvol, df_pvol
 
         results
