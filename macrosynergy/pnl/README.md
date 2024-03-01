@@ -66,9 +66,4 @@ An example of a typical flow for using the `ProxyPnL` class is as follows:
       NP-->PP
       Distr-->PP
 
-
-
-
-
-
 ```
