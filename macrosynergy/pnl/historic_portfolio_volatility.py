@@ -174,11 +174,6 @@ def _hist_vol(
         effective window.
     """
 
-    # TODO split into steps:
-    # [1] Find rebalance dates.
-    # [2] Calculate variance-covariance matrix for each rebalance date.
-    # [3] Calculate variance of portfolio for each rebalance date weighted by signal.
-
     lback_meth = lback_meth.lower()
     if lback_meth not in ["ma", "xma"]:
         raise NotImplementedError(
@@ -197,7 +192,6 @@ def _hist_vol(
     )
 
     # TODO get the correct rebalance dates
-    # TODO allow for multiple estimation frequency
 
     weights_func = flat_weights_arr if lback_meth == "ma" else expo_weights_arr
 
@@ -389,7 +383,6 @@ def historic_portfolio_vol(
 
     filt_xrs: List[str] = [tx for tx in u_tickers if tx.endswith(rstring)]
 
-    # df: pd.DataFrame = df.loc[df["ticker"].isin(filt_csigs + filt_xrs)]
     df["fid"] = (
         df["cid"]
         + "_"
