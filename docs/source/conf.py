@@ -59,13 +59,13 @@ html_theme = "pydata_sphinx_theme"
 html_theme_options = {
     "show_toc_level": 5,
     "header_links_before_dropdown": 4,
-    "navbar_end": ["version-switcher"],
+    # "navbar_end": ["version-switcher"],
     "content_footer_items": ["last-updated"],
     "github_url": "https://github.com/macrosynergy/macrosynergy",
-    "switcher": {
-        "json_url": "https://macrosynergy-docs-test.s3.eu-west-2.amazonaws.com/version_switcher.json",
-        "version_match": ms_version,
-    },
+    # "switcher": {
+    #     "json_url": "https://macrosynergy-docs-test.s3.eu-west-2.amazonaws.com/version_switcher.json",
+    #     "version_match": ms_version,
+    # },
     "logo": {
         "image_light": "MACROSYNERGY_Logo_Primary.png",
         "image_dark": "MACROSYNERGY_Logo_White.png",

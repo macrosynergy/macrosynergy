@@ -37,28 +37,23 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHub-Macrosynergy-Package
 
-      - name:
-          Get names of folders in S3
-          # store list of folders separeted by comma
-        run: |
-          aws s3 ls s3://${{ env.BUCKET_NAME }} --recursive > folders.txt
-          cp folders.txt aws_s3_ls.txt
+      # - name: Generate version switcher
+      #   run: |
+      #     aws s3 ls s3://${{ env.BUCKET_NAME }} --recursive > folders.txt
+      #     cp folders.txt aws_s3_ls.txt
 
-          python -c "print(','.join([x for x in set(map(lambda x: str(x).split(' ')[-1].strip().split('/')[0] if '/' in x else '', open('aws_s3_ls.txt').readlines())) if x.strip() != '']), end='')" > folders.txt
+      #     python -c "print(','.join([x for x in set(map(lambda x: str(x).split(' ')[-1].strip().split('/')[0] if '/' in x else '', open('aws_s3_ls.txt').readlines())) if x.strip() != '']), end='')" > folders.txt
 
-          echo $(cat folders.txt)
+      #     echo $(cat folders.txt)
+      #     BRANCHES=$(cat folders.txt)
+      #     python ./.github/scripts/gen_docs_switcher.py \
+      #       -d http://macrosynergy-docs-test.s3-website.eu-west-2.amazonaws.com \
+      #       -b $BRANCHES \
+      #       -o version_switcher.json
 
-      - name: Generate version switcher
-        run: |
-          BRANCHES=$(cat folders.txt)
-          python ./.github/scripts/gen_docs_switcher.py \
-            -d http://macrosynergy-docs-test.s3-website.eu-west-2.amazonaws.com \
-            -b $BRANCHES \
-            -o version_switcher.json
-
-      - name: Upload version switcher
-        run: |
-          aws s3 cp version_switcher.json s3://${{ env.BUCKET_NAME }}/version_switcher.json
+      # - name: Upload version switcher
+      #   run: |
+      #     aws s3 cp version_switcher.json s3://${{ env.BUCKET_NAME }}/version_switcher.json
 
       - name: Run Flake8
         run: |
