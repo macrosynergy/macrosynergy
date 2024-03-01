@@ -6,6 +6,8 @@ from typing import List, Optional, Callable, Tuple
 from functools import lru_cache
 import pandas as pd
 import numpy as np
+import logging
+
 from macrosynergy.panel.historic_vol import expo_std, flat_std, expo_weights
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.management.utils import (
@@ -19,6 +21,8 @@ from macrosynergy.management.utils import (
 )
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
+logger = logging.getLogger(__name__)
+
 cache = lru_cache(maxsize=None)
 
 
@@ -133,8 +137,8 @@ def _estimate_variance_covariance(
                 w=weights_arr,
                 remove_zeros=remove_zeros,
             )
-            cov_matr[iA, iB] = est_vol
-            cov_matr[iB, iA] = est_vol
+            cov_matr[iA, iB] = est_vol  # TODO (iA, iB) is same as (iB, iA) 
+            cov_matr[iB, iA] = est_vol  # TODO (iA, iB) is same as (iB, iA)
 
     assert np.all((cov_matr.T == cov_matr) ^ np.isnan(cov_matr))
 
