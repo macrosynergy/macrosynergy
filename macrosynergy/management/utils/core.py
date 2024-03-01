@@ -4,17 +4,16 @@ that are used across the package.
 """
 
 import datetime
-import itertools
-
-from macrosynergy.management.types import QuantamentalDataFrame
-import warnings
-from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
-from macrosynergy.management.constants import FREQUENCY_MAP
+import time
+from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload, Tuple
 
 import numpy as np
 import pandas as pd
 import requests
 import requests.compat
+
+from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.constants import FREQUENCY_MAP
 
 
 @overload
@@ -322,3 +321,25 @@ def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type
                 return result
 
     return None
+
+
+class Timer(object):
+    def __init__(self):
+        self.t0 = time.perf_counter()
+        
+    def __str__(self) -> str:
+        return f"{self.lap():.2f} seconds"
+    
+    def __repr__(self) -> str:
+        return f"<Time lapsed {str(self):s}>"
+    
+    def __float__(self) -> float:
+        return self.lap()
+    
+    def timer(self) -> Tuple[float, float]:
+        x = time.perf_counter()
+        return x, x - self.t0
+
+    def lap(self) -> float:
+        self.t0, dt = self.timer()
+        return dt
