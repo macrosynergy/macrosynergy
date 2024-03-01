@@ -10,6 +10,8 @@ import datetime
 from sklearn.linear_model import Lasso
 from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
 
+from sklearn.exceptions import NotFittedError
+
 from statsmodels.tools.tools import add_constant
 from statsmodels.regression.mixed_linear_model import MixedLM
 
@@ -107,7 +109,14 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         
         :return <np.ndarray>: Boolean mask or integer index of the selected features
         """
-        # TODO: check that 'fit' has already been run
+        if self.feature_names_in_ is None:
+            raise NotFittedError(
+                "The LASSO selector has not been fitted. Please fit the transformer before calling get_support()."
+            )
+        if not isinstance(indices, (bool, np.bool_)):
+            raise ValueError(
+                "The 'indices' parameter must be a boolean."
+            )
         if indices:
             return self.selected_ftr_idxs
         else:

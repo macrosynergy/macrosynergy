@@ -19,6 +19,8 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.feature_selection import SelectFromModel
 from sklearn.linear_model import Lasso
 
+from sklearn.exceptions import NotFittedError
+
 class TestLassoSelector(unittest.TestCase):
     @classmethod
     def setUpClass(self):
@@ -180,10 +182,10 @@ class TestLassoSelector(unittest.TestCase):
             selector.fit(self.X, self.y.reset_index())
 
     @parameterized.expand([True, False])
-    def valid_get_support(self, indices):
+    def test_valid_get_support(self, indices):
         # Sample alpha between zero and 10000 and binary 'positive'
         alpha = np.random.uniform(0.0001, 10000)
-        positive = np.random.choice([True, False])
+        positive = bool(np.random.choice([True, False]))
         # Check the Lasso selector with these hparams chooses the 
         # same features that the Lasso would
         our_selector = LassoSelector(alpha=alpha, positive = positive)
@@ -191,10 +193,28 @@ class TestLassoSelector(unittest.TestCase):
         supp_our_selector = our_selector.get_support(indices=indices)
         lasso = Lasso(alpha=alpha, positive=positive)
         lasso.fit(self.X, self.y)
-        their_selector = SelectFromModel(lasso,threshold=0)
+        their_selector = SelectFromModel(lasso,threshold=1e-10)
         their_selector.fit(self.X, self.y)
         supp_their_selector = their_selector.get_support(indices=indices)
         self.assertTrue(np.all(supp_our_selector == supp_their_selector))
+
+    @parameterized.expand([True, False])
+    def test_types_get_support(self, indices):
+        # First check that a NotFittedError is raised if get_support is called without fitting
+        alpha = np.random.uniform(0.0001, 10000)
+        positive = bool(np.random.choice([True, False]))
+        our_selector = LassoSelector(alpha=alpha, positive = positive)
+        with self.assertRaises(NotFittedError):
+            our_selector.get_support(indices=indices)
+        # Now check that a ValueError is raised if a non-boolean indices parameter is entered
+        alpha = np.random.uniform(0.0001, 10000)
+        positive = bool(np.random.choice([True, False]))
+        our_selector = LassoSelector(alpha=alpha, positive = positive)
+        our_selector.fit(self.X, self.y)
+        with self.assertRaises(ValueError):
+            our_selector.get_support(indices="indices")
+        with self.assertRaises(ValueError):
+            our_selector.get_support(indices=1)
 
     @parameterized.expand([True, False])
     def test_valid_transform(self, positive):
