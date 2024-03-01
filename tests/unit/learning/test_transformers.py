@@ -16,6 +16,7 @@ from statsmodels.tools.tools import add_constant
 from statsmodels.regression.mixed_linear_model import MixedLM
 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.feature_selection import SelectFromModel
 from sklearn.linear_model import Lasso
 
 class TestLassoSelector(unittest.TestCase):
@@ -178,6 +179,22 @@ class TestLassoSelector(unittest.TestCase):
             selector = LassoSelector(alpha=0.1, positive=True)
             selector.fit(self.X, self.y.reset_index())
 
+    @parameterized.expand([True, False])
+    def valid_get_support(self, indices):
+        # Sample alpha between zero and 10000 and binary 'positive'
+        alpha = np.random.uniform(0.0001, 10000)
+        positive = np.random.choice([True, False])
+        # Check the Lasso selector with these hparams chooses the 
+        # same features that the Lasso would
+        our_selector = LassoSelector(alpha=alpha, positive = positive)
+        our_selector.fit(self.X, self.y)
+        supp_our_selector = our_selector.get_support(indices=indices)
+        lasso = Lasso(alpha=alpha, positive=positive)
+        lasso.fit(self.X, self.y)
+        their_selector = SelectFromModel(lasso,threshold=0)
+        their_selector.fit(self.X, self.y)
+        supp_their_selector = their_selector.get_support(indices=indices)
+        self.assertTrue(np.all(supp_our_selector == supp_their_selector))
 
     @parameterized.expand([True, False])
     def test_valid_transform(self, positive):
