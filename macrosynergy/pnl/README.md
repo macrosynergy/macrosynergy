@@ -32,19 +32,21 @@ An example of a typical flow for using the `ProxyPnL` class is as follows:
   flowchart TD;
       Sig[Signals]
       HR[Hedge-Ratios]
-      CSf["`contract_signals()`"]
       CS[Contract Signals]
       AUM[AUM]
       LVG[Leverage]
       LVGP[Leverage Position]
       VT[Volatility Target]
-      NPx(Notional Positions)
+      NP(Notional Positions)
       HPV[Historical Portfolio Volatility]
+      TC[Trading Cost]
+      RC[Roll Cost]
+      Distr[Transaction Statistics]
+      PP[Proxy PnL]
 
-      Sig-->CSf
-      HR-->CSf
+      Sig-->CS
+      HR-->CS
 
-      CSf-->CS
       VT-->HPV
       CS-->HPV
       CS-->LVGP
@@ -56,14 +58,17 @@ An example of a typical flow for using the `ProxyPnL` class is as follows:
         LVGP
       end
 
-      HPV-->NPx
-      LVGP-->NPx
+      HPV-->NP
+      LVGP-->NP
 
-    
+      TC-->PP
+      RC-->PP
+      NP-->PP
+      Distr-->PP
+
+
+
+
+
 
 ```
-
-
-
-
-
