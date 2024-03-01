@@ -423,7 +423,7 @@ def historic_portfolio_vol(
         remove_zeros=remove_zeros,
     )
 
-    return ticker_df_to_qdf(df=hist_port_vol)
+    return ticker_df_to_qdf(df=hist_port_vol).dropna().reset_index(drop=True)
 
 
 if __name__ == "__main__":
