@@ -151,7 +151,7 @@ def timelines(
     if xcats is None:
         if xcat_labels:
             raise ValueError("`xcat_labels` requires `xcats` to be defined.")
-        xcats: List[str] = df["xcats"].unique().tolist()
+        xcats: List[str] = df["xcat"].unique().tolist()
 
     if cids is None:
         cids: List[str] = df["cid"].unique().tolist()
