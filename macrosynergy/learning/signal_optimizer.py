@@ -329,7 +329,7 @@ class SignalOptimizer:
         )
 
         signal_df: pd.MultiIndex = pd.DataFrame(
-            index=sig_idxs, columns=[name], data=np.nan, dtype="float64"
+            index=sig_idxs, columns=[name], data=np.nan, dtype="float64" # TODO: why not float32
         )
 
         # (2) Set up the splitter, outputs to store the predictions and model choices,
@@ -357,7 +357,7 @@ class SignalOptimizer:
         else:
             prop = None
 
-        # (3) Run the parallelised worker function to run the Macrosynergy signal
+        # (3) Run the parallelised worker function to run the signal
         #     optimization algorithm over the trading history.
         train_test_splits = list(outer_splitter.split(X=X, y=y))
 
@@ -757,13 +757,21 @@ class SignalOptimizer:
             final_estimator = optim_model
 
         if hasattr(final_estimator, "coef_"):
-            if np.array(final_estimator.coef_).squeeze().ndim == 1:
-                coefs = np.array(final_estimator.coef_).squeeze()
+            if len(final_estimator.coef_.shape) == 1:
+                coefs = np.array(final_estimator.coef_)
+            elif len(final_estimator.coef_.shape) == 2:
+                if final_estimator.coef_.shape[0] != 1:
+                    coefs = np.array([np.nan for _ in range(X_train_i.shape[1])])
+                else:
+                    coefs = np.array(final_estimator.coef_).squeeze()
             else:
                 coefs = np.array([np.nan for _ in range(X_train_i.shape[1])])
         else:
             coefs = np.array([np.nan for _ in range(X_train_i.shape[1])])
-        coef_ftr_map = {ftr : coef for ftr, coef in zip(ftr_names, coefs)}
+        try:
+            coef_ftr_map = {ftr : coef for ftr, coef in zip(ftr_names, coefs)}
+        except Exception as e1:
+            print("hey")
         coefs = [coef_ftr_map[ftr] if ftr in coef_ftr_map else np.nan for ftr in X_train_i.columns]
         if hasattr(final_estimator, "intercept_"):
             if isinstance(final_estimator.intercept_, np.ndarray):
@@ -985,11 +993,9 @@ class SignalOptimizer:
             raise TypeError("The pipeline name must be a string.")
         if name not in self.ftr_coefficients.name.unique():
             raise ValueError(
-                f"""Feature coefficients were not stored for the pipeline {name}.
-                This may be because the pipeline was not run or the feature coefficients
-                were not stored. The latter occurs, as an example, when all coefficients
-                are NaN. This can happen when the chosen models do not contain coef_ 
-                attributes.
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
                 """
             )
         
@@ -1011,10 +1017,9 @@ class SignalOptimizer:
             raise TypeError("The pipeline name must be a string.")
         if name not in self.intercepts.name.unique():
             raise ValueError(
-                f"""Intercepts were not stored for the pipeline {name}.
-                This may be because the pipeline was not run or the intercepts were not
-                stored. The latter occurs, as an example, when all intercepts are NaN. This
-                can happen when the chosen models do not contain intercept_ attributes.
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
                 """
             )
         
@@ -1039,11 +1044,9 @@ class SignalOptimizer:
             raise TypeError("The pipeline name must be a string.")
         if name not in self.ftr_coefficients.name.unique():
             raise ValueError(
-                f"""Feature coefficients were not stored for the pipeline {name}.
-                This may be because the pipeline was not run or the feature coefficients
-                were not stored. The latter occurs, as an example, when all coefficients
-                are NaN. This can happen when the chosen models do not contain coef_ 
-                attributes.
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
                 """
             )
         if not isinstance(include_intercept, (bool, np.bool_)):
@@ -1051,13 +1054,11 @@ class SignalOptimizer:
         if include_intercept:
             if name not in self.intercepts.name.unique():
                 raise ValueError(
-                    f"""Intercepts were not stored for the pipeline {name}.
-                    This may be because the pipeline was not run or the intercepts were not
-                    stored. The latter occurs, as an example, when all intercepts are NaN. 
-                    This can happen when the chosen models do not contain intercept_ 
-                    attributes.
-                    """
-                )
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
             
         # Return the means and standard deviations of the feature coefficients and
         # intercepts (if chosen) for the specified pipeline
@@ -1086,11 +1087,9 @@ class SignalOptimizer:
             raise TypeError("The pipeline name must be a string.")
         if name not in self.ftr_coefficients.name.unique():
             raise ValueError(
-                f"""Feature coefficients were not stored for the pipeline {name}.
-                This may be because the pipeline was not run or the feature coefficients
-                were not stored. The latter occurs, as an example, when all coefficients
-                are NaN. This can happen when the chosen models do not contain coef_ 
-                attributes.
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
                 """
             )
         ftrcoef_df = self.get_ftr_coefficients(name)
@@ -1149,13 +1148,11 @@ class SignalOptimizer:
             raise TypeError("The pipeline name must be a string.")
         if name not in self.intercepts.name.unique():
             raise ValueError(
-                    f"""Intercepts were not stored for the pipeline {name}.
-                    This may be because the pipeline was not run or the intercepts were not
-                    stored. The latter occurs, as an example, when all intercepts are NaN. 
-                    This can happen when the chosen models do not contain intercept_ 
-                    attributes.
-                    """
-                )
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
         intercepts_df = self.get_intercepts(name)
 
         # TODO: the next line will be made redundament once the signal optimiser checks for this
@@ -1214,11 +1211,9 @@ class SignalOptimizer:
             raise TypeError("The pipeline name must be a string.")
         if name not in self.ftr_coefficients.name.unique():
             raise ValueError(
-                f"""Feature coefficients were not stored for the pipeline {name}.
-                This may be because the pipeline was not run or the feature coefficients
-                were not stored. The latter occurs, as an example, when all coefficients
-                are NaN. This can happen when the chosen models do not contain coef_ 
-                attributes.
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
                 """
             )
         # TODO: the next line will be made redundament once the signal optimiser checks for this
@@ -1286,8 +1281,11 @@ class SignalOptimizer:
 
         # Create stacked bar plot
         # For each year, plot the positive coefficients if they exist
-        ax = pos_coefs.loc[:, pos_coefs.sum() > 0].plot(kind='bar', stacked=True, figsize=figsize, colormap=cmap_pos, alpha=0.75)
-        neg_coefs.loc[:, neg_coefs.sum() < 0].plot(kind='bar', stacked=True, figsize=figsize, colormap=cmap_neg, alpha=0.75, ax=ax)
+        
+        if pos_coefs.sum().any():
+            ax = pos_coefs.loc[:, pos_coefs.sum() > 0].plot(kind='bar', stacked=True, figsize=figsize, colormap=cmap_pos, alpha=0.75)
+        if neg_coefs.sum().any():
+            neg_coefs.loc[:, neg_coefs.sum() < 0].plot(kind='bar', stacked=True, figsize=figsize, colormap=cmap_neg, alpha=0.75, ax=ax)
 
         if title is None:
             plt.title(f'Stacked bar plot of model coefficients: {name}')
@@ -1309,6 +1307,7 @@ if __name__ == "__main__":
     from sklearn.metrics import make_scorer
     from macrosynergy.learning import (
         regression_balanced_accuracy,
+        MapSelector,
     )
 
     cids = ["AUD", "CAD", "GBP", "USD"]
@@ -1360,7 +1359,7 @@ if __name__ == "__main__":
     #     hyperparameters for the latter optimised across regression balanced accuracy.
 
     models = {
-        "OLS": LinearRegression(fit_intercept=False),
+        "OLS": LinearRegression(fit_intercept=True),
     }
     metric = make_scorer(regression_balanced_accuracy, greater_is_better=True)
     inner_splitter = RollingKFoldPanelSplit(n_splits=4)
