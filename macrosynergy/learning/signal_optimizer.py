@@ -1297,6 +1297,9 @@ class SignalOptimizer:
         plt.tight_layout()
         plt.show()
 
+    def nsplits_timeplot(self,name):
+        pass
+
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
     import macrosynergy.management as msm
@@ -1379,6 +1382,7 @@ if __name__ == "__main__":
         X=X_train,
         y=y_train,
         blacklist=black,
+        change_n_splits=True,
     )
     so.calculate_predictions(
         name="test",
