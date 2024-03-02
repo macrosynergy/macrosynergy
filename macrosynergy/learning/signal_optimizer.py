@@ -741,7 +741,7 @@ class SignalOptimizer:
             return prediction_date, modelchoice_data, coefficients_data, intercept_data
         # Store the best estimator predictions
         preds: np.ndarray = optim_model.predict(X_test_i)
-        prediction_date = [name, test_xs_levels, test_date_levels, preds]
+        prediction_data = [name, test_xs_levels, test_date_levels, preds]
 
         # See if the best model has coefficients and intercepts
         # First see if the best model is a pipeline object 
@@ -768,10 +768,8 @@ class SignalOptimizer:
                 coefs = np.array([np.nan for _ in range(X_train_i.shape[1])])
         else:
             coefs = np.array([np.nan for _ in range(X_train_i.shape[1])])
-        try:
-            coef_ftr_map = {ftr : coef for ftr, coef in zip(ftr_names, coefs)}
-        except Exception as e1:
-            print("hey")
+
+        coef_ftr_map = {ftr : coef for ftr, coef in zip(ftr_names, coefs)}
         coefs = [coef_ftr_map[ftr] if ftr in coef_ftr_map else np.nan for ftr in X_train_i.columns]
         if hasattr(final_estimator, "intercept_"):
             if isinstance(final_estimator.intercept_, np.ndarray):
@@ -804,7 +802,7 @@ class SignalOptimizer:
         ]
 
 
-        return prediction_date, modelchoice_data, coefficients_data, intercept_data
+        return prediction_data, modelchoice_data, coefficients_data, intercept_data
 
     def get_optimized_signals(
         self, name: Optional[Union[str, List]] = None
@@ -1359,7 +1357,7 @@ if __name__ == "__main__":
     #     hyperparameters for the latter optimised across regression balanced accuracy.
 
     models = {
-        "OLS": LinearRegression(fit_intercept=True),
+        "OLS": Pipeline([("selector", MapSelector(threshold=0.2)), ("model", LinearRegression(fit_intercept=True))]),
     }
     metric = make_scorer(regression_balanced_accuracy, greater_is_better=True)
     inner_splitter = RollingKFoldPanelSplit(n_splits=4)
