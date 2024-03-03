@@ -897,14 +897,12 @@ class TestAll(unittest.TestCase):
         )
         df1 = so.get_optimal_models(name="test")
         self.assertIsInstance(df1, pd.DataFrame)
-        self.assertEqual(df1.shape[1], 7)
+        self.assertEqual(df1.shape[1], 5)
         self.assertEqual(df1.columns[0], "real_date")
         self.assertEqual(df1.columns[1], "name")
         self.assertEqual(df1.columns[2], "model_type")
         self.assertEqual(df1.columns[3], "hparams")
         self.assertEqual(df1.columns[4], "n_splits_used")
-        self.assertEqual(df1.columns[5], "coefs")
-        self.assertEqual(df1.columns[6], "intercepts")
         self.assertTrue(np.all(df1.iloc[:,4] == self.splitters[1].n_splits))
         self.assertEqual(df1.name.unique()[0], "test")
         # Add a second signal and check that the output is a dataframe
@@ -918,38 +916,32 @@ class TestAll(unittest.TestCase):
         )
         df2 = so.get_optimal_models(name="test2")
         self.assertIsInstance(df2, pd.DataFrame)
-        self.assertEqual(df2.shape[1], 7)
+        self.assertEqual(df2.shape[1], 5)
         self.assertEqual(df2.columns[0], "real_date")
         self.assertEqual(df2.columns[1], "name")
         self.assertEqual(df2.columns[2], "model_type")
         self.assertEqual(df2.columns[3], "hparams")
         self.assertEqual(df2.columns[4], "n_splits_used")
-        self.assertEqual(df2.columns[5], "coefs")
-        self.assertEqual(df2.columns[6], "intercepts")
         self.assertTrue(np.all(df2.iloc[:,4] == self.splitters[1].n_splits))
         self.assertEqual(df2.name.unique()[0], "test2")
         df3 = so.get_optimal_models()
         self.assertIsInstance(df3, pd.DataFrame)
-        self.assertEqual(df3.shape[1], 7)
+        self.assertEqual(df3.shape[1], 5)
         self.assertEqual(df3.columns[0], "real_date")
         self.assertEqual(df3.columns[1], "name")
         self.assertEqual(df3.columns[2], "model_type")
         self.assertEqual(df3.columns[3], "hparams")
         self.assertEqual(df3.columns[4], "n_splits_used")
-        self.assertEqual(df3.columns[5], "coefs")
-        self.assertEqual(df3.columns[6], "intercepts")
         self.assertTrue(np.all(df3.iloc[:,4] == self.splitters[1].n_splits))
         self.assertEqual(len(df3.name.unique()), 2)
         df4 = so.get_optimal_models(name=["test", "test2"])
         self.assertIsInstance(df4, pd.DataFrame)
-        self.assertEqual(df4.shape[1], 7)
+        self.assertEqual(df4.shape[1], 5)
         self.assertEqual(df4.columns[0], "real_date")
         self.assertEqual(df4.columns[1], "name")
         self.assertEqual(df4.columns[2], "model_type")
         self.assertEqual(df4.columns[3], "hparams")
         self.assertEqual(df4.columns[4], "n_splits_used")
-        self.assertEqual(df4.columns[5], "coefs")
-        self.assertEqual(df4.columns[6], "intercepts")
         self.assertTrue(np.all(df4.iloc[:,4] == self.splitters[1].n_splits))
         self.assertEqual(len(df4.name.unique()), 2)
 
@@ -1042,7 +1034,7 @@ class TestAll(unittest.TestCase):
         )
         for train_idx, test_idx in outer_splitter.split(X=self.X_train, y=self.y_train):
             try:
-                prediction_date, modelchoice_data = so1._worker(
+                prediction_date, modelchoice_data, ftr_data, inter_data = so1._worker(
                     train_idx=train_idx,
                     test_idx=test_idx,
                     name="test",
@@ -1067,6 +1059,22 @@ class TestAll(unittest.TestCase):
             self.assertIsInstance(modelchoice_data[2], str)
             self.assertTrue(modelchoice_data[2] in ["linreg", "ridge"])
             self.assertIsInstance(modelchoice_data[3], dict)
+            # feature coefficients
+            self.assertIsInstance(ftr_data, list)
+            self.assertTrue(len(ftr_data) == 2 + 3) # 3 ftrs + 2 extra columns
+            self.assertIsInstance(ftr_data[0], datetime.date)
+            self.assertTrue(ftr_data[1]=="test")
+            for i in range(2, len(ftr_data)):
+                if ftr_data[i] != np.nan:
+                    self.assertIsInstance(ftr_data[i], np.float32)
+            # intercept data
+            self.assertIsInstance(inter_data, list)
+            self.assertTrue(len(inter_data) == 2 + 1) # 1 intercept + 2 extra columns
+            self.assertIsInstance(inter_data[0], datetime.date)
+            self.assertTrue(inter_data[1]=="test")
+            if inter_data[2] is not None:
+                self.assertIsInstance(inter_data[2], np.float32)
+
         # Check that the worker private method works as expected for a random search
         so2 = SignalOptimizer(
             inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
@@ -1080,7 +1088,7 @@ class TestAll(unittest.TestCase):
         )
         for train_idx, test_idx in outer_splitter.split(X=self.X_train, y=self.y_train):
             try:
-                prediction_date, modelchoice_data = so2._worker(
+                prediction_date, modelchoice_data, ftr_data, inter_data = so2._worker(
                     train_idx=train_idx,
                     test_idx=test_idx,
                     name="test",
@@ -1106,3 +1114,18 @@ class TestAll(unittest.TestCase):
             self.assertIsInstance(modelchoice_data[2], str)
             self.assertTrue(modelchoice_data[2] in ["linreg", "ridge"])
             self.assertIsInstance(modelchoice_data[3], dict)
+            # feature coefficients
+            self.assertIsInstance(ftr_data, list)
+            self.assertTrue(len(ftr_data) == 2 + 3) # 3 ftrs + 2 extra columns
+            self.assertIsInstance(ftr_data[0], datetime.date)
+            self.assertTrue(ftr_data[1]=="test")
+            for i in range(2, len(ftr_data)):
+                if ftr_data[i] != np.nan:
+                    self.assertIsInstance(ftr_data[i], np.float32)
+            # intercept data
+            self.assertIsInstance(inter_data, list)
+            self.assertTrue(len(inter_data) == 2 + 1) # 1 intercept + 2 extra columns
+            self.assertIsInstance(inter_data[0], datetime.date)
+            self.assertTrue(inter_data[1]=="test")
+            if inter_data[2] is not None:
+                self.assertIsInstance(inter_data[2], np.float32)
