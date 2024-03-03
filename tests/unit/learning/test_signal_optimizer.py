@@ -1129,3 +1129,169 @@ class TestAll(unittest.TestCase):
             self.assertTrue(inter_data[1]=="test")
             if inter_data[2] is not None:
                 self.assertIsInstance(inter_data[2], np.float32)
+
+    def test_types_get_intercepts(self):
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+        )
+        # First test that if no signals have been calculated, an error is raised
+        with self.assertRaises(ValueError):
+            so.get_intercepts(name="test")
+        # Now run calculate_predictions
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that a wrong signal name raises an error
+        with self.assertRaises(ValueError):
+            so.get_intercepts(name="test2")
+        # Test that the wrong dtype of a signal name raises an error
+        with self.assertRaises(TypeError):
+            so.get_intercepts(name=1)
+
+    def test_valid_get_intercepts(self):
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+        )
+        # Now run calculate_predictions
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that running get_intercepts on pipeline "test" works
+        try:
+            intercepts = so.get_intercepts(name="test")
+        except Exception as e:
+            self.fail(f"get_intercepts raised an exception: {e}")
+        # Test that the output is as expected
+        self.assertIsInstance(intercepts, pd.DataFrame)
+        self.assertEqual(intercepts.shape[1], 3)
+        self.assertEqual(intercepts.columns[0], "real_date")
+        self.assertEqual(intercepts.columns[1], "name")
+        self.assertEqual(intercepts.columns[2], "intercepts")
+        self.assertTrue(intercepts.name.unique()[0] == "test")
+        self.assertTrue(intercepts.isna().sum().sum() == 0)
+
+    def test_types_get_ftr_coefficients(self):
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+        )
+        # First test that if no signals have been calculated, an error is raised
+        with self.assertRaises(ValueError):
+            so.get_ftr_coefficients(name="test")
+        # Now run calculate_predictions
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that a wrong signal name raises an error
+        with self.assertRaises(ValueError):
+            so.get_ftr_coefficients(name="test2")
+        # Test that the wrong dtype of a signal name raises an error
+        with self.assertRaises(TypeError):
+            so.get_ftr_coefficients(name=1)
+
+    def test_valid_get_ftr_coefficients(self):
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+        )
+        # Run calculate_predictions
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that running get_ftr_coefficients on pipeline "test" works
+        try:
+            ftr_coefficients = so.get_ftr_coefficients(name="test")
+        except Exception as e:
+            self.fail(f"get_ftr_coefficients raised an exception: {e}")
+        # Test that the output is as expected
+        self.assertIsInstance(ftr_coefficients, pd.DataFrame)
+        self.assertEqual(ftr_coefficients.shape[1], 5)
+        self.assertEqual(ftr_coefficients.columns[0], "real_date")
+        self.assertEqual(ftr_coefficients.columns[1], "name")
+        for i in range(2, 5):
+            self.assertEqual(ftr_coefficients.columns[i], self.X_train.columns[i-2])
+        self.assertTrue(ftr_coefficients.name.unique()[0] == "test")
+        self.assertTrue(ftr_coefficients.isna().sum().sum() == 0)
+
+    @parameterized.expand([True, False])
+    def test_types_get_parameter_stats(self, include_intercept):
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+        )
+        # First test that if no signals have been calculated, an error is raised
+        with self.assertRaises(ValueError):
+            so.get_parameter_stats(name="test", include_intercept=include_intercept)
+        # Now run calculate_predictions
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that a wrong signal name raises an error
+        with self.assertRaises(ValueError):
+            so.get_parameter_stats(name="test2", include_intercept=include_intercept)
+        with self.assertRaises(TypeError):
+            so.get_parameter_stats(name=1, include_intercept=include_intercept)
+        with self.assertRaises(TypeError):
+            so.get_parameter_stats(name="test", include_intercept=2)
+
+    @parameterized.expand([True, False])
+    def test_valid_get_parameter_stats(self, include_intercept):
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+        )
+        # Now run calculate_predictions
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that running get_parameter_stats on pipeline "test" works
+        try:
+            parameter_stats = so.get_parameter_stats(name="test", include_intercept=include_intercept)
+        except Exception as e:
+            self.fail(f"get_parameter_stats raised an exception: {e}")
+        # Test that the output is as expected
+        if include_intercept:
+            self.assertTrue(len(parameter_stats) == 4) 
+            ftr_coefs = so.get_ftr_coefficients(name="test")
+            intercepts = so.get_intercepts(name="test")
+            mean_coefs = ftr_coefs.iloc[:,2:].mean(skipna=True)
+            std_coefs = ftr_coefs.iloc[:,2:].std(skipna=True)
+            mean_intercept = intercepts.iloc[:,2:].mean(skipna=True)
+            std_intercept = intercepts.iloc[:,2:].std(skipna=True)
+            self.assertTrue(np.all(parameter_stats[0] == mean_coefs))
+            self.assertTrue(np.all(parameter_stats[1] == std_coefs))
+            self.assertTrue(np.all(parameter_stats[2] == mean_intercept))
+            self.assertTrue(np.all(parameter_stats[3] == std_intercept))
+        else:
+            self.assertTrue(len(parameter_stats) == 2)
+            ftr_coefs = so.get_ftr_coefficients(name="test")
+            mean_coefs = ftr_coefs.iloc[:,2:].mean(skipna=True)
+            std_coefs = ftr_coefs.iloc[:,2:].std(skipna=True)
+            self.assertTrue(np.all(parameter_stats[0] == mean_coefs))
+            self.assertTrue(np.all(parameter_stats[1] == std_coefs))
