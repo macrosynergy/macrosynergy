@@ -26,7 +26,13 @@ In particular, the class allows proceeding in three separate steps, implemented 
 
 ### Flow
 
-An example of a typical flow for using the `ProxyPnL` class is as follows:
+The typical flow when using the `ProxyPnL` class is as follows:
+
+- 1. Calculating `contract_signals` from cross-sectional hedge ratios and trading signals.
+- 2. Calculating `notional_positions` from contract signals and `AUM` or `volatility_target`.
+
+- 3. (Download transaction statistics into a `QuantamentalDataFrame`)
+- 3. Calculating `proxy_pnl` from notional positions and transaction costs.
 
 ```{mermaid}
   flowchart TD;
