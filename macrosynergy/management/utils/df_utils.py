@@ -16,6 +16,7 @@ import requests
 import requests.compat
 from .core import get_cid, get_xcat, _map_to_business_day_frequency
 
+
 def standardise_dataframe(
     df: pd.DataFrame, verbose: bool = False
 ) -> QuantamentalDataFrame:
@@ -348,6 +349,7 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
         df = update_categories(df, df_add)
 
     return df.reset_index(drop=True)
+
 
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     """
@@ -847,6 +849,9 @@ def get_eops(
         raise ValueError(
             "Only one of `dates` or `start_date` and `end_date` must be passed."
         )
+
+    if dates is None:
+        dates = pd.bdate_range(start=start_date, end=end_date)
 
     dts: pd.DataFrame = (
         pd.DataFrame(dates, columns=["real_date"]).apply(pd.to_datetime, axis=1)
