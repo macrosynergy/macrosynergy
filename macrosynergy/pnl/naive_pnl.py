@@ -13,6 +13,8 @@ from macrosynergy.management.simulate import make_qdf
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.management.utils import update_df, reduce_df
 
+from macrosynergy.signal import SignalReturnRelations
+
 
 class NaivePnL:
 
@@ -989,6 +991,135 @@ class NaivePnL:
         if thresh is not None:
             df.clip(lower=-thresh, upper=thresh, inplace=True)
 
+def create_results_dataframe(
+    title: str,
+    df: pd.DataFrame,
+    ret: str,
+    sigs: Union[str, List[str]],
+    cids: Union[str, List[str]],
+    sig_ops: Union[str, List[str]],
+    sig_adds: Union[float, List[float]],
+    neutrals: Union[str, List[str]],
+    threshs: Union[float, List[float]],
+    bm: str = None,
+    sig_negs: Union[bool, List[bool]] = None,
+    cosp: bool = False,
+    start: str = None,
+    end: str = None,
+    blacklist: dict = None,
+    freqs: Union[str, List[str]] = "M",
+    agg_sigs: Union[str, List[str]] = "last",
+    sigs_renamed: dict = None,
+    fwin: int = 1,
+    slip: int = 0,
+):
+    # Get the signals table and isolate relevant performance metrics
+    srr = SignalReturnRelations(
+        df=df,
+        rets=ret,
+        sigs=sorted(sigs),
+        cids=cids,
+        sig_neg=sig_negs,
+        cosp=cosp,
+        start=start,
+        end=end,
+        blacklist=blacklist,
+        freqs=freqs,
+        agg_sigs=agg_sigs,
+        fwin=fwin,
+        slip=slip,
+    )
+    sigs_df = (
+        srr.signals_table()
+        .astype("float")[["accuracy", "bal_accuracy", "pearson", "kendall"]]
+        .round(3)
+    )
+
+    # Get the evaluated PnL statistics and isolate relevant performance metrics
+    freq_dict = {
+        "D": "daily",
+        "W": "weekly",
+        "M": "monthly",
+    }
+    pnl_freq = lambda x: freq_dict[x] if x in freq_dict.keys() else "monthly"
+
+    if sig_negs is None:
+        sig_negs = [False] * len(sigs)
+
+    pnl = NaivePnL(
+        df=df,
+        ret=ret,
+        sigs=sorted(sigs),
+        cids=cids,
+        bms=bm,
+        start=start,
+        end=end,
+        blacklist=blacklist,
+    )
+    for idx, sig in enumerate(sigs):
+        pnl.make_pnl(
+            sig=sig,
+            sig_op=(sig_ops if isinstance(sig_ops, str) else sig_ops[idx]),
+            sig_add=(sig_adds if isinstance(sig_adds, (float, int)) else sig_adds[idx]),
+            sig_neg=(sig_negs if isinstance(sig_negs, bool) else sig_negs[idx]),
+            pnl_name=sig,
+            rebal_freq=(
+                pnl_freq(freqs) if isinstance(freqs, str) else pnl_freq(freqs[idx])
+            ),
+            rebal_slip=slip,
+            vol_scale=10,
+            neutral=(neutrals if isinstance(neutrals, str) else neutrals[idx]),
+            thresh=(threshs if isinstance(threshs, (float, int)) else threshs[idx]),
+        )
+
+    if bm is not None:
+        pnl_df = (
+            pnl.evaluate_pnls(pnl_cats=sigs)
+            .transpose()[["Sharpe Ratio", "Sortino Ratio", f"{bm} correl"]]
+            .astype("float")
+            .round(3)
+        )
+    else:
+        pnl_df = (
+            pnl.evaluate_pnls(pnl_cats=sigs)
+            .transpose()[["Sharpe Ratio", "Sortino Ratio"]]
+            .astype("float")
+            .round(3)
+        )
+
+    # Concatenate them and clean them
+    res_df = pd.concat([sigs_df, pnl_df], axis=1)
+
+    metric_map = {
+        "Sharpe Ratio": "Sharpe",
+        "Sortino Ratio": "Sortino",
+        "accuracy": "Accuracy",
+        "bal_accuracy": "Bal. Accuracy",
+        "pearson": "Pearson",
+        "kendall": "Kendall",
+    }
+    if bm is not None:
+        metric_map[f"{bm} correl"] = "Market corr."
+
+    res_df.rename(columns=metric_map, inplace=True)
+
+    if sigs_renamed:
+        res_df.rename(index=sigs_renamed, inplace=True)
+
+    res_df = (
+        res_df.style.format("{:.3f}")
+        .set_caption(title)
+        .set_table_styles(
+            [
+                {
+                    "selector": "caption",
+                    "props": [("text-align", "center"), ("font-weight", "bold")],
+                }
+            ]
+        )
+    )
+
+    return res_df
 
 if __name__ == "__main__":
     cids = ["AUD", "CAD", "GBP", "NZD", "USD", "EUR"]

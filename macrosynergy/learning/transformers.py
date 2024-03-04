@@ -31,13 +31,13 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         :param <bool> positive: boolean to restrict estimated Lasso coefficients to
             be positive.
         """
-        if (type(alpha) != float) and (type(alpha) != int):
+        if not (isinstance(alpha, float) or isinstance(alpha, int)):
             raise TypeError(
                 "The 'alpha' hyper-parameter must be either a float or int."
             )
         if alpha < 0:
             raise ValueError("The 'alpha' hyper-parameter must be non-negative.")
-        if type(positive) != bool:
+        if not isinstance(positive, bool):
             raise TypeError("The 'positive' hyper-parameter must be a boolean.")
 
         self.alpha = alpha
@@ -52,19 +52,19 @@ class LassoSelector(BaseEstimator, TransformerMixin):
             associated with each sample in X.
         """
         # checks
-        if type(X) != pd.DataFrame:
+        if not isinstance(X, pd.DataFrame):
             raise TypeError(
                 "Input feature matrix for the LASSO selector must be a pandas dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas dataframe."
             )
-        if (type(y) != pd.Series) and (type(y) != pd.DataFrame):
+        if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
             raise TypeError(
                 "Target vector for the LASSO selector must be a pandas series or dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas series or dataframe."
             )
-        if type(y) == pd.DataFrame:
+        if isinstance(y, pd.DataFrame):
             if y.shape[1] != 1:
                 raise ValueError(
                     "The target dataframe must have only one column. If used as part of "
@@ -79,7 +79,7 @@ class LassoSelector(BaseEstimator, TransformerMixin):
             raise TypeError("The inner index of X must be datetime.date.")
         if not isinstance(y.index.get_level_values(1)[0], datetime.date):
             raise TypeError("The inner index of y must be datetime.date.")
-    
+
         if not X.index.equals(y.index):
             raise ValueError(
                 "The indices of the input dataframe X and the output dataframe y "
@@ -107,7 +107,7 @@ class LassoSelector(BaseEstimator, TransformerMixin):
             on the Lasso's feature selection capabilities.
         """
         # checks
-        if type(X) != pd.DataFrame:
+        if not isinstance(X, pd.DataFrame):
             raise TypeError(
                 "Input feature matrix for the LASSO selector must be a pandas dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
@@ -129,7 +129,7 @@ class LassoSelector(BaseEstimator, TransformerMixin):
             return pd.DataFrame(
                 index=X.index, columns=["no_signal"], data=0, dtype=np.float16
             )
-        
+
         return X.iloc[:, self.selected_ftr_idxs]
 
 
@@ -161,23 +161,23 @@ class MapSelector(BaseEstimator, TransformerMixin):
         the Macrosynergy panel test.
 
         :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.Series, pd.DataFrame]> Pandas series or dataframe of targets
+        :param <Union[pd.Series, pd.DataFrame]> y: Pandas series or dataframe of targets
             associated with each sample in X.
         """
         # Checks
-        if type(X) != pd.DataFrame:
+        if not isinstance(X, pd.DataFrame):
             raise TypeError(
                 "Input feature matrix for the MAP selector must be a pandas dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas dataframe."
             )
-        if (type(y) != pd.Series) and (type(y) != pd.DataFrame):
+        if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
             raise TypeError(
                 "Target vector for the MAP selector must be a pandas series or dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas series or dataframe."
             )
-        if type(y) == pd.DataFrame:
+        if isinstance(y, pd.DataFrame):
             if y.shape[1] != 1:
                 raise ValueError(
                     "The target dataframe must have only one column. If used as part of "
@@ -258,7 +258,7 @@ class FeatureAverager(BaseEstimator, TransformerMixin):
         :param <Optional[bool]> use_signs: Boolean to specify whether or not to return the
             signs of the benchmark signal instead of the signal itself. Default is False.
         """
-        if type(use_signs) != bool:
+        if not isinstance(use_signs, bool):
             raise TypeError("'use_signs' must be a boolean.")
 
         self.use_signs = use_signs
@@ -340,7 +340,7 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         :param <Any> y: Placeholder for scikit-learn compatibility.
         """
         # checks
-        if type(X) != pd.DataFrame:
+        if not isinstance(X, pd.DataFrame):
             raise TypeError(
                 "Input feature matrix for the ZnScoreAverager must be a pandas "
                 "dataframe. If used as part of an sklearn pipeline, ensure that previous "
@@ -379,7 +379,7 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         :param <pd.DataFrame> X: Pandas dataframe of input features.
         """
         # checks
-        if type(X) != pd.DataFrame:
+        if not isinstance(X, pd.DataFrame):
             raise TypeError(
                 "Input feature matrix for the ZnScoreAverager must be a pandas "
                 "dataframe. If used as part of an sklearn pipeline, ensure that previous "
@@ -556,9 +556,9 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
         :param <bool> with_std: Boolean to specify whether or not to scale the data.
         """
         # checks
-        if type(with_mean) != bool:
+        if not isinstance(with_mean, bool):
             raise TypeError("'with_mean' must be a boolean.")
-        if type(with_std) != bool:
+        if not isinstance(with_std, bool):
             raise TypeError("'with_std' must be a boolean.")
 
         # setup
@@ -578,7 +578,7 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
         :return <PanelStandardScaler>: Fitted PanelStandardScaler object.
         """
         # checks
-        if type(X) not in [pd.DataFrame, pd.Series]:
+        if not isinstance(X, pd.DataFrame) and not isinstance(X, pd.Series):
             raise TypeError(
                 "'X' must be a pandas dataframe or series. If used as part of an sklearn "
                 "pipeline, ensure that previous steps return a pandas dataframe or "

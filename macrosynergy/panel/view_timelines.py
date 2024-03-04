@@ -15,6 +15,7 @@ def view_timelines(
     xcats: Optional[List[str]] = None,
     cids: Optional[List[str]] = None,
     intersect: bool = False,
+    blacklist: Optional[dict] = None,
     val: str = "value",
     cumsum: bool = False,
     start: str = "2000-01-01",
@@ -40,7 +41,7 @@ def view_timelines(
     """Displays a facet grid of time line charts of one or more categories.
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to plot. Default is all in DataFrame.
     :param <List[str]> cids: cross sections to plot. Default is all in DataFrame.
         If this contains only one cross section a single line chart is created.
@@ -84,6 +85,7 @@ def view_timelines(
         xcats=xcats,
         cids=cids,
         intersect=intersect,
+        blacklist=blacklist,
         val=val,
         cumsum=cumsum,
         start=start,

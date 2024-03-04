@@ -9,6 +9,7 @@ import itertools
 from macrosynergy.management.types import QuantamentalDataFrame
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
+from macrosynergy.management.constants import FREQUENCY_MAP
 
 import numpy as np
 import pandas as pd
@@ -17,33 +18,27 @@ import requests.compat
 
 
 @overload
-def get_cid(ticker: str) -> str:
-    ...
+def get_cid(ticker: str) -> str: ...
 
 
 @overload
-def get_cid(ticker: Iterable[str]) -> List[str]:
-    ...
+def get_cid(ticker: Iterable[str]) -> List[str]: ...
 
 
 @overload
-def get_xcat(ticker: str) -> str:
-    ...
+def get_xcat(ticker: str) -> str: ...
 
 
 @overload
-def get_xcat(ticker: Iterable[str]) -> List[str]:
-    ...
+def get_xcat(ticker: Iterable[str]) -> List[str]: ...
 
 
 @overload
-def split_ticker(ticker: str) -> str:
-    ...
+def split_ticker(ticker: str) -> str: ...
 
 
 @overload
-def split_ticker(ticker: Iterable[str]) -> List[str]:
-    ...
+def split_ticker(ticker: Iterable[str]) -> List[str]: ...
 
 
 def split_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, List[str]]:
@@ -146,6 +141,49 @@ def convert_dq_to_iso(date: str) -> str:
         raise ValueError("Incorrect date format, should be YYYYMMDD")
 
 
+def _map_to_business_day_frequency(freq: str, valid_freqs: List[str] = None) -> str:
+    """
+    Maps a frequency string to a business frequency string.
+
+    :param <str> freq: The frequency string to be mapped.
+    :param <List[str]> valid_freqs: The valid frequency strings. If None, defaults to
+        ["D", "W". "M", "Q", "A"].
+    """
+    if not isinstance(freq, str):
+        raise TypeError("Argument `freq` must be a string.")
+
+    if valid_freqs is not None:
+        if (
+            (not isinstance(valid_freqs, list))
+            or (len(valid_freqs) == 0)
+            or (not all(isinstance(x, str) for x in valid_freqs))
+        ):
+            raise TypeError(
+                "Argument `valid_freqs` must be a non-empty list of strings."
+            )
+
+    freq = freq.upper()
+
+    if valid_freqs is None:
+        valid_freqs = list(FREQUENCY_MAP.keys())
+    else:
+        # if all valid_freqs are not Frequncy Map keys, raise error - use set to check
+        if not set(valid_freqs).issubset(set(FREQUENCY_MAP.keys())):
+            raise ValueError(
+                f"`valid_freqs` must be a subset of {list(FREQUENCY_MAP.keys())}."
+                " See macrosynergy.management.constants.FREQUENCY_MAP for more details."
+            )
+    if freq in FREQUENCY_MAP.values():
+        freq = list(FREQUENCY_MAP.keys())[list(FREQUENCY_MAP.values()).index(freq)]
+
+    if freq not in valid_freqs:
+        raise ValueError(
+            f"Frequency must be one of {valid_freqs}, but received {freq}."
+        )
+
+    return FREQUENCY_MAP[freq]
+
+
 def form_full_url(url: str, params: Dict = {}) -> str:
     """
     Forms a full URL from a base URL and a dictionary of parameters.
@@ -164,7 +202,7 @@ def form_full_url(url: str, params: Dict = {}) -> str:
 
 def common_cids(df: pd.DataFrame, xcats: List[str]):
     """
-    Returns a list of cross-sectional identifiers (cids) for which the specified 
+    Returns a list of cross-sectional identifiers (cids) for which the specified
         categories (xcats) are available.
 
     :param <pd.Dataframe> df: Standardized JPMaQS DataFrame with necessary columns:
@@ -172,7 +210,7 @@ def common_cids(df: pd.DataFrame, xcats: List[str]):
     :param <List[str]> xcats: A list with least two categories whose cross-sectional
         identifiers are being considered.
 
-    return <List[str]>: List of cross-sectional identifiers for which all categories in 
+    return <List[str]>: List of cross-sectional identifiers for which all categories in
         `xcats` are available.
     """
 

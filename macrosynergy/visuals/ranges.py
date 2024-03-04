@@ -26,13 +26,13 @@ def view_ranges(
     ylab: Optional[str] = None,
     size: Tuple[float] = (16, 8),
     xcat_labels: Optional[List[str]] = None,
-    legend_loc: str = "best",
+    legend_loc: str = "lower center",
     legend_bbox_to_anchor: Optional[Tuple[float]] = None,
 ):
     """Plots averages and various ranges across sections for one or more categories.
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to be checked on. Default is all
         in the DataFrame.
     :param <List[str]> cids: cross sections to plot. Default is all in DataFrame.
@@ -183,6 +183,8 @@ def view_ranges(
     if (len(xcats) == 1) and (xcat_labels is None):
         ax.get_legend().remove()
     else:
+        if legend_bbox_to_anchor is None:
+            legend_bbox_to_anchor = (0.5, -0.15 - 0.05 * (len(xcats) - 2))
         ax.legend(
             handles=handles[0:],
             labels=labels[0:],
@@ -212,17 +214,19 @@ if __name__ == "__main__":
     )
     df_xcats.loc["XR",] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
     df_xcats.loc["CRY",] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
+    df_xcats.loc["INFL",] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
+    df_xcats.loc["GROWTH",] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    view_ranges(
-        dfd,
-        xcats=["XR"],
-        kind="box",
-        start="2012-01-01",
-        end="2018-01-01",
-        sort_cids_by="std",
-    )
+    # view_ranges(
+    #     dfd,
+    #     xcats=["XR"],
+    #     kind="box",
+    #     start="2012-01-01",
+    #     end="2018-01-01",
+    #     sort_cids_by="std",
+    # )
 
     filter_1 = (dfd["xcat"] == "XR") & (dfd["cid"] == "AUD")
     dfd = dfd[~filter_1]

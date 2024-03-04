@@ -88,6 +88,10 @@ def fetch_release_notes(release_notes_file: str):
     os.system(f'python ./docs/release_notes.py -o "{release_notes_file}"')
 
 
+def format_docstrings(package_dir: str):
+    os.system(f'python ./docs/format_docstrings.py -d "{package_dir}"')
+
+
 def generate_rst_files(
     rst_output_dir: str = RST_OUTPUT_DIR,
     temp_rst_dir: str = TEMP_RST_DIR,
@@ -236,6 +240,7 @@ def driver(
     # generate release notes
     rnl_abs_path = OPx.abspath(OPx.normpath(OPx.join(rst_output_dir, release_notes_md)))
     fetch_release_notes(release_notes_file=rnl_abs_path)
+    format_docstrings(package_dir=f"./{package_name}")  # format the docstrings
     build_examples(markdown=True)
     copy_subpackage_readmes(rst_output_dir=rst_output_dir, package=package_name)
     make_docs(docs_dir=PACKAGE_DOCS_DIR)
