@@ -662,13 +662,44 @@ class SignalReturnRelations:
         maximum amount of signal data available (required because of the applied lag).
         """
         
-        remove_rows = df["xcat"].isin(signal) & df["value"].isna()
-        remove_rows = remove_rows.groupby(df["real_date"]).transform("any")
-        filtered_df = df[~remove_rows]
-        filtered_df = filtered_df.sort_values(["cid", "xcat", "real_date"])
-        filtered_df = filtered_df[["cid", "xcat", "real_date", "value"]].reset_index(drop=True)
+        df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values="value")
 
-        return filtered_df
+        storage = []
+        for c, cid_df in df_w.groupby(level=0):
+            cid_df = cid_df[signal + [ret]]
+
+            final_df = pd.DataFrame(
+                data=np.empty(shape=cid_df.shape),
+                columns=cid_df.columns,
+                index=cid_df.index,
+            )
+            final_df.loc[:, :] = np.NaN
+
+            # Return category is preserved.
+            final_df.loc[:, ret] = cid_df[ret]
+
+            intersection_df = cid_df.loc[:, signal].droplevel(level=0)
+            # Intersection exclusively across the signals.
+            intersection_df = intersection_df.dropna(how="any")
+            if not intersection_df.empty:
+                s_date = intersection_df.index[0]
+                e_date = intersection_df.index[-1]
+
+                final_df.loc[
+                    (c, s_date):(c, e_date), signal
+                ] = intersection_df.to_numpy()
+                storage.append(final_df)
+            else:
+                warnings.warn(
+                    f"Cross-section {c} has no common sample periods for the signals \
+                    {signal} and return {ret}."
+                )
+
+        df = pd.concat(storage)
+        df = df.stack().reset_index().sort_values(["cid", "xcat", "real_date"])
+        df.columns = ["cid", "real_date", "xcat", "value"]
+
+        return df[["cid", "xcat", "real_date", "value"]]
 
     def __table_stats__(
         self,
