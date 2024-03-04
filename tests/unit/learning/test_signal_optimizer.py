@@ -1392,7 +1392,17 @@ class TestAll(unittest.TestCase):
         legend = ax.get_legend()
         labels = [text.get_text() for text in legend.get_texts()]
         self.assertTrue(np.all(sorted(self.X_train.rename(columns=ftr_dict).columns) == sorted(labels)))  
-        
+        # Finally, test that the title works 
+        title = ax.get_title()
+        self.assertTrue(title == "Feature coefficients for pipeline: test")
+        # Try changing the title
+        try:
+            so.coefs_timeplot(name="test", title="hello")
+        except Exception as e:
+            self.fail(f"coefs_timeplot raised an exception: {e}")
+        ax = plt.gca()
+        title = ax.get_title()
+        self.assertTrue(title == "hello")
 
     def test_types_intercepts_timeplot(self):
         so = SignalOptimizer(
