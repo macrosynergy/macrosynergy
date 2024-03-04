@@ -38,7 +38,7 @@ The typical flow when using the `ProxyPnL` class is as follows:
   flowchart TD;
       Sig[Signals]
       HR[Hedge-Ratios]
-      CS[Contract Signals]
+      CS(Contract Signals)
       AUM[AUM]
       LVG[Leverage]
       LVGP[Leverage Position]
@@ -48,7 +48,7 @@ The typical flow when using the `ProxyPnL` class is as follows:
       TC[Trading Cost]
       RC[Roll Cost]
       Distr[Transaction Statistics]
-      PP[Proxy PnL]
+      PP(Proxy PnL)
 
       Sig-->CS
       HR-->CS
