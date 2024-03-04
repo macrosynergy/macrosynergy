@@ -9,6 +9,7 @@ from typing import List, Tuple, Dict, Union
 from collections import defaultdict
 import datetime
 import warnings
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
@@ -21,7 +22,7 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
         This affects non-zero means.
     :param <float> ar_coef: autoregression coefficient (between 0 and 1): default is 0.75.
 
-    :return <np.array>: autocorrelated data series.
+    :return <np.ndarray>: autocorrelated data series.
     """
 
     # Define relative parameters for creating an AR process.
@@ -322,7 +323,7 @@ def make_test_df(
     start: str = "2010-01-01",
     end: str = "2020-12-31",
     style: str = "any",
-):
+) -> QuantamentalDataFrame:
     """
     Generates a test dataframe with pre-defined values.
     These values are meant to be used for testing purposes only.
