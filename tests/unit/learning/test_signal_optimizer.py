@@ -1327,6 +1327,15 @@ class TestAll(unittest.TestCase):
             so.coefs_timeplot(name="test", figsize=("hello", 6))
         with self.assertRaises(TypeError):
             so.coefs_timeplot(name="test", figsize=("hello", "hello"))
+        # ftrs_renamed
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", ftrs_renamed=1)
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", ftrs_renamed={1: "ftr1"})
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", ftrs_renamed={"ftr1": 1})
+        with self.assertRaises(ValueError):
+            so.coefs_timeplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
 
     def test_valid_coefs_timeplot(self):
         so = SignalOptimizer(
@@ -1348,6 +1357,42 @@ class TestAll(unittest.TestCase):
             so.coefs_timeplot(name="test")
         except Exception as e:
             self.fail(f"coefs_timeplot raised an exception: {e}")
+        # Check that the legend is correct
+        ax = plt.gca()
+        legend = ax.get_legend()
+        labels = [text.get_text() for text in legend.get_texts()]
+        self.assertTrue(np.all(sorted(self.X_train.columns) == sorted(labels)))
+        # Now rerun coefs_timeplot but with a feature renaming dictionary
+        ftr_dict = {"CPI": "inflation"}
+        try:
+            so.coefs_timeplot(name="test", ftrs_renamed=ftr_dict)
+        except Exception as e:
+            self.fail(f"coefs_timeplot raised an exception: {e}")
+        ax = plt.gca()
+        legend = ax.get_legend()
+        labels = [text.get_text() for text in legend.get_texts()]
+        self.assertTrue(np.all(sorted(self.X_train.rename(columns=ftr_dict).columns) == sorted(labels)))
+        # Now rename two features
+        ftr_dict = {"CPI": "inflation", "GROWTH": "growth"}
+        try:
+            so.coefs_timeplot(name="test", ftrs_renamed=ftr_dict)
+        except Exception as e:
+            self.fail(f"coefs_timeplot raised an exception: {e}")
+        ax = plt.gca()
+        legend = ax.get_legend()
+        labels = [text.get_text() for text in legend.get_texts()]
+        self.assertTrue(np.all(sorted(self.X_train.rename(columns=ftr_dict).columns) == sorted(labels)))
+        # Now rename all features
+        ftr_dict = {ftr: f"ftr{i}" for i, ftr in enumerate(self.X_train.columns)}
+        try:
+            so.coefs_timeplot(name="test", ftrs_renamed=ftr_dict)
+        except Exception as e:
+            self.fail(f"coefs_timeplot raised an exception: {e}")
+        ax = plt.gca()
+        legend = ax.get_legend()
+        labels = [text.get_text() for text in legend.get_texts()]
+        self.assertTrue(np.all(sorted(self.X_train.rename(columns=ftr_dict).columns) == sorted(labels)))  
+        
 
     def test_types_intercepts_timeplot(self):
         so = SignalOptimizer(
@@ -1433,7 +1478,16 @@ class TestAll(unittest.TestCase):
             so.coefs_stackedbarplot(name="test", figsize=("hello", 6))
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", figsize=("hello", "hello"))
-
+        # ftrs_renamed
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", ftrs_renamed=1)
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", ftrs_renamed={1: "ftr1"})
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", ftrs_renamed={"ftr1": 1})
+        with self.assertRaises(ValueError):
+            so.coefs_stackedbarplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
+        
     def test_valid_coefs_stackedbarplot(self):
         so = SignalOptimizer(
             inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
