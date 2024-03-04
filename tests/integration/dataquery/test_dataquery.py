@@ -4,7 +4,7 @@ import pandas as pd
 import datetime
 from random import random
 from typing import List, Dict, Any
-from macrosynergy.download import JPMaQSDownload
+from macrosynergy.download.jpmaqs import JPMaQSDownload, construct_expressions
 from macrosynergy.download.dataquery import DataQueryInterface
 from macrosynergy.download.exceptions import (
     AuthenticationError,
@@ -111,7 +111,7 @@ class TestDataQueryOAuth(unittest.TestCase):
             client_secret=os.getenv("DQ_CLIENT_SECRET"),
             check_connection=False,
         )
-        bad_exprs: List[str] = jpmaqs.construct_expressions(
+        bad_exprs: List[str] = construct_expressions(
             cids=["CHIROPTERA", "Balenoptera"],
             xcats=["Dumbledore", "Voldemort"],
             tickers=["OBI_WAN_KENOBI", "R_2D_2"],

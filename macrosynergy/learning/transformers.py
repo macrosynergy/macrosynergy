@@ -161,7 +161,7 @@ class MapSelector(BaseEstimator, TransformerMixin):
         the Macrosynergy panel test.
 
         :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.Series, pd.DataFrame]> Pandas series or dataframe of targets
+        :param <Union[pd.Series, pd.DataFrame]> y: Pandas series or dataframe of targets
             associated with each sample in X.
         """
         # Checks

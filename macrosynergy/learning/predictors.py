@@ -185,7 +185,6 @@ class TimeWeightedRegressor(BaseWeightedRegressor):
         dates = sorted(targets.index.get_level_values(1).unique(), reverse=True)
         num_dates = len(dates)
         weights = np.power(2, -np.arange(num_dates) / self.half_life)
-        weights = weights / np.sum(weights)
 
         weight_map = dict(zip(dates, weights))
         self.sample_weights = targets.index.get_level_values(1).map(weight_map).to_numpy()
@@ -242,6 +241,16 @@ class SignWeightedLinearRegression(SignWeightedRegressor):
         )
         super().__init__(model)
 
+    def set_params(self, **params):
+        super().set_params(**params)
+        if 'fit_intercept' in params or 'positive' in params:
+            # Re-initialize the LinearRegression instance with updated parameters
+            self.model = LinearRegression(
+                fit_intercept=self.fit_intercept,
+                positive=self.positive
+            )
+
+        return self
 
 class TimeWeightedLinearRegression(TimeWeightedRegressor):
     def __init__(
@@ -286,6 +295,17 @@ class TimeWeightedLinearRegression(TimeWeightedRegressor):
         )
         super().__init__(half_life=half_life, model=model)
 
+    def set_params(self, **params):
+        super().set_params(**params)
+        if 'fit_intercept' in params or 'positive' in params:
+            # Re-initialize the LinearRegression instance with updated parameters
+            self.model = LinearRegression(
+                fit_intercept=self.fit_intercept,
+                positive=self.positive
+            )
+
+        return self
+
 class SignWeightedLADRegressor(SignWeightedRegressor):
     def __init__(
         self,
@@ -320,6 +340,17 @@ class SignWeightedLADRegressor(SignWeightedRegressor):
         )
         super().__init__(model)
 
+    def set_params(self, **params):
+        super().set_params(**params)
+        if 'fit_intercept' in params or 'positive' in params:
+            # Re-initialize the LinearRegression instance with updated parameters
+            self.model = LADRegressor(
+                fit_intercept=self.fit_intercept,
+                positive=self.positive
+            )
+
+        return self
+
 
 class TimeWeightedLADRegressor(TimeWeightedRegressor):
     def __init__(
@@ -349,9 +380,19 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
         )
         super().__init__(half_life=half_life, model=model)
 
+    def set_params(self, **params):
+        super().set_params(**params)
+        if 'fit_intercept' in params or 'positive' in params:
+            # Re-initialize the LinearRegression instance with updated parameters
+            self.model = LADRegressor(
+                fit_intercept=self.fit_intercept,
+                positive=self.positive
+            )
+
+        return self
 
 class LADRegressor(BaseEstimator, RegressorMixin):
-    def __init__(self, fit_intercept=True, positive=False, tol=None):
+    def __init__(self, fit_intercept=True, positive=False, tol=None, ):
         """
         Custom class to create a linear regression model with model fit determined
         by minimising L1 (absolute) loss.

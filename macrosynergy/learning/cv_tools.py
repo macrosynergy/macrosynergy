@@ -118,6 +118,7 @@ def panel_cv_scores(
 
     # construct the dataframe to return
     if show_longbias:
+        scoring = scoring.copy()
         scoring["Positive prediction ratio"] = make_scorer(
             lambda y_true, y_pred: np.sum(y_pred > 0) / len(y_pred)
         )

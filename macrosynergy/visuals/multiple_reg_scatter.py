@@ -15,13 +15,14 @@ def multiple_reg_scatter(
     title_xadj=0.5,
     title_yadj=0.99,
     title_fontsize=20,
-    xlabel="",
-    ylabel="",
+    xlab="",
+    ylab="",
     fit_reg=True,
     reg_ci=95,
     reg_order=1,
     reg_robust=False,
     coef_box=None,
+    coef_box_font_size=12,
     prob_est="pool",
     separator=None,
     single_chart=False,
@@ -36,8 +37,8 @@ def multiple_reg_scatter(
     :param <int> nrow: number of rows in the grid. Default is 0, which will be set to 1.
     :param <Tuple[float]> figsize: size of the figure. Default is (20, 15).
     :param <str> title: title of the figure. Default is an empty string.
-    :param <str> xlabel: label of the x-axis. Default is an empty string.
-    :param <str> ylabel: label of the y-axis. Default is an empty string.
+    :param <str> xlab: label of the x-axis. Default is an empty string.
+    :param <str> ylab: label of the y-axis. Default is an empty string.
     :param <bool> fit_reg: if True (default) a linear regression line is fitted to the
         data.
     :param <int> reg_ci: confidence interval for the regression line. Default is 95.
@@ -45,6 +46,8 @@ def multiple_reg_scatter(
     :param <bool> reg_robust: if True (default is False) robust standard errors are used.
     :param <str> coef_box: if not None, a box with the coefficients of the regression is
         displayed. Default is None.
+    :param <int> coef_box_font_size: font size of the coefficients box. Default is 12. If 
+        set to 0 it automatically sets the fontsize according to matplotlib.
     :param <str> prob_est: method to estimate the probability. Default is 'pool'.
     :param <int> separator: allows categorizing the scatter analysis by
             integer. This is done by setting it to a year [2010, for instance] which will
@@ -64,8 +67,6 @@ def multiple_reg_scatter(
                 "The length of subplot_titles must be equal to the length of cat_rels."
             )
 
-    # if ncol * nrow > len(cat_rels):
-
     if separator is not None:
         if separator == "cids":
             raise ValueError(
@@ -75,8 +76,8 @@ def multiple_reg_scatter(
         nrows=nrow, ncols=ncol, figsize=figsize, sharex=True, sharey=True
     )
     fig.suptitle(title, x=title_xadj, y=title_yadj, fontsize=title_fontsize)
-    fig.supxlabel(xlabel)
-    fig.supylabel(ylabel)
+    fig.supxlabel(xlab)
+    fig.supylabel(ylab)
 
     for i, cat_rel in enumerate(cat_rels):
         row = i // ncol
@@ -117,6 +118,7 @@ def multiple_reg_scatter(
             reg_order=reg_order,
             reg_robust=reg_robust,
             coef_box=coef_box,
+            coef_box_font_size=coef_box_font_size,
             prob_est=prob_est,
             single_chart=single_chart,
             ax=ax,
@@ -249,17 +251,18 @@ if __name__ == "__main__":
     multiple_reg_scatter(
         [cr1, cr2, cr3, cr4, cr5, cr6],
         title="Growth trend and subsequent sectoral equity returns.",
-        xlabel="Real technical growth trend",
-        ylabel="Excess Return",
+        xlab="Real technical growth trend",
+        ylab="Excess Return",
         ncol=3,
         nrow=2,
+        coef_box="upper right"
     )
 
     multiple_reg_scatter(
         [cr1, cr2, cr3, cr4, cr5, cr6],
         title="Growth trend and subsequent sectoral equity returns.",
-        xlabel="Real technical growth trend",
-        ylabel="Excess Return",
+        xlab="Real technical growth trend",
+        ylab="Excess Return",
         ncol=6,
         nrow=2,
     )

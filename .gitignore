@@ -190,3 +190,5 @@ credentials*.json
 # Coverage files
 coverage/
 coverage.xml
+
+*.pem

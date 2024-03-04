@@ -6,3 +6,4 @@ scikit-learn >= 1.0.2
 numpy >= 1.21.6
 requests >= 2.27.1
 tqdm >= 4.62
+Jinja2 >= 2.10

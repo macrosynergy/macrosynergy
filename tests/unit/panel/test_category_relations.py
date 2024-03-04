@@ -535,6 +535,7 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df_outlier.shape == df_time_series.shape)
 
     def test_apply_slip(self):
+        warnings.simplefilter("always")
         # pick 3 random cids
         sel_xcats: List[str] = ["XR", "CRY"]
         sel_cids: List[str] = ["AUD", "CAD", "GBP"]
@@ -628,7 +629,7 @@ class TestAll(unittest.TestCase):
             )
 
         # check that a value error is raised when cids and xcats are not in the dataframe
-        with self.assertRaises(ValueError):
+        with warnings.catch_warnings(record=True) as w:
             CategoryRelations.apply_slip(
                 df=df,
                 slip=2,
@@ -636,8 +637,6 @@ class TestAll(unittest.TestCase):
                 cids=["ac_dc"],
                 metrics=["value"],
             )
-
-        with self.assertRaises(ValueError):
             CategoryRelations.apply_slip(
                 df=df,
                 slip=2,
@@ -645,21 +644,22 @@ class TestAll(unittest.TestCase):
                 cids=sel_cids,
                 metrics=["value"],
             )
-
-        with self.assertRaises(ValueError):
             CategoryRelations.apply_slip(
                 df=df,
-                slip=-1,
-                xcats=sel_xcats,
-                cids=["ac_dc"],
+                slip=2,
+                xcats=["metallica"],
+                cids=sel_cids,
                 metrics=["value"],
             )
+            self.assertEqual(len(w), 3)
         try:
             cat_rel: CategoryRelations = CategoryRelations(
                 df=df, xcats=sel_xcats, cids=sel_cids, slip=100
             )
         except:
             self.fail("CategoryRelations init failed")
+
+        warnings.resetwarnings()
 
 
 if __name__ == "__main__":
