@@ -1518,6 +1518,39 @@ class TestAll(unittest.TestCase):
             so.coefs_stackedbarplot(name="test")
         except Exception as e:
             self.fail(f"coefs_stackedbarplot raised an exception: {e}")
+        # Check that the title is correct
+        ax = plt.gca()
+        title = ax.get_title()
+        self.assertTrue(title == "Stacked bar plot of model coefficients: test")
+        # Change the title
+        try:
+            so.coefs_stackedbarplot(name="test", title="hello")
+        except Exception as e:
+            self.fail(f"coefs_stackedbarplot raised an exception: {e}")
+        ax = plt.gca()
+        title = ax.get_title()
+        self.assertTrue(title == "hello")
+        # Now rerun coefs_stackedbarplot but with a feature renaming dictionary
+        ftr_dict = {"CPI": "inflation"}
+        try:
+            so.coefs_stackedbarplot(name="test", ftrs_renamed=ftr_dict)
+        except Exception as e:
+            self.fail(f"coefs_stackedbarplot raised an exception: {e}")
+        ax = plt.gca()
+        legend = ax.get_legend()
+        labels = sorted([text.get_text() for text in legend.get_texts()])
+        # Check that the legend is correct
+        ftrcoef_df = so.get_ftr_coefficients(name="test")
+        ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
+        ftrcoef_df = ftrcoef_df.drop(columns=["real_date", "name"])
+        ftrcoef_df = ftrcoef_df.rename(columns=ftr_dict)
+        avg_coefs = ftrcoef_df.groupby("year").mean()
+        pos_coefs = avg_coefs.clip(lower=0)
+        neg_coefs = avg_coefs.clip(upper=0)
+        correct_labels = ['POS_' + col for col in list(pos_coefs.sum().index[pos_coefs.sum() > 0])]
+        correct_labels += ['NEG_' + col for col in list(neg_coefs.sum().index[neg_coefs.sum() < 0])]
+        correct_labels = sorted(correct_labels)
+        self.assertTrue(np.all(labels == correct_labels))
 
     def test_types_nsplits_timeplot(self):
         so = SignalOptimizer(
