@@ -184,7 +184,6 @@ class SignalReturnRelations:
         self.end = end
         self.blacklist = blacklist
         self.fwin = fwin
-        self.df = df.copy()
 
         if not self.is_list_of_strings(rets):
             self.rets = [rets]
@@ -219,23 +218,15 @@ class SignalReturnRelations:
 
         if len(self.signs) != len(self.sigs):
             raise ValueError("Signs must have a length equal to signals")
-
-        self.manipulate_df(
-            xcat=self.sigs + [self.rets[0]],
-            freq=self.freqs[0],
-            agg_sig=self.agg_sigs[0],
+        
+        self.df = reduce_df(
+            df,
+            xcats=self.xcats,
+            cids=self.cids,
+            start=self.start,
+            end=self.end,
+            blacklist=self.blacklist,
         )
-        if len(self.sigs) > 1:
-            self.df_sigs = self.__rival_sigs__(self.rets[0])
-
-        self.df_cs = self.__output_table__(
-            cs_type="cids", ret=self.rets[0], sig=self.sigs[0]
-        )
-        self.df_ys = self.__output_table__(
-            cs_type="years", ret=self.rets[0], sig=self.sigs[0]
-        )
-
-        # self.sigs[0] = self.revert_negation(self.sigs[0])
 
     def __rival_sigs__(self, ret, sigs=None):
         """
@@ -255,41 +246,6 @@ class SignalReturnRelations:
             )
 
         return df_out
-
-    def signals_table(self, sigs: List[str] = None):
-        """
-        Output table on relations of various signals with the target return.
-
-        :param <List[str]> sigs: signal categories to be included in the panel-level
-            table. Default is None and all present signals will be displayed. Alternative
-            is a valid subset of the possible categories. Primary signal must be passed
-            if to be included.
-
-        NB.:
-        Analysis will be based exclusively on the panel level. Will only return a table
-        if rival signals have been defined upon instantiation. If the communal sample
-        parameter has been set to True, all signals will be aligned on the individual
-        cross-sectional level.
-        """
-
-        try:
-            df_sigs = self.df_sigs.round(decimals=3)
-        except Exception:
-            error_msg = "Additional signals have not been defined on the instance."
-            raise AttributeError(error_msg)
-        else:
-            # Set to all available signals.
-            sigs = self.sigs if sigs is None else sigs
-
-            assert isinstance(sigs, list), "List of signals expected."
-
-            sigs_error = (
-                f"The requested signals must be a subset of the primary plus "
-                f"additional signals received, {self.sigs}."
-            )
-            assert set(sigs).issubset(set(self.sigs)), sigs_error
-
-            return df_sigs.loc[sigs, :]
 
     @staticmethod
     def __yaxis_lim__(accuracy_df: pd.DataFrame):
@@ -452,12 +408,6 @@ class SignalReturnRelations:
         if ret is None and sigs is None:
             ret = self.rets[0]
             sigs = self.sigs
-            if type == "cross_section":
-                df_xs = self.df_cs
-            elif type == "years":
-                df_xs = self.df_ys
-            else:
-                df_xs = self.df_sigs
         else:
             if ret is None:
                 ret = self.rets[0]
@@ -1428,12 +1378,12 @@ if __name__ == "__main__":
     from statsmodels.tsa.stattools import grangercausalitytests
 
     def granger(x, y):
-        return grangercausalitytests(np.array([x, y]).T, maxlag=3, verbose=False)[1][0][
+        return grangercausalitytests(np.array([x, y]).T, maxlag=3, addconst=True, verbose=False)[1][0][
             "ssr_ftest"
         ][0]
 
     def granger_pval(x, y):
-        return grangercausalitytests(np.array([x, y]).T, maxlag=3, verbose=False)[1][0][
+        return grangercausalitytests(np.array([x, y]).T, maxlag=3, addconst=True, verbose=False)[1][0][
             "ssr_ftest"
         ][1]
 
@@ -1464,13 +1414,11 @@ if __name__ == "__main__":
         additional_metrics=[spearman, granger, granger_pval],
     )
 
+    df_sigs = srn.multiple_relations_table()
+    print(df_sigs)
+    
     dfsum = srn.single_relation_table(table_type="cross_section")
     print(dfsum)
-
-    df_sigs = srn.signals_table(sigs=["CRY_NEG", "INFL_NEG"])
-    df_sigs_all = srn.signals_table()
-    print(df_sigs)
-    print(df_sigs_all)
 
     srn.accuracy_bars(
         type="signals",
@@ -1511,7 +1459,7 @@ if __name__ == "__main__":
         blacklist=black,
     )
 
-    sr.accuracy_bars(type="signals", title="Accuracy")
+    sr.accuracy_bars(sigs=["CRY", "INFL"], type="signals", title="Accuracy")
     sr.correlation_bars(type="signals", title="Correlation")
 
     srt = sr.single_relation_table(ret="XRH", xcat="INFL", freq="Q", agg_sigs="last")
