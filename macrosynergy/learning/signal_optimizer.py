@@ -1068,13 +1068,16 @@ class SignalOptimizer:
 
         return ftrcoef_df.mean(skipna=True), ftrcoef_df.std(skipna=True)
     
-    def coefs_timeplot(self, name, title=None, figsize=(10, 6)):
+    def coefs_timeplot(self, name, title=None, ftrs_renamed: dict = None, figsize=(10, 6)):
         """
         Function to plot the time series of feature coefficients for a given pipeline.
 
         :param <str> name: Name of the pipeline.
         :param <Optional[str]> title: Title of the plot. Default is None. This creates
             a figure title of the form "Feature coefficients for pipeline: {name}".
+        :param <Optional[dict]> ftrs_renamed: Dictionary to rename the feature names for
+            visualisation in the plot legend. Default is None, which uses the original
+            feature names.
         :param <Tuple[Union[float, int], Union[float,int]]> figsize: Tuple of floats or
             ints denoting the figure size.
 
@@ -1101,6 +1104,14 @@ class SignalOptimizer:
             )
         if not isinstance(title, str) and title is not None:
             raise TypeError("The title must be a string.")
+        if ftrs_renamed is not None:
+            if not isinstance(ftrs_renamed, dict):
+                raise TypeError("The ftrs_renamed argument must be a dictionary.")
+            for key, value in ftrs_renamed.items():
+                if not isinstance(key, str):
+                    raise TypeError("The keys of the ftrs_renamed dictionary must be strings.")
+                if not isinstance(value, str):
+                    raise TypeError("The values of the ftrs_renamed dictionary must be strings.")
         if not isinstance(figsize, tuple):
             raise TypeError("The figsize argument must be a tuple.")
         if len(figsize) != 2:
@@ -1121,12 +1132,16 @@ class SignalOptimizer:
 
         # Create time series plot
         fig, ax = plt.subplots()
-        ftrcoef_df.plot(ax=ax, figsize=figsize)
+        if ftrs_renamed is not None:
+            ftrcoef_df.rename(columns=ftrs_renamed).plot(ax=ax, figsize=figsize)
+        else:
+            ftrcoef_df.plot(ax=ax, figsize=figsize)
 
         if title is not None:
             plt.title(title)
         else:
             plt.title(f"Feature coefficients for pipeline: {name}")
+            
         plt.show()
 
     def intercepts_timeplot(self, name, title=None, figsize=(10, 6)):
