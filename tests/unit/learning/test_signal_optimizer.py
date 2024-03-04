@@ -1295,3 +1295,216 @@ class TestAll(unittest.TestCase):
             std_coefs = ftr_coefs.iloc[:,2:].std(skipna=True)
             self.assertTrue(np.all(parameter_stats[0] == mean_coefs))
             self.assertTrue(np.all(parameter_stats[1] == std_coefs))
+
+    def test_types_coefs_timeplot(self):
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+        )
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that a wrong signal name raises an error
+        with self.assertRaises(ValueError):
+            so.coefs_timeplot(name="test2")
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name=1)
+        # title
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", title=1)
+        # figsize
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", figsize="figsize")
+        with self.assertRaises(ValueError):
+            so.coefs_timeplot(name="test", figsize=(0,1,2))
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", figsize=("hello", "hello"))
+
+    def test_valid_coefs_timeplot(self):
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+        )
+        # Test that an error is raised if calculate_predictions has not been run
+        with self.assertRaises(ValueError):
+            so.coefs_timeplot(name="test")
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that running coefs_timeplot on pipeline "test" works
+        try:
+            so.coefs_timeplot(name="test")
+        except Exception as e:
+            self.fail(f"coefs_timeplot raised an exception: {e}")
+
+    def test_types_intercepts_timeplot(self):
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+        )
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that a wrong signal name raises an error
+        with self.assertRaises(ValueError):
+            so.intercepts_timeplot(name="test2")
+        with self.assertRaises(TypeError):
+            so.intercepts_timeplot(name=1)
+        # title
+        with self.assertRaises(TypeError):
+            so.intercepts_timeplot(name="test", title=1)
+        # figsize
+        with self.assertRaises(TypeError):
+            so.intercepts_timeplot(name="test", figsize="figsize")
+        with self.assertRaises(ValueError):
+            so.intercepts_timeplot(name="test", figsize=(0,1,2))
+        with self.assertRaises(TypeError):
+            so.intercepts_timeplot(name="test", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
+            so.intercepts_timeplot(name="test", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
+            so.intercepts_timeplot(name="test", figsize=("hello", "hello"))
+
+    def test_valid_intercepts_timeplot(self):
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+        )
+        # Test that an error is raised if calculate_predictions has not been run
+        with self.assertRaises(ValueError):
+            so.intercepts_timeplot(name="test")
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that running intercepts_timeplot on pipeline "test" works
+        try:
+            so.intercepts_timeplot(name="test")
+        except Exception as e:
+            self.fail(f"intercepts_timeplot raised an exception: {e}")
+
+    def test_types_coefs_stackedbarplot(self):
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+        )
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that a wrong signal name raises an error
+        with self.assertRaises(ValueError):
+            so.coefs_stackedbarplot(name="test2")
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name=1)
+        # title
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", title=1)
+        # figsize
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", figsize="figsize")
+        with self.assertRaises(ValueError):
+            so.coefs_stackedbarplot(name="test", figsize=(0,1,2))
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", figsize=("hello", "hello"))
+
+    def test_valid_coefs_stackedbarplot(self):
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+        )
+        # Test that an error is raised if calculate_predictions has not been run
+        with self.assertRaises(ValueError):
+            so.coefs_stackedbarplot(name="test")
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that running coefs_stackedbarplot on pipeline "test" works
+        try:
+            so.coefs_stackedbarplot(name="test")
+        except Exception as e:
+            self.fail(f"coefs_stackedbarplot raised an exception: {e}")
+
+    def test_types_nsplits_timeplot(self):
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+        )
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that a wrong signal name raises an error
+        with self.assertRaises(ValueError):
+            so.nsplits_timeplot(name="test2")
+        with self.assertRaises(TypeError):
+            so.nsplits_timeplot(name=1)
+        # title
+        with self.assertRaises(TypeError):
+            so.nsplits_timeplot(name="test", title=1)
+        # figsize
+        with self.assertRaises(TypeError):
+            so.nsplits_timeplot(name="test", figsize="figsize")
+        with self.assertRaises(ValueError):
+            so.nsplits_timeplot(name="test", figsize=(0,1,2))
+        with self.assertRaises(TypeError):
+            so.nsplits_timeplot(name="test", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
+            so.nsplits_timeplot(name="test", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
+            so.nsplits_timeplot(name="test", figsize=("hello", "hello"))
+
+    @parameterized.expand([True, False])
+    def test_valid_nsplits_timeplot(self, change_n_splits):
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train, change_n_splits=change_n_splits
+        )
+        # Test that an error is raised if calculate_predictions has not been run
+        with self.assertRaises(ValueError):
+            so.nsplits_timeplot(name="test")
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that running nsplits_timeplot on pipeline "test" works
+        try:
+            so.nsplits_timeplot(name="test")
+        except Exception as e:
+            self.fail(f"nsplits_timeplot raised an exception: {e}")

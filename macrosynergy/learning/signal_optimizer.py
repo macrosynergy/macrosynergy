@@ -1297,8 +1297,61 @@ class SignalOptimizer:
         plt.tight_layout()
         plt.show()
 
-    def nsplits_timeplot(self,name):
-        pass
+    def nsplits_timeplot(self, name, title=None, figsize=(10, 6)):
+        """
+        Method to plot the time series for the number of cross-validation splits used 
+        by the signal optimizer. 
+
+        :param <str> name: Name of the pipeline.
+        :param <Optional[str]> title: Title of the plot. Default is None. This creates
+            a figure title of the form "Number of CV splits for pipeline: {name}".
+        :param <Tuple[Union[float, int], Union[float,int]]> figsize: Tuple of floats or
+            ints denoting the figure size.
+
+        :return: Time series plot of the number of cross-validation splits for the given
+            pipeline.
+        """
+        # Checks 
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.chosen_models.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
+        models_df = self.get_optimal_models(name)
+       
+        if not isinstance(title, str) and title is not None:
+            raise TypeError("The title must be a string.")
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, (int, float)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
+            
+        # Set the style
+        plt.style.use("seaborn-v0_8-darkgrid")
+
+        # Reshape dataframe for plotting
+        models_df = models_df.set_index("real_date").sort_index()
+        models_df = models_df.iloc[:, -1]
+
+        # Create time series plot
+        fig, ax = plt.subplots()
+        models_df.plot(ax=ax, figsize=figsize)
+        if title is not None:
+            plt.title(title)
+        else:
+            plt.title(f"Number of CV splits for pipeline: {name}")
+
+        plt.show()
+
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
@@ -1395,6 +1448,7 @@ if __name__ == "__main__":
     so.coefs_timeplot("test")
     so.intercepts_timeplot("test")
     so.coefs_stackedbarplot("test")
+    so.nsplits_timeplot("test")
     # (1) Example SignalOptimizer usage.
     #     We get adaptive signals for a linear regression and a KNN regressor, with the
     #     hyperparameters for the latter optimised across regression balanced accuracy.
