@@ -1,8 +1,6 @@
 """
 Functions used to visualize correlations across categories or cross-sections of
 panels.
-
-::docs::correl_matrix::sort_first::
 """
 import itertools
 import pandas as pd
@@ -14,7 +12,8 @@ from typing import List, Union, Tuple, Dict, Optional, Any
 from collections import defaultdict
 
 from macrosynergy.management.utils import reduce_df
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import _map_to_business_day_frequency
 
 
 def view_correlation(
@@ -39,7 +38,7 @@ def view_correlation(
     Visualize correlation across categories or cross-sections of panels.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to be correlated. Default is all in the
         DataFrame. If xcats contains only one category the correlation coefficients
         across cross sections are displayed. If xcats contains more than one category,
@@ -90,12 +89,7 @@ def view_correlation(
     df = df[col_names]
 
     if freq is not None:
-        freq_options = ["W", "M", "Q"]
-        error_message = (
-            f"Frequency parameter must be one of the following options:"
-            f"{freq_options}."
-        )
-        assert freq in freq_options, error_message
+        freq = _map_to_business_day_frequency(freq=freq, valid_freqs=["W", "M", "Q"])
 
     xcats = xcats if isinstance(xcats, list) else [xcats]
 
@@ -144,7 +138,8 @@ def view_correlation(
 
             if title is None:
                 title = (
-                    f"Cross-sectional correlation of {xcats[0]} and {xcats_secondary[0]} from {s_date} to "
+                    f"Cross-sectional correlation of {xcats[0]} and {xcats_secondary[0]} "
+                    f"from {s_date} to "
                     f"{e_date}"
                 )
             xlabel = f"{xcats[0]} cross-sections"
@@ -161,10 +156,7 @@ def view_correlation(
             )
 
             if title is None:
-                title = (
-                    f"Cross-category correlation of {xcats[0]} from {s_date} to "
-                    f"{e_date}"
-                )
+                title = f"Cross-category correlation from {s_date} to " f"{e_date}"
         corr = (
             pd.concat([df_w1, df_w2], axis=1, keys=["df_w1", "df_w2"])
             .corr()
@@ -172,7 +164,8 @@ def view_correlation(
         )
 
         if cluster:
-            # Since the correlation matrix is not necessarily symmetric, clustering is done in two stages.
+            # Since the correlation matrix is not necessarily symmetric, clustering is
+            # done in two stages.
             if corr.shape[0] > 1:
                 corr = _cluster_correlations(corr=corr, is_symmetric=False)
 
@@ -213,19 +206,22 @@ def view_correlation(
         # mask is implemented because correlation coefficients are symmetric.
         mask: np.ndarray = np.triu(np.ones_like(corr, dtype=bool))
 
+    ax: plt.Axes
     fig, ax = plt.subplots(figsize=size)
-    sns.set(style="ticks")
-    sns.heatmap(
-        corr,
-        mask=mask,
-        cmap="vlag_r",
-        center=0,
-        vmin=min_color,
-        vmax=max_color,
-        square=False,
-        linewidths=0.5,
-        cbar_kws={"shrink": 0.5},
-    )
+
+    with sns.axes_style("white"):
+        with sns.axes_style("ticks"):
+            sns.heatmap(
+                corr,
+                mask=mask,
+                cmap="vlag_r",
+                center=0,
+                vmin=min_color,
+                vmax=max_color,
+                square=False,
+                linewidths=0.5,
+                cbar_kws={"shrink": 0.5},
+            )
 
     ax.set(xlabel=xlabel, ylabel=ylabel)
     ax.set_title(title, fontsize=14)
@@ -244,7 +240,8 @@ def _transform_df_for_cross_sectional_corr(
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame.
     :param <str> val: name of column that contains the values of interest. Default is
         'value'.
-    :param <str> freq: Down-sampling frequency option. By default values are not down-sampled.
+    :param <str> freq: Down-sampling frequency option. By default values are not
+        down-sampled.
 
     :return <pd.Dataframe>: The transformed dataframe.
     """
@@ -363,7 +360,7 @@ def _cluster_correlations(
 
     :param <pd.Dataframe> corr: dataframe representing a correlation matrix.
     :param <bool> is_symmetric: if True, rows and columns are rearranged identically.
-                                If False, only rows are reordered.
+        If False, only rows are reordered.
 
     :return <pd.Dataframe>: The sorted correlation dataframe.
     """

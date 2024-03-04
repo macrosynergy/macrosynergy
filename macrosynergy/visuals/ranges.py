@@ -9,7 +9,7 @@ import seaborn as sns
 from typing import List, Tuple, Callable, Optional
 from packaging import version
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
 
 
@@ -26,11 +26,13 @@ def view_ranges(
     ylab: Optional[str] = None,
     size: Tuple[float] = (16, 8),
     xcat_labels: Optional[List[str]] = None,
+    legend_loc: str = "lower center",
+    legend_bbox_to_anchor: Optional[Tuple[float]] = None,
 ):
     """Plots averages and various ranges across sections for one or more categories.
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to be checked on. Default is all
         in the DataFrame.
     :param <List[str]> cids: cross sections to plot. Default is all in DataFrame.
@@ -47,7 +49,14 @@ def view_ranges(
     :param <str> ylab: y label. Default is no label.
     :param <Tuple[float]> size: Tuple of width and height of graph. Default is (16, 8).
     :param <List[str]> xcat_labels: custom labels to be used for the ranges.
+    :param <str> legend_loc: location of legend; passed to matplotlib.pyplot.legend() as
+        `loc`. Default is 'center right'.
+    :param <Tuple[float]> legend_bbox_to_anchor: passed to matplotlib.pyplot.legend() as
+        `bbox_to_anchor`. Default is None.
 
+    Please see [Matplotlib's Legend Documentation]:
+    (https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.legend.html)
+    for more information on the legend parameters `loc` and `bbox_to_anchor`.
     """
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
@@ -174,7 +183,17 @@ def view_ranges(
     if (len(xcats) == 1) and (xcat_labels is None):
         ax.get_legend().remove()
     else:
-        ax.legend(handles=handles[0:], labels=labels[0:])
+        if legend_bbox_to_anchor is None:
+            legend_bbox_to_anchor = (0.5, -0.15 - 0.05 * (len(xcats) - 2))
+        ax.legend(
+            handles=handles[0:],
+            labels=labels[0:],
+            loc=legend_loc,
+            bbox_to_anchor=legend_bbox_to_anchor,
+        )
+
+    plt.tight_layout()
+
     plt.show()
 
 
@@ -195,17 +214,19 @@ if __name__ == "__main__":
     )
     df_xcats.loc["XR",] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
     df_xcats.loc["CRY",] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
+    df_xcats.loc["INFL",] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
+    df_xcats.loc["GROWTH",] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    view_ranges(
-        dfd,
-        xcats=["XR"],
-        kind="box",
-        start="2012-01-01",
-        end="2018-01-01",
-        sort_cids_by="std",
-    )
+    # view_ranges(
+    #     dfd,
+    #     xcats=["XR"],
+    #     kind="box",
+    #     start="2012-01-01",
+    #     end="2018-01-01",
+    #     sort_cids_by="std",
+    # )
 
     filter_1 = (dfd["xcat"] == "XR") & (dfd["cid"] == "AUD")
     dfd = dfd[~filter_1]

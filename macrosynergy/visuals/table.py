@@ -3,13 +3,13 @@ from typing import List, Optional, Tuple
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from macrosynergy.signal.signal_return import SignalsReturns
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 
 
 def view_table(
     df: pd.DataFrame,
     title: Optional[str] = None,
+    title_fontsize: Optional[int] = 16,
     figsize: Optional[Tuple[float]] = (14, 4),
     min_color: float = -1,
     max_color: float = 1,
@@ -18,12 +18,14 @@ def view_table(
     xticklabels: Optional[List[str]] = None,
     yticklabels: Optional[List[str]] = None,
     annot: bool = True,
+    fmt: str = ".2f",
 ) -> None:
     """
     Displays a DataFrame representing a table as a heatmap.
 
     :param <pd.Dataframe> table: table to be displayed.
     :param <str> title: string of chart title; defaults depend on type of range plot.
+    :param <int> title_fontsize: font size of chart header. Default is 16.
     :param <Tuple[float]> figsize: Tuple (w, h) of width and height of plot.
     :param <float> min_color: minimum value of colorbar.
     :param <float> max_color: maximum value of colorbar.
@@ -55,6 +57,7 @@ def view_table(
     elif len(yticklabels) != len(df.index):
         raise ValueError("Number of yticklabels must match number of rows")
 
+    ax: plt.Axes
     fig, ax = plt.subplots(figsize=figsize)
     sns.set(style="ticks")
     sns.heatmap(
@@ -66,12 +69,14 @@ def view_table(
         linewidths=0.5,
         cbar_kws={"shrink": 0.5},
         annot=annot,
+        fmt=fmt,
         xticklabels=xticklabels,
         yticklabels=yticklabels,
     )
 
     ax.set(xlabel=xlabel, ylabel=ylabel)
-    ax.set_title(title, fontsize=14)
+    ax.set_title(title, fontsize=title_fontsize)
+    plt.tight_layout()
 
     plt.show()
 

@@ -2,18 +2,20 @@ import unittest
 from matplotlib import pyplot as plt
 import pandas as pd
 from typing import List, Dict, Any
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 from macrosynergy.visuals import Heatmap
 import matplotlib
+from unittest.mock import patch
 
 
 class TestAll(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         # Prevents plots from being displayed during tests.
+        plt.close("all")
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
-
+        self.mock_show = patch("matplotlib.pyplot.show").start()
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD"]
         self.xcats: List[str] = ["XR", "CRY", "INFL"]
         self.metric = "value"
@@ -27,7 +29,13 @@ class TestAll(unittest.TestCase):
 
     @classmethod
     def tearDownClass(self) -> None:
+        patch.stopall()
+        plt.close("all")
+        patch.stopall()
         matplotlib.use(self.mpl_backend)
+
+    def tearDown(self) -> None:
+        plt.close("all")
 
     def setUp(self):
         self.constructor_args: Dict[str, Any] = {
@@ -101,4 +109,3 @@ class TestAll(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

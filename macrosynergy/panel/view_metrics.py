@@ -5,7 +5,7 @@ set of cross sections and extended categories.
 import pandas as pd
 
 from typing import List, Tuple, Optional
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 
 import macrosynergy.visuals as msv
 
@@ -58,12 +58,12 @@ def view_metrics(
         agg=agg,
         metric=metric,
         title=title,
-        figsize=figsize
+        figsize=figsize,
     )
 
 
 if __name__ == "__main__":
-    test_cids: List[str] = ["USD","EUR", "GBP"]
+    test_cids: List[str] = ["USD", "EUR", "GBP"]
     test_xcats: List[str] = ["FX", "IR"]
     dfE: pd.DataFrame = make_test_df(
         cids=test_cids, xcats=test_xcats, style="sharp-hill"

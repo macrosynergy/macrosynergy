@@ -10,18 +10,20 @@ from .view_panel_dates import view_panel_dates
 from .correlation import view_correlation
 from .ranges import view_ranges
 from .table import view_table
+from .multiple_reg_scatter import multiple_reg_scatter
 
-TYPES = ["NoneType", "Numeric"]
-CLASSES = ["FacetPlot", "LinePlot", "Plotter", "Heatmap"]
-MODULES = []
-FUNCTIONS = [
-    "timelines",
-    "view_metrics",
-    "view_grades",
-    "view_panel_dates",
+
+__all__ = [
     "view_correlation",
+    "FacetPlot",
+    "view_grades",
+    "Heatmap",
+    "LinePlot",
+    "view_metrics",
+    "Plotter",
     "view_ranges",
-    "view_table"
+    "view_table",
+    "timelines",
+    "view_panel_dates",
+    "multiple_reg_scatter"
 ]
-
-__all__ = CLASSES + MODULES

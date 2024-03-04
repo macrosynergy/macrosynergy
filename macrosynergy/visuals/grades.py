@@ -1,5 +1,6 @@
 """
-Functions for visualizing data grading and blacklisted periods from a quantamental DataFrame.
+Functions for visualizing data grading and blacklisted periods from a quantamental 
+DataFrame.
 """
 import numpy as np
 import pandas as pd
@@ -7,7 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Union, Tuple
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.visuals import Heatmap
 
 

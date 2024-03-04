@@ -2,9 +2,10 @@ import unittest
 import pandas as pd
 import warnings
 import datetime
+import numpy as np
 
 from typing import List, Tuple, Dict, Union, Set, Any
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import (
     get_cid,
@@ -21,7 +22,12 @@ from macrosynergy.management.utils import (
     drop_nan_series,
     ticker_df_to_qdf,
     qdf_to_ticker_df,
+    get_eops,
+    _map_to_business_day_frequency,
 )
+from macrosynergy.management.constants import FREQUENCY_MAP
+from macrosynergy.management.utils.math import expanding_mean_with_nan
+from tests.simulate import make_qdf
 
 
 class TestFunctions(unittest.TestCase):
@@ -310,6 +316,8 @@ class TestFunctions(unittest.TestCase):
             dfu: pd.DataFrame = drop_nan_series(df=df_test, raise_warning=False)
             self.assertEqual(len(w), 9)
 
+        warnings.resetwarnings()
+
     def test_qdf_to_ticker_df(self):
         cids: List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
         xcats: List[str] = ["FXXR", "IR", "EQXR", "CRY", "FXFW"]
@@ -559,6 +567,154 @@ class TestFunctions(unittest.TestCase):
                 df=df, groupby_columns=["cid", "xcat"], freq=freq, agg=agg_method
             )
 
+    def test_rolling_mean(self):
+        self.__dict__["cids"] = ["AUD", "CAD", "GBP", "NZD"]
+        self.__dict__["xcats"] = ["XR", "CRY", "GROWTH", "INFL"]
+        df_cids = pd.DataFrame(
+            index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+        )
+        df_cids.loc["AUD"] = ["2000-01-01", "2020-12-31", 0.1, 1]
+        df_cids.loc["CAD"] = ["2001-01-01", "2020-11-30", 0, 1]
+        df_cids.loc["GBP"] = ["2002-01-01", "2020-11-30", 0, 2]
+        df_cids.loc["NZD"] = ["2002-01-01", "2020-09-30", -0.1, 2]
+
+        df_xcats = pd.DataFrame(
+            index=self.xcats,
+            columns=[
+                "earliest",
+                "latest",
+                "mean_add",
+                "sd_mult",
+                "ar_coef",
+                "back_coef",
+            ],
+        )
+
+        df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+        df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
+        df_xcats.loc["GROWTH"] = ["2001-01-01", "2020-10-30", 1, 2, 0.9, 1]
+        df_xcats.loc["INFL"] = ["2001-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
+
+        dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.__dict__["dfd"] = dfd
+
+        dfd_xr = dfd[dfd["xcat"] == "XR"]
+        self.__dict__["dfd_xr"] = dfd_xr
+
+        dfw = dfd_xr.pivot(index="real_date", columns="cid", values="value")
+        self.__dict__["dfw"] = dfw
+        no_rows = dfw.shape[0]
+
+        self.__dict__["no_timestamps"] = no_rows
+
+        ar_neutral = expanding_mean_with_nan(dfw=self.dfw)
+
+        benchmark_pandas = [
+            self.dfw.iloc[0 : (i + 1), :].stack().mean()
+            for i in range(self.no_timestamps)
+        ]
+
+        self.assertTrue(len(ar_neutral) == len(benchmark_pandas))
+
+        for i, elem in enumerate(ar_neutral):
+            bm_elem = round(benchmark_pandas[i], 4)
+            self.assertTrue(round(elem, 4) == bm_elem)
+
+        bm_expanding = self.dfw.mean(axis=1)
+        bm_expanding = bm_expanding.expanding(min_periods=1).mean()
+
+        # Test on another category to confirm the logic.
+        dfd_cry = self.dfd[self.dfd["xcat"] == "CRY"]
+        dfw_cry = dfd_cry.pivot(index="real_date", columns="cid", values="value")
+
+        ar_neutral = expanding_mean_with_nan(dfw=dfw_cry)
+        benchmark_pandas_cry = [
+            dfw_cry.iloc[0 : (i + 1), :].stack().mean()
+            for i in range(self.no_timestamps)
+        ]
+
+        self.assertTrue(len(ar_neutral) == len(benchmark_pandas_cry))
+        for i, elem in enumerate(ar_neutral):
+            bm_elem_cry = round(benchmark_pandas_cry[i], 4)
+            self.assertTrue(round(elem, 4) == bm_elem_cry)
+
+    def test_get_eops(self):
+        daterange1 = pd.bdate_range(start="2023-01-28", end="2023-02-02")
+        test_case_1 = pd.DataFrame({"real_date": pd.Series(daterange1)})
+        # NOTE: get_eops(freq=...) is case insensitive
+        test_result_1 = get_eops(dates=test_case_1, freq="M")
+        # expected results : 2023-01-31 (last of cycle), last index
+
+        expc_vals = set([pd.Timestamp("2023-01-31"), daterange1[-1]])
+        test_vals = set(test_result_1.tolist())
+        self.assertEqual(expc_vals, test_vals)
+
+        daterange2 = pd.bdate_range(start="2023-03-20", end="2023-07-10")
+        test_case_2 = pd.DataFrame({"real_date": pd.Series(daterange2)})
+        test_result_2 = get_eops(dates=test_case_2, freq="q")
+        # expected results : 2023-03-31 (last of cycle), 2023-06-30 (last of cycle), last index
+
+        expc_vals = set(
+            [pd.Timestamp("2023-03-31"), pd.Timestamp("2023-06-30"), daterange2[-1]]
+        )
+        test_vals = set(test_result_2.tolist())
+        self.assertEqual(expc_vals, test_vals)
+
+        daterange3 = pd.bdate_range(start="2000-01-01", end="2023-07-10")
+        test_case_3 = pd.DataFrame({"real_date": pd.Series(daterange3)})
+        test_result_3 = get_eops(dates=test_case_3, freq="m")
+
+        # expc_vals = set(
+        # print(test_case_3[test_result_3]["real_date"].values.tolist())
+        expc_vals = []
+        r_start_date = pd.Timestamp("2000-01-01")
+        r_end_date = pd.Timestamp("2023-07-10")
+
+        expc_no_cycles = (r_end_date.year - r_start_date.year) * 12 + (
+            r_end_date.month - r_start_date.month
+        )
+        self.assertEqual(expc_no_cycles, len(test_result_3) - 1)
+        # -1 as len(test_result_3) includes the last index
+
+        test_vals = [
+            [pd.Timestamp("2023-01-31"), True],
+            [pd.Timestamp("2016-02-29"), True],
+            # [pd.Timestamp("2023-02-29"), False],
+            # this timestamp doesn't exist and will raise an Exception
+            [pd.Timestamp("2023-02-28"), True],
+            [pd.Timestamp("2023-03-20"), False],
+            [pd.Timestamp("2005-12-30"), True],
+            [pd.Timestamp("2000-12-29"), True],
+        ]
+        set_test_result_3 = set(test_result_3)
+        for tval in test_vals:
+            self.assertEqual(tval[0] in set_test_result_3, tval[1])
+
+    def test_map_to_business_day_frequency(self):
+        fm_copy = FREQUENCY_MAP.copy()
+        for k in fm_copy.keys():
+            self.assertEqual(
+                _map_to_business_day_frequency(k), fm_copy[k], f"Failed for {k}"
+            )
+
+        with self.assertRaises(ValueError):
+            _map_to_business_day_frequency("X")
+            
+        with self.assertRaises(TypeError):
+            _map_to_business_day_frequency(1)
+        
+        with self.assertRaises(ValueError):
+            _map_to_business_day_frequency("D", valid_freqs=["W", "M"])
+            
+        with self.assertRaises(ValueError):
+            _map_to_business_day_frequency("D", valid_freqs=["X", "Y", "Z"])
+            
+        # check reverse mapping
+        for k, v in fm_copy.items():
+            self.assertEqual(_map_to_business_day_frequency(v), v, f"Failed for {v}")
+            
+        with self.assertRaises(TypeError):
+            _map_to_business_day_frequency("M", valid_freqs=1)
 
 if __name__ == "__main__":
     unittest.main()

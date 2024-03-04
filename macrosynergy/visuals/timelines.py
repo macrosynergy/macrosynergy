@@ -18,9 +18,10 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
-from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
+from macrosynergy.management.utils import standardise_dataframe, reduce_df
 from macrosynergy.visuals import FacetPlot, LinePlot
 from macrosynergy.management.types import Numeric
+import time
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
 
@@ -30,6 +31,7 @@ def timelines(
     xcats: Optional[List[str]] = None,
     cids: Optional[List[str]] = None,
     intersect: bool = False,
+    blacklist: Optional[dict] = None,
     val: str = "value",
     cumsum: bool = False,
     start: str = "2000-01-01",
@@ -57,7 +59,7 @@ def timelines(
 
     Parameters
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to plot. Default is all in DataFrame.
     :param <List[str]> cids: cross sections to plot. Default is all in DataFrame.
         If this contains only one cross section a single line chart is created.
@@ -100,7 +102,8 @@ def timelines(
     if not isinstance(df, pd.DataFrame):
         raise TypeError("`df` must be a pandas DataFrame.")
 
-    df: pd.DataFrame = standardise_dataframe(df.copy())
+    if len(df.columns) < 4:
+        df = df.copy().reset_index()
 
     if val not in df.columns:
         if len(df.columns) == len(IDX_COLS) + 1:
@@ -116,20 +119,11 @@ def timelines(
                 "none/many other numeric columns in the DataFrame."
             )
 
-    for dx, nx in [(start, "start"), (end, "end")]:
-        if dx is not None:
-            if not is_valid_iso_date(dx):
-                raise ValueError(f"`{nx}` must be a valid ISO date string.")
-
     if start is None:
         start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
 
     if end is None:
         end: str = pd.Timestamp(df["real_date"].max()).strftime("%Y-%m-%d")
-
-    df: pd.DataFrame = df.loc[
-        (df["real_date"] >= start) & (df["real_date"] <= end), :
-    ].copy()
 
     if isinstance(xcats, str):
         xcats: List[str] = [xcats]
@@ -157,12 +151,19 @@ def timelines(
     if xcats is None:
         if xcat_labels:
             raise ValueError("`xcat_labels` requires `xcats` to be defined.")
-        xcats: List[str] = df["xcats"].unique().tolist()
+        xcats: List[str] = df["xcat"].unique().tolist()
 
     if cids is None:
         cids: List[str] = df["cid"].unique().tolist()
 
+    if not isinstance(blacklist, dict):
+        if blacklist is not None:
+            raise TypeError("`blacklist` must be a dictionary.")
+
     if cumsum:
+        df = reduce_df(
+            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
+        )
         df[val] = (
             df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
             .groupby(["cid", "xcat"])
@@ -171,6 +172,9 @@ def timelines(
 
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
+        df = reduce_df(
+            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
+        )
         if len(xcats) > 1:
             raise ValueError("`cs_mean` cannot be True for multiple categories.")
 
@@ -188,11 +192,19 @@ def timelines(
 
     if xcat_labels:
         # when `cs_mean` is True, `xcat_labels` may have one extra label
-        if len(xcat_labels) != len(xcats) + int(cs_mean):
+        if len(xcat_labels) != len(xcats) and len(xcat_labels) != len(xcats) + int(
+            cs_mean
+        ):
             raise ValueError(
                 "`xcat_labels` must have same length as `xcats` "
                 "(or one extra label if `cs_mean` is True)."
             )
+
+    if cs_mean:
+        if xcat_labels is None:
+            xcat_labels = [xcats[0]]
+        if len(xcat_labels) == 1:
+            xcat_labels.append("Cross-Sectional Mean")
 
     facet_size: Optional[Tuple[float, float]] = (
         (aspect * height, height)
@@ -213,11 +225,13 @@ def timelines(
             xcats=xcats,
             cids=cids,
             intersect=intersect,
+            blacklist=blacklist,
             metrics=[val],
             tickers=[cross_mean_series] if cs_mean else None,
             start=start,
             end=end,
         ) as fp:
+
             fp.lineplot(
                 share_y=same_y,
                 share_x=not all_xticks,
@@ -245,6 +259,7 @@ def timelines(
             xcats=xcats,
             intersect=intersect,
             metrics=[val],
+            blacklist=blacklist,
             tickers=[cross_mean_series] if cs_mean else None,
             start=start,
             end=end,
@@ -270,6 +285,7 @@ def timelines(
             cids=cids,
             intersect=intersect,
             metrics=[val],
+            blacklist=blacklist,
             tickers=[cross_mean_series] if cs_mean else None,
             start=start,
             end=end,
@@ -303,7 +319,7 @@ def timelines(
 
 if __name__ == "__main__":
     from macrosynergy.visuals import FacetPlot
-    from macrosynergy.management.simulate_quantamental_data import make_test_df
+    from macrosynergy.management.simulate import make_test_df
 
     cids: List[str] = [
         "USD",
@@ -397,5 +413,8 @@ if __name__ == "__main__":
         same_y=False,
         xcats=sel_xcats[0],
         cids=sel_cids,
-        title="Plotting multiple cross sections for a single category \n with different y-axis!",
+        title=(
+            "Plotting multiple cross sections for a single category \n with different "
+            "y-axis!"
+        ),
     )

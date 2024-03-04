@@ -1,9 +1,11 @@
 import unittest
 import pandas as pd
 from typing import List, Dict, Any
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 import macrosynergy.visuals as msv
 import matplotlib
+import matplotlib.pyplot as plt
+from unittest.mock import patch
 
 
 class TestAll(unittest.TestCase):
@@ -12,6 +14,7 @@ class TestAll(unittest.TestCase):
         # Prevents plots from being displayed during tests.
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
+        self.mock_show = patch("matplotlib.pyplot.show").start()
 
         data = {
             "A": [1, 2, 3, 4],
@@ -25,6 +28,8 @@ class TestAll(unittest.TestCase):
 
     @classmethod
     def tearDownClass(self) -> None:
+        plt.close("all")
+        patch.stopall()
         matplotlib.use(self.mpl_backend)
 
     def setUp(self):
@@ -40,6 +45,9 @@ class TestAll(unittest.TestCase):
             "yticklabels": None,
             "annot": True,
         }
+
+    def tearDown(self) -> None:
+        plt.close("all")
 
     def test_view_table_no_error(self):
         try:
@@ -83,6 +91,7 @@ class TestAll(unittest.TestCase):
     def test_view_table_valid_tick_labels(self):
         self.valid_args["xticklabels"] = ["A", "B", "C", "D"]
         self.valid_args["yticklabels"] = ["Row1", "Row2", "Row3", "Row4"]
+
         try:
             msv.view_table(**self.valid_args)
         except Exception as e:

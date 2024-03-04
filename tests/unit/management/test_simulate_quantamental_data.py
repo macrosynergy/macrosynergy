@@ -4,38 +4,21 @@ import random
 import numpy as np
 import pandas as pd
 import os
-from macrosynergy.management.simulate_quantamental_data import (
-    make_qdf,
-    make_qdf_black,
-    simulate_ar,
-    generate_lines,
-    make_test_df,
-    mock_qdf,
-)
+from macrosynergy.management.simulate import *
 
 
 class Test_All(unittest.TestCase):
     def df_construction(self):
-        cids: List[str] = ["AUD", "CAD", "GBP"]
-        xcats: List[str] = ["XR", "CRY"]
-        df_cids: pd.DataFrame = pd.DataFrame(
-            index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
-        )
-        df_cids.loc["AUD", :] = ["2010-01-01", "2020-12-31", 0.5, 2]
-        df_cids.loc["CAD", :] = ["2011-01-01", "2020-11-30", 0, 1]
-        df_cids.loc["GBP", :] = ["2011-01-01", "2020-11-30", -0.2, 0.5]
+        cids = ['AUD', 'CAD', 'GBP']
+        xcats = ['XR', 'CRY']
+        df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
+                                                    'sd_mult'])
+        df_cids.loc['AUD', :] = ['2010-01-01', '2020-12-31', 0.5, 2]
+        df_cids.loc['CAD', :] = ['2011-01-01', '2020-11-30', 0, 1]
+        df_cids.loc['GBP', :] = ['2011-01-01', '2020-11-30', -0.2, 0.5]
 
-        df_xcats: pd.DataFrame = pd.DataFrame(
-            index=xcats,
-            columns=[
-                "earliest",
-                "latest",
-                "mean_add",
-                "sd_mult",
-                "ar_coef",
-                "back_coef",
-            ],
-        )
+        df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
+                                                      'sd_mult', 'ar_coef', 'back_coef'])
 
         df_xcats.loc["XR", :] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
         df_xcats.loc["CRY", :] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
@@ -44,17 +27,15 @@ class Test_All(unittest.TestCase):
         self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     def df_construct_black(self):
-        cids: List[str] = ["AUD", "CAD", "GBP"]
+        cids = ['AUD', 'CAD', 'GBP']
         # The algorithm is designed to test on a singular category.
-        xcats: List[str] = ["XR"]
-        df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
-        df_cids.loc["AUD", :] = ["2010-01-01", "2020-12-31"]
-        df_cids.loc["CAD", :] = ["2011-01-01", "2021-11-25"]
-        df_cids.loc["GBP", :] = ["2011-01-01", "2020-11-30"]
+        xcats = ['XR']
+        df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest'])
+        df_cids.loc['AUD', :] = ['2010-01-01', '2020-12-31']
+        df_cids.loc['CAD', :] = ['2011-01-01', '2021-11-25']
+        df_cids.loc['GBP', :] = ['2011-01-01', '2020-11-30']
 
-        df_xcats: pd.DataFrame = pd.DataFrame(
-            index=xcats, columns=["earliest", "latest"]
-        )
+        df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest'])
 
         df_xcats.loc["XR", :] = ["2010-01-01", "2021-11-25"]
 
@@ -88,13 +69,13 @@ class Test_All(unittest.TestCase):
 
         return np.corrcoef(np.array([arr_1, arr_2]))[0, 1]
 
-    def cor_coef(self, df: pd.DataFrame, ticker_x: str, ticker_y: str):
-        x = ticker_x.split("_", 1)
-        y = ticker_y.split("_", 1)
-        filt_x = (df["cid"] == x[0]) & (self.dfd["xcat"] == x[1])
-        filt_y = (df["cid"] == y[0]) & (self.dfd["xcat"] == y[1])
-        dfd_x = self.dfd.loc[filt_x,].set_index("real_date")["value"]
-        dfd_y = self.dfd.loc[filt_y,].set_index("real_date")["value"]
+    def cor_coef(self, df, ticker_x, ticker_y):
+        x = ticker_x.split('_', 1)
+        y = ticker_y.split('_', 1)
+        filt_x = (df['cid'] == x[0]) & (self.dfd['xcat'] == x[1])
+        filt_y = (df['cid'] == y[0]) & (self.dfd['xcat'] == y[1])
+        dfd_x = self.dfd.loc[filt_x, ].set_index('real_date')['value']
+        dfd_y = self.dfd.loc[filt_y, ].set_index('real_date')['value']
 
         dfd_xy = pd.merge(dfd_x, dfd_y, how="inner", left_index=True, right_index=True)
         return dfd_xy.corr().iloc[0, 1]
@@ -286,81 +267,11 @@ class Test_All(unittest.TestCase):
                     t_df: pd.DataFrame = df[(df["cid"] == cid) & (df["xcat"] == xcat)]
                     self.assertTrue(set(ebdates) == set(t_df["real_date"]))
                     # assert that the values are the same as the line style
-                    self.assertTrue(
-                        np.array_equal(
-                            t_df["value"].to_numpy(),
-                            generate_lines(sig_len=len(ebdates), style=ls),
-                        )
-                    )
-
-    def test_mock_qdf(self):
-        cids: List[str] = ["AUD", "CAD", "GBP", "USD"]
-        xcats: List[str] = ["XR", "IR"]
-        start_date: str = "2010-01-01"
-        end_date: str = "2011-12-31"
-        good_args: Dict[str, Any] = {
-            "cids": cids.copy(),
-            "xcats": xcats.copy(),
-            "start": start_date,
-            "end": end_date,
-        }
-
-        for arg, val in good_args.items():
-            # all args should raise a type error when passed an integer
-            bad_args: Dict[str, Any] = good_args.copy()
-            bad_args[arg] = 1
-            self.assertRaises(TypeError, mock_qdf, **bad_args)
-
-        for arg in ["cids", "xcats"]:
-            bad_args: Dict[str, Any] = good_args.copy()
-            bad_args[arg] = []
-            self.assertRaises(ValueError, mock_qdf, **bad_args)
-
-            bad_args: Dict[str, Any] = good_args.copy()
-            bad_args[arg] = bad_args[arg] + [1]
-            self.assertRaises(TypeError, mock_qdf, **bad_args)
-
-        # use random string to test start/end date
-        random_str: str = "2h3rn2j"
-        for arg in ["start", "end"]:
-            bad_args: Dict[str, Any] = good_args.copy()
-            bad_args[arg] = random_str
-            self.assertRaises(ValueError, mock_qdf, **bad_args)
-
-        # test that it would allow a single string as cid/xcat
-        bad_args: Dict[str, Any] = good_args.copy()
-        bad_args["cids"] = "AUD"
-        self.assertTrue(isinstance(mock_qdf(**bad_args), pd.DataFrame))
-
-        bad_args: Dict[str, Any] = good_args.copy()
-        bad_args["xcats"] = "XR"
-        self.assertTrue(isinstance(mock_qdf(**bad_args), pd.DataFrame))
-
-        # check the output is a dataframe
-        df: pd.DataFrame = mock_qdf(**good_args)
-        self.assertTrue(isinstance(df, pd.DataFrame))
-
-        # check all business days are present
-        ebdates: pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
-        self.assertTrue(set(df["real_date"]) == set(ebdates))
-
-        # check that all cids and xcats are present
-        self.assertTrue(set(df["cid"]) == set(cids))
-        self.assertTrue(set(df["xcat"]) == set(xcats))
-
-        # test that the columns are correct
-        expc_cols: List[str] = [
-            "cid",
-            "xcat",
-            "real_date",
-            "value",
-            "eop_lag",
-            "mop_lag",
-            "grading",
-        ]
-
-        self.assertTrue(set(df.columns) == set(expc_cols))
+                    self.assertTrue(np.array_equal(t_df['value'].to_numpy(), generate_lines(sig_len=len(ebdates), style=ls)))
+        
 
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
+
     unittest.main()

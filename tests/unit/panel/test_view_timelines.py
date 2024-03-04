@@ -3,12 +3,28 @@ import unittest
 import matplotlib
 import pandas as pd
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.panel.view_timelines import view_timelines
+
+from matplotlib import pyplot as plt
+from unittest.mock import patch
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_construction(self):
+    @classmethod
+    def setUpClass(self):
+        # Prevents plots from being displayed during tests.
+        self.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+        self.mock_show = patch("matplotlib.pyplot.show").start()
+
+    @classmethod
+    def tearDownClass(self) -> None:
+        plt.close("all")
+        patch.stopall()
+        matplotlib.use(self.mpl_backend)
+
+    def setUp(self):
         cids = ["AUD", "CAD", "GBP", "NZD"]
         xcats = ["XR", "CRY", "INFL"]
         df_cids = pd.DataFrame(
@@ -38,14 +54,19 @@ class TestAll(unittest.TestCase):
         self.cids = cids
         self.xcats = xcats
         self.dfd = dfd
+        self.mock_show = patch("matplotlib.pyplot.show").start()
 
-        return cids, xcats, dfd
+        matplotlib.use("Agg")
+
+    def tearDown(self) -> None:
+        plt.close("all")
+        patch.stopall()
+        matplotlib.use(self.mpl_backend)
 
     def test_view_timelines(self):
-        cids, xcats, dfd = self.dataframe_construction()
-
-        mpl_backend = matplotlib.get_backend()
-        matplotlib.use("Agg")
+        cids = self.cids
+        xcats = self.xcats
+        dfd = self.dfd
 
         # test that all the sample cases run
 
@@ -56,6 +77,14 @@ class TestAll(unittest.TestCase):
                 cids=cids[0],
                 size=(10, 5),
                 title="AUD Return and Carry",
+            )            
+            view_timelines(
+                dfd,
+                xcats=xcats[:2],
+                cids=cids[0],
+                size=(10, 5),
+                title="AUD Return and Carry",
+                blacklist={"AUD": ["2015-01-01", "2015-02-27"]}
             )
 
             view_timelines(
@@ -217,8 +246,6 @@ class TestAll(unittest.TestCase):
                 title="AUD Return, Carry & Inflation",
                 xcat_grid=True,
             )  # df must have a column named 'cid'
-
-        matplotlib.use(mpl_backend)
 
 
 if __name__ == "__main__":

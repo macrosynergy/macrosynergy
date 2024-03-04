@@ -14,9 +14,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 
-from macrosynergy.management import reduce_df
-from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.management.decorators import argcopy, argvalidation
+from macrosynergy.management.validation import validate_and_reduce_qdf
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +47,9 @@ class Plotter(metaclass=PlotterMetaClass):
     Base class for a DataFrame Plotter. The inherited meta class automatically wraps all
     methods of the Plotter class and any subclasses with the `argvalidation` and `argcopy`
     decorators, so that all methods of the class are automatically validated and copied.
-    This class does not implement any plotting functionality, but provides a shared interface
-    for the plotter classes, and some common functionality - currently just the filtering
-    of the DataFrame.
+    This class does not implement any plotting functionality, but provides a shared
+    interface for the plotter classes, and some common functionality - currently just the
+    filtering of the DataFrame.
     Parameters
     :param <pd.DataFrame> df: A DataFrame with the following columns:
         'cid', 'xcat', 'real_date', and at least one metric from -
@@ -63,8 +62,8 @@ class Plotter(metaclass=PlotterMetaClass):
         If None, all metrics are selected.
     :param <bool> intersect: if True only retains cids that are available for
         all xcats. Default is False.
-    :param <List[str]> tickers: A list of tickers to select from the DataFrame.
-        If None, all tickers are selected.
+    :param <List[str]> tickers: A list of tickers that will be selected from the DataFrame
+        if they exist, regardless of start, end, blacklist, and intersect arguments.
     :param <dict> blacklist: cross-sections with date ranges that should be excluded from
         the data frame. If one cross-section has several blacklist periods append numbers
         to the cross-section code.
@@ -89,111 +88,27 @@ class Plotter(metaclass=PlotterMetaClass):
         end: Optional[str] = None,
         backend: Optional[str] = "matplotlib",
     ):
-        sdf: pd.DataFrame = df.copy()
-        df_cols: List[str] = ["real_date", "cid", "xcat"]
-        if metrics is None:
-            metrics: List[str] = list(set(sdf.columns) - set(df_cols))
-
-        df_cols += metrics
-        sdf = standardise_dataframe(df=sdf)
-        if not set(df_cols).issubset(set(sdf.columns)):
-            raise ValueError(f"DataFrame must contain the following columns: {df_cols}")
-
-        cids_provided: bool = cids is not None
-        xcats_provided: bool = xcats is not None
-        if cids is None:
-            cids = list(sdf["cid"].unique())
-        if xcats is None:
-            xcats = list(sdf["xcat"].unique())
-
-        missing_cids: List[str] = []
-        missing_xcats: List[str] = []
-        for varx, prov_bool, namex in zip(
-            [cids, xcats], [cids_provided, xcats_provided], ["cids", "xcats"]
-        ):
-            if prov_bool:
-                df_col = namex.replace("s", "")
-                if not set(varx).issubset(set(sdf[df_col].unique())):
-                    # warn
-                    warnings.warn(
-                        f"The following {namex.upper()}, passed in `{namex}`,"
-                        " are not in the DataFrame `df`: "
-                        f"{list(set(varx) - set(sdf[df_col].unique()))}."
-                    )
-                    if namex == "cids":
-                        missing_cids += list(set(varx) - set(sdf[df_col].unique()))
-                    else:
-                        missing_xcats += list(set(varx) - set(sdf[df_col].unique()))
-
-        if start is None:
-            start: str = pd.Timestamp(sdf["real_date"].min()).strftime("%Y-%m-%d")
-        if end is None:
-            end: str = pd.Timestamp(sdf["real_date"].max()).strftime("%Y-%m-%d")
-        for var, name in [(start, "start"), (end, "end")]:
-            if not is_valid_iso_date(var):
-                raise ValueError(f"`{name}` must be a valid ISO date string")
-
-        ticker_df: pd.DataFrame = pd.DataFrame()
-        if tickers is not None:
-            df_tickers: List[pd.DataFrame] = [pd.DataFrame()]
-            for ticker in tickers:
-                _cid, _xcat = ticker.split("_", 1)
-                df_tickers.append(
-                    sdf.loc[
-                        (sdf["cid"] == _cid) & (sdf["xcat"] == _xcat),
-                        ["real_date", "cid", "xcat"] + metrics,
-                    ]
-                )
-            ticker_df: pd.DataFrame = pd.concat(df_tickers, axis=0)
-
-        sdf: pd.DataFrame
-        r_xcats: List[str]
-        r_cids: List[str]
-        sdf, r_xcats, r_cids = reduce_df(
-            df=sdf,
-            cids=cids if isinstance(cids, list) else [cids],
-            xcats=xcats if isinstance(xcats, list) else [xcats],
+        validated_args = validate_and_reduce_qdf(
+            df=df,
+            cids=cids,
+            xcats=xcats,
+            metrics=metrics,
             intersect=intersect,
+            tickers=tickers,
+            blacklist=blacklist,
             start=start,
             end=end,
-            blacklist=blacklist,
-            out_all=True,
         )
 
-        sdf: pd.DataFrame = pd.concat([sdf, ticker_df], axis=0)
-
-        if (
-            ((len(r_xcats) != len(xcats) - len(missing_xcats)) and xcats_provided)
-            or ((len(r_cids) != len(cids) - len(missing_cids)) and cids_provided)
-        ) and not intersect:
-            m_cids: List[str] = list(set(cids) - set(r_cids) - set(missing_cids))
-            m_xcats: List[str] = list(set(xcats) - set(r_xcats) - set(missing_xcats))
-            warnings.warn(
-                "The provided arguments resulted in a DataFrame that does not "
-                "contain all the requested cids and xcats. "
-                + (f"Missing cids: {m_cids}. " if m_cids else "")
-                + (f"Missing xcats: {m_xcats}. " if m_xcats else "")
-            )
-            for m_cid in m_cids:
-                cids.remove(m_cid)
-            for m_xcat in m_xcats:
-                xcats.remove(m_xcat)
-
-        if sdf.empty:
-            raise ValueError(
-                "The arguments provided resulted in an "
-                "empty DataFrame when filtered (see `reduce_df`)."
-            )
-
-        self.df: pd.DataFrame = sdf
-        self.cids: List[str] = cids
-        self.xcats: List[str] = xcats
-        self.metrics: List[str] = metrics
+        self.df: pd.DataFrame = validated_args.df
+        self.cids: List[str] = validated_args.cids
+        self.xcats: List[str] = validated_args.xcats
+        self.metrics: List[str] = validated_args.metrics
         self.intersect: bool = intersect
         self.tickers: List[str] = tickers
         self.blacklist: Dict[str, List[str]] = blacklist
-        self.start: str = start
-        self.end: str = end
+        self.start: str = validated_args.start
+        self.end: str = validated_args.end
 
         self.backend: ModuleType
         accepted_backends: List[str] = ["matplotlib", "plt", "mpl"]

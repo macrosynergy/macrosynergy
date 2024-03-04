@@ -18,7 +18,7 @@ from typing import List, Dict
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_construction(self):
+    def setUp(self) -> None:
         # Emerging Market Asian countries.
         cids: List[str] = ["IDR", "INR", "KRW", "MYR", "PHP"]
         # Add the US - used as the hedging asset.
@@ -82,6 +82,9 @@ class TestAll(unittest.TestCase):
             index="real_date", columns="cid", values="value"
         )
 
+    def tearDown(self) -> None:
+        return super().tearDown()
+
     def test_df_cols(self):
         """
         The dataframe passed to the return_beta() method needs to have the following
@@ -89,7 +92,6 @@ class TestAll(unittest.TestCase):
         This test checks if the function successfully raises a ValueError if the
         dataframe does not have the required columns.
         """
-        self.dataframe_construction()
 
         df_test: pd.DataFrame = self.dfd.copy()
         # DO NOT CHANGE THE ORDER OF THE FOLLOWING LIST `expc_cols`
@@ -122,8 +124,6 @@ class TestAll(unittest.TestCase):
         defined over the same timestamps. The method will return the proposed start &
         end date.
         """
-
-        self.dataframe_construction()
 
         # Verify that two series passed will be aligned after applying the respective
         # method.
@@ -159,8 +159,6 @@ class TestAll(unittest.TestCase):
         ratio will be continuously re-estimated as days pass but will always include all
         realised timestamps (inclusive of the start_date).
         """
-
-        self.dataframe_construction()
 
         # The method returns a standardised DataFrame. Confirm the first date in the
         # DataFrame is after the minimum observation date. The parameter 'min_obs'
@@ -270,8 +268,8 @@ class TestAll(unittest.TestCase):
         last_test_date: str = "2013-03-29"
         # check_date <- one business day after the re-estimation date - 2013-04-01.
         check_date: str = "2013-04-01"
-        test_value = float(df_hr[df_hr["real_date"] == check_date]["value"])
-        result = float(df_hrat[df_hrat["real_date"] == last_test_date]["value"])
+        test_value = float(df_hr[df_hr["real_date"] == check_date]["value"].iloc[0])
+        result = float(df_hrat[df_hrat["real_date"] == last_test_date]["value"].iloc[0])
         self.assertTrue(result == test_value)
 
     def test_adjusted_returns(self):
@@ -283,8 +281,6 @@ class TestAll(unittest.TestCase):
         benchmark). A simple example of the formula is:
         IDR_FXXR_NSA_H = IDR_FXXR_NSA - HR_IDR * USD_EQXR_NSA.
         """
-
-        self.dataframe_construction()
 
         br = pd.Series(
             data=self.benchmark_df["value"].to_numpy(),
@@ -329,12 +325,12 @@ class TestAll(unittest.TestCase):
         test_date = df_stack[df_stack["real_date"] == date]
         # Test on the two cross-sections: 'IDR' & 'INR'.
         # Hedge Return.
-        INR_HR = float(test_date[test_date["cid"] == "INR"]["value"])
-        IDR_HR = float(test_date[test_date["cid"] == "IDR"]["value"])
+        INR_HR = float(test_date[test_date["cid"] == "INR"]["value"].iloc[0])
+        IDR_HR = float(test_date[test_date["cid"] == "IDR"]["value"].iloc[0])
 
         hedge_row = df_hedge[df_hedge["real_date"] == date]
-        INR_H = float(hedge_row[hedge_row["cid"] == "INR"]["value"])
-        IDR_H = float(hedge_row[hedge_row["cid"] == "IDR"]["value"])
+        INR_H = float(hedge_row[hedge_row["cid"] == "INR"]["value"].iloc[0])
+        IDR_H = float(hedge_row[hedge_row["cid"] == "IDR"]["value"].iloc[0])
 
         return_row = dfw.loc[date]
         INR_R = return_row["INR"]
@@ -359,7 +355,6 @@ class TestAll(unittest.TestCase):
         assert statements included and the workflow of the main driver function.
         """
 
-        self.dataframe_construction()
         br_cat = "USD_EQXR_NSA"
 
         with self.assertRaises(AssertionError):
@@ -384,7 +379,7 @@ class TestAll(unittest.TestCase):
             )
 
         # Test the re-estimation frequency parameter.
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # The re-estimation frequency can either be weekly, monthly or quarterly:
             # ['w', 'm', 'q']. Set the 'refreq' parameter to an incorrect value.
             df_hedge = return_beta(
@@ -445,7 +440,9 @@ class TestAll(unittest.TestCase):
         # Test on a random date, 2014-02-14. The date should be a Friday.
         date = pd.Timestamp("2014-02-14")
         self.assertTrue(pd.Timestamp(date).dayofweek == 4)
-        df_hedge_INR_val = (df_hedge_INR[df_hedge_INR["real_date"] == date])["value"]
+        df_hedge_INR_val = (df_hedge_INR[df_hedge_INR["real_date"] == date])[
+            "value"
+        ].iloc[0]
         df_hedge_INR_val = float(df_hedge_INR_val)
 
         # Confirm the date in the DataFrame is a Monday and the hedge ratio is

@@ -1,21 +1,24 @@
 """
 Functions for calculating the hedge ratios of a panel of returns with respect to a
 single return. 
-
-::docs::return_beta::sort_first::
 """
 import warnings
 import numpy as np
 import pandas as pd
-from typing import List, Union
+from typing import List, Tuple
 import statsmodels.api as sm
 from statsmodels.regression.linear_model import RegressionResults
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
 import matplotlib.pyplot as plt
 
+from macrosynergy.management.utils import _map_to_business_day_frequency
 
-def date_alignment(unhedged_return: pd.Series, benchmark_return: pd.Series):
+
+def date_alignment(
+    unhedged_return: pd.Series, benchmark_return: pd.Series
+) -> Tuple[pd.Timestamp, pd.Timestamp]:
     """
     Method used to align the two Series over the same timestamps: the sample data for the
     endogenous & exogenous variables must match throughout the re-estimation calculation.
@@ -52,7 +55,7 @@ def hedge_calculator(
     meth: str = "ols",
     min_obs: int = 24,
     max_obs: int = 1000,
-):
+) -> pd.DataFrame:
     """
     Calculate the hedge ratios for each cross-section in the panel being hedged. It is
     worth noting that the sample of data used for calculating the hedge ratio will
@@ -81,11 +84,13 @@ def hedge_calculator(
 
     benchmark_return = benchmark_return.astype(dtype=np.float32)
     unhedged_return = unhedged_return.astype(dtype=np.float32)
-    br = benchmark_return
-    un_r = unhedged_return
 
-    benchmark_return = br[br.first_valid_index() : br.last_valid_index()]
-    unhedged_return = un_r[un_r.first_valid_index() : un_r.last_valid_index()]
+    benchmark_return = benchmark_return[
+        benchmark_return.first_valid_index() : benchmark_return.last_valid_index()
+    ]
+    unhedged_return = unhedged_return[
+        unhedged_return.first_valid_index() : unhedged_return.last_valid_index()
+    ]
 
     s_date, e_date = date_alignment(
         unhedged_return=unhedged_return, benchmark_return=benchmark_return
@@ -109,8 +114,6 @@ def hedge_calculator(
     data_column[:] = np.nan
     df_hrat = pd.DataFrame(data=data_column, index=rdates, columns=["value"])
 
-    min_date: pd.Timestamp = min(rdates)
-    list_rdates: List[pd.Timestamp] = rdates[rdates.index(min_date) :]
     for d in rdates:
         if d > min_obs_date:
             curr_start_date: pd.Timestamp = rdates[max(0, rdates.index(d) - max_obs)]
@@ -120,8 +123,7 @@ def hedge_calculator(
             # Condition currently redundant but will become relevant.
             if meth == "ols":
                 xvar = sm.add_constant(xvar)
-                mod: sm.OLS = sm.OLS(yvar, xvar)
-                results: RegressionResults = mod.fit()
+                results: RegressionResults = sm.OLS(yvar, xvar).fit()
                 results_params: pd.Series = results.params
 
             df_hrat.loc[d] = results_params.loc[cross_section]
@@ -137,18 +139,13 @@ def hedge_calculator(
     df_hr = df_ur.merge(df_hrat, on="real_date", how="left")
 
     df_hr = df_hr.drop("returns", axis=1)
-    df_hr = df_hr.fillna(method="ffill")
+    df_hr = df_hr.ffill()
     # Accounts for the application of the minimum number of observations required and
     # merging the two DataFrames. Drop the np.nan values prior to the application of the
     # shift (able to validate the logic).
     df_hr = df_hr.dropna(axis=0, how="any")
 
-    df_hr = df_hr.set_index("real_date", drop=True)
-    # Applied after the re-estimation date.
-    df_hr = df_hr.shift(1)
-
-    # Re-establish the 'real_date' column.
-    df_hr = df_hr.reset_index(level=0)
+    df_hr = df_hr.set_index("real_date", drop=True).shift(1).reset_index(level=0)
 
     df_hr["cid"] = cross_section
 
@@ -157,7 +154,7 @@ def hedge_calculator(
 
 def adjusted_returns(
     benchmark_return: pd.Series, df_hedge: pd.DataFrame, dfw: pd.DataFrame
-):
+) -> pd.DataFrame:
     """
     Method used to compute the hedge ratio returns on the hedging asset which will
     subsequently be subtracted from the returns of the position contracts to calculate
@@ -174,13 +171,12 @@ def adjusted_returns(
     """
 
     hedge_pivot = df_hedge.pivot(index="real_date", columns="cid", values="value")
-
-    no_cids = len(hedge_pivot.columns)
-
     index = benchmark_return.index
+
     # Matching the dimensions to the number of assets being hedged.
-    benchmark_return = np.tile(benchmark_return.to_numpy(), (no_cids, 1))
-    benchmark_return = benchmark_return.transpose()
+    benchmark_return = np.tile(
+        benchmark_return.to_numpy(), (len(hedge_pivot.columns), 1)
+    ).T
     br_df = pd.DataFrame(
         data=benchmark_return, columns=hedge_pivot.columns, index=index
     )
@@ -188,7 +184,7 @@ def adjusted_returns(
     hedged_returns = hedge_pivot.multiply(br_df)
     adj_rets = dfw - hedged_returns
 
-    df_stack = adj_rets.stack().to_frame("value").reset_index()
+    df_stack = adj_rets.stack().reset_index(name="value")
     df_stack.columns = ["real_date", "cid", "value"]
 
     return df_stack
@@ -204,18 +200,18 @@ def return_beta(
     blacklist: dict = None,
     meth: str = "ols",
     oos: bool = True,
-    refreq: str = "m",
+    refreq: str = "M",
     min_obs: int = 24,
     max_obs: int = 1000,
     hedged_returns: bool = False,
     ratio_name: str = "_HR",
     hr_name: str = "H",
-):
+) -> pd.DataFrame:
     """
     Estimate sensitivities (betas) of return category with respect to single return.
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and 'value.
+        'cid', 'xcat', 'real_date' and 'value.
     :param <str> xcat:  return category based on the type of positions that are
         to be hedged.
         N.B.: Each cross-section of this category uses the same hedge asset/basket.
@@ -236,7 +232,7 @@ def return_beta(
     :param <str> refreq: re-estimation frequency. This is period after which hedge ratios
         are re-estimated. The re-estimation is conducted at the end of the period and
         used as hedge ratio for all days of the following period. Re-estimation can have
-        weekly, monthly, and quarterly frequency with the notations 'w', 'm', and 'q'
+        weekly, monthly, and quarterly frequency with the notations 'W', 'M', and 'Q'
         respectively. The default frequency is monthly.
     :param <int> min_obs: the minimum number of observations required in order to
         estimate a hedge ratio. The default value is 24 days.
@@ -290,13 +286,6 @@ def return_beta(
     )
     assert xcat in list(available_categories), error_hedging
 
-    refreq_options = ["w", "m", "q"]
-    error_refreq = (
-        f"Re-estimation frequency parameter must be one of the following:"
-        f"{refreq_options}."
-    )
-    assert refreq in refreq_options, error_refreq
-
     min_obs_error = (
         "The number of minimum observations required to compute a hedge "
         "ratio is 10 business days, or two weeks."
@@ -346,12 +335,8 @@ def return_beta(
     dfw = pd.merge(dfp_w, dfh_w, how="inner", on="real_date")
     br = dfw["hedge"]
 
-    rf = {"w": "W", "m": "BM", "q": "BQ"}[refreq]
+    rf = _map_to_business_day_frequency(freq=refreq, valid_freqs=["W", "M", "Q"])
     dates_re = dfw.asfreq(rf).index
-
-    if refreq == "w":  # for weekly frequency use Fridays instead of default Sundays
-        sunday_adjustment = lambda d: d - pd.DateOffset(2)
-        dates_re = list(map(sunday_adjustment, dates_re))
 
     if isinstance(dates_re, pd.DatetimeIndex):
         dates_re: List[str] = dates_re.to_list()
@@ -360,9 +345,8 @@ def return_beta(
 
     aggregate = []
     for c in cids:
-        xr = dfw[c]
         df_hr = hedge_calculator(
-            unhedged_return=xr,
+            unhedged_return=dfw[c],
             benchmark_return=br,
             rdates=dates_re,
             cross_section=c,
@@ -372,16 +356,15 @@ def return_beta(
         )
         aggregate.append(df_hr)
 
-    df_hedge = pd.concat(aggregate).reset_index(drop=True)
+    df_hedge = pd.concat(aggregate, ignore_index=True)
 
     df_hedge["xcat"] = xcat + ratio_name
+
     if hedged_returns:
         df_hreturn = adjusted_returns(df_hedge=df_hedge, dfw=dfw, benchmark_return=br)
         df_hreturn = df_hreturn.sort_values(["cid", "real_date"])
         df_hreturn["xcat"] = xcat + "_" + hr_name
-        df_hedge = pd.concat(
-            [df_hedge, df_hreturn], axis=0, ignore_index=True
-        ).reset_index(drop=True)
+        df_hedge = pd.concat([df_hedge, df_hreturn], ignore_index=True)
 
     return df_hedge[cols]
 

@@ -96,14 +96,14 @@ def view_metrics(
         x_axis_label="Date",
         y_axis_label="Cross Sections",
         cmap=sns.color_palette("light:red", as_cmap=True),
-        rotate_xticks=90
+        rotate_xticks=90,
     )
 
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate_quantamental_data import make_test_df
+    from macrosynergy.management.simulate import make_test_df
 
-    test_cids: List[str] = ["USD","EUR", "GBP"]
+    test_cids: List[str] = ["USD", "EUR", "GBP"]
     test_xcats: List[str] = ["FX", "IR"]
     dfE: pd.DataFrame = make_test_df(
         cids=test_cids, xcats=test_xcats, style="sharp-hill"

@@ -1,33 +1,34 @@
 """
 Module for calculating z-scores for a panel around a neutral level ("zn scores").
-
-::docs::make_zn_scores::sort_first::
-
 """
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Set
-import warnings
-from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.utils import drop_nan_series, reduce_df
-from macrosynergy.management.types import QuantamentalDataFrame, Numeric
+from typing import List, Union
+from numbers import Number
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import (
+    drop_nan_series,
+    reduce_df,
+    _map_to_business_day_frequency,
+)
+from macrosynergy.management.types import Numeric
 
 
 def expanding_stat(
     df: pd.DataFrame,
     dates_iter: pd.DatetimeIndex,
-    stat: str = "mean",
+    stat: Union[str, Number] = "mean",
     sequential: bool = True,
     min_obs: int = 261,
     iis: bool = True,
-):
+) -> pd.DataFrame:
     """
     Compute statistic based on an expanding sample.
 
     :param <pd.Dataframe> df: Daily-frequency time series DataFrame.
     :param <pd.DatetimeIndex> dates_iter: controls the frequency of the neutral &
         standard deviation calculations.
-    :param <str> stat: statistical method to be applied. This is typically 'mean',
+    :param <str, Number> stat: statistical method to be applied. This is typically 'mean',
         or 'median'.
     :param <bool> sequential: if True (default) the statistic is estimated sequentially.
         If this set to false a single value is calculated per time series, based on
@@ -37,7 +38,8 @@ def expanding_stat(
     :param <bool> iis: if set to True, the values of the initial interval determined
         by min_obs will be estimated in-sample, based on the full initial sample.
 
-    :return: Time series dataframe of the chosen statistic across all columns
+    :return <pd.DataFrame> df_out: Time series dataframe of the chosen statistic across
+        all columns
     """
 
     df_out = pd.DataFrame(np.nan, index=df.index, columns=["value"])
@@ -51,11 +53,14 @@ def expanding_stat(
     # Adjust for individual cross-sections' series commencing at different dates.
     first_estimation = df.dropna(axis=0, how="all").index[min_obs]
 
-    obs_index = next(iter(np.where(df.index == first_observation)))[0]
-    est_index = next(iter(np.where(df.index == first_estimation)))[0]
+    obs_index = np.where(df.index == first_observation)[0][0]
+    est_index = np.where(df.index == first_estimation)[0][0]
 
     if stat == "zero":
         df_out["value"] = 0
+
+    elif isinstance(stat, Number):
+        df_out["value"] = stat
 
     elif not sequential:
         # The entire series is treated as in-sample. Will automatically handle NaN
@@ -65,16 +70,30 @@ def expanding_stat(
 
     else:
         dates = dates_iter[dates_iter >= first_estimation]
-        for date in dates:
-            df_out.loc[date, "value"] = (
-                df.loc[first_observation:date].stack().apply(stat)
+        if stat == "mean":
+            expanding_count = _get_expanding_count(
+                df.loc[first_observation:], min_periods=min_obs + 1
             )
+            df_mean = (
+                df.loc[first_observation:]
+                .sum(1)
+                .expanding(min_periods=min_obs + 1)
+                .sum()
+                / expanding_count
+            )
+            df_mean = df_mean.dropna().loc[dates]
+            df_mean.name = "value"
+            df_out.update(df_mean)
+        else:
+            for date in dates:
+                df_out.loc[date, "value"] = (
+                    df.loc[first_observation:date].stack().apply(stat)
+                )
 
-        df_out = df_out.fillna(method="ffill")
+        df_out = df_out.ffill()
 
-        if iis:
-            if (est_index - obs_index) > 0:
-                df_out = df_out.fillna(method="bfill", limit=(est_index - obs_index))
+        if iis and (est_index - obs_index) > 0:
+            df_out = df_out.bfill(limit=int(est_index - obs_index))
 
     df_out.columns.name = "cid"
     return df_out
@@ -90,12 +109,12 @@ def make_zn_scores(
     sequential: bool = True,
     min_obs: int = 261,
     iis: bool = True,
-    neutral: str = "zero",
-    est_freq: str = "d",
+    neutral: Union[str, Number] = "zero",
+    est_freq: str = "D",
     thresh: float = None,
     pan_weight: float = 1,
     postfix: str = "ZN",
-):
+) -> pd.DataFrame:
     """
     Computes z-scores for a panel around a neutral level ("zn scores").
 
@@ -126,11 +145,11 @@ def make_zn_scores(
     :param <bool> iis: if True (default) zn-scores are also calculated for the initial
         sample period defined by min-obs on an in-sample basis to avoid losing history.
         This is irrelevant if sequential is set to False.
-    :param <str> neutral: method to determine neutral level. Default is 'zero'.
-        Alternatives are 'mean' and "median".
+    :param <str, Number> neutral: method to determine neutral level. Default is 'zero'.
+        Alternatives are 'mean', 'median' or a number.
     :param <str> est_freq: the frequency at which standard deviations or means are
-        are re-estimated. The options are weekly, monthly & quarterly "w", "m", "q".
-        Default is daily, "d". Re-estimation is performed at period end.
+        are re-estimated. The options are daily, weekly, monthly & quarterly: "D", "W",
+        "M", "Q". Default is daily. Re-estimation is performed at period end.
     :param <float> thresh: threshold value beyond which scores are winsorized,
         i.e. contained at that threshold. The threshold is the maximum absolute
         score value that the function is allowed to produce. The minimum threshold is 1
@@ -156,13 +175,14 @@ def make_zn_scores(
 
     # --- Assertions
     err: str = (
-        "The `neutral` parameter must be a string,"
+        "The `neutral` parameter must be a number or a string with value,"
         " either 'mean', 'median' or 'zero'."
     )
-    if not isinstance(neutral, str):
-        raise TypeError(err)
-    elif neutral not in ["mean", "median", "zero"]:
-        raise ValueError(err)
+    if not isinstance(neutral, Number):
+        if not isinstance(neutral, str):
+            raise TypeError(err)
+        elif neutral not in ["mean", "median", "zero"]:
+            raise ValueError(err)
 
     if thresh is not None:
         err: str = "The `thresh` parameter must a numerical value >= 1.0."
@@ -174,28 +194,24 @@ def make_zn_scores(
     if not isinstance(iis, bool):
         raise TypeError("Parameter `iis` must be a boolean.")
 
-    err = "The `pan_weight` parameter must be a numerical value between 0 and 1 (inclusive)."
+    err = (
+        "The `pan_weight` parameter must be a numerical value between 0 and 1 "
+        "(inclusive)."
+    )
     if not isinstance(pan_weight, Numeric):
         raise TypeError(err)
     elif not (0 <= pan_weight <= 1):
         raise ValueError(err)
 
     error_min = "Minimum observations must be a non-negative Integer value."
-    if not isinstance(min_obs, int) or min_obs < 0:
+    if not isinstance(min_obs, int):
+        raise TypeError(error_min)
+    if min_obs < 0:
         raise ValueError(error_min)
 
-    frequencies = ["d", "w", "m", "q"]
-    error_freq = (
-        f"String Object required and must be one of the available frequencies: "
-        f"{frequencies}."
+    est_freq = _map_to_business_day_frequency(
+        freq=est_freq, valid_freqs=["D", "W", "M", "Q"]
     )
-
-    if not isinstance(est_freq, str):
-        raise TypeError(error_freq)
-    elif est_freq not in frequencies:
-        raise ValueError(error_freq)
-
-    pd_freq = dict(zip(frequencies, ["B", "W-Fri", "BM", "BQ"]))
 
     # --- Prepare re-estimation dates and time-series DataFrame.
 
@@ -220,7 +236,7 @@ def make_zn_scores(
 
     s_date = min(df["real_date"])
     e_date = max(df["real_date"])
-    dates_iter = pd.date_range(start=s_date, end=e_date, freq=pd_freq[est_freq])
+    dates_iter = pd.date_range(start=s_date, end=e_date, freq=est_freq)
 
     dfw = df.pivot(index="real_date", columns="cid", values="value")
     cross_sections = dfw.columns
@@ -276,7 +292,7 @@ def make_zn_scores(
             dfx = dfx.rename_axis("cid", axis=1)
 
             zns_css_df = dfx / df_mabs
-            dfw_zns_css.loc[:, cid] = zns_css_df.to_numpy()
+            dfw_zns_css.loc[:, cid] = zns_css_df["value"]
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
     dfw_zns = dfw_zns.dropna(axis=0, how="all")
@@ -295,7 +311,22 @@ def make_zn_scores(
     return df_out[df.columns].reset_index(drop=True)
 
 
+def _get_expanding_count(X: pd.DataFrame, min_periods: int = 1):
+    """
+    Helper method to get the number of non-NaN values in each expanding window.
+
+    :param <pd.DataFrame> X: Pandas dataframe of input features.
+    :param <int> min_periods: Minimum number of observations in window required to have
+        a value (otherwise result is 0.).
+
+    :return <np.ndarray>: Numpy array of expanding counts.
+    """
+    return X.expanding(min_periods).count().sum(1).to_numpy()
+
+
 if __name__ == "__main__":
+    np.random.seed(1)
+
     cids = ["AUD", "CAD", "GBP", "USD", "NZD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
 
@@ -396,3 +427,22 @@ if __name__ == "__main__":
         pan_weight=0.75,
         postfix="ZN",
     )
+
+    print(panel_df)
+
+    panel_df_7 = make_zn_scores(
+        dfd,
+        "CRY",
+        cids,
+        start="2010-01-04",
+        blacklist=black,
+        sequential=False,
+        min_obs=0,
+        neutral="zero",
+        iis=True,
+        thresh=None,
+        pan_weight=0.75,
+        postfix="ZN",
+    )
+
+    print(panel_df_7)

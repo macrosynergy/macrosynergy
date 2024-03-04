@@ -14,7 +14,7 @@ from macrosynergy.management.utils import reduce_df
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_construction(self):
+    def setUp(self) -> None:
         self.cids = ["AUD", "CAD", "GBP"]
         self.xcats = ["XR", "CRY", "GROWTH", "INFL"]
 
@@ -45,11 +45,13 @@ class TestAll(unittest.TestCase):
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.dfd = dfd
 
+    def tearDown(self) -> None:
+        return super().tearDown()
+
     def test_lag_series(self):
         """
         Test the method used to lag the categories included
         """
-        self.dataframe_construction()
 
         df_w = self.dfd.pivot(
             index=("cid", "real_date"), columns="xcat", values="value"
@@ -96,12 +98,12 @@ class TestAll(unittest.TestCase):
         fixed_date = "2013-03-11"
         condition = df_w_lag.index.get_level_values("real_date") == fixed_date
         period_t = df_w_lag[condition]["INFL_L0"]
-        period_t_aud = float(period_t.loc["AUD"])
+        period_t_aud = float(period_t.loc["AUD"].iloc[0])
 
         lagged_date_2 = pd.Timestamp(fixed_date) + pd.DateOffset(2)
         condition_2 = df_w_lag.index.get_level_values("real_date") == lagged_date_2
         period_t_2 = df_w_lag[condition_2]["INFL_L2"]
-        period_t_2_aud = float(period_t_2.loc["AUD"])
+        period_t_2_aud = float(period_t_2.loc["AUD"].iloc[0])
 
         # Confirm that the value at '2013-03-11' has been lagged correctly in INFL_L2 on
         # AUD: the same value should be held at '2013-03-13'.
@@ -118,18 +120,18 @@ class TestAll(unittest.TestCase):
         condition_5 = df_w_lag.index.get_level_values("real_date") == lagged_date_5
 
         period_t_5 = df_w_lag[condition_5]["INFL_L5"]
-        period_t_5_aud = float(period_t_5.loc["AUD"])
+        period_t_5_aud = float(period_t_5.loc["AUD"].iloc[0])
         self.assertEqual(period_t_aud, period_t_5_aud)
 
-        period_t_gbp = float(period_t.loc["GBP"])
-        period_t_2_gbp = float(period_t_2.loc["GBP"])
+        period_t_gbp = float(period_t.loc["GBP"].iloc[0])
+        period_t_2_gbp = float(period_t_2.loc["GBP"].iloc[0])
 
         # Confirm that the value at '2013-03-11' has been lagged correctly in INFL_L2 on
         # GBP: the same value should be held at '2013-03-13'.
         self.assertEqual(period_t_gbp, period_t_2_gbp)
 
         # INFL_L5 on GBP.
-        period_t_5_gbp = float(period_t_5.loc["GBP"])
+        period_t_5_gbp = float(period_t_5.loc["GBP"].values[0])
         self.assertEqual(period_t_gbp, period_t_5_gbp)
 
         # Lag inflation & Growth by a range of possible options.
@@ -145,8 +147,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(sorted(lagged_columns) == ["GROWTH_L3", "INFL_L0", "INFL_L5"])
 
     def test_correl_matrix(self):
-        self.dataframe_construction()
-
         # Mainly test assertions given the function is used for visualisation. The
         # function can easily be tested through the graph returned.
 
@@ -195,7 +195,7 @@ class TestAll(unittest.TestCase):
             self.fail(f"correl_matrix raised {e} unexpectedly")
 
         lag_dict = {"INFL": [0, 1, 2, 5]}
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test the frequency options: either ['W', 'M', 'Q'].
             correl_matrix(
                 self.dfd,
@@ -240,8 +240,6 @@ class TestAll(unittest.TestCase):
             )
 
     def test_transform_df_for_cross_sectional_corr(self):
-        self.dataframe_construction()
-
         df = reduce_df(self.dfd, xcats=["XR"], cids=self.cids)
         df_w = _transform_df_for_cross_sectional_corr(df, val="value")
 
@@ -249,8 +247,6 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df_w.columns.to_list(), self.cids)
 
     def test_transform_df_for_cross_category_corr(self):
-        self.dataframe_construction()
-
         xcats = ["XR", "CRY"]
         df = reduce_df(self.dfd, xcats=xcats, cids=self.cids)
         df_w = _transform_df_for_cross_category_corr(df, xcats=xcats, val="value")
@@ -259,8 +255,6 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df_w.columns.to_list(), xcats)
 
     def test_cluster_correlations(self):
-        self.dataframe_construction()
-
         df = reduce_df(self.dfd, xcats=["XR"], cids=self.cids)
         df_w = _transform_df_for_cross_sectional_corr(df, val="value")
 

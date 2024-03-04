@@ -1,8 +1,5 @@
 """
 Implementation of linear_composite() function as a module.
-
-::docs::linear_composite::sort_first::
-
 """
 
 import numpy as np
@@ -11,7 +8,7 @@ from typing import List, Dict, Union, Optional, Tuple, Type
 import warnings
 
 from macrosynergy.management.utils import reduce_df
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import is_valid_iso_date
 
 listtypes: Tuple[Type, ...] = (list, np.ndarray, pd.Series, tuple)
@@ -104,7 +101,8 @@ def linear_composite_cid_agg(
         .unstack(level=1)
     )
     # aligning the index of weights_df to the data one
-    # so that we have the same set of dates and same set of CIDs -- thank you @mikiinterfiore
+    # so that we have the same set of dates and same set of CIDs -- thank you
+    # @mikiinterfiore
     weights_df = (
         weights_df.stack(dropna=False)
         .reindex(data_df.stack(dropna=False).index)
@@ -297,7 +295,7 @@ def linear_composite(
     if not set(cids).issubset(set(df["cid"].unique().tolist())):
         raise ValueError("Not all `cids` are available in `df`.")
 
-    _xcat_agg: bool = len(xcats) > 1
+    _xcat_agg: bool = len(xcats) > 1 or new_xcat != "NEW"
     mode: str = "xcat_agg" if _xcat_agg else "cid_agg"
 
     if _xcat_agg and isinstance(weights, str):
@@ -359,7 +357,8 @@ def linear_composite(
     df: pd.DataFrame
     remaining_xcats: List[str]
     remaining_cids: List[str]
-    # NOTE: the "remaining_*" variables will not be in the same order as the input cids/xcats.
+    # NOTE: the "remaining_*" variables will not be in the same order as the input
+    # cids/xcats.
     # Do not used these for index based lookups/operations.
     df, remaining_xcats, remaining_cids = reduce_df(
         df=df,
@@ -387,7 +386,8 @@ def linear_composite(
             if missing_xcats:
                 # warn the user, and put in the dates with NaNs
                 warnings.warn(
-                    f"`cid` {cidx} does not have complete `xcat` data for {missing_xcats}."
+                    f"`cid` {cidx} does not have complete `xcat` data for "
+                    f"{missing_xcats}."
                     " These will be filled with NaNs for the calculation."
                 )
                 # artificially add the missing xcats
@@ -420,7 +420,8 @@ def linear_composite(
         found_cids: List[str] = df["cid"].unique().tolist()
         found_xcats: List[str] = df["xcat"].unique().tolist()
         if isinstance(weights, str):
-            # one of the found_xcats must be the weights, and there should be only one more
+            # one of the found_xcats must be the weights, and there should be only one
+            # more
             assert (weights in found_xcats) and len(
                 (set(found_xcats) - {weights})
             ) == 1, (
@@ -428,23 +429,25 @@ def linear_composite(
                 " it must be present in `df` and there must be only one other `xcat`."
             )
 
-        for icid, cidx in enumerate(
-            cids.copy()
-        ):  # copy to allow modification of `cids`
+        ctr = 0
+        for cidx in cids.copy():  # copy to allow modification of `cids`
             missing_xcats: List[str] = list(
                 set(found_xcats) - set(df.loc[df["cid"] == cidx, "xcat"].unique())
             )
             if missing_xcats:
-                cids.pop(icid)
-                signs.pop(icid)
+                cids.pop(ctr)
+                signs.pop(ctr)
                 if isinstance(weights, list):
-                    weights.pop(icid)
+                    weights.pop(ctr)
                 # drop from df
                 df = df.loc[df["cid"] != cidx, :]
                 warnings.warn(
-                    f"`cid` {cidx} does not have complete `xcat` data for {missing_xcats}."
+                    f"`cid` {cidx} does not have complete `xcat` data for "
+                    f"{missing_xcats}."
                     " It will be dropped from dataframe."
                 )
+            else:
+                ctr += 1
 
         if len(cids) == 0:
             raise ValueError(

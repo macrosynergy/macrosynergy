@@ -5,6 +5,8 @@ Utility functions for working with DataFrames.
 import itertools
 
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.constants import FREQUENCY_MAP
+
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
 
@@ -12,8 +14,7 @@ import numpy as np
 import pandas as pd
 import requests
 import requests.compat
-from .core import get_cid, get_xcat
-
+from .core import get_cid, get_xcat, _map_to_business_day_frequency
 
 def standardise_dataframe(
     df: pd.DataFrame, verbose: bool = False
@@ -230,12 +231,14 @@ def apply_slip(
         if raise_error:
             raise ValueError(
                 "Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
+                f"Missing tickers: "
+                f"{sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
             )
         else:
             warnings.warn(
                 "Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
+                f"Missing tickers: "
+                f"{sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
             )
 
     slip: int = slip.__neg__()
@@ -256,7 +259,7 @@ def downsample_df_on_real_date(
     Downsample JPMaQS DataFrame.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
     :param <List> groupby_columns: a list of columns used to group the DataFrame.
     :param <str> freq: frequency option. Per default the correlations are calculated
         based on the native frequency of the datetimes in 'real_date', which is business
@@ -276,9 +279,7 @@ def downsample_df_on_real_date(
     if not isinstance(freq, str):
         raise TypeError("`freq` must be a string")
     else:
-        freq: str = freq.upper()
-        if freq not in ["D", "W", "M", "Q", "A"]:
-            raise ValueError("`freq` must be one of 'D', 'W', 'M', 'Q' or 'A'")
+        freq: str = _map_to_business_day_frequency(freq)
 
     if not isinstance(agg, str):
         raise TypeError("`agg` must be a string")
@@ -304,9 +305,9 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     the intersection.
 
     :param <pd.DataFrame> df: standardised base JPMaQS DataFrame with the following
-        necessary columns: 'cid', 'xcats', 'real_date' and 'value'.
+        necessary columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <pd.DataFrame> df_add: another standardised JPMaQS DataFrame, with the latest
-        values, to be added with the necessary columns: 'cid', 'xcats', 'real_date', and
+        values, to be added with the necessary columns: 'cid', 'xcat', 'real_date', and
         'value'. Columns that are present in the base DataFrame but not in the appended
         DataFrame will be populated with NaN values.
     :param <bool> xcat_replace: all series belonging to the categories in the added
@@ -317,25 +318,28 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
         or newly defined tickers added.
     """
 
-    cols = ["cid", "xcat", "real_date", "value"]
+    # index_cols = ["cid", "xcat", "real_date"]
     # Consider the other possible metrics that the DataFrame could be defined over
 
     df_cols = set(df.columns)
     df_add_cols = set(df_add.columns)
 
-    error_message = f"The base DataFrame must include the necessary columns: {cols}."
-    assert set(cols).issubset(df_cols), error_message
+    error_message = f"The base DataFrame must be a Quantamental Dataframe."
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError(error_message)
 
-    error_message = f"The added DataFrame must include the necessary columns: {cols}."
-    assert set(cols).issubset(df_add_cols), error_message
+    error_message = f"The added DataFrame must be a Quantamental Dataframe."
+    if not isinstance(df_add, QuantamentalDataFrame):
+        raise TypeError(error_message)
 
-    additional_columns = filter(lambda c: c in df.columns, list(df_add.columns))
-    df_error = (
-        f"The appended DataFrame must be defined over a subset of the columns "
-        f"in the returned DataFrame. The undefined column(s): "
-        f"{additional_columns}."
+    error_message = (
+        "The two Quantamental DataFrames must share at least "
+        "four columns including than 'real_date', 'cid', and 'xcat'."
     )
-    assert df_add_cols.issubset(df_cols), df_error
+
+    all_cols = df_cols.union(df_add_cols)
+    if all_cols != df_cols and all_cols != df_add_cols:
+        raise ValueError(error_message)
 
     if not xcat_replace:
         df = update_tickers(df, df_add)
@@ -345,20 +349,6 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
 
     return df.reset_index(drop=True)
 
-
-def df_tickers(df: pd.DataFrame):
-    """
-    Helper function used to delimit the tickers defined in a received DataFrame.
-
-    :param <pd.DataFrame> df: standardised DataFrame.
-    """
-    cids_append = list(map(lambda c: c + "_", set(df["cid"])))
-    tickers = list(itertools.product(cids_append, set(df["xcat"])))
-    tickers = [c[0] + c[1] for c in tickers]
-
-    return tickers
-
-
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     """
     Method used to update aggregate DataFrame on a ticker level.
@@ -367,10 +357,10 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     :param <pd.DataFrame> df_add: DataFrame with the latest values.
 
     """
-    agg_df_tick = set(df_tickers(df))
-    add_df_tick = set(df_tickers(df_add))
-
     df["ticker"] = df["cid"] + "_" + df["xcat"]
+    df_add["ticker"] = df_add["cid"] + "_" + df_add["xcat"]
+    agg_df_tick = set(df["ticker"])
+    add_df_tick = set(df_add["ticker"])
 
     # If the ticker is already defined in the DataFrame, replace with the new series
     # otherwise append the series to the aggregate DataFrame.
@@ -379,6 +369,7 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     df = pd.concat([df, df_add], axis=0, ignore_index=True)
 
     df = df.drop(["ticker"], axis=1)
+    df_add = df_add.drop(["ticker"], axis=1)
 
     return df.sort_values(["xcat", "cid", "real_date"])
 
@@ -413,7 +404,7 @@ def update_categories(df: pd.DataFrame, df_add):
 
 def reduce_df(
     df: pd.DataFrame,
-    xcats: List[str] = None,
+    xcats: Union[str, List[str]] = None,
     cids: List[str] = None,
     start: str = None,
     end: str = None,
@@ -425,9 +416,9 @@ def reduce_df(
     Filter DataFrame by xcats and cids and notify about missing xcats and cids.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and 'value'.
-    :param <List[str]> xcats: extended categories to be filtered on. Default is all in
-        the DataFrame.
+        'cid', 'xcat', 'real_date' and 'value'.
+    :param <Union[str, List[str]]> xcats: extended categories to be filtered on. Default is
+        all in the DataFrame.
     :param <List[str]> cids: cross sections to be checked on. Default is all in the
         dataframe.
     :param <str> start: string representing the earliest date. Default is None.
@@ -446,6 +437,10 @@ def reduce_df(
     """
 
     dfx = df.copy()
+
+    if xcats is not None:
+        if not isinstance(xcats, list):
+            xcats = [xcats]
 
     if start is not None:
         dfx = dfx[dfx["real_date"] >= pd.to_datetime(start)]
@@ -507,7 +502,7 @@ def reduce_df_by_ticker(
     Filter dataframe by xcats and cids and notify about missing xcats and cids
 
     :param <pd.Dataframe> df: standardized dataframe with the following columns:
-        'cid', 'xcats', 'real_date'.
+        'cid', 'xcat', 'real_date'.
     :param <List[str]> ticks: tickers (cross sections + base categories)
     :param <str> start: string in ISO 8601 representing earliest date. Default is None.
     :param <str> end: string ISO 8601 representing the latest date. Default is None.
@@ -624,7 +619,7 @@ def categories_df(
     if applicable, lags.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the following necessary
-        columns: 'cid', 'xcats', 'real_date' and at least one column with values of
+        columns: 'cid', 'xcat', 'real_date' and at least one column with values of
         interest.
     :param <List[str]> xcats: extended categories involved in the custom DataFrame. The
         last category in the list represents the dependent variable, and the (n - 1)
@@ -664,10 +659,7 @@ def categories_df(
     columns will reflect the order of the categories list.
     """
 
-    frq_options = ["D", "W", "M", "Q", "A"]
-    frq_error = f"Frequency parameter must be one of the stated options, {frq_options}."
-    assert freq in frq_options, frq_error
-    frq_dict = dict(zip(frq_options, ["B", "W-Fri", "BM", "BQ", "BA"]))
+    freq = _map_to_business_day_frequency(freq)
 
     assert isinstance(xcats, list), f"<list> expected and not {type(xcats)}."
     assert all([isinstance(c, str) for c in xcats]), "List of categories expected."
@@ -728,7 +720,7 @@ def categories_df(
         df_w = df_w.groupby(
             [
                 pd.Grouper(level="cid"),
-                pd.Grouper(level="real_date", freq=frq_dict[freq]),
+                pd.Grouper(level="real_date", freq=freq),
             ]
         )
 
@@ -796,3 +788,97 @@ def categories_df(
     # how is set to "any", a potential unnecessary loss of data on certain categories
     # could arise.
     return dfc.dropna(axis=0, how="all")
+
+
+def years_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of years between two dates."""
+    return end_date.year - start_date.year
+
+
+def quarters_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of quarters between two dates."""
+    return (end_date.year - start_date.year) * 4 + (
+        end_date.quarter - start_date.quarter
+    )
+
+
+def months_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of months between two dates."""
+    return (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month)
+
+
+def weeks_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of business weeks between two dates."""
+    next_monday = start_date + pd.offsets.Week(weekday=0)
+    dif = (end_date - next_monday).days // 7 + 1
+    return dif
+
+
+def get_eops(
+    dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
+    start_date: Optional[Union[str, pd.Timestamp]] = None,
+    end_date: Optional[Union[str, pd.Timestamp]] = None,
+    freq: str = "M",
+) -> pd.Series:
+    """
+    Returns a series of end-of-period dates for a given frequency.
+    Dates can be passed as a series, index, a generic iterable or as a start and end date.
+
+    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
+    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
+        be used to generate the end-of-period dates. Can be passed as a series, index, a
+        generic iterable or as a start and end date.
+    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
+        not passed.
+    """
+    if (not isinstance(freq, str)) or (freq.upper() not in FREQUENCY_MAP.keys()):
+        raise ValueError(
+            f"Frequency must be one of {list(FREQUENCY_MAP.keys())}, but received {freq}."
+        )
+    freq: str = freq.upper()
+
+    if bool(start_date) != bool(end_date):
+        raise ValueError(
+            "Both `start_date` and `end_date` must be passed when using "
+            "dates as a start and end date."
+        )
+
+    if bool(start_date) and bool(dates):
+        raise ValueError(
+            "Only one of `dates` or `start_date` and `end_date` must be passed."
+        )
+
+    dts: pd.DataFrame = (
+        pd.DataFrame(dates, columns=["real_date"]).apply(pd.to_datetime, axis=1)
+        if dates is not None
+        else pd.Series(pd.bdate_range(start_date, end_date))
+    )
+    if dates is not None:
+        dts = dts[
+            dts["real_date"].isin(
+                pd.bdate_range(start=dts["real_date"].min(), end=dts["real_date"].max())
+            )
+        ]
+
+    min_date: pd.Timestamp = dts["real_date"].min()
+
+    if freq == "M":
+        func = months_btwn_dates
+    elif freq == "W":
+        func = weeks_btwn_dates
+    elif freq == "Q":
+        func = quarters_btwn_dates
+    elif freq == "A":
+        func = years_btwn_dates
+    elif freq == "D":
+        func = lambda x, y: len(pd.bdate_range(x, y)) - 1
+    else:
+        raise ValueError("Frequency parameter must be one of D, M, W, or Q")
+
+    dts["period"] = dts["real_date"].apply(func, args=(min_date,))
+
+    t_indices: pd.Series = dts["period"].shift(-1) != dts["period"]
+
+    t_dates: pd.Series = dts["real_date"].loc[t_indices].reset_index(drop=True)
+
+    return t_dates
