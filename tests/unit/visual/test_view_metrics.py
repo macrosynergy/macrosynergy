@@ -4,16 +4,20 @@ from typing import List, Dict, Any
 from macrosynergy.management.simulate import make_test_df
 import macrosynergy.visuals as msv
 import matplotlib
+import warnings
+from unittest.mock import patch
+from matplotlib import pyplot as plt
 
 
 class TestAll(unittest.TestCase):
-
     @classmethod
     def setUpClass(self):
         # Prevents plots from being displayed during tests.
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
-        
+        self.mock_show = patch("matplotlib.pyplot.show").start()
+        warnings.simplefilter("ignore")
+
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD"]
         self.xcats: List[str] = ["XR", "CRY", "INFL"]
         self.metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
@@ -30,11 +34,13 @@ class TestAll(unittest.TestCase):
                 on=idx_cols,
             )
         self.df: pd.DataFrame = df
-        
+
     @classmethod
     def tearDownClass(self) -> None:
+        warnings.resetwarnings()
+        plt.close("all")
         matplotlib.use(self.mpl_backend)
-        
+
     def setUp(self):
         self.valid_args: Dict[str, Any] = {
             "df": self.df,
@@ -48,6 +54,9 @@ class TestAll(unittest.TestCase):
             "title": "Test plot",
             "figsize": (10, None),
         }
+
+    def tearDown(self) -> None:
+        plt.close("all")
 
     def test_view_metrics_no_error(self):
         try:
@@ -67,7 +76,8 @@ class TestAll(unittest.TestCase):
         invalid_args["xcat"] = "bad_xcat"
         with self.assertRaises(ValueError):
             try:
-                msv.view_metrics(**invalid_args)
+                with warnings.catch_warnings(record=True) as w:
+                    msv.view_metrics(**invalid_args)
             except Exception as e:
                 self.assertIsInstance(e, ValueError)
                 raise ValueError(e)
@@ -87,13 +97,14 @@ class TestAll(unittest.TestCase):
     def test_view_metrics_invalid_cids(self):
         invalid_args = self.valid_args.copy()
         invalid_args["cids"] = [1, 2, 3]
+        # catch warnings from msm.validation.py
+        with warnings.catch_warnings(record=True) as w:
+            with self.assertRaises(TypeError):
+                msv.view_metrics(**invalid_args)
 
-        with self.assertRaises(TypeError):
-            msv.view_metrics(**invalid_args)
-
-        invalid_args["cids"] = ["bad_cid"]
-        with self.assertRaises(ValueError):
-            msv.view_metrics(**invalid_args)
+            invalid_args["cids"] = ["bad_cid"]
+            with self.assertRaises(ValueError):
+                msv.view_metrics(**invalid_args)
 
     def test_view_metrics_invalid_start_and_end(self):
         invalid_args = self.valid_args

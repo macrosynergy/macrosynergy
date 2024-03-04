@@ -1,9 +1,6 @@
 """
 Implementation of `make_relative_value()` function as a module. The function is used
 to calculate values for indicators relative to a basket of cross-sections.
-
-::docs::make_relative_value::sort_first::
-
 """
 import numpy as np
 import pandas as pd

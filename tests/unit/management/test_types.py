@@ -66,6 +66,22 @@ class TestTypes(unittest.TestCase):
         df["real_date"] = pd.Series(nseries, dtype=object).copy()
         self.assertFalse(isinstance(df, QuantamentalDataFrame))
 
+        # Check if subclassing works as expected
+        df: pd.DataFrame = test_df.copy()
+
+        dfx: QuantamentalDataFrame = QuantamentalDataFrame(df)
+
+        self.assertTrue(isinstance(dfx, QuantamentalDataFrame))
+        self.assertTrue(isinstance(dfx, pd.DataFrame))
+
+        df_Q = (
+            QuantamentalDataFrame(df)
+            .sort_values(["cid", "xcat", "real_date"])
+            .reset_index(drop=True)
+        )
+        df_S = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
+        self.assertTrue(df_Q.equals(df_S))
+
 
 if __name__ == "__main__":
     unittest.main()

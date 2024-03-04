@@ -1,45 +1,154 @@
+from typing import List, Dict
 import unittest
 import numpy as np
 import pandas as pd
 import sys
-from tests.simulate import dataframe_basket, construct_df
+from tests.simulate import dataframe_basket, construct_df, simulate_ar, make_qdf
 from macrosynergy.panel.basket import Basket
 from macrosynergy.management.utils import reduce_df, reduce_df_by_ticker
+import random
 from macrosynergy.panel.historic_vol import flat_std
 from itertools import chain
 import warnings
 
 
-warnings.filterwarnings("ignore")
+def dataframe_basket(ret="XR_NSA", cry=["CRY_NSA"], start=None, end=None, black=None):
+    cids = ["AUD", "GBP", "NZD", "USD"]
+    xcats = [
+        "FXXR_NSA",
+        "FXCRY_NSA",
+        "FXCRR_NSA",
+        "EQXR_NSA",
+        "EQCRY_NSA",
+        "EQCRR_NSA",
+        "FXWBASE_NSA",
+        "EQWBASE_NSA",
+    ]
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+
+    df_cids.loc["AUD"] = ["2010-12-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2011-01-01", "2020-11-30", 0, 2]
+    df_cids.loc["NZD"] = ["2012-01-01", "2020-11-30", 0, 3]
+    df_cids.loc["USD"] = ["2013-01-01", "2020-09-30", 0, 4]
+
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
+
+    df_xcats.loc["FXXR_NSA"] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.2]
+    df_xcats.loc["FXCRY_NSA"] = ["2010-01-01", "2020-12-31", 1, 1, 0.9, 0.2]
+    df_xcats.loc["FXCRR_NSA"] = ["2010-01-01", "2020-12-31", 0.5, 0.8, 0.9, 0.2]
+    df_xcats.loc["EQXR_NSA"] = ["2012-01-01", "2020-12-31", 0.5, 2, 0, 0.2]
+    df_xcats.loc["EQCRY_NSA"] = ["2010-01-01", "2020-12-31", 2, 1.5, 0.9, 0.5]
+    df_xcats.loc["EQCRR_NSA"] = ["2010-01-01", "2020-12-31", 1.5, 1.5, 0.9, 0.5]
+    df_xcats.loc["FXWBASE_NSA"] = ["2010-01-01", "2020-12-31", 1, 1.5, 0.8, 0.5]
+    df_xcats.loc["EQWBASE_NSA"] = ["2010-01-01", "2020-12-31", 1, 1.5, 0.9, 0.5]
+
+    random.seed(2)
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+
+    contracts = ["AUD_FX", "AUD_EQ", "NZD_FX", "GBP_EQ", "USD_EQ"]
+    ticks_cry = []
+    for c_ in cry:
+        ticks_cry.append([c + c_ for c in contracts])
+
+    ticks_ret = [c + ret for c in contracts]
+    tickers = ticks_ret + list(chain.from_iterable(ticks_cry))
+    dfx = reduce_df_by_ticker(dfd, start=start, end=end, blacklist=black, ticks=tickers)
+
+    dfw_ret = dfx[dfx["ticker"].isin(ticks_ret)].pivot(
+        index="real_date", columns="ticker", values="value"
+    )
+    dfw_cry_list = []
+    for t in ticks_cry:
+        dfw_cry = dfx[dfx["ticker"].isin(t)].pivot(
+            index="real_date", columns="ticker", values="value"
+        )
+        dfw_cry_list.append(dfw_cry)
+    if len(dfw_cry_list) == 1:
+        dfw_cry_list = next(iter(dfw_cry_list))
+
+    return dfw_ret, dfw_cry_list, dfd
+
+
+# DataFrame used for more scrupulous, thorough testing.
+def construct_df():
+    weights = [random.random() for i in range(65)]
+    weights = np.array(weights)
+    weights = weights.reshape((13, 5))
+
+    weights[0:4, 0] = np.nan
+    weights[-3:, 1] = np.nan
+    weights[-6:, 2] = np.nan
+    weights[-2:, -1] = np.nan
+    weights[:3, -1] = np.nan
+
+    sum_ = np.nansum(weights, axis=1)
+    sum_ = sum_[:, np.newaxis]
+
+    weights = np.divide(weights, sum_)
+    cols = ["col_" + str(i + 1) for i in range(weights.shape[1])]
+    pseudo_df = pd.DataFrame(data=weights, columns=cols)
+
+    return pseudo_df
+
+
+if __name__ == "__main__":
+    ser_ar = simulate_ar(100, mean=0, sd_mult=1, ar_coef=0.75)
+
+    cids = ["AUD", "CAD", "GBP"]
+    xcats = ["XR", "CRY"]
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2010-01-01", "2020-12-31", 0.5, 2]
+    df_cids.loc["CAD"] = ["2011-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP"] = ["2011-01-01", "2020-11-30", -0.2, 0.5]
+
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
+    df_xcats.loc["XR"] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+
+    dfw_ret, dfw_cry, dfd = dataframe_basket()
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_generator(self):
-        self.__dict__["ret"] = "XR_NSA"
-        self.__dict__["cry"] = ["CRY_NSA", "CRR_NSA"]
-        black = {
+    def setUp(self) -> None:
+        self.ret: str = "XR_NSA"
+        self.cry: List[str] = ["CRY_NSA", "CRR_NSA"]
+        self.black: Dict[str, List[str]] = {
             "AUD": ["2000-01-01", "2003-12-31"],
             "GBP": ["2018-01-01", "2100-01-01"],
         }
-        self.__dict__["black"] = black
+
         dfw_ret, dfw_cry, dfd = dataframe_basket(
             ret=self.ret, cry=self.cry, black=self.black
         )
-        self.__dict__["dfw_ret"] = dfw_ret
-        self.__dict__["dfw_cry"] = dfw_cry
-        self.__dict__["dfd"] = dfd
-        contracts = ["AUD_FX", "AUD_EQ", "NZD_FX", "GBP_EQ", "USD_EQ"]
-        self.__dict__["contracts"] = contracts
+        self.dfw_ret: pd.DataFrame = dfw_ret
+        self.dfw_cry: List[pd.DataFrame] = dfw_cry
+        self.dfd: pd.DataFrame = dfd
+        self.contracts: List[str] = ["AUD_FX", "AUD_EQ", "NZD_FX", "GBP_EQ", "USD_EQ"]
 
-        # Instantiate an instance of the Class.
         basket = Basket(
             df=dfd,
-            contracts=contracts,
+            contracts=self.contracts,
             ret="XR_NSA",
             cry=["CRY_NSA", "CRR_NSA"],
-            blacklist=black,
+            blacklist=self.black,
         )
-        self.__dict__["basket"] = basket
+        self.basket: Basket = basket
+
+    def tearDown(self) -> None:
+        return super().tearDown()
 
     # Internal method used to return a dataframe with the uniform weights and a bool
     # array indicating which rows the procedure is necessary for.
@@ -68,7 +177,6 @@ class TestAll(unittest.TestCase):
             Basket.check_weights(weights)
 
     def test_equal_weight(self):
-        self.dataframe_generator()
         dfw_bool = ~self.dfw_ret.isnull()
         dfw_bool = dfw_bool.astype(dtype=np.uint8)
         bool_arr = dfw_bool.to_numpy()
@@ -88,7 +196,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.all(np.nan_to_num(row) == test))
 
     def test_fixed_weight(self):
-        self.dataframe_generator()
         w = [6, 12, 7, 8, 13]
         weights = self.basket.fixed_weight(df_ret=self.dfw_ret, weights=w)
 
@@ -104,7 +211,6 @@ class TestAll(unittest.TestCase):
             self.assertAlmostEqual(sum_of_diffs, 0, 4)
 
     def test_inverse_weight(self):
-        self.dataframe_generator()
         weights = self.basket.inverse_weight(self.dfw_ret, "ma")
         fvi = weights.first_valid_index()
         weights = weights[fvi:]
@@ -147,7 +253,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(reverse_order == sorted(row_weight, reverse=True))
 
     def test_values_weights(self):
-        self.dataframe_generator()
         # Construct an additional dataframe on a different category to delimit weights.
         # Comparable to the design of basket_performance.py file which isolates a
         # category, from the dataframe produced by make_qdf(), and uses the now truncated
@@ -172,7 +277,10 @@ class TestAll(unittest.TestCase):
         dfx = reduce_df_by_ticker(dfd_weights, ticks=tickers, blacklist=black_)
         w_df = dfx.pivot(index="real_date", columns="ticker", values="value")
 
-        weights = self.basket.values_weight(dfw_ret, w_df, weight_meth="values")
+        with warnings.catch_warnings(record=True) as w:
+            weights = self.basket.values_weight(dfw_ret, w_df, weight_meth="values")
+            self.assertTrue(len(w) == 1)
+
         self.assertTrue(weights.shape == dfw_ret.shape)
         weights_inv = self.basket.values_weight(dfw_ret, w_df, weight_meth="inv_values")
         self.assertTrue(weights_inv.shape == dfw_ret.shape)
@@ -193,11 +301,9 @@ class TestAll(unittest.TestCase):
         for i in range(weights_test.shape[0]):
             compare_1 = np.nan_to_num(weights_test[i, :])
             compare_2 = np.nan_to_num(weights_arr[i, :])
-            condition = (np.all(compare_1 - compare_2)) < 0.000001
-            # self.assertTrue(condition)
+            self.assertTrue(np.allclose(compare_1, compare_2))
 
     def test_max_weight(self):
-        self.dataframe_generator()
         # Test on a randomly generated set of weights (pseudo-DataFrame).
         max_weight = 0.3
 
@@ -207,6 +313,7 @@ class TestAll(unittest.TestCase):
         # larger than the maximum weight, all weight values are unable to be less than
         # the defined maximum value. Therefore, in such instance, set each weight value
         # to the equal weight.
+        uni_bool: pd.Series
         weights_uni, uni_bool = self.weight_check(pseudo_df, max_weight)
 
         weights = self.basket.max_weight_func(pseudo_df, max_weight)
@@ -218,7 +325,7 @@ class TestAll(unittest.TestCase):
         # Check whether the weights are evenly distributed or all are within the
         # upper-bound.
         for i, row in enumerate(weights):
-            if uni_bool[i]:
+            if uni_bool.iloc[i]:
                 # If the maximum weight is less than the uniformly distributed weight,
                 # all weights are set to the uniform value. Validate the logic.
                 self.assertTrue(np.all(row == weights_uni[i, :]))
@@ -237,7 +344,7 @@ class TestAll(unittest.TestCase):
         weights = weights[fvi:]
 
         weights = self.basket.max_weight_func(weights, max_weight)
-
+        uni_bool: pd.Series
         weights_uni, uni_bool = self.weight_check(weights, max_weight)
         weights = weights.to_numpy()
         weights_uni = weights_uni.to_numpy()
@@ -246,7 +353,7 @@ class TestAll(unittest.TestCase):
         weights = np.nan_to_num(weights)
         weights_uni = np.nan_to_num(weights_uni)
         for i, row in enumerate(weights):
-            if uni_bool[i]:
+            if uni_bool.iloc[i]:
                 self.assertTrue(np.all(row == weights_uni[i, :]))
             else:
                 self.assertTrue(np.all((row - (max_weight + 0.001)) < 0.00001))
@@ -255,7 +362,6 @@ class TestAll(unittest.TestCase):
         # Test the operations associated with the Class's Constructor. Will implicitly
         # test the methods: store_attributes(), pivot_dataframe(), date_check().
 
-        self.dataframe_generator()
         dfw_ret = self.dfw_ret
         dfw_cry = self.dfw_cry
         dfd_test = self.dfd
@@ -345,7 +451,6 @@ class TestAll(unittest.TestCase):
         # be stored inside the respective dictionaries: "self.dict_retcry" &
         # "self.dict_wgs".
 
-        self.dataframe_generator()
         basket_1 = Basket(
             df=self.dfd,
             contracts=self.contracts,
@@ -498,7 +603,6 @@ class TestAll(unittest.TestCase):
         # visualisation tools require certain parameters to be defined (dependency
         # between parameters.
 
-        self.dataframe_generator()
         basket_1 = Basket(
             df=self.dfd,
             contracts=self.contracts,
@@ -577,7 +681,6 @@ class TestAll(unittest.TestCase):
 
     def test_return_basket(self):
         # Method used to return the computed dataframes.
-        self.dataframe_generator()
         basket_1 = Basket(
             df=self.dfd,
             contracts=self.contracts,

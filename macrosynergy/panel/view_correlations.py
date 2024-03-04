@@ -1,17 +1,10 @@
 """
 Functions used to visualize correlations across categories or cross-sections of
 panels.
-
-::docs::correl_matrix::sort_first::
 """
-import itertools
 import pandas as pd
 import numpy as np
-import seaborn as sns
-import scipy.cluster.hierarchy as sch
-from matplotlib import pyplot as plt
 from typing import List, Union, Tuple, Dict, Optional, Any
-from collections import defaultdict
 from macrosynergy.management.simulate import make_qdf
 
 import macrosynergy.visuals as msv
@@ -39,7 +32,7 @@ def correl_matrix(
     Visualize correlation across categories or cross-sections of panels.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to be correlated. Default is all in the
         DataFrame. If xcats contains only one category the correlation coefficients
         across cross sections are displayed. If xcats contains more than one category,
@@ -85,7 +78,7 @@ def correl_matrix(
     N.B:. The function displays the heatmap of a correlation matrix across categories or
     cross-sections (depending on which parameter has received multiple elements).
     """
-    
+
     msv.view_correlation(
         df=df,
         xcats=xcats,
@@ -104,6 +97,7 @@ def correl_matrix(
         max_color=max_color,
         show=show,
     )
+
 
 if __name__ == "__main__":
     np.random.seed(0)

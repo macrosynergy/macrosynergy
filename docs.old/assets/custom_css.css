@@ -1,0 +1,12 @@
+
+.bd-header-announcement  {
+    /* set the background color to black */
+    background-color: #000000;
+}
+
+/* rounded image  */
+.bd-header-announcement-img {
+    border-radius: 4%;
+}
+
+

@@ -1,8 +1,6 @@
 """
 Collection of non-standard scikit-learn performance metrics for evaluation of
 machine learning model predictions.
-
-**NOTE: This module is under development, and is not yet ready for production use.**
 """
 
 import numpy as np
@@ -16,13 +14,13 @@ from sklearn.metrics import make_scorer, accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LinearRegression
 
-from macrosynergy.learning import PanelTimeSeriesSplit
+from macrosynergy.learning.panel_time_series_split import ExpandingKFoldPanelSplit
 
 from typing import Union
 
 
 def panel_significance_probability(
-    y_true: pd.Series, y_pred: Union[pd.Series, np.array]
+    y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]
 ) -> float:
     """
     Function to create a linear mixed effects model between the ground truth returns and
@@ -34,7 +32,7 @@ def panel_significance_probability(
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
         multi-indexed by cross-section and date. The dates must be in datetime format.
-    :param <Union[pd.Series,np.array]> y_pred: Either a pandas series or numpy array
+    :param <Union[pd.Series,np.ndarray]> y_pred: Either a pandas series or numpy array
         of predicted targets. This must have the same length as y_true.
 
     :return <float> significance_prob: 1 - p-value of the regression slope parameter,
@@ -54,19 +52,34 @@ def panel_significance_probability(
     if not (len(y_true) == len(y_pred)):
         raise ValueError("y_true and y_pred must have the same length.")
 
+    if np.all(y_true == 0):
+        # Sklearn averages each metric over the CV splits.
+        # If all the ground truth labels are zero, the regression is invalid due to a
+        # singular matrix. Hence, we return zero in this case.
+        significance_prob = 0
+        return significance_prob
+
     # regress ground truth against predictions
     X = add_constant(y_pred)
     groups = y_true.index.get_level_values(1)
 
     # fit model
     re = MixedLM(y_true, X, groups=groups).fit(reml=False)
-    pval = re.pvalues[1]
+    pval = re.pvalues.iloc[1]
 
     return 1 - pval
 
-def regression_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
+
+def regression_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> float:
     """
     Function to return the accuracy between the signs of the predictions and targets.
+
+    :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
+        multi-indexed by cross-section and date. The dates must be in datetime format.
+    :param <Union[pd.Series,np.ndarray]> y_pred: Either a pandas series or numpy array
+        of predicted targets. This must have the same length as y_true.
+
+    :return <float>: Accuracy between the signs of the predictions and targets.
     """
 
     # checks
@@ -81,13 +94,23 @@ def regression_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -
 
     if not (len(y_true) == len(y_pred)):
         raise ValueError("y_true and y_pred must have the same length.")
-    
+
     return accuracy_score(y_true < 0, y_pred < 0)
 
-def regression_balanced_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
+
+def regression_balanced_accuracy(
+    y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]
+) -> float:
     """
-    Function to return the balancedaccuracy between the signs
+    Function to return the balanced accuracy between the signs
     of the predictions and targets.
+
+    :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
+        multi-indexed by cross-section and date. The dates must be in datetime format.
+    :param <Union[pd.Series,np.ndarray]> y_pred: Either a pandas series or numpy array
+        of predicted targets. This must have the same length as y_true.
+
+    :return <float>: Balanced accuracy between the signs of the predictions and targets.
     """
 
     # checks
@@ -102,15 +125,21 @@ def regression_balanced_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.
 
     if not (len(y_true) == len(y_pred)):
         raise ValueError("y_true and y_pred must have the same length.")
-    
-    return balanced_accuracy_score(y_true < 0, y_pred < 0)
-    
 
-def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
+    return balanced_accuracy_score(y_true < 0, y_pred < 0)
+
+
+def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> float:
     """
-    NOTE: This function is experimental.
     Function to return a Sharpe ratio for a strategy where we go long if the predictions
     are positive and short if the predictions are negative.
+
+    :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
+        multi-indexed by cross-section and date. The dates must be in datetime format.
+    :param <Union[pd.Series,np.ndarray]> y_pred: Either a pandas series or numpy array
+        of predicted targets. This must have the same length as y_true.
+
+    :return <float>: Sharpe ratio for the binary strategy.
     """
 
     # checks
@@ -130,16 +159,28 @@ def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float
     average_return = np.mean(portfolio_returns)
     std_return = np.std(portfolio_returns)
 
-    sharpe_ratio = average_return / std_return
+    if std_return == 0:
+        # Sklearn averages each metric over the CV splits.
+        # If the standard deviation is zero, the portfolio returns are constant.
+        # So we return zero to ignore this split in the average.
+        sharpe_ratio = 0
+    else:
+        sharpe_ratio = average_return / std_return
 
     return sharpe_ratio
 
 
-def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
+def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> float:
     """
-    NOTE: This function is experimental.
     Function to return a Sortino ratio for a strategy where we go long if the predictions
     are positive and short if the predictions are negative.
+
+    :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
+        multi-indexed by cross-section and date. The dates must be in datetime format.
+    :param <Union[pd.Series,np.ndarray]> y_pred: Either a pandas series or numpy array
+        of predicted targets. This must have the same length as y_true.
+
+    :return <float>: Sortino ratio for the binary strategy.
     """
 
     # checks
@@ -158,14 +199,20 @@ def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> floa
     portfolio_returns = np.where(y_pred > 0, y_true, -y_true)
     negative_returns = portfolio_returns[portfolio_returns < 0]
     average_return = np.mean(portfolio_returns)
+    denominator = np.sqrt(np.mean(negative_returns**2))
 
-    sortino_ratio = average_return / np.sqrt(np.mean(negative_returns**2))
+    if denominator == 0:
+        # Sklearn averages each metric over the CV splits.
+        # If the denominator is zero, the sortino ratio over this period is invalid.
+        # So we return zero to ignore this split in the average.
+        sortino_ratio = 0
+    else:
+        sortino_ratio = average_return / denominator
 
     return sortino_ratio
 
 
 if __name__ == "__main__":
-
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CPI", "GROWTH", "RIR"]
 
@@ -199,7 +246,7 @@ if __name__ == "__main__":
     X = df.drop(columns="XR")
     y = df["XR"]
 
-    splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="expanding")
+    splitter = ExpandingKFoldPanelSplit(n_splits=4)
     scorer1 = make_scorer(panel_significance_probability, greater_is_better=True)
     scorer2 = make_scorer(sharpe_ratio, greater_is_better=True)
     scorer3 = make_scorer(sortino_ratio, greater_is_better=True)

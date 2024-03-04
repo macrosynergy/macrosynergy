@@ -2,8 +2,6 @@
 Module for checking the availability of data availabity from a 
 Quantamental DataFrame. Includes functions for checking start years
 and end dates of a DataFrame, as well as visualizing the results.
-
-::docs::check_availability::sort_first::
 """
 
 import numpy as np
@@ -30,7 +28,7 @@ def check_availability(
     Wrapper for visualizing start and end dates of a filtered DataFrame.
 
     :param <pd.DataFrame> df: standardized DataFrame with the following necessary
-        columns: 'cid', 'xcats', 'real_date'.
+        columns: 'cid', 'xcat', 'real_date'.
     :param <List[str]> xcats: extended categories to be checked on.
         Default is all in the DataFrame.
     :param <List[str]> cids: cross sections to be checked on.
@@ -70,7 +68,7 @@ def missing_in_df(df: pd.DataFrame, xcats: List[str] = None, cids: List[str] = N
     Print missing cross-sections and categories
 
     :param <pd.DataFrame> df: standardized DataFrame with the following necessary
-        columns: 'cid', 'xcats', 'real_date'.
+        columns: 'cid', 'xcat', 'real_date'.
     :param <List[str]> xcats: extended categories to be checked on. Default is all
         in the DataFrame.
     :param <List[str]> cids: cross sections to be checked on. Default is all in
@@ -92,7 +90,7 @@ def check_startyears(df: pd.DataFrame):
     DataFrame with starting years across all extended categories and cross-sections
 
     :param <pd.DataFrame> df: standardized DataFrame with the following necessary
-        columns: 'cid', 'xcats', 'real_date'.
+        columns: 'cid', 'xcat', 'real_date'.
 
     """
     df: pd.DataFrame = df.copy()
@@ -108,7 +106,7 @@ def check_enddates(df: pd.DataFrame) -> pd.DataFrame:
     DataFrame with end dates across all extended categories and cross sections.
 
     :param <pd.DataFrame> df: standardized DataFrame with the following necessary
-        columns: 'cid', 'xcats', 'real_date'.
+        columns: 'cid', 'xcat', 'real_date'.
     """
     df: pd.DataFrame = df.copy()
     df = df.dropna(how="any")

@@ -20,7 +20,7 @@ import math
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_generator(self):
+    def setUp(self) -> None:
         """Create  standardised dataframe defined over the three categories"""
 
         self.cids: List[str] = ["AUD", "GBP", "JPY", "NZD", "USD"]
@@ -63,7 +63,6 @@ class TestAll(unittest.TestCase):
             "GBP": ["2018-01-01", "2100-01-01"],
         }
 
-
         # Exclude the blacklist from the creation of the dataframe. All dates are used
         # for calculating the evolving volatility for the volatility targeting mechanism.
         self.dfd_reduced: pd.DataFrame = reduce_df(
@@ -78,6 +77,9 @@ class TestAll(unittest.TestCase):
             index="real_date", columns="cid", values="value"
         )
 
+    def tearDown(self) -> None:
+        return super().tearDown()
+
     def test_weight_dataframes(self):
         """
         Tests separability and consistency of returns and weights.
@@ -90,7 +92,6 @@ class TestAll(unittest.TestCase):
         # dataframes and a dictionary of the basket's name and the associated
         # constituents.
 
-        self.dataframe_generator()
         dfd = reduce_df(
             df=self.dfd,
             xcats=self.xcats,
@@ -137,7 +138,6 @@ class TestAll(unittest.TestCase):
         Test if unit positions are correct.
         """
 
-        self.dataframe_generator()
         xcat_sig = "SIG_NSA"
         dfd = reduce_df(
             df=self.dfd,
@@ -310,7 +310,9 @@ class TestAll(unittest.TestCase):
 
         std = np.array(std)
         row_vector = std[:, np.newaxis]
-        test_zn_scores = np.clip(numerator.div(row_vector, axis="rows"), -thresh, thresh)
+        test_zn_scores = np.clip(
+            numerator.div(row_vector, axis="rows"), -thresh, thresh
+        )
         condition = test_zn_scores.to_numpy() - output_rows.to_numpy()
         # Convert the NaN value to zero for testing purposes only.
         condition = np.nan_to_num(condition)
@@ -329,7 +331,6 @@ class TestAll(unittest.TestCase):
     def test_cs_unit_returns(self):
         # The method is required for volatility targeting to adjust the respective
         # positions.
-        self.dataframe_generator()
 
         sigrels = [1, -1]
         ret = "XR_NSA"
@@ -397,8 +398,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(first_date == "2012-01-02")
 
     def test_basket_handler(self):
-        self.dataframe_generator()
-
         reduced_dfd = reduce_df(
             df=self.dfd, xcats=self.xcats, cids=self.cids, blacklist=None
         )
@@ -487,7 +486,6 @@ class TestAll(unittest.TestCase):
         return df_basket_pos
 
     def test_consolidation_help(self):
-        self.dataframe_generator()
         # If a basket of contracts are defined, their respective positions will be weight
         # adjusted. After the weight-adjusted positions are computed for the basket,
         # consolidate the positions on the shared contracts: intersection between the
@@ -544,16 +542,16 @@ class TestAll(unittest.TestCase):
         df_basket_pos_test_date = df_basket_pos.loc[test_date]
 
         for c in non_basket_cids:
-            logic = test_values[test_values["cid"] == c]["value"]
+            logic = (test_values[test_values["cid"] == c]["value"]).iloc[0]
+            logic: float = float(logic)
             t_val = df_mods_w_test_date[c]
-            logic = float(logic)
             self.assertTrue(abs(t_val - logic) < 0.000001)
 
         # Consolidate the positions computed for the basket contracts and the respective
         # panel.
         for c in contract_cids:
-            logic = test_values[test_values["cid"] == c]["value"]
-            logic = float(logic)
+            logic = (test_values[test_values["cid"] == c]["value"]).iloc[0]
+            logic: float = float(logic)
             panel_val = df_mods_w_test_date[c]
             basket_val = df_basket_pos_test_date[c]
             # Consolidation operation.
@@ -561,7 +559,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(abs(logic - test) < 0.000001)
 
     def test_consolidate_positions(self):
-        self.dataframe_generator()
         # Conceals the function above and applies the logic to multiple baskets which are
         # consolidated to the associated number of panels.
         # Confirm the application of multiple baskets works.
@@ -694,8 +691,6 @@ class TestAll(unittest.TestCase):
         # column.
         # The workflow and logic has already been examined individually with the
         # final method dependent on the previous steps being executed correctly.
-
-        self.dataframe_generator()
 
         reduced_dfd = reduce_df(
             df=self.dfd, xcats=self.xcats, cids=self.cids, blacklist=None

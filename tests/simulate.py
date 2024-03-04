@@ -19,7 +19,7 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
     :param <float> ar_coef: auto-regression coefficient (between 0 and 1): default is
         0.75.
 
-    return <np.array>: auto-correlated data series.
+    return <np.ndarray>: auto-correlated data series.
     """
 
     ar_params = np.r_[1, -ar_coef]

@@ -1,11 +1,6 @@
 """
 Module with functionality for generating mock 
 quantamental data for testing purposes.
-
-::docs::make_qdf::sort_first::
-::docs::make_qdf_black::sort_first::
-::docs::make_test_df::sort_first::
-
 """
 import numpy as np
 import pandas as pd
@@ -13,6 +8,8 @@ from statsmodels.tsa.arima_process import ArmaProcess
 from typing import List, Tuple, Dict, Union
 from collections import defaultdict
 import datetime
+import warnings
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
@@ -25,7 +22,7 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
         This affects non-zero means.
     :param <float> ar_coef: autoregression coefficient (between 0 and 1): default is 0.75.
 
-    :return <np.array>: autocorrelated data series.
+    :return <np.ndarray>: autocorrelated data series.
     """
 
     # Define relative parameters for creating an AR process.
@@ -35,8 +32,10 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
     ser = ser + mean - np.mean(ser)
     return sd_mult * ser / np.std(ser)
 
-def dataframe_generator(df_cids: pd.DataFrame, df_xcats: pd.DataFrame,
-                        cid: str, xcat: str):
+
+def dataframe_generator(
+    df_cids: pd.DataFrame, df_xcats: pd.DataFrame, cid: str, xcat: str
+):
     """
     Adjacent method used to construct the quantamental DataFrame.
 
@@ -199,7 +198,7 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
                 # in the dictionary.
                 # Naturally compare against the data-series' formal start & end date.
                 if start < dates[0] or end > dates[-1]:
-                    print("Blackout period date not within data series range.")
+                    warnings.warn("Blackout period date not within data series range.")
                     break
                 # If the date falls on a weekend, change to the following Monday.
                 elif condition_start > 0:
@@ -324,7 +323,7 @@ def make_test_df(
     start: str = "2010-01-01",
     end: str = "2020-12-31",
     style: str = "any",
-):
+) -> QuantamentalDataFrame:
     """
     Generates a test dataframe with pre-defined values.
     These values are meant to be used for testing purposes only.
@@ -341,8 +340,8 @@ def make_test_df(
     :param <str> end_date: An ISO-formatted date string.
     :param <str> style: A string that specifies the type of line to generate.
         Current choices are: 'linear', 'decreasing-linear', 'sharp-hill',
-        'four-bit-sine', 'sine', 'cosine', 'sawtooth', 'any'.
-        See `macrosynergy.management.simulate.simulate_quantamental_data.generate_lines()`.
+        'four-bit-sine', 'sine', 'cosine', 'sawtooth', 'any'. See 
+        `macrosynergy.management.simulate.simulate_quantamental_data.generate_lines()`.
     """
 
     if isinstance(cids, str):
