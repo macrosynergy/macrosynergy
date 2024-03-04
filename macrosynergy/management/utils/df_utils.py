@@ -884,8 +884,8 @@ def get_eops(
         func = quarters_btwn_dates
     elif freq == "A":
         func = years_btwn_dates
-    elif freq == "D":
-        func = lambda x, y: len(pd.bdate_range(x, y)) - 1
+    # elif freq == "D":
+    #     func = lambda x, y: len(pd.bdate_range(x, y)) - 1
     else:
         raise ValueError("Frequency parameter must be one of D, M, W, or Q")
 
