@@ -14,7 +14,12 @@ import numpy as np
 import pandas as pd
 import requests
 import requests.compat
-from .core import get_cid, get_xcat, _map_to_business_day_frequency
+from macrosynergy.management.utils.core import (
+    get_cid,
+    get_xcat,
+    _map_to_business_day_frequency,
+)
+
 
 def standardise_dataframe(
     df: pd.DataFrame, verbose: bool = False
@@ -882,3 +887,52 @@ def get_eops(
     t_dates: pd.Series = dts["real_date"].loc[t_indices].reset_index(drop=True)
 
     return t_dates
+
+
+def estimate_release_frequency(
+    timeseries: pd.Series,
+    exception_tolerance: float = 0.1,
+):
+    """
+    Estimates the release frequency of a timeseries.
+
+    :param <pd.Series> timeseries: The timeseries to be used to estimate the release
+        frequency.
+    :param <float> exception_tolerance: The tolerance for exceptions in the release
+        frequency estimation. Must be a float between 0 and 1.
+    :return <str>: The estimated release frequency.
+    """
+    timeseries = timeseries.copy().dropna()
+    if (
+        not isinstance(timeseries, pd.Series)
+        or timeseries.empty
+        or timeseries.index.name != "real_date"
+    ):
+        raise TypeError(
+            "Argument `timeseries` must be a non-empty pandas Series with "
+            "a datetime index `'real_date'`."
+        )
+
+    if not isinstance(exception_tolerance, (int, float)) or not (
+        0 <= exception_tolerance <= 1
+    ):
+        raise TypeError(
+            "Argument `exception_tolerance` must be a float between 0 and 1."
+        )
+
+    # get start and end date
+    start: pd.Timestamp = timeseries.index.min()
+    end: pd.Timestamp = timeseries.index.max()
+
+    eops_dict = {
+        frx: get_eops(start_date=start, end_date=end, freq=frx)
+        for frx in FREQUENCY_MAP.keys()
+    }
+    # count the number of observations in each frequency between consecutive EOPs
+    eops_est = {}
+    for frx, eops in eops_dict.items():
+        eops_est[frx] = timeseries.groupby(pd.cut(timeseries.index, eops)).count()
+    
+    
+    
+    
