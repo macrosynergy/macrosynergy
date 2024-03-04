@@ -1112,6 +1112,12 @@ class SignalOptimizer:
                     raise TypeError("The keys of the ftrs_renamed dictionary must be strings.")
                 if not isinstance(value, str):
                     raise TypeError("The values of the ftrs_renamed dictionary must be strings.")
+                if key not in self.X.columns:
+                    raise ValueError(
+                        f"""The key {key} in the ftrs_renamed dictionary is not a feature 
+                        in the pipeline {name}.
+                        """
+                    )
         if not isinstance(figsize, tuple):
             raise TypeError("The figsize argument must be a tuple.")
         if len(figsize) != 2:
@@ -1141,7 +1147,7 @@ class SignalOptimizer:
             plt.title(title)
         else:
             plt.title(f"Feature coefficients for pipeline: {name}")
-            
+
         plt.show()
 
     def intercepts_timeplot(self, name, title=None, figsize=(10, 6)):
@@ -1249,10 +1255,10 @@ class SignalOptimizer:
                     raise TypeError("The keys of the ftrs_renamed dictionary must be strings.")
                 if not isinstance(value, str):
                     raise TypeError("The values of the ftrs_renamed dictionary must be strings.")
-                if key not in ftrcoef_df.columns:
+                if key not in self.X.columns:
                     raise ValueError(
-                        f"""The feature name {key} is not in the list of features for this pipeline.
-                        Please check the feature renaming dictionary carefully.
+                        f"""The key {key} in the ftrs_renamed dictionary is not a feature 
+                        in the pipeline {name}.
                         """
                     )
         if not isinstance(figsize, tuple):
@@ -1284,6 +1290,9 @@ class SignalOptimizer:
         ftrcoef_df.drop(columns=["real_date", "name"], inplace=True)
 
         # Average the coefficients for each year
+        if ftrs_renamed is not None:
+            ftrcoef_df.rename(columns=ftrs_renamed, inplace=True)
+
         avg_coefs = ftrcoef_df.groupby("year").mean()
         pos_coefs = avg_coefs.clip(lower=0)
         neg_coefs = avg_coefs.clip(upper=0)
