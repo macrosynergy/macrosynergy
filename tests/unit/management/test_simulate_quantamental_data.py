@@ -1,57 +1,41 @@
+from typing import Any, Dict, List, Union
 import unittest
 import random
 import numpy as np
 import pandas as pd
 import os
-from typing import List
-from macrosynergy.management.simulate import (
-    make_qdf,
-    make_qdf_black,
-    simulate_ar,
-    generate_lines,
-    make_test_df,
-)
+from macrosynergy.management.simulate import *
 
 
 class Test_All(unittest.TestCase):
     def df_construction(self):
-        cids = ["AUD", "CAD", "GBP"]
-        xcats = ["XR", "CRY"]
-        df_cids = pd.DataFrame(
-            index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
-        )
-        df_cids.loc["AUD", :] = ["2010-01-01", "2020-12-31", 0.5, 2]
-        df_cids.loc["CAD", :] = ["2011-01-01", "2020-11-30", 0, 1]
-        df_cids.loc["GBP", :] = ["2011-01-01", "2020-11-30", -0.2, 0.5]
+        cids = ['AUD', 'CAD', 'GBP']
+        xcats = ['XR', 'CRY']
+        df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
+                                                    'sd_mult'])
+        df_cids.loc['AUD', :] = ['2010-01-01', '2020-12-31', 0.5, 2]
+        df_cids.loc['CAD', :] = ['2011-01-01', '2020-11-30', 0, 1]
+        df_cids.loc['GBP', :] = ['2011-01-01', '2020-11-30', -0.2, 0.5]
 
-        df_xcats = pd.DataFrame(
-            index=xcats,
-            columns=[
-                "earliest",
-                "latest",
-                "mean_add",
-                "sd_mult",
-                "ar_coef",
-                "back_coef",
-            ],
-        )
+        df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
+                                                      'sd_mult', 'ar_coef', 'back_coef'])
 
         df_xcats.loc["XR", :] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
         df_xcats.loc["CRY", :] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
 
         random.seed(1)
-        self.dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     def df_construct_black(self):
-        cids = ["AUD", "CAD", "GBP"]
+        cids = ['AUD', 'CAD', 'GBP']
         # The algorithm is designed to test on a singular category.
-        xcats = ["XR"]
-        df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
-        df_cids.loc["AUD", :] = ["2010-01-01", "2020-12-31"]
-        df_cids.loc["CAD", :] = ["2011-01-01", "2021-11-25"]
-        df_cids.loc["GBP", :] = ["2011-01-01", "2020-11-30"]
+        xcats = ['XR']
+        df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest'])
+        df_cids.loc['AUD', :] = ['2010-01-01', '2020-12-31']
+        df_cids.loc['CAD', :] = ['2011-01-01', '2021-11-25']
+        df_cids.loc['GBP', :] = ['2011-01-01', '2020-11-30']
 
-        df_xcats = pd.DataFrame(index=xcats, columns=["earliest", "latest"])
+        df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest'])
 
         df_xcats.loc["XR", :] = ["2010-01-01", "2021-11-25"]
 
@@ -86,12 +70,12 @@ class Test_All(unittest.TestCase):
         return np.corrcoef(np.array([arr_1, arr_2]))[0, 1]
 
     def cor_coef(self, df, ticker_x, ticker_y):
-        x = ticker_x.split("_", 1)
-        y = ticker_y.split("_", 1)
-        filt_x = (df["cid"] == x[0]) & (self.dfd["xcat"] == x[1])
-        filt_y = (df["cid"] == y[0]) & (self.dfd["xcat"] == y[1])
-        dfd_x = self.dfd.loc[filt_x,].set_index("real_date")["value"]
-        dfd_y = self.dfd.loc[filt_y,].set_index("real_date")["value"]
+        x = ticker_x.split('_', 1)
+        y = ticker_y.split('_', 1)
+        filt_x = (df['cid'] == x[0]) & (self.dfd['xcat'] == x[1])
+        filt_y = (df['cid'] == y[0]) & (self.dfd['xcat'] == y[1])
+        dfd_x = self.dfd.loc[filt_x, ].set_index('real_date')['value']
+        dfd_y = self.dfd.loc[filt_y, ].set_index('real_date')['value']
 
         dfd_xy = pd.merge(dfd_x, dfd_y, how="inner", left_index=True, right_index=True)
         return dfd_xy.corr().iloc[0, 1]
@@ -283,13 +267,11 @@ class Test_All(unittest.TestCase):
                     t_df: pd.DataFrame = df[(df["cid"] == cid) & (df["xcat"] == xcat)]
                     self.assertTrue(set(ebdates) == set(t_df["real_date"]))
                     # assert that the values are the same as the line style
-                    self.assertTrue(
-                        np.array_equal(
-                            t_df["value"].to_numpy(),
-                            generate_lines(sig_len=len(ebdates), style=ls),
-                        )
-                    )
+                    self.assertTrue(np.array_equal(t_df['value'].to_numpy(), generate_lines(sig_len=len(ebdates), style=ls)))
+        
 
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
+
     unittest.main()
