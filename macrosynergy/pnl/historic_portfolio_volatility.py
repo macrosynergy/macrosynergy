@@ -129,15 +129,20 @@ def _estimate_variance_covariance(
 
     cov_matr = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
 
+    nan_ratio = lambda x: np.isnan(x).sum() + (x == 0).sum() / len(x)
+    apply_mask = lambda x: x if nan_ratio(x) <= nan_tolerance else np.nan * x
+
     for iB, cB in enumerate(piv_ret.columns):
         for iA, cA in enumerate(piv_ret.columns[: iB + 1]):
+            rA: np.ndarray = apply_mask(piv_ret[cA].values)
+            rB: np.ndarray = apply_mask(piv_ret[cB].values)
             est_vol = weighted_covariance(
-                x=piv_ret[cA].values,
-                y=piv_ret[cB].values,
+                x=rA,
+                y=rB,
                 w=weights_arr,
                 remove_zeros=remove_zeros,
             )
-            cov_matr[iA, iB] = est_vol  # TODO (iA, iB) is same as (iB, iA) 
+            cov_matr[iA, iB] = est_vol  # TODO (iA, iB) is same as (iB, iA)
             cov_matr[iB, iA] = est_vol  # TODO (iA, iB) is same as (iB, iA)
 
     assert np.all((cov_matr.T == cov_matr) ^ np.isnan(cov_matr))
@@ -421,6 +426,9 @@ if __name__ == "__main__":
     from macrosynergy.management.simulate import simulate_returns_and_signals
     from contract_signals import contract_signals
 
+    # np seed 42
+    np.random.seed(42)
+
     # Signals: FXCRY_NSA, EQCRY_NSA (rename to FX_CSIG_STRAT, EQ_CSIG_STRAT)
     # Returns: FXXR_NSA, EQXR_NSA (renamed to FXXR, EQXR)
 
@@ -442,8 +450,13 @@ if __name__ == "__main__":
     )
     # TODO simulate_returns_and_signals are risk-signals, not contract signals. We need to adjust for volatility and common (observed) factor.
     end = df["real_date"].max().strftime("%Y-%m-%d")
-    # randomly make 10% of the entires NaN
-    df.loc[df.sample(frac=0.1).index, "value"] = np.nan
+
+    df_copy = df.copy()
+
+    N_p_nans = 0.20
+    df["value"] = df["value"].apply(
+        lambda x: x if np.random.rand() > N_p_nans else np.nan
+    )
 
     df_vol: pd.DataFrame = historic_portfolio_vol(
         df=df,
@@ -457,5 +470,22 @@ if __name__ == "__main__":
         start=start,
         end=end,
     )
-    print(df_vol.head(10))
-    print(df_vol.tail(10))
+
+    df_copy_vol: pd.DataFrame = historic_portfolio_vol(
+        df=df_copy,
+        sname="STRAT",
+        fids=fids,
+        est_freq="m",
+        lback_periods=15,
+        lback_meth="ma",
+        half_life=11,
+        rstring="XR",
+        start=start,
+        end=end,
+    )
+
+    expc_idx = pd.Timestamp("2019-04-26")
+    assert df_copy_vol.max()["real_date"] == expc_idx  # np.seed is 42
+
+    # print(df_copy_vol.head(10))
+    # print(df_copy_vol.tail(10))
