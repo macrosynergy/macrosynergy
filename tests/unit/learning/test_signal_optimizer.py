@@ -1572,3 +1572,15 @@ class TestAll(unittest.TestCase):
             so.nsplits_timeplot(name="test")
         except Exception as e:
             self.fail(f"nsplits_timeplot raised an exception: {e}")
+        # Test that setting the title works
+        ax = plt.gca()
+        title = ax.get_title()
+        self.assertTrue(title == "Number of CV splits for pipeline: test")
+        # Try changing the title
+        try:
+            so.nsplits_timeplot(name="test", title="hello")
+        except Exception as e:
+            self.fail(f"nsplits_timeplot raised an exception: {e}")
+        ax = plt.gca()
+        title = ax.get_title()
+        self.assertTrue(title == "hello")
