@@ -751,7 +751,7 @@ class SignalOptimizer:
             # Check whether a feature selector was used and get the output features if so
             final_estimator = optim_model[-1]
             for _, transformer in reversed(optim_model.steps):
-                if issubclass(transformer, SelectorMixin):
+                if isinstance(transformer, SelectorMixin):
                     ftr_names = transformer.get_feature_names_out()
                     break
         else:
