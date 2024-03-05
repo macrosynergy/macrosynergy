@@ -223,6 +223,25 @@ class TestContractSignals(unittest.TestCase):
         self.assertIsInstance(dfc, pd.DataFrame)
         # TODO for unit signals (same signal for all cross sections), and relative value, the contract signal should be zero position.
 
+    def test_contract_signal_relative_value_and_volatility_adjustment(self):
+        p: pd.DataFrame = pd.DataFrame(
+            1.0,
+            columns=[f"{cid:s}_SIGNAL" for cid in ("AUD", "GBP", "EUR")],
+            index=pd.date_range("2000-01-01", periods=252, freq="B")
+        )
+        p.index.name = "real_date"
+        p.columns.name = "ticker"
+        dfx = p.stack().to_frame("value").reset_index()
+        dfx[["cid", "xcat"]] = dfx.ticker.str.split("_", n=1, expand=True)
+        # TODO add volatility to the above unit signal
+
+        # TODO add relative value changes and compare with contract signals...
+        dfc: pd.DataFrame = contract_signals(dfx, sig="SIGNAL", cids=["AUD", "GBP", "EUR"], ctypes=["FX"])
+
+        self.assertIsInstance(dfc, pd.DataFrame)
+        # TODO for unit signals (same signal for all cross sections), and relative value, the contract signal should be zero position.
+        # TODO similar: relative value is after volatility adjustment of a signal - so even when adding volatility, a unit signal should be zero position.
+
 
 if __name__ == "__main__":
     unittest.main()
