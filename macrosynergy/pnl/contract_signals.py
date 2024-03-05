@@ -165,11 +165,17 @@ def coerce_estimation_frequency(df_wide: pd.DataFrame, est_freq: str) -> pd.Data
 
     :return <pd.DataFrame>: dataframe with the estimated frequency.
     """
-    # estimated_freq: str = estimate_release_frequency(df_wide=df_wide)
-    # # for tickers where the frequency is higher than the estimated frequency
-    # # downsample the dataframe
-    # if estimated_freq != est_freq:
-    df_wide = downsample_wide_df_on_real_date(df=df_wide, freq=est_freq)
+
+    estimated_freq: pd.Series = estimate_release_frequency(df_wide=df_wide)
+
+    series_to_downsample: bool = estimated_freq[
+        estimated_freq != est_freq
+    ].index.tolist()
+
+    if len(series_to_downsample) > 0:
+        df_wide.loc[:, series_to_downsample] = downsample_wide_df_on_real_date(
+            df_wide=df_wide.loc[:, series_to_downsample], est_freq=est_freq
+        )
 
     return df_wide
 
