@@ -675,6 +675,7 @@ class TestFunctions(unittest.TestCase):
         )
         self.assertEqual(expc_no_cycles, len(test_result_3) - 1)
         # -1 as len(test_result_3) includes the last index
+        set_test_result_3 = set(test_result_3)
 
         test_vals = [
             [pd.Timestamp("2023-01-31"), True],
@@ -686,9 +687,39 @@ class TestFunctions(unittest.TestCase):
             [pd.Timestamp("2005-12-30"), True],
             [pd.Timestamp("2000-12-29"), True],
         ]
-        set_test_result_3 = set(test_result_3)
         for tval in test_vals:
             self.assertEqual(tval[0] in set_test_result_3, tval[1])
+
+        test_start_date = "2000-01-01"
+        test_end_date = "2001-10-31"
+
+        test_result_4 = get_eops(
+            start_date=test_start_date, end_date=test_end_date, freq="Q"
+        )
+        expected_rs_4 = [
+            "2000-03-31",
+            "2000-06-30",
+            "2000-09-29",
+            "2000-12-29",
+            "2001-03-30",
+            "2001-06-29",
+            "2001-09-28",
+            "2001-10-31",
+        ]
+        self.assertTrue(
+            set(test_result_4) == set([pd.Timestamp(dx) for dx in expected_rs_4])
+        )
+
+        daterange5 = pd.bdate_range(start="2023-01-01", end="2024-01-01")
+        test_case_5 = pd.DataFrame({"real_date": pd.Series(daterange5)})
+        test_result_5 = get_eops(dates=test_case_5, freq="D")
+
+        expc_vals = set(daterange5.tolist())
+        test_vals = set(test_result_5.tolist())
+        self.assertEqual(expc_vals, test_vals)
+        
+        test_result_6 = get_eops(start_date="2023-01-01", end_date="2024-01-01", freq="D")
+        self.assertEqual(expc_vals, set(test_result_6))
 
     def test_map_to_business_day_frequency(self):
         fm_copy = FREQUENCY_MAP.copy()
@@ -699,22 +730,23 @@ class TestFunctions(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             _map_to_business_day_frequency("X")
-            
+
         with self.assertRaises(TypeError):
             _map_to_business_day_frequency(1)
-        
+
         with self.assertRaises(ValueError):
             _map_to_business_day_frequency("D", valid_freqs=["W", "M"])
-            
+
         with self.assertRaises(ValueError):
             _map_to_business_day_frequency("D", valid_freqs=["X", "Y", "Z"])
-            
+
         # check reverse mapping
         for k, v in fm_copy.items():
             self.assertEqual(_map_to_business_day_frequency(v), v, f"Failed for {v}")
-            
+
         with self.assertRaises(TypeError):
             _map_to_business_day_frequency("M", valid_freqs=1)
+
 
 if __name__ == "__main__":
     unittest.main()
