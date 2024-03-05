@@ -1250,7 +1250,7 @@ class SignalReturnRelations:
 
             row = self.get_rowcol(hash, rows)
             column = self.get_rowcol(hash, columns)
-            df_result[column][row] = self.calculate_single_stat(stat, ret, sig, type)
+            df_result.loc[row, column] = self.calculate_single_stat(stat, ret, sig, type)
 
             # Reset self.df and sig to original values
             self.df = self.original_df
@@ -1293,30 +1293,36 @@ class SignalReturnRelations:
         """
 
         if len(rows) == 2:
-            rows_names = [
-                a + "/" + b for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]
-            ]
-            columns_names = [
-                a + "/" + b
-                for a in rows_dict[columns[0]]
-                for b in rows_dict[columns[1]]
-            ]
+            rows_names = pd.MultiIndex.from_tuples([(a, b) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]])
+            columns_names = pd.MultiIndex.from_tuples([(a, b) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]]])
+            # rows_names = [
+            #     a + "/" + b for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]
+            # ]
+            # columns_names = [
+            #     a + "/" + b
+            #     for a in rows_dict[columns[0]]
+            #     for b in rows_dict[columns[1]]
+            # ]
         elif len(rows) == 1:
             rows_names = rows_dict[rows[0]]
-            columns_names = [
-                a + "/" + b + "/" + c
-                for a in rows_dict[columns[0]]
-                for b in rows_dict[columns[1]]
-                for c in rows_dict[columns[2]]
-            ]
+            columns_names = pd.MultiIndex.from_tuples([(a, b, c) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]]] for c in rows_dict[columns[2]])
+            # rows_names = rows_dict[rows[0]]
+            # columns_names = [
+            #     a + "/" + b + "/" + c
+            #     for a in rows_dict[columns[0]]
+            #     for b in rows_dict[columns[1]]
+            #     for c in rows_dict[columns[2]]
+            # ]
         elif len(columns) == 1:
-            rows_names = [
-                a + "/" + b + "/" + c
-                for a in rows_dict[rows[0]]
-                for b in rows_dict[rows[1]]
-                for c in rows_dict[rows[2]]
-            ]
+            rows_names = pd.MultiIndex.from_tuples([(a, b, c) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]] for c in rows_dict[rows[2]]])
             columns_names = rows_dict[columns[0]]
+            # rows_names = [
+            #     a + "/" + b + "/" + c
+            #     for a in rows_dict[rows[0]]
+            #     for b in rows_dict[rows[1]]
+            #     for c in rows_dict[rows[2]]
+            # ]
+            # columns_names = rows_dict[columns[0]]
 
         return rows_names, columns_names
 
@@ -1332,10 +1338,14 @@ class SignalReturnRelations:
         idx: List[str] = ["ret", "xcat", "freq", "agg_sigs"]
         assert all([x in idx for x in rowcols]), "rowcols must be a subset of idx"
 
-        for rowcol in rowcols:
-            result += hash.split("/")[idx.index(rowcol)] + "/"
+        if len(rowcols) == 1:
+            result = hash.split("/")[idx.index(rowcols[0])]
+        if len(rowcols) == 2:
+            result = (hash.split("/")[idx.index(rowcols[0])], hash.split("/")[idx.index(rowcols[1])])
+        if len(rowcols) == 3:
+            result = (hash.split("/")[idx.index(rowcols[0])], hash.split("/")[idx.index(rowcols[1])], hash.split("/")[idx.index(rowcols[2])])
 
-        return result[:-1]
+        return result
 
 
 if __name__ == "__main__":
