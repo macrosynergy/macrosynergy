@@ -950,6 +950,8 @@ def estimate_release_frequency(
     timeseries: pd.Series = None,
     df_wide: pd.DataFrame = None,
     exception_tolerance: float = 0.1,
+    score_method: str = "count",
+    **kwargs,
 ) -> Union[str, pd.DataFrame]:
     """
     Estimates the release frequency of a timeseries.
@@ -958,10 +960,24 @@ def estimate_release_frequency(
         frequency.
     :param <float> exception_tolerance: The tolerance for exceptions in the release
         frequency estimation. Must be a float between 0 and 1.
+    :param <str> score_method: The method used to score the release frequency. Must be
+        one of "mean", or "count".
+        - "mean": chooses the period with the mean number of releases per period closest
+            to one.
+        - "count": chooses the period has the highest ratio of periods with exactly one
+            release to the total number of periods.
+
+
     :return <str>: The estimated release frequency.
+
     """
 
+    if score_method not in ["mean", "count"]:
+        raise NotImplementedError("The score method must be one of 'mean', or 'count'.")
+
     if df_wide is not None:
+        if timeseries is not None:
+            raise ValueError("Only one of `timeseries` or `df_wide` must be passed.")
         if not isinstance(df_wide, pd.DataFrame):
             raise TypeError("Argument `df_wide` must be a pandas DataFrame.")
         if df_wide.empty or df_wide.index.name != "real_date":
@@ -971,21 +987,14 @@ def estimate_release_frequency(
             )
 
     if df_wide is not None:
-        est_freqs = pd.DataFrame(
-            {
-                ticker: estimate_release_frequency(
-                    timeseries=df_wide[ticker], exception_tolerance=exception_tolerance
-                )
-                for ticker in df_wide.columns
-            }
-        )
-        return est_freqs
+        return _estimate_release_frequency_wide(df_wide=df_wide, **kwargs)
 
-    timeseries = timeseries.copy().dropna()
+    timeseries: pd.Series = timeseries.copy().dropna().drop_duplicates(keep="first")
+
     if (
         not isinstance(timeseries, pd.Series)
         or timeseries.empty
-        or timeseries.index.name != "real_date"
+        or not isinstance(timeseries.index, pd.DatetimeIndex)
     ):
         raise TypeError(
             "Argument `timeseries` must be a non-empty pandas Series with "
@@ -1003,30 +1012,49 @@ def estimate_release_frequency(
     start: pd.Timestamp = timeseries.index.min()
     end: pd.Timestamp = timeseries.index.max()
 
-    eops_dict = {
-        frx: get_eops(start_date=start, end_date=end, freq=frx)
-        for frx in FREQUENCY_MAP.keys()
-    }
-    eops_est = {}
-    for frx, eops in eops_dict.items():
-        # count the number of entries timeseries has between eops[n] and eops[n+1]
-        occs: np.ndarray = np.array(
-            [
-                timeseries.loc[eops[i] : eops[i + 1]].count()
-                for i in range(len(eops) - 1)
-            ]
+    eops_scores = {}
+    for freqx in FREQUENCY_MAP.keys():
+        bins: pd.Series = pd.cut(
+            timeseries.index,
+            pd.bdate_range(start=start, end=end, freq=freqx),
         )
-        abs_score = np.sum(occs == 1) / len(occs)
-        # w_score = np.sum(occs[np.where(occs != 1)] / len(occs))
-        eops_est[frx] = abs_score
+        bin_counts = bins.value_counts()
+        if score_method == "mean":
+            eops_scores[freqx] = bin_counts.mean()
+        if score_method == "count":
+            eops_scores[freqx] = (
+                bin_counts[bin_counts == 1].count() / bin_counts.count()
+            )
 
-    best_freq = max(eops_est, key=eops_est.get)
+    eops_scores = pd.Series(eops_scores, name="score")
 
-    if eops_est[best_freq] < exception_tolerance:
-        warnings.warn(
-            f"Estimated release frequency is {best_freq} with an exception tolerance "
-            f"of {exception_tolerance}.",
-            category=UserWarning,
-        )
+    if score_method == "mean":
+        return (abs(eops_scores) - 1).idxmin()
 
-    return best_freq
+    if score_method == "count":
+        return eops_scores.idxmax()
+
+
+def _estimate_release_frequency_wide(df_wide: pd.DataFrame, **kwargs):
+    """
+    Estimates the release frequency of a wide DataFrame.
+    Backend for `estimate_release_frequency`.
+
+    :param <pd.DataFrame> df_wide: The wide DataFrame to be used to estimate the release
+        frequency.
+
+    :return <pd.DataFrame>: The estimated release frequency.
+    """
+    assert "timeseries" not in kwargs, "Argument `timeseries` is not allowed."
+    assert isinstance(df_wide, pd.DataFrame), "Argument `df_wide` must be a DataFrame."
+
+    return pd.Series(
+        [
+            estimate_release_frequency(
+                timeseries=df_wide[tx],
+                **kwargs,
+            )
+            for tx in df_wide.columns
+        ],
+        index=df_wide.columns,
+    )
