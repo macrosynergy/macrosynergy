@@ -710,16 +710,24 @@ class TestFunctions(unittest.TestCase):
             set(test_result_4) == set([pd.Timestamp(dx) for dx in expected_rs_4])
         )
 
-        daterange5 = pd.bdate_range(start="2023-01-01", end="2024-01-01")
+        stdt5, enddt5 = "2023-01-01", "2024-01-01"
+        daterange5 = pd.bdate_range(start=stdt5, end=enddt5)
         test_case_5 = pd.DataFrame({"real_date": pd.Series(daterange5)})
         test_result_5 = get_eops(dates=test_case_5, freq="D")
 
         expc_vals = set(daterange5.tolist())
         test_vals = set(test_result_5.tolist())
         self.assertEqual(expc_vals, test_vals)
-        
-        test_result_6 = get_eops(start_date="2023-01-01", end_date="2024-01-01", freq="D")
+
+        stdt5, enddt5 = enddt5, stdt5  # swap
+        test_result_6 = get_eops(start_date=stdt5, end_date=enddt5, freq="D")
         self.assertEqual(expc_vals, set(test_result_6))
+
+        with self.assertRaises(TypeError):
+            get_eops(start_date=1, end_date="2024-01-01", freq="D")
+
+        with self.assertRaises(ValueError):
+            get_eops(start_date="0", end_date="2024-01-01", freq="D")
 
     def test_map_to_business_day_frequency(self):
         fm_copy = FREQUENCY_MAP.copy()
