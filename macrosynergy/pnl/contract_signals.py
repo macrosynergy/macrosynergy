@@ -24,6 +24,9 @@ from macrosynergy.management.utils import (
     get_cid,
     get_xcat,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _check_scaling_args(
@@ -58,6 +61,7 @@ def _check_scaling_args(
             csigns: List[int] = [x / abs(x) for x in csigns]
     else:
         csigns: List[int] = [1] * len(ctypes)
+
     ## Check hbasket and hscales
     if hbasket is not None:
         if not (bool(hratios) and bool(hscales)):
@@ -161,11 +165,11 @@ def coerce_estimation_frequency(df_wide: pd.DataFrame, est_freq: str) -> pd.Data
 
     :return <pd.DataFrame>: dataframe with the estimated frequency.
     """
-    estimated_freq: str = estimate_release_frequency(df_wide=df_wide)
-    # for tickers where the frequency is higher than the estimated frequency
-    # downsample the dataframe
-    if estimated_freq != est_freq:
-        df_wide = downsample_wide_df_on_real_date(df=df_wide, freq=est_freq)
+    # estimated_freq: str = estimate_release_frequency(df_wide=df_wide)
+    # # for tickers where the frequency is higher than the estimated frequency
+    # # downsample the dataframe
+    # if estimated_freq != est_freq:
+    df_wide = downsample_wide_df_on_real_date(df=df_wide, freq=est_freq)
 
     return df_wide
 
@@ -311,7 +315,7 @@ def _apply_hedge_ratios(
 
     df_wide = df_wide.loc[:, hedged_assets_list]
 
-    return ticker_df_to_qdf(df=df_wide)
+    return df_wide
 
 
 def _add_hedged_signals(

@@ -304,6 +304,8 @@ def downsample_wide_df_on_real_date(
     df: pd.DataFrame,
     freq: str = "M",
     agg: str = "mean",
+    ffill: bool = False,
+    max_fill: int = 0,
 ):
     if not isinstance(freq, str):
         raise TypeError("`freq` must be a string")
@@ -319,6 +321,11 @@ def downsample_wide_df_on_real_date(
                 "`agg` must be one of 'mean', 'median', 'min', 'max', 'first', 'last'"
             )
 
+    ffill = bool(ffill)
+
+    if not isinstance(max_fill, int) or max_fill < 0:
+        raise ValueError("Max fill must be a non-negative integer.")
+
     # now, downsample given that each column is a ticker
     if not isinstance(df, pd.DataFrame):
         raise TypeError("`df` must be a DataFrame")
@@ -327,7 +334,13 @@ def downsample_wide_df_on_real_date(
             raise ValueError("DataFrame must have a 'real_date' index")
         df = df.set_index("real_date")
 
-    return df.resample(freq).agg(agg, numeric_only=True)
+    if not ffill:
+        return df.resample(freq).agg(agg, numeric_only=True)
+
+    min_date, max_date = df.index.min(), df.index.max()
+    date_range = pd.bdate_range(min_date, max_date, freq=freq)
+    df = df.reindex(date_range)
+
 
 
 def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False):
