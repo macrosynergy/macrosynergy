@@ -84,7 +84,7 @@ def _univariate_volatility(
     return univariate_vol
 
 
-def weighted_covariance(
+def _weighted_covariance(
     x: np.ndarray, y: np.ndarray, w: np.ndarray = None, remove_zeros: bool = True
 ):
     """
@@ -108,8 +108,6 @@ def weighted_covariance(
 def _estimate_variance_covariance(
     piv_ret: pd.DataFrame,
     remove_zeros: bool,
-    nan_tolerance: float,
-    lback_periods: int,
     weights_arr: Optional[np.ndarray],
 ) -> pd.DataFrame:
     """Estimation of the variance-covariance matrix needs to have the following configuration options
@@ -131,7 +129,7 @@ def _estimate_variance_covariance(
 
     for iB, cB in enumerate(piv_ret.columns):
         for iA, cA in enumerate(piv_ret.columns[: iB + 1]):
-            est_vol = weighted_covariance(
+            est_vol = _weighted_covariance(
                 x=piv_ret[cA].values,
                 y=piv_ret[cB].values,
                 w=weights_arr,
@@ -202,6 +200,9 @@ def _calculate_portfolio_volatility(
         piv_ret = (
             pivot_returns.loc[pivot_returns.index <= td].iloc[-lback_periods:].dropna()
         )
+
+        # TODO: what if len(pivot_returns) < lback_periods? -- ffill, fillna, or drop?
+
         weights_arr = weights_func(
             lback_periods=min(lback_periods, len(piv_ret)),
             half_life=min(half_life, len(piv_ret)),
@@ -209,7 +210,6 @@ def _calculate_portfolio_volatility(
 
         vcv: pd.DataFrame = _estimate_variance_covariance(
             piv_ret=piv_ret,
-            lback_periods=lback_periods,
             weights_arr=weights_arr,
             **kwargs,
         )
