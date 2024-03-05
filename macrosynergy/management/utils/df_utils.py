@@ -304,6 +304,36 @@ def downsample_df_on_real_date(
     )
 
 
+def downsample_wide_df_on_real_date(
+    df: pd.DataFrame,
+    freq: str = "M",
+    agg: str = "mean",
+):
+    if not isinstance(freq, str):
+        raise TypeError("`freq` must be a string")
+    else:
+        freq: str = _map_to_business_day_frequency(freq)
+
+    if not isinstance(agg, str):
+        raise TypeError("`agg` must be a string")
+    else:
+        agg: str = agg.lower()
+        if agg not in ["mean", "median", "min", "max", "first", "last"]:
+            raise ValueError(
+                "`agg` must be one of 'mean', 'median', 'min', 'max', 'first', 'last'"
+            )
+
+    # now, downsample given that each column is a ticker
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("`df` must be a DataFrame")
+    if df.index.name != "real_date":
+        if not "real_date" in df.columns:
+            raise ValueError("DataFrame must have a 'real_date' index")
+        df = df.set_index("real_date")
+
+    return df.resample(freq).agg(agg, numeric_only=True)
+
+
 def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False):
     """
     Append a standard DataFrame to a standard base DataFrame with ticker replacement on
@@ -891,9 +921,10 @@ def get_eops(
 
 
 def estimate_release_frequency(
-    timeseries: pd.Series,
+    timeseries: pd.Series = None,
+    df_wide: pd.DataFrame = None,
     exception_tolerance: float = 0.1,
-):
+) -> Union[str, pd.DataFrame]:
     """
     Estimates the release frequency of a timeseries.
 
@@ -903,6 +934,27 @@ def estimate_release_frequency(
         frequency estimation. Must be a float between 0 and 1.
     :return <str>: The estimated release frequency.
     """
+
+    if df_wide is not None:
+        if not isinstance(df_wide, pd.DataFrame):
+            raise TypeError("Argument `df_wide` must be a pandas DataFrame.")
+        if df_wide.empty or df_wide.index.name != "real_date":
+            raise ValueError(
+                "Argument `df_wide` must be a non-empty pandas DataFrame with a datetime "
+                "index `'real_date'`."
+            )
+
+    if df_wide is not None:
+        est_freqs = pd.DataFrame(
+            {
+                ticker: estimate_release_frequency(
+                    timeseries=df_wide[ticker], exception_tolerance=exception_tolerance
+                )
+                for ticker in df_wide.columns
+            }
+        )
+        return est_freqs
+
     timeseries = timeseries.copy().dropna()
     if (
         not isinstance(timeseries, pd.Series)
