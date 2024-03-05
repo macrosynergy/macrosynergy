@@ -354,6 +354,7 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
 
     return df.reset_index(drop=True)
 
+
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     """
     Method used to update aggregate DataFrame on a ticker level.
@@ -928,11 +929,26 @@ def estimate_release_frequency(
         frx: get_eops(start_date=start, end_date=end, freq=frx)
         for frx in FREQUENCY_MAP.keys()
     }
-    # count the number of observations in each frequency between consecutive EOPs
     eops_est = {}
     for frx, eops in eops_dict.items():
-        eops_est[frx] = timeseries.groupby(pd.cut(timeseries.index, eops)).count()
-    
-    
-    
-    
+        # count the number of entries timeseries has between eops[n] and eops[n+1]
+        occs: np.ndarray = np.array(
+            [
+                timeseries.loc[eops[i] : eops[i + 1]].count()
+                for i in range(len(eops) - 1)
+            ]
+        )
+        abs_score = np.sum(occs == 1) / len(occs)
+        # w_score = np.sum(occs[np.where(occs != 1)] / len(occs))
+        eops_est[frx] = abs_score
+
+    best_freq = max(eops_est, key=eops_est.get)
+
+    if eops_est[best_freq] < exception_tolerance:
+        warnings.warn(
+            f"Estimated release frequency is {best_freq} with an exception tolerance "
+            f"of {exception_tolerance}.",
+            category=UserWarning,
+        )
+
+    return best_freq
