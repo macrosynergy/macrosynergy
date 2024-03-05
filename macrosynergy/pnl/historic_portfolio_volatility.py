@@ -10,6 +10,7 @@ import logging
 
 from macrosynergy.panel.historic_vol import expo_std, flat_std, expo_weights
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
+from macrosynergy.management.constants import FFILL_LIMITS
 from macrosynergy.management.utils import (
     reduce_df,
     standardise_dataframe,
@@ -18,6 +19,7 @@ from macrosynergy.management.utils import (
     ticker_df_to_qdf,
     get_eops,
     get_cid,
+    _map_to_business_day_frequency
 )
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
@@ -149,7 +151,7 @@ def _hist_vol(
     pivot_signals: pd.DataFrame,
     pivot_returns: pd.DataFrame,
     sname: str,
-    est_freq: str = "m",
+    est_freq: str = "M",
     lback_periods: int = 21,
     lback_meth: str = "ma",
     half_life=11,
@@ -183,6 +185,7 @@ def _hist_vol(
         raise NotImplementedError(
             f"`lback_meth` must be 'ma' or 'xma'; got {lback_meth}"
         )
+    
 
     # NOTE: `get_eops` helps identify the dates for which the volatility calculation
     # will be performed. This is done by identifying the last date of each cycle.
@@ -247,8 +250,7 @@ def _hist_vol(
     # Annualised standard deviation (ASD)
     df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name] * 252)
 
-    ffills = {"d": 1, "w": 5, "m": 24, "q": 64}
-    df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[est_freq]).dropna()
+    df_out = df_out.reindex(pivot_returns.index).ffill(limit=FFILL_LIMITS[est_freq])
 
     return df_out
 
@@ -258,7 +260,7 @@ def historic_portfolio_vol(
     sname: str,
     fids: List[str],
     rstring: str = "XR",
-    est_freq: str = "m",
+    est_freq: str = "M",
     lback_periods: int = 21,
     lback_meth: str = "ma",
     half_life=11,
@@ -341,6 +343,7 @@ def historic_portfolio_vol(
 
     ## Standardize and copy DF
     df: pd.DataFrame = standardise_dataframe(df.copy())
+    est_freq = _map_to_business_day_frequency(est_freq)
 
     ## Check the dates
     if start is None:
