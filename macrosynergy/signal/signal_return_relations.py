@@ -1277,7 +1277,25 @@ class SignalReturnRelations:
                 yticklabels=row_names,
             )
 
-        return df_result
+        header_styles = [
+            {'selector': 'th', 
+            'props': [('font-size', '12px'),
+                    ('text-align', 'center'),
+                    ('background-color', 'black')]}
+        ]
+
+        index_styles = [
+            {'selector': '.index_name',
+            'props': [('font-size', '12px'),
+                    ('text-align', 'right'),
+                    ('background-color', 'black')]}
+        ]
+
+        # Apply the styles to the DataFrame
+        styled_df = df_result.style.set_table_styles(header_styles, overwrite=False)
+        styled_df = styled_df.set_table_styles(index_styles, axis=1, overwrite=False)
+
+        return styled_df
 
     def set_df_labels(self, rows_dict: Dict, rows: List[str], columns: List[str]):
         """
