@@ -16,10 +16,12 @@ from macrosynergy.learning import (
     ExpandingKFoldPanelSplit,
     RollingKFoldPanelSplit,
     ExpandingIncrementPanelSplit,
+    LassoSelector,
 )
 
 from sklearn.model_selection import KFold
-from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.linear_model import LinearRegression, Ridge, Lasso
+from sklearn.pipeline import Pipeline
 from sklearn.metrics import make_scorer, mean_squared_error
 
 
@@ -1129,6 +1131,59 @@ class TestAll(unittest.TestCase):
             self.assertTrue(inter_data[1]=="test")
             if inter_data[2] is not None:
                 self.assertIsInstance(inter_data[2], np.float32)
+            # Check that the worker function outputs as expected when no models are selected
+            so3 = SignalOptimizer(
+                inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+            )
+            outer_splitter = ExpandingIncrementPanelSplit(
+                train_intervals=1,
+                test_size=1,
+                min_cids=4,
+                min_periods=36,
+                max_periods=None,
+            )
+            models = {"linreg": Pipeline([("selector", LassoSelector(alpha=10000)), ("linreg", LinearRegression())])}
+            for train_idx, test_idx in outer_splitter.split(X=self.X_train, y=self.y_train):
+                try:
+                    prediction_date, modelchoice_data, ftr_data, inter_data = so3._worker(
+                        train_idx=train_idx,
+                        test_idx=test_idx,
+                        name="test",
+                        models=models,
+                        metric=self.metric,
+                        original_date_levels=sorted(
+                            self.X_train.index.get_level_values(1).unique()
+                        ),
+                        hparam_grid={"linreg": {}},
+                        hparam_type="random",
+                        n_iter=1,
+                    )
+                except Exception as e:
+                    self.fail(f"_worker raised an exception: {e}")
+                self.assertIsInstance(prediction_date, list)
+                self.assertTrue(prediction_date[0] == "test")
+                self.assertIsInstance(prediction_date[1], pd.Index)
+                self.assertIsInstance(prediction_date[2], pd.DatetimeIndex)
+                self.assertIsInstance(prediction_date[3], np.ndarray)
+                self.assertTrue(np.all(prediction_date[3] == 0))
+                self.assertIsInstance(modelchoice_data, list)
+                self.assertIsInstance(modelchoice_data[0], datetime.date)
+                self.assertTrue(modelchoice_data[1] == "test")
+                self.assertTrue(modelchoice_data[2] is None)
+                self.assertTrue(modelchoice_data[3] is None)
+                # feature coefficients
+                self.assertIsInstance(ftr_data, list)
+                self.assertTrue(len(ftr_data) == 2 + 3)
+                self.assertIsInstance(ftr_data[0], datetime.date)
+                self.assertTrue(ftr_data[1]=="test")
+                for ftr_coef in ftr_data[2:]:
+                    self.assertTrue(ftr_coef is np.nan)
+                # intercept data
+                self.assertIsInstance(inter_data, list)
+                self.assertTrue(len(inter_data) == 2 + 1)
+                self.assertIsInstance(inter_data[0], datetime.date)
+                self.assertTrue(inter_data[1]=="test")
+                self.assertTrue(inter_data[2] is np.nan)
 
     def test_types_get_intercepts(self):
         so = SignalOptimizer(
@@ -1617,3 +1672,5 @@ class TestAll(unittest.TestCase):
         ax = plt.gca()
         title = ax.get_title()
         self.assertTrue(title == "hello")
+
+    
