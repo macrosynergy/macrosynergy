@@ -729,6 +729,18 @@ class TestFunctions(unittest.TestCase):
         with self.assertRaises(ValueError):
             get_eops(start_date="0", end_date="2024-01-01", freq="D")
 
+        with self.assertRaises(ValueError):
+            get_eops(start_date="2023-01-01", end_date="2024-01-01", freq="X")
+
+        with self.assertRaises(ValueError):
+            get_eops(start_date="2023-01-01", freq=1)
+
+        with self.assertRaises(ValueError):
+            get_eops(start_date="2023-01-01", dates=test_case_5, freq="D")
+
+        test_result_7 = get_eops(dates=test_case_5, freq="A")
+        self.assertTrue(len(test_result_7) == 2)  # as there are 2 years
+
     def test_map_to_business_day_frequency(self):
         fm_copy = FREQUENCY_MAP.copy()
         for k in fm_copy.keys():
