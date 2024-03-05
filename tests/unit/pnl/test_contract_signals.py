@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union, Any
 
-from tests.simulate import make_qdf
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.pnl.contract_signals import (
     contract_signals,
@@ -174,6 +173,55 @@ class TestContractSignals(unittest.TestCase):
         self.assertTrue((df["value"] == 1).all())
         
         self.assertTrue(dfcs.eq(_add_hedged_signals(dfcs, None)).all().all())
+
+    def test_contract_signal_no_adjustment(self):
+        p: pd.DataFrame = pd.DataFrame(
+            1.0,
+            columns=[f"{cid:s}_SIGNAL" for cid in ("AUD", "GBP", "EUR")],
+            index=pd.date_range("2000-01-01", periods=252, freq="B")
+        )
+        p.index.name = "real_date"
+        p.columns.name = "ticker"
+        dfx = p.stack().to_frame("value").reset_index()
+        dfx[["cid", "xcat"]] = dfx.ticker.str.split("_", n=1, expand=True)
+        dfc: pd.DataFrame = contract_signals(dfx, sig="SIGNAL", cids=["AUD", "GBP", "EUR"], ctypes=["FX"])
+
+        self.assertIsInstance(dfc, pd.DataFrame)
+        # TODO check identical dfx and dfc...
+    
+    def test_contract_signal_with_volatility_adjustment(self):
+        p: pd.DataFrame = pd.DataFrame(
+            1.0,
+            columns=[f"{cid:s}_SIGNAL" for cid in ("AUD", "GBP", "EUR")],
+            index=pd.date_range("2000-01-01", periods=252, freq="B")
+        )
+        p.index.name = "real_date"
+        p.columns.name = "ticker"
+        dfx = p.stack().to_frame("value").reset_index()
+        # TODO add monthly volatility changes and compare with contract signals...
+
+        dfx[["cid", "xcat"]] = dfx.ticker.str.split("_", n=1, expand=True)
+        dfc: pd.DataFrame = contract_signals(dfx, sig="SIGNAL", cids=["AUD", "GBP", "EUR"], ctypes=["FX"])
+
+        self.assertIsInstance(dfc, pd.DataFrame)
+        # TODO check reasonable fit... correct adjustment
+    
+    def test_contract_signal_relative_value(self):
+        p: pd.DataFrame = pd.DataFrame(
+            1.0,
+            columns=[f"{cid:s}_SIGNAL" for cid in ("AUD", "GBP", "EUR")],
+            index=pd.date_range("2000-01-01", periods=252, freq="B")
+        )
+        p.index.name = "real_date"
+        p.columns.name = "ticker"
+        dfx = p.stack().to_frame("value").reset_index()
+        dfx[["cid", "xcat"]] = dfx.ticker.str.split("_", n=1, expand=True)
+
+        # TODO add relative value changes and compare with contract signals...
+        dfc: pd.DataFrame = contract_signals(dfx, sig="SIGNAL", cids=["AUD", "GBP", "EUR"], ctypes=["FX"])
+
+        self.assertIsInstance(dfc, pd.DataFrame)
+        # TODO for unit signals (same signal for all cross sections), and relative value, the contract signal should be zero position.
 
 
 if __name__ == "__main__":
