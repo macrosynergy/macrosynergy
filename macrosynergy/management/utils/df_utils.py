@@ -5,7 +5,7 @@ Utility functions for working with DataFrames.
 import itertools
 
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.constants import FREQUENCY_MAP
+from macrosynergy.management.constants import FREQUENCY_MAP, FFILL_LIMITS
 
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
@@ -305,6 +305,7 @@ def downsample_wide_df_on_real_date(
     freq: str = "M",
     agg: str = "mean",
     ffill: bool = False,
+    bfill: bool = False,
     max_fill: int = 0,
 ):
     if not isinstance(freq, str):
@@ -321,7 +322,9 @@ def downsample_wide_df_on_real_date(
                 "`agg` must be one of 'mean', 'median', 'min', 'max', 'first', 'last'"
             )
 
-    ffill = bool(ffill)
+    ffill, bfill = bool(ffill), bool(bfill)
+    if ffill and bfill:
+        raise ValueError("Cannot use both ffill and bfill.")
 
     if not isinstance(max_fill, int) or max_fill < 0:
         raise ValueError("Max fill must be a non-negative integer.")
@@ -334,13 +337,26 @@ def downsample_wide_df_on_real_date(
             raise ValueError("DataFrame must have a 'real_date' index")
         df = df.set_index("real_date")
 
-    if not ffill:
-        return df.resample(freq).agg(agg, numeric_only=True)
+    rdf = df.resample(freq).agg(agg, numeric_only=True)
+    rdf.index.name = "real_date"
+    if not (ffill or bfill):
+        return rdf
 
-    min_date, max_date = df.index.min(), df.index.max()
-    date_range = pd.bdate_range(min_date, max_date, freq=freq)
-    df = df.reindex(date_range)
-
+    rdf = rdf.reindex(
+        pd.Series(
+            pd.bdate_range(
+                df.index.min(),
+                df.index.max(),
+                freq="B",
+                name="real_date",
+            )
+        )
+    )
+    if ffill:
+        rdf = rdf.ffill(limit=FFILL_LIMITS[freq])
+    if bfill:
+        rdf = rdf.bfill(limit=FFILL_LIMITS[freq])
+    return rdf
 
 
 def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False):
