@@ -32,6 +32,7 @@ def validate_and_reduce_qdf(
     intersect: Optional[bool] = False,
     tickers: Optional[List[str]] = None,
     blacklist: Optional[Dict[str, List[str]]] = None,
+    blacklist_fillna: Optional[bool] = False,
     start: Optional[str] = None,
     end: Optional[str] = None,
 ):
@@ -55,6 +56,8 @@ def validate_and_reduce_qdf(
     :param <dict> blacklist: cross-sections with date ranges that should be excluded from
         the data frame. If one cross-section has several blacklist periods append numbers
         to the cross-section code.
+    :param <bool> blacklist_fillna: if True, fills in missing dates in the blacklist
+        with the previous date. Default is False.
     :param <str> start: ISO-8601 formatted date string. Select data from
         this date onwards. If None, all dates are selected.
     :param <str> end: ISO-8601 formatted date string. Select data up to
@@ -97,6 +100,7 @@ def validate_and_reduce_qdf(
         start=start,
         end=end,
         blacklist=blacklist,
+        blacklist_fillna=blacklist_fillna,
         out_all=True,
     )
 

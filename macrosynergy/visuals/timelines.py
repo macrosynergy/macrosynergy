@@ -162,7 +162,13 @@ def timelines(
 
     if cumsum:
         df = reduce_df(
-            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
+            df,
+            xcats=xcats,
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            blacklist_fillna=True,
         )
         df[val] = (
             df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
@@ -173,7 +179,13 @@ def timelines(
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
         df = reduce_df(
-            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
+            df,
+            xcats=xcats,
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            blacklist_fillna=True,
         )
         if len(xcats) > 1:
             raise ValueError("`cs_mean` cannot be True for multiple categories.")
@@ -385,6 +397,11 @@ if __name__ == "__main__":
             .copy()
         )
 
+    blacklist = {
+        "USD": ["2010-01-01", "2013-12-31"],
+        "GBP": ["2010-01-01", "2013-12-31"],
+    }
+
     import time
 
     # timer_start: float = time.time()
@@ -396,6 +413,7 @@ if __name__ == "__main__":
         square_grid=True,
         cids=sel_cids[1],
         # single_chart=True,
+        blacklist=blacklist,
     )
 
     timelines(
@@ -405,6 +423,7 @@ if __name__ == "__main__":
         # cs_mean=True,
         # xcat_grid=False,
         single_chart=True,
+        blacklist=blacklist,
         cs_mean=True,
     )
 
@@ -417,4 +436,5 @@ if __name__ == "__main__":
             "Plotting multiple cross sections for a single category \n with different "
             "y-axis!"
         ),
+        blacklist=blacklist,
     )

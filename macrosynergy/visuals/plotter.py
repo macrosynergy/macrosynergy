@@ -84,6 +84,7 @@ class Plotter(metaclass=PlotterMetaClass):
         intersect: Optional[bool] = False,
         tickers: Optional[List[str]] = None,
         blacklist: Optional[Dict[str, List[str]]] = None,
+        blacklist_fillna: Optional[bool] = False,
         start: Optional[str] = None,
         end: Optional[str] = None,
         backend: Optional[str] = "matplotlib",
@@ -96,6 +97,7 @@ class Plotter(metaclass=PlotterMetaClass):
             intersect=intersect,
             tickers=tickers,
             blacklist=blacklist,
+            blacklist_fillna=blacklist_fillna,
             start=start,
             end=end,
         )

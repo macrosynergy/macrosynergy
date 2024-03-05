@@ -411,6 +411,7 @@ def reduce_df(
     start: str = None,
     end: str = None,
     blacklist: dict = None,
+    blacklist_fillna: bool = False,
     out_all: bool = False,
     intersect: bool = False,
 ):
@@ -428,6 +429,8 @@ def reduce_df(
     :param <dict> blacklist: cross-sections with date ranges that should be excluded from
         the data frame. If one cross-section has several blacklist periods append numbers
         to the cross-section code.
+    :param <bool> blacklist_fillna: if True, the function fills NaNs in the DataFrame
+        where the blacklist is applied. Default is False.
     :param <bool> out_all: if True the function returns reduced dataframe and selected/
         available xcats and cids.
         Default is False, i.e. only the DataFrame is returned
@@ -461,7 +464,10 @@ def reduce_df(
 
         if masks:
             combined_mask = pd.concat(masks, axis=1).any(axis=1)
-            dfx = dfx[~combined_mask]
+            if blacklist_fillna:
+                dfx.loc[combined_mask, "value"] = np.nan
+            else:
+                dfx = dfx[~combined_mask]
 
     xcats_in_df = dfx["xcat"].unique()
     if xcats is None:
