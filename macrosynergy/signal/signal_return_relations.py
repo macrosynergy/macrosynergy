@@ -129,11 +129,16 @@ class SignalReturnRelations:
                     if f not in seen:
                         seen.add(f)
                         self.freqs.append(f)
+                    else:
+                        warnings.warn(f"Frequency {f} is repeated, dropping repeated frequency.")
         else:
             if not freqs in self.dic_freq.keys():
                 raise ValueError(freq_error)
             else:
                 self.freqs = [freqs]
+
+        if not isinstance(ms_panel_test, bool):
+            raise TypeError(f"<bool> object expected for ms_panel_test and not {type(ms_panel_test)}.")
 
         self.ms_panel_test = ms_panel_test
 
@@ -150,6 +155,7 @@ class SignalReturnRelations:
             "kendall_pval",
             "auc",
         ]
+
         if self.ms_panel_test:
             self.metrics.append("map_pval")
 
