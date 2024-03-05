@@ -892,7 +892,7 @@ def get_eops(
     # elif freq == "D":
     #     func = lambda x, y: len(pd.bdate_range(x, y)) - 1
     else:
-        raise ValueError("Frequency parameter must be one of D, M, W, or Q")
+        raise ValueError("Frequency parameter must be one of D, M, W, Q, or A.")
 
     dts["period"] = dts["real_date"].apply(func, args=(min_date,))
 
