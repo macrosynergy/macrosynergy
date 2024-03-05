@@ -14,7 +14,8 @@ import numpy as np
 import pandas as pd
 import requests
 import requests.compat
-from .core import get_cid, get_xcat, _map_to_business_day_frequency
+from .core import get_cid, get_xcat, _map_to_business_day_frequency, is_valid_iso_date
+
 
 def standardise_dataframe(
     df: pd.DataFrame, verbose: bool = False
@@ -348,6 +349,7 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
         df = update_categories(df, df_add)
 
     return df.reset_index(drop=True)
+
 
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     """
@@ -848,19 +850,36 @@ def get_eops(
             "Only one of `dates` or `start_date` and `end_date` must be passed."
         )
 
-    dts: pd.DataFrame = (
-        pd.DataFrame(dates, columns=["real_date"]).apply(pd.to_datetime, axis=1)
-        if dates is not None
-        else pd.Series(pd.bdate_range(start_date, end_date))
-    )
-    if dates is not None:
-        dts = dts[
-            dts["real_date"].isin(
-                pd.bdate_range(start=dts["real_date"].min(), end=dts["real_date"].max())
-            )
-        ]
+    if bool(start_date):
+        assert bool(end_date)
+        for date, dname in zip([start_date, end_date], ["start_date", "end_date"]):
+            if not isinstance(date, (str, pd.Timestamp)):
+                raise TypeError(f"{dname} must be a string or a pandas Timestamp.")
+            if isinstance(date, str):
+                if not is_valid_iso_date(date):
+                    raise ValueError(
+                        "Both `start_date` and `end_date` must be valid ISO dates when passed as "
+                        "strings."
+                    )
+
+        if pd.Timestamp(start_date) > pd.Timestamp(end_date):
+            start_date, end_date = end_date, start_date
+
+    dts: pd.DataFrame = pd.DataFrame(
+        (
+            dates
+            if (dates is not None)
+            else pd.bdate_range(start=start_date, end=end_date)
+        ),
+        columns=["real_date"],
+    ).apply(pd.to_datetime, axis=1)
 
     min_date: pd.Timestamp = dts["real_date"].min()
+
+    if freq == "D":
+        max_date = dts["real_date"].max()
+        dtx = pd.bdate_range(start=min_date, end=max_date)
+        return dtx[dtx.isin(dts["real_date"])]
 
     if freq == "M":
         func = months_btwn_dates
@@ -870,10 +889,10 @@ def get_eops(
         func = quarters_btwn_dates
     elif freq == "A":
         func = years_btwn_dates
-    elif freq == "D":
-        func = lambda x, y: len(pd.bdate_range(x, y)) - 1
+    # elif freq == "D":
+    #     func = lambda x, y: len(pd.bdate_range(x, y)) - 1
     else:
-        raise ValueError("Frequency parameter must be one of D, M, W, or Q")
+        raise ValueError("Frequency parameter must be one of D, M, W, Q, or A.")
 
     dts["period"] = dts["real_date"].apply(func, args=(min_date,))
 
