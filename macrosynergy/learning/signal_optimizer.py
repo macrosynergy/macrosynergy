@@ -14,6 +14,7 @@ import datetime
 
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.base import BaseEstimator
+from sklearn.feature_selection import SelectorMixin
 from sklearn.pipeline import Pipeline
 
 from typing import List, Union, Dict, Optional, Callable, Tuple
@@ -750,7 +751,7 @@ class SignalOptimizer:
             # Check whether a feature selector was used and get the output features if so
             final_estimator = optim_model[-1]
             for _, transformer in reversed(optim_model.steps):
-                if hasattr(transformer, "get_feature_names_out"):
+                if issubclass(transformer, SelectorMixin):
                     ftr_names = transformer.get_feature_names_out()
                     break
         else:
