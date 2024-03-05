@@ -852,7 +852,12 @@ def get_eops(
 
     if bool(start_date):
         assert bool(end_date)
-        if not (is_valid_iso_date(start_date) or is_valid_iso_date(end_date)):
+        if not (
+            isinstance(start_date, str)
+            and is_valid_iso_date(start_date)
+            or isinstance(end_date, str)
+            and is_valid_iso_date(end_date)
+        ):
             raise ValueError(
                 "Both `start_date` and `end_date` must be valid ISO dates."
             )
