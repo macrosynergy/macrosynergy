@@ -1191,6 +1191,10 @@ class SignalReturnRelations:
         :param <bool> annotate: if True, the values are annotated in the heatmap.
         :param <int> round: number of decimals to round the values to on the
             heatmap's annotations.
+
+        :return: DataFrame with the specified statistic for each row and column
+            NOTE: This dataframe is styled so if you want to view in command line call
+            the .data method on the dataframe.
         """
         self.df = self.original_df.copy()
         self.sigs = [self.revert_negation(sig) for sig in self.sigs]
@@ -1277,25 +1281,7 @@ class SignalReturnRelations:
                 yticklabels=row_names,
             )
 
-        header_styles = [
-            {'selector': 'th', 
-            'props': [('font-size', '12px'),
-                    ('text-align', 'center'),
-                    ('background-color', 'black')]}
-        ]
-
-        index_styles = [
-            {'selector': '.index_name',
-            'props': [('font-size', '12px'),
-                    ('text-align', 'right'),
-                    ('background-color', 'black')]}
-        ]
-
-        # Apply the styles to the DataFrame
-        styled_df = df_result.style.set_table_styles(header_styles, overwrite=False)
-        styled_df = styled_df.set_table_styles(index_styles, axis=1, overwrite=False)
-
-        return styled_df
+        return df_result
 
     def set_df_labels(self, rows_dict: Dict, rows: List[str], columns: List[str]):
         """
