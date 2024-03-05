@@ -1,6 +1,7 @@
 """
 Module for calculating the historic portfolio volatility for a given strategy.
 """
+
 from typing import List, Optional
 from functools import lru_cache
 import pandas as pd
@@ -46,22 +47,11 @@ def _weighted_covariance(
 
     assert x.shape[0] == y.shape[0], "x and y must have same length"
 
-    # assert len(x) == len(w), "weights and window must have same length"
-    if remove_zeros:
-        # TODO as per docs string: look-back window needs to stay the same, hence we need to do the below earlier?
-        mask = (x != 0) & (y != 0)
-        x = x[mask]
-        y = y[mask]
-        w = w[0 : len(x)] / sum(w[0 : len(x)])
-
     # TODO what happens if w is None?
+    # W is never none, flat weights are used if w is None (see flat_weights_arr)
     w = w / sum(w)  # weights are normalized
 
-    if y is not None:
-        # TODO y is never None in our current implementation!
-        rss = (x - x.mean()) * (y - y.mean())
-    else:
-        rss = (x - x.mean()) ** 2
+    rss = (x - x.mean()) * (y - y.mean())
 
     return w.T.dot(rss)
 
@@ -91,27 +81,16 @@ def _estimate_variance_covariance(
     cov_matr = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
 
     for i_b, c_b in enumerate(piv_ret.columns):
-        # TODO diagonal elements 
-        est_vol = _weighted_covariance(
-                x=piv_ret[c_b].values,
-                y=piv_ret[c_b].values,
-                w=weights_arr,
-                remove_zeros=remove_zeros,
-            )
-        cov_matr[i_b, i_b] = est_vol
-
-        # TODO off-diagonal elements
-        for i_a, c_a in enumerate(piv_ret.columns[:i_b + 1]):
+        for i_a, c_a in enumerate(piv_ret.columns[: i_b + 1]):
             est_vol = _weighted_covariance(
                 x=piv_ret[c_a].values,
                 y=piv_ret[c_b].values,
                 w=weights_arr,
                 remove_zeros=remove_zeros,
             )
-
-            # Covariance matrix is symmetric: hence adding to both sides
             cov_matr[i_a, i_b] = est_vol
-            cov_matr[i_b, i_a] = est_vol
+            if i_a != i_b:
+                cov_matr[i_b, i_a] = est_vol
 
     assert np.all((cov_matr.T == cov_matr) ^ np.isnan(cov_matr))
 
@@ -122,18 +101,28 @@ def _nan_ratio(x) -> float:
     return (sum(np.isnan(x)) + sum(x == 0)) / len(x)
 
 
-def _mask_nan_series(pivot_df: pd.DataFrame, nan_tolerance: float) -> pd.DataFrame:
+def _mask_nan_series(
+    pivot_df: pd.DataFrame,
+    trigger_indices: pd.DatetimeIndex,
+    lback_periods: int,
+    nan_tolerance: float,
+) -> pd.DataFrame:
     """
     Drops series from the dataframe if the ratio of NaNs to non-NaNs exceeds the
     nan_tolerance. Exists to allow greater flexibility in nan-processing.
 
     :param <pd.DataFrame> pivot_df: the dataframe of the pivot table.
+    :param <pd.DatetimeIndex> trigger_indices: the DateTimeIndex of the trigger dates.
+    :param <int> lback_periods: the number of periods to use for filling NaNs.
     :param <float> nan_tolerance: the maximum ratio of NaNs to non-NaNs in a lookback
         window, if exceeded the resulting volatility is set to NaN. Default is 0.25.
     """
-    # where this is higher than the nan_tolerance, the series is set to NaN
-    mask = pivot_df.apply(_nan_ratio, axis=0) > nan_tolerance
-    pivot_df.loc[:, mask] = np.nan
+
+    for trigger_date in trigger_indices:
+        dtidx = pivot_df.index[pivot_df.index <= trigger_date][-lback_periods:]
+        col_mask = (pivot_df.loc[dtidx].apply(_nan_ratio) > nan_tolerance).values
+        pivot_df.loc[dtidx, col_mask] = np.nan
+
     return pivot_df
 
 
@@ -168,9 +157,13 @@ def _calculate_portfolio_volatility(
         estimation function.
     """
 
-    # TODO this will black-list the full time-series if above NA tolerance - need it to be recursive per rebalance dates...
-    pivot_returns = _mask_nan_series(pivot_returns, nan_tolerance)
-    pivot_signals = _mask_nan_series(pivot_signals, nan_tolerance)
+    _mask_args = dict(
+        trigger_indices=trigger_indices,
+        lback_periods=lback_periods,
+        nan_tolerance=nan_tolerance,
+    )
+    pivot_returns = _mask_nan_series(pivot_df=pivot_returns, **_mask_args)
+    pivot_signals = _mask_nan_series(pivot_df=pivot_signals, **_mask_args)
 
     return_values = []
 
@@ -278,7 +271,14 @@ def _hist_vol(
     ffills = {"d": 1, "w": 5, "m": 24, "q": 64}
     df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[est_freq])
     # TODO - should below not be forward filled with the previous volatility value...
-    assert not df_out.loc[df_out.first_valid_index():df_out.last_valid_index(), portfolio_return_name].isnull().any()
+    assert (
+        not df_out.loc[
+            df_out.first_valid_index() : df_out.last_valid_index(),
+            portfolio_return_name,
+        ]
+        .isnull()
+        .any()
+    )
     # TODO or log warning if there are NaNs
     df_out.dropna(inplace=True)
 
@@ -480,7 +480,7 @@ if __name__ == "__main__":
 
     df_copy = df.copy()
 
-    N_p_nans = 0.20
+    N_p_nans = 0.30
     df["value"] = df["value"].apply(
         lambda x: x if np.random.rand() > N_p_nans else np.nan
     )
