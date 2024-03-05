@@ -129,16 +129,11 @@ def _estimate_variance_covariance(
 
     cov_matr = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
 
-    nan_ratio = lambda x: np.isnan(x).sum() + (x == 0).sum() / len(x)
-    apply_mask = lambda x: x if nan_ratio(x) <= nan_tolerance else np.nan * x
-
     for iB, cB in enumerate(piv_ret.columns):
         for iA, cA in enumerate(piv_ret.columns[: iB + 1]):
-            rA: np.ndarray = apply_mask(piv_ret[cA].values)
-            rB: np.ndarray = apply_mask(piv_ret[cB].values)
             est_vol = weighted_covariance(
-                x=rA,
-                y=rB,
+                x=piv_ret[cA].values,
+                y=piv_ret[cB].values,
                 w=weights_arr,
                 remove_zeros=remove_zeros,
             )
@@ -148,6 +143,83 @@ def _estimate_variance_covariance(
     assert np.all((cov_matr.T == cov_matr) ^ np.isnan(cov_matr))
 
     return pd.DataFrame(cov_matr, index=piv_ret.columns, columns=piv_ret.columns)
+
+
+def _mask_nan_series(pivot_df: pd.DataFrame, nan_tolerance: float) -> pd.DataFrame:
+    """
+    Drops series from the dataframe if the ratio of NaNs to non-NaNs exceeds the
+    nan_tolerance. Exists to allow greater flexibility in nan-processing.
+
+    :param <pd.DataFrame> pivot_df: the dataframe of the pivot table.
+    :param <float> nan_tolerance: the maximum ratio of NaNs to non-NaNs in a lookback
+        window, if exceeded the resulting volatility is set to NaN. Default is 0.25.
+    """
+    nan_ratio: Callable = lambda x: (sum(np.isnan(x)) + sum(x == 0)) / len(x)
+    # where this is higher than the nan_tolerance, the series is set to NaN
+    mask = pivot_df.apply(nan_ratio, axis=0) > nan_tolerance
+    pivot_df.loc[:, mask] = np.nan
+    return pivot_df
+
+
+def _calculate_portfolio_volatility(
+    trigger_indices: pd.DatetimeIndex,
+    pivot_returns: pd.DataFrame,
+    pivot_signals: pd.DataFrame,
+    lback_periods: int,
+    half_life: int,
+    weights_func: Optional[np.ndarray],
+    nan_tolerance: float,
+    portfolio_return_name: str,
+    **kwargs,
+):
+    """
+    Calculate the portfolio volatility for each trigger date.
+    Backed function for `_hist_vol`, to increase readability.
+
+    :param <pd.DatetimeIndex> trigger_indices: the DateTimeIndex of the trigger dates.
+    :param <pd.DataFrame> pivot_returns: the pivot table of the contract returns.
+    :param <pd.DataFrame> pivot_signals: the pivot table of the contract signals.
+    :param <int> lback_periods: the number of periods to use for the lookback period
+        of the volatility-targeting method. Default is 21.
+    :param <int> half_life: Refers to the half-time for "xma" and full lookback period
+        for "ma". Default is 11.
+    :param <callable> weights_func: the function to use for the weights array. Default
+        is None, which means that the weights are equal.
+    :param <float> nan_tolerance: maximum ratio of NaNs to non-NaNs in a lookback window,
+        if exceeded the resulting volatility is set to NaN. Default is 0.25.
+    :param <str> portfolio_return_name: the name of the portfolio return series.
+    :param <dict> kwargs: additional keyword arguments to pass to the variance-covariance
+        estimation function.
+    """
+
+    pivot_returns = _mask_nan_series(pivot_returns, nan_tolerance)
+    pivot_signals = _mask_nan_series(pivot_signals, nan_tolerance)
+
+    return_values = []
+
+    for trigger_date in trigger_indices:
+        td = trigger_date
+        piv_ret = (
+            pivot_returns.loc[pivot_returns.index <= td].iloc[-lback_periods:].dropna()
+        )
+        weights_arr = weights_func(
+            lback_periods=min(lback_periods, len(piv_ret)),
+            half_life=min(half_life, len(piv_ret)),
+        )  # inherently fast, and cached anyway
+
+        vcv: pd.DataFrame = _estimate_variance_covariance(
+            piv_ret=piv_ret,
+            lback_periods=lback_periods,
+            weights_arr=weights_arr,
+            **kwargs,
+        )
+        piv_sig: pd.DataFrame = pivot_signals.loc[td, :]
+        return_values += [(td, piv_sig.T.dot(vcv).dot(piv_sig))]
+
+    return pd.DataFrame(
+        return_values,
+        columns=["real_date", portfolio_return_name],
+    ).set_index("real_date")
 
 
 def _hist_vol(
@@ -203,8 +275,9 @@ def _hist_vol(
     # TODO get the correct rebalance dates
 
     weights_func = flat_weights_arr if lback_meth == "ma" else expo_weights_arr
+    portfolio_return_name = f"{sname}{RETURN_SERIES_XCAT}"
 
-    vol_args = dict(
+    df_out: pd.DataFrame = _calculate_portfolio_volatility(
         trigger_indices=trigger_indices,
         pivot_returns=pivot_returns,
         pivot_signals=pivot_signals,
@@ -212,42 +285,12 @@ def _hist_vol(
         remove_zeros=remove_zeros,
         nan_tolerance=nan_tolerance,
         weights_func=weights_func,
+        half_life=half_life,
+        portfolio_return_name=portfolio_return_name,
     )
 
-    def _pvol_tuples(
-        trigger_indices: pd.DatetimeIndex,
-        pivot_returns: pd.DataFrame,
-        pivot_signals: pd.DataFrame,
-        lback_periods: int,
-        weights_func: Optional[np.ndarray],
-        **kwargs,
-    ):
-        for trigger_date in trigger_indices:
-            td = trigger_date
-            piv_ret = (
-                pivot_returns.loc[pivot_returns.index <= td]
-                .iloc[-lback_periods:]
-                .dropna()
-            )
-            weights_arr = weights_func(
-                lback_periods=min(lback_periods, len(piv_ret)),
-                half_life=min(half_life, len(piv_ret)),
-            )  # inherently fast, and cached anyway
-
-            vcv: pd.DataFrame = _estimate_variance_covariance(
-                piv_ret=piv_ret,
-                lback_periods=lback_periods,
-                weights_arr=weights_arr,
-                **kwargs,
-            )
-            piv_sig: pd.DataFrame = pivot_signals.loc[td, :]
-            yield td, piv_sig.T.dot(vcv).dot(piv_sig)
-
-    portfolio_return_name = f"{sname}{RETURN_SERIES_XCAT}"
-    df_out = pd.DataFrame(
-        _pvol_tuples(**vol_args),
-        columns=["real_date", portfolio_return_name],
-    ).set_index("real_date")
+    # assert portfolio_return_name the only column
+    assert df_out.columns == [portfolio_return_name]
 
     # Annualised standard deviation (ASD)
     df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name] * 252)
