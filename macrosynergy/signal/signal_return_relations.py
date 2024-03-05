@@ -1291,10 +1291,10 @@ class SignalReturnRelations:
         :param <List[str]> columns: list of strings specifying which of the categories
             are included in the columns of the dataframe.
         """
-
+        label_dict = {"xcat": "Signal", "ret": "Return", "freq": "Frequency", "agg_sigs": "Aggregation"}
         if len(rows) == 2:
-            rows_names = pd.MultiIndex.from_tuples([(a, b) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]])
-            columns_names = pd.MultiIndex.from_tuples([(a, b) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]]])
+            rows_names = pd.MultiIndex.from_tuples([(a, b) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]], names=[label_dict[rows[0]], label_dict[rows[1]]])
+            columns_names = pd.MultiIndex.from_tuples([(a, b) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]]], names=[label_dict[columns[0]], label_dict[columns[1]]])
             # rows_names = [
             #     a + "/" + b for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]
             # ]
@@ -1305,7 +1305,7 @@ class SignalReturnRelations:
             # ]
         elif len(rows) == 1:
             rows_names = rows_dict[rows[0]]
-            columns_names = pd.MultiIndex.from_tuples([(a, b, c) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]]] for c in rows_dict[columns[2]])
+            columns_names = pd.MultiIndex.from_tuples([(a, b, c) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]] for c in rows_dict[columns[2]]], names=[label_dict[columns[0]], label_dict[columns[1]], label_dict[columns[2]]])
             # rows_names = rows_dict[rows[0]]
             # columns_names = [
             #     a + "/" + b + "/" + c
@@ -1314,7 +1314,7 @@ class SignalReturnRelations:
             #     for c in rows_dict[columns[2]]
             # ]
         elif len(columns) == 1:
-            rows_names = pd.MultiIndex.from_tuples([(a, b, c) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]] for c in rows_dict[rows[2]]])
+            rows_names = pd.MultiIndex.from_tuples([(a, b, c) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]] for c in rows_dict[rows[2]]], names=[label_dict[rows[0]], label_dict[rows[1]], label_dict[rows[2]]])
             columns_names = rows_dict[columns[0]]
             # rows_names = [
             #     a + "/" + b + "/" + c
