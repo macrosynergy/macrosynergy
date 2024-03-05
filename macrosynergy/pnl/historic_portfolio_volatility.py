@@ -1,27 +1,23 @@
 """
 Module for calculating the historic portfolio volatility for a given strategy.
 """
-
-from typing import List, Optional, Callable, Tuple
+from typing import List, Optional
 from functools import lru_cache
 import pandas as pd
 import numpy as np
-import logging
 
-from macrosynergy.panel.historic_vol import expo_std, flat_std, expo_weights
-from macrosynergy.management.types import NoneType, QuantamentalDataFrame
+from macrosynergy.panel.historic_vol import expo_weights
+from macrosynergy.management.types import NoneType
 from macrosynergy.management.utils import (
     reduce_df,
     standardise_dataframe,
     is_valid_iso_date,
-    qdf_to_ticker_df,
     ticker_df_to_qdf,
     get_eops,
-    get_cid,
 )
+from macrosynergy.management.types import QuantamentalDataFrame
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
-logger = logging.getLogger(__name__)
 
 cache = lru_cache(maxsize=None)
 
@@ -38,52 +34,6 @@ def expo_weights_arr(lback_periods: int, half_life: int, *args, **kwargs) -> np.
     return expo_weights(lback_periods=lback_periods, half_life=half_life)
 
 
-def _univariate_volatility(
-    df_wide: pd.DataFrame,
-    roll_func: Callable,
-    lback_periods: int,
-    nan_tolerance: float,
-    remove_zeros: bool,
-    weights: Optional[np.ndarray],
-):
-    """
-    Calculates the univariate volatility for a given dataframe.
-
-    :param <pd.DataFrame> df_wide: the wide dataframe of all the tickers in the strategy.
-    :param <callable> roll_func: the function to use for the rolling window calculation.
-        The function must have a signature of (np.ndarray, *, remove_zeros: bool) -> float.
-        See `expo_std` and `flat_std` for examples.
-    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
-        effective window.
-    :param <np.ndarray> weights: array of exponential weights for each period in the
-        lookback window. Default is None, which means that the weights are equal.
-    """
-    if weights is None:
-        weights = np.ones(df_wide.shape[0]) / df_wide.shape[0]
-        univariate_vol: pd.Series = df_wide.agg(roll_func, remove_zeros=remove_zeros)
-    else:
-        if len(weights) == len(df_wide):
-            univariate_vol = df_wide.agg(
-                roll_func, w=weights, remove_zeros=remove_zeros
-            )
-        else:
-            return pd.Series(np.nan, index=df_wide.columns)
-
-        ## Creating a mask to fill series `nan_tolerance`
-    mask = (
-        (
-            df_wide.isna().sum(axis=0)
-            + (df_wide == 0).sum(axis=0)
-            + (lback_periods - len(df_wide))
-        )
-        / lback_periods
-    ) <= nan_tolerance
-
-    univariate_vol[~mask] = np.nan
-
-    return univariate_vol
-
-
 def _weighted_covariance(
     x: np.ndarray, y: np.ndarray, w: np.ndarray = None, remove_zeros: bool = True
 ):
@@ -91,13 +41,24 @@ def _weighted_covariance(
     Estimate covariance between two series after applying weights.
 
     """
+    assert x.ndim == 1 or x.shape[1] == 1, "x must be a 1D array or a column vector"
+    assert y.ndim == 1 or y.shape[1] == 1, "y must be a 1D array or a column vector"
+
+    assert x.shape[0] == y.shape[0], "x and y must have same length"
+
     # assert len(x) == len(w), "weights and window must have same length"
     if remove_zeros:
-        x = x[x != 0]
+        # TODO as per docs string: look-back window needs to stay the same, hence we need to do the below earlier?
+        mask = (x != 0) & (y != 0)
+        x = x[mask]
+        y = y[mask]
         w = w[0 : len(x)] / sum(w[0 : len(x)])
+
+    # TODO what happens if w is None?
     w = w / sum(w)  # weights are normalized
 
     if y is not None:
+        # TODO y is never None in our current implementation!
         rss = (x - x.mean()) * (y - y.mean())
     else:
         rss = (x - x.mean()) ** 2
@@ -118,29 +79,47 @@ def _estimate_variance_covariance(
     """
     # If weights is None, then the weights are equal
     if weights_arr is None:
+        # TODO weights_arr is never None in the current implementation
         weights_arr = np.ones(piv_ret.shape[0]) / piv_ret.shape[0]
 
     assert len(weights_arr) == len(piv_ret), "weights and window must have same length"
     assert not (
         piv_ret.isna().any().any()
     ), "NaN should have been removed by this stage"
+    # TODO why is N/A removed by this stage? Has it been replaced by zeros?
 
     cov_matr = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
 
-    for iB, cB in enumerate(piv_ret.columns):
-        for iA, cA in enumerate(piv_ret.columns[: iB + 1]):
-            est_vol = _weighted_covariance(
-                x=piv_ret[cA].values,
-                y=piv_ret[cB].values,
+    for i_b, c_b in enumerate(piv_ret.columns):
+        # TODO diagonal elements 
+        est_vol = _weighted_covariance(
+                x=piv_ret[c_b].values,
+                y=piv_ret[c_b].values,
                 w=weights_arr,
                 remove_zeros=remove_zeros,
             )
-            cov_matr[iA, iB] = est_vol  # TODO (iA, iB) is same as (iB, iA)
-            cov_matr[iB, iA] = est_vol  # TODO (iA, iB) is same as (iB, iA)
+        cov_matr[i_b, i_b] = est_vol
+
+        # TODO off-diagonal elements
+        for i_a, c_a in enumerate(piv_ret.columns[:i_b + 1]):
+            est_vol = _weighted_covariance(
+                x=piv_ret[c_a].values,
+                y=piv_ret[c_b].values,
+                w=weights_arr,
+                remove_zeros=remove_zeros,
+            )
+
+            # Covariance matrix is symmetric: hence adding to both sides
+            cov_matr[i_a, i_b] = est_vol
+            cov_matr[i_b, i_a] = est_vol
 
     assert np.all((cov_matr.T == cov_matr) ^ np.isnan(cov_matr))
 
     return pd.DataFrame(cov_matr, index=piv_ret.columns, columns=piv_ret.columns)
+
+
+def _nan_ratio(x) -> float:
+    return (sum(np.isnan(x)) + sum(x == 0)) / len(x)
 
 
 def _mask_nan_series(pivot_df: pd.DataFrame, nan_tolerance: float) -> pd.DataFrame:
@@ -152,9 +131,8 @@ def _mask_nan_series(pivot_df: pd.DataFrame, nan_tolerance: float) -> pd.DataFra
     :param <float> nan_tolerance: the maximum ratio of NaNs to non-NaNs in a lookback
         window, if exceeded the resulting volatility is set to NaN. Default is 0.25.
     """
-    nan_ratio: Callable = lambda x: (sum(np.isnan(x)) + sum(x == 0)) / len(x)
     # where this is higher than the nan_tolerance, the series is set to NaN
-    mask = pivot_df.apply(nan_ratio, axis=0) > nan_tolerance
+    mask = pivot_df.apply(_nan_ratio, axis=0) > nan_tolerance
     pivot_df.loc[:, mask] = np.nan
     return pivot_df
 
@@ -190,6 +168,7 @@ def _calculate_portfolio_volatility(
         estimation function.
     """
 
+    # TODO this will black-list the full time-series if above NA tolerance - need it to be recursive per rebalance dates...
     pivot_returns = _mask_nan_series(pivot_returns, nan_tolerance)
     pivot_signals = _mask_nan_series(pivot_signals, nan_tolerance)
 
@@ -203,6 +182,7 @@ def _calculate_portfolio_volatility(
 
         # TODO: what if len(pivot_returns) < lback_periods? -- ffill, fillna, or drop?
 
+        # TODO what is the benefit of cached? The weight_func is only called once.
         weights_arr = weights_func(
             lback_periods=min(lback_periods, len(piv_ret)),
             half_life=min(half_life, len(piv_ret)),
@@ -232,7 +212,7 @@ def _hist_vol(
     half_life=11,
     nan_tolerance: float = 0.25,
     remove_zeros: bool = True,
-):
+) -> pd.DataFrame:
     """
     Calculates historic volatility for a given strategy. It assumes that the dataframe
     is composed solely of the relevant signals and returns for the strategy.
@@ -296,7 +276,11 @@ def _hist_vol(
     df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name] * 252)
 
     ffills = {"d": 1, "w": 5, "m": 24, "q": 64}
-    df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[est_freq]).dropna()
+    df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[est_freq])
+    # TODO - should below not be forward filled with the previous volatility value...
+    assert not df_out.loc[df_out.first_valid_index():df_out.last_valid_index(), portfolio_return_name].isnull().any()
+    # TODO or log warning if there are NaNs
+    df_out.dropna(inplace=True)
 
     return df_out
 
@@ -315,7 +299,7 @@ def historic_portfolio_vol(
     blacklist: Optional[dict] = None,
     nan_tolerance: float = 0.25,
     remove_zeros: bool = True,
-):
+) -> QuantamentalDataFrame:
     """Historical portfolio volatility.
 
     Estimates annualized standard deviations of a portfolio, based on historic
@@ -336,7 +320,7 @@ def historic_portfolio_vol(
         for monthly. Alternatives are 'w' for business weekly, 'd' for daily, and 'q'
         for quarterly. Estimations are conducted for the end of the period.
     :param <int> lback_periods: the number of periods to use for the lookback period
-        of the volatility-targeting method. Default is 21.
+        of the volatility-targeting method. Default is 21 for daily (TODO verify).
     :param <str> lback_meth: the method to use for the lookback period of the
         volatility-targeting method. Default is 'ma' for moving average. Alternative is
         "xma", for exponential moving average.
