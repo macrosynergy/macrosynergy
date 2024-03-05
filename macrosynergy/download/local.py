@@ -613,6 +613,7 @@ class DownloadTimeseries(DataQueryInterface):
                         raise exc
 
         if len(failed_batches) > 0:
+            logger.debug(f"Retrying {len(failed_batches)} failed batches. ")
             print(f"Retrying {len(failed_batches)} failed batches. ")
             self.msg_errors.append(
                 f"Failed to download {len(failed_batches)} batches. Retrying..."
@@ -742,7 +743,7 @@ class DownloadTimeseries(DataQueryInterface):
             "data": reference_data,
         }
 
-        final_output: List[dict] = self._download(
+        final_output: List[bool] = self._download(
             expressions=expressions,
             params=params_dict,
             url=self.base_url + endpoint,
