@@ -9,6 +9,7 @@ import datetime
 
 from sklearn.linear_model import Lasso
 from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
+from sklearn.feature_selection import SelectorMixin
 
 from sklearn.exceptions import NotFittedError
 
@@ -20,7 +21,7 @@ from typing import Union, Any, List, Optional
 import warnings
 
 
-class LassoSelector(BaseEstimator, TransformerMixin):
+class LassoSelector(BaseEstimator, SelectorMixin):
     def __init__(self, alpha: Union[float, int], positive: bool = True):
         """
         Transformer class to use the Lasso as a feature selection algorithm.
@@ -101,6 +102,14 @@ class LassoSelector(BaseEstimator, TransformerMixin):
 
         return self
     
+    def _get_support_mask(self):
+        """
+        Private method to return a boolean mask of the features selected for the Pandas dataframe.
+        """
+        mask = np.zeros(self.p, dtype=bool)
+        mask[self.selected_ftr_idxs] = True
+        return mask
+    
     def get_support(self, indices=False):
         """
         Method to return a mask, or integer index, of the features selected for the Pandas dataframe.
@@ -120,8 +129,7 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         if indices:
             return self.selected_ftr_idxs
         else:
-            mask = np.zeros(self.p, dtype=bool)
-            mask[self.selected_ftr_idxs] = True
+            mask = self._get_support_mask()
             return mask
         
     def get_feature_names_out(self):
@@ -172,10 +180,10 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         return X.iloc[:, self.selected_ftr_idxs]
 
 
-class MapSelector(BaseEstimator, TransformerMixin):
+class MapSelector(BaseEstimator, SelectorMixin):
     def __init__(self, threshold: float, positive: bool = False):
         """
-        Transformer class to select features from a training set
+        Selector class to select features from a training set
         based on the Macrosynergy panel test. This test involves creating
         a linear mixed effects model with period-specific random effects to
         account for cross-sectional correlations. The p-value for the slope
@@ -261,6 +269,13 @@ class MapSelector(BaseEstimator, TransformerMixin):
 
         return self
     
+    def _get_support_mask(self):
+        """
+        Private method to return a boolean mask of the features selected for the Pandas dataframe.
+        """
+        mask = [col in self.ftrs for col in self.feature_names_in_]
+        return np.array(mask)
+    
     def get_support(self, indices=False):
         """
         Method to return a mask, or integer index, of the features selected for the Pandas dataframe.
@@ -277,12 +292,12 @@ class MapSelector(BaseEstimator, TransformerMixin):
             raise NotFittedError(
                 "The MAP selector has not been fitted. Please fit the selector before calling get_support()."
             )
-        mask = [col in self.ftrs for col in self.feature_names_in_]
+        mask = self._get_support_mask()
 
         if indices:
             return np.where(mask)[0]
         
-        return np.array(mask)
+        return mask
         
     def get_feature_names_out(self):
         """
