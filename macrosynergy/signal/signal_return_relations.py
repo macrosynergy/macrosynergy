@@ -1109,20 +1109,16 @@ class SignalReturnRelations:
         for agg_sigs_elem in agg_sigs:
             if not agg_sigs_elem in self.agg_sigs:
                 raise ValueError(f"{agg_sigs_elem} is not a valid aggregation method")
-
+            
         xcats = [x for x in xcats if x in self.sigs]
 
-        index = [
-            (
-                f"{freq}: "
-                f"{xcat + '_NEG' if self.signs[self.sigs.index(xcat)] else xcat}"
-                f"/{agg_sig} => {ret}"
-            )
+        multiindex = pd.MultiIndex.from_tuples([
+            (ret, xcat + "_NEG" if self.signs[self.sigs.index(xcat)] else xcat, freq, agg_sig)
             for freq in freqs
             for agg_sig in agg_sigs
             for ret in rets
             for xcat in xcats
-        ]
+        ], names=["Return", "Signal", "Frequency", "Aggregation"])
 
         df_result = pd.concat(
             [
@@ -1136,7 +1132,8 @@ class SignalReturnRelations:
             ],
             axis=0,
         )
-        df_result.index = index
+
+        df_result.index = multiindex
 
         return df_result
 
