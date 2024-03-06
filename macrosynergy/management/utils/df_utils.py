@@ -5,7 +5,7 @@ Utility functions for working with DataFrames.
 import itertools
 
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.constants import FREQUENCY_MAP, FFILL_LIMITS
+from macrosynergy.management.constants import FREQUENCY_MAP, FFILL_LIMITS, DAYS_PER_FREQ
 
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
@@ -967,6 +967,7 @@ def estimate_release_frequency(
     df_wide: pd.DataFrame = None,
     exception_tolerance: float = 0.1,
     score_method: str = "count",
+    *args,
     **kwargs,
 ) -> Union[str, pd.DataFrame]:
     """
@@ -1003,7 +1004,7 @@ def estimate_release_frequency(
             )
 
     if df_wide is not None:
-        return _estimate_release_frequency_wide(df_wide=df_wide, **kwargs)
+        return _estimate_release_frequency_wide(df_wide=df_wide, *args,**kwargs)
 
     timeseries: pd.Series = timeseries.copy().dropna().drop_duplicates(keep="first")
 
@@ -1024,34 +1025,19 @@ def estimate_release_frequency(
             "Argument `exception_tolerance` must be a float between 0 and 1."
         )
 
-    # get start and end date
-    start: pd.Timestamp = timeseries.index.min()
-    end: pd.Timestamp = timeseries.index.max()
-
     eops_scores = {}
     for freqx in FREQUENCY_MAP.keys():
-        bins: pd.Series = pd.cut(
-            timeseries.index,
-            pd.bdate_range(start=start, end=end, freq=freqx),
+        eops_scores[freqx] = (
+            timeseries.groupby(pd.Grouper(timeseries, freq="B")).nunique().mean()
+            / DAYS_PER_FREQ[freqx]
         )
-        bin_counts = bins.value_counts()
-        if score_method == "mean":
-            eops_scores[freqx] = bin_counts.mean()
-        if score_method == "count":
-            eops_scores[freqx] = (
-                bin_counts[bin_counts == 1].count() / bin_counts.count()
-            )
 
-    eops_scores = pd.Series(eops_scores, name="score")
+    eops_df = pd.Series(eops_scores, name="score")
 
-    if score_method == "mean":
-        return (abs(eops_scores) - 1).idxmin()
-
-    if score_method == "count":
-        return eops_scores.idxmax()
+    return eops_df.idxmax()
 
 
-def _estimate_release_frequency_wide(df_wide: pd.DataFrame, **kwargs):
+def _estimate_release_frequency_wide(df_wide: pd.DataFrame,*args, **kwargs):
     """
     Estimates the release frequency of a wide DataFrame.
     Backend for `estimate_release_frequency`.
