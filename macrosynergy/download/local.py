@@ -554,6 +554,7 @@ class DownloadTimeseries(DataQueryInterface):
 
         future_objects: List[concurrent.futures.Future] = []
         results: List[bool] = []
+        future_to_batch = {}
         with concurrent.futures.ThreadPoolExecutor() as executor:
             for ib, expr_batch in tqdm(
                 enumerate(expr_batches),
@@ -564,15 +565,14 @@ class DownloadTimeseries(DataQueryInterface):
                 curr_params: Dict = params.copy()
                 curr_params["expressions"] = expr_batch
                 logger.debug(f"Sending request with params: {curr_params}")
-
-                future_objects.append(
-                    executor.submit(
-                        self._get_data,
-                        url=url,
-                        params=curr_params,
-                        tracking_id=tracking_id,
-                    )
+                future = executor.submit(
+                    self._get_data,
+                    url=url,
+                    params=curr_params,
+                    tracking_id=tracking_id
                 )
+                future_objects.append(future)
+                future_to_batch[future] = expr_batch
                 time.sleep(delay_param)
 
             for ib, future_object in tqdm(
@@ -581,6 +581,7 @@ class DownloadTimeseries(DataQueryInterface):
                 disable=not show_progress,
                 total=len(future_objects),
             ):
+                expr_batch = future_to_batch[future_object]
                 try:
                     res: Dict[str, Any] = future_object.result()
                     results.append(res)
@@ -598,8 +599,8 @@ class DownloadTimeseries(DataQueryInterface):
                     if isinstance(exc, (KeyboardInterrupt, AuthenticationError)):
                         raise exc
 
-                    failed_batches.append(expr_batches[ib])
-                    self.msg_errors.append(f"Batch {ib} failed with exception: {exc}")
+                    failed_batches.append(expr_batch)
+                    self.msg_errors.append(f"Batch failed with exception: {exc}")
                     continuous_failures += 1
                     last_five_exc.append(exc)
                     if continuous_failures > MAX_CONTINUOUS_FAILURES:
@@ -797,7 +798,7 @@ def create_store(
     store_path: str,
     client_id: str,
     client_secret: str,
-    fmt: str = "pkl",
+    fmt: str = "json",
     expressions: List[str] = None,
     test_mode: bool = False,
     check_download: bool = False,
