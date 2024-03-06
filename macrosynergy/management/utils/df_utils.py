@@ -992,7 +992,6 @@ def estimate_release_frequency(
                 "index `'real_date'`."
             )
 
-    if df_wide is not None:
         return _estimate_release_frequency_wide(df_wide=df_wide, *args, **kwargs)
 
     timeseries: pd.Series = timeseries.copy().dropna().drop_duplicates(keep="first")
