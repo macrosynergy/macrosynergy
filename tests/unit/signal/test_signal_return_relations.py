@@ -77,12 +77,12 @@ class TestAll(unittest.TestCase):
             srr = SignalReturnRelations(
                 self.dfd, sigs="CRY", freqs="D", blacklist=self.blacklist
             )
-        
+
         with self.assertRaises(ValueError):
             srr = SignalReturnRelations(
                 self.dfd, rets="XR", freqs="D", blacklist=self.blacklist
             )
-        
+
         with self.assertRaises(TypeError):
             srr = SignalReturnRelations(
                 "self.dfd", rets="XR", sigs="CRY", freqs="D", blacklist=self.blacklist
@@ -112,9 +112,9 @@ class TestAll(unittest.TestCase):
                 blacklist=self.blacklist,
                 sig_neg=True,
             )
-        
+
         # Test that if the same frequency is passed twice it is ignored
-            
+
         srr = SignalReturnRelations(
             self.dfd,
             rets="XR",
@@ -133,7 +133,7 @@ class TestAll(unittest.TestCase):
                 blacklist=self.blacklist,
                 ms_panel_test="FAIL",
             )
-        
+
         with self.assertRaises(TypeError):
             srr = SignalReturnRelations(
                 self.dfd,
@@ -153,7 +153,7 @@ class TestAll(unittest.TestCase):
                 blacklist=self.blacklist,
                 sig_neg=[True],
             )
-        
+
         with self.assertRaises(AssertionError):
             srr = SignalReturnRelations(
                 self.dfd,
@@ -339,7 +339,9 @@ class TestAll(unittest.TestCase):
             freqs="D",
             blacklist=self.blacklist,
         )
-        srr.manipulate_df(xcat=[primary_signal] + rival_signals + ["XR"], freq="D", agg_sig="last")
+        srr.manipulate_df(
+            xcat=[primary_signal] + rival_signals + ["XR"], freq="D", agg_sig="last"
+        )
 
         df_sigs = srr.__rival_sigs__(ret="XR")
 
@@ -906,17 +908,18 @@ class TestAll(unittest.TestCase):
         )
         expected_col_names = ["mean", "last"]
         expected_row_names = [
-            "CRY/XR/Q",
-            "CRY/XR/M",
-            "CRY/GROWTH/Q",
-            "CRY/GROWTH/M",
-            "INFL/XR/Q",
-            "INFL/XR/M",
-            "INFL/GROWTH/Q",
-            "INFL/GROWTH/M",
+            ("CRY", "XR", "Q"),
+            ("CRY", "XR", "M"),
+            ("CRY", "GROWTH", "Q"),
+            ("CRY", "GROWTH", "M"),
+            ("INFL", "XR", "Q"),
+            ("INFL", "XR", "M"),
+            ("INFL", "GROWTH", "Q"),
+            ("INFL", "GROWTH", "M"),
         ]
+        for i, rows_name in enumerate(rows_names):
+            self.assertTrue(rows_name == expected_row_names[i])
 
-        self.assertTrue(rows_names == expected_row_names)
         self.assertTrue(columns_names == expected_col_names)
 
         rows = ["xcat", "ret"]
@@ -926,11 +929,23 @@ class TestAll(unittest.TestCase):
             rows_dict=rows_dict, rows=rows, columns=columns
         )
 
-        expected_col_names = ["mean/Q", "mean/M", "last/Q", "last/M"]
-        expected_row_names = ["CRY/XR", "CRY/GROWTH", "INFL/XR", "INFL/GROWTH"]
+        expected_col_names = [
+            ("mean", "Q"),
+            ("mean", "M"),
+            ("last", "Q"),
+            ("last", "M"),
+        ]
+        expected_row_names = [
+            ("CRY", "XR"),
+            ("CRY", "GROWTH"),
+            ("INFL", "XR"),
+            ("INFL", "GROWTH"),
+        ]
 
-        self.assertTrue(rows_names == expected_row_names)
-        self.assertTrue(columns_names == expected_col_names)
+        for i, rows_name in enumerate(rows_names):
+            self.assertTrue(rows_name == expected_row_names[i])
+        for i, columns_name in enumerate(columns_names):
+            self.assertTrue(columns_name == expected_col_names[i])
 
         rows = ["xcat"]
         columns = columns = ["agg_sigs", "ret", "freq"]
@@ -940,21 +955,21 @@ class TestAll(unittest.TestCase):
         )
 
         expected_col_names = [
-            "mean/XR/Q",
-            "mean/XR/M",
-            "mean/GROWTH/Q",
-            "mean/GROWTH/M",
-            "last/XR/Q",
-            "last/XR/M",
-            "last/GROWTH/Q",
-            "last/GROWTH/M",
+            ("mean", "XR", "Q"),
+            ("mean", "XR", "M"),
+            ("mean", "GROWTH", "Q"),
+            ("mean", "GROWTH", "M"),
+            ("last", "XR", "Q"),
+            ("last", "XR", "M"),
+            ("last", "GROWTH", "Q"),
+            ("last", "GROWTH", "M"),
         ]
         expected_row_names = ["CRY", "INFL"]
 
         self.assertTrue(rows_names == expected_row_names)
-        self.assertTrue(columns_names == expected_col_names)
 
-        return 0
+        for i, columns_name in enumerate(columns_names):
+            self.assertTrue(columns_name == expected_col_names[i])
 
     def test_get_rowcol(self):
         rets = ["XR", "GROWTH"]
@@ -975,7 +990,7 @@ class TestAll(unittest.TestCase):
         rows = ["xcat", "ret", "freq"]
         columns = ["agg_sigs"]
 
-        self.assertTrue(sr.get_rowcol(hash, rows) == "CRY/XR/Q")
+        self.assertTrue(sr.get_rowcol(hash, rows) == ("CRY", "XR", "Q"))
         self.assertTrue(sr.get_rowcol(hash, columns) == "mean")
 
     def test_single_statistic_table_show_heatmap(self):
