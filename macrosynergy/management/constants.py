@@ -39,6 +39,7 @@ FREQUENCY_MAP = {
     "A": "BA",
 }
 
+
 FFILL_LIMITS = {
     "D": 1,
     "W": 5,
@@ -51,6 +52,7 @@ FFILL_LIMITS = {
     "BQ": 64,
     "BA": 252,
 }
+DAYS_PER_FREQ = FFILL_LIMITS.copy()
 
 # Cross-sections of interest
 ## DM currency areas
