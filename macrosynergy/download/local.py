@@ -803,6 +803,7 @@ def create_store(
     test_mode: bool = False,
     check_download: bool = False,
     check_connection: bool = False,
+    batch_size: int = 10,
 ) -> None:
     DownloadTimeseries(
         store_path=store_path,
@@ -811,6 +812,7 @@ def create_store(
         store_format=fmt,
         test_mode=test_mode,
         check_connection=check_connection,
+        batch_size=batch_size,
     ).download_data(
         show_progress=True,
         expressions=expressions,
