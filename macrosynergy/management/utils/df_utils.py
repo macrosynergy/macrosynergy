@@ -966,7 +966,6 @@ def estimate_release_frequency(
     timeseries: pd.Series = None,
     df_wide: pd.DataFrame = None,
     exception_tolerance: float = 0.1,
-    score_method: str = "count",
     *args,
     **kwargs,
 ) -> Union[str, pd.DataFrame]:
@@ -977,20 +976,10 @@ def estimate_release_frequency(
         frequency.
     :param <float> exception_tolerance: The tolerance for exceptions in the release
         frequency estimation. Must be a float between 0 and 1.
-    :param <str> score_method: The method used to score the release frequency. Must be
-        one of "mean", or "count".
-        - "mean": chooses the period with the mean number of releases per period closest
-            to one.
-        - "count": chooses the period has the highest ratio of periods with exactly one
-            release to the total number of periods.
-
 
     :return <str>: The estimated release frequency.
 
     """
-
-    if score_method not in ["mean", "count"]:
-        raise NotImplementedError("The score method must be one of 'mean', or 'count'.")
 
     if df_wide is not None:
         if timeseries is not None:
@@ -1004,7 +993,7 @@ def estimate_release_frequency(
             )
 
     if df_wide is not None:
-        return _estimate_release_frequency_wide(df_wide=df_wide, *args,**kwargs)
+        return _estimate_release_frequency_wide(df_wide=df_wide, *args, **kwargs)
 
     timeseries: pd.Series = timeseries.copy().dropna().drop_duplicates(keep="first")
 
@@ -1037,7 +1026,7 @@ def estimate_release_frequency(
     return eops_df.idxmax()
 
 
-def _estimate_release_frequency_wide(df_wide: pd.DataFrame,*args, **kwargs):
+def _estimate_release_frequency_wide(df_wide: pd.DataFrame, *args, **kwargs):
     """
     Estimates the release frequency of a wide DataFrame.
     Backend for `estimate_release_frequency`.
