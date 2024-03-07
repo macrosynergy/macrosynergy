@@ -105,10 +105,10 @@ def run_commands_on_ec2(instance, notebooks):
     outputs = {"succeeded": [], "failed": []}
     try:
         # Initial cleanup commands
-        cleanup_commands = "rm -rf notebooks failed_notebooks.txt successful_notebooks.txt nohup.out myvenv"
+        cleanup_commands = "rm -rf notebooks failed_notebooks.txt successful_notebooks.txt nohup.out myvenv && python3 -m venv myvenv"
         print(f"Running cleanup commands on {instance.id}...")
-        ssh_client.exec_command(cleanup_commands, timeout=3)
-        time.sleep(3)
+        stdin, stdout, stderr = ssh_client.exec_command(cleanup_commands, timeout=50)
+        stdout.channel.recv_exit_status()
         print(f"Cleanup commands completed on {instance.id}")
 
         # Wget commands
@@ -118,12 +118,6 @@ def run_commands_on_ec2(instance, notebooks):
         stdout.channel.recv_exit_status()
         print(f"Wget commands completed on {instance.id}")
         # Consider adding a delay or checking for command completion if necessary
-        
-        print(f"Running venv commands on {instance.id}...")
-        venv_commands = "python3 -m venv myvenv"
-        stdin, stdout, stderr = ssh_client.exec_command(venv_commands, timeout=50)
-        stdout.channel.recv_exit_status()
-        print(f"Venv commands completed on {instance.id}")
 
         print(f"Running pip commands on {instance.id}...")
         pip_commands = f"myvenv/bin/python -m pip install linearmodels jupyter nbformat git+https://github.com/macrosynergy/macrosynergy@{branch_name}  --upgrade"
