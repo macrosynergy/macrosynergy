@@ -599,6 +599,7 @@ class SignalReturnRelations:
             freq=freq,
             blacklist=None,
             lag=1,
+            fwin=self.fwin,
             xcat_aggs=[agg_sig, "sum"],
         )
         self.df = df
