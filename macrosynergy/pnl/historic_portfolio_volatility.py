@@ -2,7 +2,7 @@
 Module for calculating the historic portfolio volatility for a given strategy.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Tuple, Callable
 from functools import lru_cache
 import pandas as pd
 import numpy as np
