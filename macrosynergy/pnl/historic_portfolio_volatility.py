@@ -165,7 +165,7 @@ def _calculate_portfolio_volatility(
     for trigger_date in trigger_indices:
         td = trigger_date
         lbx = -1 * int(np.ceil(lback_periods * (1 + nan_tolerance)))
-        # account for possible NA drops
+        # account for possible NA drops and create a bigger slice
         piv_ret = pivot_returns.loc[pivot_returns.index <= td].iloc[lbx:]
         vcv: pd.DataFrame = _estimate_variance_covariance(
             piv_ret=piv_ret,
