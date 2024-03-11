@@ -84,7 +84,11 @@ def _mask_nan_series(
 def _estimate_variance_covariance(
     piv_ret: pd.DataFrame,
     remove_zeros: bool,
-    weights_arr: Optional[np.ndarray],
+    weights_func: Callable[[int, int], np.ndarray],
+    lback_periods: int,
+    half_life: int,
+    *args,
+    **kwargs,
 ) -> pd.DataFrame:
     """Estimation of the variance-covariance matrix needs to have the following configuration options
 
@@ -92,27 +96,30 @@ def _estimate_variance_covariance(
     2. Flat weights (equal) vs. exponential weights,
     3. Frequency of estimation (daily, weekly, monthly, quarterly) and their weights.
     """
-    # If weights is None, then the weights are equal
-    if weights_arr is None:
-        # TODO weights_arr is never None in the current implementation
-        weights_arr = np.ones(piv_ret.shape[0]) / piv_ret.shape[0]
-
-    assert len(weights_arr) == len(piv_ret), "weights and window must have same length"
-    assert not (
-        piv_ret.isna().any().any()
-    ), "NaN should have been removed by this stage"
-    # TODO why is N/A removed by this stage? Has it been replaced by zeros?
+    # weights is a function at this point; either flat_weights_arr or expo_weights_arr
 
     cov_matr = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
 
     for i_b, c_b in enumerate(piv_ret.columns):
         for i_a, c_a in enumerate(piv_ret.columns[: i_b + 1]):
-            est_vol = _weighted_covariance(
+            x, y = _mask_nan_series(
                 x=piv_ret[c_a].values,
                 y=piv_ret[c_b].values,
-                w=weights_arr,
+                lback_periods=lback_periods,
                 remove_zeros=remove_zeros,
             )
+            # if either of the return series is not available, set the covariance to NaN
+            if np.isnan(x).all() or np.isnan(y).all():
+                cov_matr[i_a, i_b] = np.nan
+                cov_matr[i_b, i_a] = np.nan
+                continue
+
+            w = weights_func(
+                lback_periods=min(lback_periods, len(x)),
+                half_life=min(half_life, len(x)),
+            )  # inherently fast, and cached anyway
+
+            est_vol = _weighted_covariance(x=x, y=y, w=w)
             cov_matr[i_a, i_b] = est_vol
             if i_a != i_b:
                 cov_matr[i_b, i_a] = est_vol
@@ -127,11 +134,11 @@ def _calculate_portfolio_volatility(
     pivot_returns: pd.DataFrame,
     pivot_signals: pd.DataFrame,
     lback_periods: int,
-    half_life: int,
-    weights_func: Optional[np.ndarray],
     nan_tolerance: float,
     portfolio_return_name: str,
+    *args,
     **kwargs,
+    # weights_func: Optional[np.ndarray],
 ):
     """
     Calculate the portfolio volatility for each trigger date.
@@ -153,35 +160,22 @@ def _calculate_portfolio_volatility(
         estimation function.
     """
 
-    _mask_args = dict(
-        trigger_indices=trigger_indices,
-        lback_periods=lback_periods,
-        nan_tolerance=nan_tolerance,
-    )
-    pivot_returns = _mask_nan_series(pivot_df=pivot_returns, **_mask_args)
-    pivot_signals = _mask_nan_series(pivot_df=pivot_signals, **_mask_args)
-
     return_values = []
 
     for trigger_date in trigger_indices:
         td = trigger_date
-        piv_ret = (
-            pivot_returns.loc[pivot_returns.index <= td].iloc[-lback_periods:].dropna()
-        )
-
-        # TODO: what if len(pivot_returns) < lback_periods? -- ffill, fillna, or drop?
-
-        # TODO what is the benefit of cached? The weight_func is only called once.
-        weights_arr = weights_func(
-            lback_periods=min(lback_periods, len(piv_ret)),
-            half_life=min(half_life, len(piv_ret)),
-        )  # inherently fast, and cached anyway
-
+        lbx = -1 * int(np.ceil(lback_periods * (1 + nan_tolerance)))
+        # account for possible NA drops
+        piv_ret = pivot_returns.loc[pivot_returns.index <= td].iloc[lbx:]
         vcv: pd.DataFrame = _estimate_variance_covariance(
             piv_ret=piv_ret,
-            weights_arr=weights_arr,
+            lback_periods=lback_periods,
+            *args,
             **kwargs,
         )
+
+        # TODO - NaN handing for signals?
+
         piv_sig: pd.DataFrame = pivot_signals.loc[td, :]
         return_values += [(td, piv_sig.T.dot(vcv).dot(piv_sig))]
 
@@ -289,7 +283,7 @@ def historic_portfolio_vol(
     est_freq: str = "m",
     lback_periods: int = 21,
     lback_meth: str = "ma",
-    half_life=11,
+    half_life: int = 11,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
@@ -476,7 +470,7 @@ if __name__ == "__main__":
 
     df_copy = df.copy()
 
-    N_p_nans = 0.30
+    N_p_nans = 0.10
     df["value"] = df["value"].apply(
         lambda x: x if np.random.rand() > N_p_nans else np.nan
     )
