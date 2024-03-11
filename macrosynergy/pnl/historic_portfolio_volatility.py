@@ -35,20 +35,17 @@ def expo_weights_arr(lback_periods: int, half_life: int, *args, **kwargs) -> np.
     return expo_weights(lback_periods=lback_periods, half_life=half_life)
 
 
-def _weighted_covariance(
-    x: np.ndarray, y: np.ndarray, w: np.ndarray = None, remove_zeros: bool = True
-):
+def _weighted_covariance(x: np.ndarray, y: np.ndarray, w: np.ndarray = None):
     """
     Estimate covariance between two series after applying weights.
 
     """
-    assert x.ndim == 1 or x.shape[1] == 1, "x must be a 1D array or a column vector"
-    assert y.ndim == 1 or y.shape[1] == 1, "y must be a 1D array or a column vector"
+    assert x.ndim == 1 or x.shape[1] == 1, "`x` must be a 1D array or a column vector"
+    assert y.ndim == 1 or y.shape[1] == 1, "`y` must be a 1D array or a column vector"
+    assert x.shape[0] == y.shape[0], "`x` and `y` must have same length"
+    assert w.ndim == 1 or w.shape[1] == 1, "`w` must be a 1D array or a column vector"
+    assert x.shape[0] == w.shape[0], "`x` and `w` must have same length"
 
-    assert x.shape[0] == y.shape[0], "x and y must have same length"
-
-    # TODO what happens if w is None?
-    # W is never none, flat weights are used if w is None (see flat_weights_arr)
     w = w / sum(w)  # weights are normalized
 
     rss = (x - x.mean()) * (y - y.mean())
