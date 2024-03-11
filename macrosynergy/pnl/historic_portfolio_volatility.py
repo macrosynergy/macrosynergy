@@ -53,6 +53,34 @@ def _weighted_covariance(x: np.ndarray, y: np.ndarray, w: np.ndarray = None):
     return w.T.dot(rss)
 
 
+def _nan_ratio(x, remove_zeros: bool = True) -> float:
+    return (sum(np.isnan(x)) + (sum(x == 0) if remove_zeros else 0)) / len(x)
+
+
+def _mask_nan_series(
+    x: np.ndarray,
+    y: np.ndarray,
+    lback_periods: int,
+    remove_zeros: bool,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Mask NaNs in the series."""
+    # if either of the dates is NaN, mask that row
+    mask = np.isnan(x) | np.isnan(y)
+    if remove_zeros:
+        mask = mask | (x == 0) | (y == 0)
+
+    # drop NaNs
+    x = x[~mask]
+    y = y[~mask]
+
+    # if dropping nans leaves less than lback_periods, fill with NaNs and return
+    if any(len(_) < lback_periods for _ in [x, y]):
+        _r = np.full(lback_periods, np.nan)
+        return (_r, _r)
+
+    return (x[-lback_periods:], y[-lback_periods:])
+
+
 def _estimate_variance_covariance(
     piv_ret: pd.DataFrame,
     remove_zeros: bool,
@@ -92,35 +120,6 @@ def _estimate_variance_covariance(
     assert np.all((cov_matr.T == cov_matr) ^ np.isnan(cov_matr))
 
     return pd.DataFrame(cov_matr, index=piv_ret.columns, columns=piv_ret.columns)
-
-
-def _nan_ratio(x) -> float:
-    return (sum(np.isnan(x)) + sum(x == 0)) / len(x)
-
-
-def _mask_nan_series(
-    pivot_df: pd.DataFrame,
-    trigger_indices: pd.DatetimeIndex,
-    lback_periods: int,
-    nan_tolerance: float,
-) -> pd.DataFrame:
-    """
-    Drops series from the dataframe if the ratio of NaNs to non-NaNs exceeds the
-    nan_tolerance. Exists to allow greater flexibility in nan-processing.
-
-    :param <pd.DataFrame> pivot_df: the dataframe of the pivot table.
-    :param <pd.DatetimeIndex> trigger_indices: the DateTimeIndex of the trigger dates.
-    :param <int> lback_periods: the number of periods to use for filling NaNs.
-    :param <float> nan_tolerance: the maximum ratio of NaNs to non-NaNs in a lookback
-        window, if exceeded the resulting volatility is set to NaN. Default is 0.25.
-    """
-
-    for trigger_date in trigger_indices:
-        dtidx = pivot_df.index[pivot_df.index <= trigger_date][-lback_periods:]
-        col_mask = (pivot_df.loc[dtidx].apply(_nan_ratio) > nan_tolerance).values
-        pivot_df.loc[dtidx, col_mask] = np.nan
-
-    return pivot_df
 
 
 def _calculate_portfolio_volatility(
