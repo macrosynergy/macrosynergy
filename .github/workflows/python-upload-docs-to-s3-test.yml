@@ -1,0 +1,83 @@
+name: Package documentation - push to AWS test bucket
+
+permissions:
+  id-token: write # This is required for aws oidc connection
+  contents: read # This is required for actions/checkout
+  pull-requests: write # This is required for gh bot to comment PR
+env:
+  TF_LOG: INFO
+  AWS_REGION: eu-west-2
+
+on:
+  push:
+    branches: [main, test, develop, feature/aws_docs]
+  workflow_dispatch:
+
+jobs:
+  build-docs-test:
+    env:
+      BUCKET_NAME: ${{ secrets.AWS_DOCS_TEST_BUCKET }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Restore caches
+        uses: ./.github/actions/restore-pip-cache
+        with:
+          python-version: 3.11
+
+      - name: Get branch name
+        id: branch
+        run: echo ::set-output name=branch::${GITHUB_REF#refs/heads/}
+
+      - name: Configure AWS credentials from AWS account
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }} # Choose test or prod role
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHub-Macrosynergy-Package
+
+      # - name: Generate version switcher
+      #   run: |
+      #     aws s3 ls s3://${{ env.BUCKET_NAME }} --recursive > folders.txt
+      #     cp folders.txt aws_s3_ls.txt
+
+      #     python -c "print(','.join([x for x in set(map(lambda x: str(x).split(' ')[-1].strip().split('/')[0] if '/' in x else '', open('aws_s3_ls.txt').readlines())) if x.strip() != '']), end='')" > folders.txt
+
+      #     echo $(cat folders.txt)
+      #     BRANCHES=$(cat folders.txt)
+      #     python ./.github/scripts/gen_docs_switcher.py \
+      #       -d http://macrosynergy-docs-test.s3-website.eu-west-2.amazonaws.com \
+      #       -b $BRANCHES \
+      #       -o version_switcher.json
+
+      # - name: Upload version switcher
+      #   run: |
+      #     aws s3 cp version_switcher.json s3://${{ env.BUCKET_NAME }}/version_switcher.json
+
+      - name: Run Flake8
+        run: |
+          # Options: exluding docs, scripts and build folders. Also, treating certain errors as warnings.
+
+          flake8 --count --select=E9,F63,F7,F82 --show-source --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
+
+          flake8 --count --exit-zero --max-complexity=10 --max-line-length=127 --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
+
+      - name: Build docs
+        run: |
+          pip install -r docs/requirements.txt
+          pip install .
+          python docs/gen.py
+
+      - name: Delete existing docs (if exists)
+        run: |
+          BRANCH=${{ steps.branch.outputs.branch }}
+          BRANCH=${BRANCH//\//-}
+          aws s3 rm s3://${{ env.BUCKET_NAME }}/${BRANCH} --recursive
+
+      - name: Upload to S3
+        run: |
+          BRANCH=${{ steps.branch.outputs.branch }}
+          BRANCH=${BRANCH//\//-}
+          mv docs/build/html docs/build/${BRANCH}
+          aws s3 cp --recursive docs/build/${BRANCH} s3://${{ env.BUCKET_NAME }}/${BRANCH}

@@ -4,6 +4,15 @@
 import os
 import sys
 
+import macrosynergy
+
+ms_version = macrosynergy.__version__
+if "+" in ms_version:
+    _a, _b = ms_version.split("+")
+    _, _c = _b.split("_")
+    ms_version = _a + "+" + _c
+
+
 sys.path.insert(0, os.path.abspath("../../"))
 
 # -- Project information -----------------------------------------------------
@@ -50,8 +59,13 @@ html_theme = "pydata_sphinx_theme"
 html_theme_options = {
     "show_toc_level": 5,
     "header_links_before_dropdown": 4,
+    # "navbar_end": ["version-switcher"],
     "content_footer_items": ["last-updated"],
     "github_url": "https://github.com/macrosynergy/macrosynergy",
+    # "switcher": {
+    #     "json_url": "https://macrosynergy-docs-test.s3.eu-west-2.amazonaws.com/version_switcher.json",
+    #     "version_match": ms_version,
+    # },
     "logo": {
         "image_light": "MACROSYNERGY_Logo_Primary.png",
         "image_dark": "MACROSYNERGY_Logo_White.png",
