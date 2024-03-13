@@ -6,6 +6,7 @@ from typing import List, Optional, Tuple, Callable
 from functools import lru_cache
 import pandas as pd
 import numpy as np
+import logging
 
 from macrosynergy.panel.historic_vol import expo_weights
 from macrosynergy.management.types import NoneType
@@ -22,6 +23,8 @@ RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
 
 cache = lru_cache(maxsize=None)
 
+logger = logging.getLogger(__name__)
+
 
 @cache
 def flat_weights_arr(lback_periods: int, *args, **kwargs) -> np.ndarray:
@@ -35,7 +38,13 @@ def expo_weights_arr(lback_periods: int, half_life: int, *args, **kwargs) -> np.
     return expo_weights(lback_periods=lback_periods, half_life=half_life)
 
 
-def _weighted_covariance(x: np.ndarray, y: np.ndarray, w: np.ndarray = None):
+def _weighted_covariance(
+    x: np.ndarray,
+    y: np.ndarray,
+    weights_func: Callable[[int, int], np.ndarray],
+    *args,
+    **kwargs,
+) -> float:
     """
     Estimate covariance between two series after applying weights.
 
@@ -43,50 +52,38 @@ def _weighted_covariance(x: np.ndarray, y: np.ndarray, w: np.ndarray = None):
     assert x.ndim == 1 or x.shape[1] == 1, "`x` must be a 1D array or a column vector"
     assert y.ndim == 1 or y.shape[1] == 1, "`y` must be a 1D array or a column vector"
     assert x.shape[0] == y.shape[0], "`x` and `y` must have same length"
-    assert w.ndim == 1 or w.shape[1] == 1, "`w` must be a 1D array or a column vector"
-    assert x.shape[0] == w.shape[0], "`x` and `w` must have same length"
 
-    w = w / sum(w)  # weights are normalized
+    # if either of x or y is all NaNs, return NaN
+    if np.isnan(x).all() or np.isnan(y).all():
+        return np.nan
 
-    rss = (x - x.mean()) * (y - y.mean())
+    xnans, ynans = np.isnan(x), np.isnan(y)
+    wmask = xnans | ynans
+    weightslen = sum(~wmask)
+    xmean, ymean = x[~xnans].mean(), y[~ynans].mean()
+
+    # drop NaNs
+    x, y = x[~wmask], y[~wmask]
+
+    # rss = (x - x.mean()) * (y - y.mean())
+    rss = (x - xmean) * (y - ymean)
+
+    assert len(rss) == weightslen
+
+    w: np.ndarray = weights_func(
+        lback_periods=weightslen,
+        half_life=min(weightslen // 2, kwargs.get("half_life", 11)),
+    )
 
     return w.T.dot(rss)
 
 
-def _nan_ratio(x, remove_zeros: bool = True) -> float:
-    return (sum(np.isnan(x)) + (sum(x == 0) if remove_zeros else 0)) / len(x)
-
-
-def _mask_nan_series(
-    x: np.ndarray,
-    y: np.ndarray,
-    lback_periods: int,
-    remove_zeros: bool,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Mask NaNs in the series."""
-    # if either of the dates is NaN, mask that row
-    mask = np.isnan(x) | np.isnan(y)
-    if remove_zeros:
-        mask = mask | (x == 0) | (y == 0)
-
-    # drop NaNs
-    x = x[~mask]
-    y = y[~mask]
-
-    # if dropping nans leaves less than lback_periods, fill with NaNs and return
-    if any(len(_) < lback_periods for _ in [x, y]):
-        _r = np.full(lback_periods, np.nan)
-        return (_r, _r)
-
-    return (x[-lback_periods:], y[-lback_periods:])
-
-
 def _estimate_variance_covariance(
     piv_ret: pd.DataFrame,
-    remove_zeros: bool,
-    weights_func: Callable[[int, int], np.ndarray],
-    lback_periods: int,
-    half_life: int,
+    # weights_func: Callable[[int, int], np.ndarray],
+    # lback_periods: int,
+    # half_life: int,
+    # remove_zeros: bool,
     *args,
     **kwargs,
 ) -> pd.DataFrame:
@@ -96,37 +93,47 @@ def _estimate_variance_covariance(
     2. Flat weights (equal) vs. exponential weights,
     3. Frequency of estimation (daily, weekly, monthly, quarterly) and their weights.
     """
-    # weights is a function at this point; either flat_weights_arr or expo_weights_arr
 
-    cov_matr = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
+    cov_mat = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
+    logger.info(f"Estimating variance-covariance matrix for {piv_ret.columns}")
 
     for i_b, c_b in enumerate(piv_ret.columns):
         for i_a, c_a in enumerate(piv_ret.columns[: i_b + 1]):
-            x, y = _mask_nan_series(
+            logger.debug(f"Estimating covariance between {c_a} and {c_b}")
+            est_vol = _weighted_covariance(
                 x=piv_ret[c_a].values,
                 y=piv_ret[c_b].values,
-                lback_periods=lback_periods,
-                remove_zeros=remove_zeros,
+                *args,
+                **kwargs,
             )
-            # if either of the return series is not available, set the covariance to NaN
-            if np.isnan(x).all() or np.isnan(y).all():
-                cov_matr[i_a, i_b] = np.nan
-                cov_matr[i_b, i_a] = np.nan
-                continue
+            cov_mat[i_a, i_b] = cov_mat[i_b, i_a] = est_vol
 
-            w = weights_func(
-                lback_periods=min(lback_periods, len(x)),
-                half_life=min(half_life, len(x)),
-            )  # inherently fast, and cached anyway
+    assert np.all((cov_mat.T == cov_mat) ^ np.isnan(cov_mat))
 
-            est_vol = _weighted_covariance(x=x, y=y, w=w)
-            cov_matr[i_a, i_b] = est_vol
-            if i_a != i_b:
-                cov_matr[i_b, i_a] = est_vol
+    return pd.DataFrame(cov_mat, index=piv_ret.columns, columns=piv_ret.columns)
 
-    assert np.all((cov_matr.T == cov_matr) ^ np.isnan(cov_matr))
 
-    return pd.DataFrame(cov_matr, index=piv_ret.columns, columns=piv_ret.columns)
+def _nan_ratio(x, remove_zeros: bool = True) -> float:
+    return (sum(np.isnan(x)) + (sum(x == 0) if remove_zeros else 0)) / len(x)
+
+
+def _mask_nans(
+    piv_df: pd.DataFrame,
+    nan_tolerance: float,
+    remove_zeros: bool,
+) -> pd.DataFrame:
+    """Mask NaNs in the dataframe"""
+    mask = piv_df.apply(_nan_ratio, remove_zeros=remove_zeros) > nan_tolerance
+    piv_df.loc[:, mask] = np.nan
+
+    if any(mask.values == True):
+        logger.debug(
+            f"Dropping columns {mask[mask].index}"
+            f" from {piv_df.index.min()} to {piv_df.index.max()}"
+            f" due to NaN ratio > {nan_tolerance}"
+        )
+
+    return piv_df
 
 
 def _calculate_portfolio_volatility(
@@ -136,6 +143,7 @@ def _calculate_portfolio_volatility(
     lback_periods: int,
     nan_tolerance: float,
     portfolio_return_name: str,
+    remove_zeros: bool,
     *args,
     **kwargs,
     # weights_func: Optional[np.ndarray],
@@ -161,15 +169,20 @@ def _calculate_portfolio_volatility(
     """
 
     return_values = []
+    logger.info(
+        f"Calculating portfolio volatility for {len(trigger_indices)} dates, "
+        f"for FIDS={pivot_returns.columns.tolist()}"
+        f"from {trigger_indices.min()} to {trigger_indices.max()} "
+    )
 
-    for trigger_date in trigger_indices:
-        td = trigger_date
-        lbx = -1 * int(np.ceil(lback_periods * (1 + nan_tolerance)))
-        # account for possible NA drops and create a bigger slice
-        piv_ret = pivot_returns.loc[pivot_returns.index <= td].iloc[lbx:]
+    for td in trigger_indices:
+        logger.debug(f"Calculating portfolio volatility for {td}")
+        piv_ret = pivot_returns.loc[pivot_returns.index <= td].iloc[-lback_periods:]
+        masked_piv_ret = _mask_nans(piv_ret, nan_tolerance, remove_zeros=remove_zeros)
         vcv: pd.DataFrame = _estimate_variance_covariance(
-            piv_ret=piv_ret,
+            piv_ret=masked_piv_ret,
             lback_periods=lback_periods,
+            remove_zeros=remove_zeros,
             *args,
             **kwargs,
         )
@@ -238,6 +251,9 @@ def _hist_vol(
     # TODO get the correct rebalance dates
 
     weights_func = flat_weights_arr if lback_meth == "ma" else expo_weights_arr
+    logger.info(
+        "Found lback_meth=%s, using weights_func=%s", lback_meth, weights_func.__name__
+    )
     portfolio_return_name = f"{sname}{RETURN_SERIES_XCAT}"
 
     df_out: pd.DataFrame = _calculate_portfolio_volatility(
