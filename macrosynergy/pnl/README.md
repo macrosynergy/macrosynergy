@@ -1,4 +1,4 @@
-# `macrosynergy.download`
+# `macrosynergy.pnl`
 
 Subpackage for calculating Profits and Loss (PnL) of positions (portfolios).
 
