@@ -9,7 +9,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from typing import List, Union, Tuple, Optional
+from typing import List, Union, Tuple, Optional, Set
 
 from macrosynergy.management.utils import (
     standardise_dataframe,
@@ -65,6 +65,84 @@ def _apply_slip(
         )
 
 
+def _check_df_for_contract_signals(
+    df: QuantamentalDataFrame,
+    sname: str,
+    fids: List[str],
+) -> None:
+    """
+    Checks if the dataframe contains contract signals for the specified strategy
+    and the specified contract identifiers.
+
+    :param <QuantamentalDataFrame> df: Quantamental dataframe with contract signals and returns.
+    :param <str> sname: the name of the strategy.
+    :param <List[str]> fids: list of contract identifiers to apply the slip to.
+    """
+    assert isinstance(df, QuantamentalDataFrame)
+    assert isinstance(sname, str)
+    assert (
+        isinstance(fids, list)
+        and len(fids) > 0
+        and all([isinstance(x, str) for x in fids])
+    )
+
+    sig_ident: str = f"_CSIG_{sname}"
+    _check_conts: Set = set([f"{contx}{sig_ident}" for contx in fids])
+    _found_conts: Set = set((df["cid"] + "_" + df["xcat"]).unique())
+    if not _check_conts.issubset(_found_conts):
+        raise ValueError(
+            f"Contract signals for all contracts not in dataframe. \n"
+            f"Missing: {_check_conts - _found_conts}"
+        )
+    
+    return
+
+
+def _vol_target_positions(
+    df: pd.DataFrame,
+    sname: str,
+    fids: List[str],
+    aum: Numeric = 100,
+    dollar_per_signal: Numeric = 1.0,
+    vol_target: Numeric = 0.1,
+    rebal_freq: str = "m",
+    lback_periods: int = 21,
+    half_life: int = 11,
+    nan_tolerance: float = 0.25,
+    remove_zeros: bool = True,
+    lback_meth: str = "ma",
+    rstring: str = "XR",
+    pname: str = "VPOS",
+) -> QuantamentalDataFrame:
+    """
+    Uses historic portfolio volatility to calculate notional positions based on
+    contract signals, volatility targeting and other relevant parameters.
+    """
+
+    assert isinstance(df, QuantamentalDataFrame)
+
+    sig_ident: str = f"_CSIG_{sname}"
+
+    df_wide: pd.DataFrame = qdf_to_ticker_df(df)
+
+    _check_df_for_contract_signals(df=df, sname=sname, fids=fids)
+
+    histpvol = historic_portfolio_vol(
+        df=df,
+        sname=sname,
+        fids=fids,
+        rstring=rstring,
+        lback_periods=lback_periods,
+        half_life=half_life,
+        lback_meth=lback_meth,
+        nan_tolerance=nan_tolerance,
+        est_freq=rebal_freq,
+        remove_zeros=remove_zeros,
+    )
+
+    # TODO: implement the rest of the function
+
+
 def _leverage_positions(
     df: pd.DataFrame,
     sname: str,
@@ -79,14 +157,10 @@ def _leverage_positions(
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
     sig_ident: str = f"_CSIG_{sname}"
 
-    _check_conts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
-    if not set(_check_conts).issubset(set(df_wide.columns)):
-        raise ValueError(
-            f"Contract signals for all contracts not in dataframe. \n"
-            f"Missing: {set(_check_conts) - set(df_wide.columns)}"
-        )
+    _found_conts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
+    _check_df_for_contract_signals(df=df, sname=sname, fids=fids)
 
-    rowsums: pd.Series = df_wide.loc[:, _check_conts].sum(axis=1)
+    rowsums: pd.Series = df_wide.loc[:, _found_conts].sum(axis=1)
     # if any of the rowsums are zero, set to NaN to avoid div by zero
     rowsums[rowsums == 0] = np.nan
 
