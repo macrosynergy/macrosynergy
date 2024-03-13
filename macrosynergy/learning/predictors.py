@@ -9,12 +9,15 @@ import warnings
 import datetime
 
 from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 
 from typing import Union
 from abc import abstractmethod, ABC
 
 import numbers
+
+from sklearn.tree import DecisionTreeRegressor
 
 class NaivePredictor(BaseEstimator, RegressorMixin):
     """
@@ -404,6 +407,110 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
 
         return self
 
+
+class SignWeightedDecisionTreeRegressor(SignWeightedRegressor):
+    def __init__(
+        self,
+    ):
+        """
+        Custom class to create a weighted decision tree regression model, with the sample weights
+        chosen by inverse frequency of the label's sign in the training set.
+
+        NOTE: By weighting the contribution of different training samples based on the
+        sign of the label, the model is encouraged to learn equally from both positive and negative return samples,
+        irrespective of class imbalance. If there are more positive targets than negative
+        targets in the training set, then the negative target samples are given a higher
+        weight in the model training process. The opposite is true if there are more
+        negative targets than positive targets.
+        """
+        model = DecisionTreeRegressor(
+        )
+        super().__init__(model)
+
+    def set_params(self, **params):
+        super().set_params(**params)
+
+        # Re-initialize the DecisionTreeRegressor instance with updated parameters
+        self.model = DecisionTreeRegressor()
+
+        return self
+
+
+class TimeWeightedDecisionTreeRegressor(TimeWeightedRegressor):
+    def __init__(
+        self,
+        half_life: Union[float, int] = 21 * 12,
+        **kwargs,
+    ):
+        """
+        Custom class to create a weighted decision tree regression model, where the training sample
+        weights exponentially decay by sample recency, given a prescribed half_life.
+
+        :param <Union[float, int]> half_life: The number of time periods in units of the native data frequency for the weight attributed to the most recent sample (one) to decay by half.
+        """
+        model = DecisionTreeRegressor()
+        super().__init__(half_life=half_life, model=model)
+
+    def set_params(self, **params):
+        super().set_params(**params)
+        
+        # Re-initialize the DecisionTreeRegressor instance with updated parameters
+        self.model = DecisionTreeRegressor()
+
+        return self
+    
+    
+class SignWeightedRandomForestRegressor(SignWeightedRegressor):
+    def __init__(
+        self,
+    ):
+        """
+        Custom class to create a weighted random forest regression model, with the sample weights
+        chosen by inverse frequency of the label's sign in the training set.
+
+        NOTE: By weighting the contribution of different training samples based on the
+        sign of the label, the model is encouraged to learn equally from both positive and negative return samples,
+        irrespective of class imbalance. If there are more positive targets than negative
+        targets in the training set, then the negative target samples are given a higher
+        weight in the model training process. The opposite is true if there are more
+        negative targets than positive targets.
+        """
+        model = RandomForestRegressor()
+        super().__init__(model)
+
+    def set_params(self, **params):
+        super().set_params(**params)
+
+        # Re-initialize the RandomForestRegressor instance with updated parameters
+        self.model = RandomForestRegressor()
+
+        return self
+
+
+class TimeWeightedRandomForestRegressor(TimeWeightedRegressor):
+    def __init__(
+        self,
+        half_life: Union[float, int] = 21 * 12,
+    ):
+        """
+        Custom class to create a weighted random forest regression model, where the training sample
+        weights exponentially decay by sample recency, given a prescribed half_life.
+
+        :param <Union[float, int]> half_life: The number of time periods in units of the native data frequency for the weight attributed to the most recent sample (one) to decay by half.
+        """
+        model = RandomForestRegressor()
+        super().__init__(half_life=half_life, model=model)
+
+    def set_params(self, **params):
+        super().set_params(**params)
+        
+        # Re-initialize the RandomForestRegressor instance with updated parameters
+        self.model = RandomForestRegressor()
+
+        return self
+
+
+
 class LADRegressor(BaseEstimator, RegressorMixin):
     def __init__(self, fit_intercept=True, positive=False, tol=None, ):
         """
@@ -756,3 +863,4 @@ if __name__ == "__main__":
     plt.suptitle("Histograms of predictions")
     plt.tight_layout()
     plt.show()
+
