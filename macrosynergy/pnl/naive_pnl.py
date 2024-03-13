@@ -1,6 +1,7 @@
 """
 "Naive" PnLs with limited signal options and disregarding transaction costs.
 """
+
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -17,7 +18,6 @@ from macrosynergy.signal import SignalReturnRelations
 
 
 class NaivePnL:
-
     """
     Computes and collects illustrative PnLs with limited signal options and
     disregarding transaction costs.
@@ -201,12 +201,12 @@ class NaivePnL:
         The signals are calculated daily and for each individual cross-section defined in
         the panel. However, re-balancing a position can occur more infrequently than
         daily. Therefore, produce the re-balancing values according to the more
-        infrequent timeline (weekly or monthly).
+        infrequent timeline (weekly, monthly, or quarterly).
 
         :param <pd.Dataframe> dfw: DataFrame with each category represented by a column
             and the daily signal is also included with the column name 'psig'.
         :param <str> rebal_freq: re-balancing frequency for positions according to signal
-            must be one of 'daily' (default), 'weekly' or 'monthly'.
+            must be one of 'daily' (default), 'weekly', 'monthly', or 'quarterly'.
         :param <str> rebal_slip: re-balancing slippage in days.
 
         :return <pd.Series>: will return a pd.Series containing the associated signals
@@ -216,6 +216,7 @@ class NaivePnL:
         # The re-balancing days are the first of the respective time-periods because of
         # the shift forward by one day applied earlier in the code. Therefore, only
         # concerned with the minimum date of each re-balance period.
+
         dfw["year"] = dfw["real_date"].dt.year
         if rebal_freq == "monthly":
             dfw["month"] = dfw["real_date"].dt.month
@@ -223,6 +224,9 @@ class NaivePnL:
         elif rebal_freq == "weekly":
             dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
             rebal_dates = dfw.groupby(["cid", "year", "week"])["real_date"].min()
+        elif rebal_freq == "quarterly":
+            dfw["quarter"] = dfw["real_date"].dt.quarter
+            rebal_dates = dfw.groupby(["cid", "year", "quarter"])["real_date"].min()
 
         # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
         r_dates_df = rebal_dates.reset_index(level=0)
@@ -298,9 +302,9 @@ class NaivePnL:
             Previously calculated PnLs of the same name will be overwritten. This means
             that if a set of PnLs are to be compared, each PnL requires a distinct name.
         :param <str> rebal_freq: re-balancing frequency for positions according to signal
-            must be one of 'daily' (default), 'weekly' or 'monthly'. The re-balancing is
-            only concerned with the signal value on the re-balancing date which is
-            delimited by the frequency chosen.
+            must be one of 'daily' (default), 'weekly' 'monthly', or 'quarterly'.
+            The re-balancing is only concerned with the signal value on the re-balancing
+            date which is delimited by the frequency chosen.
             Additionally, the re-balancing frequency will be applied to make_zn_scores()
             if used as the method to produce the raw signals.
         :param <str> rebal_slip: re-balancing slippage in days. Default is 1 which
@@ -340,7 +344,7 @@ class NaivePnL:
         )
         assert sig_op in sig_options, error_sig_method
 
-        freq_params = ["daily", "weekly", "monthly"]
+        freq_params = ["daily", "weekly", "monthly", "quarterly"]
         freq_error = f"Re-balancing frequency must be one of: {freq_params}."
         assert rebal_freq in freq_params, freq_error
 
@@ -349,7 +353,7 @@ class NaivePnL:
 
         sig_add_error = "Numeric value expected for signal addition."
         assert isinstance(sig_add, (float, int)), sig_add_error
-        
+
         if thresh is not None and thresh < 1:
             raise ValueError("thresh must be greater than or equal to one.")
 
@@ -375,7 +379,7 @@ class NaivePnL:
             neg = ""
 
         dfw["psig"] += sig_add
-        
+
         self._winsorize(df=dfw["psig"], thresh=thresh)
 
         # Multi-index DataFrame with a natural minimum lag applied.
@@ -986,10 +990,11 @@ class NaivePnL:
         filter_2 = self.df["cid"] == "ALL" if not cs else True
 
         return self.df[filter_1 & filter_2]
-    
+
     def _winsorize(self, df: pd.DataFrame, thresh: float):
         if thresh is not None:
             df.clip(lower=-thresh, upper=thresh, inplace=True)
+
 
 def create_results_dataframe(
     title: str,
@@ -1040,6 +1045,7 @@ def create_results_dataframe(
         "D": "daily",
         "W": "weekly",
         "M": "monthly",
+        "Q": "quarterly",
     }
     pnl_freq = lambda x: freq_dict[x] if x in freq_dict.keys() else "monthly"
 
@@ -1120,6 +1126,7 @@ def create_results_dataframe(
     )
 
     return res_df
+
 
 if __name__ == "__main__":
     cids = ["AUD", "CAD", "GBP", "NZD", "USD", "EUR"]

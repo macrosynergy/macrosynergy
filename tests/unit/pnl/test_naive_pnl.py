@@ -1,4 +1,4 @@
-from tests.simulate import make_qdf
+from simulate import make_qdf
 from macrosynergy.pnl.naive_pnl import NaivePnL
 from macrosynergy.management.utils import reduce_df
 import unittest
@@ -213,13 +213,16 @@ class TestAll(unittest.TestCase):
     def diff_month(d1, d2):
         return (d1.year - d2.year) * 12 + d1.month - d2.month
 
+    @staticmethod
+    def diff_quarter(d1, d2):
+        return (d1.year - d2.year) * 4 + d1.quarter - d2.quarter
+
     def test_rebalancing_dates(self):
         self.test_make_signal()
 
         dfw = self.signal_dfw
         dfw.reset_index(inplace=True)
         dfw = dfw.rename_axis(None, axis=1)
-
         dfw = dfw.sort_values(["cid", "real_date"])
 
         sig_series = NaivePnL.rebalancing(dfw, rebal_freq="monthly")
@@ -240,6 +243,33 @@ class TestAll(unittest.TestCase):
         no_months = self.diff_month(end_date, start_date)
 
         self.assertTrue(no_months - 1 == len(unique_values_aud))
+
+    def test_rebalancing_dates_quarterly(self):
+        self.test_make_signal()
+
+        dfw = self.signal_dfw
+        dfw.reset_index(inplace=True)
+        dfw = dfw.rename_axis(None, axis=1)
+        dfw = dfw.sort_values(["cid", "real_date"])
+        
+        sig_series = NaivePnL.rebalancing(dfw, rebal_freq="quarterly")
+        dfw["sig"] = np.squeeze(sig_series.to_numpy())
+
+        dfw_signal_rebal = dfw.pivot(index="real_date", columns="cid", values="sig")
+
+        # Confirm, on a single cross-section that re-balancing occurs on a quarterly basis.
+        # The number of unique values will equate to the number of quarters in the
+        # time-series.
+        dfw_signal_rebal_aud = dfw_signal_rebal.loc[:, "AUD"]
+        aud_array = np.squeeze(dfw_signal_rebal_aud.to_numpy())
+        unique_values_aud = set(aud_array)
+
+        start_date = dfw_signal_rebal.index[0]
+        end_date = dfw_signal_rebal.index[-1]
+
+        n_quarters = self.diff_quarter(end_date, start_date)
+
+        self.assertTrue(n_quarters - 1 == len(unique_values_aud))
 
     def test_make_pnl(self):
         self.test_make_signal()
