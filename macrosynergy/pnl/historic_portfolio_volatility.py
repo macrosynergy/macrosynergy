@@ -336,14 +336,14 @@ def historic_portfolio_vol(
         the end date is taken from the dataframe.
     :param <dict> blacklist: a dictionary of contract identifiers to exclude from
         the calculation. Default is None, which means that no contracts are excluded.
-    :param <float> nan_tolerance: maximum ratio of NaNs to non-NaNs in a lookback window,
-        if exceeded the resulting volatility is set to NaN. Default is 0.25.
+    :param <float> nan_tolerance: maximum ratio of number of NaN values to the total 
+        number of values in a lookback window. If exceeded the resulting volatility is set
+        to NaN, else prior non-zero values are added to the window instead. Default is 0.25.
     :param <bool> remove_zeros: if True (default) any returns that are exact zeros will
         not be included in the lookback window and prior non-zero values are added to the
         window instead.
 
-
-    :return: <pd.DataFrame> JPMaQS dataframe of annualized standard deviation of
+    :return <pd.DataFrame>: JPMaQS dataframe of annualized standard deviation of
         estimated strategy PnL, with category name <sname>_PNL_USD1S_ASD.
         TODO: check if this is correct.
         The values are in % annualized. Values between estimation points are forward
@@ -355,8 +355,6 @@ def historic_portfolio_vol(
     up to a minimum of 11 days. If no returns are available for a contract type for
     at least 11 days the function returns an NaN for that date and sends a warning of all
     the dates for which this happened.
-
-
     """
     ## Check inputs
     for varx, namex, typex in [
