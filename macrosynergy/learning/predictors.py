@@ -1,3 +1,4 @@
+from matplotlib.widgets import Lasso
 import numpy as np
 import pandas as pd
 
@@ -10,7 +11,7 @@ import datetime
 
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import ElasticNet, LinearRegression, Ridge
 
 from typing import Union
 from abc import abstractmethod, ABC
@@ -18,6 +19,7 @@ from abc import abstractmethod, ABC
 import numbers
 
 from sklearn.tree import DecisionTreeRegressor
+
 
 class NaivePredictor(BaseEstimator, RegressorMixin):
     """
@@ -195,7 +197,9 @@ class TimeWeightedRegressor(BaseWeightedRegressor):
         weights = np.power(2, -np.arange(num_dates) / self.half_life)
 
         weight_map = dict(zip(dates, weights))
-        self.sample_weights = targets.index.get_level_values(1).map(weight_map).to_numpy()
+        self.sample_weights = (
+            targets.index.get_level_values(1).map(weight_map).to_numpy()
+        )
 
         return self.sample_weights
 
@@ -247,20 +251,20 @@ class SignWeightedLinearRegression(SignWeightedRegressor):
             n_jobs=self.n_jobs,
             positive=self.positive,
         )
-        self.coef_ = None 
+        self.coef_ = None
         self.intercept_ = None
         super().__init__(model)
 
     def set_params(self, **params):
         super().set_params(**params)
-        if 'fit_intercept' in params or 'positive' in params:
+        if "fit_intercept" in params or "positive" in params:
             # Re-initialize the LinearRegression instance with updated parameters
             self.model = LinearRegression(
-                fit_intercept=self.fit_intercept,
-                positive=self.positive
+                fit_intercept=self.fit_intercept, positive=self.positive
             )
 
         return self
+
 
 class TimeWeightedLinearRegression(TimeWeightedRegressor):
     def __init__(
@@ -309,14 +313,14 @@ class TimeWeightedLinearRegression(TimeWeightedRegressor):
 
     def set_params(self, **params):
         super().set_params(**params)
-        if 'fit_intercept' in params or 'positive' in params:
+        if "fit_intercept" in params or "positive" in params:
             # Re-initialize the LinearRegression instance with updated parameters
             self.model = LinearRegression(
-                fit_intercept=self.fit_intercept,
-                positive=self.positive
+                fit_intercept=self.fit_intercept, positive=self.positive
             )
 
         return self
+
 
 class SignWeightedLADRegressor(SignWeightedRegressor):
     def __init__(
@@ -356,11 +360,10 @@ class SignWeightedLADRegressor(SignWeightedRegressor):
 
     def set_params(self, **params):
         super().set_params(**params)
-        if 'fit_intercept' in params or 'positive' in params:
+        if "fit_intercept" in params or "positive" in params:
             # Re-initialize the LinearRegression instance with updated parameters
             self.model = LADRegressor(
-                fit_intercept=self.fit_intercept,
-                positive=self.positive
+                fit_intercept=self.fit_intercept, positive=self.positive
             )
 
         return self
@@ -398,11 +401,10 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
 
     def set_params(self, **params):
         super().set_params(**params)
-        if 'fit_intercept' in params or 'positive' in params:
+        if "fit_intercept" in params or "positive" in params:
             # Re-initialize the LinearRegression instance with updated parameters
             self.model = LADRegressor(
-                fit_intercept=self.fit_intercept,
-                positive=self.positive
+                fit_intercept=self.fit_intercept, positive=self.positive
             )
 
         return self
@@ -423,8 +425,7 @@ class SignWeightedDecisionTreeRegressor(SignWeightedRegressor):
         weight in the model training process. The opposite is true if there are more
         negative targets than positive targets.
         """
-        model = DecisionTreeRegressor(
-        )
+        model = DecisionTreeRegressor()
         super().__init__(model)
 
     def set_params(self, **params):
@@ -453,13 +454,13 @@ class TimeWeightedDecisionTreeRegressor(TimeWeightedRegressor):
 
     def set_params(self, **params):
         super().set_params(**params)
-        
+
         # Re-initialize the DecisionTreeRegressor instance with updated parameters
         self.model = DecisionTreeRegressor()
 
         return self
-    
-    
+
+
 class SignWeightedRandomForestRegressor(SignWeightedRegressor):
     def __init__(
         self,
@@ -503,16 +504,171 @@ class TimeWeightedRandomForestRegressor(TimeWeightedRegressor):
 
     def set_params(self, **params):
         super().set_params(**params)
-        
+
         # Re-initialize the RandomForestRegressor instance with updated parameters
         self.model = RandomForestRegressor()
 
         return self
 
 
+class SignWeightedRidgeRegressor(SignWeightedRegressor):
+    def __init__(
+        self,
+        **kwargs,
+    ):
+        """
+        Custom class to create a weighted Ridge regression model, with the sample weights
+        chosen by inverse frequency of the label's sign in the training set.
+
+        NOTE: By weighting the contribution of different training samples based on the
+        sign of the label, the model is encouraged to learn equally from both positive and negative return samples,
+        irrespective of class imbalance. If there are more positive targets than negative
+        targets in the training set, then the negative target samples are given a higher
+        weight in the model training process. The opposite is true if there are more
+        negative targets than positive targets.
+        """
+        model = Ridge(**kwargs)
+        super().__init__(model)
+
+    def set_params(self, **params):
+        super().set_params(**params)
+
+        # Re-initialize the RandomForestRegressor instance with updated parameters
+        self.model = Ridge(**params)
+
+        return self
+
+
+class TimeWeightedRidgeRegressor(TimeWeightedRegressor):
+    def __init__(
+        self,
+        half_life: Union[float, int] = 21 * 12,
+    ):
+        """
+        Custom class to create a weighted Ridge regression model, where the training sample
+        weights exponentially decay by sample recency, given a prescribed half_life.
+
+        :param <Union[float, int]> half_life: The number of time periods in units of the native data frequency for the weight attributed to the most recent sample (one) to decay by half.
+        """
+        model = Ridge()
+        super().__init__(half_life=half_life, model=model)
+
+    def set_params(self, **params):
+        super().set_params(**params)
+
+        # Re-initialize the RandomForestRegressor instance with updated parameters
+        self.model = Ridge()
+
+        return self
+
+
+class SignWeightedLassoRegressor(SignWeightedRegressor):
+    def __init__(
+        self,
+    ):
+        """
+        Custom class to create a weighted Lasso regression model, with the sample weights
+        chosen by inverse frequency of the label's sign in the training set.
+
+        NOTE: By weighting the contribution of different training samples based on the
+        sign of the label, the model is encouraged to learn equally from both positive and negative return samples,
+        irrespective of class imbalance. If there are more positive targets than negative
+        targets in the training set, then the negative target samples are given a higher
+        weight in the model training process. The opposite is true if there are more
+        negative targets than positive targets.
+        """
+        model = Lasso()
+        super().__init__(model)
+
+    def set_params(self, **params):
+        super().set_params(**params)
+
+        # Re-initialize the RandomForestRegressor instance with updated parameters
+        self.model = Lasso()
+
+        return self
+
+
+class TimeWeightedLassoRegressor(TimeWeightedRegressor):
+    def __init__(
+        self,
+        half_life: Union[float, int] = 21 * 12,
+    ):
+        """
+        Custom class to create a weighted Lasso regression model, where the training sample
+        weights exponentially decay by sample recency, given a prescribed half_life.
+
+        :param <Union[float, int]> half_life: The number of time periods in units of the native data frequency for the weight attributed to the most recent sample (one) to decay by half.
+        """
+        model = Lasso()
+        super().__init__(half_life=half_life, model=model)
+
+    def set_params(self, **params):
+        super().set_params(**params)
+
+        # Re-initialize the RandomForestRegressor instance with updated parameters
+        self.model = Lasso()
+
+        return self
+
+
+class SignWeightedElasticNetRegressor(SignWeightedRegressor):
+    def __init__(
+        self,
+    ):
+        """
+        Custom class to create a weighted elastic net regression model, with the sample weights
+        chosen by inverse frequency of the label's sign in the training set.
+
+        NOTE: By weighting the contribution of different training samples based on the
+        sign of the label, the model is encouraged to learn equally from both positive and negative return samples,
+        irrespective of class imbalance. If there are more positive targets than negative
+        targets in the training set, then the negative target samples are given a higher
+        weight in the model training process. The opposite is true if there are more
+        negative targets than positive targets.
+        """
+        model = ElasticNet()
+        super().__init__(model)
+
+    def set_params(self, **params):
+        super().set_params(**params)
+
+        # Re-initialize the RandomForestRegressor instance with updated parameters
+        self.model = ElasticNet()
+
+        return self
+
+
+class TimeWeightedElasticNetRegressor(TimeWeightedRegressor):
+    def __init__(
+        self,
+        half_life: Union[float, int] = 21 * 12,
+    ):
+        """
+        Custom class to create a weighted elastic net regression model, where the training sample
+        weights exponentially decay by sample recency, given a prescribed half_life.
+
+        :param <Union[float, int]> half_life: The number of time periods in units of the native data frequency for the weight attributed to the most recent sample (one) to decay by half.
+        """
+        model = ElasticNet()
+        super().__init__(half_life=half_life, model=model)
+
+    def set_params(self, **params):
+        super().set_params(**params)
+
+        # Re-initialize the RandomForestRegressor instance with updated parameters
+        self.model = ElasticNet()
+
+        return self
+
 
 class LADRegressor(BaseEstimator, RegressorMixin):
-    def __init__(self, fit_intercept=True, positive=False, tol=None, ):
+    def __init__(
+        self,
+        fit_intercept=True,
+        positive=False,
+        tol=None,
+    ):
         """
         Custom class to create a linear regression model with model fit determined
         by minimising L1 (absolute) loss.
@@ -649,7 +805,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 sample_weight=sample_weight,
             ),
             x0=init_weights,
-            method="SLSQP", # TODO: make this an option in the constructor.
+            method="SLSQP",  # TODO: make this an option in the constructor.
             bounds=bounds,
             tol=self.tol,
         )
@@ -863,4 +1019,3 @@ if __name__ == "__main__":
     plt.suptitle("Histograms of predictions")
     plt.tight_layout()
     plt.show()
-
