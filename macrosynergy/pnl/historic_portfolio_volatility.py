@@ -2,7 +2,7 @@
 Module for calculating the historic portfolio volatility for a given strategy.
 """
 
-from typing import List, Optional, Callable, Tuple
+from typing import List, Optional, Tuple, Callable
 from functools import lru_cache
 import pandas as pd
 import numpy as np
@@ -15,17 +15,18 @@ from macrosynergy.management.utils import (
     reduce_df,
     standardise_dataframe,
     is_valid_iso_date,
-    qdf_to_ticker_df,
     ticker_df_to_qdf,
     get_eops,
     get_cid,
     _map_to_business_day_frequency
 )
+from macrosynergy.management.types import QuantamentalDataFrame
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
-logger = logging.getLogger(__name__)
 
 cache = lru_cache(maxsize=None)
+
+logger = logging.getLogger(__name__)
 
 
 @cache
@@ -40,79 +41,55 @@ def expo_weights_arr(lback_periods: int, half_life: int, *args, **kwargs) -> np.
     return expo_weights(lback_periods=lback_periods, half_life=half_life)
 
 
-def _univariate_volatility(
-    df_wide: pd.DataFrame,
-    roll_func: Callable,
+def _weighted_covariance(
+    x: np.ndarray,
+    y: np.ndarray,
+    weights_func: Callable[[int, int], np.ndarray],
     lback_periods: int,
-    nan_tolerance: float,
-    remove_zeros: bool,
-    weights: Optional[np.ndarray],
-):
-    """
-    Calculates the univariate volatility for a given dataframe.
-
-    :param <pd.DataFrame> df_wide: the wide dataframe of all the tickers in the strategy.
-    :param <callable> roll_func: the function to use for the rolling window calculation.
-        The function must have a signature of (np.ndarray, *, remove_zeros: bool) -> float.
-        See `expo_std` and `flat_std` for examples.
-    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
-        effective window.
-    :param <np.ndarray> weights: array of exponential weights for each period in the
-        lookback window. Default is None, which means that the weights are equal.
-    """
-    if weights is None:
-        weights = np.ones(df_wide.shape[0]) / df_wide.shape[0]
-        univariate_vol: pd.Series = df_wide.agg(roll_func, remove_zeros=remove_zeros)
-    else:
-        if len(weights) == len(df_wide):
-            univariate_vol = df_wide.agg(
-                roll_func, w=weights, remove_zeros=remove_zeros
-            )
-        else:
-            return pd.Series(np.nan, index=df_wide.columns)
-
-        ## Creating a mask to fill series `nan_tolerance`
-    mask = (
-        (
-            df_wide.isna().sum(axis=0)
-            + (df_wide == 0).sum(axis=0)
-            + (lback_periods - len(df_wide))
-        )
-        / lback_periods
-    ) <= nan_tolerance
-
-    univariate_vol[~mask] = np.nan
-
-    return univariate_vol
-
-
-def weighted_covariance(
-    x: np.ndarray, y: np.ndarray, w: np.ndarray = None, remove_zeros: bool = True
-):
+    *args,
+    **kwargs,
+) -> float:
     """
     Estimate covariance between two series after applying weights.
 
     """
-    # assert len(x) == len(w), "weights and window must have same length"
-    if remove_zeros:
-        x = x[x != 0]
-        w = w[0 : len(x)] / sum(w[0 : len(x)])
-    w = w / sum(w)  # weights are normalized
+    assert x.ndim == 1 or x.shape[1] == 1, "`x` must be a 1D array or a column vector"
+    assert y.ndim == 1 or y.shape[1] == 1, "`y` must be a 1D array or a column vector"
+    assert x.shape[0] == y.shape[0], "`x` and `y` must have same length"
 
-    if y is not None:
-        rss = (x - x.mean()) * (y - y.mean())
-    else:
-        rss = (x - x.mean()) ** 2
+    # if either of x or y is all NaNs, return NaN
+    if np.isnan(x).all() or np.isnan(y).all():
+        return np.nan
+
+    xnans, ynans = np.isnan(x), np.isnan(y)
+    wmask = xnans | ynans
+    weightslen = min(sum(~wmask), lback_periods)
+    xmean, ymean = x[~xnans].mean(), y[~ynans].mean()
+
+    # drop NaNs and only consider the most recent lback_periods
+    x, y = x[~wmask][-weightslen:], y[~wmask][-weightslen:]
+
+    # rss = (x - x.mean()) * (y - y.mean())
+    rss = (x - xmean) * (y - ymean)
+
+    assert len(rss) == weightslen
+
+    w: np.ndarray = weights_func(
+        lback_periods=weightslen,
+        half_life=min(weightslen // 2, kwargs.get("half_life", 11)),
+    )
 
     return w.T.dot(rss)
 
 
 def _estimate_variance_covariance(
     piv_ret: pd.DataFrame,
-    remove_zeros: bool,
-    nan_tolerance: float,
-    lback_periods: int,
-    weights_arr: Optional[np.ndarray],
+    # weights_func: Callable[[int, int], np.ndarray],
+    # lback_periods: int,
+    # half_life: int,
+    # remove_zeros: bool,
+    *args,
+    **kwargs,
 ) -> pd.DataFrame:
     """Estimation of the variance-covariance matrix needs to have the following configuration options
 
@@ -120,31 +97,131 @@ def _estimate_variance_covariance(
     2. Flat weights (equal) vs. exponential weights,
     3. Frequency of estimation (daily, weekly, monthly, quarterly) and their weights.
     """
-    # If weights is None, then the weights are equal
-    if weights_arr is None:
-        weights_arr = np.ones(piv_ret.shape[0]) / piv_ret.shape[0]
 
-    assert len(weights_arr) == len(piv_ret), "weights and window must have same length"
-    assert not (
-        piv_ret.isna().any().any()
-    ), "NaN should have been removed by this stage"
+    cov_mat = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
+    logger.info(f"Estimating variance-covariance matrix for {piv_ret.columns}")
 
-    cov_matr = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
-
-    for iB, cB in enumerate(piv_ret.columns):
-        for iA, cA in enumerate(piv_ret.columns[: iB + 1]):
-            est_vol = weighted_covariance(
-                x=piv_ret[cA].values,
-                y=piv_ret[cB].values,
-                w=weights_arr,
-                remove_zeros=remove_zeros,
+    for i_b, c_b in enumerate(piv_ret.columns):
+        for i_a, c_a in enumerate(piv_ret.columns[: i_b + 1]):
+            logger.debug(f"Estimating covariance between {c_a} and {c_b}")
+            est_vol = _weighted_covariance(
+                x=piv_ret[c_a].values,
+                y=piv_ret[c_b].values,
+                *args,
+                **kwargs,
             )
-            cov_matr[iA, iB] = est_vol  # TODO (iA, iB) is same as (iB, iA) 
-            cov_matr[iB, iA] = est_vol  # TODO (iA, iB) is same as (iB, iA)
+            cov_mat[i_a, i_b] = cov_mat[i_b, i_a] = est_vol
 
-    assert np.all((cov_matr.T == cov_matr) ^ np.isnan(cov_matr))
+    assert np.all((cov_mat.T == cov_mat) ^ np.isnan(cov_mat))
 
-    return pd.DataFrame(cov_matr, index=piv_ret.columns, columns=piv_ret.columns)
+    return pd.DataFrame(cov_mat, index=piv_ret.columns, columns=piv_ret.columns)
+
+
+def _nan_ratio(x, remove_zeros: bool = True) -> float:
+    return (sum(np.isnan(x)) + (sum(x == 0) if remove_zeros else 0)) / len(x)
+
+
+def _mask_nans(
+    piv_df: pd.DataFrame,
+    lback_periods: int,
+    nan_tolerance: float,
+    remove_zeros: bool,
+) -> pd.DataFrame:
+    """Mask NaNs in the dataframe"""
+    mask = (
+        piv_df.iloc[-lback_periods:].apply(_nan_ratio, remove_zeros=remove_zeros)
+        > nan_tolerance
+    )
+    piv_df.loc[:, mask] = np.nan
+
+    for col in piv_df.loc[:, ~mask].columns:
+        _ts = piv_df[col]
+        if remove_zeros:
+            _ts = _ts.replace(0, np.nan)
+        if len(piv_df[col].dropna()) < lback_periods:
+            piv_df.loc[:, col] = np.nan
+            logger.debug(
+                f"Dropping column {col} from {piv_df.index.min()} to "
+                f"{piv_df.index.max()} due to insufficient data despite bringing "
+                "prior non-NaN " + ("and non-zero " if remove_zeros else "") + "values."
+            )
+
+    if any(mask.values == True):
+        logger.debug(
+            f"Dropping columns {mask[mask].index}"
+            f" from {piv_df.index.min()} to {piv_df.index.max()}"
+            f" due to NaN ratio > {nan_tolerance}"
+        )
+
+    return piv_df
+
+
+def _calculate_portfolio_volatility(
+    trigger_indices: pd.DatetimeIndex,
+    pivot_returns: pd.DataFrame,
+    pivot_signals: pd.DataFrame,
+    lback_periods: int,
+    nan_tolerance: float,
+    portfolio_return_name: str,
+    remove_zeros: bool,
+    *args,
+    **kwargs,
+    # weights_func: Optional[np.ndarray],
+):
+    """
+    Calculate the portfolio volatility for each trigger date.
+    Backed function for `_hist_vol`, to increase readability.
+
+    :param <pd.DatetimeIndex> trigger_indices: the DateTimeIndex of the trigger dates.
+    :param <pd.DataFrame> pivot_returns: the pivot table of the contract returns.
+    :param <pd.DataFrame> pivot_signals: the pivot table of the contract signals.
+    :param <int> lback_periods: the number of periods to use for the lookback period
+        of the volatility-targeting method. Default is 21.
+    :param <int> half_life: Refers to the half-time for "xma" and full lookback period
+        for "ma". Default is 11.
+    :param <callable> weights_func: the function to use for the weights array. Default
+        is None, which means that the weights are equal.
+    :param <float> nan_tolerance: maximum ratio of NaNs to non-NaNs in a lookback window,
+        if exceeded the resulting volatility is set to NaN. Default is 0.25.
+    :param <str> portfolio_return_name: the name of the portfolio return series.
+    :param <dict> kwargs: additional keyword arguments to pass to the variance-covariance
+        estimation function.
+    """
+
+    return_values = []
+    logger.info(
+        f"Calculating portfolio volatility for {len(trigger_indices)} dates, "
+        f"for FIDS={pivot_returns.columns.tolist()}"
+        f"from {trigger_indices.min()} to {trigger_indices.max()} "
+    )
+
+    for td in trigger_indices:
+        logger.debug(f"Calculating portfolio volatility for {td}")
+        lbextra = -1 * int(np.ceil(lback_periods * (1 + nan_tolerance)))
+        piv_ret = pivot_returns.loc[pivot_returns.index <= td].iloc[lbextra:]
+        masked_piv_ret = _mask_nans(
+            piv_df=piv_ret,
+            lback_periods=lback_periods,
+            nan_tolerance=nan_tolerance,
+            remove_zeros=remove_zeros,
+        )
+        vcv: pd.DataFrame = _estimate_variance_covariance(
+            piv_ret=masked_piv_ret,
+            lback_periods=lback_periods,
+            remove_zeros=remove_zeros,
+            *args,
+            **kwargs,
+        )
+
+        # TODO - NaN handing for signals?
+
+        sig_arr: pd.DataFrame = pivot_signals.loc[td, :]
+        return_values += [(td, sig_arr.T.dot(vcv).dot(sig_arr))]
+
+    return pd.DataFrame(
+        return_values,
+        columns=["real_date", portfolio_return_name],
+    ).set_index("real_date")
 
 
 def _hist_vol(
@@ -157,7 +234,7 @@ def _hist_vol(
     half_life=11,
     nan_tolerance: float = 0.25,
     remove_zeros: bool = True,
-):
+) -> pd.DataFrame:
     """
     Calculates historic volatility for a given strategy. It assumes that the dataframe
     is composed solely of the relevant signals and returns for the strategy.
@@ -201,8 +278,12 @@ def _hist_vol(
     # TODO get the correct rebalance dates
 
     weights_func = flat_weights_arr if lback_meth == "ma" else expo_weights_arr
+    logger.info(
+        "Found lback_meth=%s, using weights_func=%s", lback_meth, weights_func.__name__
+    )
+    portfolio_return_name = f"{sname}{RETURN_SERIES_XCAT}"
 
-    vol_args = dict(
+    df_out: pd.DataFrame = _calculate_portfolio_volatility(
         trigger_indices=trigger_indices,
         pivot_returns=pivot_returns,
         pivot_signals=pivot_signals,
@@ -210,47 +291,34 @@ def _hist_vol(
         remove_zeros=remove_zeros,
         nan_tolerance=nan_tolerance,
         weights_func=weights_func,
+        half_life=half_life,
+        portfolio_return_name=portfolio_return_name,
     )
 
-    def _pvol_tuples(
-        trigger_indices: pd.DatetimeIndex,
-        pivot_returns: pd.DataFrame,
-        pivot_signals: pd.DataFrame,
-        lback_periods: int,
-        weights_func: Optional[np.ndarray],
-        **kwargs,
-    ):
-        for trigger_date in trigger_indices:
-            td = trigger_date
-            piv_ret = (
-                pivot_returns.loc[pivot_returns.index <= td]
-                .iloc[-lback_periods:]
-                .dropna()
-            )
-            weights_arr = weights_func(
-                lback_periods=min(lback_periods, len(piv_ret)),
-                half_life=min(half_life, len(piv_ret)),
-            )  # inherently fast, and cached anyway
-
-            vcv: pd.DataFrame = _estimate_variance_covariance(
-                piv_ret=piv_ret,
-                lback_periods=lback_periods,
-                weights_arr=weights_arr,
-                **kwargs,
-            )
-            piv_sig: pd.DataFrame = pivot_signals.loc[td, :]
-            yield td, piv_sig.T.dot(vcv).dot(piv_sig)
-
-    portfolio_return_name = f"{sname}{RETURN_SERIES_XCAT}"
-    df_out = pd.DataFrame(
-        _pvol_tuples(**vol_args),
-        columns=["real_date", portfolio_return_name],
-    ).set_index("real_date")
+    # assert portfolio_return_name the only column
+    assert df_out.columns == [portfolio_return_name]
 
     # Annualised standard deviation (ASD)
     df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name] * 252)
 
-    df_out = df_out.reindex(pivot_returns.index).ffill(limit=FFILL_LIMITS[est_freq])
+    ffills = {"d": 1, "w": 5, "m": 24, "q": 64}
+    df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[est_freq])
+    nanindex = df_out.index[df_out[portfolio_return_name].isnull()]
+    if len(nanindex) > 0:
+        df_out = df_out.dropna()
+        logger.debug(
+            f"Found {len(nanindex)} NaNs in {portfolio_return_name} at {nanindex}, dropping all NaNs."
+        )
+
+    # TODO - should below not be forward filled with the previous volatility value...
+    assert (
+        not df_out.loc[
+            df_out.first_valid_index() : df_out.last_valid_index(),
+            portfolio_return_name,
+        ]
+        .isnull()
+        .any()
+    )
 
     return df_out
 
@@ -263,13 +331,13 @@ def historic_portfolio_vol(
     est_freq: str = "M",
     lback_periods: int = 21,
     lback_meth: str = "ma",
-    half_life=11,
+    half_life: int = 11,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
     nan_tolerance: float = 0.25,
     remove_zeros: bool = True,
-):
+) -> QuantamentalDataFrame:
     """Historical portfolio volatility.
 
     Estimates annualized standard deviations of a portfolio, based on historic
@@ -290,7 +358,7 @@ def historic_portfolio_vol(
         for monthly. Alternatives are 'w' for business weekly, 'd' for daily, and 'q'
         for quarterly. Estimations are conducted for the end of the period.
     :param <int> lback_periods: the number of periods to use for the lookback period
-        of the volatility-targeting method. Default is 21.
+        of the volatility-targeting method. Default is 21 for daily (TODO verify).
     :param <str> lback_meth: the method to use for the lookback period of the
         volatility-targeting method. Default is 'ma' for moving average. Alternative is
         "xma", for exponential moving average.
@@ -300,14 +368,14 @@ def historic_portfolio_vol(
         the end date is taken from the dataframe.
     :param <dict> blacklist: a dictionary of contract identifiers to exclude from
         the calculation. Default is None, which means that no contracts are excluded.
-    :param <float> nan_tolerance: maximum ratio of NaNs to non-NaNs in a lookback window,
-        if exceeded the resulting volatility is set to NaN. Default is 0.25.
+    :param <float> nan_tolerance: maximum ratio of number of NaN values to the total
+        number of values in a lookback window. If exceeded the resulting volatility is set
+        to NaN, else prior non-zero values are added to the window instead. Default is 0.25.
     :param <bool> remove_zeros: if True (default) any returns that are exact zeros will
         not be included in the lookback window and prior non-zero values are added to the
         window instead.
 
-
-    :return: <pd.DataFrame> JPMaQS dataframe of annualized standard deviation of
+    :return <pd.DataFrame>: JPMaQS dataframe of annualized standard deviation of
         estimated strategy PnL, with category name <sname>_PNL_USD1S_ASD.
         TODO: check if this is correct.
         The values are in % annualized. Values between estimation points are forward
@@ -319,8 +387,6 @@ def historic_portfolio_vol(
     up to a minimum of 11 days. If no returns are available for a contract type for
     at least 11 days the function returns an NaN for that date and sends a warning of all
     the dates for which this happened.
-
-
     """
     ## Check inputs
     for varx, namex, typex in [
@@ -417,12 +483,15 @@ def historic_portfolio_vol(
         remove_zeros=remove_zeros,
     )
 
-    return ticker_df_to_qdf(df=hist_port_vol).dropna().reset_index(drop=True)
+    return ticker_df_to_qdf(df=hist_port_vol)
 
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import simulate_returns_and_signals
     from contract_signals import contract_signals
+
+    # np seed 42
+    np.random.seed(42)
 
     # Signals: FXCRY_NSA, EQCRY_NSA (rename to FX_CSIG_STRAT, EQ_CSIG_STRAT)
     # Returns: FXXR_NSA, EQXR_NSA (renamed to FXXR, EQXR)
@@ -445,8 +514,13 @@ if __name__ == "__main__":
     )
     # TODO simulate_returns_and_signals are risk-signals, not contract signals. We need to adjust for volatility and common (observed) factor.
     end = df["real_date"].max().strftime("%Y-%m-%d")
-    # randomly make 10% of the entires NaN
-    df.loc[df.sample(frac=0.1).index, "value"] = np.nan
+
+    df_copy = df.copy()
+
+    N_p_nans = 0.01
+    df["value"] = df["value"].apply(
+        lambda x: x if np.random.rand() > N_p_nans else np.nan
+    )
 
     df_vol: pd.DataFrame = historic_portfolio_vol(
         df=df,
@@ -460,5 +534,22 @@ if __name__ == "__main__":
         start=start,
         end=end,
     )
-    print(df_vol.head(10))
-    print(df_vol.tail(10))
+
+    df_copy_vol: pd.DataFrame = historic_portfolio_vol(
+        df=df_copy,
+        sname="STRAT",
+        fids=fids,
+        est_freq="m",
+        lback_periods=15,
+        lback_meth="ma",
+        half_life=11,
+        rstring="XR",
+        start=start,
+        end=end,
+    )
+
+    expc_idx = pd.Timestamp("2019-04-26")
+    assert df_copy_vol.max()["real_date"] == expc_idx  # np.seed is 42
+
+    # print(df_copy_vol.head(10))
+    # print(df_copy_vol.tail(10))
