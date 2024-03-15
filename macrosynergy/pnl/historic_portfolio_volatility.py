@@ -194,7 +194,7 @@ def _calculate_portfolio_volatility(
 
     for td in trigger_indices:
         logger.debug(f"Calculating portfolio volatility for {td}")
-        lbextra = -1 * np.ceil(lback_periods * (1 + nan_tolerance))
+        lbextra = -1 * int(np.ceil(lback_periods * (1 + nan_tolerance)))
         piv_ret = pivot_returns.loc[pivot_returns.index <= td].iloc[lbextra:]
         masked_piv_ret = _mask_nans(
             pic_df=piv_ret,
