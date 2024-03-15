@@ -66,7 +66,7 @@ def _apply_slip(
 
 
 def _check_df_for_contract_signals(
-    df: QuantamentalDataFrame,
+    df_wide: QuantamentalDataFrame,
     sname: str,
     fids: List[str],
 ) -> None:
@@ -78,7 +78,6 @@ def _check_df_for_contract_signals(
     :param <str> sname: the name of the strategy.
     :param <List[str]> fids: list of contract identifiers to apply the slip to.
     """
-    assert isinstance(df, QuantamentalDataFrame)
     assert isinstance(sname, str)
     assert (
         isinstance(fids, list)
@@ -88,7 +87,7 @@ def _check_df_for_contract_signals(
 
     sig_ident: str = f"_CSIG_{sname}"
     _check_conts: Set = set([f"{contx}{sig_ident}" for contx in fids])
-    _found_conts: Set = set((df["cid"] + "_" + df["xcat"]).unique())
+    _found_conts: Set = set(df_wide.columns)
     if not _check_conts.issubset(_found_conts):
         raise ValueError(
             f"Contract signals for all contracts not in dataframe. \n"
@@ -99,7 +98,7 @@ def _check_df_for_contract_signals(
 
 
 def _vol_target_positions(
-    df: pd.DataFrame,
+    df_wide: pd.DataFrame,
     sname: str,
     fids: List[str],
     dollar_per_signal: Numeric = 1.0,
@@ -118,18 +117,14 @@ def _vol_target_positions(
     contract signals, volatility targeting and other relevant parameters.
     """
 
-    assert isinstance(df, QuantamentalDataFrame)
+    _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
 
     vol_target: float = vol_target / 100
 
     sig_ident: str = f"_CSIG_{sname}"
 
-    df_wide: pd.DataFrame = qdf_to_ticker_df(df)
-
-    _check_df_for_contract_signals(df=df, sname=sname, fids=fids)
-
     histpvol = historic_portfolio_vol(
-        df=df,
+        df=ticker_df_to_qdf(df_wide), # TODO: should we df_wide arg, or an alternate entrypoint to this function?
         sname=sname,
         fids=fids,
         rstring=rstring,
@@ -152,11 +147,11 @@ def _vol_target_positions(
     # filter df to only contain position columns
     df_wide = df_wide.loc[:, [f"{contx}_{pname}" for contx in fids]]
 
-    return ticker_df_to_qdf(df=df_wide)
+    return df_wide
 
 
 def _leverage_positions(
-    df: pd.DataFrame,
+    df_wide: pd.DataFrame,
     sname: str,
     fids: List[str],
     aum: Numeric = 100,
@@ -164,15 +159,13 @@ def _leverage_positions(
     pname: str = "POS",
 ) -> QuantamentalDataFrame:
     """"""
-    assert isinstance(df, QuantamentalDataFrame)
+    _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
 
-    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
     sig_ident: str = f"_CSIG_{sname}"
 
-    _found_conts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
-    _check_df_for_contract_signals(df=df, sname=sname, fids=fids)
+    _contracts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
 
-    rowsums: pd.Series = df_wide.loc[:, _found_conts].sum(axis=1)
+    rowsums: pd.Series = df_wide.loc[:, _contracts].sum(axis=1)
     # if any of the rowsums are zero, set to NaN to avoid div by zero
     rowsums[rowsums == 0] = np.nan
 
@@ -186,7 +179,7 @@ def _leverage_positions(
     # filter df to only contain position columns
     df_wide = df_wide.loc[:, [f"{contx}_{pname}" for contx in fids]]
 
-    return ticker_df_to_qdf(df=df_wide)
+    return df_wide
 
 
 def notional_positions(
@@ -349,9 +342,11 @@ def notional_positions(
         fids=fids,
     )
 
+    df_wide = qdf_to_ticker_df(df)
+    return_df = None
     if leverage:
-        leveraged_positions: QuantamentalDataFrame = _leverage_positions(
-            df=df,
+        return_df: pd.DataFrame = _leverage_positions(
+            df_wide=df_wide,
             sname=sname,
             fids=fids,
             aum=aum,
@@ -359,11 +354,9 @@ def notional_positions(
             pname=pname,
         )
 
-        return leveraged_positions
-
     else:
-        vol_targeted_positions: QuantamentalDataFrame = _vol_target_positions(
-            df=df,
+        return_df: pd.DataFrame = _vol_target_positions(
+            df_wide=df_wide,
             sname=sname,
             fids=fids,
             dollar_per_signal=dollar_per_signal,
@@ -376,7 +369,7 @@ def notional_positions(
             pname=pname,
         )
 
-        return vol_targeted_positions
+    return ticker_df_to_qdf(df=return_df)
 
 
 if __name__ == "__main__":
