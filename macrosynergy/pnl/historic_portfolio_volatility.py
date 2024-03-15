@@ -63,8 +63,8 @@ def _weighted_covariance(
     weightslen = min(sum(~wmask), lback_periods)
     xmean, ymean = x[~xnans].mean(), y[~ynans].mean()
 
-    # drop NaNs
-    x, y = x[~wmask], y[~wmask]
+    # drop NaNs and only consider the most recent lback_periods
+    x, y = x[~wmask][-weightslen:], y[~wmask][-weightslen:]
 
     # rss = (x - x.mean()) * (y - y.mean())
     rss = (x - xmean) * (y - ymean)
@@ -197,7 +197,7 @@ def _calculate_portfolio_volatility(
         lbextra = -1 * int(np.ceil(lback_periods * (1 + nan_tolerance)))
         piv_ret = pivot_returns.loc[pivot_returns.index <= td].iloc[lbextra:]
         masked_piv_ret = _mask_nans(
-            pic_df=piv_ret,
+            piv_df=piv_ret,
             lback_periods=lback_periods,
             nan_tolerance=nan_tolerance,
             remove_zeros=remove_zeros,
