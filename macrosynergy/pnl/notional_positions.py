@@ -94,7 +94,7 @@ def _check_df_for_contract_signals(
             f"Contract signals for all contracts not in dataframe. \n"
             f"Missing: {_check_conts - _found_conts}"
         )
-    
+
     return
 
 
@@ -102,7 +102,6 @@ def _vol_target_positions(
     df: pd.DataFrame,
     sname: str,
     fids: List[str],
-    aum: Numeric = 100,
     dollar_per_signal: Numeric = 1.0,
     vol_target: Numeric = 0.1,
     rebal_freq: str = "m",
@@ -140,7 +139,18 @@ def _vol_target_positions(
         remove_zeros=remove_zeros,
     )
 
-    # TODO: implement the rest of the function
+    histpvol["value"] = vol_target * dollar_per_signal / histpvol["value"]
+
+    # TODO: check if this is correct
+    for contx in fids:
+        pos_col = contx + "_" + pname
+        cont_name = contx + sig_ident
+        df_wide[pos_col] = df_wide[cont_name] * histpvol["value"]
+
+    # filter df to only contain position columns
+    df_wide = df_wide.loc[:, [f"{contx}_{pname}" for contx in fids]]
+
+    return ticker_df_to_qdf(df=df_wide)
 
 
 def _leverage_positions(
@@ -350,7 +360,21 @@ def notional_positions(
         return leveraged_positions
 
     else:
-        raise NotImplementedError("Volatility targeting not implemented yet.")
+        vol_targeted_positions: QuantamentalDataFrame = _vol_target_positions(
+            df=df,
+            sname=sname,
+            fids=fids,
+            dollar_per_signal=dollar_per_signal,
+            vol_target=vol_target,
+            rebal_freq=rebal_freq,
+            lback_periods=lback_periods,
+            lback_meth=lback_meth,
+            half_life=half_life,
+            rstring=rstring,
+            pname=pname,
+        )
+
+        return vol_targeted_positions
 
 
 if __name__ == "__main__":
@@ -432,3 +456,9 @@ if __name__ == "__main__":
     # 82168  USD   FX_POS 2020-12-30   0.457190
     # 82169  USD  IRS_POS 2020-12-30  -0.228595
     # """
+    df_notional: pd.DataFrame = notional_positions(
+        df=df_cs,
+        fids=fids,
+        sname="STRAT",
+        vol_target=0.1,
+    )
