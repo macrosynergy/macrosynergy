@@ -969,6 +969,8 @@ class SignalReturnRelations:
             If not specified uses the freq stored in the class.
         :param <str> agg_sigs: aggregation method applied to the signal values in
             down-sampling.
+        :param <str> table_type: type of table to be returned. Either "summary", "years", 
+            "cross_section".
         """
         self.sigs = [self.revert_negation(sig) for sig in self.sigs]
         self.df = self.original_df
