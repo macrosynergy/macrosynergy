@@ -132,9 +132,12 @@ def _mask_nans(
     )
     piv_df.loc[:, mask] = np.nan
 
-    lgstr = "Dropping columns {dropcols} from {start} to {end} "
-    "due to insufficient data despite bringing prior non-NaN "
-    +("and non-zero " if remove_zeros else "") + "values."
+    lgstr = (
+        "Dropping columns {dropcols} from {start} to {end} "
+        "due to insufficient data despite bringing prior non-NaN "
+        + ("and non-zero " if remove_zeros else "")
+        + "values."
+    )
 
     if lback_periods:
         for col in piv_df.loc[:, ~mask].columns:
