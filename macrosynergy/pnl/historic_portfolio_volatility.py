@@ -125,23 +125,27 @@ def _mask_nans(
     remove_zeros: bool,
 ) -> pd.DataFrame:
     """Mask NaNs in the dataframe"""
+    lback_periods = 0 if lback_periods < 0 else lback_periods
     mask = (
         piv_df.iloc[-lback_periods:].apply(_nan_ratio, remove_zeros=remove_zeros)
         > nan_tolerance
     )
     piv_df.loc[:, mask] = np.nan
 
-    for col in piv_df.loc[:, ~mask].columns:
-        _ts = piv_df[col]
-        if remove_zeros:
-            _ts = _ts.replace(0, np.nan)
-        if len(piv_df[col].dropna()) < lback_periods:
-            piv_df.loc[:, col] = np.nan
-            logger.debug(
-                f"Dropping column {col} from {piv_df.index.min()} to "
-                f"{piv_df.index.max()} due to insufficient data despite bringing "
-                "prior non-NaN " + ("and non-zero " if remove_zeros else "") + "values."
-            )
+    if lback_periods:
+        for col in piv_df.loc[:, ~mask].columns:
+            _ts = piv_df[col]
+            if remove_zeros:
+                _ts = _ts.replace(0, np.nan)
+            if len(piv_df[col].dropna()) < lback_periods:
+                piv_df.loc[:, col] = np.nan
+                logger.debug(
+                    f"Dropping column {col} from {piv_df.index.min()} to "
+                    f"{piv_df.index.max()} due to insufficient data despite bringing "
+                    "prior non-NaN "
+                    + ("and non-zero " if remove_zeros else "")
+                    + "values."
+                )
 
     if any(mask.values == True):
         logger.debug(
@@ -192,9 +196,13 @@ def _calculate_portfolio_volatility(
         f"from {trigger_indices.min()} to {trigger_indices.max()} "
     )
 
+    if lback_periods < 0:
+        assert lback_periods == -1
+        lbextra = 0
+    else:
+        lbextra = -1 * int(np.ceil(lback_periods * (1 + nan_tolerance)))
     for td in trigger_indices:
         logger.debug(f"Calculating portfolio volatility for {td}")
-        lbextra = -1 * int(np.ceil(lback_periods * (1 + nan_tolerance)))
         piv_ret = pivot_returns.loc[pivot_returns.index <= td].iloc[lbextra:]
         masked_piv_ret = _mask_nans(
             piv_df=piv_ret,
