@@ -1,9 +1,11 @@
 import warnings
+import datetime
 from typing import (
     Dict,
     List,
     NamedTuple,
     Optional,
+    Union,
 )
 import pandas as pd
 
@@ -245,3 +247,26 @@ def _find_missing_in_df(df: pd.DataFrame, col_name: str, values: List, param_nam
         missing = list(set(values) - set(df[col_name].unique()))
 
     return missing
+
+def _validate_Xy_learning(X: pd.DataFrame, y: Union[pd.DataFrame, pd.Series]):
+    """
+    Validates the expected long-format inputs and targets expected for the learning
+    submodule.
+    """
+    if not isinstance(X, pd.DataFrame):
+        raise TypeError("The X argument must be a pandas DataFrame.")
+    if not isinstance(y, pd.Series) and not isinstance(y, pd.DataFrame):
+        raise TypeError("The y argument must be a pandas Series or DataFrame.")
+    if not isinstance(X.index, pd.MultiIndex):
+        raise ValueError("X must be multi-indexed.")
+    if not isinstance(y.index, pd.MultiIndex):
+        raise ValueError("y must be multi-indexed.")
+    if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+        raise TypeError("The inner index of X must be datetime.date.")
+    if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+        raise TypeError("The inner index of y must be datetime.date.")
+    if not X.index.equals(y.index):
+        raise ValueError(
+            "The indices of the input dataframe X and the output dataframe y don't "
+            "match."
+        )

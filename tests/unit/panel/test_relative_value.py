@@ -59,7 +59,7 @@ class TestAll(unittest.TestCase):
     def test_relative_value_dimensionality(self):
         dfd: pd.DataFrame = self.dfd.copy()
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Validate the assertion on the parameter "rel_meth".
             dfd_1: pd.DataFrame = make_relative_value(
                 df=dfd,
@@ -71,7 +71,7 @@ class TestAll(unittest.TestCase):
                 postfix="RV",
             )
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(TypeError):
             # Validate the assertion on "xcats" parameter.
             dfd_2: pd.DataFrame = make_relative_value(
                 df=dfd,
@@ -83,7 +83,7 @@ class TestAll(unittest.TestCase):
                 rel_xcats=["XRvB3", "GROWTHvB3", "INFLvB3"],
             )
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Validate the clause constructed around the basket parameter. The
             # cross-sections included in the "basket" must either be complete, inclusive
             # of all defined cross-sections, or a valid subset dependent on the cross-
@@ -93,9 +93,9 @@ class TestAll(unittest.TestCase):
                 xcats=["XR", "GROWTH"],
                 cids=["GBP"],
                 blacklist=None,
-                basket=["AUD", "CAD"],
+                basket=["AUD", "CAD", "INVALID"],
                 rel_meth="divide",
-                rel_xcats=["XRvB3", "GROWTHvB3", "INFLvB3"],
+                rel_xcats=["XRvB3", "GROWTHvB3"],
             )
 
         # The first aspect of the code to validate is if the DataFrame is reduced to a

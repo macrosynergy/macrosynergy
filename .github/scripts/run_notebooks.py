@@ -83,11 +83,14 @@ def connect_to_instance(instance):
             instance_ip = instance.public_ip_address
             ssh_client = paramiko.SSHClient()
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            print(f"Connecting to {instance.id}")
             ssh_client.connect(
                 hostname=instance_ip, username="ubuntu", key_filename="./notebook_runner.pem"
             )
-            ssh_client.get_transport().is_active()
-            ssh_client.get_transport().open_session()
+            if not ssh_client.get_transport().is_active():
+                raise Exception("Failed to connect to instance")
+            print(f"Opening session to {instance.id}")
+            ssh_client.get_transport().open_session(timeout=10)
             print(f"Connection to {instance.id} Succeeded!!!")
             return ssh_client
         except:
@@ -107,15 +110,16 @@ def run_commands_on_ec2(instance, notebooks):
         # Initial cleanup commands
         cleanup_commands = "rm -rf notebooks failed_notebooks.txt successful_notebooks.txt nohup.out myvenv"
         print(f"Running cleanup commands on {instance.id}...")
-        ssh_client.exec_command(cleanup_commands, timeout=3)
-        time.sleep(3)
+        stdin, stdout, stderr = ssh_client.exec_command(cleanup_commands, timeout=3)
+        stdout.channel.recv_exit_status()
         print(f"Cleanup commands completed on {instance.id}")
 
-        # Wget commands
         print(f"Running wget commands on {instance.id}...")
-        wget_commands = " && ".join(["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks])
-        stdin, stdout, stderr = ssh_client.exec_command(f"bash -c '{wget_commands}'", timeout=50)
-        stdout.channel.recv_exit_status()
+        for notebook in notebooks:
+            # Wget commands
+            wget_command = "wget -P notebooks/ " + bucket_url + notebook 
+            stdin, stdout, stderr = ssh_client.exec_command(wget_command, timeout=3)
+            stdout.channel.recv_exit_status()
         print(f"Wget commands completed on {instance.id}")
         # Consider adding a delay or checking for command completion if necessary
         
@@ -145,7 +149,6 @@ def run_commands_on_ec2(instance, notebooks):
         ssh_client.close()
         instance.stop()
     return outputs
-
 
 def check_output(ssh_client):
     command = "ls"

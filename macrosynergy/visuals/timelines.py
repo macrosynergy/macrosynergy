@@ -25,13 +25,11 @@ import time
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
 
-
 def timelines(
     df: pd.DataFrame,
     xcats: Optional[List[str]] = None,
     cids: Optional[List[str]] = None,
     intersect: bool = False,
-    blacklist: Optional[dict] = None,
     val: str = "value",
     cumsum: bool = False,
     start: str = "2000-01-01",
@@ -101,10 +99,10 @@ def timelines(
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("`df` must be a pandas DataFrame.")
-
+    
     if len(df.columns) < 4:
         df = df.copy().reset_index()
-
+    
     if val not in df.columns:
         if len(df.columns) == len(IDX_COLS) + 1:
             val: str = list(set(df.columns) - set(IDX_COLS))[0]
@@ -156,25 +154,16 @@ def timelines(
     if cids is None:
         cids: List[str] = df["cid"].unique().tolist()
 
-    if not isinstance(blacklist, dict):
-        if blacklist is not None:
-            raise TypeError("`blacklist` must be a dictionary.")
-
     if cumsum:
-        df = reduce_df(
-            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
-        )
-        df[val] = (
-            df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
+        df = reduce_df(df, xcats=xcats, cids=cids, start=start, end=end)
+        df[val] = (df.sort_values(["cid", "xcat", "real_date"])
+            [["cid", "xcat", val]]
             .groupby(["cid", "xcat"])
-            .cumsum()
-        )
+            .cumsum())
 
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
-        df = reduce_df(
-            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
-        )
+        df = reduce_df(df, xcats=xcats, cids=cids, start=start, end=end)
         if len(xcats) > 1:
             raise ValueError("`cs_mean` cannot be True for multiple categories.")
 
@@ -225,13 +214,12 @@ def timelines(
             xcats=xcats,
             cids=cids,
             intersect=intersect,
-            blacklist=blacklist,
             metrics=[val],
             tickers=[cross_mean_series] if cs_mean else None,
             start=start,
             end=end,
         ) as fp:
-
+            
             fp.lineplot(
                 share_y=same_y,
                 share_x=not all_xticks,
@@ -259,7 +247,6 @@ def timelines(
             xcats=xcats,
             intersect=intersect,
             metrics=[val],
-            blacklist=blacklist,
             tickers=[cross_mean_series] if cs_mean else None,
             start=start,
             end=end,
@@ -285,7 +272,6 @@ def timelines(
             cids=cids,
             intersect=intersect,
             metrics=[val],
-            blacklist=blacklist,
             tickers=[cross_mean_series] if cs_mean else None,
             start=start,
             end=end,

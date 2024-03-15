@@ -77,14 +77,6 @@ class TestAll(unittest.TestCase):
                 cids=cids[0],
                 size=(10, 5),
                 title="AUD Return and Carry",
-            )            
-            view_timelines(
-                dfd,
-                xcats=xcats[:2],
-                cids=cids[0],
-                size=(10, 5),
-                title="AUD Return and Carry",
-                blacklist={"AUD": ["2015-01-01", "2015-02-27"]}
             )
 
             view_timelines(

@@ -43,6 +43,7 @@ OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 JPMAQS_GROUP_ID: str = "JPMAQS"
 API_DELAY_PARAM: float = 0.2  # 300ms delay between requests
+TOKEN_EXPIRY_BUFFER: float = 0.9  # 90% of token expiry time.
 API_RETRY_COUNT: int = 5  # retry count for transient errors
 HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
 MAX_CONTINUOUS_FAILURES: int = 5  # max number of continuous errors before stopping
@@ -310,7 +311,7 @@ class OAuth(object):
 
         created: datetime = self._stored_token["created_at"]  # utc time of creation
         expires: datetime = created + timedelta(
-            seconds=self._stored_token["expires_in"]
+            seconds=self._stored_token["expires_in"] * TOKEN_EXPIRY_BUFFER
         )
 
         utcnow = datetime.now(timezone.utc)
