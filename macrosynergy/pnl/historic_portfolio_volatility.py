@@ -60,7 +60,7 @@ def _weighted_covariance(
 
     xnans, ynans = np.isnan(x), np.isnan(y)
     wmask = xnans | ynans
-    weightslen = min(sum(~wmask), lback_periods)
+    weightslen = min(sum(~wmask), lback_periods if lback_periods > 0 else len(x))
     xmean, ymean = x[~xnans].mean(), y[~ynans].mean()
 
     # drop NaNs and only consider the most recent lback_periods
@@ -536,7 +536,7 @@ if __name__ == "__main__":
         sname="STRAT",
         fids=fids,
         est_freq="m",
-        lback_periods=15,
+        lback_periods=-1,
         lback_meth="ma",
         half_life=11,
         rstring="XR",
