@@ -35,37 +35,36 @@ The typical flow when using the `ProxyPnL` class is as follows:
 - 3. Calculating `proxy_pnl` from notional positions and transaction costs.
 
 ```{mermaid}
-  flowchart TD;
-      Sig[Signals]
-      HR[Hedge-Ratios]
-      CS(Contract Signals)
-      AUM[AUM]
-      LVG[Leverage]
-      LVGP[Leverage Position]
-      VT[Volatility Target]
-      NP(Notional Positions)
-      HPV[Historical Portfolio Volatility]
-      TC[Trading Cost]
-      RC[Roll Cost]
-      Distr[Transaction Statistics]
-      PP(Proxy PnL)
+flowchart TD;
+    Sig[Signals]
+    HR[Hedge-Ratios]
+    CS(Contract Signals)
+    AUM[AUM]
+    LVG[Leverage]
+    LVGP[Leverage Position]
+    VT[Volatility Target]
+    NP(Notional Positions)
+    HPV[Historical Portfolio Volatility]
+    TC[Trading Cost]
+    RC[Roll Cost]
+    Distr[Transaction Statistics]
+    PP(Proxy PnL)
 
-      Sig-->CS
-      HR-->CS
+    Sig-->CS
+    HR-->CS
 
-      VT-->HPV
-      CS-->HPV
-      CS-->LVGP
-      LVG-->LVGP
-      AUM-->LVGP
+    VT-->HPV
+    CS-->HPV
+    CS-->LVGP
+    LVG-->LVGP
+    AUM-->LVGP
 
 
-      HPV-->NP
-      LVGP-->NP
+    HPV-->NP
+    LVGP-->NP
 
-      TC-->PP
-      RC-->PP
-      NP-->PP
-      Distr-->PP
-
+    TC-->PP
+    RC-->PP
+    NP-->PP
+    Distr-->PP
 ```
