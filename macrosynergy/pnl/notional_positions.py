@@ -103,7 +103,7 @@ def _vol_target_positions(
     sname: str,
     fids: List[str],
     dollar_per_signal: Numeric = 1.0,
-    vol_target: Numeric = 0.1,
+    vol_target: Numeric = 10,
     rebal_freq: str = "m",
     lback_periods: int = 21,
     half_life: int = 11,
@@ -119,6 +119,8 @@ def _vol_target_positions(
     """
 
     assert isinstance(df, QuantamentalDataFrame)
+
+    vol_target: float = vol_target / 100
 
     sig_ident: str = f"_CSIG_{sname}"
 
