@@ -42,6 +42,7 @@ def _weighted_covariance(
     x: np.ndarray,
     y: np.ndarray,
     weights_func: Callable[[int, int], np.ndarray],
+    lback_periods: int,
     *args,
     **kwargs,
 ) -> float:
@@ -59,7 +60,7 @@ def _weighted_covariance(
 
     xnans, ynans = np.isnan(x), np.isnan(y)
     wmask = xnans | ynans
-    weightslen = sum(~wmask)
+    weightslen = min(sum(~wmask), lback_periods)
     xmean, ymean = x[~xnans].mean(), y[~ynans].mean()
 
     # drop NaNs
@@ -119,12 +120,28 @@ def _nan_ratio(x, remove_zeros: bool = True) -> float:
 
 def _mask_nans(
     piv_df: pd.DataFrame,
+    lback_periods: int,
     nan_tolerance: float,
     remove_zeros: bool,
 ) -> pd.DataFrame:
     """Mask NaNs in the dataframe"""
-    mask = piv_df.apply(_nan_ratio, remove_zeros=remove_zeros) > nan_tolerance
+    mask = (
+        piv_df.iloc[-lback_periods:].apply(_nan_ratio, remove_zeros=remove_zeros)
+        > nan_tolerance
+    )
     piv_df.loc[:, mask] = np.nan
+
+    for col in piv_df.loc[:, ~mask].columns:
+        _ts = piv_df[col]
+        if remove_zeros:
+            _ts = _ts.replace(0, np.nan)
+        if len(piv_df[col].dropna()) < lback_periods:
+            piv_df.loc[:, col] = np.nan
+            logger.debug(
+                f"Dropping column {col} from {piv_df.index.min()} to "
+                f"{piv_df.index.max()} due to insufficient data despite bringing "
+                "prior non-NaN " + ("and non-zero " if remove_zeros else "") + "values."
+            )
 
     if any(mask.values == True):
         logger.debug(
@@ -177,8 +194,14 @@ def _calculate_portfolio_volatility(
 
     for td in trigger_indices:
         logger.debug(f"Calculating portfolio volatility for {td}")
-        piv_ret = pivot_returns.loc[pivot_returns.index <= td].iloc[-lback_periods:]
-        masked_piv_ret = _mask_nans(piv_ret, nan_tolerance, remove_zeros=remove_zeros)
+        lbextra = -1 * np.ceil(lback_periods * (1 + nan_tolerance))
+        piv_ret = pivot_returns.loc[pivot_returns.index <= td].iloc[lbextra:]
+        masked_piv_ret = _mask_nans(
+            pic_df=piv_ret,
+            lback_periods=lback_periods,
+            nan_tolerance=nan_tolerance,
+            remove_zeros=remove_zeros,
+        )
         vcv: pd.DataFrame = _estimate_variance_covariance(
             piv_ret=masked_piv_ret,
             lback_periods=lback_periods,
@@ -336,7 +359,7 @@ def historic_portfolio_vol(
         the end date is taken from the dataframe.
     :param <dict> blacklist: a dictionary of contract identifiers to exclude from
         the calculation. Default is None, which means that no contracts are excluded.
-    :param <float> nan_tolerance: maximum ratio of number of NaN values to the total 
+    :param <float> nan_tolerance: maximum ratio of number of NaN values to the total
         number of values in a lookback window. If exceeded the resulting volatility is set
         to NaN, else prior non-zero values are added to the window instead. Default is 0.25.
     :param <bool> remove_zeros: if True (default) any returns that are exact zeros will
