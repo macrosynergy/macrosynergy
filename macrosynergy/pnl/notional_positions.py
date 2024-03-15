@@ -231,13 +231,13 @@ def notional_positions(
         contracts have different expected volatility and correlations this method
         does not control expected volatility. Default is None, i.e. the method is not
         applied.
-    :param <float> vol_target: the target volatility of the portfolio in % of AUM.
-        This is the main parameter for volatility-targeted positioning. That method
-        estimates the annualized standard deviation of the signal-based portfolio
-        for a 1 USD per signal portfolio based on past variances and covariances of
-        the contract returns. The estimation is managed by the function
-        `historic_portfolio_vol()`.
-        Default is None, i.e. the volatility-targeting is not applied.
+    :param <float> vol_target: the target volatility of the portfolio in % of AUM
+        (For clarity, `vol_target=10` means 10%). This is the main parameter for
+        volatility-targeted positioning. That method estimates the annualized standard
+        deviation of the signal-based portfolio for a 1 USD per signal portfolio based on
+        past variances and covariances of the contract returns. The estimation is managed
+        by the function `historic_portfolio_vol()`. Default is None, i.e. the
+        volatility-targeting is not applied.
     :param <str> rebal_freq: the rebalancing frequency. Default is 'm' for monthly.
         Alternatives are 'w' for business weekly, 'd' for daily, and 'q' for quarterly.
         Contract signals are taken from the end of the holding period and applied to
