@@ -83,7 +83,7 @@ class ProxyPnL(object):
         dollar_per_signal: Numeric = 1.0,
         leverage: Optional[Numeric] = None,
         vol_target: Optional[Numeric] = None,
-        rebal_freq: str = "M",
+        rebal_freq: str = "m",
         slip: int = 1,
         lback_periods: int = 21,
         lback_meth: str = "ma",
