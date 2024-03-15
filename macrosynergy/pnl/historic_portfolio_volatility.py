@@ -212,8 +212,8 @@ def _calculate_portfolio_volatility(
 
         # TODO - NaN handing for signals?
 
-        piv_sig: pd.DataFrame = pivot_signals.loc[td, :]
-        return_values += [(td, piv_sig.T.dot(vcv).dot(piv_sig))]
+        sig_arr: pd.DataFrame = pivot_signals.loc[td, :]
+        return_values += [(td, sig_arr.T.dot(vcv).dot(sig_arr))]
 
     return pd.DataFrame(
         return_values,
@@ -299,6 +299,13 @@ def _hist_vol(
 
     ffills = {"d": 1, "w": 5, "m": 24, "q": 64}
     df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[est_freq])
+    nanindex = df_out.index[df_out[portfolio_return_name].isnull()]
+    if len(nanindex) > 0:
+        df_out = df_out.dropna()
+        logger.debug(
+            f"Found {len(nanindex)} NaNs in {portfolio_return_name} at {nanindex}, dropping all NaNs."
+        )
+
     # TODO - should below not be forward filled with the previous volatility value...
     assert (
         not df_out.loc[
@@ -308,8 +315,6 @@ def _hist_vol(
         .isnull()
         .any()
     )
-    # TODO or log warning if there are NaNs
-    df_out.dropna(inplace=True)
 
     return df_out
 
@@ -507,7 +512,7 @@ if __name__ == "__main__":
 
     df_copy = df.copy()
 
-    N_p_nans = 0.10
+    N_p_nans = 0.01
     df["value"] = df["value"].apply(
         lambda x: x if np.random.rand() > N_p_nans else np.nan
     )
