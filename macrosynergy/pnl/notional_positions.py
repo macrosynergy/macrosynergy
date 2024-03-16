@@ -9,7 +9,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from typing import List, Union, Tuple, Optional
+from typing import List, Union, Tuple, Optional, Set
 
 from macrosynergy.management.utils import (
     standardise_dataframe,
@@ -65,8 +65,93 @@ def _apply_slip(
         )
 
 
+def _check_df_for_contract_signals(
+    df_wide: QuantamentalDataFrame,
+    sname: str,
+    fids: List[str],
+) -> None:
+    """
+    Checks if the dataframe contains contract signals for the specified strategy
+    and the specified contract identifiers.
+
+    :param <QuantamentalDataFrame> df: Quantamental dataframe with contract signals and returns.
+    :param <str> sname: the name of the strategy.
+    :param <List[str]> fids: list of contract identifiers to apply the slip to.
+    """
+    assert isinstance(sname, str)
+    assert (
+        isinstance(fids, list)
+        and len(fids) > 0
+        and all([isinstance(x, str) for x in fids])
+    )
+
+    sig_ident: str = f"_CSIG_{sname}"
+    _check_conts: Set = set([f"{contx}{sig_ident}" for contx in fids])
+    _found_conts: Set = set(df_wide.columns)
+    if not _check_conts.issubset(_found_conts):
+        raise ValueError(
+            f"Contract signals for all contracts not in dataframe. \n"
+            f"Missing: {_check_conts - _found_conts}"
+        )
+
+    return
+
+
+def _vol_target_positions(
+    df_wide: pd.DataFrame,
+    sname: str,
+    fids: List[str],
+    dollar_per_signal: Numeric = 1.0,
+    vol_target: Numeric = 10,
+    rebal_freq: str = "m",
+    lback_periods: int = 21,
+    half_life: int = 11,
+    nan_tolerance: float = 0.25,
+    remove_zeros: bool = True,
+    lback_meth: str = "ma",
+    rstring: str = "XR",
+    pname: str = "VPOS",
+) -> QuantamentalDataFrame:
+    """
+    Uses historic portfolio volatility to calculate notional positions based on
+    contract signals, volatility targeting and other relevant parameters.
+    """
+
+    _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
+
+    vol_target: float = vol_target / 100
+
+    sig_ident: str = f"_CSIG_{sname}"
+
+    histpvol = historic_portfolio_vol(
+        df=ticker_df_to_qdf(df_wide), # TODO: should we df_wide arg, or an alternate entrypoint to this function?
+        sname=sname,
+        fids=fids,
+        rstring=rstring,
+        lback_periods=lback_periods,
+        half_life=half_life,
+        lback_meth=lback_meth,
+        nan_tolerance=nan_tolerance,
+        est_freq=rebal_freq,
+        remove_zeros=remove_zeros,
+    )
+
+    histpvol["value"] = vol_target * dollar_per_signal / histpvol["value"]
+
+    # TODO: check if this is correct
+    for contx in fids:
+        pos_col = contx + "_" + pname
+        cont_name = contx + sig_ident
+        df_wide[pos_col] = df_wide[cont_name] * histpvol["value"]
+
+    # filter df to only contain position columns
+    df_wide = df_wide.loc[:, [f"{contx}_{pname}" for contx in fids]]
+
+    return df_wide
+
+
 def _leverage_positions(
-    df: pd.DataFrame,
+    df_wide: pd.DataFrame,
     sname: str,
     fids: List[str],
     aum: Numeric = 100,
@@ -74,19 +159,13 @@ def _leverage_positions(
     pname: str = "POS",
 ) -> QuantamentalDataFrame:
     """"""
-    assert isinstance(df, QuantamentalDataFrame)
+    _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
 
-    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
     sig_ident: str = f"_CSIG_{sname}"
 
-    _check_conts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
-    if not set(_check_conts).issubset(set(df_wide.columns)):
-        raise ValueError(
-            f"Contract signals for all contracts not in dataframe. \n"
-            f"Missing: {set(_check_conts) - set(df_wide.columns)}"
-        )
+    _contracts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
 
-    rowsums: pd.Series = df_wide.loc[:, _check_conts].sum(axis=1)
+    rowsums: pd.Series = df_wide.loc[:, _contracts].sum(axis=1)
     # if any of the rowsums are zero, set to NaN to avoid div by zero
     rowsums[rowsums == 0] = np.nan
 
@@ -100,7 +179,7 @@ def _leverage_positions(
     # filter df to only contain position columns
     df_wide = df_wide.loc[:, [f"{contx}_{pname}" for contx in fids]]
 
-    return ticker_df_to_qdf(df=df_wide)
+    return df_wide
 
 
 def notional_positions(
@@ -145,13 +224,13 @@ def notional_positions(
         contracts have different expected volatility and correlations this method
         does not control expected volatility. Default is None, i.e. the method is not
         applied.
-    :param <float> vol_target: the target volatility of the portfolio in % of AUM.
-        This is the main parameter for volatility-targeted positioning. That method
-        estimates the annualized standard deviation of the signal-based portfolio
-        for a 1 USD per signal portfolio based on past variances and covariances of
-        the contract returns. The estimation is managed by the function
-        `historic_portfolio_vol()`.
-        Default is None, i.e. the volatility-targeting is not applied.
+    :param <float> vol_target: the target volatility of the portfolio in % of AUM
+        (For clarity, `vol_target=10` means 10%). This is the main parameter for
+        volatility-targeted positioning. That method estimates the annualized standard
+        deviation of the signal-based portfolio for a 1 USD per signal portfolio based on
+        past variances and covariances of the contract returns. The estimation is managed
+        by the function `historic_portfolio_vol()`. Default is None, i.e. the
+        volatility-targeting is not applied.
     :param <str> rebal_freq: the rebalancing frequency. Default is 'm' for monthly.
         Alternatives are 'w' for business weekly, 'd' for daily, and 'q' for quarterly.
         Contract signals are taken from the end of the holding period and applied to
@@ -263,9 +342,11 @@ def notional_positions(
         fids=fids,
     )
 
+    df_wide = qdf_to_ticker_df(df)
+    return_df = None
     if leverage:
-        leveraged_positions: QuantamentalDataFrame = _leverage_positions(
-            df=df,
+        return_df: pd.DataFrame = _leverage_positions(
+            df_wide=df_wide,
             sname=sname,
             fids=fids,
             aum=aum,
@@ -273,10 +354,22 @@ def notional_positions(
             pname=pname,
         )
 
-        return leveraged_positions
-
     else:
-        raise NotImplementedError("Volatility targeting not implemented yet.")
+        return_df: pd.DataFrame = _vol_target_positions(
+            df_wide=df_wide,
+            sname=sname,
+            fids=fids,
+            dollar_per_signal=dollar_per_signal,
+            vol_target=vol_target,
+            rebal_freq=rebal_freq,
+            lback_periods=lback_periods,
+            lback_meth=lback_meth,
+            half_life=half_life,
+            rstring=rstring,
+            pname=pname,
+        )
+
+    return ticker_df_to_qdf(df=return_df)
 
 
 if __name__ == "__main__":
@@ -358,3 +451,9 @@ if __name__ == "__main__":
     # 82168  USD   FX_POS 2020-12-30   0.457190
     # 82169  USD  IRS_POS 2020-12-30  -0.228595
     # """
+    df_notional: pd.DataFrame = notional_positions(
+        df=df_cs,
+        fids=fids,
+        sname="STRAT",
+        vol_target=0.1,
+    )
