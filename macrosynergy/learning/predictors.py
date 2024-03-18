@@ -80,6 +80,11 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin, ABC):
         # Fit
         self.sample_weights = self._calculate_sample_weights(y)
         self.model.fit(X, y, sample_weight=self.sample_weights)
+        if hasattr(self.model, "coef_"):
+            self.coef_ = self.model.coef_
+        if hasattr(self.model, "intercept_"):
+            self.intercept_ = self.model.intercept_
+
         return self
 
     def predict(self, X: pd.DataFrame):
@@ -239,6 +244,8 @@ class SignWeightedLinearRegression(SignWeightedRegressor):
             n_jobs=self.n_jobs,
             positive=self.positive,
         )
+        self.coef_ = None 
+        self.intercept_ = None
         super().__init__(model)
 
     def set_params(self, **params):
@@ -293,6 +300,8 @@ class TimeWeightedLinearRegression(TimeWeightedRegressor):
             n_jobs=self.n_jobs,
             positive=self.positive,
         )
+        self.coef_ = None
+        self.intercept_ = None
         super().__init__(half_life=half_life, model=model)
 
     def set_params(self, **params):
@@ -338,6 +347,8 @@ class SignWeightedLADRegressor(SignWeightedRegressor):
             fit_intercept=self.fit_intercept,
             positive=self.positive,
         )
+        self.coef_ = None
+        self.intercept_ = None
         super().__init__(model)
 
     def set_params(self, **params):
@@ -378,6 +389,8 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
             fit_intercept=self.fit_intercept,
             positive=self.positive,
         )
+        self.coef_ = None
+        self.intercept_ = None
         super().__init__(half_life=half_life, model=model)
 
     def set_params(self, **params):
@@ -424,6 +437,8 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         self.fit_intercept = fit_intercept
         self.positive = positive
         self.tol = tol
+        self.coef_ = None
+        self.intercept_ = None
 
     def fit(
         self,

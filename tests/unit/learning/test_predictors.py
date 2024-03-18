@@ -504,14 +504,14 @@ class TestSWLRegression(unittest.TestCase):
 
         self.assertIsInstance(df_sigs, pd.DataFrame)
         self.assertEqual(df_sigs.shape[1], 4)
-        self.assertEqual(sorted(df_sigs.columns), ["cid", "real_date", "value", "xcat"])
+        self.assertEqual(sorted(df_sigs.columns), sorted(["cid", "real_date", "value", "xcat"]))
         self.assertTrue(len(df_sigs.xcat.unique()) == 1)
         self.assertEqual(df_sigs.xcat.unique()[0], "test")
 
         self.assertIsInstance(df_sigs, pd.DataFrame)
-        self.assertEqual(df_models.shape[1], 4)
+        self.assertEqual(df_models.shape[1], 5)
         self.assertEqual(
-            sorted(df_models.columns), ["hparams", "model_type", "name", "real_date"]
+            sorted(df_models.columns), sorted(["hparams", "model_type", "name", "real_date", "n_splits_used"])
         )
         self.assertTrue(len(df_models.name.unique()) == 1)
         self.assertEqual(df_models.name.unique()[0], "test")
@@ -793,14 +793,14 @@ class TestTWLRegression(unittest.TestCase):
 
         self.assertIsInstance(df_sigs, pd.DataFrame)
         self.assertEqual(df_sigs.shape[1], 4)
-        self.assertEqual(sorted(df_sigs.columns), ["cid", "real_date", "value", "xcat"])
+        self.assertEqual(sorted(df_sigs.columns), sorted(["cid", "real_date", "value", "xcat"]))
         self.assertTrue(len(df_sigs.xcat.unique()) == 1)
         self.assertEqual(df_sigs.xcat.unique()[0], "test")
 
         self.assertIsInstance(df_sigs, pd.DataFrame)
-        self.assertEqual(df_models.shape[1], 4)
+        self.assertEqual(df_models.shape[1], 5)
         self.assertEqual(
-            sorted(df_models.columns), ["hparams", "model_type", "name", "real_date"]
+            sorted(df_models.columns), sorted(["hparams", "model_type", "name", "real_date", "n_splits_used"])
         )
         self.assertTrue(len(df_models.name.unique()) == 1)
         self.assertEqual(df_models.name.unique()[0], "test")

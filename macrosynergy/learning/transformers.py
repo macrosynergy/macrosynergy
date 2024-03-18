@@ -9,16 +9,19 @@ import datetime
 
 from sklearn.linear_model import Lasso
 from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
+from sklearn.feature_selection import SelectorMixin
+
+from sklearn.exceptions import NotFittedError
 
 from statsmodels.tools.tools import add_constant
 from statsmodels.regression.mixed_linear_model import MixedLM
 
 from typing import Union, Any, List, Optional
 
-import logging
+import warnings
 
 
-class LassoSelector(BaseEstimator, TransformerMixin):
+class LassoSelector(BaseEstimator, SelectorMixin):
     def __init__(self, alpha: Union[float, int], positive: bool = True):
         """
         Transformer class to use the Lasso as a feature selection algorithm.
@@ -42,6 +45,7 @@ class LassoSelector(BaseEstimator, TransformerMixin):
 
         self.alpha = alpha
         self.positive = positive
+        self.feature_names_in_ = None
 
     def fit(self, X: pd.DataFrame, y: Union[pd.Series, pd.DataFrame]):
         """
@@ -86,7 +90,8 @@ class LassoSelector(BaseEstimator, TransformerMixin):
                 "don't match as input to the LASSO selector."
             )
 
-        self.p = X.shape[-1]
+        self.feature_names_in_ = np.array(X.columns)
+        self.p = X.shape[1]
 
         if self.positive:
             self.lasso = Lasso(alpha=self.alpha, positive=True).fit(X, y)
@@ -96,6 +101,47 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         self.selected_ftr_idxs = [i for i in range(self.p) if self.lasso.coef_[i] != 0]
 
         return self
+    
+    def _get_support_mask(self):
+        """
+        Private method to return a boolean mask of the features selected for the Pandas dataframe.
+        """
+        mask = np.zeros(self.p, dtype=bool)
+        mask[self.selected_ftr_idxs] = True
+        return mask
+    
+    def get_support(self, indices=False):
+        """
+        Method to return a mask, or integer index, of the features selected for the Pandas dataframe.
+        
+        :param <bool> indices: Boolean to specify whether to return the column indices of the selected features instead of a boolean mask
+        
+        :return <np.ndarray>: Boolean mask or integer index of the selected features
+        """
+        if self.feature_names_in_ is None:
+            raise NotFittedError(
+                "The LASSO selector has not been fitted. Please fit the selector before calling get_support()."
+            )
+        if not isinstance(indices, (bool, np.bool_)):
+            raise ValueError(
+                "The 'indices' parameter must be a boolean."
+            )
+        if indices:
+            return self.selected_ftr_idxs
+        else:
+            mask = self._get_support_mask()
+            return mask
+        
+    def get_feature_names_out(self):
+        """
+        Method to mask feature names according to selected features.
+        """
+        if self.feature_names_in_ is None:
+            raise NotFittedError(
+                "The LASSO selector has not been fitted. Please fit the selector before calling get_feature_names_out()."
+            )
+        
+        return self.feature_names_in_[self.get_support(indices=False)]
 
     def transform(self, X: pd.DataFrame):
         """
@@ -125,18 +171,19 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         if len(self.selected_ftr_idxs) == 0:
             # Then no features were selected
             # Then at the given time, no trading decisions can be made based on these features
-            # Hence, we return a dataframe of zeros
-            return pd.DataFrame(
-                index=X.index, columns=["no_signal"], data=0, dtype=np.float16
+            warnings.warn(
+                "No features were selected. At the given time, no trading decisions can be made based on these features.",
+                UserWarning,
             )
+            return X.iloc[:, :0]
 
         return X.iloc[:, self.selected_ftr_idxs]
 
 
-class MapSelector(BaseEstimator, TransformerMixin):
-    def __init__(self, threshold: float):
+class MapSelector(BaseEstimator, SelectorMixin):
+    def __init__(self, threshold: float, positive: bool = False):
         """
-        Transformer class to select features from a training set
+        Selector class to select features from a training set
         based on the Macrosynergy panel test. This test involves creating
         a linear mixed effects model with period-specific random effects to
         account for cross-sectional correlations. The p-value for the slope
@@ -144,16 +191,21 @@ class MapSelector(BaseEstimator, TransformerMixin):
 
         :param <float> threshold: Significance threshold. This should be in
             the interval (0,1).
+        :param <bool> positive: Boolean indicating whether or not to only keep features
+            with positive estimated model coefficients.
         """
         if type(threshold) != float:
             raise TypeError("The threshold must be a float.")
-
         if (threshold <= 0) or (threshold > 1):
             raise ValueError(
                 "The threshold must be in between 0 (inclusive) and 1 (exclusive)."
             )
+        if not isinstance(positive, (bool, np.bool_)):
+            raise TypeError("The 'positive' parameter must be a boolean.")
 
         self.threshold = threshold
+        self.positive = positive
+        self.feature_names_in_ = None
 
     def fit(self, X: pd.DataFrame, y: Union[pd.Series, pd.DataFrame]):
         """
@@ -199,19 +251,62 @@ class MapSelector(BaseEstimator, TransformerMixin):
             )
 
         self.ftrs = []
-        self.cols = X.columns
+        self.feature_names_in_ = np.array(X.columns)
 
-        for col in self.cols:
+        for col in self.feature_names_in_:
             ftr = X[col]
             ftr = add_constant(ftr)
             groups = ftr.index.get_level_values(1)
             model = MixedLM(y.values, ftr, groups).fit(reml=False)
             est = model.params.iloc[1]
             pval = model.pvalues.iloc[1]
-            if (pval < self.threshold) & (est > 0):
-                self.ftrs.append(col)
+            if (pval < self.threshold):
+                if self.positive:
+                    if est > 0:
+                        self.ftrs.append(col)
+                else:
+                    self.ftrs.append(col)
 
         return self
+    
+    def _get_support_mask(self):
+        """
+        Private method to return a boolean mask of the features selected for the Pandas dataframe.
+        """
+        mask = [col in self.ftrs for col in self.feature_names_in_]
+        return np.array(mask)
+    
+    def get_support(self, indices=False):
+        """
+        Method to return a mask, or integer index, of the features selected for the Pandas dataframe.
+        
+        :param <bool> indices: Boolean to specify whether to return the column indices of the selected features instead of a boolean mask
+        
+        :return <np.ndarray>: Boolean mask or integer index of the selected features
+        """
+        if not isinstance(indices, (bool, np.bool_)):
+            raise TypeError(
+                "The 'indices' parameter must be a boolean."
+            )
+        if self.feature_names_in_ is None:
+            raise NotFittedError(
+                "The MAP selector has not been fitted. Please fit the selector before calling get_support()."
+            )
+        mask = self._get_support_mask()
+
+        if indices:
+            return np.where(mask)[0]
+        
+        return mask
+        
+    def get_feature_names_out(self):
+        """
+        Method to mask feature names according to selected features.
+        """
+        if self.feature_names_in_ is None:
+            raise ValueError("The feature names are not available. Please fit the transformer first.")
+        
+        return self.feature_names_in_[self.get_support(indices=False)]
 
     def transform(self, X: pd.DataFrame):
         """
@@ -233,7 +328,7 @@ class MapSelector(BaseEstimator, TransformerMixin):
             raise ValueError("X must be multi-indexed.")
         if not isinstance(X.index.get_level_values(1)[0], datetime.date):
             raise TypeError("The inner index of X must be datetime.date.")
-        if not X.columns.equals(self.cols):
+        if not np.all(np.array(X.columns) == self.feature_names_in_):
             raise ValueError(
                 "The columns of the dataframe to be transformed, X, don't match the "
                 "columns of the training dataframe."
@@ -242,10 +337,10 @@ class MapSelector(BaseEstimator, TransformerMixin):
         if self.ftrs == []:
             # Then no features were selected
             # Then at the given time, no trading decisions can be made based on these features
-            # Hence, we return a dataframe of zeros
-            return pd.DataFrame(
-                index=X.index, columns=["no_signal"], data=0, dtype=np.float16
+            warnings.warn(
+                "No features were selected. At the given time, no trading decisions can be made based on these features."
             )
+            return X.iloc[:, :0]
 
         return X[self.ftrs]
 
@@ -659,13 +754,16 @@ if __name__ == "__main__":
     X = dfd2.drop(columns=["XR"])
     y = dfd2["XR"]
 
-    selector = MapSelector(0.05)
+
+    selector = LassoSelector(0.2)
+    selector.fit(X, y)
+    print(selector.transform(X).columns)
+    
+    selector = MapSelector(1e-20)
     selector.fit(X, y)
     print(selector.transform(X).columns)
 
-    selector = LassoSelector(10000)
-    selector.fit(X, y)
-    print(selector.transform(X).columns)
+
 
     # Split X and y into training and test sets
     X_train, X_test = (
