@@ -311,7 +311,8 @@ def _hist_vol(
     # Annualised standard deviation (ASD)
     df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name] * 252)
 
-    ffills = {"d": 1, "w": 5, "m": 24, "q": 64}
+    rebal_freq = rebal_freq.upper()
+    ffills = {"D": 1, "W": 5, "M": 24, "Q": 64}
     df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[rebal_freq])
     nanindex = df_out.index[df_out[portfolio_return_name].isnull()]
     if len(nanindex) > 0:

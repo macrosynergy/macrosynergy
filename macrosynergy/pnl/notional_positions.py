@@ -137,17 +137,22 @@ def _vol_target_positions(
     )
 
     histpvol["value"] = vol_target * dollar_per_signal / histpvol["value"]
+    vlen = len(histpvol["value"])
+
+    out_df = pd.DataFrame(index=df_wide.index)
 
     # TODO: check if this is correct
     for contx in fids:
         pos_col = contx + "_" + pname
         cont_name = contx + sig_ident
-        df_wide[pos_col] = df_wide[cont_name] * histpvol["value"]
+        out_df[pos_col] = np.nan
+        out_df[pos_col].iloc[-vlen:] = (
+            histpvol["value"].values * df_wide[cont_name].iloc[-vlen:].values
+        )
 
-    # filter df to only contain position columns
-    df_wide = df_wide.loc[:, [f"{contx}_{pname}" for contx in fids]]
-
-    return df_wide
+    # drop rows with all na
+    out_df = out_df.dropna(how="all")
+    return out_df
 
 
 def _leverage_positions(
@@ -369,7 +374,7 @@ def notional_positions(
             pname=pname,
         )
 
-    return ticker_df_to_qdf(df=return_df)
+    return ticker_df_to_qdf(df=return_df).dropna()
 
 
 if __name__ == "__main__":
@@ -418,8 +423,15 @@ if __name__ == "__main__":
         sname="STRAT",
     )
 
+    df_xr = make_test_df(
+        cids=cids,
+        xcats=[f"{_}XR" for _ in ctypes],
+        start=start,
+        end=end,
+    )
+
     df_notional: pd.DataFrame = notional_positions(
-        df=df_cs,
+        df=pd.concat([df_cs, df_xr], axis=0),
         fids=fids,
         sname="STRAT",
         vol_target=0.1,
