@@ -124,7 +124,7 @@ def _vol_target_positions(
     sig_ident: str = f"_CSIG_{sname}"
 
     histpvol = historic_portfolio_vol(
-        df=ticker_df_to_qdf(df_wide), # TODO: should we df_wide arg, or an alternate entrypoint to this function?
+        df=ticker_df_to_qdf(df_wide),
         sname=sname,
         fids=fids,
         rstring=rstring,
@@ -409,23 +409,6 @@ if __name__ == "__main__":
         hratios="HR",
     )
 
-    # df_cs looks like:
-    # """
-    #         cid            xcat  real_date         value
-    # 0      AUD  CDS_CSIG_STRAT 2000-01-03     10.000000
-    # 1      AUD   FX_CSIG_STRAT 2000-01-03    100.000000
-    # 2      AUD  IRS_CSIG_STRAT 2000-01-03    -50.000000
-    # 3      CAD  CDS_CSIG_STRAT 2000-01-03      0.001825
-    # 4      CAD   FX_CSIG_STRAT 2000-01-03      0.018252
-    # ...    ...             ...        ...           ...
-    # 54785  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
-    # 54786  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
-    # 54787  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
-    # 54788  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
-    # 54789  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
-
-    # """
-
     fids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
 
     df_notional: pd.DataFrame = notional_positions(
@@ -434,26 +417,13 @@ if __name__ == "__main__":
         leverage=1.1,
         sname="STRAT",
     )
-    # print(df_notional)
 
-    # df_notional looks like:
-    # """
-    #         cid     xcat  real_date      value
-    # 0      AUD  CDS_POS 2000-01-03   0.006619
-    # 1      AUD   FX_POS 2000-01-03   0.066188
-    # 2      AUD  IRS_POS 2000-01-03  -0.033094
-    # 3      CAD  CDS_POS 2000-01-03   0.006619
-    # 4      CAD   FX_POS 2000-01-03   0.066188
-    # ...    ...      ...        ...        ...
-    # 82165  GBP   FX_POS 2020-12-30  45.719036
-    # 82166  GBP  IRS_POS 2020-12-30 -22.859518
-    # 82167  USD  CDS_POS 2020-12-30   0.045719
-    # 82168  USD   FX_POS 2020-12-30   0.457190
-    # 82169  USD  IRS_POS 2020-12-30  -0.228595
-    # """
     df_notional: pd.DataFrame = notional_positions(
         df=df_cs,
         fids=fids,
         sname="STRAT",
         vol_target=0.1,
+        lback_meth="xma",
+        lback_periods=-1,
+        half_life=20,
     )
