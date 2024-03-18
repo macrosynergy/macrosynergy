@@ -1,8 +1,6 @@
 """
 Module for calculating contract signals based on cross-section-specific signals,
 and hedging them with a basket of contracts. Main function is `contract_signals`.
-
-::docs::contract_signals::sort_first::
 """
 
 import numpy as np
@@ -158,12 +156,14 @@ def _check_arg_types(
 
 def coerce_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.DataFrame:
     """
-    Check the estimated frequency and downsample the dataframe if necessary.
+    Check the timeseries to see if the estimated frequency matches the actual frequency.
 
     :param <pd.DataFrame> df_wide: dataframe in wide format with the contract signals.
     :param <str> est_freq: the estimated frequency of the contract signals.
 
     :return <pd.DataFrame>: dataframe with the estimated frequency.
+    
+    :raises <ValueError>: if the estimated frequency does not match the actual frequency.
     """
 
     estimated_freq: pd.Series = estimate_release_frequency(df_wide=df_wide)
