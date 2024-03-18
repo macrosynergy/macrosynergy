@@ -35,7 +35,7 @@ The typical flow when using the `ProxyPnL` class is as follows:
 - 3. Calculating `proxy_pnl` from notional positions and transaction costs.
 
 ```{mermaid}
-flowchart TD;
+graph TD;
     Sig[Signals]
     HR[Hedge-Ratios]
     CS(Contract Signals)
