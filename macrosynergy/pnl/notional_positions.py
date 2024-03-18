@@ -132,7 +132,7 @@ def _vol_target_positions(
         half_life=half_life,
         lback_meth=lback_meth,
         nan_tolerance=nan_tolerance,
-        est_freq=rebal_freq,
+        rebal_freq=rebal_freq,
         remove_zeros=remove_zeros,
     )
 

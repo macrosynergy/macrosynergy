@@ -239,7 +239,7 @@ def _hist_vol(
     pivot_signals: pd.DataFrame,
     pivot_returns: pd.DataFrame,
     sname: str,
-    est_freq: str = "m",
+    rebal_freq: str = "m",
     lback_periods: int = 21,
     lback_meth: str = "ma",
     half_life=11,
@@ -252,7 +252,7 @@ def _hist_vol(
 
     :param <pd.DataFrame> pivot_signals: the pivot table of the contract signals.
     :param <pd.DataFrame> pivot_returns: the pivot table of the contract returns.
-    :param <str> est_freq: the frequency of the volatility estimation. Default is 'm'
+    :param <str> rebal_freq: the frequency of the volatility estimation. Default is 'm'
         for monthly. Alternatives are 'w' for business weekly, 'd' for daily, and 'q'
         for quarterly. Estimations are conducted for the end of the period.
     :param <int> lback_periods: the number of periods to use for the lookback period
@@ -282,7 +282,7 @@ def _hist_vol(
 
     trigger_indices = get_eops(
         dates=pivot_signals.index,
-        freq=est_freq,
+        freq=rebal_freq,
     )
 
     # TODO get the correct rebalance dates
@@ -312,7 +312,7 @@ def _hist_vol(
     df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name] * 252)
 
     ffills = {"d": 1, "w": 5, "m": 24, "q": 64}
-    df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[est_freq])
+    df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[rebal_freq])
     nanindex = df_out.index[df_out[portfolio_return_name].isnull()]
     if len(nanindex) > 0:
         df_out = df_out.dropna()
@@ -338,7 +338,7 @@ def historic_portfolio_vol(
     sname: str,
     fids: List[str],
     rstring: str = "XR",
-    est_freq: str = "m",
+    rebal_freq: str = "m",
     lback_periods: int = 21,
     lback_meth: str = "ma",
     half_life: int = 11,
@@ -364,7 +364,7 @@ def historic_portfolio_vol(
         the contract returns that are required for the volatility-targeting method, based
         on the category identifier format <cid>_<ctype><rstring> in accordance with
         JPMaQS conventions. Default is 'XR'.
-    :param <str> est_freq: the frequency of the volatility estimation. Default is 'm'
+    :param <str> rebal_freq: the frequency of the volatility estimation. Default is 'm'
         for monthly. Alternatives are 'w' for business weekly, 'd' for daily, and 'q'
         for quarterly. Estimations are conducted for the end of the period.
     :param <int> lback_periods: the number of periods to use for the lookback period
@@ -403,7 +403,7 @@ def historic_portfolio_vol(
         (df, "df", pd.DataFrame),
         (sname, "sname", str),
         (fids, "fids", list),
-        (est_freq, "est_freq", str),
+        (rebal_freq, "rebal_freq", str),
         (lback_periods, "lback_periods", int),
         (lback_meth, "lback_meth", str),
         (half_life, "half_life", int),
@@ -484,7 +484,7 @@ def historic_portfolio_vol(
         pivot_returns=pivot_returns,
         pivot_signals=pivot_signals,
         sname=sname,
-        est_freq=est_freq,
+        rebal_freq=rebal_freq,
         lback_periods=lback_periods,
         lback_meth=lback_meth,
         half_life=half_life,
@@ -535,7 +535,7 @@ if __name__ == "__main__":
         df=df,
         sname="STRAT",
         fids=fids,
-        est_freq="m",
+        rebal_freq="m",
         lback_periods=-1,
         lback_meth="ma",
         half_life=11,
@@ -548,7 +548,7 @@ if __name__ == "__main__":
         df=df_copy,
         sname="STRAT",
         fids=fids,
-        est_freq="m",
+        rebal_freq="m",
         lback_periods=15,
         lback_meth="ma",
         half_life=11,
