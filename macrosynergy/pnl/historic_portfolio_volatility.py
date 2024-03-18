@@ -452,9 +452,9 @@ def historic_portfolio_vol(
 
     if not all([f"{contx}{rstring}" in u_tickers for contx in fids]):
         missing_tickers = [
-            f"{contx}_{rstring}"
+            f"{contx}{rstring}"
             for contx in fids
-            if f"{contx}_{rstring}" not in u_tickers
+            if f"{contx}{rstring}" not in u_tickers
         ]
         raise ValueError(
             f"The dataframe is missing the following return series: {missing_tickers}"
