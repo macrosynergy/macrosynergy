@@ -722,6 +722,10 @@ class SignalReturnRelations:
 
         if (ret_sign == -1.0).all() or (ret_sign == 1.0).all():
             df_out.loc[segment, "auc"] = np.NaN
+            warnings.warn(
+                "AUC could not be calculated, since the return category has a lack of "
+                "class diversity."
+            )
         else:
             df_out.loc[segment, "auc"] = skm.roc_auc_score(ret_sign, sig_sign)
 
@@ -918,6 +922,10 @@ class SignalReturnRelations:
             elif stat == "auc":
                 if (ret_sign == -1.0).all() or (ret_sign == 1.0).all():
                     list_of_results.append(np.NaN)
+                    warnings.warn(
+                        "AUC could not be calculated, since the return category has a "
+                        "lack of class diversity."
+                    )
                 else:
                     list_of_results.append(skm.roc_auc_score(ret_sign, sig_sign))
             elif stat == "map_pval" and self.ms_panel_test:
