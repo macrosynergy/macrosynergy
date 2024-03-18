@@ -156,7 +156,7 @@ def _check_arg_types(
     return correct_nested_types
 
 
-def coerce_estimation_frequency(df_wide: pd.DataFrame, est_freq: str) -> pd.DataFrame:
+def coerce_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.DataFrame:
     """
     Check the estimated frequency and downsample the dataframe if necessary.
 
@@ -169,12 +169,12 @@ def coerce_estimation_frequency(df_wide: pd.DataFrame, est_freq: str) -> pd.Data
     estimated_freq: pd.Series = estimate_release_frequency(df_wide=df_wide)
 
     series_to_downsample: bool = estimated_freq[
-        estimated_freq != est_freq
+        estimated_freq != rebal_freq
     ].index.tolist()
 
     if len(series_to_downsample) > 0:
         df_wide.loc[:, series_to_downsample] = downsample_wide_df_on_real_date(
-            df_wide=df_wide.loc[:, series_to_downsample], est_freq=est_freq
+            df_wide=df_wide.loc[:, series_to_downsample], freq=rebal_freq
         )
 
     return df_wide
@@ -351,7 +351,7 @@ def contract_signals(
     hratios: Optional[str] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    est_freq: str = "M",
+    rebal_freq: str = "M",
     blacklist: Optional[dict] = None,
     sname: str = "STRAT",
 ) -> pd.DataFrame:
@@ -464,9 +464,9 @@ def contract_signals(
     ## Cast the dataframe to wide format
     df_wide: pd.DataFrame = qdf_to_ticker_df(df)
 
-    ## Check est_freq or downsample the dataframe
+    ## Check rebal_freq or downsample the dataframe
     df_wide: pd.DataFrame = coerce_estimation_frequency(
-        df_wide=df_wide, est_freq=est_freq
+        df_wide=df_wide, rebal_freq=rebal_freq
     )
 
     # Actual calculation
