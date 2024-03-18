@@ -154,7 +154,7 @@ def _check_arg_types(
     return correct_nested_types
 
 
-def coerce_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.DataFrame:
+def check_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.DataFrame:
     """
     Check the timeseries to see if the estimated frequency matches the actual frequency.
 
@@ -162,20 +162,23 @@ def coerce_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.Da
     :param <str> est_freq: the estimated frequency of the contract signals.
 
     :return <pd.DataFrame>: dataframe with the estimated frequency.
-    
+
     :raises <ValueError>: if the estimated frequency does not match the actual frequency.
     """
 
     estimated_freq: pd.Series = estimate_release_frequency(df_wide=df_wide)
 
-    series_to_downsample: bool = estimated_freq[
-        estimated_freq != rebal_freq
-    ].index.tolist()
-
-    if len(series_to_downsample) > 0:
-        df_wide.loc[:, series_to_downsample] = downsample_wide_df_on_real_date(
-            df_wide=df_wide.loc[:, series_to_downsample], freq=rebal_freq
-        )
+    # for each series in the dataframe, check if the estimated frequency matches the rebal_freq
+    for _col in df_wide.columns:
+        if estimated_freq[_col] is None:
+            warnings.warn(
+                f"Unable to estimate frequency for `{_col}`",
+            )
+        elif estimated_freq[_col] != rebal_freq:
+            warnings.warn(
+                f"Estimated frequency for `{_col}` does not match "
+                f"the rebalancing frequency`{rebal_freq}`",
+            )
 
     return df_wide
 
@@ -465,7 +468,7 @@ def contract_signals(
     df_wide: pd.DataFrame = qdf_to_ticker_df(df)
 
     ## Check rebal_freq or downsample the dataframe
-    df_wide: pd.DataFrame = coerce_estimation_frequency(
+    df_wide: pd.DataFrame = check_estimation_frequency(
         df_wide=df_wide, rebal_freq=rebal_freq
     )
 
