@@ -10,6 +10,8 @@ from macrosynergy.management.constants import FREQUENCY_MAP, FFILL_LIMITS, DAYS_
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
 
+from numbers import Number
+
 import numpy as np
 import pandas as pd
 import requests
@@ -965,20 +967,22 @@ def get_eops(
 def estimate_release_frequency(
     timeseries: Optional[pd.Series] = None,
     df_wide: Optional[pd.DataFrame] = None,
-    exception_tolerance: float = 0.1,
-    *args,
-    **kwargs,
-) -> Union[str, pd.DataFrame]:
+    atol: Optional[float] = None,
+    rtol: Optional[float] = None,
+) -> Union[Optional[str], Dict[str, Optional[str]]]:
     """
-    Estimates the release frequency of a timeseries.
+    Estimates the release frequency of a timeseries, by inferring the frequency of the
+    timeseries index. Before calling `pd.infer_freq`, the function drops NaNs, and rounds
+    values as specified by the tolerance parameters to allow dropping of "duplicate" values.
 
     :param <pd.Series> timeseries: The timeseries to be used to estimate the release
-        frequency.
-    :param <float> exception_tolerance: The tolerance for exceptions in the release
-        frequency estimation. Must be a float between 0 and 1.
-
+        frequency. Only one of `timeseries` or `df_wide` must be passed.
+    :param <pd.DataFrame> df_wide: The wide DataFrame to be used to estimate the release
+        frequency. This mode processes each column of the DataFrame as a timeseries. Only
+        one of `timeseries` or `df_wide` must be passed.
+    :param <float> diff_atol: The absolute tolerance for the difference between two
+    :param <float> diff_rtol: The relative tolerance for the difference between two
     :return <str>: The estimated release frequency.
-
     """
 
     if df_wide is not None:
@@ -991,9 +995,36 @@ def estimate_release_frequency(
                 "Argument `df_wide` must be a non-empty pandas DataFrame with a datetime index `'real_date'`."
             )
 
-        return _estimate_release_frequency_wide(df_wide=df_wide, *args, **kwargs)
+        return {
+            col: estimate_release_frequency(
+                timeseries=df_wide[col], atol=atol, rtol=rtol
+            )
+            for col in df_wide.columns
+        }
 
-    timeseries: pd.Series = timeseries.copy().dropna().drop_duplicates(keep="first")
+    if bool(atol) and bool(rtol):
+        raise ValueError("Only one of `diff_atol` or `diff_rtol` must be passed.")
+
+    if atol:
+        if not isinstance(atol, Number) or atol <= 0:
+            raise TypeError("Argument `diff_atol` must be a float.")
+    elif rtol:
+        if not isinstance(rtol, Number):
+            raise TypeError("Argument `diff_rtol` must be a float.")
+        if not (0 <= rtol <= 1):
+            raise ValueError("Argument `diff_rtol` must be a float between 0 and 1.")
+
+    for _arg, _name in zip([atol, rtol], ["atol", "rtol"]):
+        if _arg is not None:
+            if not isinstance(_arg, Number) or _arg < 0:
+                raise TypeError(
+                    f"Argument `{_name}` must be a float greater than 0 or None."
+                )
+    if rtol or atol:
+        _scale = timeseries.abs().max() * rtol if rtol else atol
+        _dp = -int(np.floor(np.log10(_scale)))
+        timeseries: pd.Series = timeseries.round(_dp)
+    timeseries: pd.Series = timeseries.dropna().drop_duplicates(keep="first")
 
     if (
         not isinstance(timeseries, pd.Series)
@@ -1005,45 +1036,6 @@ def estimate_release_frequency(
             "a datetime index `'real_date'`."
         )
 
-    if not isinstance(exception_tolerance, (int, float)) or not (
-        0 <= exception_tolerance <= 1
-    ):
-        raise TypeError(
-            "Argument `exception_tolerance` must be a float between 0 and 1."
-        )
+    # infer the frequency of the timeseries
 
-    eops_scores = {}
-    for freqx in FREQUENCY_MAP.keys():
-        eops_scores[freqx] = (
-            timeseries.groupby(pd.Grouper(timeseries, freq="B")).nunique().mean()
-            / DAYS_PER_FREQ[freqx]
-        )
-
-    eops_df = pd.Series(eops_scores, name="score")
-
-    return eops_df.idxmax()
-
-
-def _estimate_release_frequency_wide(df_wide: pd.DataFrame, *args, **kwargs):
-    """
-    Estimates the release frequency of a wide DataFrame.
-    Backend for `estimate_release_frequency`.
-
-    :param <pd.DataFrame> df_wide: The wide DataFrame to be used to estimate the release
-        frequency.
-
-    :return <pd.DataFrame>: The estimated release frequency.
-    """
-    assert "timeseries" not in kwargs, "Argument `timeseries` is not allowed."
-    assert isinstance(df_wide, pd.DataFrame), "Argument `df_wide` must be a DataFrame."
-
-    return pd.Series(
-        [
-            estimate_release_frequency(
-                timeseries=df_wide[tx],
-                **kwargs,
-            )
-            for tx in df_wide.columns
-        ],
-        index=df_wide.columns,
-    )
+    return pd.infer_freq(timeseries.index)
