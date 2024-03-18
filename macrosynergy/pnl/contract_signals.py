@@ -154,7 +154,7 @@ def _check_arg_types(
     return correct_nested_types
 
 
-def check_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.DataFrame:
+def _check_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.DataFrame:
     """
     Check the timeseries to see if the estimated frequency matches the actual frequency.
 
@@ -468,7 +468,7 @@ def contract_signals(
     df_wide: pd.DataFrame = qdf_to_ticker_df(df)
 
     ## Check rebal_freq or downsample the dataframe
-    df_wide: pd.DataFrame = check_estimation_frequency(
+    df_wide: pd.DataFrame = _check_estimation_frequency(
         df_wide=df_wide, rebal_freq=rebal_freq
     )
 
