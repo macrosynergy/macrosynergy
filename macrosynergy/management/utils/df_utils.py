@@ -963,8 +963,8 @@ def get_eops(
 
 
 def estimate_release_frequency(
-    timeseries: pd.Series = None,
-    df_wide: pd.DataFrame = None,
+    timeseries: Optional[pd.Series] = None,
+    df_wide: Optional[pd.DataFrame] = None,
     exception_tolerance: float = 0.1,
     *args,
     **kwargs,
@@ -988,8 +988,7 @@ def estimate_release_frequency(
             raise TypeError("Argument `df_wide` must be a pandas DataFrame.")
         if df_wide.empty or df_wide.index.name != "real_date":
             raise ValueError(
-                "Argument `df_wide` must be a non-empty pandas DataFrame with a datetime "
-                "index `'real_date'`."
+                "Argument `df_wide` must be a non-empty pandas DataFrame with a datetime index `'real_date'`."
             )
 
         return _estimate_release_frequency_wide(df_wide=df_wide, *args, **kwargs)
