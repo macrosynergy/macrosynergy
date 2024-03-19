@@ -806,7 +806,7 @@ class DataQueryInterface(object):
         :raises <ValueError>: if the response from the server is not valid.
         """
         if verbose:
-            print("Downloading the JPMaQS catalogue from DataQuery...")
+            print(f"Downloading the {group_id} catalogue from DataQuery...")
         try:
             response_list: Dict = self._fetch(
                 url=self.base_url + CATALOGUE_ENDPOINT,
@@ -826,6 +826,8 @@ class DataQueryInterface(object):
             and (len(set(tkr_idx)) == utkr_count)
         ):
             raise ValueError("The downloaded catalogue is corrupt.")
+        if verbose:
+            print(f"Downloaded {group_id} catalogue with {utkr_count} tickers.")
 
         return tickers
 

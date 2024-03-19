@@ -6,6 +6,7 @@ import datetime
 import io
 import logging
 import os
+import json
 import traceback as tb
 import warnings
 from timeit import default_timer as timer
@@ -15,7 +16,7 @@ import itertools
 
 import pandas as pd
 
-from macrosynergy.download.dataquery import DataQueryInterface
+from macrosynergy.download.dataquery import DataQueryInterface, API_DELAY_PARAM
 from macrosynergy.download.exceptions import HeartbeatError, InvalidDataframeError
 from macrosynergy.management.utils import is_valid_iso_date, standardise_dataframe
 from macrosynergy.management.types import QuantamentalDataFrame
@@ -285,6 +286,63 @@ def concat_column_dfs(
     # all the dfs are indexed by real_date, so we can just concat them adn drop dates when all values are NaN
     # df: pd.DataFrame = pd.concat(df_list, axis=1).dropna(how="all", axis=0)
     return pd.concat(_pop_df_list(), axis=1).dropna(how="all", axis=0)
+
+
+def _save_qdf(data: List[dict], save_path: str) -> None:
+
+    def _get_expr(ts: dict) -> str:
+        return ts["attributes"][0]["expression"]
+
+    def _get_ticker(ts: dict) -> str:
+        return _get_expr(ts).split(",")[1]
+
+    def _get_xcat(ticker: str) -> str:
+        return ticker.split("_", 1)[1]
+
+    def fnm(ticker: str) -> str:
+        return os.path.join(save_path, _get_xcat(ticker), f"{ticker}.csv")
+
+    for tkr in sorted(set(map(_get_ticker, data))):
+        tkr_fnm = fnm(tkr)
+        os.makedirs(os.path.dirname(tkr_fnm), exist_ok=True)
+        _ts = [ts for ts in data if _get_ticker(ts) == tkr]
+        df: QuantamentalDataFrame = concat_single_metric_qdfs(
+            [timeseries_to_qdf(ts) for ts in _ts]
+        ).drop(columns=["cid", "xcat"])
+        if os.path.exists(fnm(tkr)):
+            edf = pd.read_csv(tkr_fnm, parse_dates=["real_date"], index_col="real_date")
+            edf = edf.drop(columns=[col for col in edf.columns if col in df.columns])
+            df = pd.concat([edf, df.set_index("real_date")], axis=1).reset_index()
+            os.remove(tkr_fnm)
+        df.to_csv(tkr_fnm, index=False)
+
+    return
+
+
+def _save_timeseries_as_column(data: List[dict], save_path: str) -> None:
+    for ts in data:
+        if ts["attributes"][0]["time-series"] is None:
+            continue
+        expr = ts["attributes"][0]["expression"]
+        df = timeseries_to_column(ts)
+        if df.empty:
+            continue
+        df.reset_index().to_csv(os.path.join(save_path, f"{expr}.csv"), index=False)
+    return
+
+
+def _save_timeseries(data: List[dict], save_path: str):
+    data = [d for d in data if d is not None]
+    if len(data) == 0:
+        return
+    expr_path = lambda ts: os.path.join(
+        save_path, f"{ts['attributes'][0]['expression']}.json"
+    )
+    for its, ts in enumerate(data):
+        with open(expr_path(ts), "w") as f:
+            json.dump(ts, f)
+
+    return
 
 
 def validate_downloaded_df(
@@ -685,7 +743,7 @@ class JPMaQSDownload(DataQueryInterface):
         if isinstance(download_outputs[0], pd.DataFrame):
             return concat_column_dfs(df_list=download_outputs)
 
-        if isinstance(download_outputs[0][0], (dict, QuantamentalDataFrame)):
+        if isinstance(download_outputs[0][0], (dict, bool, QuantamentalDataFrame)):
             logger.debug(f"Chaining {len(download_outputs)} outputs.")
             _ch_types = list(
                 itertools.chain.from_iterable(
@@ -696,7 +754,7 @@ class JPMaQSDownload(DataQueryInterface):
 
             download_outputs = list(itertools.chain.from_iterable(download_outputs))
 
-        if isinstance(download_outputs[0], dict):
+        if isinstance(download_outputs[0], (dict, bool)):
             return download_outputs
         if isinstance(download_outputs[0], QuantamentalDataFrame):
             return concat_single_metric_qdfs(download_outputs)
@@ -705,12 +763,24 @@ class JPMaQSDownload(DataQueryInterface):
         raise NotImplementedError(
             f"Cannot chain download outputs that are List of : {list(set(map(type, download_outputs)))}."
         )
-        
-    def _save_timeseries(
-        data: Union[List[Dict], List[pd.DataFrame], List[QuantamentalDataFrame]],
-    ):
-        ...
-        # TODO: implement for all formats
+
+    def _save_data(
+        self,
+        data: List[dict],
+        as_dataframe: bool,
+        dataframe_format: str,
+        save_path: str,
+    ) -> bool:
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+        if as_dataframe:
+            if dataframe_format == "qdf":
+                _save_qdf(data, save_path)
+            elif dataframe_format == "wide":
+                _save_timeseries_as_column(data, save_path)
+        else:
+            _save_timeseries(data, save_path)
+        return True
 
     def _fetch_timeseries(
         self,
@@ -723,7 +793,9 @@ class JPMaQSDownload(DataQueryInterface):
         *args,
         **kwargs,
     ) -> Union[pd.DataFrame, List[Dict]]:
-        ts_list = self._fetch(url=url, params=params, tracking_id=tracking_id)
+        ts_list: List[dict] = self._fetch(
+            url=url, params=params, tracking_id=tracking_id
+        )
         for its, ts in enumerate(ts_list):
             if ts["attributes"][0]["time-series"] is None:
                 self.unavailable_expressions.append(ts["attributes"][0]["expression"])
@@ -736,28 +808,81 @@ class JPMaQSDownload(DataQueryInterface):
                     )
                 ts_list[its] = None
 
-        ts_list = list(filter(None, ts_list))
-
-        if as_dataframe:
-            if save_path is not None:
-                ... # TODO: implement saving of different formats
+        ts_list: List[dict] = list(filter(None, ts_list))
+        logger.debug(f"Downloaded data for {len(ts_list)} expressions.")
+        logger.debug(f"Unavailble expressions: {self.unavailable_expressions}")
+        if save_path is not None:
+            ts_list = [
+                self._save_data(
+                    data=ts_list,
+                    as_dataframe=as_dataframe,
+                    dataframe_format=dataframe_format,
+                    save_path=save_path,
+                )
+            ]
+        elif as_dataframe:
             if dataframe_format == "qdf":
                 ts_list = [timeseries_to_qdf(ts) for ts in ts_list if ts is not None]
             elif dataframe_format == "wide":
                 ts_list = concat_column_dfs(
                     df_list=[timeseries_to_column(ts) for ts in ts_list]
                 )
-                
-        logger.debug(f"Downloaded data for {len(ts_list)} expressions.")
-        logger.debug(f"Unavailble expressions: {self.unavailable_expressions}")
 
         downloaded_types = list(set(map(type, ts_list)))
-        logger.debug(f"Object types in the downloaded data: {downloaded_types}")
+        logger.debug(
+            f"Object types in the downloaded data: {downloaded_types}"
+            + ("(saving to disk)" if save_path is not None else "")
+        )
 
         return ts_list
 
     def download_data(self, *args, **kwargs):
         return super().download_data(*args, **kwargs)
+
+    def download_all_to_disk(
+        self,
+        path: str,
+        expressions: Optional[List[str]] = None,
+        as_dataframe: bool = True,
+        dataframe_format: str = "qdf",
+        show_progress: bool = True,
+        delay_param: float = API_DELAY_PARAM,
+        batch_size: Optional[int] = None,
+        *args,
+        **kwargs,
+    ) -> None:
+        """
+        Downloads all JPMaQS data to disk.
+        """
+        path = os.path.expandvars(os.path.expanduser(path))
+        save_path = os.path.join(path, "JPMaQSData")
+        os.makedirs(save_path, exist_ok=True)
+
+        start_date = "1990-01-01"
+        end_date = (datetime.datetime.today() + pd.offsets.BusinessDay(2)).strftime(
+            "%Y-%m-%d"
+        )
+        self.batch_size = batch_size or self.batch_size
+        if not expressions:
+            catalogue: List[str] = self.get_catalogue()
+            expressions = sorted(
+                construct_expressions(tickers=catalogue, metrics=self.valid_metrics)
+            )
+        download_time_taken: float = timer()
+        data: List[Union[dict, QuantamentalDataFrame]] = self.download_data(
+            save_path=save_path,
+            expressions=expressions,
+            start_date=start_date,
+            end_date=end_date,
+            show_progress=show_progress,
+            as_dataframe=as_dataframe,
+            dataframe_format=dataframe_format,
+            delay_param=delay_param,
+            *args,
+            **kwargs,
+        )
+
+        download_time_taken: float = timer() - download_time_taken
 
     def download(
         self,
