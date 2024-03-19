@@ -1,6 +1,7 @@
 """
 "Naive" PnLs with limited signal options and disregarding transaction costs.
 """
+
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -15,9 +16,9 @@ from macrosynergy.management.utils import update_df, reduce_df
 
 from macrosynergy.signal import SignalReturnRelations
 
+import warnings
 
 class NaivePnL:
-
     """
     Computes and collects illustrative PnLs with limited signal options and
     disregarding transaction costs.
@@ -349,7 +350,7 @@ class NaivePnL:
 
         sig_add_error = "Numeric value expected for signal addition."
         assert isinstance(sig_add, (float, int)), sig_add_error
-        
+
         if thresh is not None and thresh < 1:
             raise ValueError("thresh must be greater than or equal to one.")
 
@@ -375,7 +376,7 @@ class NaivePnL:
             neg = ""
 
         dfw["psig"] += sig_add
-        
+
         self._winsorize(df=dfw["psig"], thresh=thresh)
 
         # Multi-index DataFrame with a natural minimum lag applied.
@@ -505,7 +506,7 @@ class NaivePnL:
         same_y: bool = True,
         title: str = "Cumulative Naive PnL",
         title_fontsize: int = 20,
-        xcat_labels: List[str] = None,
+        xcat_labels: Union[List[str], dict] = None,
         xlab: str = "",
         ylab: str = "% of risk capital, no compounding",
         share_axis_labels: bool = True,
@@ -595,11 +596,27 @@ class NaivePnL:
             "The number of custom labels must match the defined number of "
             "categories in pnl_cats."
         )
-        if xcat_labels is not None:
-            assert len(xcat_labels) == len(pnl_cats), error_message
 
+        if isinstance(xcat_labels, dict) or xcat_labels is None:
+            if xcat_labels is None:
+                xcat_labels = pnl_cats.copy()
+            else:
+                assert len(xcat_labels) == len(pnl_cats), error_message
+                xcat_labels = [xcat_labels[pnl] for pnl in pnl_cats]
+
+        elif isinstance(xcat_labels, list) and all(
+            isinstance(item, str) for item in xcat_labels
+        ):
+            warnings.warn(
+                "xcat_labels should be a dictionary with keys as pnl_cats and values as "
+                "the custom labels. This will be enforced in a future version.",
+            )
+            assert len(xcat_labels) == len(pnl_cats), error_message
         else:
-            xcat_labels = pnl_cats.copy()
+            raise TypeError(
+                "xcat_labels should be a dictionary with keys as pnl_cats and values as "
+                "the custom labels."
+            )
 
         no_cids = len(pnl_cids)
 
@@ -986,10 +1003,11 @@ class NaivePnL:
         filter_2 = self.df["cid"] == "ALL" if not cs else True
 
         return self.df[filter_1 & filter_2]
-    
+
     def _winsorize(self, df: pd.DataFrame, thresh: float):
         if thresh is not None:
             df.clip(lower=-thresh, upper=thresh, inplace=True)
+
 
 def create_results_dataframe(
     title: str,
@@ -1120,6 +1138,7 @@ def create_results_dataframe(
     )
 
     return res_df
+
 
 if __name__ == "__main__":
     cids = ["AUD", "CAD", "GBP", "NZD", "USD", "EUR"]
