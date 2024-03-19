@@ -1204,8 +1204,6 @@ class SignalReturnRelations:
             heatmap's annotations.
 
         :return: DataFrame with the specified statistic for each row and column
-            NOTE: This dataframe is styled so if you want to view in command line call
-            the .data method on the dataframe.
         """
         self.df = self.original_df.copy()
         self.sigs = [self.revert_negation(sig) for sig in self.sigs]
