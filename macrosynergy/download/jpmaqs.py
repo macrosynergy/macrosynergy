@@ -705,6 +705,12 @@ class JPMaQSDownload(DataQueryInterface):
         raise NotImplementedError(
             f"Cannot chain download outputs that are List of : {list(set(map(type, download_outputs)))}."
         )
+        
+    def _save_timeseries(
+        data: Union[List[Dict], List[pd.DataFrame], List[QuantamentalDataFrame]],
+    ):
+        ...
+        # TODO: implement for all formats
 
     def _fetch_timeseries(
         self,
@@ -713,6 +719,7 @@ class JPMaQSDownload(DataQueryInterface):
         tracking_id: str,
         as_dataframe: bool = True,
         dataframe_format: str = "qdf",
+        save_path: Optional[str] = None,
         *args,
         **kwargs,
     ) -> Union[pd.DataFrame, List[Dict]]:
@@ -732,12 +739,15 @@ class JPMaQSDownload(DataQueryInterface):
         ts_list = list(filter(None, ts_list))
 
         if as_dataframe:
+            if save_path is not None:
+                ... # TODO: implement saving of different formats
             if dataframe_format == "qdf":
                 ts_list = [timeseries_to_qdf(ts) for ts in ts_list if ts is not None]
             elif dataframe_format == "wide":
                 ts_list = concat_column_dfs(
                     df_list=[timeseries_to_column(ts) for ts in ts_list]
                 )
+                
         logger.debug(f"Downloaded data for {len(ts_list)} expressions.")
         logger.debug(f"Unavailble expressions: {self.unavailable_expressions}")
 
