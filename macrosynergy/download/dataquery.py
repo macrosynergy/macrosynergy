@@ -913,7 +913,7 @@ class DataQueryInterface(object):
         Used by the `download_data()` method. Exists to provide a method that can be
         modified when inheriting from this class.
 
-        :param <List[Union[Dict, Any]>> download_outputs: list of list of dictionaries/
+        :param <List[Union[Dict, Any]> download_outputs: list of list of dictionaries/
             other objects.
         :return <List[Dict]>: list of dictionaries/other objects.
         """
