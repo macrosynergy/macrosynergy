@@ -7,7 +7,7 @@ import pandas as pd
 
 import datetime
 
-from sklearn.linear_model import Lasso
+from sklearn.linear_model import Lasso, ElasticNet
 from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
 from sklearn.feature_selection import SelectorMixin
 
@@ -20,6 +20,183 @@ from typing import Union, Any, List, Optional
 
 import warnings
 
+class ENetSelector(BaseEstimator, SelectorMixin):
+    def __init__(self, alpha: Union[float, int] = 1.0, l1_ratio = 0.5, positive: bool = True):
+        """
+        Transformer class to use "Elastic Net" as a feature selection algorithm.
+        Given two hyper-parameters, `alpha` and `l1_ratio`, the Elastic Net model is fit and
+        the non-zero coefficients are used to extract features from an input dataframe.
+        If `positive` is set to True, the underlying features as input to the Elastic Net
+        are expected to be positively correlated with the target variable.
+
+        :param <Union[float, int]> alpha: the regularisation imposed by the Elastic Net.
+        :param <float> l1_ratio: the ratio of L1 to L2 regularisation. If 0, the penalty is
+            an L2 penalty. If 1, it is an L1 penalty. If 0 < l1_ratio < 1, the penalty is
+            a combination of L1 and L2. As per the `scikit-learn` documentation,
+            setting the `l1_ratio` <= 0.01 is not reliable.
+        :param <bool> positive: boolean to restrict estimated Elastic Net coefficients to
+            be positive.
+        """
+        if not (isinstance(alpha, float) or isinstance(alpha, int)):
+            raise TypeError(
+                "The 'alpha' hyper-parameter must be either a float or int."
+            )
+        if alpha < 0:
+            raise ValueError("The 'alpha' hyper-parameter must be non-negative.")
+        
+        if not (isinstance(l1_ratio, float) or isinstance(l1_ratio, np.floating)):
+            raise TypeError(
+                "The 'l1_ratio' hyper-parameter must be a float."
+            )
+        if (l1_ratio < 0) or (l1_ratio > 1):
+            raise ValueError(
+                "The 'l1_ratio' hyper-parameter must be in the interval [0,1]."
+            )
+        if l1_ratio <= 0.01:
+            warnings.warn(
+                "Setting the 'l1_ratio' hyper-parameter to be <= 0.01 is not reliable.",
+                UserWarning,
+            )            
+        if not isinstance(positive, bool):
+            raise TypeError("The 'positive' hyper-parameter must be a boolean.")
+
+        self.alpha = alpha
+        self.l1_ratio = l1_ratio
+        self.positive = positive
+        self.feature_names_in_ = None
+
+    def fit(self, X: pd.DataFrame, y: Union[pd.Series, pd.DataFrame]):
+        """
+        Fit method to fit an Elastic Net regression and obtain the selected features.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.Series,pd.DataFrame]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+        """
+        # checks
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError(
+                "Input feature matrix for the Elastic Net selector must be a pandas dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas dataframe."
+            )
+        if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
+            raise TypeError(
+                "Target vector for the Elastic Net selector must be a pandas series or dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas series or dataframe."
+            )
+        if isinstance(y, pd.DataFrame):
+            if y.shape[1] != 1:
+                raise ValueError(
+                    "The target dataframe must have only one column. If used as part of "
+                    "an sklearn pipeline, ensure that previous steps return a pandas "
+                    "series or dataframe."
+                )
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of y must be datetime.date.")
+
+        if not X.index.equals(y.index):
+            raise ValueError(
+                "The indices of the input dataframe X and the output dataframe y "
+                "don't match as input to the Elastic Net selector."
+            )
+
+        self.feature_names_in_ = np.array(X.columns)
+        self.p = X.shape[1]
+
+        if self.positive:
+
+            self.enet = ElasticNet(alpha=self.alpha, l1_ratio=self.l1_ratio, positive=True).fit(X, y)
+        else:
+            self.enet = ElasticNet(alpha=self.alpha, l1_ratio=self.l1_ratio).fit(X, y)
+
+        self.selected_ftr_idxs = [i for i in range(self.p) if self.enet.coef_[i] != 0]
+
+        return self
+    
+    def _get_support_mask(self):
+        """
+        Private method to return a boolean mask of the features selected for the Pandas dataframe.
+        """
+        mask = np.zeros(self.p, dtype=bool)
+        mask[self.selected_ftr_idxs] = True
+        return mask
+    
+    def get_support(self, indices=False):
+        """
+        Method to return a mask, or integer index, of the features selected for the Pandas dataframe.
+        
+        :param <bool> indices: Boolean to specify whether to return the column indices of the selected features instead of a boolean mask
+        
+        :return <np.ndarray>: Boolean mask or integer index of the selected features
+        """
+        if self.feature_names_in_ is None:
+            raise NotFittedError(
+                "The Elastic Net selector has not been fitted. Please fit the selector before calling get_support()."
+            )
+        if not isinstance(indices, (bool, np.bool_)):
+            raise ValueError(
+                "The 'indices' parameter must be a boolean."
+            )
+        if indices:
+            return self.selected_ftr_idxs
+        else:
+            mask = self._get_support_mask()
+            return mask
+        
+    def get_feature_names_out(self):
+        """
+        Method to mask feature names according to selected features.
+        """
+        if self.feature_names_in_ is None:
+            raise NotFittedError(
+                "The Elastic Net selector has not been fitted. Please fit the selector before calling get_feature_names_out()."
+            )
+        
+        return self.feature_names_in_[self.get_support(indices=False)]
+
+    def transform(self, X: pd.DataFrame):
+        """
+        Transform method to return only the selected features of the dataframe.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+
+        :return <pd.DataFrame>: Pandas dataframe of input features selected based
+            on the Elastic Net's feature selection capabilities.
+        """
+        # checks
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError(
+                "Input feature matrix for the Elastic Net selector must be a pandas dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas dataframe."
+            )
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not X.shape[-1] == self.p:
+            raise ValueError(
+                "The number of columns of the dataframe to be transformed, X, doesn't "
+                "match the number of columns of the training dataframe."
+            )
+        if len(self.selected_ftr_idxs) == 0:
+            # Then no features were selected
+            # Then at the given time, no trading decisions can be made based on these features
+            warnings.warn(
+                "No features were selected. At the given time, no trading decisions can be made based on these features.",
+                UserWarning,
+            )
+            return X.iloc[:, :0]
+
+        return X.iloc[:, self.selected_ftr_idxs]
 
 class LassoSelector(BaseEstimator, SelectorMixin):
     def __init__(self, alpha: Union[float, int], positive: bool = True):

@@ -562,6 +562,15 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"plot_pnl raised {e} unexpectedly")
 
+        with self.assertRaises(TypeError):
+            pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"], xcat_labels=1)
+
+        with self.assertWarns(Warning):
+            pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"], xcat_labels=["A", "B"])
+
+        with self.assertRaises(AssertionError):
+            pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"], xcat_labels={"PNL_GROWTH": "A"})
+
         try:
             pnl.signal_heatmap(pnl_name="PNL_GROWTH")
         except Exception as e:
