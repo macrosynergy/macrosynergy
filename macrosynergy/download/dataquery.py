@@ -865,16 +865,20 @@ class DataQueryInterface(object):
             ):
                 curr_params: Dict = params.copy()
                 curr_params["expressions"] = expr_batch
-                future_objects.append(
-                    executor.submit(
-                        self._fetch_timeseries,
-                        url=url,
-                        params=curr_params,
-                        tracking_id=tracking_id,
-                        *args,
-                        **kwargs,
+                try:
+                    future_objects.append(
+                        executor.submit(
+                            self._fetch_timeseries,
+                            url=url,
+                            params=curr_params,
+                            tracking_id=tracking_id,
+                            *args,
+                            **kwargs,
+                        )
                     )
-                )
+                except Exception as exc:
+                    raise exc
+
                 time.sleep(delay_param)
 
             for ib, future in tqdm(
@@ -884,10 +888,13 @@ class DataQueryInterface(object):
                 total=len(future_objects),
             ):
                 try:
+                    if future.exception() is not None:
+                        raise future.exception()
                     download_outputs.append(future.result())
                     continuous_failures = 0
                 except Exception as exc:
                     if isinstance(exc, (KeyboardInterrupt, AuthenticationError)):
+                        executor.shutdown(wait=False, cancel_futures=True)
                         raise exc
 
                     failed_batches.append(expr_batches[ib])
@@ -939,7 +946,7 @@ class DataQueryInterface(object):
         Used by the `download_data()` method.
         """
 
-        if retry_counter > 0:
+        if 0 < retry_counter < HL_RETRY_COUNT:
             print("Retrying failed downloads. Retry count:", retry_counter)
 
         if retry_counter > HL_RETRY_COUNT:
