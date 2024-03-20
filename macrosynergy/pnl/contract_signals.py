@@ -325,6 +325,11 @@ def contract_signals(
     :param <dict> blacklist: cross-sections with date ranges that should be excluded
         from the calculation of contract signals.
     :param <str> sname: name of the strategy. Default is "STRAT".
+    :param <Optional[bool, List[str]]> None, relative_value: list of cross sections
+        (cids) for which to calculate relative value. If None, no relative value is
+        calculated. If a list of cids is provided, relative value is calculated for these cids.
+        If a True boolean, relative value is calculated for all cids in the strategy.
+    # TODO split above `relative_value` argument into two: `relative_value` and `relative_value_cids`?
 
     :return <pd.DataFrame>: with the contract signals for all traded contracts and the
         specified strategy. It has the standard JPMaQS DataFrame. The contract signals
