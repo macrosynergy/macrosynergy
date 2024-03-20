@@ -6,6 +6,8 @@ import datetime
 import io
 import logging
 import os
+import glob
+import shutil
 import json
 import traceback as tb
 import warnings
@@ -335,11 +337,11 @@ def _save_timeseries(data: List[dict], save_path: str):
     data = [d for d in data if d is not None]
     if len(data) == 0:
         return
-    expr_path = lambda ts: os.path.join(
-        save_path, f"{ts['attributes'][0]['expression']}.json"
-    )
+
     for its, ts in enumerate(data):
-        with open(expr_path(ts), "w") as f:
+        with open(
+            os.path.join(save_path, f"{ts['attributes'][0]['expression']}.json"), "w"
+        ) as f:
             json.dump(ts, f)
 
     return
@@ -812,14 +814,19 @@ class JPMaQSDownload(DataQueryInterface):
         logger.debug(f"Downloaded data for {len(ts_list)} expressions.")
         logger.debug(f"Unavailble expressions: {self.unavailable_expressions}")
         if save_path is not None:
-            ts_list = [
-                self._save_data(
-                    data=ts_list,
-                    as_dataframe=as_dataframe,
-                    dataframe_format=dataframe_format,
-                    save_path=save_path,
-                )
-            ]
+            try:
+                ts_list = [
+                    self._save_data(
+                        data=ts_list,
+                        as_dataframe=as_dataframe,
+                        dataframe_format=dataframe_format,
+                        save_path=save_path,
+                    )
+                ]
+            except Exception as exc:
+                logger.error(f"Failed to save data to disk: {exc}")
+                self.msg_errors.append(f"Failed to save data to disk: {exc}")
+                raise exc
         elif as_dataframe:
             if dataframe_format == "qdf":
                 ts_list = [timeseries_to_qdf(ts) for ts in ts_list if ts is not None]
@@ -848,26 +855,63 @@ class JPMaQSDownload(DataQueryInterface):
         show_progress: bool = True,
         delay_param: float = API_DELAY_PARAM,
         batch_size: Optional[int] = None,
+        retry: int = 3,
+        overwrite: bool = True,
         *args,
         **kwargs,
     ) -> None:
         """
         Downloads all JPMaQS data to disk.
         """
-        path = os.path.expandvars(os.path.expanduser(path))
-        save_path = os.path.join(path, "JPMaQSData")
-        os.makedirs(save_path, exist_ok=True)
+        save_path: Optional[str] = None
+        if path == "":
+            print(
+                "Path explicitly provided as an empty string. "
+                "Assuming alternate saving method implemented."
+            )
+            save_path = ""
+        else:
+            path = os.path.expandvars(os.path.expanduser(path))
+            save_path = os.path.join(path, "JPMaQSData")
+            os.makedirs(save_path, exist_ok=True)
+            if overwrite:
+                msg = f"Overwriting data in {save_path}."
+                warnings.warn(msg)  # the user should be warned
+                logger.info(msg)  # but log doesn't need to be warning, info is fine
+                shutil.rmtree(save_path)
+                os.makedirs(save_path, exist_ok=True)
+
+            print(f"Downloading all JPMaQS data to disk. Saving to: `{save_path}`.")
 
         start_date = "1990-01-01"
         end_date = (datetime.datetime.today() + pd.offsets.BusinessDay(2)).strftime(
             "%Y-%m-%d"
         )
         self.batch_size = batch_size or self.batch_size
+
+        self.check_connection(verbose=True)
+
         if not expressions:
             catalogue: List[str] = self.get_catalogue()
             expressions = sorted(
                 construct_expressions(tickers=catalogue, metrics=self.valid_metrics)
             )
+
+        # if all the expressions do not contain DB(JPMAQS, then we need set dataframe format to wide
+        if (
+            as_dataframe
+            and dataframe_format == "qdf"
+            and not any([not expr.startswith("DB(JPMAQS") for expr in expressions])
+        ):
+            dataframe_format = "wide"
+            warnings.warn(
+                "The list of expressions contains non-JPMAQS expressions. "
+                "Setting dataframe format to 'wide'."
+            )
+        print(
+            "Downloading data from JPMaQS.\nTimestamp UTC: ",
+            datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        )
         download_time_taken: float = timer()
         data: List[Union[dict, QuantamentalDataFrame]] = self.download_data(
             save_path=save_path,
@@ -881,8 +925,47 @@ class JPMaQSDownload(DataQueryInterface):
             *args,
             **kwargs,
         )
-
         download_time_taken: float = timer() - download_time_taken
+        assert all([d is True for d in data])
+        if path == "":
+            return
+        d_exprs = [
+            os.path.basename(csv).split(".")[0]
+            for csv in glob.glob(f"{save_path}/**/*.csv", recursive=True)
+        ]
+        if len(d_exprs) == 0:
+            raise ValueError("No data was downloaded.")
+
+        if as_dataframe and dataframe_format == "qdf":
+            d_exprs = construct_expressions(tickers=d_exprs, metrics=self.valid_metrics)
+
+        logger.info(f"Downloaded {len(d_exprs)} expressions.")
+
+        # get the diff between the expressions and the downloaded expressions
+        unavailable_expressions = list(set(expressions) - set(d_exprs))
+
+        if len(unavailable_expressions) > 0:
+            if retry > 0:
+                logger.info(
+                    f"Retrying {len(unavailable_expressions)} unavailable expressions."
+                )
+                self.download_all_to_disk(
+                    path=path,
+                    expressions=unavailable_expressions,
+                    as_dataframe=as_dataframe,
+                    dataframe_format=dataframe_format,
+                    show_progress=show_progress,
+                    delay_param=delay_param,
+                    batch_size=batch_size,
+                    retry=retry - 1,
+                    overwrite=False,
+                    *args,
+                    **kwargs,
+                )
+            else:
+                print(f"Failed to download {len(unavailable_expressions)} expressions.")
+                for expr in unavailable_expressions:
+                    print(f"\t{expr}")
 
     def download(
         self,
