@@ -683,7 +683,7 @@ class SignalOptimizer:
         # If nsplits_add is provided, add it to the number of splits 
         if self.initial_nsplits:
             n_splits = self.initial_nsplits + nsplits_add
-            self.inner_splitter.n_splits = n_splits
+            self.inner_splitter.n_splits = int(n_splits)
 
         # For each model, run a grid search over the hyperparameters to optimise
         # the provided metric. The best model is then used to make predictions.
@@ -1464,7 +1464,8 @@ if __name__ == "__main__":
         X=X_train,
         y=y_train,
         blacklist=black,
-        change_n_splits=True,
+        initial_nsplits=5,
+        threshold_ndates=24,
     )
     so.calculate_predictions(
         name="test",
