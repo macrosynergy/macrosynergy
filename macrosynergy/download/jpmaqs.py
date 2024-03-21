@@ -821,6 +821,8 @@ class JPMaQSDownload(DataQueryInterface):
                         as_dataframe=as_dataframe,
                         dataframe_format=dataframe_format,
                         save_path=save_path,
+                        *args,
+                        **kwargs,
                     )
                 ]
             except Exception as exc:
