@@ -40,8 +40,9 @@ class SignalOptimizer:
         inner_splitter: BasePanelSplit,
         X: pd.DataFrame,
         y: Union[pd.DataFrame, pd.Series],
-        blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]] = None,
-        change_n_splits: bool = False,
+        blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]]= None,
+        initial_nsplits: Optional[Union[int, np.int_]] = None,
+        threshold_ndates: Optional[Union[int, np.int_]] = None,
     ):
         """
         Class for sequential optimization of raw signals based on quantamental features.
@@ -76,12 +77,16 @@ class SignalOptimizer:
             corresponding with a time index equal to the features in `X`.
         :param <Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]> blacklist: cross-sections
             with date ranges that should be excluded from the data frame.
-        :param <Optional[bool> change_n_splits: If True and the inner_splitter is an instance of
-            `RollingKFoldPanelSplit` or `ExpandingKFoldPanelSplit`, the proportion between
-            the number of unique dates in the initial training set and the number of splits
-            specified in the splitter is calculated and maintained over the iterations of
-            the outer splitter. This means that the number of cross-validation splits
-            increases as more training data becomes available. Default is False.
+        :param <Optional[Union[int, np.int_]]> initial_nsplits: The number of splits to be
+            used in the initial training set for cross-validation. If not None, this parameter
+            ovverrides the number of splits in the inner splitter. By setting this value, 
+            the ensuing signal optimization process uses a changing number of cross-validation
+            splits over time. The parameter "threshold_ndates", which defines the dynamics
+            of the adaptive number of splits, must be set in this case. Default is None.
+        :param <Optional[Union[int, np.int_]]> threshold_ndates: Number of unique dates,
+            in units of the native dataset frequency, to be made available for the currently-used
+            number of cross-validation splits to increase by one. If not None, the "initial_nsplits"
+            parameter must be set. Default is None.
 
         Note:
         Optimization is based on expanding time series panels and maximizes a defined
@@ -146,17 +151,23 @@ class SignalOptimizer:
         ```
         """
         # Checks
-        self._checks_init_params(inner_splitter, X, y, blacklist, change_n_splits)
+        self._checks_init_params(inner_splitter, X, y, blacklist, initial_nsplits, threshold_ndates)
 
         # Set instance attributes
-        self.inner_splitter = inner_splitter
         self.X = X
         self.y = y
+        self.inner_splitter = inner_splitter
         self.blacklist = blacklist
-        
-        if not hasattr(self, "change_n_splits"):
-            # Then change_n_splits wasn't adjusted in the checks
-            self.change_n_splits = change_n_splits
+        self.initial_nsplits = initial_nsplits
+        self.threshold_ndates = threshold_ndates
+
+        if self.initial_nsplits:
+            warnings.warn(
+                "The initial_nsplits parameter has been set. Adjusting the number of splits "
+                f"of the specified inner splitter to {self.initial_nsplits}",
+                RuntimeWarning,
+            )
+            self.inner_splitter.n_splits = self.initial_nsplits
 
         # Create initial dataframes to store quantamental predictions and model choices
         self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
@@ -173,7 +184,8 @@ class SignalOptimizer:
         X: pd.DataFrame,
         y: Union[pd.DataFrame, pd.Series],
         blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]],
-        change_n_splits: bool,
+        initial_nsplits: Optional[Union[int, np.int_]],
+        threshold_ndates: Optional[Union[int, np.int_]],
     ):
         """
         Private method to check the initialisation parameters of the class.
@@ -215,18 +227,27 @@ class SignalOptimizer:
                             "pandas Timestamps."
                         )
 
-        # Check change_n_splits
-        if not isinstance(change_n_splits, bool):
-            raise TypeError("The change_n_splits argument must be a boolean.")
-        if change_n_splits:
-            if not isinstance(
-                inner_splitter, RollingKFoldPanelSplit
-            ) and not isinstance(inner_splitter, ExpandingKFoldPanelSplit):
-                warnings.warn(
-                    f"The chosen splitter isn't an instance of RollingKFoldPanelSplit or ExpandingKFoldPanelSplit. The change_n_splits argument will be set to False.",
-                    RuntimeWarning,
+        # Check initial_nsplits
+        if initial_nsplits is not None:
+            if not isinstance(initial_nsplits, (int, np.int_)):
+                raise TypeError("The initial_nsplits argument must be an integer.")
+            if threshold_ndates is None:
+                raise ValueError(
+                    "The threshold_ndates argument must be set if the initial_nsplits "
+                    "argument is set."
                 )
-                self.change_n_splits = False
+            if not hasattr(inner_splitter, "n_splits"):
+                raise AttributeError(
+                    "The inner_splitter object must have an attribute n_splits."
+                )
+        if threshold_ndates is not None:
+            if not isinstance(threshold_ndates, (int, np.int_)):
+                raise TypeError("The threshold_ndates argument must be an integer.")
+            if initial_nsplits is None:
+                raise ValueError(
+                    "The initial_nsplits argument must be set if the threshold_ndates "
+                    "argument is set."
+                )
 
     def calculate_predictions(
         self,
@@ -333,9 +354,7 @@ class SignalOptimizer:
             index=sig_idxs, columns=[name], data=np.nan, dtype="float64" # TODO: why not float32
         )
 
-        # (2) Set up the splitter, outputs to store the predictions and model choices,
-        #     and (if specified) calculations for adaptive n_splits in preparation
-        #     for parallelising the historical model predictions.
+        # (2) Set up the splitter, outputs to store the predictions and model choices
    
         outer_splitter = ExpandingIncrementPanelSplit(
             train_intervals=1,
@@ -347,16 +366,6 @@ class SignalOptimizer:
 
         X = self.X.copy()
         y = self.y.copy()
-
-        if self.change_n_splits:
-            # calculate the initial unique training dates to n_splits proportion
-            for train_idx, _ in outer_splitter.split(X=X, y=y):
-                init_train_idx = train_idx
-                break
-            init_train_dates = X.iloc[init_train_idx].index.get_level_values(1).unique()
-            prop = len(init_train_dates) / self.inner_splitter.n_splits
-        else:
-            prop = None
 
         # (3) Run the parallelised worker function to run the signal
         #     optimization algorithm over the trading history.
@@ -373,10 +382,10 @@ class SignalOptimizer:
                 hparam_type=hparam_type,
                 hparam_grid=hparam_grid,
                 n_iter=n_iter,
-                prop=prop,
+                nsplits_add = np.floor(idx / self.threshold_ndates) if self.initial_nsplits else None,
             )
-            for train_idx, test_idx in tqdm(
-                train_test_splits,
+            for idx, (train_idx, test_idx) in tqdm(
+                enumerate(train_test_splits),
                 total=len(train_test_splits),
             )
         )
@@ -621,7 +630,7 @@ class SignalOptimizer:
         hparam_grid: Dict[str, Dict[str, List]],
         n_iter: int = 10,
         hparam_type: str = "grid",
-        prop: Optional[float] = None,
+        nsplits_add: Optional[Union[int, np.int_]] = None,
     ):
         """
         Private helper function to run the grid search for a single (train, test) pair
@@ -645,8 +654,8 @@ class SignalOptimizer:
         :param <int> n_iter: Number of iterations to run for random search. Default is 10.
         :param <str> hparam_type: Hyperparameter search type.
             This must be either "grid", "random" or "bayes". Default is "grid".
-        :param <Optional[float]> prop: Proportion of unique training dates in the initial
-            training set to the number of splits specified by the user.
+        :param <Optional[Union[int, np.int_]]> nsplits_add: Additional number of splits
+            to add to the number of splits in the inner splitter. Default is None.
         """
         # Set up training and test sets
         X_train_i: pd.DataFrame = self.X.iloc[train_idx]
@@ -671,15 +680,10 @@ class SignalOptimizer:
         optim_model = None
         optim_score = -np.inf
 
-        # If prop is provided, adjust the number of splits in the inner splitter
-        # appropriately
-        if prop is not None:
-            n_splits = np.floor(
-                len(X_train_i.index.get_level_values(1).unique()) / prop
-            )
-            self.inner_splitter.n_splits = int(n_splits)
-        else:
-            n_splits = self.inner_splitter.n_splits
+        # If nsplits_add is provided, add it to the number of splits 
+        if self.initial_nsplits:
+            n_splits = self.initial_nsplits + nsplits_add
+            self.inner_splitter.n_splits = n_splits
 
         # For each model, run a grid search over the hyperparameters to optimise
         # the provided metric. The best model is then used to make predictions.
@@ -726,8 +730,8 @@ class SignalOptimizer:
             modelchoice_data = [
                 test_date_levels.date[0],
                 name,
-                None,
-                None,
+                "None",
+                {},
                 int(n_splits),
             ]
             coefficients_data = [
