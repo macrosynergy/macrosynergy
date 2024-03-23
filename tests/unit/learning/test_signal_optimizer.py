@@ -142,19 +142,31 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         matplotlib.use(self.mpl_backend)
 
-    @parameterized.expand(itertools.product([0, 1, 2], [True, False], [True, False]))
+    @parameterized.expand(itertools.product([0, 1], [True, False], [True, False]))
     def test_valid_init(self, idx, use_blacklist, change_n_splits):
         # Test standard instantiation of the SignalOptimizer works as expected
         inner_splitter = self.splitters[idx]
         try:
             blacklist = self.black_valid if use_blacklist else None
-            so = SignalOptimizer(
-                inner_splitter=inner_splitter,
-                X=self.X_train,
-                y=self.y_train,
-                blacklist=blacklist,
-                change_n_splits=change_n_splits,
-            )
+            if change_n_splits:
+                # generate sample initial_nsplits and threshold_ndates
+                initial_nsplits = np.random.choice([2,5,10])
+                threshold_ndates = np.random.choice([1,6,12,24])
+                so = SignalOptimizer(
+                    inner_splitter=inner_splitter,
+                    X=self.X_train,
+                    y=self.y_train,
+                    blacklist=blacklist,
+                    initial_nsplits=initial_nsplits,
+                    threshold_ndates=threshold_ndates,
+                )
+            else:
+                so = SignalOptimizer(
+                    inner_splitter=inner_splitter,
+                    X=self.X_train,
+                    y=self.y_train,
+                    blacklist=blacklist,
+                )
         except Exception as e:
             self.fail(f"Instantiation of the SignalOptimizer raised an exception: {e}")
         self.assertIsInstance(so, SignalOptimizer)
@@ -162,12 +174,33 @@ class TestAll(unittest.TestCase):
         pd.testing.assert_frame_equal(so.X, self.X_train)
         pd.testing.assert_series_equal(so.y, self.y_train)
         self.assertEqual(so.blacklist, blacklist)
-        if idx != 2:
-            self.assertEqual(so.change_n_splits, change_n_splits)
+        if change_n_splits:
+            self.assertEqual(so.initial_nsplits, initial_nsplits)
+            self.assertEqual(so.threshold_ndates, threshold_ndates)
+            # Run the signal optimizer again to check a warning is raised
+            with self.assertWarns(RuntimeWarning):
+                so = SignalOptimizer(
+                    inner_splitter=inner_splitter,
+                    X=self.X_train,
+                    y=self.y_train,
+                    blacklist=blacklist,
+                    initial_nsplits=initial_nsplits,
+                    threshold_ndates=threshold_ndates,
+                )
+                self.assertEqual(so.inner_splitter.n_splits, initial_nsplits)
+            
         else:
-            self.assertEqual(so.change_n_splits, False)
+            self.assertEqual(so.threshold_ndates, None)
+            self.assertEqual(so.initial_nsplits, None)
 
-        # Test 
+        pd.testing.assert_frame_equal(so.preds, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]))
+        pd.testing.assert_frame_equal(so.chosen_models, pd.DataFrame(
+            columns=["real_date", "name", "model_type", "hparams", "n_splits_used"]
+        ))
+        pd.testing.assert_frame_equal(so.ftr_coefficients, pd.DataFrame(columns = ["real_date", "name"] + list(self.X_train.columns)))
+        pd.testing.assert_frame_equal(so.intercepts, pd.DataFrame(columns = ["real_date", "name", "intercepts"]))
+
+
 
     def test_types_init(self):
         inner_splitter = KFold(n_splits=5, shuffle=False)
