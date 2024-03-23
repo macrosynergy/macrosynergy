@@ -200,8 +200,6 @@ class TestAll(unittest.TestCase):
         pd.testing.assert_frame_equal(so.ftr_coefficients, pd.DataFrame(columns = ["real_date", "name"] + list(self.X_train.columns)))
         pd.testing.assert_frame_equal(so.intercepts, pd.DataFrame(columns = ["real_date", "name", "intercepts"]))
 
-
-
     def test_types_init(self):
         inner_splitter = KFold(n_splits=5, shuffle=False)
         with self.assertRaises(TypeError):
@@ -271,20 +269,89 @@ class TestAll(unittest.TestCase):
                 blacklist=self.black_invalid4,
             )
 
+        # Check that wrong adaptive cv splits formats raise an error
         with self.assertRaises(TypeError):
             so = SignalOptimizer(
                 inner_splitter=self.splitters[1],
                 X=self.X_train,
                 y=self.y_train,
-                change_n_splits="change_n_splits",
+                initial_nsplits="initial_nsplits",
+                threshold_ndates="threshold_ndates",
             )
 
-        with self.assertWarns(Warning):
+        with self.assertRaises(TypeError):
             so = SignalOptimizer(
-                inner_splitter=self.splitters[2],
+                inner_splitter=self.splitters[1],
                 X=self.X_train,
                 y=self.y_train,
-                change_n_splits=True,
+                initial_nsplits=5,
+                threshold_ndates="threshold_ndates",
+            )
+
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[1],
+                X=self.X_train,
+                y=self.y_train,
+                initial_nsplits="initial_nsplits",
+                threshold_ndates=6,
+            )
+
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[0],
+                X=self.X_train,
+                y=self.y_train,
+                initial_nsplits="initial_nsplits",
+                threshold_ndates="threshold_ndates",
+            )
+
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[0],
+                X=self.X_train,
+                y=self.y_train,
+                initial_nsplits=5,
+                threshold_ndates="threshold_ndates",
+            )
+
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[0],
+                X=self.X_train,
+                y=self.y_train,
+                initial_nsplits="initial_nsplits",
+                threshold_ndates=6,
+            )
+
+        # Check that initial_nsplits and threshold_ndates require each other
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[1],
+                X=self.X_train,
+                y=self.y_train,
+                initial_nsplits=10,
+            )
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[1],
+                X=self.X_train,
+                y=self.y_train,
+                threshold_ndates=6,
+            )
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[0],
+                X=self.X_train,
+                y=self.y_train,
+                initial_nsplits=10,
+            )
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[0],
+                X=self.X_train,
+                y=self.y_train,
+                threshold_ndates=6,
             )
 
     def test_valid_calculate_predictions(self):
