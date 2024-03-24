@@ -248,7 +248,6 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
                 f"Cannot have number of splits less than 2. Got n_splits={n_splits}."
             )
         self.n_splits = n_splits
-        self.n_folds = n_splits + 1
 
     def split(
         self, X: pd.DataFrame, y: pd.DataFrame, groups=None
@@ -283,10 +282,10 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
         )
 
         # split all unique dates into n_folds sub-arrays.
-        splits: List[pd.DatetimeIndex] = np.array_split(self.unique_dates, self.n_folds)
+        splits: List[pd.DatetimeIndex] = np.array_split(self.unique_dates, self.n_splits + 1)
 
         train_split = np.array([], dtype=np.datetime64)
-        for i in range(0, self.n_splits):
+        for i in range(0, self.n_splits + 1):
             train_split = np.concatenate([train_split, splits[i]])
             train_indices = np.where(Xy.index.get_level_values(1).isin(train_split))[0]
 
