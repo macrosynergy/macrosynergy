@@ -181,6 +181,9 @@ class SignalOptimizer:
             columns=["real_date", "name"] + list(X.columns)
         )
         self.intercepts = pd.DataFrame(columns=["real_date", "name", "intercepts"])
+        # Create initial dataframe to store selected features at each time, assuming 
+        # some feature selection stage is used in a sklearn pipeline
+        self.selected_ftrs = pd.DataFrame(columns=["real_date", "name"] + list(X.columns))
 
     def _checks_init_params(
         self,
@@ -408,12 +411,14 @@ class SignalOptimizer:
         modelchoice_data = []
         ftrcoeff_data = []
         intercept_data = []
+        ftr_selection_data = []
 
-        for pred_data, model_data, ftr_data, inter_data in results:
+        for pred_data, model_data, ftr_data, inter_data, ftrselect_data in results:
             prediction_data.append(pred_data)
             modelchoice_data.append(model_data)
             ftrcoeff_data.append(ftr_data)
             intercept_data.append(inter_data)
+            ftr_selection_data.append(ftrselect_data)
 
         # Condense the collected data into a single dataframe
         for column_name, xs_levels, date_levels, predictions in prediction_data:
@@ -455,6 +460,9 @@ class SignalOptimizer:
         )
         intercept_df_long = pd.DataFrame(
             columns=self.intercepts.columns, data=intercept_data
+        )
+        ftr_select_df_long = pd.DataFrame(
+            columns=self.selected_ftrs.columns, data=ftr_selection_data
         )
 
         self.chosen_models = pd.concat(
@@ -498,6 +506,18 @@ class SignalOptimizer:
                 "intercepts": "float",
             }
         )
+
+        ftr_selection_types = {col: "int" for col in self.X.columns}
+        ftr_selection_types["real_date"] = "datetime64[ns]"
+        ftr_selection_types["name"] = "object"
+
+        self.selected_ftrs = pd.concat(
+            (
+                self.selected_ftrs,
+                ftr_select_df_long,
+            ),
+            axis=0,
+        ).astype(ftr_selection_types)
 
     def _checks_calcpred_params(
         self,
@@ -748,7 +768,8 @@ class SignalOptimizer:
                 name,
             ] + [np.nan for _ in range(X_train_i.shape[1])]
             intercept_data = [test_date_levels.date[0], name, np.nan]
-            return prediction_date, modelchoice_data, coefficients_data, intercept_data
+            ftr_selection_data = [test_date_levels.date[0],name] + [1 for _ in range(X_train_i.shape[1])]
+            return prediction_date, modelchoice_data, coefficients_data, intercept_data, ftr_selection_data
         # Store the best estimator predictions
         preds: np.ndarray = optim_model.predict(X_test_i)
         prediction_data = [name, test_xs_levels, test_date_levels, preds]
@@ -797,6 +818,12 @@ class SignalOptimizer:
         else:
             intercepts = np.nan
         # Store information about the chosen model at each time.
+        if len(ftr_names) == X_train_i.shape[1]:
+            # Then all features were selected
+            ftr_selection_data = [test_date_levels.date[0], name] + [1 for _ in ftr_names]
+        else:
+            # Then some features were excluded
+            ftr_selection_data = [test_date_levels.date[0], name] + [1 if name in ftr_names else 0 for name in np.array(X_train_i.columns)]
         modelchoice_data = [
             test_date_levels.date[0],
             name,
@@ -810,7 +837,7 @@ class SignalOptimizer:
         ] + coefs
         intercept_data = [test_date_levels.date[0], name, intercepts]
 
-        return prediction_data, modelchoice_data, coefficients_data, intercept_data
+        return prediction_data, modelchoice_data, coefficients_data, intercept_data, ftr_selection_data
 
     def get_optimized_signals(
         self, name: Optional[Union[str, List]] = None
@@ -876,6 +903,42 @@ class SignalOptimizer:
                         """
                     )
             return self.chosen_models[self.chosen_models.name.isin(name)]
+
+    def ftr_selection_heatmap(
+        self,
+        name: str,
+        title: Optional[str] = None,
+        cap: Optional[int] = 5,
+        figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
+    ):
+        """
+        Method to visualise the selected features in a scikit-learn pipeline.
+
+        :param <str> name: Name of the prediction model.
+        :param <Optional[str]> title: Title of the heatmap. Default is None. This creates
+            a figure title of the form "Model Selection Heatmap for {name}".
+        :param <Optional[int]> cap: Maximum number of models to display. Default
+            (and limit) is 5. The chosen models are the 'cap' most frequently occurring
+            in the pipeline.
+        :param <Optional[Tuple[Union[int, float], Union[int, float]]]> figsize: Tuple of
+            floats or ints denoting the figure size. Default is (12, 8).
+
+        Note:
+        This method displays the times at which each feature was used in
+        the learning process and used for signal generation, as a binary heatmap.
+        """
+        # TODO: checks
+
+        selected_ftrs = self.selected_ftrs[self.selected_ftrs.name.isin([name])]
+        selected_ftrs["real_date"] = selected_ftrs["real_date"].dt.date
+        selected_ftrs = selected_ftrs.sort_values(by="real_date").drop(columns=["name"]).set_index("real_date")
+        plt.figure(figsize=figsize)
+        if np.all(selected_ftrs == 1):
+            sns.heatmap(selected_ftrs, cmap="binary_r", cbar=False)
+        else:
+            sns.heatmap(selected_ftrs, cmap="binary", cbar=False)
+        plt.title(title)
+        plt.show()
 
     def models_heatmap(
         self,
@@ -1509,6 +1572,7 @@ if __name__ == "__main__":
         n_jobs=-1,
     )
     so.coefs_timeplot("test")
+    so.ftr_selection_heatmap("test", title="Feature selection heatmap for pipeline: test")
     so.intercepts_timeplot("test")
     so.coefs_stackedbarplot("test")
     so.nsplits_timeplot("test")
