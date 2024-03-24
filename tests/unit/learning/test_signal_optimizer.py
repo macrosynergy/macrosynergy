@@ -1165,10 +1165,18 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             so.models_heatmap(name="test", figsize=(2, -1))
 
-    def test_valid_models_heatmap(self):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1],[True, False]))
+    def test_valid_models_heatmap(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         so.calculate_predictions(
             name="test",
             models=self.models,
