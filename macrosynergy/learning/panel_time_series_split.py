@@ -285,7 +285,7 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
         splits: List[pd.DatetimeIndex] = np.array_split(self.unique_dates, self.n_splits + 1)
 
         train_split = np.array([], dtype=np.datetime64)
-        for i in range(0, self.n_splits + 1):
+        for i in range(0, self.n_splits):
             train_split = np.concatenate([train_split, splits[i]])
             train_indices = np.where(Xy.index.get_level_values(1).isin(train_split))[0]
 
