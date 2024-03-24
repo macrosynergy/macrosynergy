@@ -684,6 +684,8 @@ class SignalOptimizer:
         if self.initial_nsplits:
             n_splits = self.initial_nsplits + nsplits_add
             self.inner_splitter.n_splits = int(n_splits)
+        else:
+            n_splits = self.inner_splitter.n_splits
 
         # For each model, run a grid search over the hyperparameters to optimise
         # the provided metric. The best model is then used to make predictions.
