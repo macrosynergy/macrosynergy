@@ -1006,7 +1006,7 @@ class TestAll(unittest.TestCase):
             so.get_optimal_models(name="test2")
         # Test that if no signals have been calculated, an error is raised
         so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+            inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
         )
         with self.assertRaises(ValueError):
             so.get_optimal_models(name="test2")
