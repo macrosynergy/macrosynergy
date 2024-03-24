@@ -912,11 +912,19 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             so.get_optimized_signals(name="test2")
 
-    def test_valid_get_optimized_signals(self):
+    @parameterized.expand(itertools.product([0,1],[True, False]))
+    def test_valid_get_optimized_signals(self, splitter_idx, change_n_splits):
         # Test that the output is a dataframe
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train,initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         so.calculate_predictions(
             name="test",
             models=self.models,
@@ -967,11 +975,19 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df4.columns[3], "value")
         self.assertEqual(len(df4.xcat.unique()), 2)
 
-    def test_types_get_optimal_models(self):
-        # Test that invalid names are caught
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1],[True, False]))
+    def test_types_get_optimal_models(self, splitter_idx, change_n_splits):
+        # Test that the output is a dataframe
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train,initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         so.calculate_predictions(
             name="test",
             models=self.models,
@@ -995,11 +1011,19 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             so.get_optimal_models(name="test2")
 
-    def test_valid_get_optimal_models(self):
+    @parameterized.expand(itertools.product([0,1],[True, False]))
+    def test_valid_get_optimal_models(self, splitter_idx, change_n_splits):
         # Test that the output is a dataframe
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         so.calculate_predictions(
             name="test",
             models=self.models,
@@ -1016,7 +1040,13 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df1.columns[2], "model_type")
         self.assertEqual(df1.columns[3], "hparams")
         self.assertEqual(df1.columns[4], "n_splits_used")
-        self.assertTrue(np.all(df1.iloc[:,4] == self.splitters[1].n_splits))
+        if not change_n_splits:
+            self.assertTrue(np.all(df1.iloc[:,4] == self.splitters[1].n_splits))
+        else:
+            num_new_dates = len(pd.bdate_range(df1.real_date.min(), df1.real_date.max()))
+            self.assertTrue(np.min(df1.iloc[:,4]) == initial_nsplits)
+            self.assertTrue(np.max(df1.iloc[:,4]) == initial_nsplits + (num_new_dates // threshold_ndates))
+
         self.assertEqual(df1.name.unique()[0], "test")
         # Add a second signal and check that the output is a dataframe
         so.calculate_predictions(
@@ -1035,7 +1065,12 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df2.columns[2], "model_type")
         self.assertEqual(df2.columns[3], "hparams")
         self.assertEqual(df2.columns[4], "n_splits_used")
-        self.assertTrue(np.all(df2.iloc[:,4] == self.splitters[1].n_splits))
+        if not change_n_splits:
+            self.assertTrue(np.all(df2.iloc[:,4] == self.splitters[1].n_splits))
+        else:
+            num_new_dates = len(pd.bdate_range(df2.real_date.min(), df2.real_date.max()))
+            self.assertTrue(np.min(df2.iloc[:,4]) == initial_nsplits)
+            self.assertTrue(np.max(df2.iloc[:,4]) == initial_nsplits + (num_new_dates // threshold_ndates))
         self.assertEqual(df2.name.unique()[0], "test2")
         df3 = so.get_optimal_models()
         self.assertIsInstance(df3, pd.DataFrame)
@@ -1045,7 +1080,12 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df3.columns[2], "model_type")
         self.assertEqual(df3.columns[3], "hparams")
         self.assertEqual(df3.columns[4], "n_splits_used")
-        self.assertTrue(np.all(df3.iloc[:,4] == self.splitters[1].n_splits))
+        if not change_n_splits:
+            self.assertTrue(np.all(df3.iloc[:,4] == self.splitters[1].n_splits))
+        else:
+            num_new_dates = len(pd.bdate_range(df3.real_date.min(), df3.real_date.max()))
+            self.assertTrue(np.min(df3.iloc[:,4]) == initial_nsplits)
+            self.assertTrue(np.max(df3.iloc[:,4]) == initial_nsplits + (num_new_dates // threshold_ndates))
         self.assertEqual(len(df3.name.unique()), 2)
         df4 = so.get_optimal_models(name=["test", "test2"])
         self.assertIsInstance(df4, pd.DataFrame)
@@ -1055,7 +1095,13 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df4.columns[2], "model_type")
         self.assertEqual(df4.columns[3], "hparams")
         self.assertEqual(df4.columns[4], "n_splits_used")
-        self.assertTrue(np.all(df4.iloc[:,4] == self.splitters[1].n_splits))
+        if not change_n_splits:
+            self.assertTrue(np.all(df4.iloc[:,4] == self.splitters[1].n_splits))
+        else:
+            num_new_dates = len(pd.bdate_range(df4.real_date.min(), df4.real_date.max()))
+            self.assertTrue(np.min(df4.iloc[:,4]) == initial_nsplits)
+            self.assertTrue(np.max(df4.iloc[:,4]) == initial_nsplits + (num_new_dates // threshold_ndates))
+            
         self.assertEqual(len(df4.name.unique()), 2)
 
     def test_types_models_heatmap(self):
