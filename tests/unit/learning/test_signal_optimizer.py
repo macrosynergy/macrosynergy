@@ -1101,13 +1101,21 @@ class TestAll(unittest.TestCase):
             num_new_dates = len(pd.bdate_range(df4.real_date.min(), df4.real_date.max()))
             self.assertTrue(np.min(df4.iloc[:,4]) == initial_nsplits)
             self.assertTrue(np.max(df4.iloc[:,4]) == initial_nsplits + (num_new_dates // threshold_ndates))
-            
+
         self.assertEqual(len(df4.name.unique()), 2)
 
-    def test_types_models_heatmap(self):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1],[True, False]))
+    def test_types_models_heatmap(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         # Test that invalid names are caught
         with self.assertRaises(TypeError):
             so.models_heatmap(name=1)
