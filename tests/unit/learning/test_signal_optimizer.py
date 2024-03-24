@@ -1041,7 +1041,7 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df1.columns[3], "hparams")
         self.assertEqual(df1.columns[4], "n_splits_used")
         if not change_n_splits:
-            self.assertTrue(np.all(df1.iloc[:,4] == self.splitters[1].n_splits))
+            self.assertTrue(np.all(df1.iloc[:,4] == self.splitters[splitter_idx].n_splits))
         else:
             num_new_dates = len(pd.bdate_range(df1.real_date.min(), df1.real_date.max()))
             self.assertTrue(np.min(df1.iloc[:,4]) == initial_nsplits)
@@ -1066,7 +1066,7 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df2.columns[3], "hparams")
         self.assertEqual(df2.columns[4], "n_splits_used")
         if not change_n_splits:
-            self.assertTrue(np.all(df2.iloc[:,4] == self.splitters[1].n_splits))
+            self.assertTrue(np.all(df2.iloc[:,4] == self.splitters[splitter_idx].n_splits))
         else:
             num_new_dates = len(pd.bdate_range(df2.real_date.min(), df2.real_date.max()))
             self.assertTrue(np.min(df2.iloc[:,4]) == initial_nsplits)
@@ -1081,7 +1081,7 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df3.columns[3], "hparams")
         self.assertEqual(df3.columns[4], "n_splits_used")
         if not change_n_splits:
-            self.assertTrue(np.all(df3.iloc[:,4] == self.splitters[1].n_splits))
+            self.assertTrue(np.all(df3.iloc[:,4] == self.splitters[splitter_idx].n_splits))
         else:
             num_new_dates = len(pd.bdate_range(df3.real_date.min(), df3.real_date.max()))
             self.assertTrue(np.min(df3.iloc[:,4]) == initial_nsplits)
@@ -1096,7 +1096,7 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df4.columns[3], "hparams")
         self.assertEqual(df4.columns[4], "n_splits_used")
         if not change_n_splits:
-            self.assertTrue(np.all(df4.iloc[:,4] == self.splitters[1].n_splits))
+            self.assertTrue(np.all(df4.iloc[:,4] == self.splitters[splitter_idx].n_splits))
         else:
             num_new_dates = len(pd.bdate_range(df4.real_date.min(), df4.real_date.max()))
             self.assertTrue(np.min(df4.iloc[:,4]) == initial_nsplits)
@@ -1428,10 +1428,18 @@ class TestAll(unittest.TestCase):
                 self.assertTrue(inter_data[1]=="test")
                 self.assertTrue(inter_data[2] is np.nan)
 
-    def test_types_get_intercepts(self):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1],[True, False]))
+    def test_types_get_intercepts(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         # First test that if no signals have been calculated, an error is raised
         with self.assertRaises(ValueError):
             so.get_intercepts(name="test")
@@ -1451,10 +1459,18 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(TypeError):
             so.get_intercepts(name=1)
 
-    def test_valid_get_intercepts(self):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1],[True, False]))
+    def test_valid_get_intercepts(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         # Now run calculate_predictions
         so.calculate_predictions(
             name="test",
@@ -1478,10 +1494,18 @@ class TestAll(unittest.TestCase):
         self.assertTrue(intercepts.name.unique()[0] == "test")
         self.assertTrue(intercepts.isna().sum().sum() == 0)
 
-    def test_types_get_ftr_coefficients(self):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1],[True, False]))
+    def test_types_get_ftr_coefficients(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         # First test that if no signals have been calculated, an error is raised
         with self.assertRaises(ValueError):
             so.get_ftr_coefficients(name="test")
@@ -1501,10 +1525,18 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(TypeError):
             so.get_ftr_coefficients(name=1)
 
-    def test_valid_get_ftr_coefficients(self):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1],[True, False]))
+    def test_valid_get_ftr_coefficients(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         # Run calculate_predictions
         so.calculate_predictions(
             name="test",
@@ -1529,11 +1561,18 @@ class TestAll(unittest.TestCase):
         self.assertTrue(ftr_coefficients.name.unique()[0] == "test")
         self.assertTrue(ftr_coefficients.isna().sum().sum() == 0)
 
-    @parameterized.expand([True, False])
-    def test_types_get_parameter_stats(self, include_intercept):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1],[True, False],[True, False]))
+    def test_types_get_parameter_stats(self, splitter_idx, change_n_splits, include_intercept):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         # First test that if no signals have been calculated, an error is raised
         with self.assertRaises(ValueError):
             so.get_parameter_stats(name="test", include_intercept=include_intercept)
@@ -1554,11 +1593,18 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(TypeError):
             so.get_parameter_stats(name="test", include_intercept=2)
 
-    @parameterized.expand([True, False])
-    def test_valid_get_parameter_stats(self, include_intercept):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1],[True, False],[True, False]))
+    def test_valid_get_parameter_stats(self, splitter_idx, change_n_splits, include_intercept):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         # Now run calculate_predictions
         so.calculate_predictions(
             name="test",
@@ -1594,10 +1640,18 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.all(parameter_stats[0] == mean_coefs))
             self.assertTrue(np.all(parameter_stats[1] == std_coefs))
 
-    def test_types_coefs_timeplot(self):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1], [True, False]))
+    def test_types_coefs_timeplot(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         so.calculate_predictions(
             name="test",
             models=self.models,
@@ -1635,10 +1689,18 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             so.coefs_timeplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
 
-    def test_valid_coefs_timeplot(self):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1], [True, False]))
+    def test_valid_coefs_timeplot(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         # Test that an error is raised if calculate_predictions has not been run
         with self.assertRaises(ValueError):
             so.coefs_timeplot(name="test")
@@ -1702,10 +1764,18 @@ class TestAll(unittest.TestCase):
         title = ax.get_title()
         self.assertTrue(title == "hello")
 
-    def test_types_intercepts_timeplot(self):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1], [True, False]))
+    def test_types_intercepts_timeplot(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         so.calculate_predictions(
             name="test",
             models=self.models,
@@ -1734,10 +1804,18 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(TypeError):
             so.intercepts_timeplot(name="test", figsize=("hello", "hello"))
 
-    def test_valid_intercepts_timeplot(self):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1], [True, False]))
+    def test_valid_intercepts_timeplot(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         # Test that an error is raised if calculate_predictions has not been run
         with self.assertRaises(ValueError):
             so.intercepts_timeplot(name="test")
@@ -1755,10 +1833,18 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"intercepts_timeplot raised an exception: {e}")
 
-    def test_types_coefs_stackedbarplot(self):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1], [True, False]))
+    def test_types_coefs_stackedbarplot(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         so.calculate_predictions(
             name="test",
             models=self.models,
@@ -1796,10 +1882,18 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
         
-    def test_valid_coefs_stackedbarplot(self):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1], [True, False]))
+    def test_valid_coefs_stackedbarplot(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         # Test that an error is raised if calculate_predictions has not been run
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test")
@@ -1850,10 +1944,18 @@ class TestAll(unittest.TestCase):
         correct_labels = sorted(correct_labels)
         self.assertTrue(np.all(labels == correct_labels))
 
-    def test_types_nsplits_timeplot(self):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+    @parameterized.expand(itertools.product([0,1], [True, False]))
+    def test_types_nsplits_timeplot(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         so.calculate_predictions(
             name="test",
             models=self.models,
@@ -1882,11 +1984,18 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(TypeError):
             so.nsplits_timeplot(name="test", figsize=("hello", "hello"))
 
-    @parameterized.expand([True, False])
-    def test_valid_nsplits_timeplot(self, change_n_splits):
-        so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train, change_n_splits=change_n_splits
-        )
+    @parameterized.expand(itertools.product([0,1],[True, False]))
+    def test_valid_nsplits_timeplot(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         # Test that an error is raised if calculate_predictions has not been run
         with self.assertRaises(ValueError):
             so.nsplits_timeplot(name="test")
