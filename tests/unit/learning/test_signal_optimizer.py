@@ -1195,11 +1195,9 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"models_heatmap raised an exception: {e}")
 
-    def test_valid__worker(self):
+    @parameterized.expand(itertools.product([0,1],[True, False]))
+    def test_valid__worker(self, splitter_idx, change_n_splits):
         # Check that the worker private method works as expected for a grid search
-        so1 = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
         outer_splitter = ExpandingIncrementPanelSplit(
             train_intervals=1,
             test_size=1,
@@ -1207,22 +1205,48 @@ class TestAll(unittest.TestCase):
             min_periods=36,
             max_periods=None,
         )
-        for train_idx, test_idx in outer_splitter.split(X=self.X_train, y=self.y_train):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so1 = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so1 = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
+        for idx, (train_idx, test_idx) in enumerate(outer_splitter.split(X=self.X_train, y=self.y_train)):
             try:
-                prediction_date, modelchoice_data, ftr_data, inter_data = so1._worker(
-                    train_idx=train_idx,
-                    test_idx=test_idx,
-                    name="test",
-                    models=self.models,
-                    metric=self.metric,
-                    original_date_levels=sorted(
-                        self.X_train.index.get_level_values(1).unique()
-                    ),
-                    hparam_grid=self.hparam_grid,
-                    hparam_type="grid",
-                )
+                if not change_n_splits:
+                    prediction_date, modelchoice_data, ftr_data, inter_data = so1._worker(
+                        train_idx=train_idx,
+                        test_idx=test_idx,
+                        name="test",
+                        models=self.models,
+                        metric=self.metric,
+                        original_date_levels=sorted(
+                            self.X_train.index.get_level_values(1).unique()
+                        ),
+                        hparam_grid=self.hparam_grid,
+                        hparam_type="grid",
+                    )
+                else:
+                    prediction_date, modelchoice_data, ftr_data, inter_data = so1._worker(
+                        train_idx=train_idx,
+                        test_idx=test_idx,
+                        name="test",
+                        models=self.models,
+                        metric=self.metric,
+                        original_date_levels=sorted(
+                            self.X_train.index.get_level_values(1).unique()
+                        ),
+                        hparam_grid=self.hparam_grid,
+                        hparam_type="grid",
+                        nsplits_add = np.floor(idx / threshold_ndates)
+                    )
             except Exception as e:
                 self.fail(f"_worker raised an exception: {e}")
+
             self.assertIsInstance(prediction_date, list)
             self.assertTrue(prediction_date[0] == "test")
             self.assertIsInstance(prediction_date[1], pd.Index)
@@ -1251,9 +1275,16 @@ class TestAll(unittest.TestCase):
                 self.assertIsInstance(inter_data[2], np.float32)
 
         # Check that the worker private method works as expected for a random search
-        so2 = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-        )
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2,3,5,10])
+            threshold_ndates = np.random.choice([21, 21*3, 21*6])
+            so2 = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+            )
+        else:
+            so2 = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            )
         outer_splitter = ExpandingIncrementPanelSplit(
             train_intervals=1,
             test_size=1,
@@ -1261,21 +1292,37 @@ class TestAll(unittest.TestCase):
             min_periods=36,
             max_periods=None,
         )
-        for train_idx, test_idx in outer_splitter.split(X=self.X_train, y=self.y_train):
+        for idx, (train_idx, test_idx) in enumerate(outer_splitter.split(X=self.X_train, y=self.y_train)):
             try:
-                prediction_date, modelchoice_data, ftr_data, inter_data = so2._worker(
-                    train_idx=train_idx,
-                    test_idx=test_idx,
-                    name="test",
-                    models=self.models,
-                    metric=self.metric,
-                    original_date_levels=sorted(
-                        self.X_train.index.get_level_values(1).unique()
-                    ),
-                    hparam_grid={"linreg": {}, "ridge": {"alpha": stats.expon()}},
-                    hparam_type="random",
-                    n_iter=1,
-                )
+                if not change_n_splits:
+                    prediction_date, modelchoice_data, ftr_data, inter_data = so2._worker(
+                        train_idx=train_idx,
+                        test_idx=test_idx,
+                        name="test",
+                        models=self.models,
+                        metric=self.metric,
+                        original_date_levels=sorted(
+                            self.X_train.index.get_level_values(1).unique()
+                        ),
+                        hparam_grid={"linreg": {}, "ridge": {"alpha": stats.expon()}},
+                        hparam_type="random",
+                        n_iter=1,
+                    )
+                else:
+                    prediction_date, modelchoice_data, ftr_data, inter_data = so2._worker(
+                        train_idx=train_idx,
+                        test_idx=test_idx,
+                        name="test",
+                        models=self.models,
+                        metric=self.metric,
+                        original_date_levels=sorted(
+                            self.X_train.index.get_level_values(1).unique()
+                        ),
+                        hparam_grid={"linreg": {}, "ridge": {"alpha": stats.expon()}},
+                        hparam_type="random",
+                        n_iter=1,
+                        nsplits_add = np.floor(idx / threshold_ndates),
+                    )
             except Exception as e:
                 self.fail(f"_worker raised an exception: {e}")
             self.assertIsInstance(prediction_date, list)
@@ -1305,9 +1352,16 @@ class TestAll(unittest.TestCase):
             if inter_data[2] is not None:
                 self.assertIsInstance(inter_data[2], np.float32)
             # Check that the worker function outputs as expected when no models are selected
-            so3 = SignalOptimizer(
-                inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
-            )
+            if change_n_splits:
+                initial_nsplits = np.random.choice([2,3,5,10])
+                threshold_ndates = np.random.choice([21, 21*3, 21*6])
+                so3 = SignalOptimizer(
+                    inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train, initial_nsplits=initial_nsplits, threshold_ndates=threshold_ndates,
+                )
+            else:
+                so3 = SignalOptimizer(
+                    inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+                )
             outer_splitter = ExpandingIncrementPanelSplit(
                 train_intervals=1,
                 test_size=1,
@@ -1316,21 +1370,37 @@ class TestAll(unittest.TestCase):
                 max_periods=None,
             )
             models = {"linreg": Pipeline([("selector", LassoSelector(alpha=10000)), ("linreg", LinearRegression())])}
-            for train_idx, test_idx in outer_splitter.split(X=self.X_train, y=self.y_train):
+            for idx, (train_idx, test_idx) in enumerate(outer_splitter.split(X=self.X_train, y=self.y_train)):
                 try:
-                    prediction_date, modelchoice_data, ftr_data, inter_data = so3._worker(
-                        train_idx=train_idx,
-                        test_idx=test_idx,
-                        name="test",
-                        models=models,
-                        metric=self.metric,
-                        original_date_levels=sorted(
-                            self.X_train.index.get_level_values(1).unique()
-                        ),
-                        hparam_grid={"linreg": {}},
-                        hparam_type="random",
-                        n_iter=1,
-                    )
+                    if not change_n_splits:
+                        prediction_date, modelchoice_data, ftr_data, inter_data = so3._worker(
+                            train_idx=train_idx,
+                            test_idx=test_idx,
+                            name="test",
+                            models=models,
+                            metric=self.metric,
+                            original_date_levels=sorted(
+                                self.X_train.index.get_level_values(1).unique()
+                            ),
+                            hparam_grid={"linreg": {}},
+                            hparam_type="random",
+                            n_iter=1,
+                        )
+                    else:
+                        prediction_date, modelchoice_data, ftr_data, inter_data = so3._worker(
+                            train_idx=train_idx,
+                            test_idx=test_idx,
+                            name="test",
+                            models=models,
+                            metric=self.metric,
+                            original_date_levels=sorted(
+                                self.X_train.index.get_level_values(1).unique()
+                            ),
+                            hparam_grid={"linreg": {}},
+                            hparam_type="random",
+                            n_iter=1,
+                            nsplits_add = np.floor(idx / threshold_ndates),
+                        )
                 except Exception as e:
                     self.fail(f"_worker raised an exception: {e}")
                 self.assertIsInstance(prediction_date, list)
@@ -1342,8 +1412,8 @@ class TestAll(unittest.TestCase):
                 self.assertIsInstance(modelchoice_data, list)
                 self.assertIsInstance(modelchoice_data[0], datetime.date)
                 self.assertTrue(modelchoice_data[1] == "test")
-                self.assertTrue(modelchoice_data[2] is None)
-                self.assertTrue(modelchoice_data[3] is None)
+                self.assertTrue(modelchoice_data[2] == "None")
+                self.assertTrue(modelchoice_data[3] == {})
                 # feature coefficients
                 self.assertIsInstance(ftr_data, list)
                 self.assertTrue(len(ftr_data) == 2 + 3)
