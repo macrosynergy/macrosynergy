@@ -1315,6 +1315,7 @@ class TestAll(unittest.TestCase):
                         modelchoice_data,
                         ftr_data,
                         inter_data,
+                        ftr_selection_data
                     ) = so1._worker(
                         train_idx=train_idx,
                         test_idx=test_idx,
@@ -1333,6 +1334,7 @@ class TestAll(unittest.TestCase):
                         modelchoice_data,
                         ftr_data,
                         inter_data,
+                        ftr_selection_data,
                     ) = so1._worker(
                         train_idx=train_idx,
                         test_idx=test_idx,
@@ -1375,6 +1377,13 @@ class TestAll(unittest.TestCase):
             self.assertTrue(inter_data[1] == "test")
             if inter_data[2] is not None:
                 self.assertIsInstance(inter_data[2], np.float32)
+            # feature selection data
+            self.assertIsInstance(ftr_selection_data, list)
+            self.assertTrue(len(ftr_selection_data) == 2 + 3)  # 3 ftrs + 2 extra columns
+            self.assertIsInstance(ftr_selection_data[0], datetime.date)
+            self.assertTrue(ftr_selection_data[1] == "test")
+            for i in range(2, len(ftr_selection_data)):
+                self.assertTrue(ftr_selection_data[i] in [0,1])
 
         # Check that the worker private method works as expected for a random search
         if change_n_splits:
@@ -1410,6 +1419,7 @@ class TestAll(unittest.TestCase):
                         modelchoice_data,
                         ftr_data,
                         inter_data,
+                        ftr_selection_data,
                     ) = so2._worker(
                         train_idx=train_idx,
                         test_idx=test_idx,
@@ -1429,6 +1439,7 @@ class TestAll(unittest.TestCase):
                         modelchoice_data,
                         ftr_data,
                         inter_data,
+                        ftr_selection_data,
                     ) = so2._worker(
                         train_idx=train_idx,
                         test_idx=test_idx,
@@ -1471,6 +1482,13 @@ class TestAll(unittest.TestCase):
             self.assertTrue(inter_data[1] == "test")
             if inter_data[2] is not None:
                 self.assertIsInstance(inter_data[2], np.float32)
+            # feature selection data
+            self.assertIsInstance(ftr_selection_data, list)
+            self.assertTrue(len(ftr_selection_data) == 2 + 3)  # 3 ftrs + 2 extra columns
+            self.assertIsInstance(ftr_selection_data[0], datetime.date)
+            self.assertTrue(ftr_selection_data[1] == "test")
+            for i in range(2, len(ftr_selection_data)):
+                self.assertTrue(ftr_selection_data[i] in [0,1])
             # Check that the worker function outputs as expected when no models are selected
             if change_n_splits:
                 initial_nsplits = np.random.choice([2, 3, 5, 10])
@@ -1513,6 +1531,7 @@ class TestAll(unittest.TestCase):
                             modelchoice_data,
                             ftr_data,
                             inter_data,
+                            ftr_selection_data,
                         ) = so3._worker(
                             train_idx=train_idx,
                             test_idx=test_idx,
@@ -1532,6 +1551,7 @@ class TestAll(unittest.TestCase):
                             modelchoice_data,
                             ftr_data,
                             inter_data,
+                            ftr_selection_data,
                         ) = so3._worker(
                             train_idx=train_idx,
                             test_idx=test_idx,
@@ -1572,7 +1592,13 @@ class TestAll(unittest.TestCase):
                 self.assertIsInstance(inter_data[0], datetime.date)
                 self.assertTrue(inter_data[1] == "test")
                 self.assertTrue(inter_data[2] is np.nan)
-
+                # feature selection data
+                self.assertIsInstance(ftr_selection_data, list)
+                self.assertTrue(len(ftr_selection_data) == 2 + 3)  # 3 ftrs + 2 extra columns
+                self.assertIsInstance(ftr_selection_data[0], datetime.date)
+                self.assertTrue(ftr_selection_data[1] == "test")
+                for i in range(2, len(ftr_selection_data)):
+                    self.assertTrue(ftr_selection_data[i] in [0,1])
     @parameterized.expand(itertools.product([0, 1], [True, False]))
     def test_types_get_intercepts(self, splitter_idx, change_n_splits):
         if change_n_splits:
