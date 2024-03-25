@@ -108,7 +108,9 @@ def _make_relative_value(
 ) -> pd.DataFrame:
 
     assert isinstance(df, QuantamentalDataFrame), "`df` must be a QuantamentalDataFrame"
-    rdf = make_relative_value(df=df, *args, **kwargs)
+    xcats = df["xcat"].unique().tolist()
+    rdf = make_relative_value(df=df, xcats=xcats, postfix="", *args, **kwargs)
+    return rdf
 
 
 def _gen_contract_signals(
@@ -357,6 +359,7 @@ def contract_signals(
         (hbasket, "hbasket", (list, NoneType)),
         (hscales, "hscales", (list, NoneType)),
         (hratios, "hratios", (str, NoneType)),
+        (relative_value, "relative_value", bool),
         (start, "start", (str, NoneType)),
         (end, "end", (str, NoneType)),
         (blacklist, "blacklist", (dict, NoneType)),
@@ -437,6 +440,10 @@ def contract_signals(
                 )
 
     # Actual calculation
+
+    ## Calculate relative value if requested
+    if relative_value:
+        df = _make_relative_value(df=df, *args, **kwargs)
 
     ## Generate primary contract signals
     df_contract_signals: pd.DataFrame = _gen_contract_signals(
