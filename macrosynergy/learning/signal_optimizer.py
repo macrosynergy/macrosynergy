@@ -903,12 +903,42 @@ class SignalOptimizer:
                         """
                     )
             return self.chosen_models[self.chosen_models.name.isin(name)]
+        
+    def get_selected_ftrs(self, name: Optional[Union[str, List]] = None) -> pd.DataFrame:
+        """
+        Returns the selected features over time for one or more processes
+
+        :param <str> name: Label of signal optimization process. Default is all
+            stored in the class instance.
+
+        :return <pd.DataFrame>: Pandas dataframe of the selected features over time
+            at the end of the base period in which they were determined (to be applied
+            in the subsequent period).
+        """
+        if name is None:
+            return self.selected_ftrs
+        else:
+            if isinstance(name, str):
+                name = [name]
+            elif not isinstance(name, list):
+                raise TypeError(
+                    "The process name must be a string or a list of strings."
+                )
+
+            for n in name:
+                if n not in self.selected_ftrs.name.unique():
+                    raise ValueError(
+                        f"""The process name '{n}' is not in the list of already-run
+                        pipelines. Please check the name carefully. If correct, please run 
+                        calculate_predictions() first.
+                        """
+                    )
+            return self.selected_ftrs[self.selected_ftrs.name.isin(name)]
 
     def ftr_selection_heatmap(
         self,
         name: str,
         title: Optional[str] = None,
-        cap: Optional[int] = 5,
         figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
     ):
         """
@@ -917,9 +947,6 @@ class SignalOptimizer:
         :param <str> name: Name of the prediction model.
         :param <Optional[str]> title: Title of the heatmap. Default is None. This creates
             a figure title of the form "Model Selection Heatmap for {name}".
-        :param <Optional[int]> cap: Maximum number of models to display. Default
-            (and limit) is 5. The chosen models are the 'cap' most frequently occurring
-            in the pipeline.
         :param <Optional[Tuple[Union[int, float], Union[int, float]]]> figsize: Tuple of
             floats or ints denoting the figure size. Default is (12, 8).
 
@@ -927,18 +954,51 @@ class SignalOptimizer:
         This method displays the times at which each feature was used in
         the learning process and used for signal generation, as a binary heatmap.
         """
-        # TODO: checks
+        # Checks
+        self._checks_ftr_selection_heatmap(name=name, title=title, figsize=figsize)
 
-        selected_ftrs = self.selected_ftrs[self.selected_ftrs.name.isin([name])]
+        # Get the selected features for the specified pipeline to visualise selection.
+        selected_ftrs = self.get_selected_ftrs(name=name)
         selected_ftrs["real_date"] = selected_ftrs["real_date"].dt.date
         selected_ftrs = selected_ftrs.sort_values(by="real_date").drop(columns=["name"]).set_index("real_date")
+
+        # Create the heatmap
         plt.figure(figsize=figsize)
         if np.all(selected_ftrs == 1):
-            sns.heatmap(selected_ftrs, cmap="binary_r", cbar=False)
+            sns.heatmap(selected_ftrs.T, cmap="binary_r", cbar=False)
         else:
-            sns.heatmap(selected_ftrs, cmap="binary", cbar=False)
+            sns.heatmap(selected_ftrs.T, cmap="binary", cbar=False)
         plt.title(title)
         plt.show()
+
+    def _checks_ftr_selection_heatmap(
+        self,
+        name: str,
+        title: Optional[str] = None,
+        figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
+    ):
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.selected_ftrs.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
+        if title is None:
+            title = f"Feature Selection Heatmap for {name}"
+        if not isinstance(title, str):
+            raise TypeError("The figure title must be a string.")
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, (int, float)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
 
     def models_heatmap(
         self,
