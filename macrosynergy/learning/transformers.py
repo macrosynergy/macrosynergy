@@ -434,7 +434,7 @@ class MapSelector(BaseEstimator, SelectorMixin):
             ftr = X[col]
             ftr = add_constant(ftr)
             groups = ftr.index.get_level_values(1)
-            model = MixedLM(y.values, ftr, groups).fit(reml=False)
+            model = MixedLM(y.values, ftr, groups).fit(reml=False, method="lbfgs")
             est = model.params.iloc[1]
             pval = model.pvalues.iloc[1]
             if (pval < self.threshold):
