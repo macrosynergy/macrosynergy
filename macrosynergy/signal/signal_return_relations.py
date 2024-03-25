@@ -14,14 +14,6 @@ from sklearn.exceptions import UndefinedMetricWarning
 import statsmodels.api as sm
 from statsmodels.tools.sm_exceptions import ConvergenceWarning
 
-warnings.simplefilter("ignore", ConvergenceWarning)
-warnings.filterwarnings("ignore", category=UserWarning)
-warnings.filterwarnings("ignore", category=RuntimeWarning)
-warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
-
-# Ignore all warnings
-warnings.filterwarnings("ignore")
-
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import (
     apply_slip as apply_slip_util,
@@ -30,6 +22,8 @@ from macrosynergy.management.utils import (
 )
 import macrosynergy.visuals as msv
 
+#Ensure warnings are printed
+warnings.simplefilter("always")
 
 class SignalReturnRelations:
     """
@@ -957,6 +951,30 @@ class SignalReturnRelations:
             sig = sig[:-4]
         return sig
 
+
+    def summary_table(self, cross_section: bool = False, years: bool = False):
+        warnings.warn(
+            "summary_table() has been deprecated will be removed in a subsequent "
+            "version, please now use single_relation_table(table_type='summary').",
+            FutureWarning
+        )
+        if cross_section and years:
+            raise ValueError("Both cross_section and years cannot be True")
+        if not (cross_section and years):
+            return self.single_relation_table(table_type="summary")
+        else:
+            return self.single_relation_table(table_type="years" if years else "cross_section")
+    
+    def signals_table(self, sigs: List[str] = None):
+        warnings.warn(
+            "signals_table() has been deprecated will be removed in a subsequent "
+            "version, please now use multiple_relations_table()",
+            FutureWarning
+        )
+        if sigs is None:
+            sigs = self.sigs
+        return self.multiple_relations_table(rets=self.rets[0], xcats=sigs, freqs=self.freqs[0], agg_sigs=self.agg_sigs[0])
+
     def single_relation_table(
         self,
         ret: str = None,
@@ -1425,6 +1443,9 @@ if __name__ == "__main__":
         ms_panel_test=True,
         additional_metrics=[spearman, granger, granger_pval],
     )
+
+    df_dep = srn.summary_table()
+    print(df_dep)
 
     dfsum = srn.single_relation_table(table_type="summary")
     print(dfsum)
