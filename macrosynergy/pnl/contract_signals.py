@@ -12,6 +12,7 @@ import warnings
 from typing import List, Union, Tuple, Optional, Set
 
 from macrosynergy.management.types import NoneType, Numeric, QuantamentalDataFrame
+from macrosynergy.panel import make_relative_value
 from macrosynergy.management.utils import (
     is_valid_iso_date,
     standardise_dataframe,
@@ -98,6 +99,16 @@ def _check_arg_types(
     )
 
     return correct_nested_types
+
+
+def _make_relative_value(
+    df: pd.DataFrame,
+    *args,
+    **kwargs,
+) -> pd.DataFrame:
+
+    assert isinstance(df, QuantamentalDataFrame), "`df` must be a QuantamentalDataFrame"
+    rdf = make_relative_value(df=df, *args, **kwargs)
 
 
 def _gen_contract_signals(
@@ -224,7 +235,6 @@ def _apply_hedge_ratios(
             # e.g.:
             # USD_EQ_CSIG = AUD_SIG * AUD_HRATIO * USD_EQ_HSCALE
 
-            # TODO: the above naming should be just: _hb + "_CSIG"
             cid_sig: str = _cid + "_" + sig
             cid_hr: str = _cid + "_" + hratios
 
@@ -283,6 +293,8 @@ def contract_signals(
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
     sname: str = "STRAT",
+    *args,
+    **kwargs,
 ) -> pd.DataFrame:
     """
     Calculate contract-specific signals based on cross section-specific signals.
