@@ -288,7 +288,7 @@ def contract_signals(
     hbasket: Optional[List[str]] = None,
     hscales: Optional[List[Union[Numeric, str]]] = None,
     hratios: Optional[str] = None,
-    relative_value: Optional[Union[bool, List[str]]] = None,
+    relative_value: bool = False,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
@@ -331,11 +331,8 @@ def contract_signals(
     :param <str> hratios: category name for cross-section-specific hedge ratios.
         The values of this category determine direction and size of the hedge basket
         per unit of the cross section-specific signal.
-    :param <Optional[Union[bool, List[str]]]> relative_value: list of cross sections
-        (cids) for which to calculate relative value. If a list of cids is provided,
-        relative value is calculated for these cids. If a True boolean, relative value is
-        calculated for all cids in the strategy. If None (default) or False, no relative
-        value is calculated.
+    :param <bool> relative_value: If False (default), no relative value is calculated. If
+        True boolean, relative value is calculated for all cids in the strategy.
         # TODO split above `relative_value` argument into two: `relative_value` and `relative_value_cids`?
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
