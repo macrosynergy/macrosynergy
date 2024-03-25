@@ -247,12 +247,16 @@ class TestContractSignals(unittest.TestCase):
 
         # TODO add relative value changes and compare with contract signals...
         dfc: pd.DataFrame = contract_signals(
-            dfx, sig="SIGNAL", cids=["AUD", "GBP", "EUR"], ctypes=["FX"]
+            dfx,
+            sig="SIGNAL",
+            cids=["AUD", "GBP", "EUR"],
+            ctypes=["FX"],
+            relative_value=True,
         )
 
         self.assertIsInstance(dfc, pd.DataFrame)
         # TODO for unit signals (same signal for all cross sections), and relative value, the contract signal should be zero position.
-        self.assertEqual(set(dfc.value), set([0]))
+        self.assertEqual(set(dfc["value"]), set([0.0]))
 
     def test_contract_signal_relative_value_and_volatility_adjustment(self):
         p: pd.DataFrame = pd.DataFrame(
