@@ -1177,6 +1177,95 @@ class TestAll(unittest.TestCase):
         self.assertEqual(len(df4.name.unique()), 2)
 
     @parameterized.expand(itertools.product([0, 1], [True, False]))
+    def test_types_ftr_selection_heatmap(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2, 3, 5, 10])
+            threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx],
+                X=self.X_train,
+                y=self.y_train,
+                initial_nsplits=initial_nsplits,
+                threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx],
+                X=self.X_train,
+                y=self.y_train,
+            )
+        # Test that invalid names are caught
+        with self.assertRaises(TypeError):
+            so.ftr_selection_heatmap(name=1)
+        with self.assertRaises(TypeError):
+            so.ftr_selection_heatmap(name=[1, 2, 3])
+        with self.assertRaises(ValueError):
+            so.ftr_selection_heatmap(name="test")
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        with self.assertRaises(TypeError):
+            so.ftr_selection_heatmap(name=1)
+        with self.assertRaises(TypeError):
+            so.ftr_selection_heatmap(name=["test"])
+        with self.assertRaises(ValueError):
+            so.ftr_selection_heatmap(name="test2")
+        # title
+        with self.assertRaises(TypeError):
+            so.ftr_selection_heatmap(name="test", title=1)
+        # figsize
+        with self.assertRaises(TypeError):
+            so.ftr_selection_heatmap(name="test", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so.ftr_selection_heatmap(name="test", figsize=1)
+        with self.assertRaises(TypeError):
+            so.ftr_selection_heatmap(name="test", figsize=[1.5, 2])  # needs to be a tuple!
+        with self.assertRaises(TypeError):
+            so.ftr_selection_heatmap(name="test", figsize=(1.5, "e"))
+        with self.assertRaises(ValueError):
+            so.ftr_selection_heatmap(name="test", figsize=(0,))
+        with self.assertRaises(ValueError):
+            so.ftr_selection_heatmap(name="test", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
+            so.ftr_selection_heatmap(name="test", figsize=(2, -1))
+
+    @parameterized.expand(itertools.product([0, 1], [True, False]))
+    def test_valid_ftr_selection_heatmap(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2, 3, 5, 10])
+            threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx],
+                X=self.X_train,
+                y=self.y_train,
+                initial_nsplits=initial_nsplits,
+                threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx],
+                X=self.X_train,
+                y=self.y_train,
+            )
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        try:
+            so.ftr_selection_heatmap(name="test")
+        except Exception as e:
+            self.fail(f"ftr_selection_heatmap raised an exception: {e}")
+            
+    @parameterized.expand(itertools.product([0, 1], [True, False]))
     def test_types_models_heatmap(self, splitter_idx, change_n_splits):
         if change_n_splits:
             initial_nsplits = np.random.choice([2, 3, 5, 10])
@@ -1677,6 +1766,86 @@ class TestAll(unittest.TestCase):
         self.assertTrue(intercepts.name.unique()[0] == "test")
         self.assertTrue(intercepts.isna().sum().sum() == 0)
 
+    @parameterized.expand(itertools.product([0, 1], [True, False]))
+    def test_types_get_selected_ftrs(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2, 3, 5, 10])
+            threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx],
+                X=self.X_train,
+                y=self.y_train,
+                initial_nsplits=initial_nsplits,
+                threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx],
+                X=self.X_train,
+                y=self.y_train,
+            )
+        # First test that if no signals have been calculated, an error is raised
+        with self.assertRaises(ValueError):
+            so.get_selected_ftrs(name="test")
+        # Now run calculate_predictions
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that a wrong signal name raises an error
+        with self.assertRaises(ValueError):
+            so.get_selected_ftrs(name="test2")
+        # Test that the wrong dtype of a signal name raises an error
+        with self.assertRaises(TypeError):
+            so.get_selected_ftrs(name=1)
+
+    @parameterized.expand(itertools.product([0, 1], [True, False]))
+    def test_valid_get_selected_ftrs(self, splitter_idx, change_n_splits):
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2, 3, 5, 10])
+            threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx],
+                X=self.X_train,
+                y=self.y_train,
+                initial_nsplits=initial_nsplits,
+                threshold_ndates=threshold_ndates,
+            )
+        else:
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx],
+                X=self.X_train,
+                y=self.y_train,
+            )
+        # Now run calculate_predictions
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+            n_jobs=1,
+        )
+        # Test that running get_selected_ftrs on pipeline "test" works
+        try:
+            selected_ftrs = so.get_selected_ftrs(name="test")
+        except Exception as e:
+            self.fail(f"get_selected_ftrs raised an exception: {e}")
+        # Test that the output is as expected
+        # Test that the output is as expected
+        self.assertIsInstance(selected_ftrs, pd.DataFrame)
+        self.assertEqual(selected_ftrs.shape[1], 5)
+        self.assertEqual(selected_ftrs.columns[0], "real_date")
+        self.assertEqual(selected_ftrs.columns[1], "name")
+        for i in range(2, 5):
+            self.assertEqual(selected_ftrs.columns[i], self.X_train.columns[i - 2])
+        self.assertTrue(selected_ftrs.name.unique()[0] == "test")
+        self.assertTrue(selected_ftrs.isna().sum().sum() == 0)
+        
     @parameterized.expand(itertools.product([0, 1], [True, False]))
     def test_types_get_ftr_coefficients(self, splitter_idx, change_n_splits):
         if change_n_splits:
