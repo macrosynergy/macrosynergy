@@ -18,7 +18,7 @@ from macrosynergy.management.utils import (
     ticker_df_to_qdf,
     get_eops,
     get_cid,
-    _map_to_business_day_frequency
+    _map_to_business_day_frequency,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 
@@ -242,7 +242,7 @@ def _hist_vol(
     pivot_signals: pd.DataFrame,
     pivot_returns: pd.DataFrame,
     sname: str,
-    est_freq: str = "M",
+    rebal_freq: str = "M",
     lback_periods: int = 21,
     lback_meth: str = "ma",
     half_life=11,
@@ -255,7 +255,7 @@ def _hist_vol(
 
     :param <pd.DataFrame> pivot_signals: the pivot table of the contract signals.
     :param <pd.DataFrame> pivot_returns: the pivot table of the contract returns.
-    :param <str> est_freq: the frequency of the volatility estimation. Default is 'm'
+    :param <str> rebal_freq: the frequency of the volatility estimation. Default is 'm'
         for monthly. Alternatives are 'w' for business weekly, 'd' for daily, and 'q'
         for quarterly. Estimations are conducted for the end of the period.
     :param <int> lback_periods: the number of periods to use for the lookback period
@@ -276,7 +276,6 @@ def _hist_vol(
         raise NotImplementedError(
             f"`lback_meth` must be 'ma' or 'xma'; got {lback_meth}"
         )
-    
 
     # NOTE: `get_eops` helps identify the dates for which the volatility calculation
     # will be performed. This is done by identifying the last date of each cycle.
@@ -286,7 +285,7 @@ def _hist_vol(
 
     trigger_indices = get_eops(
         dates=pivot_signals.index,
-        freq=est_freq,
+        freq=rebal_freq,
     )
 
     # TODO get the correct rebalance dates
@@ -315,8 +314,9 @@ def _hist_vol(
     # Annualised standard deviation (ASD)
     df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name] * 252)
 
-    ffills = {"d": 1, "w": 5, "m": 24, "q": 64}
-    df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[est_freq])
+    rebal_freq = rebal_freq.upper()
+    ffills = {"D": 1, "W": 5, "M": 24, "Q": 64}
+    df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[rebal_freq])
     nanindex = df_out.index[df_out[portfolio_return_name].isnull()]
     if len(nanindex) > 0:
         df_out = df_out.dropna()
@@ -342,7 +342,7 @@ def historic_portfolio_vol(
     sname: str,
     fids: List[str],
     rstring: str = "XR",
-    est_freq: str = "M",
+    rebal_freq: str = "M",
     lback_periods: int = 21,
     lback_meth: str = "ma",
     half_life: int = 11,
@@ -368,7 +368,7 @@ def historic_portfolio_vol(
         the contract returns that are required for the volatility-targeting method, based
         on the category identifier format <cid>_<ctype><rstring> in accordance with
         JPMaQS conventions. Default is 'XR'.
-    :param <str> est_freq: the frequency of the volatility estimation. Default is 'm'
+    :param <str> rebal_freq: the frequency of the volatility estimation. Default is 'm'
         for monthly. Alternatives are 'w' for business weekly, 'd' for daily, and 'q'
         for quarterly. Estimations are conducted for the end of the period.
     :param <int> lback_periods: the number of periods to use for the lookback period
@@ -407,7 +407,7 @@ def historic_portfolio_vol(
         (df, "df", pd.DataFrame),
         (sname, "sname", str),
         (fids, "fids", list),
-        (est_freq, "est_freq", str),
+        (rebal_freq, "rebal_freq", str),
         (lback_periods, "lback_periods", int),
         (lback_meth, "lback_meth", str),
         (half_life, "half_life", int),
@@ -423,7 +423,7 @@ def historic_portfolio_vol(
 
     ## Standardize and copy DF
     df: pd.DataFrame = standardise_dataframe(df.copy())
-    est_freq = _map_to_business_day_frequency(est_freq)
+    rebal_freq = _map_to_business_day_frequency(rebal_freq)
 
     ## Check the dates
     if start is None:
@@ -457,9 +457,9 @@ def historic_portfolio_vol(
 
     if not all([f"{contx}{rstring}" in u_tickers for contx in fids]):
         missing_tickers = [
-            f"{contx}_{rstring}"
+            f"{contx}{rstring}"
             for contx in fids
-            if f"{contx}_{rstring}" not in u_tickers
+            if f"{contx}{rstring}" not in u_tickers
         ]
         raise ValueError(
             f"The dataframe is missing the following return series: {missing_tickers}"
@@ -489,7 +489,7 @@ def historic_portfolio_vol(
         pivot_returns=pivot_returns,
         pivot_signals=pivot_signals,
         sname=sname,
-        est_freq=est_freq,
+        rebal_freq=rebal_freq,
         lback_periods=lback_periods,
         lback_meth=lback_meth,
         half_life=half_life,
@@ -540,7 +540,7 @@ if __name__ == "__main__":
         df=df,
         sname="STRAT",
         fids=fids,
-        est_freq="m",
+        rebal_freq="m",
         lback_periods=-1,
         lback_meth="ma",
         half_life=11,
@@ -553,7 +553,7 @@ if __name__ == "__main__":
         df=df_copy,
         sname="STRAT",
         fids=fids,
-        est_freq="m",
+        rebal_freq="m",
         lback_periods=15,
         lback_meth="ma",
         half_life=11,
