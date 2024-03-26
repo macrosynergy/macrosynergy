@@ -340,8 +340,10 @@ def historic_portfolio_vol(
     fids: List[str],
     rstring: str = "XR",
     rebal_freq: str = "m",
-    lback_periods: int = 21,
+    est_freq: str = "m",  # "m", "w", "d", "q"
+    est_freq_meth: str = "last",  # "last", "first", "mean", "sum"
     lback_meth: str = "ma",
+    lback_periods: int = 21,
     half_life: int = 11,
     start: Optional[str] = None,
     end: Optional[str] = None,
@@ -365,14 +367,22 @@ def historic_portfolio_vol(
         the contract returns that are required for the volatility-targeting method, based
         on the category identifier format <cid>_<ctype><rstring> in accordance with
         JPMaQS conventions. Default is 'XR'.
-    :param <str> rebal_freq: the frequency of the volatility estimation. Default is 'm'
-        for monthly. Alternatives are 'w' for business weekly, 'd' for daily, and 'q'
-        for quarterly. Estimations are conducted for the end of the period.
+    :param <str> rebal_freq: the frequency of rebalancing and volatility estimation.
+        Default is 'M' for monthly. Alternatives are 'W' for business weekly, 'D' for
+        daily, and 'Q' for quarterly. Estimations are conducted for the end of the period.
+    :param <int> est_freq: the frequency of the volatility estimation. Data will be
+        downsampled to this frequency before the estimation. Default is 'M' for monthly.
+        Alternatives are 'W' for business weekly, 'D' for daily, and 'Q' for quarterly.
+    :param <str> est_freq_meth: the method to use for downsampling the data to the
+        estimation frequency. Default is 'last' for taking the last value of the period.
+    :param <str> lback_meth: the method to use for the lookback period of the
+        volatility-targeting method. Default is "ma" for moving average. Alternative is
+        "xma", for exponential moving average.
     :param <int> lback_periods: the number of periods to use for the lookback period
         of the volatility-targeting method. Default is 21 for daily (TODO verify).
-    :param <str> lback_meth: the method to use for the lookback period of the
-        volatility-targeting method. Default is 'ma' for moving average. Alternative is
-        "xma", for exponential moving average.
+    :param <int> half_life: the half-life of the exponential moving average for the
+        volatility-targeting method. This is disregarded when using `lback_meth="ma"`.
+        Default is 11.
     :param <str> start: the start date of the data. Default is None, which means that
         the start date is taken from the dataframe.
     :param <str> end: the end date of the data. Default is None, which means that
