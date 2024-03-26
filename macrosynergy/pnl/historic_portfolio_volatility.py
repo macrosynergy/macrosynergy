@@ -340,11 +340,11 @@ def historic_portfolio_vol(
     fids: List[str],
     rstring: str = "XR",
     rebal_freq: str = "m",
-    est_freq: str = "m",  # "m", "w", "d", "q"
-    est_freq_meth: str = "last",  # "last", "first", "mean", "sum"
     lback_meth: str = "ma",
     lback_periods: int = 21,
     half_life: int = 11,
+    est_freq: str = "m",  # "m", "w", "d", "q"
+    agg_meths: Tuple[str, str] = ("last", "last"),
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
