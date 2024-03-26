@@ -92,10 +92,12 @@ def missing_in_df(
 
     cids = df["cid"].unique() if cids is None else cids
     xcats_used = sorted(list(set(xcats).intersection(set(df["xcat"]))))
-
+    max_xcat_len = max(map(len, xcats_used))
     for xcat in xcats_used:
         cids_xcat = df.loc[df["xcat"] == xcat, "cid"].unique()
-        print(f"Missing cids for {xcat}: ", list(set(cids) - set(cids_xcat)))
+        missing_cids = sorted(set(cids) - set(cids_xcat))
+        msg = f"Missing cids for {xcat}: " + " " * (max_xcat_len - len(xcat))
+        print(msg, missing_cids)
 
 
 def check_startyears(df: pd.DataFrame):
