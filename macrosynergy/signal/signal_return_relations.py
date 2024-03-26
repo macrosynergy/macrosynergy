@@ -1465,11 +1465,11 @@ if __name__ == "__main__":
         additional_metrics=[spearman, granger, granger_pval],
     )
 
-    # df_dep = srn.summary_table()
-    # print(df_dep)
+    df_dep = srn.summary_table()
+    print(df_dep)
 
-    # dfsum = srn.single_relation_table(table_type="summary")
-    # print(dfsum)
+    dfsum = srn.single_relation_table(table_type="summary")
+    print(dfsum)
 
     srn = SignalReturnRelations(
         dfd,
@@ -1485,17 +1485,17 @@ if __name__ == "__main__":
     df_sigs = srn.multiple_relations_table()
     print(df_sigs)
     
-    # dfsum = srn.single_relation_table(table_type="cross_section")
-    # print(dfsum)
+    dfsum = srn.single_relation_table(table_type="cross_section")
+    print(dfsum)
 
-    # srn.accuracy_bars(
-    #     type="signals",
-    #     title="Accuracy",
-    # )
+    srn.accuracy_bars(
+        type="signals",
+        title="Accuracy",
+    )
 
-    # sst = srn.single_statistic_table(stat="granger_pval")
+    sst = srn.single_statistic_table(stat="granger_pval")
 
-    # print(sst)
+    print(sst)
 
     sr = SignalReturnRelations(
         dfd,
@@ -1506,13 +1506,13 @@ if __name__ == "__main__":
         agg_sigs="last",
     )
 
-    # srt = sr.single_relation_table()
+    srt = sr.single_relation_table()
     mrt = sr.multiple_relations_table()
-    # sst = sr.single_statistic_table(stat="accuracy", type="mean_years")
+    sst = sr.single_statistic_table(stat="accuracy", type="mean_years")
 
-    # print(srt)
+    print(srt)
     print(mrt)
-    # print(sst)
+    print(sst)
 
     # Basic Signal Returns showing for multiple input values
 
@@ -1527,31 +1527,31 @@ if __name__ == "__main__":
         blacklist=black,
     )
 
-    # sr.accuracy_bars(sigs=["CRY", "INFL"], type="signals", title="Accuracy")
-    # sr.correlation_bars(type="signals", title="Correlation")
+    sr.accuracy_bars(sigs=["CRY", "INFL"], type="signals", title="Accuracy")
+    sr.correlation_bars(type="signals", title="Correlation")
 
-    # srt = sr.single_relation_table(ret="XRH", xcat="INFL", freq="Q", agg_sigs="last")
+    srt = sr.single_relation_table(ret="XRH", xcat="INFL", freq="Q", agg_sigs="last")
     mrt = sr.multiple_relations_table()
-    # sst = sr.single_statistic_table(stat="pearson", show_heatmap=True)
+    sst = sr.single_statistic_table(stat="pearson", show_heatmap=True)
 
-    # print(srt)
+    print(srt)
     print(mrt)
-    # print(sst)
+    print(sst)
 
     # Specifying specific arguments for each of the Signal Return Functions
 
-    # srt = sr.single_relation_table(ret="XR", xcat="CRY", freq="Q", agg_sigs="last")
-    # print(srt)
+    srt = sr.single_relation_table(ret="XR", xcat="CRY", freq="Q", agg_sigs="last")
+    print(srt)
 
     mrt = sr.multiple_relations_table(
         rets=["XR", "GROWTH"], xcats="INFL", freqs=["M", "Q"], agg_sigs=["last", "mean"]
     )
     print(mrt)
 
-    # sst = sr.single_statistic_table(
-    #     stat="auc",
-    #     rows=["ret", "xcat", "freq"],
-    #     columns=["agg_sigs"],
-    #     type="mean_cids",
-    # )
-    # print(sst)
+    sst = sr.single_statistic_table(
+        stat="auc",
+        rows=["ret", "xcat", "freq"],
+        columns=["agg_sigs"],
+        type="mean_cids",
+    )
+    print(sst)
