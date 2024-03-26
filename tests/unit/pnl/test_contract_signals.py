@@ -289,6 +289,7 @@ class TestContractSignals(unittest.TestCase):
             cids=["AUD", "GBP", "EUR"],
             ctypes=["FX"],
             cscales=["FXLEV"],
+            relative_value=True,
         )
 
         self.assertIsInstance(dfc, pd.DataFrame)
