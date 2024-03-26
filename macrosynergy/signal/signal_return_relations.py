@@ -975,6 +975,23 @@ class SignalReturnRelations:
             self.sigs = [self.revert_negation(sig) for sig in self.sigs]
             sigs = self.sigs
         return self.multiple_relations_table(rets=self.rets[0], xcats=sigs, freqs=self.freqs[0], agg_sigs=self.agg_sigs[0])
+    
+    def cross_section_table(self):
+        warnings.warn(
+            "cross_section_table() has been deprecated will be removed in a subsequent "
+            "version, please now use " 
+            " single_relation_table(table_type='cross_section_table')",
+            FutureWarning
+        )
+        return self.single_relation_table(table_type="cross_section")
+    
+    def yearly_table(self):
+        warnings.warn(
+            "yearly_table() has been deprecated will be removed in a subsequent "
+            "version, please now use single_relation_table(table_type='years')",
+            FutureWarning
+        )
+        return self.single_relation_table(table_type="years")
 
     def single_relation_table(
         self,
