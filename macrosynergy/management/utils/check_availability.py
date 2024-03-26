@@ -80,6 +80,14 @@ def missing_in_df(
         the DataFrame.
 
     """
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("`df` must be a QuantamentalDataFrame/pd.DataFrame")
+    for lst, name in zip([xcats, cids], ["xcats", "cids"]):
+        if (lst is not None) and not (
+            isinstance(lst, list) and all(isinstance(x, str) for x in lst)
+        ):
+            raise TypeError(f"`{name}` should be a `List[str]` and not {type(lst)}.")
+
     print("Missing xcats across df: ", list(set(xcats) - set(df["xcat"])))
 
     cids = df["cid"].unique() if cids is None else cids
