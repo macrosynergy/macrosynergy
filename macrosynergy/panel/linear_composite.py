@@ -135,6 +135,7 @@ def linear_composite_cid_agg(
 
 def linear_composite_xcat_agg(
     df: pd.DataFrame,
+    xcats: List[str],
     weights: List[float],
     signs: List[float],
     normalize_weights: bool = True,
@@ -145,7 +146,7 @@ def linear_composite_xcat_agg(
 
     # Create a weights series with the xcats as index
     weights_series: pd.Series = pd.Series(
-        np.array(weights) * np.array(signs), index=df["xcat"].unique().tolist()
+        np.array(weights) * np.array(signs), index=xcats
     )
 
     # Create wide dataframes for the data and weights
@@ -409,6 +410,7 @@ def linear_composite(
 
         return linear_composite_xcat_agg(
             df=df,
+            xcats=xcats,
             weights=weights,
             signs=signs,
             normalize_weights=normalize_weights,
