@@ -358,7 +358,7 @@ class LassoSelector(BaseEstimator, SelectorMixin):
 
 
 class MapSelector(BaseEstimator, SelectorMixin):
-    def __init__(self, threshold: float, positive: bool = False):
+    def __init__(self, threshold: float, positive: bool = False, method: str = "bfgs"):
         """
         Selector class to select features from a training set
         based on the Macrosynergy panel test. This test involves creating
@@ -370,6 +370,9 @@ class MapSelector(BaseEstimator, SelectorMixin):
             the interval (0,1).
         :param <bool> positive: Boolean indicating whether or not to only keep features
             with positive estimated model coefficients.
+        :param <str> method: The method used to fit the mixed linear model. The default
+            is "bfgs". Options available are: "lbfgs", "bfgs", "nm", "powell", "cg", "basinhopping"
+            and "minimize". The "bfgs" method is the default.
         """
         if type(threshold) != float:
             raise TypeError("The threshold must be a float.")
@@ -379,9 +382,15 @@ class MapSelector(BaseEstimator, SelectorMixin):
             )
         if not isinstance(positive, (bool, np.bool_)):
             raise TypeError("The 'positive' parameter must be a boolean.")
-
+        if not isinstance(method, str):
+            raise TypeError("The 'method' parameter must be a string.")
+        if method not in ["lbfgs", "bfgs", "nm", "powell", "cg", "basinhopping", "minimize"]:
+            raise ValueError(
+                "The 'method' parameter must be one of the following: 'lbfgs', 'bfgs', 'nm', 'powell', 'cg', 'basinhopping', 'minimize'."
+            )
         self.threshold = threshold
         self.positive = positive
+        self.method = method
         self.feature_names_in_ = None
 
     def fit(self, X: pd.DataFrame, y: Union[pd.Series, pd.DataFrame]):
@@ -434,7 +443,7 @@ class MapSelector(BaseEstimator, SelectorMixin):
             ftr = X[col]
             ftr = add_constant(ftr)
             groups = ftr.index.get_level_values(1)
-            model = MixedLM(y.values, ftr, groups).fit(reml=False)
+            model = MixedLM(y.values, ftr, groups).fit(reml=False, method=self.method)
             est = model.params.iloc[1]
             pval = model.pvalues.iloc[1]
             if (pval < self.threshold):
