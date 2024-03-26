@@ -10,6 +10,7 @@ from typing import List, Tuple
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.types import QuantamentalDataFrame
 import macrosynergy.visuals as msv
 
 
@@ -63,11 +64,15 @@ def check_availability(
         visual_paneldates(dfe, size=end_size, use_last_businessday=use_last_businessday)
 
 
-def missing_in_df(df: pd.DataFrame, xcats: List[str] = None, cids: List[str] = None):
+def missing_in_df(
+    df: QuantamentalDataFrame,
+    xcats: List[str] = None,
+    cids: List[str] = None,
+):
     """
     Print missing cross-sections and categories
 
-    :param <pd.DataFrame> df: standardized DataFrame with the following necessary
+    :param <QuantamentalDataFrame> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcat', 'real_date'.
     :param <List[str]> xcats: extended categories to be checked on. Default is all
         in the DataFrame.
