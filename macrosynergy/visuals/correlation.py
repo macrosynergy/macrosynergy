@@ -102,6 +102,11 @@ def view_correlation(
     xlabel = ""
     ylabel = ""
 
+    missing_data_msg = (
+        "The provided dataframe does not contain any data for the "
+        "specified categories: {xcats}. Please check the data."
+    )
+
     # If more than one set of xcats or cids have been supplied.
     if xcats_secondary or cids_secondary:
         if xcats_secondary:
@@ -120,12 +125,9 @@ def view_correlation(
         df2, xcats_secondary, cids_secondary = reduce_df(
             df.copy(), xcats_secondary, cids_secondary, start, end, out_all=True
         )
-        for _, _xc in zip([df1, df2], [xcats, xcats_secondary]):
-            if _.empty:
-                raise ValueError(
-                    f"The provided dataframe does not contain any data for the "
-                    f"specified categories: {_xc}. Please check the data."
-                )
+        for _df, _xc in zip([df1, df2], [xcats, xcats_secondary]):
+            if _df.empty:
+                raise ValueError(missing_data_msg.format(xcats=_xc))
 
         s_date = min(df1["real_date"].min(), df2["real_date"].min()).strftime(
             "%Y-%m-%d"
@@ -183,10 +185,7 @@ def view_correlation(
     else:
         df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
         if df.empty:
-            raise ValueError(
-                f"The provided dataframe does not contain any data for the "
-                f"specified categories: {xcats}. Please check the data."
-            )
+            raise ValueError(missing_data_msg.format(xcats=xcats))
 
         s_date: str = df["real_date"].min().strftime("%Y-%m-%d")
         e_date: str = df["real_date"].max().strftime("%Y-%m-%d")
