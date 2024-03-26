@@ -226,9 +226,8 @@ def make_relative_value(
         dfw = dfw[dfw.count(axis=1) > 1]
         # The time-index will be delimited by the respective category.
         dfa = pd.merge(dfw, bm, how="left", left_index=True, right_index=True)
-        dfo: pd.DataFrame
 
-        dfo: pd.DateFrame = operations[rel_meth](dfa[dfw.columns], dfa["value"], axis=0)
+        dfo: pd.DataFrame = operations[rel_meth](dfa[dfw.columns], dfa["value"], axis=0)
 
         # Re-stack.
         df_new = (
