@@ -327,16 +327,16 @@ def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type
 class Timer(object):
     def __init__(self):
         self.t0 = time.perf_counter()
-        
+
     def __str__(self) -> str:
         return f"{self.lap():.2f} seconds"
-    
+
     def __repr__(self) -> str:
         return f"<Time lapsed {str(self):s}>"
-    
+
     def __float__(self) -> float:
         return self.lap()
-    
+
     def timer(self) -> Tuple[float, float]:
         x = time.perf_counter()
         return x, x - self.t0
@@ -345,8 +345,10 @@ class Timer(object):
         self.t0, dt = self.timer()
         return dt
 
+
 def check_package_version(required_version: str):
     from macrosynergy import __version__ as msy_version
+
     assert version.parse(msy_version) >= version.parse(required_version), (
         f"Current version {msy_version:s} is less than required {required_version:s}"
         " - please upgrade using `pip install macrosynergy --upgrade`"
