@@ -2,18 +2,19 @@
 Functions used to visualize correlations across categories or cross-sections of
 panels.
 """
-import itertools
-import pandas as pd
-import numpy as np
-import seaborn as sns
-import scipy.cluster.hierarchy as sch
-from matplotlib import pyplot as plt
-from typing import List, Union, Tuple, Dict, Optional, Any
-from collections import defaultdict
 
-from macrosynergy.management.utils import reduce_df
+import itertools
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
+import scipy.cluster.hierarchy as sch
+import seaborn as sns
+from matplotlib import pyplot as plt
+
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import _map_to_business_day_frequency
+from macrosynergy.management.utils import _map_to_business_day_frequency, reduce_df
 
 
 def view_correlation(
@@ -101,6 +102,11 @@ def view_correlation(
     xlabel = ""
     ylabel = ""
 
+    missing_data_msg = (
+        "The provided dataframe does not contain any data for the "
+        "specified categories: {xcats}. Please check the data."
+    )
+
     # If more than one set of xcats or cids have been supplied.
     if xcats_secondary or cids_secondary:
         if xcats_secondary:
@@ -119,6 +125,9 @@ def view_correlation(
         df2, xcats_secondary, cids_secondary = reduce_df(
             df.copy(), xcats_secondary, cids_secondary, start, end, out_all=True
         )
+        for _df, _xc in zip([df1, df2], [xcats, xcats_secondary]):
+            if _df.empty:
+                raise ValueError(missing_data_msg.format(xcats=_xc))
 
         s_date = min(df1["real_date"].min(), df2["real_date"].min()).strftime(
             "%Y-%m-%d"
@@ -175,6 +184,8 @@ def view_correlation(
     # If there is only one set of xcats and cids.
     else:
         df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
+        if df.empty:
+            raise ValueError(missing_data_msg.format(xcats=xcats))
 
         s_date: str = df["real_date"].min().strftime("%Y-%m-%d")
         e_date: str = df["real_date"].max().strftime("%Y-%m-%d")
