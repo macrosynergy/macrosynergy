@@ -24,6 +24,13 @@ In particular, the class allows proceeding in three separate steps, implemented 
 
 - The method `proxy_pnl` multiplies positions with proxy returns and estimates transaction costs. In particular, it uses a trading_cost method to apply transaction costs and their size dependency to discretionary position changes. And it applies a roll_cost method to apply roll costs to positions at certain intervals. This function also should provide some analytics as to estimated PnLs across sections and the impact of trading costs.
 
+### Terminology
+To calculate proxy PnL we define our signals (and returns) into three different stages:
+
+1. Risk signals and returns: not tradable assets (purely theoretical construct), but idiosyncratic property makes it attractive for signal construction.
+2. Contract signal: tradable asset position implied, but only relative sizing between the different instruments is defined as it has no absolutely scale.
+3. Notional position: scale is defined as either a leverage rule of AUM allocation or a volatility target in terms of USD.
+
 ### Flow
 
 The typical flow when using the `ProxyPnL` class is as follows:
