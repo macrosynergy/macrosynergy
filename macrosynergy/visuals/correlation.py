@@ -2,18 +2,19 @@
 Functions used to visualize correlations across categories or cross-sections of
 panels.
 """
-import itertools
-import pandas as pd
-import numpy as np
-import seaborn as sns
-import scipy.cluster.hierarchy as sch
-from matplotlib import pyplot as plt
-from typing import List, Union, Tuple, Dict, Optional, Any
-from collections import defaultdict
 
-from macrosynergy.management.utils import reduce_df
+import itertools
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
+import scipy.cluster.hierarchy as sch
+import seaborn as sns
+from matplotlib import pyplot as plt
+
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import _map_to_business_day_frequency
+from macrosynergy.management.utils import _map_to_business_day_frequency, reduce_df
 
 
 def view_correlation(
