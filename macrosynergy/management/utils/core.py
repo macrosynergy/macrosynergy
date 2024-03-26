@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import requests
 import requests.compat
+from packaging import version
 
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.constants import FREQUENCY_MAP
@@ -343,3 +344,10 @@ class Timer(object):
     def lap(self) -> float:
         self.t0, dt = self.timer()
         return dt
+
+def check_package_version(required_version: str):
+    from macrosynergy import __version__ as msy_version
+    assert version.parse(msy_version) >= version.parse(required_version), (
+        f"Current version {msy_version:s} is less than required {required_version:s}"
+        " - please upgrade using `pip install macrosynergy --upgrade`"
+    )
