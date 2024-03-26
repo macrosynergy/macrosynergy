@@ -1124,6 +1124,7 @@ class SignalReturnRelations:
             values in down-sampling.
         """
         self.sigs = [self.revert_negation(sig) for sig in self.sigs]
+        self.df = self.original_df
         self.xcats = list(self.df["xcat"].unique())
         if rets is None:
             rets = self.rets
