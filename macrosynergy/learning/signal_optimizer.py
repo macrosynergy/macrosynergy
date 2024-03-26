@@ -904,7 +904,7 @@ class SignalOptimizer:
                     )
             return self.chosen_models[self.chosen_models.name.isin(name)]
         
-    def get_selected_ftrs(self, name: Optional[Union[str, List]] = None) -> pd.DataFrame:
+    def get_selected_features(self, name: Optional[Union[str, List]] = None) -> pd.DataFrame:
         """
         Returns the selected features over time for one or more processes
 
@@ -935,7 +935,7 @@ class SignalOptimizer:
                     )
             return self.selected_ftrs[self.selected_ftrs.name.isin(name)]
 
-    def ftr_selection_heatmap(
+    def feature_selection_heatmap(
         self,
         name: str,
         title: Optional[str] = None,
@@ -955,10 +955,10 @@ class SignalOptimizer:
         the learning process and used for signal generation, as a binary heatmap.
         """
         # Checks
-        self._checks_ftr_selection_heatmap(name=name, title=title, figsize=figsize)
+        self._checks_feature_selection_heatmap(name=name, title=title, figsize=figsize)
 
         # Get the selected features for the specified pipeline to visualise selection.
-        selected_ftrs = self.get_selected_ftrs(name=name)
+        selected_ftrs = self.get_selected_features(name=name)
         selected_ftrs["real_date"] = selected_ftrs["real_date"].dt.date
         selected_ftrs = selected_ftrs.sort_values(by="real_date").drop(columns=["name"]).set_index("real_date")
 
@@ -971,7 +971,7 @@ class SignalOptimizer:
         plt.title(title)
         plt.show()
 
-    def _checks_ftr_selection_heatmap(
+    def _checks_feature_selection_heatmap(
         self,
         name: str,
         title: Optional[str] = None,
@@ -1632,7 +1632,7 @@ if __name__ == "__main__":
         n_jobs=-1,
     )
     so.coefs_timeplot("test")
-    so.ftr_selection_heatmap("test", title="Feature selection heatmap for pipeline: test")
+    so.feature_selection_heatmap("test", title="Feature selection heatmap for pipeline: test")
     so.intercepts_timeplot("test")
     so.coefs_stackedbarplot("test")
     so.nsplits_timeplot("test")

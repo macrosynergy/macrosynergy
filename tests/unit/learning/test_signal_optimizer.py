@@ -1177,7 +1177,7 @@ class TestAll(unittest.TestCase):
         self.assertEqual(len(df4.name.unique()), 2)
 
     @parameterized.expand(itertools.product([0, 1], [True, False]))
-    def test_types_ftr_selection_heatmap(self, splitter_idx, change_n_splits):
+    def test_types_feature_selection_heatmap(self, splitter_idx, change_n_splits):
         if change_n_splits:
             initial_nsplits = np.random.choice([2, 3, 5, 10])
             threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
@@ -1196,11 +1196,11 @@ class TestAll(unittest.TestCase):
             )
         # Test that invalid names are caught
         with self.assertRaises(TypeError):
-            so.ftr_selection_heatmap(name=1)
+            so.feature_selection_heatmap(name=1)
         with self.assertRaises(TypeError):
-            so.ftr_selection_heatmap(name=[1, 2, 3])
+            so.feature_selection_heatmap(name=[1, 2, 3])
         with self.assertRaises(ValueError):
-            so.ftr_selection_heatmap(name="test")
+            so.feature_selection_heatmap(name="test")
         so.calculate_predictions(
             name="test",
             models=self.models,
@@ -1210,32 +1210,32 @@ class TestAll(unittest.TestCase):
             n_jobs=1,
         )
         with self.assertRaises(TypeError):
-            so.ftr_selection_heatmap(name=1)
+            so.feature_selection_heatmap(name=1)
         with self.assertRaises(TypeError):
-            so.ftr_selection_heatmap(name=["test"])
+            so.feature_selection_heatmap(name=["test"])
         with self.assertRaises(ValueError):
-            so.ftr_selection_heatmap(name="test2")
+            so.feature_selection_heatmap(name="test2")
         # title
         with self.assertRaises(TypeError):
-            so.ftr_selection_heatmap(name="test", title=1)
+            so.feature_selection_heatmap(name="test", title=1)
         # figsize
         with self.assertRaises(TypeError):
-            so.ftr_selection_heatmap(name="test", figsize="figsize")
+            so.feature_selection_heatmap(name="test", figsize="figsize")
         with self.assertRaises(TypeError):
-            so.ftr_selection_heatmap(name="test", figsize=1)
+            so.feature_selection_heatmap(name="test", figsize=1)
         with self.assertRaises(TypeError):
-            so.ftr_selection_heatmap(name="test", figsize=[1.5, 2])  # needs to be a tuple!
+            so.feature_selection_heatmap(name="test", figsize=[1.5, 2])  # needs to be a tuple!
         with self.assertRaises(TypeError):
-            so.ftr_selection_heatmap(name="test", figsize=(1.5, "e"))
+            so.feature_selection_heatmap(name="test", figsize=(1.5, "e"))
         with self.assertRaises(ValueError):
-            so.ftr_selection_heatmap(name="test", figsize=(0,))
+            so.feature_selection_heatmap(name="test", figsize=(0,))
         with self.assertRaises(ValueError):
-            so.ftr_selection_heatmap(name="test", figsize=(0, 1, 2))
+            so.feature_selection_heatmap(name="test", figsize=(0, 1, 2))
         with self.assertRaises(ValueError):
-            so.ftr_selection_heatmap(name="test", figsize=(2, -1))
+            so.feature_selection_heatmap(name="test", figsize=(2, -1))
 
     @parameterized.expand(itertools.product([0, 1], [True, False]))
-    def test_valid_ftr_selection_heatmap(self, splitter_idx, change_n_splits):
+    def test_valid_feature_selection_heatmap(self, splitter_idx, change_n_splits):
         if change_n_splits:
             initial_nsplits = np.random.choice([2, 3, 5, 10])
             threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
@@ -1261,9 +1261,9 @@ class TestAll(unittest.TestCase):
             n_jobs=1,
         )
         try:
-            so.ftr_selection_heatmap(name="test")
+            so.feature_selection_heatmap(name="test")
         except Exception as e:
-            self.fail(f"ftr_selection_heatmap raised an exception: {e}")
+            self.fail(f"feature_selection_heatmap raised an exception: {e}")
             
     @parameterized.expand(itertools.product([0, 1], [True, False]))
     def test_types_models_heatmap(self, splitter_idx, change_n_splits):
@@ -1767,7 +1767,7 @@ class TestAll(unittest.TestCase):
         self.assertTrue(intercepts.isna().sum().sum() == 0)
 
     @parameterized.expand(itertools.product([0, 1], [True, False]))
-    def test_types_get_selected_ftrs(self, splitter_idx, change_n_splits):
+    def test_types_get_selected_features(self, splitter_idx, change_n_splits):
         if change_n_splits:
             initial_nsplits = np.random.choice([2, 3, 5, 10])
             threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
@@ -1786,7 +1786,7 @@ class TestAll(unittest.TestCase):
             )
         # First test that if no signals have been calculated, an error is raised
         with self.assertRaises(ValueError):
-            so.get_selected_ftrs(name="test")
+            so.get_selected_features(name="test")
         # Now run calculate_predictions
         so.calculate_predictions(
             name="test",
@@ -1798,13 +1798,13 @@ class TestAll(unittest.TestCase):
         )
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
-            so.get_selected_ftrs(name="test2")
+            so.get_selected_features(name="test2")
         # Test that the wrong dtype of a signal name raises an error
         with self.assertRaises(TypeError):
-            so.get_selected_ftrs(name=1)
+            so.get_selected_features(name=1)
 
     @parameterized.expand(itertools.product([0, 1], [True, False]))
-    def test_valid_get_selected_ftrs(self, splitter_idx, change_n_splits):
+    def test_valid_get_selected_features(self, splitter_idx, change_n_splits):
         if change_n_splits:
             initial_nsplits = np.random.choice([2, 3, 5, 10])
             threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
@@ -1830,11 +1830,11 @@ class TestAll(unittest.TestCase):
             hparam_type="grid",
             n_jobs=1,
         )
-        # Test that running get_selected_ftrs on pipeline "test" works
+        # Test that running get_selected_features on pipeline "test" works
         try:
-            selected_ftrs = so.get_selected_ftrs(name="test")
+            selected_ftrs = so.get_selected_features(name="test")
         except Exception as e:
-            self.fail(f"get_selected_ftrs raised an exception: {e}")
+            self.fail(f"get_selected_features raised an exception: {e}")
         # Test that the output is as expected
         # Test that the output is as expected
         self.assertIsInstance(selected_ftrs, pd.DataFrame)
