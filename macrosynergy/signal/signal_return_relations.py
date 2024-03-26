@@ -972,6 +972,7 @@ class SignalReturnRelations:
             FutureWarning
         )
         if sigs is None:
+            self.sigs = [self.revert_negation(sig) for sig in self.sigs]
             sigs = self.sigs
         return self.multiple_relations_table(rets=self.rets[0], xcats=sigs, freqs=self.freqs[0], agg_sigs=self.agg_sigs[0])
 
@@ -1106,6 +1107,7 @@ class SignalReturnRelations:
             values in down-sampling.
         """
         self.sigs = [self.revert_negation(sig) for sig in self.sigs]
+        self.xcats = self.df["xcat"].unique()
         if rets is None:
             rets = self.rets
         if freqs is None:
