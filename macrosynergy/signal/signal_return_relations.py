@@ -1432,7 +1432,7 @@ if __name__ == "__main__":
 
     # Reduced DataFrame.
     dfdx = dfd[~(filt1 | filt2)].copy()
-    dfdx["ERA"]: str = "before 2007"
+    dfdx["ERA"] = "before 2007"
     dfdx.loc[dfdx["real_date"].dt.year > 2007, "ERA"] = "from 2010"
 
     cidx = ["AUD", "CAD", "GBP", "USD"]
