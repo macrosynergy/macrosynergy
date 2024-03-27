@@ -12,6 +12,7 @@ import warnings
 from typing import List, Union, Tuple, Optional, Set
 
 from macrosynergy.management.types import NoneType, Numeric, QuantamentalDataFrame
+from macrosynergy.panel import make_relative_value
 from macrosynergy.management.utils import (
     is_valid_iso_date,
     standardise_dataframe,
@@ -98,6 +99,18 @@ def _check_arg_types(
     )
 
     return correct_nested_types
+
+
+def _make_relative_value(
+    df: pd.DataFrame,
+    *args,
+    **kwargs,
+) -> pd.DataFrame:
+
+    assert isinstance(df, QuantamentalDataFrame), "`df` must be a QuantamentalDataFrame"
+    xcats = df["xcat"].unique().tolist()
+    rdf = make_relative_value(df=df, xcats=xcats, postfix="", *args, **kwargs)
+    return rdf
 
 
 def _gen_contract_signals(
@@ -224,7 +237,6 @@ def _apply_hedge_ratios(
             # e.g.:
             # USD_EQ_CSIG = AUD_SIG * AUD_HRATIO * USD_EQ_HSCALE
 
-            # TODO: the above naming should be just: _hb + "_CSIG"
             cid_sig: str = _cid + "_" + sig
             cid_hr: str = _cid + "_" + hratios
 
@@ -278,10 +290,13 @@ def contract_signals(
     hbasket: Optional[List[str]] = None,
     hscales: Optional[List[Union[Numeric, str]]] = None,
     hratios: Optional[str] = None,
+    relative_value: bool = False,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
     sname: str = "STRAT",
+    *args,
+    **kwargs,
 ) -> pd.DataFrame:
     """
     Calculate contract-specific signals based on cross section-specific signals.
@@ -318,6 +333,9 @@ def contract_signals(
     :param <str> hratios: category name for cross-section-specific hedge ratios.
         The values of this category determine direction and size of the hedge basket
         per unit of the cross section-specific signal.
+    :param <bool> relative_value: If False (default), no relative value is calculated. If
+        True boolean, relative value is calculated for all cids in the strategy.
+        # TODO split above `relative_value` argument into two: `relative_value` and `relative_value_cids`?
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
@@ -341,6 +359,7 @@ def contract_signals(
         (hbasket, "hbasket", (list, NoneType)),
         (hscales, "hscales", (list, NoneType)),
         (hratios, "hratios", (str, NoneType)),
+        (relative_value, "relative_value", bool),
         (start, "start", (str, NoneType)),
         (end, "end", (str, NoneType)),
         (blacklist, "blacklist", (dict, NoneType)),
@@ -421,6 +440,10 @@ def contract_signals(
                 )
 
     # Actual calculation
+
+    ## Calculate relative value if requested
+    if relative_value:
+        df = _make_relative_value(df=df, *args, **kwargs)
 
     ## Generate primary contract signals
     df_contract_signals: pd.DataFrame = _gen_contract_signals(
