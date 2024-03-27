@@ -199,9 +199,7 @@ class LinePlot(Plotter):
 
             ui = VBox([trend_check, seasonal_check, resid_check])
             out = interactive_output(update_plot, {'trend': trend_check, 'seasonal': seasonal_check, 'resid': resid_check})
-
-            display(ui, out)
-            return
+            return ui, out
 
         # if there is a legend, add it
         if legend:
