@@ -1205,12 +1205,18 @@ class SignalOptimizer:
         return ftrcoef_df.mean(skipna=True), ftrcoef_df.std(skipna=True)
 
     def coefs_timeplot(
-        self, name, title=None, ftrs_renamed: dict = None, figsize=(10, 6)
+        self, name: str, ftrs: List[str] = None, title: str = None, ftrs_renamed: dict = None, figsize: Tuple[Union[int, float], Union[int, float]]=(10, 6)
     ):
         """
         Function to plot the time series of feature coefficients for a given pipeline.
+        At most, 10 feature coefficient paths can be plotted at once. If more than 10
+        features were involved in the learning procedure, the default is to plot the
+        first 10 features in the order specified during training. By specifying a `ftrs`
+        list (which can be no longer than 10 elements in length), this default behaviour
+        can be overridden.
 
         :param <str> name: Name of the pipeline.
+        :param <Optional[List]> ftrs: List of feature names to plot. Default is None.
         :param <Optional[str]> title: Title of the plot. Default is None. This creates
             a figure title of the form "Feature coefficients for pipeline: {name}".
         :param <Optional[dict]> ftrs_renamed: Dictionary to rename the feature names for
@@ -1232,14 +1238,28 @@ class SignalOptimizer:
                 """
             )
         ftrcoef_df = self.get_ftr_coefficients(name)
-        # TODO: the next line will be made redundament once the signal optimiser checks for this
-        # and removes any pipelines with all NaN coefficients
         if ftrcoef_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
                 f"""There are no non-NA coefficients for the pipeline {name}.
                 Cannot display a time series plot.
                 """
             )
+        if ftrs is not None:
+            if not isinstance(ftrs, list):
+                raise TypeError("The ftrs argument must be a list.")
+            if len(ftrs) > 10:
+                raise ValueError(
+                    "The ftrs list must be no longer than 10 elements in length."
+                )
+            for ftr in ftrs:
+                if not isinstance(ftr, str):
+                    raise TypeError("The elements of the ftrs list must be strings.")
+                if ftr not in ftrcoef_df.columns:
+                    raise ValueError(
+                        f"""The feature {ftr} is not in the list of feature coefficients 
+                        for the pipeline {name}.
+                        """
+                    )
         if not isinstance(title, str) and title is not None:
             raise TypeError("The title must be a string.")
         if ftrs_renamed is not None:
@@ -1265,7 +1285,7 @@ class SignalOptimizer:
         if len(figsize) != 2:
             raise ValueError("The figsize argument must be a tuple of length 2.")
         for element in figsize:
-            if not isinstance(element, (int, float)):
+            if not isinstance(element, (int, float, np.int_, np.float_)):
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
@@ -1277,6 +1297,12 @@ class SignalOptimizer:
         ftrcoef_df = self.get_ftr_coefficients(name)
         ftrcoef_df = ftrcoef_df.set_index("real_date")
         ftrcoef_df = ftrcoef_df.iloc[:, 1:]
+
+        if ftrs is not None:
+            ftrcoef_df = ftrcoef_df[ftrs]
+        else:
+            if ftrcoef_df.shape[1] > 11:
+                ftrcoef_df = pd.concat((ftrcoef_df.iloc[:, :10],ftrcoef_df.iloc[:, -1]), axis=1)
 
         # Create time series plot
         fig, ax = plt.subplots()
@@ -1354,12 +1380,18 @@ class SignalOptimizer:
         plt.show()
 
     def coefs_stackedbarplot(
-        self, name, title=None, ftrs_renamed: dict = None, figsize=(10, 6)
+        self, name: str, ftrs: List[str] = None, title: str = None, ftrs_renamed: dict = None, figsize=(10, 6)
     ):
         """
         Function to create a stacked bar plot of feature coefficients for a given pipeline.
+        At most, 10 feature coefficients can be considered in the plot. If more than 10
+        features were involved in the learning procedure, the default is to plot the first
+        10 features in the order specified during training. By specifying a `ftrs` list
+        (which can be no longer than 10 elements in length), this default behaviour can be
+        overridden.
 
         :param <str> name: Name of the pipeline.
+        :param <Optional[List]> ftrs: List of feature names to plot. Default is None.
         :param <Optional[str]> title: Title of the plot. Default is None. This creates
             a figure title of the form "Stacked bar plot of model coefficients: {name}".
         :param <Optional[dict]> ftrs_renamed: Dictionary to rename the feature names for
@@ -1379,8 +1411,6 @@ class SignalOptimizer:
                 run calculate_predictions() first.
                 """
             )
-        # TODO: the next line will be made redundament once the signal optimiser checks for this
-        # and removes any pipelines with all NaN coefficients
         ftrcoef_df = self.get_ftr_coefficients(name)
         if ftrcoef_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
@@ -1388,7 +1418,23 @@ class SignalOptimizer:
                 Cannot display a stacked bar plot.
                 """
             )
-
+        if ftrs is not None:
+            if not isinstance(ftrs, list):
+                raise TypeError("The ftrs argument must be a list.")
+            if len(ftrs) > 10:
+                raise ValueError(
+                    "The ftrs list must be no longer than 10 elements in length."
+                )
+            for ftr in ftrs:
+                if not isinstance(ftr, str):
+                    raise TypeError("The elements of the ftrs list must be strings.")
+                if ftr not in ftrcoef_df.columns:
+                    raise ValueError(
+                        f"""The feature {ftr} is not in the list of feature coefficients 
+                        for the pipeline {name}.
+                        """
+                    )
+                
         if not isinstance(title, str) and title is not None:
             raise TypeError("The title must be a string.")
         if ftrs_renamed is not None:
@@ -1414,7 +1460,7 @@ class SignalOptimizer:
         if len(figsize) != 2:
             raise ValueError("The figsize argument must be a tuple of length 2.")
         for element in figsize:
-            if not isinstance(element, (int, float)):
+            if not isinstance(element, (int, float, np.int_, np.float_)):
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
@@ -1422,21 +1468,23 @@ class SignalOptimizer:
         # Set the style
         plt.style.use("seaborn-v0_8-darkgrid")
 
-        # Get positive coefficient colour map
-        cmap_pos = plt.get_cmap("Greens")
-        colors_pos = cmap_pos(np.linspace(0.3, 1, cmap_pos.N))
-        cmap_pos = mcolors.LinearSegmentedColormap.from_list("coef_green", colors_pos)
-
-        # Get negative coefficient colour map
-        cmap_neg = plt.get_cmap("Reds")
-        colors_neg = cmap_neg(np.linspace(0.3, 1, cmap_neg.N))
-        cmap_neg = mcolors.LinearSegmentedColormap.from_list("coef_red", colors_neg)
-
+        # Reshape dataframe for plotting
         ftrcoef_df = self.get_ftr_coefficients(name)
         ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
         ftrcoef_df.drop(columns=["real_date", "name"], inplace=True)
 
-        # Average the coefficients for each year
+        # Define colour map
+        default_cycle_colors = plt.rcParams['axes.prop_cycle'].by_key()['color'][:10]
+        cmap = mcolors.LinearSegmentedColormap.from_list("default_cycle", default_cycle_colors)
+
+        # Handle case where there are more than 10 features
+        if ftrs is not None:
+            ftrcoef_df = ftrcoef_df[ftrs]
+        else:
+            if ftrcoef_df.shape[1] > 11:
+                ftrcoef_df = pd.concat((ftrcoef_df.iloc[:, :10],ftrcoef_df.iloc[:, -1]), axis=1)
+
+        # Average the coefficients for each year and separate into positive and negative values
         if ftrs_renamed is not None:
             ftrcoef_df.rename(columns=ftrs_renamed, inplace=True)
 
@@ -1445,22 +1493,20 @@ class SignalOptimizer:
         neg_coefs = avg_coefs.clip(upper=0)
 
         # Rename columns so that the legend later informs on whether a coefficient is positive or negative
-        pos_coefs.columns = ["POS_" + col for col in pos_coefs.columns]
-        neg_coefs.columns = ["NEG_" + col for col in neg_coefs.columns]
+        #pos_coefs.columns = ["POS_" + col for col in pos_coefs.columns]
+        #neg_coefs.columns = ["NEG_" + col for col in neg_coefs.columns]
 
         # Create stacked bar plot
-        # For each year, plot the positive coefficients if they exist
-
         if pos_coefs.sum().any():
             ax = pos_coefs.loc[:, pos_coefs.sum() > 0].plot(
-                kind="bar", stacked=True, figsize=figsize, colormap=cmap_pos, alpha=0.75
+                kind="bar", stacked=True, figsize=figsize, colormap=cmap, alpha=0.75
             )
         if neg_coefs.sum().any():
             neg_coefs.loc[:, neg_coefs.sum() < 0].plot(
                 kind="bar",
                 stacked=True,
                 figsize=figsize,
-                colormap=cmap_neg,
+                colormap=cmap,
                 alpha=0.75,
                 ax=ax,
             )
@@ -1473,7 +1519,12 @@ class SignalOptimizer:
         plt.xlabel("Year")
         plt.ylabel("Average Coefficient Value")
         plt.axhline(0, color="black", linewidth=0.8)  # Adds a line at zero
-        plt.legend(title="Coefficients", bbox_to_anchor=(1.05, 1), loc="upper left")
+
+
+        # Amend legend to only display a label once 
+        handles, labels = plt.gca().get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        plt.legend(by_label.values(), by_label.keys(), title="Coefficients", bbox_to_anchor=(1.05, 1), loc="upper left")
         plt.tight_layout()
         plt.show()
 
@@ -1595,7 +1646,7 @@ if __name__ == "__main__":
     models = {
         "OLS": Pipeline(
             [
-                ("selector", MapSelector(threshold=0.2)),
+                #("selector", MapSelector(threshold=0.2)),
                 ("model", LinearRegression(fit_intercept=True)),
             ]
         ),
@@ -1615,6 +1666,11 @@ if __name__ == "__main__":
             pd.Timestamp(year=2100, month=1, day=1),
         ),
     }
+    for i in range(1,5):
+        X_train[f"CRY{i}"] = X_train["CRY"] + i
+        X_train[f"GROWTH{i}"] = X_train["GROWTH"] + i
+        X_train[f"INFL{i}"] = X_train["INFL"] + i
+
     so = SignalOptimizer(
         inner_splitter=inner_splitter,
         X=X_train,
@@ -1631,10 +1687,10 @@ if __name__ == "__main__":
         hparam_type="grid",
         n_jobs=-1,
     )
+    so.coefs_stackedbarplot("test", ftrs_renamed={"CRY": "carry", "GROWTH2": "growth2"})
     so.coefs_timeplot("test")
     so.feature_selection_heatmap("test", title="Feature selection heatmap for pipeline: test")
     so.intercepts_timeplot("test")
-    so.coefs_stackedbarplot("test")
     so.nsplits_timeplot("test")
     # (1) Example SignalOptimizer usage.
     #     We get adaptive signals for a linear regression and a KNN regressor, with the
