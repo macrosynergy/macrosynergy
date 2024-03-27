@@ -8,14 +8,17 @@ import pandas as pd
 import numpy as np
 import logging
 
-from macrosynergy.panel.historic_vol import expo_weights
-from macrosynergy.management.types import NoneType
+from macrosynergy.panel.historic_vol import expo_std, flat_std, expo_weights
+from macrosynergy.management.types import NoneType, QuantamentalDataFrame
+from macrosynergy.management.constants import FFILL_LIMITS
 from macrosynergy.management.utils import (
     reduce_df,
     standardise_dataframe,
     is_valid_iso_date,
     ticker_df_to_qdf,
     get_eops,
+    get_cid,
+    _map_to_business_day_frequency,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 
@@ -239,7 +242,7 @@ def _hist_vol(
     pivot_signals: pd.DataFrame,
     pivot_returns: pd.DataFrame,
     sname: str,
-    rebal_freq: str = "m",
+    rebal_freq: str = "M",
     lback_periods: int = 21,
     lback_meth: str = "ma",
     half_life=11,
@@ -339,7 +342,7 @@ def historic_portfolio_vol(
     sname: str,
     fids: List[str],
     rstring: str = "XR",
-    rebal_freq: str = "m",
+    rebal_freq: str = "M",
     lback_periods: int = 21,
     lback_meth: str = "ma",
     half_life: int = 11,
@@ -420,6 +423,7 @@ def historic_portfolio_vol(
 
     ## Standardize and copy DF
     df: pd.DataFrame = standardise_dataframe(df.copy())
+    rebal_freq = _map_to_business_day_frequency(rebal_freq)
 
     ## Check the dates
     if start is None:
