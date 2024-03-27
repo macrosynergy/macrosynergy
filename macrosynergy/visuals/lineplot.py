@@ -12,6 +12,9 @@ from macrosynergy.management.types import Numeric, NoneType
 
 from macrosynergy.management.simulate import make_test_df
 
+from statsmodels.tsa.seasonal import seasonal_decompose
+from ipywidgets import Checkbox, VBox, interactive_output
+
 
 class LinePlot(Plotter):
     """
@@ -97,6 +100,7 @@ class LinePlot(Plotter):
         dpi: int = 300,
         return_figure: bool = False,
         on_axis: Optional[plt.Axes] = None,
+        decompose: bool = False,
         # args, kwargs
         *args,
         **kwargs,
@@ -173,6 +177,32 @@ class LinePlot(Plotter):
         if y_axis_label:
             ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
 
+        if decompose:
+            time_series_df = df.set_index('real_date')[['value']]
+            decomposition = seasonal_decompose(time_series_df, model="additive")
+            trend_check = Checkbox(description="Trend", value=False)
+            seasonal_check = Checkbox(description="Seasonality", value=False)
+            resid_check = Checkbox(description="Random Walk", value=False)
+
+            def update_plot(trend, seasonal, resid):
+                ax.clear()
+                ax.plot(time_series_df.index, time_series_df['value'], label=f"{cid}_{xcat}")
+                if trend:
+                    ax.plot(time_series_df.index, decomposition.trend, label="Trend")
+                if seasonal:
+                    ax.plot(time_series_df.index, decomposition.seasonal, label="Seasonal")
+                if resid:
+                    ax.plot(time_series_df.index, decomposition.resid, label="Residual")
+
+                plt.tight_layout()
+                plt.show()
+
+            ui = VBox([trend_check, seasonal_check, resid_check])
+            out = interactive_output(update_plot, {'trend': trend_check, 'seasonal': seasonal_check, 'resid': resid_check})
+
+            display(ui, out)
+            return
+
         # if there is a legend, add it
         if legend:
             ax.legend(
@@ -205,7 +235,8 @@ class LinePlot(Plotter):
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_test_df
-    from macrosynergy.download import LocalCache as JPMaQSDownload
+    from macrosynergy.download import JPMaQSDownload
+    import os
 
     cids: List[str] = [
         "USD",
@@ -231,16 +262,17 @@ if __name__ == "__main__":
         "DU05YXR_NSA",
     ]  # market links
 
-    sel_cids: List[str] = ["USD", "EUR", "GBP"]
-    sel_xcats: List[str] = ["NIR_NSA", "RIR_NSA", "FXXR_NSA", "EQXR_NSA"]
+    cids: List[str] = ["GBP"]
+    xcats: List[str] = ["RIR_NSA"]#, "RIR_NSA"]#, "FXXR_NSA", "EQXR_NSA"]
 
-    with JPMaQSDownload(
-        local_path=r"~\Macrosynergy\Macrosynergy - Documents\SharedData\JPMaQSTickers"
-    ) as jpmaqs:
+    client_id: str = os.getenv("DQ_CLIENT_ID")
+    client_secret: str = os.getenv("DQ_CLIENT_SECRET")
+
+    with JPMaQSDownload(client_id=client_id, client_secret=client_secret) as jpmaqs:
         df: pd.DataFrame = jpmaqs.download(
             cids=cids,
             xcats=xcats,
-            start_date="2016-01-01",
+            start_date="1990-01-01",
         )
 
     from random import SystemRandom
@@ -267,7 +299,6 @@ if __name__ == "__main__":
             "line - why not?"
         ),
         legend_fontsize=8,
-        compare_series="USD_RIR_NSA",
     )
 
     # facet_size=(5, 4),
