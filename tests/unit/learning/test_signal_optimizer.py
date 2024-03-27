@@ -2370,10 +2370,10 @@ class TestAll(unittest.TestCase):
         pos_coefs = avg_coefs.clip(lower=0)
         neg_coefs = avg_coefs.clip(upper=0)
         correct_labels = [
-            "POS_" + col for col in list(pos_coefs.sum().index[pos_coefs.sum() > 0])
+            col for col in list(pos_coefs.sum().index[pos_coefs.sum() > 0])
         ]
         correct_labels += [
-            "NEG_" + col for col in list(neg_coefs.sum().index[neg_coefs.sum() < 0])
+            col for col in list(neg_coefs.sum().index[neg_coefs.sum() < 0])
         ]
         correct_labels = sorted(correct_labels)
         self.assertTrue(np.all(labels == correct_labels))
