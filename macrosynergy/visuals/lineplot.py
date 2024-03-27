@@ -186,7 +186,7 @@ class LinePlot(Plotter):
 
             def update_plot(trend, seasonal, resid):
                 ax.clear()
-                ax.plot(time_series_df.index, time_series_df['value'], label=f"{cid}_{xcat}")
+                # ax.plot(time_series_df.index, time_series_df['value'], label=f"{cid}_{xcat}")
                 if trend:
                     ax.plot(time_series_df.index, decomposition.trend, label="Trend", color="red")
                 if seasonal:
