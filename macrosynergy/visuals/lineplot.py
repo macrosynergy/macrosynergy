@@ -179,7 +179,7 @@ class LinePlot(Plotter):
 
         if decompose:
             time_series_df = dfx.set_index('real_date')[['value']]
-            decomposition = seasonal_decompose(time_series_df, model="additive", period=261)
+            decomposition = seasonal_decompose(time_series_df, model="additive", period=12)
             trend_check = Checkbox(description="Trend", value=False)
             seasonal_check = Checkbox(description="Seasonality", value=False)
             resid_check = Checkbox(description="Random Walk", value=False)
