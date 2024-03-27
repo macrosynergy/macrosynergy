@@ -13,7 +13,7 @@ from macrosynergy.management.types import Numeric, NoneType
 from macrosynergy.management.simulate import make_test_df
 
 from statsmodels.tsa.seasonal import seasonal_decompose
-from ipywidgets import Checkbox, VBox, interactive_output
+from ipywidgets import Checkbox, VBox, interactive_output, Output
 
 
 class LinePlot(Plotter):
@@ -179,27 +179,31 @@ class LinePlot(Plotter):
 
         if decompose:
             time_series_df = dfx.set_index('real_date')[['value']]
-            decomposition = seasonal_decompose(time_series_df, model="additive")
+            decomposition = seasonal_decompose(time_series_df, model="additive", period=261)
             trend_check = Checkbox(description="Trend", value=False)
             seasonal_check = Checkbox(description="Seasonality", value=False)
             resid_check = Checkbox(description="Random Walk", value=False)
 
-            def update_plot(trend, seasonal, resid):
-                ax.clear()
-                # ax.plot(time_series_df.index, time_series_df['value'], label=f"{cid}_{xcat}")
-                if trend:
-                    ax.plot(time_series_df.index, decomposition.trend, label="Trend", color="red")
-                if seasonal:
-                    ax.plot(time_series_df.index, decomposition.seasonal, label="Seasonal", color="green")
-                if resid:
-                    ax.plot(time_series_df.index, decomposition.resid, label="Residual", color="yellow")
+            plot_output = Output()
 
-                plt.tight_layout()
-                plt.show()
+            def update_plot(trend, seasonal, resid):
+                with plot_output:
+                    plot_output.clear_output(wait=True)  # Clear the previous plot
+                    # Plot initial time series
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    ax.plot(time_series_df.index, time_series_df['value'], label='Original')
+                    if trend:
+                        ax.plot(time_series_df.index, decomposition.trend, label="Trend", color="red")
+                    if seasonal:
+                        ax.plot(time_series_df.index, decomposition.seasonal, label="Seasonal", color="green")
+                    if resid:
+                        ax.plot(time_series_df.index, decomposition.resid, label="Residual", color="yellow")
+                    ax.legend()
+                    plt.show()
 
             ui = VBox([trend_check, seasonal_check, resid_check])
             out = interactive_output(update_plot, {'trend': trend_check, 'seasonal': seasonal_check, 'resid': resid_check})
-            return ui, out
+            return ui, out, plot_output
 
         # if there is a legend, add it
         if legend:
