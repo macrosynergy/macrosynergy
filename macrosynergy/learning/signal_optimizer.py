@@ -1479,7 +1479,7 @@ class SignalOptimizer:
 
         # Handle case where there are more than 10 features
         if ftrs is not None:
-            ftrcoef_df = ftrcoef_df[ftrs]
+            ftrcoef_df = ftrcoef_df[ftrs + ["year"]]
         else:
             if ftrcoef_df.shape[1] > 11:
                 ftrcoef_df = pd.concat((ftrcoef_df.iloc[:, :10],ftrcoef_df.iloc[:, -1]), axis=1)
@@ -1491,10 +1491,6 @@ class SignalOptimizer:
         avg_coefs = ftrcoef_df.groupby("year").mean()
         pos_coefs = avg_coefs.clip(lower=0)
         neg_coefs = avg_coefs.clip(upper=0)
-
-        # Rename columns so that the legend later informs on whether a coefficient is positive or negative
-        #pos_coefs.columns = ["POS_" + col for col in pos_coefs.columns]
-        #neg_coefs.columns = ["NEG_" + col for col in neg_coefs.columns]
 
         # Create stacked bar plot
         if pos_coefs.sum().any():
@@ -1511,6 +1507,7 @@ class SignalOptimizer:
                 ax=ax,
             )
 
+        # Display, title, axis labels
         if title is None:
             plt.title(f"Stacked bar plot of model coefficients: {name}")
         else:
@@ -1521,10 +1518,12 @@ class SignalOptimizer:
         plt.axhline(0, color="black", linewidth=0.8)  # Adds a line at zero
 
 
-        # Amend legend to only display a label once 
+        # Configure legend
         handles, labels = plt.gca().get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
         plt.legend(by_label.values(), by_label.keys(), title="Coefficients", bbox_to_anchor=(1.05, 1), loc="upper left")
+
+        # Display plot
         plt.tight_layout()
         plt.show()
 
