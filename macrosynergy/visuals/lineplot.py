@@ -188,11 +188,11 @@ class LinePlot(Plotter):
                 ax.clear()
                 ax.plot(time_series_df.index, time_series_df['value'], label=f"{cid}_{xcat}")
                 if trend:
-                    ax.plot(time_series_df.index, decomposition.trend, label="Trend")
+                    ax.plot(time_series_df.index, decomposition.trend, label="Trend", color="red")
                 if seasonal:
-                    ax.plot(time_series_df.index, decomposition.seasonal, label="Seasonal")
+                    ax.plot(time_series_df.index, decomposition.seasonal, label="Seasonal", color="green")
                 if resid:
-                    ax.plot(time_series_df.index, decomposition.resid, label="Residual")
+                    ax.plot(time_series_df.index, decomposition.resid, label="Residual", color="yellow")
 
                 plt.tight_layout()
                 plt.show()
