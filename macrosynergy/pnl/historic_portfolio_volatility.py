@@ -371,7 +371,7 @@ def historic_portfolio_vol(
         Default is 'M' for monthly. Alternatives are 'W' for business weekly, 'D' for
         daily, and 'Q' for quarterly. Estimations are conducted for the end of the period.
     :param <List[str]> est_freqs: the list of frequencies for which the volatility
-        is estimated. Volatility for a given period is the sum of the volatilities
+        is estimated. Volatility for a given period is the weighted sum of the volatilities
         estimated for each frequency. Default is ["D", "W", "M"].
     :param <List[float]> est_weights: the list of weights for each frequency in
         `est_freqs`. Weights are normalized before applying. In cases where there may be
