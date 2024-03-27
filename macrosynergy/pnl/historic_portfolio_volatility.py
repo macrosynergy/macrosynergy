@@ -2,7 +2,7 @@
 Module for calculating the historic portfolio volatility for a given strategy.
 """
 
-from typing import List, Optional, Tuple, Callable
+from typing import List, Optional, Tuple, Callable, Iterable
 from functools import lru_cache
 import pandas as pd
 import numpy as np
@@ -343,8 +343,8 @@ def historic_portfolio_vol(
     lback_meth: str = "ma",
     lback_periods: int = 21,
     half_life: int = 11,
-    est_freq: str = "m",  # "m", "w", "d", "q"
-    agg_meths: Tuple[str, str] = ("last", "last"),
+    est_freqs: List[str] = ["D", "W", "M"],  # "m", "w", "d", "q"
+    est_weights: Optional[List[float]] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
@@ -370,11 +370,13 @@ def historic_portfolio_vol(
     :param <str> rebal_freq: the frequency of rebalancing and volatility estimation.
         Default is 'M' for monthly. Alternatives are 'W' for business weekly, 'D' for
         daily, and 'Q' for quarterly. Estimations are conducted for the end of the period.
-    :param <int> est_freq: the frequency of the volatility estimation. Data will be
-        downsampled to this frequency before the estimation. Default is 'M' for monthly.
-        Alternatives are 'W' for business weekly, 'D' for daily, and 'Q' for quarterly.
-    :param <str> est_freq_meth: the method to use for downsampling the data to the
-        estimation frequency. Default is 'last' for taking the last value of the period.
+    :param <List[str]> est_freqs: the list of frequencies for which the volatility
+        is estimated. Volatility for a given period is the sum of the volatilities
+        estimated for each frequency. Default is ["D", "W", "M"].
+    :param <List[float]> est_weights: the list of weights for each frequency in
+        `est_freqs`. Weights are normalized before applying. In cases where there may be
+        missing data or NaNs in the result, the remaining weights are normalized. Default
+        is None, which means that the weights are equal.
     :param <str> lback_meth: the method to use for the lookback period of the
         volatility-targeting method. Default is "ma" for moving average. Alternative is
         "xma", for exponential moving average.
