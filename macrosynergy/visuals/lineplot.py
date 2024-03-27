@@ -178,7 +178,7 @@ class LinePlot(Plotter):
             ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
 
         if decompose:
-            time_series_df = df.set_index('real_date')[['value']]
+            time_series_df = dfx.set_index('real_date')[['value']]
             decomposition = seasonal_decompose(time_series_df, model="additive")
             trend_check = Checkbox(description="Trend", value=False)
             seasonal_check = Checkbox(description="Seasonality", value=False)
