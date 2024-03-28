@@ -167,24 +167,13 @@ def _mask_nans(
 
 def _downsample_returns(
     piv_df: pd.DataFrame,
-    trigger_indices: pd.Series,
+    freq: str = "m",
 ) -> pd.DataFrame:
+    assert freq in ("d", "w", "m", "q")
+    piv_df.index = pd.to_datetime(piv_df.index)  # TODO - check if this is necessary
+    pivot_new_frequency: pd.DataFrame = ((1+piv_df/100).resample("m").prod() - 1) * 100
 
-    trg = trigger_indices.tolist()
-    outs = []
-    # TODO (1+x).cumprod()
-    # TODO groupby...
-    # TODO pandas.DataFrame.resample (from daily to x)
-    for itd in range(1, len(trg) - 1):
-        prev_period = piv_df.loc[trg[itd - 1] : trg[itd]].iloc[-1].dropna()
-        prev_period += 1
-        prod_sum = functools.reduce(lambda x, y: x * y, prev_period)
-        outs += [prod_sum]
-
-    for itd in range(1, len(trg) - 1):
-        piv_df.loc[trg[itd] : trg[itd + 1]] = outs[itd - 1]
-
-    return piv_df
+    return pivot_new_frequency
 
 
 def _multifreq_volatility(
@@ -206,7 +195,7 @@ def _multifreq_volatility(
     returns_values_dict = {freq: [] for freq in trigger_indices_dict.keys()}
 
     for freq, trigger_indices in trigger_indices_dict.items():
-        ds_piv_ret = _downsample_returns(pivot_returns, trigger_indices)
+        ds_piv_ret = _downsample_returns(pivot_returns, freq=freq)
         for td in trigger_indices:
             logger.debug(f"Calculating portfolio volatility for {td}")
             ds_piv_ret = ds_piv_ret.loc[ds_piv_ret.index <= td].iloc[lbextra:]
