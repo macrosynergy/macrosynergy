@@ -200,7 +200,7 @@ class LinePlot(Plotter):
                     if resid:
                         ax.plot(time_series_df.index, decomposition.resid, label="Residual", color="yellow")
                     ax.legend()
-                    #plt.show()
+                    plt.show()
 
             ui = VBox([trend_check, seasonal_check, resid_check])
             out = interactive_output(update_plot, {'trend': trend_check, 'seasonal': seasonal_check, 'resid': resid_check})
@@ -232,7 +232,7 @@ class LinePlot(Plotter):
             return fig
 
         if show:
-            plt.show()
+            #plt.show()
             return
 
 
