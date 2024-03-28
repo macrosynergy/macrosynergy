@@ -135,16 +135,14 @@ def timeseries_to_qdf(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
     if not isinstance(timeseries, dict):
         raise TypeError("Argument `timeseries` must be a dictionary.")
 
-    if timeseries["attributes"][0]["time-series"] is None:
+    if _get_ts(timeseries) is None:
         return None
 
-    cid, xcat, metric = deconstruct_expression(
-        timeseries["attributes"][0]["expression"]
-    )
+    cid, xcat, metric = deconstruct_expression(_get_expr(timeseries))
 
     df: pd.DataFrame = (
         pd.DataFrame(
-            timeseries["attributes"][0]["time-series"],
+            _get_ts(timeseries),
             columns=["real_date", metric],
         )
         .assign(cid=cid, xcat=xcat)
@@ -239,15 +237,15 @@ def timeseries_to_column(
     if errors not in ["raise", "ignore"]:
         raise ValueError("`errors` must be one of 'raise' or 'ignore'.")
 
-    expression = timeseries["attributes"][0]["expression"]
+    expression = _get_expr(timeseries)
 
-    if timeseries["attributes"][0]["time-series"] is None:
+    if _get_ts(timeseries) is None:
         if errors == "raise":
             raise ValueError("Time series is empty.")
         return None
 
     df: pd.DataFrame = pd.DataFrame(
-        timeseries["attributes"][0]["time-series"], columns=["real_date", expression]
+        _get_ts(timeseries), columns=["real_date", expression]
     )
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y%m%d")
     df = df.dropna()
@@ -290,42 +288,52 @@ def concat_column_dfs(
     return pd.concat(_pop_df_list(), axis=1).dropna(how="all", axis=0)
 
 
+def _get_expr(ts: dict) -> str:
+    return ts["attributes"][0]["expression"]
+
+
+def _get_ts(ts: dict) -> dict:
+    return ts["attributes"][0]["time-series"]
+
+
+def _get_ticker(ts: dict) -> str:
+    return _get_expr(ts).split(",")[1]
+
+
+def _get_xcat(ticker: str) -> str:
+    return ticker.split("_", 1)[1]
+
+
+def _ticker_filename(ticker: str, save_path: str) -> str:
+    return os.path.join(save_path, _get_xcat(ticker), f"{ticker}.csv")
+
+
 def _save_qdf(data: List[dict], save_path: str) -> None:
 
-    def _get_expr(ts: dict) -> str:
-        return ts["attributes"][0]["expression"]
-
-    def _get_ticker(ts: dict) -> str:
-        return _get_expr(ts).split(",")[1]
-
-    def _get_xcat(ticker: str) -> str:
-        return ticker.split("_", 1)[1]
-
-    def fnm(ticker: str) -> str:
-        return os.path.join(save_path, _get_xcat(ticker), f"{ticker}.csv")
-
-    for tkr in sorted(set(map(_get_ticker, data))):
-        tkr_fnm = fnm(tkr)
-        os.makedirs(os.path.dirname(tkr_fnm), exist_ok=True)
-        _ts = [ts for ts in data if _get_ticker(ts) == tkr]
+    for ticker in sorted(set(map(_get_ticker, data))):
+        ticker_filename = _ticker_filename(ticker, save_path)
+        os.makedirs(os.path.dirname(ticker_filename), exist_ok=True)
+        ts = [_ts for _ts in data if _get_ticker(_ts) == ticker]
         df: QuantamentalDataFrame = concat_single_metric_qdfs(
-            [timeseries_to_qdf(ts) for ts in _ts]
+            [timeseries_to_qdf(_ts) for _ts in ts]
         ).drop(columns=["cid", "xcat"])
-        if os.path.exists(fnm(tkr)):
-            edf = pd.read_csv(tkr_fnm, parse_dates=["real_date"], index_col="real_date")
+        if os.path.exists(_ticker_filename(ticker)):
+            edf = pd.read_csv(
+                ticker_filename, parse_dates=["real_date"], index_col="real_date"
+            )
             edf = edf.drop(columns=[col for col in edf.columns if col in df.columns])
             df = pd.concat([edf, df.set_index("real_date")], axis=1).reset_index()
-            os.remove(tkr_fnm)
-        df.to_csv(tkr_fnm, index=False)
+            os.remove(ticker_filename)
+        df.to_csv(ticker_filename, index=False)
 
     return
 
 
 def _save_timeseries_as_column(data: List[dict], save_path: str) -> None:
     for ts in data:
-        if ts["attributes"][0]["time-series"] is None:
+        if _get_ts(ts) is None:
             continue
-        expr = ts["attributes"][0]["expression"]
+        expr = _get_expr(ts)
         df = timeseries_to_column(ts)
         if df.empty:
             continue
@@ -338,10 +346,8 @@ def _save_timeseries(data: List[dict], save_path: str):
     if len(data) == 0:
         return
 
-    for its, ts in enumerate(data):
-        with open(
-            os.path.join(save_path, f"{ts['attributes'][0]['expression']}.json"), "w"
-        ) as f:
+    for ts in data:
+        with open(os.path.join(save_path, f"{_get_expr(ts)}.json"), "w") as f:
             json.dump(ts, f)
 
     return
@@ -799,8 +805,8 @@ class JPMaQSDownload(DataQueryInterface):
             url=url, params=params, tracking_id=tracking_id
         )
         for its, ts in enumerate(ts_list):
-            if ts["attributes"][0]["time-series"] is None:
-                self.unavailable_expressions.append(ts["attributes"][0]["expression"])
+            if _get_ts(ts) is None:
+                self.unavailable_expressions.append(_get_expr(ts))
                 if "message" in ts["attributes"][0]:
                     self.msg_warnings.append(ts["attributes"][0]["message"])
                 else:
