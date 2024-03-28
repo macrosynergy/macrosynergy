@@ -63,20 +63,21 @@ def _weighted_covariance(
     xnans, ynans = np.isnan(x), np.isnan(y)
     wmask = xnans | ynans
     weightslen = min(sum(~wmask), lback_periods if lback_periods > 0 else len(x))
-    xmean, ymean = x[~xnans].mean(), y[~ynans].mean()
 
     # drop NaNs and only consider the most recent lback_periods
     x, y = x[~wmask][-weightslen:], y[~wmask][-weightslen:]
 
-    # rss = (x - x.mean()) * (y - y.mean())
-    rss = (x - xmean) * (y - ymean)
 
-    assert len(rss) == weightslen
-
+    assert x.shape[0] == weightslen  # TODO what happens if it is less...
     w: np.ndarray = weights_func(
         lback_periods=weightslen,
         half_life=min(weightslen // 2, kwargs.get("half_life", 11)),
     )
+
+    xmean, ymean = (w*x).sum(), (w*y).sum()
+
+    # rss = (x - x.mean()) * (y - y.mean())
+    rss = (x - xmean) * (y - ymean)
 
     return w.T.dot(rss)
 
@@ -171,6 +172,9 @@ def _downsample_returns(
 
     trg = trigger_indices.tolist()
     outs = []
+    # TODO (1+x).cumprod()
+    # TODO groupby...
+    # TODO pandas.DataFrame.resample (from daily to x)
     for itd in range(1, len(trg) - 1):
         prev_period = piv_df.loc[trg[itd - 1] : trg[itd]].iloc[-1].dropna()
         prev_period += 1
