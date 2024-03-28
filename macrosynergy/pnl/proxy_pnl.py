@@ -12,9 +12,7 @@ from macrosynergy.management.utils import (
     is_valid_iso_date,
 )
 from macrosynergy.management.types import Numeric, QuantamentalDataFrame
-
 from macrosynergy.pnl import notional_positions, contract_signals, proxy_pnl_calc
-
 from macrosynergy.download.transaction_costs import download_transaction_costs
 
 
@@ -27,6 +25,10 @@ class ProxyPnL(object):
         blacklist: Optional[dict] = None,
         sname: str = "STRAT",
         pname: str = "POS",
+        # TODO roll costs
+        # TODO bid-ask spread
+        # TODO size
+        # TODO slippage? In notional?
     ):
         self.sname = sname
         self.pname = pname

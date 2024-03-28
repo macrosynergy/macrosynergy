@@ -24,6 +24,7 @@ from macrosynergy.management.utils import (
     qdf_to_ticker_df,
     get_eops,
     _map_to_business_day_frequency,
+    Timer
 )
 from macrosynergy.management.constants import FREQUENCY_MAP
 from macrosynergy.management.utils.math import expanding_mean_with_nan
@@ -766,6 +767,34 @@ class TestFunctions(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             _map_to_business_day_frequency("M", valid_freqs=1)
+
+
+class TestTimer(unittest.TestCase):
+    def test_timer(self):
+        t = Timer()
+        self.assertIsInstance(t, Timer)
+    
+    def test_timer_str(self):
+        t = Timer()
+        self.assertIsInstance(str(t), str)
+
+        self.assertIsInstance(f"{t:s}", str)
+
+        self.assertIn(" seconds", str(t))
+    
+    def test_timer_repr(self):
+        t = Timer()
+        self.assertIsInstance(repr(t), str)
+
+        self.assertIn(" seconds>", repr(t))
+
+        self.assertIsInstance(f"{t!r}", str)
+    
+    def test_timer_float(self):
+        t = Timer()
+        self.assertIsInstance(float(t), float)
+
+        self.assertIsInstance(f"{t:0.2f}", str)
 
 
 if __name__ == "__main__":
