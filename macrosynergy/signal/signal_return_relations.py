@@ -1,6 +1,7 @@
 """
 Module for analysing and visualizing signal and a return series.
 """
+
 import warnings
 import numpy as np
 import pandas as pd
@@ -8,18 +9,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn import metrics as skm
 from scipy import stats
-from typing import List, Union, Tuple, Dict, Any, Optional
+from typing import List, Union, Tuple, Dict, Any, Optional, Callable
 from sklearn.exceptions import UndefinedMetricWarning
 import statsmodels.api as sm
 from statsmodels.tools.sm_exceptions import ConvergenceWarning
-
-warnings.simplefilter("ignore", ConvergenceWarning)
-warnings.filterwarnings("ignore", category=UserWarning)
-warnings.filterwarnings("ignore", category=RuntimeWarning)
-warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
-
-# Ignore all warnings
-warnings.filterwarnings("ignore")
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import (
@@ -29,9 +22,10 @@ from macrosynergy.management.utils import (
 )
 import macrosynergy.visuals as msv
 
+#Ensure warnings are printed
+warnings.simplefilter("always")
 
 class SignalReturnRelations:
-
     """
     Class for analysing and visualizing signal and a return series.
 
@@ -69,8 +63,10 @@ class SignalReturnRelations:
         Technically, this is a negative lag (early arrival) of the target category
         in working days prior to any frequency conversion. Default is 0.
     :param <bool> ms_panel_test: if True the Macrosynergy Panel test is calculated. Please
-        note that this is a very time-consuming operation and should be used only if you 
+        note that this is a very time-consuming operation and should be used only if you
         require the result.
+    :param <List[Callable]> additional_metrics: list of additional metrics to be
+        calculated and added to the output table.
     """
 
     def __init__(
@@ -89,6 +85,7 @@ class SignalReturnRelations:
         fwin: int = 1,
         slip: int = 0,
         ms_panel_test: bool = False,
+        additional_metrics: List[Callable] = None,
     ):
         if rets is None:
             raise ValueError("Target return must be defined.")
@@ -126,11 +123,16 @@ class SignalReturnRelations:
                     if f not in seen:
                         seen.add(f)
                         self.freqs.append(f)
+                    else:
+                        warnings.warn(f"Frequency {f} is repeated, dropping repeated frequency.")
         else:
             if not freqs in self.dic_freq.keys():
                 raise ValueError(freq_error)
             else:
                 self.freqs = [freqs]
+
+        if not isinstance(ms_panel_test, bool):
+            raise TypeError(f"<bool> object expected for ms_panel_test and not {type(ms_panel_test)}.")
 
         self.ms_panel_test = ms_panel_test
 
@@ -145,10 +147,22 @@ class SignalReturnRelations:
             "pearson_pval",
             "kendall",
             "kendall_pval",
-            "auc"
+            "auc",
         ]
+
         if self.ms_panel_test:
             self.metrics.append("map_pval")
+
+        if additional_metrics:
+            self.metrics.extend(
+                metric.__name__
+                for metric in additional_metrics
+                if hasattr(metric, "__name__")
+            )
+        else:
+            additional_metrics = []
+
+        self.additional_metrics = additional_metrics
 
         if not isinstance(cosp, bool):
             raise TypeError(f"<bool> object expected and not {type(cosp)}.")
@@ -170,7 +184,6 @@ class SignalReturnRelations:
         self.end = end
         self.blacklist = blacklist
         self.fwin = fwin
-        self.df = df.copy()
 
         if not self.is_list_of_strings(rets):
             self.rets = [rets]
@@ -205,23 +218,15 @@ class SignalReturnRelations:
 
         if len(self.signs) != len(self.sigs):
             raise ValueError("Signs must have a length equal to signals")
-
-        self.manipulate_df(
-            xcat=self.sigs + [self.rets[0]],
-            freq=self.freqs[0],
-            agg_sig=self.agg_sigs[0],
+        
+        self.df = reduce_df(
+            df,
+            xcats=self.xcats,
+            cids=self.cids,
+            start=self.start,
+            end=self.end,
+            blacklist=self.blacklist,
         )
-        if len(self.sigs) > 1:
-            self.df_sigs = self.__rival_sigs__(self.rets[0])
-
-        self.df_cs = self.__output_table__(
-            cs_type="cids", ret=self.rets[0], sig=self.sigs[0]
-        )
-        self.df_ys = self.__output_table__(
-            cs_type="years", ret=self.rets[0], sig=self.sigs[0]
-        )
-
-        # self.sigs[0] = self.revert_negation(self.sigs[0])
 
     def __rival_sigs__(self, ret, sigs=None):
         """
@@ -241,49 +246,6 @@ class SignalReturnRelations:
             )
 
         return df_out
-
-    def signals_table(self, sigs: List[str] = None):
-        """
-        Output table on relations of various signals with the target return.
-
-        :param <List[str]> sigs: signal categories to be included in the panel-level
-            table. Default is None and all present signals will be displayed. Alternative
-            is a valid subset of the possible categories. Primary signal must be passed
-            if to be included.
-
-        NB.:
-        Analysis will be based exclusively on the panel level. Will only return a table
-        if rival signals have been defined upon instantiation. If the communal sample
-        parameter has been set to True, all signals will be aligned on the individual
-        cross-sectional level.
-        """
-
-        try:
-            df_sigs = self.df_sigs.round(decimals=3)
-        except Exception:
-            error_msg = "Additional signals have not been defined on the instance."
-            raise AttributeError(error_msg)
-        else:
-            # Set to all available signals.
-            sigs = self.sigs if sigs is None else sigs
-
-            assert isinstance(sigs, list), "List of signals expected."
-
-            sigs_error = (
-                f"The requested signals must be a subset of the primary plus "
-                f"additional signals received, {self.sigs}."
-            )
-            assert set(sigs).issubset(set(self.sigs)), sigs_error
-
-            return df_sigs.loc[sigs, :]
-
-    def cross_section_table(self):
-        """Output table on relations across sections and the panel."""
-        return self.df_cs.round(decimals=3)
-
-    def yearly_table(self):
-        """Output table on relations across sections and the panel."""
-        return self.df_ys.round(decimals=3)
 
     @staticmethod
     def __yaxis_lim__(accuracy_df: pd.DataFrame):
@@ -446,12 +408,6 @@ class SignalReturnRelations:
         if ret is None and sigs is None:
             ret = self.rets[0]
             sigs = self.sigs
-            if type == "cross_section":
-                df_xs = self.df_cs
-            elif type == "years":
-                df_xs = self.df_ys
-            else:
-                df_xs = self.df_sigs
         else:
             if ret is None:
                 ret = self.rets[0]
@@ -637,6 +593,7 @@ class SignalReturnRelations:
             freq=freq,
             blacklist=None,
             lag=1,
+            fwin=self.fwin,
             xcat_aggs=[agg_sig, "sum"],
         )
         self.df = df
@@ -661,7 +618,7 @@ class SignalReturnRelations:
         Remove the return category from establishing the intersection to preserve the
         maximum amount of signal data available (required because of the applied lag).
         """
-        
+
         df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values="value")
 
         storage = []
@@ -685,9 +642,9 @@ class SignalReturnRelations:
                 s_date = intersection_df.index[0]
                 e_date = intersection_df.index[-1]
 
-                final_df.loc[
-                    (c, s_date):(c, e_date), signal
-                ] = intersection_df.to_numpy()
+                final_df.loc[(c, s_date):(c, e_date), signal] = (
+                    intersection_df.to_numpy()
+                )
                 storage.append(final_df)
             else:
                 warnings.warn(
@@ -759,16 +716,26 @@ class SignalReturnRelations:
 
         if (ret_sign == -1.0).all() or (ret_sign == 1.0).all():
             df_out.loc[segment, "auc"] = np.NaN
+            warnings.warn(
+                "AUC could not be calculated, since the return category has a lack of "
+                "class diversity."
+            )
         else:
             df_out.loc[segment, "auc"] = skm.roc_auc_score(ret_sign, sig_sign)
 
         if self.ms_panel_test:
             df_out.loc[segment, "map_pval"] = self.map_pval(ret_vals, sig_vals)
 
+        for metric in self.additional_metrics:
+            df_out.loc[segment, metric.__name__] = metric(ret_vals, sig_vals)
+
         return df_out
 
     def map_pval(self, ret_vals, sig_vals):
-        if not "cid" in ret_vals.index.names or ret_vals.index.get_level_values("cid").nunique() <= 1:
+        if (
+            not "cid" in ret_vals.index.names
+            or ret_vals.index.get_level_values("cid").nunique() <= 1
+        ):
             warnings.warn(
                 "P-value could not be calculated, since there wasn't enough datapoints."
             )
@@ -850,7 +817,7 @@ class SignalReturnRelations:
         if not srt:
             df_out.loc["Mean", :] = df_out.loc[css, :].mean()
 
-            above50s = statms[0:6] + [statms[-1]]
+            above50s = statms[0:6] + [statms[statms.index("auc")]]
             # Overview of the cross-sectional performance.
             df_out.loc["PosRatio", above50s] = (df_out.loc[css, above50s] > 0.5).mean()
 
@@ -863,7 +830,6 @@ class SignalReturnRelations:
             pos_pvals = np.mean(np.array(pvals_bool) * np.array(pos_corr_coefs), axis=0)
             # Positive correlation with error prob < 50%.
             df_out.loc["PosRatio", below50s] = pos_pvals
-            pos_pearson = pos_corr_coefs["pearson"]
             if self.ms_panel_test:
                 map_pval_bool = df_out.loc[css, "map_pval"] < 0.5
                 pos_map_pval = np.mean(np.array(map_pval_bool) * np.nan)
@@ -922,6 +888,7 @@ class SignalReturnRelations:
 
             sig_sign = df_sgs[sig]
             ret_sign = df_sgs[ret]
+            ret_vals, sig_vals = df_segment[ret], df_segment[sig]
             if stat == "accuracy":
                 list_of_results.append(skm.accuracy_score(sig_sign, ret_sign))
             elif stat == "bal_accuracy":
@@ -939,24 +906,31 @@ class SignalReturnRelations:
                     skm.precision_score(ret_sign, sig_sign, pos_label=-1)
                 )
             elif stat == "kendall":
-                ret_vals, sig_vals = df_segment[ret], df_segment[sig]
                 list_of_results.append(stats.kendalltau(ret_vals, sig_vals)[0])
             elif stat == "kendall_pval":
-                ret_vals, sig_vals = df_segment[ret], df_segment[sig]
                 list_of_results.append(stats.kendalltau(ret_vals, sig_vals)[1])
             elif stat == "pearson":
-                ret_vals, sig_vals = df_segment[ret], df_segment[sig]
                 list_of_results.append(stats.pearsonr(ret_vals, sig_vals)[0])
             elif stat == "pearson_pval":
-                ret_vals, sig_vals = df_segment[ret], df_segment[sig]
                 list_of_results.append(stats.pearsonr(ret_vals, sig_vals)[1])
             elif stat == "auc":
                 if (ret_sign == -1.0).all() or (ret_sign == 1.0).all():
                     list_of_results.append(np.NaN)
+                    warnings.warn(
+                        "AUC could not be calculated, since the return category has a "
+                        "lack of class diversity."
+                    )
                 else:
                     list_of_results.append(skm.roc_auc_score(ret_sign, sig_sign))
             elif stat == "map_pval" and self.ms_panel_test:
                 list_of_results.append(self.map_pval(ret_vals, sig_vals))
+            elif True in [
+                stat == metric.__name__ for metric in self.additional_metrics
+            ]:
+                idx = [
+                    stat == metric.__name__ for metric in self.additional_metrics
+                ].index(True)
+                list_of_results.append(self.additional_metrics[idx](ret_vals, sig_vals))
             else:
                 raise ValueError("Invalid statistic.")
 
@@ -972,84 +946,52 @@ class SignalReturnRelations:
             elif stat in self.metrics[7:10:2]:
                 return np.mean(np.array(list_of_results) < 0.5)
 
-    def summary_table(self, cross_section: bool = False, years: bool = False):
-        """
-        Summary of signal-return relations for panel, or across years or cross sections.
-
-        :param <bool> cross_section: If True, returns the cross-sectional summary table.
-            Default is False.
-        :param <bool> years: If True, returns the yearly summary table. Default is False.
-
-        returns <pd.DataFrame>: summary table.
-
-        N.B.: The interpretation of the columns is generally as follows:
-
-        accuracy refers to accuracy for binary classification, i.e. positive or negative
-            return, and gives the ratio of correct prediction of the sign of returns
-            against all predictions. Note that exact zero values for either signal or
-            return series will not be considered for accuracy analysis.
-        bal_accuracy refers to balanced accuracy. This is the average of the ratios of
-            correctly detected positive returns and correctly detected negative returns.
-            The denominators here are the total of actual positive and negative returns
-            cases. Technically, this is the average of sensitivity and specificity.
-        pos_sigr is the ratio of positive signals to all predictions. It indicates the
-            long bias of the signal.
-        pos_retr is the ratio of positive returns to all observed returns. It indicates
-            the positive bias of the returns.
-        pos_prec means positive precision, i.e. the ratio of correct positive return
-            predictions to all positive predictions. It indicates how well the positive
-            predictions of the signal have fared. Generally, good positive precision is
-            easy to accomplish if the ratio of positive returns has been high (the signal
-            can simply propose a long position for the full duration).
-        neg_prec means negative precision, i.e. the ratio of correct negative return
-            predictions to all negative predictions. It indicates how well the negative
-            predictions of the signal have fared. Generally, good negative precision is
-            hard to accomplish if the ratio of positive returns has been high.
-        pearson is the Pearson correlation coefficient between signal and subsequent
-            return.
-        pearson_pval is the probability that the (positive) correlation has been
-            accidental, assuming that returns are independently distributed. This
-            statistic would be invalid for forward moving averages.
-        kendall is the Kendall correlation coefficient between signal and subsequent
-            return.
-        kendall_pval is the probability that the (positive) correlation has been
-            accidental, assuming that returns are independently distributed. This
-            statistic would be invalid for forward moving averages.
-
-        The rows have the following meaning:
-
-        Panel refers to the the whole panel of cross-sections and sample period,
-            excluding unavailable and blacklisted periods.
-        Mean years is the mean of the statistic across all years.
-        Mean cids is the mean of the statistic across all cross-sections.
-        Positive ratio is the ratio of positive years or cross-sections for which the
-            statistic was above its "neutral" level, i.e. above 0.5 for classification
-            ratios and positive correlation probabilities, and above 0 for the
-            correlation coefficients.
-        """
-        dfys = self.df_ys.round(decimals=5)
-        dfcs = self.df_cs.round(decimals=5)
-        if cross_section:
-            return dfcs
-        elif years:
-            return dfys
-        else:
-            dfsum = pd.concat([dfys.iloc[:3,], dfcs.iloc[1:3,]], axis=0)
-
-            dfsum.index = [
-                "Panel",
-                "Mean years",
-                "Positive ratio",
-                "Mean cids",
-                "Positive ratio",
-            ]
-
-            return dfsum
-
     def revert_negation(self, sig: str):
         if sig[-4:] == "_NEG":
             sig = sig[:-4]
         return sig
+
+
+    def summary_table(self, cross_section: bool = False, years: bool = False):
+        warnings.warn(
+            "summary_table() has been deprecated will be removed in a subsequent "
+            "version, please now use single_relation_table(table_type='summary').",
+            FutureWarning
+        )
+        if cross_section and years:
+            raise ValueError("Both cross_section and years cannot be True")
+        if not (cross_section and years):
+            return self.single_relation_table(table_type="summary")
+        else:
+            return self.single_relation_table(table_type="years" if years else "cross_section")
+    
+    def signals_table(self, sigs: List[str] = None):
+        warnings.warn(
+            "signals_table() has been deprecated will be removed in a subsequent "
+            "version, please now use multiple_relations_table()",
+            FutureWarning
+        )
+        if sigs is None:
+            self.sigs = [self.revert_negation(sig) for sig in self.sigs]
+            sigs = self.sigs
+        return self.multiple_relations_table(rets=self.rets[0], xcats=sigs, freqs=self.freqs[0], agg_sigs=self.agg_sigs[0])
+    
+    def cross_section_table(self):
+        warnings.warn(
+            "cross_section_table() has been deprecated will be removed in a subsequent "
+            "version, please now use " 
+            " single_relation_table(table_type='cross_section_table')",
+            FutureWarning
+        )
+        return self.single_relation_table(table_type="cross_section")
+    
+    def yearly_table(self):
+        warnings.warn(
+            "yearly_table() has been deprecated will be removed in a subsequent "
+            "version, please now use single_relation_table(table_type='years')",
+            FutureWarning
+        )
+        return self.single_relation_table(table_type="years")
 
     def single_relation_table(
         self,
@@ -1057,6 +999,7 @@ class SignalReturnRelations:
         xcat: str = None,
         freq: str = None,
         agg_sigs: str = None,
+        table_type: str = None,
     ):
         """
         Computes all the statistics for one specific signal-return relation:
@@ -1070,6 +1013,8 @@ class SignalReturnRelations:
             If not specified uses the freq stored in the class.
         :param <str> agg_sigs: aggregation method applied to the signal values in
             down-sampling.
+        :param <str> table_type: type of table to be returned. Either "summary", "years", 
+            "cross_section".
         """
         self.sigs = [self.revert_negation(sig) for sig in self.sigs]
         self.df = self.original_df
@@ -1114,16 +1059,47 @@ class SignalReturnRelations:
         if not sig in self.sigs:
             sig = sig + "_NEG"
 
-        df_result = self.__output_table__(
-            cs_type="cids", ret=ret, sig=sig, srt=True
-        ).round(decimals=5)
+        if table_type is not None:
+            if not table_type in ["summary", "years", "cross_section"]:
+                raise ValueError("Invalid table type")
+
+        if table_type == "years":
+            cs_type = "years"
+        else:
+            cs_type = "cids"
+
+        if table_type == "summary":
+            df_result = pd.concat(
+                [
+                    self.__output_table__(
+                        cs_type="years", ret=ret, sig=sig, srt=False
+                    ).iloc[
+                        :3,
+                    ],
+                    self.__output_table__(
+                        cs_type="cids", ret=ret, sig=sig, srt=False
+                    ).iloc[
+                        1:3,
+                    ],
+                ],
+                axis=0,
+            )
+            df_result.index = [
+                df_result.index[0],
+                "Mean years",
+                "Positive ratio",
+                "Mean cids",
+                "Positive ratio",
+            ]
+        else:
+            df_result = self.__output_table__(cs_type=cs_type, ret=ret, sig=sig, srt=table_type is None)
 
         self.df = self.original_df
         index = f"{freq}: {sig}/{agg_sigs} => {ret}"
 
         df_result.rename(index={"Panel": index}, inplace=True)
 
-        return df_result
+        return df_result.round(5)
 
     def multiple_relations_table(
         self,
@@ -1148,6 +1124,8 @@ class SignalReturnRelations:
             values in down-sampling.
         """
         self.sigs = [self.revert_negation(sig) for sig in self.sigs]
+        self.df = self.original_df
+        self.xcats = list(self.df["xcat"].unique())
         if rets is None:
             rets = self.rets
         if freqs is None:
@@ -1180,34 +1158,32 @@ class SignalReturnRelations:
         for agg_sigs_elem in agg_sigs:
             if not agg_sigs_elem in self.agg_sigs:
                 raise ValueError(f"{agg_sigs_elem} is not a valid aggregation method")
-
+            
         xcats = [x for x in xcats if x in self.sigs]
 
-        index = [
-            (
-                f"{freq}: "
-                f"{xcat + '_NEG' if self.signs[self.sigs.index(xcat)] else xcat}"
-                f"/{agg_sig} => {ret}"
-            )
+        multiindex = pd.MultiIndex.from_tuples([
+            (ret, xcat + "_NEG" if self.signs[self.sigs.index(xcat)] else xcat, freq, agg_sig)
             for freq in freqs
             for agg_sig in agg_sigs
             for ret in rets
             for xcat in xcats
-        ]
+        ], names=["Return", "Signal", "Frequency", "Aggregation"])
 
-        df_result = pd.concat(
-            [
-                self.single_relation_table(
-                    ret=ret, xcat=[xcat, ret], freq=freq, agg_sigs=agg_sig
-                )
-                for freq in freqs
-                for agg_sig in agg_sigs
-                for ret in rets
-                for xcat in xcats
-            ],
-            axis=0,
-        )
-        df_result.index = index
+        df_rows = []
+        for freq in freqs:
+            for agg_sig in agg_sigs:
+                for ret in rets:
+                    self.manipulate_df(xcat=xcats+[ret], freq=freq, agg_sig=agg_sig)
+                    for xcat in xcats:
+                        if not xcat in self.sigs:
+                            xcat = xcat + "_NEG"
+                        df_rows.append(self.__output_table__(cs_type="cids", ret=ret, sig=xcat, srt=True))
+
+        df_result = pd.concat(df_rows, axis=0)
+
+        df_result.index = multiindex
+
+        self.df = self.original_df
 
         return df_result
 
@@ -1265,6 +1241,8 @@ class SignalReturnRelations:
         :param <bool> annotate: if True, the values are annotated in the heatmap.
         :param <int> round: number of decimals to round the values to on the
             heatmap's annotations.
+
+        :return: DataFrame with the specified statistic for each row and column
         """
         self.df = self.original_df.copy()
         self.sigs = [self.revert_negation(sig) for sig in self.sigs]
@@ -1324,7 +1302,7 @@ class SignalReturnRelations:
 
             row = self.get_rowcol(hash, rows)
             column = self.get_rowcol(hash, columns)
-            df_result[column][row] = self.calculate_single_stat(stat, ret, sig, type)
+            df_result.loc[row, column] = self.calculate_single_stat(stat, ret, sig, type)
 
             # Reset self.df and sig to original values
             self.df = self.original_df
@@ -1365,32 +1343,38 @@ class SignalReturnRelations:
         :param <List[str]> columns: list of strings specifying which of the categories
             are included in the columns of the dataframe.
         """
-
+        label_dict = {"xcat": "Signal", "ret": "Return", "freq": "Frequency", "agg_sigs": "Aggregation"}
         if len(rows) == 2:
-            rows_names = [
-                a + "/" + b for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]
-            ]
-            columns_names = [
-                a + "/" + b
-                for a in rows_dict[columns[0]]
-                for b in rows_dict[columns[1]]
-            ]
+            rows_names = pd.MultiIndex.from_tuples([(a, b) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]], names=[label_dict[rows[0]], label_dict[rows[1]]])
+            columns_names = pd.MultiIndex.from_tuples([(a, b) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]]], names=[label_dict[columns[0]], label_dict[columns[1]]])
+            # rows_names = [
+            #     a + "/" + b for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]
+            # ]
+            # columns_names = [
+            #     a + "/" + b
+            #     for a in rows_dict[columns[0]]
+            #     for b in rows_dict[columns[1]]
+            # ]
         elif len(rows) == 1:
             rows_names = rows_dict[rows[0]]
-            columns_names = [
-                a + "/" + b + "/" + c
-                for a in rows_dict[columns[0]]
-                for b in rows_dict[columns[1]]
-                for c in rows_dict[columns[2]]
-            ]
+            columns_names = pd.MultiIndex.from_tuples([(a, b, c) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]] for c in rows_dict[columns[2]]], names=[label_dict[columns[0]], label_dict[columns[1]], label_dict[columns[2]]])
+            # rows_names = rows_dict[rows[0]]
+            # columns_names = [
+            #     a + "/" + b + "/" + c
+            #     for a in rows_dict[columns[0]]
+            #     for b in rows_dict[columns[1]]
+            #     for c in rows_dict[columns[2]]
+            # ]
         elif len(columns) == 1:
-            rows_names = [
-                a + "/" + b + "/" + c
-                for a in rows_dict[rows[0]]
-                for b in rows_dict[rows[1]]
-                for c in rows_dict[rows[2]]
-            ]
+            rows_names = pd.MultiIndex.from_tuples([(a, b, c) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]] for c in rows_dict[rows[2]]], names=[label_dict[rows[0]], label_dict[rows[1]], label_dict[rows[2]]])
             columns_names = rows_dict[columns[0]]
+            # rows_names = [
+            #     a + "/" + b + "/" + c
+            #     for a in rows_dict[rows[0]]
+            #     for b in rows_dict[rows[1]]
+            #     for c in rows_dict[rows[2]]
+            # ]
+            # columns_names = rows_dict[columns[0]]
 
         return rows_names, columns_names
 
@@ -1406,10 +1390,14 @@ class SignalReturnRelations:
         idx: List[str] = ["ret", "xcat", "freq", "agg_sigs"]
         assert all([x in idx for x in rowcols]), "rowcols must be a subset of idx"
 
-        for rowcol in rowcols:
-            result += hash.split("/")[idx.index(rowcol)] + "/"
+        if len(rowcols) == 1:
+            result = hash.split("/")[idx.index(rowcols[0])]
+        if len(rowcols) == 2:
+            result = (hash.split("/")[idx.index(rowcols[0])], hash.split("/")[idx.index(rowcols[1])])
+        if len(rowcols) == 3:
+            result = (hash.split("/")[idx.index(rowcols[0])], hash.split("/")[idx.index(rowcols[1])], hash.split("/")[idx.index(rowcols[2])])
 
-        return result[:-1]
+        return result
 
 
 if __name__ == "__main__":
@@ -1444,10 +1432,25 @@ if __name__ == "__main__":
 
     # Reduced DataFrame.
     dfdx = dfd[~(filt1 | filt2)].copy()
-    dfdx["ERA"]: str = "before 2007"
+    dfdx["ERA"] = "before 2007"
     dfdx.loc[dfdx["real_date"].dt.year > 2007, "ERA"] = "from 2010"
 
     cidx = ["AUD", "CAD", "GBP", "USD"]
+
+    def spearman(x, y):
+        return stats.spearmanr(x, y)[0]
+
+    from statsmodels.tsa.stattools import grangercausalitytests
+
+    def granger(x, y):
+        return grangercausalitytests(np.array([x, y]).T, maxlag=3, addconst=True, verbose=False)[1][0][
+            "ssr_ftest"
+        ][0]
+
+    def granger_pval(x, y):
+        return grangercausalitytests(np.array([x, y]).T, maxlag=3, addconst=True, verbose=False)[1][0][
+            "ssr_ftest"
+        ][1]
 
     # Additional signals.
     srn = SignalReturnRelations(
@@ -1458,10 +1461,14 @@ if __name__ == "__main__":
         cosp=True,
         freqs="Q",
         start="2002-01-01",
-        ms_panel_test=True
+        ms_panel_test=True,
+        additional_metrics=[spearman, granger, granger_pval],
     )
 
-    dfsum = srn.summary_table(years=True)
+    df_dep = srn.summary_table()
+    print(df_dep)
+
+    dfsum = srn.single_relation_table(table_type="summary")
     print(dfsum)
 
     srn = SignalReturnRelations(
@@ -1472,19 +1479,23 @@ if __name__ == "__main__":
         cosp=True,
         freqs="M",
         start="2002-01-01",
+        additional_metrics=[spearman, granger, granger_pval],
     )
-    dfsum = srn.summary_table(cross_section=True)
-    print(dfsum)
 
-    df_sigs = srn.signals_table(sigs=["CRY_NEG", "INFL_NEG"])
-    df_sigs_all = srn.signals_table()
+    df_sigs = srn.multiple_relations_table()
     print(df_sigs)
-    print(df_sigs_all)
+    
+    dfsum = srn.single_relation_table(table_type="cross_section")
+    print(dfsum)
 
     srn.accuracy_bars(
         type="signals",
         title="Accuracy",
     )
+
+    sst = srn.single_statistic_table(stat="granger_pval")
+
+    print(sst)
 
     sr = SignalReturnRelations(
         dfd,
@@ -1516,7 +1527,7 @@ if __name__ == "__main__":
         blacklist=black,
     )
 
-    sr.accuracy_bars(type="signals", title="Accuracy")
+    sr.accuracy_bars(sigs=["CRY", "INFL"], type="signals", title="Accuracy")
     sr.correlation_bars(type="signals", title="Correlation")
 
     srt = sr.single_relation_table(ret="XRH", xcat="INFL", freq="Q", agg_sigs="last")
