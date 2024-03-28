@@ -192,13 +192,14 @@ class LinePlot(Plotter):
                     plot_output.clear_output(wait=True)  # Clear the previous plot
                     # Plot initial time series
                     fig, ax = plt.subplots(figsize=(10, 6))
-                    ax.plot(time_series_df.index, time_series_df['value'], label='Original')
                     if trend:
                         ax.plot(time_series_df.index, decomposition.trend, label="Trend", color="red")
                     if seasonal:
                         ax.plot(time_series_df.index, decomposition.seasonal, label="Seasonal", color="green")
                     if resid:
                         ax.plot(time_series_df.index, decomposition.resid, label="Residual", color="yellow")
+                    if not trend and not seasonal and not resid:
+                        ax.plot(time_series_df.index, time_series_df['value'], label='Original')
                     ax.legend()
                     plt.show()
 
@@ -232,7 +233,7 @@ class LinePlot(Plotter):
             return fig
 
         if show:
-            #plt.show()
+            plt.show()
             return
 
 
