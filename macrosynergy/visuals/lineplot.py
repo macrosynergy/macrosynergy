@@ -188,6 +188,7 @@ class LinePlot(Plotter):
 
             def update_plot(trend, seasonal, resid):
                 with plot_output:
+                    plt.close()  # Close the previous plot
                     plot_output.clear_output(wait=True)  # Clear the previous plot
                     # Plot initial time series
                     fig, ax = plt.subplots(figsize=(10, 6))
