@@ -328,6 +328,14 @@ class Timer(object):
     def __init__(self):
         self.t0 = time.perf_counter()
 
+    def __format__(self, format_spec: str):
+        if "r" in format_spec:
+            return repr(self).__format__(format_spec)
+        elif "f" in format_spec:
+            return float(self).__format__(format_spec)
+        else:
+            return str(self).__format__(format_spec)
+
     def __str__(self) -> str:
         return f"{self.lap():.2f} seconds"
 
