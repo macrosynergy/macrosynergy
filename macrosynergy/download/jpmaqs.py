@@ -909,7 +909,7 @@ class JPMaQSDownload(DataQueryInterface):
         if (
             as_dataframe
             and dataframe_format == "qdf"
-            and not any([not expr.startswith("DB(JPMAQS") for expr in expressions])
+            and not all([expr.startswith("DB(JPMAQS") for expr in expressions])
         ):
             dataframe_format = "wide"
             warnings.warn(
