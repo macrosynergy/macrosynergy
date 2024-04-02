@@ -192,3 +192,6 @@ coverage/
 coverage.xml
 
 *.pem
+
+# Visual studio code files
+.trunk/

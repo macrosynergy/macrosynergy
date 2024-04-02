@@ -11,8 +11,18 @@ except ModuleNotFoundError:
     __git_revision__ = GIT_REVISION
 
 from . import visuals, download, panel, pnl, management, signal, learning
+from .management.utils import check_package_version
 
-__all__ = ["visuals", "download", "panel", "pnl", "management", "signal", "learning"]
+__all__ = [
+    "visuals",
+    "download",
+    "panel",
+    "pnl",
+    "management",
+    "signal",
+    "learning",
+    "check_package_version",
+]
 
 __name__ = ["__version__"]
 
