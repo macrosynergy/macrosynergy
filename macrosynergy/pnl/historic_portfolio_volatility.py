@@ -67,16 +67,19 @@ def _weighted_covariance(
     # drop NaNs and only consider the most recent lback_periods
     x, y = x[~wmask][-weightslen:], y[~wmask][-weightslen:]
 
-
-    assert x.shape[0] == weightslen  # TODO what happens if it is less...
+    # assert x.shape[0] == weightslen  # TODO what happens if it is less...
+    for arr in [x, y]:
+        if arr.shape[0] < weightslen:
+            warnings.warn(
+                f"Length of x is less than the weightslen: {arr.shape[0]} < {weightslen}"
+            )
     w: np.ndarray = weights_func(
         lback_periods=weightslen,
         half_life=min(weightslen // 2, kwargs.get("half_life", 11)),
     )
 
-    xmean, ymean = (w*x).sum(), (w*y).sum()
+    xmean, ymean = (w * x).sum(), (w * y).sum()
 
-    # rss = (x - x.mean()) * (y - y.mean())
     rss = (x - xmean) * (y - ymean)
 
     return w.T.dot(rss)
@@ -170,10 +173,8 @@ def _downsample_returns(
     freq: str = "m",
 ) -> pd.DataFrame:
     assert freq in ("d", "w", "m", "q")
-    piv_df.index = pd.to_datetime(piv_df.index)  # TODO - check if this is necessary
-    pivot_new_frequency: pd.DataFrame = ((1+piv_df/100).resample("m").prod() - 1) * 100
-
-    return pivot_new_frequency
+    piv_new_freq: pd.DataFrame = ((1 + piv_df / 100).resample("m").prod() - 1) * 100
+    return piv_new_freq
 
 
 def _multifreq_volatility(
