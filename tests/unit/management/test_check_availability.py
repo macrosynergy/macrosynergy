@@ -152,8 +152,8 @@ class TestAll(unittest.TestCase):
 
         # Validate the output.
         lines = [l for l in output.splitlines() if l.strip()]  # Remove empty lines.
-        # first line should be the missing xcats across df
-        self.assertTrue(lines[0].startswith("Missing xcats across df: "))
+        # first line should be no missing xcats
+        self.assertTrue(lines[0].startswith("No missing XCATs across DataFrame."))
 
         # each consecutive line should be a missing cid for a xcat
         for line in lines[1:]:
@@ -164,6 +164,22 @@ class TestAll(unittest.TestCase):
             _tkdrop = [(_c, _xcat) for _c in _cids]
             # each cid, xcat pair should be in the list of dropped tickers
             self.assertTrue(all([_ in tkdrop for _ in _tkdrop]))
+
+        # select one more random xcat
+        random_xcat: str = random.choice(xcats)
+        dfd = dfd[~(dfd["xcat"] == random_xcat)]
+
+        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
+            missing_in_df(dfd, xcats, cids)
+            output = mock_stdout.getvalue()
+
+        # Validate the output.
+        lines = [l for l in output.splitlines() if l.strip()]
+        # first line should be a missing xcat, the rest has been tested above
+        self.assertTrue(lines[0].startswith("Missing XCATs across DataFrame:"))
+        extracted_xcat = eval(lines[0].split(":")[1].strip())
+        self.assertTrue(len(extracted_xcat) == 1)
+        self.assertTrue(extracted_xcat[0] == random_xcat)
 
 
 if __name__ == "__main__":
