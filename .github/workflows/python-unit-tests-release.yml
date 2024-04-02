@@ -8,37 +8,52 @@ on:
   workflow_dispatch:
 
 jobs:
+  prepare-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: set-matrix
+        run: |
+          FOLDERS=$(ls -d tests/unit/*/ | sed 's|tests/unit/||' | sed 's|/||' | jq -R -s -c 'split("\n")[:-1]')
+          echo "Matrix: $FOLDERS"
+          echo "::set-output name=matrix::$FOLDERS"
+
   run-unit-tests-matrix:
+    needs: prepare-matrix
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.8", "3.9", "3.10", "3.11"]
+        folder: ${{fromJson(needs.prepare-matrix.outputs.matrix)}}
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
         run: |
           pip install .[test]
 
       - name: Lint with flake8
         run: |
-          # Options: exluding docs, scripts and build folders. Also, treating certain errors as warnings.
           flake8 --count --select=E9,F63,F7,F82 --show-source --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
           flake8 --count --exit-zero --max-complexity=10 --max-line-length=127 --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
 
-      - name: Test with pytest
+      - name: Test with pytest in ${{ matrix.folder }}
         run: |
-          # Options: --ignore=tests/specific.py --ignore-glob=tests/ignore-pattern
-          pytest tests/unit/
+          pytest tests/unit/${{ matrix.folder }}
 
       - name: Test build settings
         run: |
           pip uninstall -y macrosynergy
           pip install .[all] 
           python -c "import macrosynergy; print(macrosynergy.__version__)"
-          
