@@ -54,7 +54,12 @@ jobs:
   run-unit-tests-success:
     needs: run-unit-tests
     runs-on: ubuntu-latest
-    if: ${{ always() }}
     steps:
-      - name: Print success message
-        run: echo "Unit tests passed successfully!"
+      - name: Notify on Failure
+        run: |
+          if [ ${{ job.status }} == 'failure' ]; then
+            echo "Unit tests failed"
+            exit 1
+          else
+            echo "Unit tests passed"
+          fi
