@@ -145,8 +145,8 @@ def _vol_target_positions(
     for contx in fids:
         pos_col = contx + "_" + pname
         cont_name = contx + sig_ident
-        out_df[pos_col] = np.nan
-        out_df[pos_col].iloc[-vlen:] = (
+        out_df.loc[:, pos_col] = np.nan
+        out_df.loc[:, pos_col].iloc[-vlen:] = (
             histpvol["value"].values * df_wide[cont_name].iloc[-vlen:].values
         )
 
