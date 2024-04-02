@@ -1494,11 +1494,11 @@ class SignalOptimizer:
 
         # Create stacked bar plot
         if pos_coefs.sum().any():
-            ax = pos_coefs.loc[:, pos_coefs.sum() > 0].plot(
+            ax = pos_coefs.plot(
                 kind="bar", stacked=True, figsize=figsize, colormap=cmap, alpha=0.75
             )
         if neg_coefs.sum().any():
-            neg_coefs.loc[:, neg_coefs.sum() < 0].plot(
+            neg_coefs.plot(
                 kind="bar",
                 stacked=True,
                 figsize=figsize,
