@@ -160,6 +160,19 @@ class TestContractSignals(unittest.TestCase):
         # self.assertTrue(dfcs.eq(_add_hedged_signals(dfcs, None)).all().all())
         self.assertTrue(np.all(dfcs.values == _add_hedged_signals(dfcs, None).values))
 
+    def test_contract_signal(self):
+        good_args = dict(
+            df=self._testDF(),
+            sig=self.sig,
+            cids=self.cids,
+            ctypes=self.ctypes,
+            cscales=self.cscales,
+            csigns=self.csigns,
+            hbasket=self.hbasket,
+            hscales=self.hscales,
+            hratios=self.hratios,
+        )
+
     def test_contract_signal_no_adjustment(self):
         p: pd.DataFrame = pd.DataFrame(
             1.0,
