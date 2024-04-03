@@ -345,9 +345,11 @@ def contract_signals(
     if relative_value:
         df = _make_relative_value(df=df, *args, **kwargs)
 
+    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
+
     ## Generate primary contract signals
     df_contract_signals: pd.DataFrame = _gen_contract_signals(
-        df=df,
+        df_wide=df_wide,
         cids=cids,
         sig=sig,
         ctypes=ctypes,
@@ -359,7 +361,7 @@ def contract_signals(
     df_hedge_signals: Optional[pd.DataFrame] = None
     if hbasket is not None:
         df_hedge_signals: pd.DataFrame = _apply_hedge_ratios(
-            df=df,
+            df_wide=df_wide,
             cids=cids,
             sig=sig,
             hbasket=hbasket,
@@ -368,14 +370,12 @@ def contract_signals(
         )
 
     # Add the hedge signals to the contract signals
-    df_out: pd.DataFrame = _add_hedged_signals(
+    df_out_wide: pd.DataFrame = _add_hedged_signals(
         df_contract_signals=df_contract_signals,
         df_hedge_signals=df_hedge_signals,
     )
-    # Append the strategy name to all the xcats
-    df_out["xcat"] = df_out["xcat"] + "_" + sname
 
-    return df_out
+    return ticker_df_to_qdf(df=df_out_wide)
 
 
 if __name__ == "__main__":
