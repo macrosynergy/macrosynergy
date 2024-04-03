@@ -182,6 +182,17 @@ class TestContractSignals(unittest.TestCase):
             with self.assertRaises(ValueError):
                 _check_scaling_args(**bad_args)
 
+            if argx != "hbasket":
+                bad_args[argx] = [(None, None) for _ in range(len(good_args[argx]))]
+                with self.assertRaises(TypeError):
+                    _check_scaling_args(**bad_args)
+
+        bad_args = good_args.copy()
+        # set hratios to None
+        bad_args["hratios"] = None
+        with self.assertRaises(ValueError):
+            _check_scaling_args(**bad_args)
+
         # with cscales/csigns = None, the return cscales/csigns should be all ones
         bad_args = good_args.copy()
         bad_args["cscales"] = None
