@@ -1,5 +1,14 @@
-"""
+"""Estimation of Historic Portfolio Volatility.
+
 Module for calculating the historic portfolio volatility for a given strategy.
+
+TODO Proposed workflow:
+1. Create list of trigger dates for rebalance frequency.
+2. Create batches of frequencies for which to estimate volatility per trigger date (memory inefficient).
+3. Estimate variance-covariance matrix for each batch (per trigger date) and per frequency (annualised).
+4. Weight the variance-covariance matrices by the weights for each frequency into single matrix.
+5. Aggregate the variance-covariance matrix into a single portfolio volatility estimate.
+
 """
 
 import logging
@@ -27,6 +36,14 @@ cache = functools.lru_cache(maxsize=None)
 
 logger = logging.getLogger(__name__)
 
+
+# TODO move to constants?
+__MAP_ANNUALIZE = {
+    "D": 252,
+    "W": 52,
+    "M": 12,
+    "Q": 4
+}
 
 @cache
 def flat_weights_arr(lback_periods: int, *args, **kwargs) -> np.ndarray:
@@ -252,13 +269,13 @@ def _calculate_portfolio_volatility(
     :param <pd.DatetimeIndex> trigger_indices: the DateTimeIndex of the trigger dates.
     :param <pd.DataFrame> pivot_returns: the pivot table of the contract returns.
     :param <pd.DataFrame> pivot_signals: the pivot table of the contract signals.
-    :param <int> lback_periods: the number of periods to use for the lookback period
+    :param <int> lback_periods: the number of periods to use for the look-back period
         of the volatility-targeting method. Default is 21.
-    :param <int> half_life: Refers to the half-time for "xma" and full lookback period
+    :param <int> half_life: Refers to the half-time for "xma" and full look-back period
         for "ma". Default is 11.
     :param <callable> weights_func: the function to use for the weights array. Default
         is None, which means that the weights are equal.
-    :param <float> nan_tolerance: maximum ratio of NaNs to non-NaNs in a lookback window,
+    :param <float> nan_tolerance: maximum ratio of NaNs to non-NaNs in a look-back window,
         if exceeded the resulting volatility is set to NaN. Default is 0.25.
     :param <str> portfolio_return_name: the name of the portfolio return series.
     :param <dict> kwargs: additional keyword arguments to pass to the variance-covariance
