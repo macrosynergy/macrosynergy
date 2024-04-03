@@ -43,6 +43,7 @@ OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 JPMAQS_GROUP_ID: str = "JPMAQS"
 API_DELAY_PARAM: float = 0.2  # 300ms delay between requests
+TOKEN_EXPIRY_BUFFER: float = 0.9  # 90% of token expiry time.
 API_RETRY_COUNT: int = 5  # retry count for transient errors
 HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
 MAX_CONTINUOUS_FAILURES: int = 5  # max number of continuous errors before stopping
@@ -310,7 +311,7 @@ class OAuth(object):
 
         created: datetime = self._stored_token["created_at"]  # utc time of creation
         expires: datetime = created + timedelta(
-            seconds=self._stored_token["expires_in"]
+            seconds=self._stored_token["expires_in"] * TOKEN_EXPIRY_BUFFER
         )
 
         utcnow = datetime.now(timezone.utc)
@@ -805,7 +806,7 @@ class DataQueryInterface(object):
         :raises <ValueError>: if the response from the server is not valid.
         """
         if verbose:
-            print("Downloading the JPMaQS catalogue from DataQuery...")
+            print(f"Downloading the {group_id} catalogue from DataQuery...")
         try:
             response_list: Dict = self._fetch(
                 url=self.base_url + CATALOGUE_ENDPOINT,
@@ -825,6 +826,8 @@ class DataQueryInterface(object):
             and (len(set(tkr_idx)) == utkr_count)
         ):
             raise ValueError("The downloaded catalogue is corrupt.")
+        if verbose:
+            print(f"Downloaded {group_id} catalogue with {utkr_count} tickers.")
 
         return tickers
 
@@ -862,16 +865,20 @@ class DataQueryInterface(object):
             ):
                 curr_params: Dict = params.copy()
                 curr_params["expressions"] = expr_batch
-                future_objects.append(
-                    executor.submit(
-                        self._fetch_timeseries,
-                        url=url,
-                        params=curr_params,
-                        tracking_id=tracking_id,
-                        *args,
-                        **kwargs,
+                try:
+                    future_objects.append(
+                        executor.submit(
+                            self._fetch_timeseries,
+                            url=url,
+                            params=curr_params,
+                            tracking_id=tracking_id,
+                            *args,
+                            **kwargs,
+                        )
                     )
-                )
+                except Exception as exc:
+                    raise exc
+
                 time.sleep(delay_param)
 
             for ib, future in tqdm(
@@ -881,10 +888,13 @@ class DataQueryInterface(object):
                 total=len(future_objects),
             ):
                 try:
+                    if future.exception() is not None:
+                        raise future.exception()
                     download_outputs.append(future.result())
                     continuous_failures = 0
                 except Exception as exc:
                     if isinstance(exc, (KeyboardInterrupt, AuthenticationError)):
+                        executor.shutdown(wait=False, cancel_futures=True)
                         raise exc
 
                     failed_batches.append(expr_batches[ib])
@@ -912,7 +922,7 @@ class DataQueryInterface(object):
         Used by the `download_data()` method. Exists to provide a method that can be
         modified when inheriting from this class.
 
-        :param <List[Union[Dict, Any]>> download_outputs: list of list of dictionaries/
+        :param <List[Union[Dict, Any]> download_outputs: list of list of dictionaries/
             other objects.
         :return <List[Dict]>: list of dictionaries/other objects.
         """
@@ -936,7 +946,7 @@ class DataQueryInterface(object):
         Used by the `download_data()` method.
         """
 
-        if retry_counter > 0:
+        if 0 < retry_counter < HL_RETRY_COUNT:
             print("Retrying failed downloads. Retry count:", retry_counter)
 
         if retry_counter > HL_RETRY_COUNT:

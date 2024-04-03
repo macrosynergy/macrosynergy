@@ -59,7 +59,7 @@ class CategoryRelations(object):
         Importantly, for analysis with explanatory and dependent categories, the second
         takes the role of the dependent and a forward window means that the dependent
         values average forward into the future.
-    :param: <List[float]> xcat_trims: two-element list with maximum absolute values
+    :param <List[float]> xcat_trims: two-element list with maximum absolute values
         for the two respective categories. Observations with higher values will be
         trimmed, i.e. removed from the analysis (not winsorized!). Default is None
         for both. Trimming is applied after all other transformations.
@@ -808,7 +808,7 @@ if __name__ == "__main__":
 
     # Reduced DataFrame.
     dfdx = dfd[~(filt1 | filt2)].copy()
-    dfdx["ERA"]: str = "before 2007"
+    dfdx["ERA"] = "before 2007"
     dfdx.loc[dfdx["real_date"].dt.year > 2007, "ERA"] = "from 2010"
 
     cidx = ["AUD", "CAD", "GBP", "USD", "PRY"]

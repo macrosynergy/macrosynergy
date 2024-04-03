@@ -2,6 +2,7 @@
 Implementation of `make_relative_value()` function as a module. The function is used
 to calculate values for indicators relative to a basket of cross-sections.
 """
+
 import numpy as np
 import pandas as pd
 from typing import List, Set
@@ -113,37 +114,41 @@ def make_relative_value(
 
     """
 
-    expected_columns = ["cid", "xcat", "real_date", "value"]
-    col_error = f"The DataFrame must contain the necessary columns: {expected_columns}."
-    assert set(expected_columns).issubset(set(df.columns)), col_error
+    col_names = ["cid", "xcat", "real_date", "value"]
+    col_error = f"The DataFrame must contain the necessary columns: {col_names}."
+    if not set(col_names).issubset(set(df.columns)):
+        raise ValueError(col_error)
 
-    df = df.loc[:, ["cid", "xcat", "real_date", "value"]]
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    operations = {
+        "divide": pd.DataFrame.div,
+        "subtract": pd.DataFrame.sub,
+    }
+    if rel_meth not in operations:
+        raise ValueError("rel_meth must be 'subtract' or 'divide'")
 
-    assert rel_meth in ["subtract", "divide"], "rel_meth must be 'subtract' or 'divide'"
-
-    xcat_error = (
-        f"List of categories or single single category string expected. "
-        f"Received {type(xcats)}."
-    )
-    assert isinstance(xcats, (list, str)), xcat_error
+    if not isinstance(xcats, (list, str)):
+        raise TypeError("xcats must be a list of strings or a single string.")
 
     if isinstance(xcats, str):
         xcats = [xcats]
 
     if rel_xcats is not None:
         error_rel_xcat = "List of strings or single string expected for `rel_xcats`."
-        assert isinstance(rel_xcats, (list, str)), error_rel_xcat
+        if not isinstance(rel_xcats, (list, str)):
+            raise TypeError(error_rel_xcat)
 
         if isinstance(rel_xcats, str):
             rel_xcats = [rel_xcats]
 
-        error_length = "`rel_xcats` must have the same number of elements as `xcats`."
-        assert len(xcats) == len(rel_xcats), error_length
+        if len(xcats) != len(rel_xcats):
+            raise ValueError(
+                "`rel_xcats` must have the same number of elements as `xcats`."
+            )
 
         rel_xcats_dict = dict(zip(xcats, rel_xcats))
 
-    col_names = ["cid", "xcat", "real_date", "value"]
+    df = df.loc[:, col_names]
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     # Intersect parameter set to False. Therefore, cross-sections across the categories
     # can vary.
@@ -166,7 +171,8 @@ def make_relative_value(
         error_basket = (
             f"The basket elements {miss} are not specified or " f"are not available."
         )
-        assert len(miss) == 0, error_basket
+        if not len(miss) == 0:
+            raise ValueError(error_basket)
     else:
         # Default basket is all available cross-sections.
         basket = cids
@@ -220,11 +226,8 @@ def make_relative_value(
         dfw = dfw[dfw.count(axis=1) > 1]
         # The time-index will be delimited by the respective category.
         dfa = pd.merge(dfw, bm, how="left", left_index=True, right_index=True)
-        dfo: pd.DataFrame
-        if rel_meth == "subtract":
-            dfo = dfa[dfw.columns].sub(dfa.loc[:, "value"], axis=0)
-        else:
-            dfo = dfa[dfw.columns].div(dfa.loc[:, "value"], axis=0)
+
+        dfo: pd.DataFrame = operations[rel_meth](dfa[dfw.columns], dfa["value"], axis=0)
 
         # Re-stack.
         df_new = (

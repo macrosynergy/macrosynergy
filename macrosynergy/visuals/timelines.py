@@ -20,7 +20,7 @@ import pandas as pd
 
 from macrosynergy.management.utils import standardise_dataframe, reduce_df
 from macrosynergy.visuals import FacetPlot, LinePlot
-from macrosynergy.management.types import Numeric
+from numbers import Number
 import time
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
@@ -31,7 +31,6 @@ def timelines(
     xcats: Optional[List[str]] = None,
     cids: Optional[List[str]] = None,
     intersect: bool = False,
-    blacklist: Optional[dict] = None,
     val: str = "value",
     cumsum: bool = False,
     start: str = "2000-01-01",
@@ -50,9 +49,9 @@ def timelines(
     title_xadj: float = 0.5,
     title_fontsize: int = 22,
     cs_mean: bool = False,
-    size: Tuple[Numeric, Numeric] = (12, 7),
-    aspect: Numeric = 1.7,
-    height: Numeric = 3.0,
+    size: Tuple[Number, Number] = (12, 7),
+    aspect: Number = 1.7,
+    height: Number = 3.0,
     legend_fontsize: int = 12,
 ):
     """Displays a facet grid of time line charts of one or more categories.
@@ -91,11 +90,11 @@ def timelines(
     :param <bool> cs_mean: if True this adds a line of cross-sectional averages to
         the line charts. This is only allowed for function calls with a single
         category. Default is False.
-    :param <Tuple[Numeric, Numeric]> size: two-element tuple setting width/height
+    :param <Tuple[Number, Number]> size: two-element tuple setting width/height
         of single cross section plot. Default is (12, 7). This is irrelevant for facet
         grid.
-    :param <Numeric> aspect: width-height ratio for plots in facet. Default is 1.7.
-    :param <Numeric> height: height of plots in facet. Default is 3.
+    :param <Number> aspect: width-height ratio for plots in facet. Default is 1.7.
+    :param <Number> height: height of plots in facet. Default is 3.
     :param <int> legend_fontsize: font size of legend. Default is 12.
 
     """
@@ -156,14 +155,8 @@ def timelines(
     if cids is None:
         cids: List[str] = df["cid"].unique().tolist()
 
-    if not isinstance(blacklist, dict):
-        if blacklist is not None:
-            raise TypeError("`blacklist` must be a dictionary.")
-
     if cumsum:
-        df = reduce_df(
-            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
-        )
+        df = reduce_df(df, xcats=xcats, cids=cids, start=start, end=end)
         df[val] = (
             df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
             .groupby(["cid", "xcat"])
@@ -172,9 +165,7 @@ def timelines(
 
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
-        df = reduce_df(
-            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
-        )
+        df = reduce_df(df, xcats=xcats, cids=cids, start=start, end=end)
         if len(xcats) > 1:
             raise ValueError("`cs_mean` cannot be True for multiple categories.")
 
@@ -225,7 +216,6 @@ def timelines(
             xcats=xcats,
             cids=cids,
             intersect=intersect,
-            blacklist=blacklist,
             metrics=[val],
             tickers=[cross_mean_series] if cs_mean else None,
             start=start,
@@ -259,7 +249,6 @@ def timelines(
             xcats=xcats,
             intersect=intersect,
             metrics=[val],
-            blacklist=blacklist,
             tickers=[cross_mean_series] if cs_mean else None,
             start=start,
             end=end,
@@ -285,7 +274,6 @@ def timelines(
             cids=cids,
             intersect=intersect,
             metrics=[val],
-            blacklist=blacklist,
             tickers=[cross_mean_series] if cs_mean else None,
             start=start,
             end=end,

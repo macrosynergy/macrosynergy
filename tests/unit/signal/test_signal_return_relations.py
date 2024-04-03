@@ -73,12 +73,33 @@ class TestAll(unittest.TestCase):
     def test_constructor(self):
         # Test the Class's constructor.
 
+        with self.assertRaises(ValueError):
+            srr = SignalReturnRelations(
+                self.dfd, sigs="CRY", freqs="D", blacklist=self.blacklist
+            )
+
+        with self.assertRaises(ValueError):
+            srr = SignalReturnRelations(
+                self.dfd, rets="XR", freqs="D", blacklist=self.blacklist
+            )
+
+        with self.assertRaises(TypeError):
+            srr = SignalReturnRelations(
+                "self.dfd", rets="XR", sigs="CRY", freqs="D", blacklist=self.blacklist
+            )
+
         # First, test the assertions.
         # Trivial test to confirm the primary signal must be present in the passed
         # DataFrame.
         with self.assertRaises(AssertionError):
             srr = SignalReturnRelations(
                 self.dfd, rets="XR", sigs="Missing", freqs="D", blacklist=self.blacklist
+            )
+
+        with self.assertRaises(ValueError):
+            test_df = self.dfd.copy().drop(columns=["value"])
+            srr = SignalReturnRelations(
+                test_df, rets="XR", sigs="CRY", freqs="A", blacklist=self.blacklist
             )
 
         # Test that frequency must be one of the following: 'D', 'W', 'M', 'Q', 'Y'.
@@ -92,209 +113,79 @@ class TestAll(unittest.TestCase):
                 sig_neg=True,
             )
 
+        # Test that if the same frequency is passed twice it is ignored
+
+        srr = SignalReturnRelations(
+            self.dfd,
+            rets="XR",
+            sigs="CRY",
+            freqs=["D", "D"],
+            blacklist=self.blacklist,
+        )
+        self.assertEqual(srr.freqs, ["D"])
+
+        with self.assertRaises(TypeError):
+            srr = SignalReturnRelations(
+                self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs="D",
+                blacklist=self.blacklist,
+                ms_panel_test="FAIL",
+            )
+
+        with self.assertRaises(TypeError):
+            srr = SignalReturnRelations(
+                self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs="D",
+                blacklist=self.blacklist,
+                cosp="FAIL",
+            )
+
+        with self.assertRaises(AssertionError):
+            srr = SignalReturnRelations(
+                self.dfd,
+                rets="XASDR",
+                sigs="CRY",
+                freqs="D",
+                blacklist=self.blacklist,
+                sig_neg=[True],
+            )
+
+        with self.assertRaises(AssertionError):
+            srr = SignalReturnRelations(
+                self.dfd,
+                rets="XR",
+                sigs="CRYSAD",
+                freqs="D",
+                blacklist=self.blacklist,
+            )
+
+        with self.assertRaises(TypeError):
+            srr = SignalReturnRelations(
+                self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs="D",
+                blacklist=self.blacklist,
+                sig_neg="BOOP",
+            )
+
+        with self.assertRaises(ValueError):
+            srr = SignalReturnRelations(
+                self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs="D",
+                blacklist=self.blacklist,
+                sig_neg=[True, False],
+            )
+
         signal = "CRY"
         srr: SignalReturnRelations = SignalReturnRelations(
             self.dfd, rets="XR", sigs=signal, freqs="D", blacklist=self.blacklist
-        )
-
-        # The signal will invariably be used as the explanatory variable and the return
-        # as the dependent variable.
-        # Confirm that the signal is lagged after applying categories_df().
-
-        # Choose an arbitrary date and confirm that the signal in the original DataFrame
-        # has been lagged by a day. Confirm on multiple cross-sections: AUD & USD.
-        df_signal = self.dfd[self.dfd["xcat"] == signal]
-        arbitrary_date_one = "2011-01-10"
-        arbitrary_date_two = "2020-10-27"
-
-        test_aud: pd.Series = df_signal[df_signal["real_date"] == arbitrary_date_one]
-        test_aud = test_aud[test_aud["cid"] == "AUD"]["value"]
-
-        test_usd: pd.Series = df_signal[df_signal["real_date"] == arbitrary_date_two]
-        test_usd = test_usd[test_usd["cid"] == "USD"]["value"]
-
-        lagged_df: pd.DataFrame = srr.df
-        aud_lagged: float = lagged_df.loc["AUD", signal]["2011-01-11"]
-        condition: float = round(test_aud.values[0], 5) - round(aud_lagged, 5)
-        self.assertTrue(abs(condition) < 0.0001)
-
-        usd_lagged: float = lagged_df.loc["USD", signal]["2020-10-28"]
-        condition: float = round(test_usd.values[0], 5) - round(usd_lagged, 5)
-        self.assertTrue(condition < 0.0001)
-
-        # In addition to the DataFrame returned by categories_df(), an instance of the
-        # Class will hold two "tables" for each segmentation type.
-        # Confirm the indices are the expected: cross-sections or years.
-        test_index: List[str] = list(srr.df_cs.index)[3:]
-        self.assertTrue(sorted(self.cids) == sorted(test_index))
-
-    def test_constructor_multiple_sigs(self):
-        # The signal return Class allows for additional signals to be passed, upon
-        # instantiation, to understand the primary signal's performance relative to other
-        # possible signals. The analysis will be completed on the panel level.
-
-        # First, test the assertions.
-        # Any additional signals passed must either be a string or list.
-        with self.assertRaises(AssertionError):
-            srr = SignalReturnRelations(
-                self.dfd,
-                rets="XR",
-                sigs=set(["CRY", "GROWTH", "INFL"]),
-                freqs="D",
-                blacklist=self.blacklist,
-            )
-        # Return Signal must be specified
-        with self.assertRaises(ValueError):
-            srr = SignalReturnRelations(
-                self.dfd,
-            )
-        with self.assertRaises(ValueError):
-            srr = SignalReturnRelations(
-                self.dfd,
-                rets="XR",
-            )
-        # Signals passed must be a subset of the categories defined in the DataFrame. If
-        # not, will raise an assertion.
-        with self.assertRaises(AssertionError):
-            # GDP is not a defined category.
-            srr = SignalReturnRelations(
-                self.dfd,
-                rets="XR",
-                sigs=["CRY", "GROWTH", "INFL", "GDP"],
-                freqs="D",
-                blacklist=self.blacklist,
-            )
-
-        primary_signal = "CRY"
-        rival_signals = ["GROWTH", "INFL"]
-        srr = SignalReturnRelations(
-            self.dfd,
-            rets="XR",
-            sigs=[primary_signal] + rival_signals,
-            freqs="D",
-            blacklist=self.blacklist,
-        )
-        # First, confirm the signal list stored on the instance comprises both the
-        # primary signal and the rival signals.
-        self.assertTrue([primary_signal] + rival_signals == srr.sigs)
-
-        # Secondly, confirm the DataFrame is defined over the expected columns.
-        self.assertTrue(
-            list(srr.df.columns) == [primary_signal] + rival_signals + ["XR"]
-        )
-
-        # Test the negative conversion if the parameter 'sig_neg' is set to True. If set
-        # to True, the signal fields will have a postfix, '_NEG', appended.
-        srr_neg = SignalReturnRelations(
-            self.dfd,
-            rets="XR",
-            sigs=[primary_signal] + rival_signals,
-            sig_neg=[True, True, True],
-            blacklist=self.blacklist,
-            freqs="D",
-        )
-
-        # Firstly, confirm the signal names have been updated correctly.
-        srr_signals = list(map(lambda s: s.split("_"), srr_neg.sigs))
-        signals = [primary_signal] + rival_signals
-        for i, s in enumerate(srr_signals):
-            self.assertTrue(s[1] == "NEG")
-            self.assertTrue(s[0] == signals[i])
-
-        self.assertEqual(srr_neg.sigs[0][-4:], "_NEG")
-        self.assertEqual(srr_neg.sigs[0][:-4], primary_signal)
-
-        # Secondly, confirm the actual DataFrame's columns have been updated.
-        test_columns = list(srr_neg.df.columns)
-        # Confirms the update has been made on the DataFrame level.
-        self.assertTrue(test_columns == srr_neg.sigs + ["XR"])
-
-        # Lastly, check the original values have been multiplied by minus one. Therefore,
-        # add the two DataFrames which should equate to zero. The multiplication by minus
-        # one only occurs on the signals.
-
-        srr_neg.df.rename(columns=dict(zip(srr_neg.sigs, srr.sigs)), inplace=True)
-        zero_df = srr.df + srr_neg.df
-        zero_df_sigs = zero_df.loc[:, srr.sigs]
-        sum_columns = zero_df_sigs.sum(axis=0)
-        self.assertTrue(np.all(sum_columns.to_numpy() == 0.0))
-
-    def test_constructor_communal(self):
-        # Used to test the communal sample period by setting the parameter equal to True.
-        # The DataFrame instantiated on the instance is a multi-index DataFrame where the
-        # outer index will be qualified by the available cross-sections and the interior
-        # index will be timestamps. The columns will be the respective signals plus
-        # return.
-        # If the parameter is set to True, the individual cross-section's start dates
-        # will be aligned across the panels: the proposed start date will have a
-        # realised value for all categories for that specific cross-section. The logic is
-        # applied to each cross-section.
-
-        primary_signal = "CRY"
-        rival_signals = ["GROWTH", "INFL"]
-        # Set "cosp" equal to True.
-        srr_cosp = SignalReturnRelations(
-            self.dfd,
-            rets="XR",
-            sigs=[primary_signal] + rival_signals,
-            cosp=True,
-            freqs="D",
-            blacklist=None,
-        )
-
-        # The start date for the communal series should be:
-        # start_dates = {'AUD': '2011-01-01', 'CAD': '2009-01-01', 'GBP': '2010-01-01',
-        #                'NZD': '2008-01-01', 'USD': '2012-01-01'}
-
-        df = srr_cosp.df
-        # Test across all cross-sections - aligned on the cross-section's intersection.
-        # Account for weekends.
-        expected_date = {
-            "AUD": "2011-01-03",
-            "CAD": "2009-01-01",
-            "GBP": "2010-01-01",
-            "NZD": "2008-01-01",
-            "USD": "2012-01-02",
-        }
-        for c, cid_df in df.groupby(level=0):
-            # Isolate the interior index.
-            series_s_date = str(cid_df.iloc[0, :].name[1]).split(" ")[0]
-            self.assertEqual(expected_date[c], series_s_date)
-
-        # Test the values.
-        dfd = srr_cosp.dfd
-        filt_1 = (dfd["real_date"] == "2011-01-04") & (dfd["xcat"] == "XR")
-        dfd_filt = dfd[filt_1]
-        benchmark_value = float(dfd_filt[dfd_filt["cid"] == "AUD"]["value"].iloc[0])
-        benchmark_value = round(benchmark_value, 5)
-
-        test_row = srr_cosp.df.loc["AUD"].loc["2011-01-04"]
-        condition = abs(benchmark_value - round(test_row["XR"], 5)) < 0.00001
-        self.assertTrue(condition)
-
-        # Account for lagging the signals. Therefore, the signal values will reference
-        # the previous day.
-        filt_2 = (dfd["real_date"] == "2011-01-03") & (dfd["cid"] == "AUD")
-        dfd_filt = dfd[filt_2]
-        signals = [primary_signal] + rival_signals
-
-        for s in signals:
-            test_value = float(dfd_filt[dfd_filt["xcat"] == s]["value"].iloc[0])
-            self.assertTrue(np.isclose(test_value, test_row[s]))
-
-        # Confirm the dimensions of the return column remains unchanged - alignment
-        # occurs exclusively on the signals. To test, confirm the columns are the same
-        # regardless of whether communal sampling is applied.
-        srr = SignalReturnRelations(
-            self.dfd,
-            rets="XR",
-            sigs=[primary_signal] + rival_signals,
-            cosp=False,
-            freqs="D",
-            blacklist=None,
-        )
-        self.assertTrue(
-            srr.df.loc[:, srr.rets].shape == srr_cosp.df.loc[:, srr.rets].shape
         )
 
     def test__slice_df__(self):
@@ -306,6 +197,7 @@ class TestAll(unittest.TestCase):
         srr = SignalReturnRelations(
             self.dfd, sigs=signal, rets="XR", freqs="D", blacklist=self.blacklist
         )
+        srr.manipulate_df(xcat=[signal, "XR"], freq="D", agg_sig="last")
         df = srr.df.dropna(how="any").copy()
 
         # First, test cross-sectional basis.
@@ -346,6 +238,7 @@ class TestAll(unittest.TestCase):
         srr = SignalReturnRelations(
             self.dfd, sigs=signal, rets=return_, freqs="D", blacklist=self.blacklist
         )
+        srr.manipulate_df(xcat=[signal, return_], freq="D", agg_sig="last")
         df_cs = srr.__output_table__(cs_type="cids")
 
         # The lagged signal & returns have been reduced to[-1, 1] which are interpreted
@@ -446,6 +339,9 @@ class TestAll(unittest.TestCase):
             freqs="D",
             blacklist=self.blacklist,
         )
+        srr.manipulate_df(
+            xcat=[primary_signal] + rival_signals + ["XR"], freq="D", agg_sig="last"
+        )
 
         df_sigs = srr.__rival_sigs__(ret="XR")
 
@@ -462,55 +358,13 @@ class TestAll(unittest.TestCase):
         manual_value = accuracy_score(df_sgs["GROWTH"], df_sgs["XR"])
         self.assertEqual(growth_accuracy, manual_value)
 
-    def test_signals_table(self):
-        # If defined, will return the panel-level table for the rival signals. The method
-        # receives a single parameter, "sigs", whose default is set to None (all
-        # available signals are returned).
-
-        primary_signal = "CRY"
-        rival_signals = ["GROWTH", "INFL"]
-        srr = SignalReturnRelations(
-            self.dfd,
-            rets="XR",
-            sigs=[primary_signal] + rival_signals,
-            freqs="M",
-            blacklist=self.blacklist,
-        )
-        # Firstly, confirm that if the parameter 'sigs' is left undefined, all signals
-        # will be displayed in the table (default setting).
-        df_sigs = srr.signals_table()
-        self.assertEqual(list(df_sigs.index), [primary_signal] + rival_signals)
-
-        # Secondly, confirm that a specific subset of the signals can be displayed.
-        df_sigs = srr.signals_table(sigs=["CRY", "INFL"])
-        self.assertEqual(list(df_sigs.index), [primary_signal] + ["INFL"])
-
-        # Confirm that a list of signals must be passed. The method is for comparison
-        # purposes. Therefore, at a minimum, it expects to receive the primary signal
-        # plus an additional rival signal.
-        with self.assertRaises(AssertionError):
-            # Pass in a single signal as a string.
-            df_sigs = srr.signals_table(sigs="INFL")
-
-        # Lastly, confirm that an AttributeError will be thrown if the method is called
-        # but additional signals have not been passed to the instance.
-        srr = SignalReturnRelations(
-            self.dfd,
-            rets="XR",
-            sigs=primary_signal,
-            sig_neg=False,
-            freqs="M",
-            blacklist=self.blacklist,
-        )
-        with self.assertRaises(AttributeError):
-            df_sigs = srr.signals_table()
-
     def test__yaxis_lim__(self):
         signal = "CRY"
         return_ = "XR"
         srr = SignalReturnRelations(
             self.dfd, sigs=signal, rets=return_, freqs="D", blacklist=self.blacklist
         )
+        srr.manipulate_df(xcat=[signal, return_], freq="D", agg_sig="last")
         df_cs = srr.__output_table__(cs_type="cids")
         dfx = df_cs[~df_cs.index.isin(["PosRatio"])]
         dfx_acc = dfx.loc[:, ["accuracy", "bal_accuracy"]]
@@ -664,17 +518,6 @@ class TestAll(unittest.TestCase):
         except:
             self.fail("SignalReturnRelations init failed")
 
-    def test_cross_section_and_yearly_table(self):
-        srr = SignalReturnRelations(
-            self.dfd,
-            rets="XR",
-            sigs=["CRY"] + ["GROWTH", "INFL"],
-            freqs="M",
-            blacklist=self.blacklist,
-        )
-        self.assertTrue(srr.cross_section_table().shape == (8, 11))
-        self.assertTrue(srr.yearly_table().shape == (16, 11))
-
     def test_accuracy_and_correlation_bars(self):
         plt.close("all")
         mock_plt = patch("matplotlib.pyplot.show").start()
@@ -751,17 +594,6 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         matplotlib.use(mpl_backend)
         patch.stopall()
-
-    def test_summary_table(self):
-        srr = SignalReturnRelations(
-            self.dfd,
-            rets="XR",
-            sigs=["CRY", "GROWTH", "INFL"],
-            freqs="M",
-            blacklist=self.blacklist,
-        )
-
-        self.assertTrue(srr.summary_table().shape == (5, 11))
 
     def test_single_relation_table(self):
         sr = SignalReturnRelations(
@@ -1076,17 +908,18 @@ class TestAll(unittest.TestCase):
         )
         expected_col_names = ["mean", "last"]
         expected_row_names = [
-            "CRY/XR/Q",
-            "CRY/XR/M",
-            "CRY/GROWTH/Q",
-            "CRY/GROWTH/M",
-            "INFL/XR/Q",
-            "INFL/XR/M",
-            "INFL/GROWTH/Q",
-            "INFL/GROWTH/M",
+            ("CRY", "XR", "Q"),
+            ("CRY", "XR", "M"),
+            ("CRY", "GROWTH", "Q"),
+            ("CRY", "GROWTH", "M"),
+            ("INFL", "XR", "Q"),
+            ("INFL", "XR", "M"),
+            ("INFL", "GROWTH", "Q"),
+            ("INFL", "GROWTH", "M"),
         ]
+        for i, rows_name in enumerate(rows_names):
+            self.assertTrue(rows_name == expected_row_names[i])
 
-        self.assertTrue(rows_names == expected_row_names)
         self.assertTrue(columns_names == expected_col_names)
 
         rows = ["xcat", "ret"]
@@ -1096,11 +929,23 @@ class TestAll(unittest.TestCase):
             rows_dict=rows_dict, rows=rows, columns=columns
         )
 
-        expected_col_names = ["mean/Q", "mean/M", "last/Q", "last/M"]
-        expected_row_names = ["CRY/XR", "CRY/GROWTH", "INFL/XR", "INFL/GROWTH"]
+        expected_col_names = [
+            ("mean", "Q"),
+            ("mean", "M"),
+            ("last", "Q"),
+            ("last", "M"),
+        ]
+        expected_row_names = [
+            ("CRY", "XR"),
+            ("CRY", "GROWTH"),
+            ("INFL", "XR"),
+            ("INFL", "GROWTH"),
+        ]
 
-        self.assertTrue(rows_names == expected_row_names)
-        self.assertTrue(columns_names == expected_col_names)
+        for i, rows_name in enumerate(rows_names):
+            self.assertTrue(rows_name == expected_row_names[i])
+        for i, columns_name in enumerate(columns_names):
+            self.assertTrue(columns_name == expected_col_names[i])
 
         rows = ["xcat"]
         columns = columns = ["agg_sigs", "ret", "freq"]
@@ -1110,21 +955,21 @@ class TestAll(unittest.TestCase):
         )
 
         expected_col_names = [
-            "mean/XR/Q",
-            "mean/XR/M",
-            "mean/GROWTH/Q",
-            "mean/GROWTH/M",
-            "last/XR/Q",
-            "last/XR/M",
-            "last/GROWTH/Q",
-            "last/GROWTH/M",
+            ("mean", "XR", "Q"),
+            ("mean", "XR", "M"),
+            ("mean", "GROWTH", "Q"),
+            ("mean", "GROWTH", "M"),
+            ("last", "XR", "Q"),
+            ("last", "XR", "M"),
+            ("last", "GROWTH", "Q"),
+            ("last", "GROWTH", "M"),
         ]
         expected_row_names = ["CRY", "INFL"]
 
         self.assertTrue(rows_names == expected_row_names)
-        self.assertTrue(columns_names == expected_col_names)
 
-        return 0
+        for i, columns_name in enumerate(columns_names):
+            self.assertTrue(columns_name == expected_col_names[i])
 
     def test_get_rowcol(self):
         rets = ["XR", "GROWTH"]
@@ -1145,7 +990,7 @@ class TestAll(unittest.TestCase):
         rows = ["xcat", "ret", "freq"]
         columns = ["agg_sigs"]
 
-        self.assertTrue(sr.get_rowcol(hash, rows) == "CRY/XR/Q")
+        self.assertTrue(sr.get_rowcol(hash, rows) == ("CRY", "XR", "Q"))
         self.assertTrue(sr.get_rowcol(hash, columns) == "mean")
 
     def test_single_statistic_table_show_heatmap(self):
