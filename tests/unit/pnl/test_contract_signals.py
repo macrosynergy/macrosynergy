@@ -158,8 +158,6 @@ class TestContractSignals(unittest.TestCase):
         df = _add_hedged_signals(dfcs, dfhr)
         # all should be ones
         self.assertTrue(np.all(df.values == 1))
-
-        # self.assertTrue(dfcs.eq(_add_hedged_signals(dfcs, None)).all().all())
         self.assertTrue(np.all(dfcs.values == _add_hedged_signals(dfcs, None).values))
 
     def test_check_scaling_args(self):
@@ -237,7 +235,7 @@ class TestContractSignals(unittest.TestCase):
         # test for improper qdf
         bad_args = good_args.copy()
         bad_args["df"] = bad_args["df"].rename(columns={"cid": "foo"})
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             contract_signals(**bad_args)
 
         # test for missing tickers

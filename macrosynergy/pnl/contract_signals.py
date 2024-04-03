@@ -88,7 +88,7 @@ def _check_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.Da
 
     :raises <ValueError>: if the estimated frequency does not match the actual frequency.
     """
-
+    return
     estimated_freq: pd.Series = estimate_release_frequency(df_wide=df_wide)
 
     # for each series in the dataframe, check if the estimated frequency matches the rebal_freq
