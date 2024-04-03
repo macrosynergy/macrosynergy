@@ -9,7 +9,7 @@ import numpy as np
 import logging
 
 from macrosynergy.panel.historic_vol import expo_weights
-from macrosynergy.management.types import NoneType
+from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.management.utils import (
     reduce_df,
     standardise_dataframe,
@@ -17,7 +17,6 @@ from macrosynergy.management.utils import (
     ticker_df_to_qdf,
     get_eops,
 )
-from macrosynergy.management.types import QuantamentalDataFrame
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
 
