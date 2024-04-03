@@ -480,6 +480,12 @@ def contract_signals(
         hratios=hratios,
     )
 
+    # Actual calculation
+
+    ## Calculate relative value if requested
+    if relative_value:
+        df = _make_relative_value(df=df, *args, **kwargs)
+
     ## Cast the dataframe to wide format
     df_wide: pd.DataFrame = qdf_to_ticker_df(df)
 
@@ -487,12 +493,6 @@ def contract_signals(
     df_wide: pd.DataFrame = _check_estimation_frequency(
         df_wide=df_wide, rebal_freq=rebal_freq
     )
-
-    # Actual calculation
-
-    ## Calculate relative value if requested
-    if relative_value:
-        df = _make_relative_value(df=df, *args, **kwargs)
 
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
 
