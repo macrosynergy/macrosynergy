@@ -302,65 +302,6 @@ def downsample_df_on_real_date(
     )
 
 
-def downsample_wide_df_on_real_date(
-    df: pd.DataFrame,
-    freq: str = "M",
-    agg: str = "mean",
-    ffill: bool = False,
-    bfill: bool = False,
-    max_fill: int = 0,
-):
-    if not isinstance(freq, str):
-        raise TypeError("`freq` must be a string")
-    else:
-        freq: str = _map_to_business_day_frequency(freq)
-
-    if not isinstance(agg, str):
-        raise TypeError("`agg` must be a string")
-    else:
-        agg: str = agg.lower()
-        if agg not in ["mean", "median", "min", "max", "first", "last"]:
-            raise ValueError(
-                "`agg` must be one of 'mean', 'median', 'min', 'max', 'first', 'last'"
-            )
-
-    ffill, bfill = bool(ffill), bool(bfill)
-    if ffill and bfill:
-        raise ValueError("Cannot use both ffill and bfill.")
-
-    if not isinstance(max_fill, int) or max_fill < 0:
-        raise ValueError("Max fill must be a non-negative integer.")
-
-    # now, downsample given that each column is a ticker
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError("`df` must be a DataFrame")
-    if df.index.name != "real_date":
-        if not "real_date" in df.columns:
-            raise ValueError("DataFrame must have a 'real_date' index")
-        df = df.set_index("real_date")
-
-    rdf = df.resample(freq).agg(agg, numeric_only=True)
-    rdf.index.name = "real_date"
-    if not (ffill or bfill):
-        return rdf
-
-    rdf = rdf.reindex(
-        pd.Series(
-            pd.bdate_range(
-                df.index.min(),
-                df.index.max(),
-                freq="B",
-                name="real_date",
-            )
-        )
-    )
-    if ffill:
-        rdf = rdf.ffill(limit=FFILL_LIMITS[freq])
-    if bfill:
-        rdf = rdf.bfill(limit=FFILL_LIMITS[freq])
-    return rdf
-
-
 def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False):
     """
     Append a standard DataFrame to a standard base DataFrame with ticker replacement on

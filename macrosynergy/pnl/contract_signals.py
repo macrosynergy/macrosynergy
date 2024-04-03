@@ -18,7 +18,6 @@ from macrosynergy.management.utils import (
     qdf_to_ticker_df,
     reduce_df,
     estimate_release_frequency,
-    downsample_wide_df_on_real_date,
     update_df,
     get_cid,
     get_xcat,
