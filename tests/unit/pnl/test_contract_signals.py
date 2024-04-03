@@ -7,7 +7,6 @@ from numbers import Number
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.pnl.contract_signals import (
     contract_signals,
-    _check_arg_types,
     _gen_contract_signals,
     _add_hedged_signals,
     _apply_hedge_ratios,
@@ -46,26 +45,6 @@ class TestContractSignals(unittest.TestCase):
             start=self.start,
             end=self.end,
         )
-
-    def test_check_arg_types(self):
-        args = [
-            "df",
-            "sig",
-            "cids",
-            "ctypes",
-            "cscales",
-            "csigns",
-            "hbasket",
-            "hscales",
-            "hratios",
-            "start",
-            "end",
-            "blacklist",
-            "sname",
-        ]
-
-        for arg in args:
-            self.assertFalse(_check_arg_types(**{arg: 1}))
 
     def test_gen_contract_signals(self):
         test_df = self._testDF()
