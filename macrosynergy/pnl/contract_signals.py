@@ -77,80 +77,6 @@ def _check_scaling_args(
     return cscales, csigns, hbasket, hscales, hratios
 
 
-def _check_arg_types(
-    df: Optional[pd.DataFrame] = None,
-    sig: Optional[str] = None,
-    cids: Optional[List[str]] = None,
-    ctypes: Optional[List[str]] = None,
-    cscales: Optional[List[Union[Number, str]]] = None,
-    csigns: Optional[List[int]] = None,
-    hbasket: Optional[List[str]] = None,
-    hscales: Optional[List[Union[Number, str]]] = None,
-    hratios: Optional[str] = None,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    blacklist: Optional[dict] = None,
-    sname: Optional[str] = None,
-) -> bool:
-    """
-    Auxiliary function to check the types of the arguments passed to the main function.
-    Accepts all arguments from `contract_signals()` as optional keyword arguments, and
-    checks that they are of the correct type.
-
-    :params: see `contract_signals()`
-    :return <bool>: True if all arguments are of the correct type, False otherwise.
-    """
-    correct_types: bool = all(
-        [
-            isinstance(df, (pd.DataFrame, NoneType)),
-            isinstance(sig, (str, NoneType)),
-            isinstance(cids, (list, NoneType)),
-            isinstance(ctypes, (list, NoneType)),
-            isinstance(cscales, (list, NoneType)),
-            isinstance(csigns, (list, NoneType)),
-            isinstance(hbasket, (list, NoneType)),
-            isinstance(hscales, (list, NoneType)),
-            isinstance(hratios, (str, NoneType)),
-            isinstance(start, (str, NoneType)),
-            isinstance(end, (str, NoneType)),
-            isinstance(blacklist, (dict, NoneType)),
-            isinstance(sname, (str, NoneType)),
-        ]
-    )
-
-    try:
-        non_empty_iterables: bool = all(
-            [
-                df is None or len(df) > 0,
-                cids is None or len(cids) > 0,
-                ctypes is None or len(ctypes) > 0,
-                cscales is None or len(cscales) > 0,
-                csigns is None or len(csigns) > 0,
-                hbasket is None or len(hbasket) > 0,
-                hscales is None or len(hscales) > 0,
-            ]
-        )
-    except TypeError:
-        non_empty_iterables: bool = False
-
-    correct_nested_types: bool = (
-        correct_types
-        and non_empty_iterables
-        and all(
-            [
-                cids is None or all([isinstance(x, str) for x in cids]),
-                ctypes is None or all([isinstance(x, str) for x in ctypes]),
-                cscales is None or all([isinstance(x, (str, Number)) for x in cscales]),
-                csigns is None or all([isinstance(x, int) for x in csigns]),
-                hbasket is None or all([isinstance(x, str) for x in hbasket]),
-                hscales is None or all([isinstance(x, (str, Number)) for x in hscales]),
-            ]
-        )
-    )
-
-    return correct_nested_types
-
-
 def _check_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.DataFrame:
     """
     Check the timeseries to see if the estimated frequency matches the actual frequency.
@@ -224,16 +150,6 @@ def _gen_contract_signals(
 
     :return <pd.DataFrame>: dataframe with scaling applied.
     """
-    # Type checks
-    if not _check_arg_types(
-        df=df_wide,
-        cids=cids,
-        sig=sig,
-        ctypes=ctypes,
-        cscales=cscales,
-        csigns=csigns,
-    ):
-        raise TypeError("Invalid arguments passed to `_gen_contract_tickers()`")
 
     expected_contract_signals: List[str] = [f"{cx}_{sig}" for cx in cids]
 
@@ -276,15 +192,6 @@ def _apply_hedge_ratios(
     hscales: List[Union[Number, str]],
     hratios: str,
 ) -> pd.DataFrame:
-    # Type checks
-    if not _check_arg_types(
-        df=df_wide,
-        cids=cids,
-        hbasket=hbasket,
-        hscales=hscales,
-        hratios=hratios,
-    ):
-        raise TypeError("Invalid arguments passed to `apply_hedge_ratios()`")
 
     # check if the CID_SIG is in the dataframe
     expc_cid_sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
