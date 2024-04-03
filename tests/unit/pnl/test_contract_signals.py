@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union, Any
+from numbers import Number
 
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.pnl.contract_signals import (
@@ -11,7 +12,7 @@ from macrosynergy.pnl.contract_signals import (
     _add_hedged_signals,
     _apply_hedge_ratios,
 )
-from macrosynergy.management.types import Numeric, QuantamentalDataFrame
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import (
     is_valid_iso_date,
     standardise_dataframe,
@@ -31,10 +32,10 @@ class TestContractSignals(unittest.TestCase):
         self.start: str = "2000-01-01"
         self.end: str = "2020-12-31"
         self.ctypes: List[str] = ["FX", "IRS", "CDS"]
-        self.cscales: List[Numeric] = [1.0, 0.5, 0.1]
+        self.cscales: List[Number] = [1.0, 0.5, 0.1]
         self.csigns: List[int] = [1, -1, 1]
         self.hbasket: List[str] = ["USD_EQ", "EUR_EQ"]
-        self.hscales: List[Numeric] = [0.7, 0.3]
+        self.hscales: List[Number] = [0.7, 0.3]
         self.sig = "SIG"
         self.hratios = "HR"
 

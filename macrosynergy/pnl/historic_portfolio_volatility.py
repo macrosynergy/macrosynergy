@@ -10,6 +10,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from macrosynergy.panel.historic_vol import expo_weights
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.management.utils import (
     _map_to_business_day_frequency,
@@ -19,7 +20,6 @@ from macrosynergy.management.utils import (
     standardise_dataframe,
     ticker_df_to_qdf,
 )
-from macrosynergy.panel.historic_vol import expo_weights
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
 

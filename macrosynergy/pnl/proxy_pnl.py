@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+from numbers import Number
 from typing import List, Union, Tuple, Optional
 
 from macrosynergy.management.simulate import make_qdf
@@ -11,7 +11,7 @@ from macrosynergy.management.utils import (
     standardise_dataframe,
     is_valid_iso_date,
 )
-from macrosynergy.management.types import Numeric, QuantamentalDataFrame
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.pnl import notional_positions, contract_signals, proxy_pnl_calc
 from macrosynergy.download.transaction_costs import download_transaction_costs
 
@@ -46,10 +46,10 @@ class ProxyPnL(object):
         sig: str,
         cids: List[str],
         ctypes: List[str],
-        cscales: Optional[List[Union[Numeric, str]]] = None,
+        cscales: Optional[List[Union[Number, str]]] = None,
         csigns: Optional[List[int]] = None,
         hbasket: Optional[List[str]] = None,
-        hscales: Optional[List[Union[Numeric, str]]] = None,
+        hscales: Optional[List[Union[Number, str]]] = None,
         hratios: Optional[str] = None,
         *args,
         **kwargs,
@@ -81,10 +81,10 @@ class ProxyPnL(object):
         df: QuantamentalDataFrame = None,
         sname: str = None,
         fids: List[str] = None,
-        aum: Numeric = 100,
-        dollar_per_signal: Numeric = 1.0,
-        leverage: Optional[Numeric] = None,
-        vol_target: Optional[Numeric] = None,
+        aum: Number = 100,
+        dollar_per_signal: Number = 1.0,
+        leverage: Optional[Number] = None,
+        vol_target: Optional[Number] = None,
         rebal_freq: str = "m",
         slip: int = 1,
         lback_periods: int = 21,

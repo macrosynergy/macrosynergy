@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+from numbers import Number
 from typing import List, Union, Tuple, Optional, Set
 
 from macrosynergy.management.utils import (
@@ -23,7 +23,7 @@ from macrosynergy.management.utils import (
     get_xcat,
 )
 
-from macrosynergy.management.types import Numeric, NoneType, QuantamentalDataFrame
+from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.pnl.historic_portfolio_volatility import historic_portfolio_vol
 
 
@@ -101,8 +101,8 @@ def _vol_target_positions(
     df_wide: pd.DataFrame,
     sname: str,
     fids: List[str],
-    dollar_per_signal: Numeric = 1.0,
-    vol_target: Numeric = 10,
+    dollar_per_signal: Number = 1.0,
+    vol_target: Number = 10,
     rebal_freq: str = "m",
     lback_periods: int = 21,
     half_life: int = 11,
@@ -159,8 +159,8 @@ def _leverage_positions(
     df_wide: pd.DataFrame,
     sname: str,
     fids: List[str],
-    aum: Numeric = 100,
-    leverage: Numeric = 1.0,
+    aum: Number = 100,
+    leverage: Number = 1.0,
     pname: str = "POS",
 ) -> QuantamentalDataFrame:
     """"""
@@ -191,10 +191,10 @@ def notional_positions(
     df: pd.DataFrame,
     sname: str,
     fids: List[str],
-    aum: Numeric = 100,
-    dollar_per_signal: Numeric = 1.0,
-    leverage: Optional[Numeric] = None,
-    vol_target: Optional[Numeric] = None,
+    aum: Number = 100,
+    dollar_per_signal: Number = 1.0,
+    leverage: Optional[Number] = None,
+    vol_target: Optional[Number] = None,
     rebal_freq: str = "m",
     slip: int = 1,
     lback_periods: int = 21,
@@ -276,10 +276,10 @@ def notional_positions(
         (df, "df", pd.DataFrame),
         (sname, "sname", str),
         (fids, "fids", list),
-        (aum, "aum", Numeric),
-        (dollar_per_signal, "dollar_per_signal", Numeric),
-        (leverage, "leverage", (Numeric, NoneType)),
-        (vol_target, "vol_target", (Numeric, NoneType)),
+        (aum, "aum", Number),
+        (dollar_per_signal, "dollar_per_signal", Number),
+        (leverage, "leverage", (Number, NoneType)),
+        (vol_target, "vol_target", (Number, NoneType)),
         (rebal_freq, "rebal_freq", str),
         (slip, "slip", int),
         (lback_periods, "lback_periods", int),
