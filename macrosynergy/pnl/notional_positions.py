@@ -2,6 +2,8 @@
 Module for calculating notional positions based on contract signals, assets-under-management, 
 and other relevant parameters.
 
+# TODO positions taken at the end of the first trading day of the holding period (rebalance date)
+
 """
 
 import numpy as np
@@ -60,7 +62,7 @@ def _apply_slip(
             cids=cids,
             xcats=xcats,
             slip=slip,
-            raise_error=False,
+            raise_error=False,  # TODO why false?
             metrics=["value"],
         )
 
@@ -188,7 +190,7 @@ def _leverage_positions(
 
 
 def notional_positions(
-    df: pd.DataFrame,
+    df: QuantamentalDataFrame,
     sname: str,
     fids: List[str],
     aum: Number = 100,
@@ -210,7 +212,7 @@ def notional_positions(
     Calculates contract positions based on contract signals, assets under management (AUM)
     and other specifications.
 
-    :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
+    :param <QuantamentalDataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
         This dataframe must contain the contract-specific signals and possibly
         related return series (for vol-targeting).
@@ -309,7 +311,8 @@ def notional_positions(
     if "value" not in df.columns:
         raise ValueError("`df` must have a `value` column.")
 
-    df: pd.DataFrame = standardise_dataframe(df.copy())
+    # TODO why not already a QuantamentalDataFrame?
+    df: QuantamentalDataFrame = standardise_dataframe(df.copy())
 
     ## Check the dates
     if start is None:
@@ -347,6 +350,7 @@ def notional_positions(
         fids=fids,
     )
 
+    # TODO why pivot it out to a wide format?
     df_wide = qdf_to_ticker_df(df)
     return_df = None
     if leverage:

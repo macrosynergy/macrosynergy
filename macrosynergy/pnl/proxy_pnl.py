@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from numbers import Number
-from typing import List, Union, Tuple, Optional
+from typing import List, Union, Tuple, Optional, Dict, Any
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import (
@@ -73,7 +73,7 @@ class ProxyPnL(object):
         self.fids = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
 
         cs_df: QuantamentalDataFrame = contract_signals(**cs_args)
-        self.cs_df = cs_df
+        self.cs_df: QuantamentalDataFrame = cs_df
         return cs_df
 
     def notional_positions(
@@ -95,7 +95,7 @@ class ProxyPnL(object):
         end: Optional[str] = None,
         blacklist: Optional[dict] = None,
         pname: str = "POS",
-    ):
+    ) -> QuantamentalDataFrame:
         fids = fids or self.fids
         df = df or self.cs_df or self.contract_signals()
         np_args = dict(
@@ -118,7 +118,7 @@ class ProxyPnL(object):
             pname=pname,
         )
         np_df: QuantamentalDataFrame = notional_positions(**np_args)
-        self.npos_df = np_df
+        self.npos_df: QuantamentalDataFrame = np_df
         return np_df
 
     def proxy_pnl_calc(
@@ -133,11 +133,12 @@ class ProxyPnL(object):
         rcost_l: Optional[str] = None,
         size_l: Optional[str] = None,
         roll_freqs: Optional[dict] = None,
-    ):
-        df = df or self.npos_df or self.notional_positions()
-        spos = spos or self.sname + "_" + self.pname
-        fids = fids or self.fids
-        pp_args = dict(
+    ) -> QuantamentalDataFrame:
+        df: QuantamentalDataFrame = df or self.npos_df or self.notional_positions()
+        # TODO spos does not have a None option in type
+        spos: str = spos or self.sname + "_" + self.pname
+        fids: List[str] = fids or self.fids
+        pp_args: Dict[str, Union[QuantamentalDataFrame, str, List[str], dict]] = dict(
             df=df,
             spos=spos,
             fids=fids,
@@ -146,7 +147,7 @@ class ProxyPnL(object):
             size_n=size_n,
             tcost_l=tcost_l,
             rcost_l=rcost_l,
-            size_l=size_l,
+            size_l=size_l,  # TODO what happens if None?
             roll_freqs=roll_freqs,
             start=self.start,
             end=self.end,

@@ -160,9 +160,9 @@ def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFr
     df["ticker"] = df["cid"] + "_" + df["xcat"]
     # drop cid and xcat
     df = (
-        df.drop(columns=["cid", "xcat"])
+        df.drop(columns=["cid", "xcat"])  # TODO why drop?
         .pivot(index="real_date", columns="ticker", values=value_column)
-        .rename_axis(None, axis=1)
+        .rename_axis(None, axis=1)  # TODO why rename axis?
     )
 
     return df
