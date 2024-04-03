@@ -397,9 +397,9 @@ def contract_signals(
     df_wide: pd.DataFrame = qdf_to_ticker_df(df)
 
     ## Check rebal_freq or downsample the dataframe
-    df_wide: pd.DataFrame = _check_estimation_frequency(
-        df_wide=df_wide, rebal_freq=rebal_freq
-    )
+    # df_wide: pd.DataFrame = _check_estimation_frequency(
+    #     df_wide=df_wide, rebal_freq=rebal_freq
+    # )
 
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
 
