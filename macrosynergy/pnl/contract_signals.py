@@ -38,7 +38,7 @@ def _make_relative_value(
 
 
 def _gen_contract_signals(
-    df: pd.DataFrame,
+    df_wide: pd.DataFrame,
     cids: List[str],
     sig: str,
     ctypes: List[str],
@@ -71,8 +71,8 @@ def _gen_contract_signals(
     """
     expected_contract_signals: List[str] = [f"{cx}_{sig}" for cx in cids]
 
-    # Pivot from quantamental to wide format
-    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
+    # Copy the dataframe to avoid modifying the original
+    df_wide: pd.DataFrame = df_wide.copy()
 
     # Check that all the contract signals are in the dataframe
     if not set(expected_contract_signals).issubset(set(df_wide.columns)):
@@ -102,11 +102,11 @@ def _gen_contract_signals(
     # Only return the new contract signals
     df_wide = df_wide.loc[:, new_conts]
 
-    return ticker_df_to_qdf(df=df_wide)
+    return df_wide
 
 
 def _apply_hedge_ratios(
-    df: pd.DataFrame,
+    df_wide: pd.DataFrame,
     cids: List[str],
     sig: str,
     hbasket: List[str],
@@ -114,9 +114,8 @@ def _apply_hedge_ratios(
     hratios: str,
 ) -> pd.DataFrame:
 
-    # Pivot the DF to wide ticker format
-    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
-
+    # Copy the dataframe to avoid modifying the original
+    df_wide: pd.DataFrame = df_wide.copy()
     # check if the CID_SIG is in the dataframe
     expc_cid_sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
     expc_cid_hr: List[str] = [f"{cx}_{hratios}" for cx in cids]
@@ -163,7 +162,7 @@ def _apply_hedge_ratios(
 
     df_wide = df_wide.loc[:, hedged_assets_list]
 
-    return ticker_df_to_qdf(df=df_wide)
+    return df_wide
 
 
 def _add_hedged_signals(
