@@ -590,7 +590,9 @@ class FacetPlot(Plotter):
 
                 plot_func_args = {}
                 if legend_color_map:
-                    plot_func_args["color"] = legend_color_map.get(xcatx if cid_grid else cidx)
+                    plot_func_args["color"] = legend_color_map.get(
+                        xcatx if cid_grid else cidx
+                    )
 
                 if y == compare_series:
                     plot_func_args["color"] = "red"
@@ -637,12 +639,12 @@ class FacetPlot(Plotter):
 
         self.df.reset_index(inplace=True)
 
-        for ax in ax_list[len(plot_dict):]:
+        for ax in ax_list[len(plot_dict) :]:
             fig.delaxes(ax)
-        ax_list = ax_list[:len(plot_dict)]
-        
+        ax_list = ax_list[: len(plot_dict)]
+
         if share_x:
-            for target_ax in ax_list[(len(plot_dict) - grid_dim[0]):]:
+            for target_ax in ax_list[(len(plot_dict) - grid_dim[0]) :]:
                 target_ax.xaxis.set_tick_params(labelbottom=True)
 
         if legend:
@@ -658,8 +660,14 @@ class FacetPlot(Plotter):
                 frameon=legend_frame,
             )
 
-            leg_width, leg_height = leg.get_window_extent().width, leg.get_window_extent().height
-            fig_width, fig_height = fig.get_window_extent().width, fig.get_window_extent().height
+            leg_width, leg_height = (
+                leg.get_window_extent().width,
+                leg.get_window_extent().height,
+            )
+            fig_width, fig_height = (
+                fig.get_window_extent().width,
+                fig.get_window_extent().height,
+            )
 
             if "lower" in legend_loc:
                 re_adj[1] += leg_height / fig_height
@@ -764,7 +772,7 @@ if __name__ == "__main__":
             title="Another test title",
             # save_to_file="test_1.png",
             show=True,
-            share_x=True
+            share_x=True,
         )
         fp.lineplot(
             cids=cids_C,
