@@ -166,21 +166,18 @@ def _apply_hedge_ratios(
 
 
 def _add_hedged_signals(
-    df_contract_signals: QuantamentalDataFrame,
-    df_hedge_signals: Optional[QuantamentalDataFrame] = None,
-) -> QuantamentalDataFrame:
+    df_contract_signals: pd.DataFrame,
+    df_hedge_signals: Optional[pd.DataFrame] = None,
+) -> pd.DataFrame:
     if df_hedge_signals is None:
         return df_contract_signals
 
-    dfC: pd.DataFrame = qdf_to_ticker_df(df_contract_signals)
-    dfH: pd.DataFrame = qdf_to_ticker_df(df_hedge_signals)
+    for _col in set(df_hedge_signals.columns):
+        if _col not in df_contract_signals.columns:
+            df_contract_signals[_col] = 0.0
+        df_contract_signals[_col] += df_hedge_signals[_col]
 
-    for _col in set(dfH.columns):
-        if _col not in dfC.columns:
-            dfC[_col] = 0.0
-        dfC[_col] += dfH[_col]
-
-    return ticker_df_to_qdf(df=dfC)
+    return df_contract_signals
 
 
 def contract_signals(

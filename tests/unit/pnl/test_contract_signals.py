@@ -95,9 +95,9 @@ class TestContractSignals(unittest.TestCase):
         self.assertTrue(list_of_cols_with_values == ["FX_CSIG"])
 
     def test_apply_hedge_ratios(self):
-        test_df = self._testDF()
+        test_df = qdf_to_ticker_df(self._testDF())
         good_args = dict(
-            df=test_df,
+            df_wide=test_df,
             sig=self.sig,
             cids=self.cids,
             hbasket=self.hbasket,
@@ -105,54 +105,60 @@ class TestContractSignals(unittest.TestCase):
             hratios=self.hratios,
         )
 
-        df = _apply_hedge_ratios(**good_args)
-        self.assertIsInstance(df, QuantamentalDataFrame)
+        wide_df = _apply_hedge_ratios(**good_args)
 
         # should all be 0 when hscales are 0
         bad_args = good_args.copy()
-        bad_args["df"]["value"] = 1
+        bad_args["df_wide"].loc[:, :] = 1
         bad_args["hscales"] = [0, 0]
-        df = _apply_hedge_ratios(**bad_args)
-        self.assertTrue((df["value"] == 0).all())
+        wide_df = _apply_hedge_ratios(**bad_args)
+        self.assertTrue(np.allclose(wide_df.values, 0))
 
         # should be len(cids) * 1 (5) (adding 1 for each)
         bad_args = good_args.copy()
-        bad_args["df"]["value"] = 1
+        bad_args["df_wide"].loc[:, :] = 1
         bad_args["hscales"] = [1, 1]
-        df = _apply_hedge_ratios(**bad_args)
-        self.assertTrue((df["value"] == len(self.cids)).all())
+        wide_df = _apply_hedge_ratios(**bad_args)
+        self.assertTrue(np.all(wide_df.values == len(self.cids)))
 
         bad_args = good_args.copy()
-        bad_args["df"]["value"] = 1
+        bad_args["df_wide"].loc[:, :] = 1
         bad_args["hscales"] = [-1, 0]
         # bad_args["hbasket"] = ["USD_EQ", "EUR_EQ"]
-        df = _apply_hedge_ratios(**bad_args)
-        nz_bool = df["value"].apply(bool)
-        nz_tickers = (df["cid"] + "_" + df["xcat"])[nz_bool].unique().tolist()
+        wide_df = _apply_hedge_ratios(**bad_args)
+        # nz_tickers -- columns with any non-zero values
+        nz_tickers = list(
+            (wide_df.columns[wide_df.apply(lambda x: x != 0).any()].unique())
+        )
         self.assertTrue(len(nz_tickers) == 1)
         self.assertTrue(nz_tickers[0] == "USD_EQ_CSIG")
-        self.assertTrue((df[nz_bool]["value"] == -5.0).all())
+        self.assertTrue(np.all(wide_df["USD_EQ_CSIG"].values == -5))
 
     def test_add_hedged_signals(self):
-        dfcs = make_test_df(
-            cids=self.cids,
-            xcats=[f"{ct}_CSIG" for ct in self.ctypes],
-            start=self.start,
-            end=self.end,
+        dfcs = qdf_to_ticker_df(
+            make_test_df(
+                cids=self.cids,
+                xcats=[f"{ct}_CSIG" for ct in self.ctypes],
+                start=self.start,
+                end=self.end,
+            )
         )
-        dfcs["value"] = 1
-        dfhr = make_test_df(
-            cids=get_cid(self.hbasket),
-            xcats=[f"{xc}_CSIG" for xc in list(set(get_xcat(self.hbasket)))],
-            start=self.start,
-            end=self.end,
+        dfcs.loc[:, :] = 1
+        dfhr = qdf_to_ticker_df(
+            make_test_df(
+                cids=get_cid(self.hbasket),
+                xcats=[f"{xc}_CSIG" for xc in list(set(get_xcat(self.hbasket)))],
+                start=self.start,
+                end=self.end,
+            )
         )
-        dfhr["value"] = 1
+        dfhr.loc[:, :] = 1
         df = _add_hedged_signals(dfcs, dfhr)
         # all should be ones
-        self.assertTrue((df["value"] == 1).all())
+        self.assertTrue(np.all(df.values == 1))
 
-        self.assertTrue(dfcs.eq(_add_hedged_signals(dfcs, None)).all().all())
+        # self.assertTrue(dfcs.eq(_add_hedged_signals(dfcs, None)).all().all())
+        self.assertTrue(np.all(dfcs.values == _add_hedged_signals(dfcs, None).values))
 
     def test_contract_signal_no_adjustment(self):
         p: pd.DataFrame = pd.DataFrame(
