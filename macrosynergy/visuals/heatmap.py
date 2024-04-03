@@ -315,7 +315,7 @@ class Heatmap(Plotter):
         vmax: float = max(1, df[metric].max())
         vmin: float = min(0, df[metric].min())
 
-        df["real_date"]: pd.Series = df["real_date"].dt.strftime("%Y-%m-%d")
+        df["real_date"] = df["real_date"].dt.strftime("%Y-%m-%d")
 
         df = df.pivot_table(index=y_axis_column, columns=x_axis_column, values=metric)
 
@@ -380,7 +380,7 @@ if __name__ == "__main__":
 
     heatmap = Heatmap(df=dfx, xcats=["FX"])
 
-    heatmap.df["real_date"]: pd.Series = heatmap.df["real_date"].dt.strftime("%Y-%m-%d")
+    heatmap.df["real_date"] = heatmap.df["real_date"].dt.strftime("%Y-%m-%d")
     heatmap.df = heatmap.df.pivot_table(
         index="cid", columns="real_date", values="grading"
     )
