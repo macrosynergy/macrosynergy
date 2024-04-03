@@ -405,7 +405,7 @@ def contract_signals(
 
     ## Generate primary contract signals
     df_contract_signals: pd.DataFrame = _gen_contract_signals(
-        df_wide=df,
+        df_wide=df_wide,
         cids=cids,
         sig=sig,
         ctypes=ctypes,
@@ -417,7 +417,7 @@ def contract_signals(
     df_hedge_signals: Optional[pd.DataFrame] = None
     if hbasket is not None:
         df_hedge_signals: pd.DataFrame = _apply_hedge_ratios(
-            df_wide=df,
+            df_wide=df_wide,
             cids=cids,
             sig=sig,
             hbasket=hbasket,
