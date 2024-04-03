@@ -1227,7 +1227,7 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             so.feature_selection_heatmap(name="test", figsize=(2, -1))
 
-    def test_valid_feature_selection_heatmap(self, splitter_idx, change_n_splits):
+    def test_valid_feature_selection_heatmap(self):
         splitter_idx = 1
         so = SignalOptimizer(
             inner_splitter=self.splitters[splitter_idx],
@@ -1247,7 +1247,7 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"feature_selection_heatmap raised an exception: {e}")
 
-    def test_types_models_heatmap(self, splitter_idx, change_n_splits):
+    def test_types_models_heatmap(self):
         splitter_idx = 1
         so = SignalOptimizer(
             inner_splitter=self.splitters[splitter_idx],
