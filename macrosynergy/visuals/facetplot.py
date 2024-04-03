@@ -445,10 +445,11 @@ class FacetPlot(Plotter):
                 tks: List[str] = [ticker]
                 if compare_series is not None:
                     tks.append(compare_series)
-                plot_dict[i]: Dict[str, Union[str, List[str]]] = {
+                plot_dict[i] = {
                     "X": "real_date",
                     "Y": tks,
                 }
+                # plot_dict[i] --> Dict[str, Union[str, List[str]]]
 
         if cid_grid or xcat_grid:
             # flipper handles resolution between cid_grid and xcat_grid for binary
@@ -481,11 +482,12 @@ class FacetPlot(Plotter):
                 if tks == [compare_series]:
                     continue
 
-                plot_dict[i]: Dict[str, Union[str, List[str]]] = {
+                plot_dict[i] = {
                     "X": "real_date",
                     "Y": tks + ([compare_series] if compare_series else []),
                     "title": facet_titles[i],
                 }
+                # plot_dict[i] --> Dict[str, Union[str, List[str]]]
 
         if cid_xcat_grid:
             # NB : legend goes away in cid_xcat_grid
@@ -494,11 +496,12 @@ class FacetPlot(Plotter):
             for i, cid in enumerate(_cids):
                 for j, xcat in enumerate(_xcats):
                     tk: str = "_".join([cid, xcat])
-                    plot_dict[i * len(_xcats) + j]: Dict[str, List[str]] = {
+                    plot_dict[i * len(_xcats) + j] = {
                         "X": "real_date",
                         "Y": [tk],
                         "title": tk,
                     }
+                    # plot_dict[i * len(_xcats) + j] --> Dict[str, List[str]]
 
         if len(plot_dict) == 0:
             raise ValueError("Unable to resolve plot settings.")
