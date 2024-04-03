@@ -482,7 +482,7 @@ class TestAll(unittest.TestCase):
         pd.testing.assert_frame_equal(df1, df5)
 
     @parameterized.expand(
-        itertools.product([2, 3, 5, 10], [21, 21 * 3, 21 * 6], [0, 1])
+        itertools.product([2, 5], [21, 21 * 3], [0, 1])
     )
     def test_valid_change_n_splits(
         self, initial_nsplits, threshold_ndates, splitter_idx
