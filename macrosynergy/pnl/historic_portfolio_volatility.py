@@ -30,13 +30,13 @@ logger = logging.getLogger(__name__)
 
 @cache
 def flat_weights_arr(lback_periods: int, *args, **kwargs) -> np.ndarray:
-    """Flat weights for the lookback period."""
+    """Flat weights for the look-back period."""
     return np.ones(lback_periods) / lback_periods
 
 
 @cache
 def expo_weights_arr(lback_periods: int, half_life: int, *args, **kwargs) -> np.ndarray:
-    """Exponential weights for the lookback period."""
+    """Exponential weights for the look-back period."""
     return expo_weights(lback_periods=lback_periods, half_life=half_life)
 
 
@@ -173,7 +173,8 @@ def _downsample_returns(
     freq: str = "m",
 ) -> pd.DataFrame:
     assert freq in ("d", "w", "m", "q")
-    piv_new_freq: pd.DataFrame = ((1 + piv_df / 100).resample("m").prod() - 1) * 100
+    # TODO test [1] input data is daily and [2] daily gives daily output
+    piv_new_freq: pd.DataFrame = ((1 + piv_df / 100).resample(freq).prod() - 1) * 100
     return piv_new_freq
 
 
@@ -273,6 +274,7 @@ def _calculate_portfolio_volatility(
         f"est_weights={est_weights}, portfolio_return_name={portfolio_return_name}"
     )
 
+    # TODO should be the same for all frequencies
     trigger_indices_dict: Dict[str, pd.Series] = {
         freq: get_eops(dates=pivot_signals.index, freq=freq) for freq in est_freqs
     }
@@ -310,7 +312,7 @@ def _hist_vol(
     sname: str,
     rebal_freq: str = "m",
     lback_meth: str = "ma",
-    *args,
+    *args,  # TODO drop *args? See below VisualStudio Code warning
     **kwargs,
     # lback_periods: int = 21,
     # est_freqs: List[str] = ["D", "W", "M"],
@@ -353,13 +355,13 @@ def _hist_vol(
     # It was originally designed as part of the `historic_vol` module, but it is
     # used here as well.
 
+    # TODO we are currently not using the trigger_indices:
     trigger_indices = get_eops(
         dates=pivot_signals.index,
         freq=rebal_freq,
     )
 
     # TODO get the correct rebalance dates
-
     weights_func = flat_weights_arr if lback_meth == "ma" else expo_weights_arr
     logger.info(
         "Found lback_meth=%s, using weights_func=%s", lback_meth, weights_func.__name__
@@ -386,6 +388,7 @@ def _hist_vol(
     assert df_out.columns == [portfolio_return_name]
 
     # Annualised standard deviation (ASD)
+    # TODO annualisation depends on the frequency of the returns
     df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name] * 252)
 
     rebal_freq = rebal_freq.upper()
@@ -447,6 +450,7 @@ def historic_portfolio_vol(
     :param <str> rebal_freq: the frequency of rebalancing and volatility estimation.
         Default is 'M' for monthly. Alternatives are 'W' for business weekly, 'D' for
         daily, and 'Q' for quarterly. Estimations are conducted for the end of the period.
+        # TODO - case insensitive!
     :param <List[str]> est_freqs: the list of frequencies for which the volatility
         is estimated. Volatility for a given period is the weighted sum of the volatilities
         estimated for each frequency. Default is ["D", "W", "M"].
@@ -547,6 +551,10 @@ def historic_portfolio_vol(
                 "`est_weights` must be a list of floats with the same length as `est_freqs`."
             )
 
+        assert all(x > 0 for x in est_weights), (
+            f"Non-positive est_weights not allowed: {est_weights}"
+        )
+
         if not np.isclose(sum(est_weights), 1):
             warnings.warn("`est_weights` do not sum to 1. They will be normalized.")
             est_weights = [w / sum(est_weights) for w in est_weights]
@@ -591,7 +599,7 @@ def historic_portfolio_vol(
         + "_"
         + df["xcat"]
         .str.split("_")
-        .map(lambda x: x[0][:-2] if x[0].endswith("XR") else x[0])
+        .map(lambda x: x[0][:-len(rstring)] if x[0].endswith(rstring) else x[0])
     )
     pivot_signals: pd.DataFrame = df.loc[df["ticker"].isin(filt_csigs)].pivot(
         index="real_date", columns="fid", values="value"
