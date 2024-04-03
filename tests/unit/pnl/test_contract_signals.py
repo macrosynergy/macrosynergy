@@ -47,9 +47,9 @@ class TestContractSignals(unittest.TestCase):
         )
 
     def test_gen_contract_signals(self):
-        test_df = self._testDF()
+        test_df = qdf_to_ticker_df(self._testDF())
         good_args = dict(
-            df=test_df,
+            df_wide=test_df,
             sig=self.sig,
             cids=self.cids,
             ctypes=self.ctypes,
@@ -57,42 +57,42 @@ class TestContractSignals(unittest.TestCase):
             csigns=self.csigns,
         )
 
-        df = _gen_contract_signals(**good_args)
-        self.assertIsInstance(df, QuantamentalDataFrame)
-        # self.assertEqual(set(tickers_in_test_df), set(tickers_in_df))
-        self.assertAlmostEqual(
-            len(set(qdf_to_ticker_df(test_df).columns))
-            / len(set(qdf_to_ticker_df(df).columns)),
-            len(test_df) / len(df),
-        )
-
+        df_wide = _gen_contract_signals(**good_args)
+        self.assertIsInstance(df_wide, pd.DataFrame)
         # should all be 0 when cscales are 0
         bad_args = good_args.copy()
         bad_args["cscales"] = [0 for _ in self.cscales]
-        df = _gen_contract_signals(**bad_args)
-        self.assertTrue(np.allclose(df["value"], 0))
+        df_wide = _gen_contract_signals(**bad_args)
+        self.assertTrue(np.allclose(df_wide.values, 0))
 
         # should all be negative when csigns are -1
         bad_args = good_args.copy()
         bad_args["csigns"] = [-1 for _ in self.csigns]
-        df = _gen_contract_signals(**bad_args)
-        self.assertTrue(np.all(df["value"] < 0))
+        df_wide = _gen_contract_signals(**bad_args)
+        self.assertTrue(np.all(df_wide.values < 0))
 
         # should all be exactly 1 when cscales are 1
         bad_args = good_args.copy()
-        bad_args["df"]["value"] = 1
+        bad_args["df_wide"].loc[:, :] = 1
         bad_args["cscales"] = [1, 1, 1]
         bad_args["csigns"] = [1, 1, 1]
-        df = _gen_contract_signals(**bad_args)
-        self.assertTrue((df["value"] == 1.0).all())
+        df_wide = _gen_contract_signals(**bad_args)
+        self.assertTrue(np.all(df_wide.values == 1.0))
 
         # only FX_CSIG should be non-zero when cscales are 1,0,0
         bad_args = good_args.copy()
-        bad_args["df"]["value"] = 1
+        bad_args["df_wide"].loc[:, :] = 1
         bad_args["cscales"] = [1, 0, 0]
         bad_args["csigns"] = [1, 1, 1]
-        df = _gen_contract_signals(**bad_args)
-        self.assertTrue(df[df["value"].apply(bool)]["xcat"].unique()[0] == "FX_CSIG")
+        df_wide = _gen_contract_signals(**bad_args)
+        list_of_cols_with_values = list(
+            set(
+                get_xcat(
+                    df_wide.columns[df_wide.apply(lambda x: x != 0).any()].unique()
+                )
+            )
+        )
+        self.assertTrue(list_of_cols_with_values == ["FX_CSIG"])
 
     def test_apply_hedge_ratios(self):
         test_df = self._testDF()
