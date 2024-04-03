@@ -20,7 +20,6 @@ from macrosynergy.management.utils import (
     get_cid,
     _map_to_business_day_frequency,
 )
-from macrosynergy.management.types import QuantamentalDataFrame
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
 

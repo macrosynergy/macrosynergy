@@ -7,9 +7,10 @@ import numpy as np
 import pandas as pd
 import warnings
 
+from numbers import Number
 from typing import List, Union, Tuple, Optional, Set, Any
 
-from macrosynergy.management.types import NoneType, Numeric, QuantamentalDataFrame
+from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.panel import make_relative_value
 from macrosynergy.management.utils import (
     is_valid_iso_date,
@@ -25,10 +26,11 @@ logger = logging.getLogger(__name__)
 
 
 def _check_scaling_args(
-    cscales: Optional[List[Union[Numeric, str]]] = None,
+    ctypes: List[str],
+    cscales: Optional[List[Union[Number, str]]] = None,
     csigns: Optional[List[int]] = None,
     hbasket: Optional[List[str]] = None,
-    hscales: Optional[List[Union[Numeric, str]]] = None,
+    hscales: Optional[List[Union[Number, str]]] = None,
     hratios: Optional[str] = None,
 ) -> Tuple[Any, Any, Any, Any, Any]:
 
@@ -37,10 +39,10 @@ def _check_scaling_args(
         # check that the number of scales is the same as the number of ctypes
         if len(cscales) != len(ctypes):
             raise ValueError("`cscales` must be of the same length as `ctypes`")
-        if not all([isinstance(x, (str, Numeric)) for x in cscales]):
+        if not all([isinstance(x, (str, Number)) for x in cscales]):
             raise TypeError("`cscales` must be a List of strings or numerical values")
     else:
-        cscales: List[Numeric] = [1.0] * len(ctypes)
+        cscales: List[Number] = [1.0] * len(ctypes)
 
     if csigns is not None:
         # check that the number of signs is the same as the number of ctypes
@@ -67,7 +69,7 @@ def _check_scaling_args(
             # check that the number of scales is the same as the number of hbasket
             if len(hscales) != len(hbasket):
                 raise ValueError("`hscales` must be of the same length as `hbasket`")
-            if not all([isinstance(x, (str, Numeric)) for x in hscales]):
+            if not all([isinstance(x, (str, Number)) for x in hscales]):
                 raise TypeError(
                     "`hscales` must be a List of strings or numerical values"
                 )
@@ -80,10 +82,10 @@ def _check_arg_types(
     sig: Optional[str] = None,
     cids: Optional[List[str]] = None,
     ctypes: Optional[List[str]] = None,
-    cscales: Optional[List[Union[Numeric, str]]] = None,
+    cscales: Optional[List[Union[Number, str]]] = None,
     csigns: Optional[List[int]] = None,
     hbasket: Optional[List[str]] = None,
-    hscales: Optional[List[Union[Numeric, str]]] = None,
+    hscales: Optional[List[Union[Number, str]]] = None,
     hratios: Optional[str] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
@@ -138,12 +140,10 @@ def _check_arg_types(
             [
                 cids is None or all([isinstance(x, str) for x in cids]),
                 ctypes is None or all([isinstance(x, str) for x in ctypes]),
-                cscales is None
-                or all([isinstance(x, (str, Numeric)) for x in cscales]),
+                cscales is None or all([isinstance(x, (str, Number)) for x in cscales]),
                 csigns is None or all([isinstance(x, int) for x in csigns]),
                 hbasket is None or all([isinstance(x, str) for x in hbasket]),
-                hscales is None
-                or all([isinstance(x, (str, Numeric)) for x in hscales]),
+                hscales is None or all([isinstance(x, (str, Number)) for x in hscales]),
             ]
         )
     )
@@ -197,7 +197,7 @@ def _gen_contract_signals(
     cids: List[str],
     sig: str,
     ctypes: List[str],
-    cscales: List[Union[Numeric, str]],
+    cscales: List[Union[Number, str]],
     csigns: List[int],
 ) -> pd.DataFrame:
     """
@@ -215,7 +215,7 @@ def _gen_contract_signals(
         "FX" for FX forwards or "EQ" for equity index futures.
         N.B. Overall a contract is identified by the combination of its cross-section
         and its contract type "<cid>_<ctype>".
-    :param <List[Union[Numeric, str]]> cscales: list of scaling factors for the
+    :param <List[Union[Number, str]]> cscales: list of scaling factors for the
         contract signals. These can be either a list of floats or a list of category
         tickers that serve as basis of translation. The former are fixed across time,
         the latter variable.
@@ -249,13 +249,13 @@ def _gen_contract_signals(
     for _cid in cids:
         sig_col: str = _cid + "_" + sig
         for ix, ctx in enumerate(ctypes):
-            scale_var: Union[Numeric, pd.Series]
+            scale_var: Union[Number, pd.Series]
             # If the scale is a string, it must be a category ticker
             # Otherwise it is a fixed numeric value
             if isinstance(cscales[ix], str):
                 scale_var: pd.Series = df_wide[_cid + "_" + cscales[ix]]
             else:
-                scale_var: Numeric = cscales[ix]
+                scale_var: Number = cscales[ix]
 
             new_cont_name: str = _cid + "_" + ctx + "_CSIG"
             df_wide[new_cont_name] = df_wide[sig_col] * csigns[ix] * scale_var
@@ -273,7 +273,7 @@ def _apply_hedge_ratios(
     cids: List[str],
     sig: str,
     hbasket: List[str],
-    hscales: List[Union[Numeric, str]],
+    hscales: List[Union[Number, str]],
     hratios: str,
 ) -> pd.DataFrame:
     # Type checks
@@ -313,13 +313,13 @@ def _apply_hedge_ratios(
             cid_sig: str = _cid + "_" + sig
             cid_hr: str = _cid + "_" + hratios
 
-            hb_hratio: Union[Numeric, pd.Series]
+            hb_hratio: Union[Number, pd.Series]
             # If the scale is a string, it must be a category ticker
             # Otherwise it is a fixed numeric value
             if isinstance(hscales[hb_ix], str):
                 hb_hratio: pd.Series = df_wide[_cid + "_" + hscales[hb_ix]]
             else:
-                hb_hratio: Numeric = hscales[hb_ix]
+                hb_hratio: Number = hscales[hb_ix]
 
             # Add the basket position to the exisitng basket_pos column in the df
             _posx: pd.Series = df_wide[cid_sig] * df_wide[cid_hr] * hb_hratio
@@ -355,10 +355,10 @@ def contract_signals(
     sig: str,
     cids: List[str],
     ctypes: List[str],
-    cscales: Optional[List[Union[Numeric, str]]] = None,
+    cscales: Optional[List[Union[Number, str]]] = None,
     csigns: Optional[List[int]] = None,
     hbasket: Optional[List[str]] = None,
-    hscales: Optional[List[Union[Numeric, str]]] = None,
+    hscales: Optional[List[Union[Number, str]]] = None,
     hratios: Optional[str] = None,
     relative_value: bool = False,
     start: Optional[str] = None,
@@ -472,6 +472,7 @@ def contract_signals(
 
     ## Check the scaling and hedging arguments
     cscales, csigns, hbasket, hscales, hratios = _check_scaling_args(
+        ctypes=ctypes,
         cscales=cscales,
         csigns=csigns,
         hbasket=hbasket,

@@ -3,27 +3,11 @@ import numpy as np
 import pandas as pd
 
 from typing import Any, List
-from macrosynergy.management.types import Numeric, NoneType, QuantamentalDataFrame
+from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.management.simulate import make_test_df
 
 
 class TestTypes(unittest.TestCase):
-    def test_numeric_type(self):
-        true_cases: List[Any] = [1, 1.0, np.int64(1), np.float64(1)]
-
-        for case in true_cases:
-            self.assertTrue(isinstance(case, Numeric), msg=f"Failed for {case}")
-
-        false_cases: List[Any] = [
-            "1",
-            None,
-            object(),
-            pd.DataFrame(),
-            pd.Series(dtype=int),
-        ]
-
-        for case in false_cases:
-            self.assertFalse(isinstance(case, Numeric), msg=f"Failed for {case}")
 
     def test_none_type(self):
         self.assertTrue(isinstance(None, NoneType))
