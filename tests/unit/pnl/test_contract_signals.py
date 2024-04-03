@@ -37,6 +37,7 @@ class TestContractSignals(unittest.TestCase):
         self.hscales: List[Number] = [0.7, 0.3]
         self.sig = "SIG"
         self.hratios = "HR"
+        self.sname = "tEsT_sTrAT"
 
     def _testDF(self) -> QuantamentalDataFrame:
         return make_test_df(
@@ -160,7 +161,7 @@ class TestContractSignals(unittest.TestCase):
         # self.assertTrue(dfcs.eq(_add_hedged_signals(dfcs, None)).all().all())
         self.assertTrue(np.all(dfcs.values == _add_hedged_signals(dfcs, None).values))
 
-    def test_contract_signal(self):
+    def test_contract_signal_main(self):
         good_args = dict(
             df=self._testDF(),
             sig=self.sig,
@@ -171,7 +172,45 @@ class TestContractSignals(unittest.TestCase):
             hbasket=self.hbasket,
             hscales=self.hscales,
             hratios=self.hratios,
+            sname=self.sname,
+            relative_value=True,
         )
+        # full run
+        dfc: QuantamentalDataFrame = contract_signals(**good_args)
+        self.assertIsInstance(dfc, QuantamentalDataFrame)
+
+        for arg in good_args:
+            bad_args = good_args.copy()
+
+            bad_args[arg] = np.zeros(1)
+            with self.assertRaises(TypeError):
+                contract_signals(**bad_args)
+        for arg in good_args:
+            if isinstance(good_args[arg], (list, str, dict)):
+                if isinstance(good_args[arg], list):
+                    bad_args[arg] = []
+                elif isinstance(good_args[arg], dict):
+                    bad_args[arg] = {}
+                elif isinstance(good_args[arg], str):
+                    bad_args[arg] = ""
+                with self.assertRaises(ValueError):
+                    contract_signals(**bad_args)
+
+        for date_var in ["start", "end"]:
+            bad_args = good_args.copy()
+            bad_args[date_var] = "bad_date"
+            with self.assertRaises(ValueError):
+                contract_signals(**bad_args)
+
+        # test for missing tickers
+        bad_args = good_args.copy()
+        bad_args["df"] = bad_args["df"][
+            bad_args["df"]["cid"] != bad_args["cids"][-1]
+        ].reset_index(drop=True)
+        with self.assertRaises(ValueError):
+            contract_signals(**bad_args)
+
+        # test for mismatch
 
     def test_contract_signal_no_adjustment(self):
         p: pd.DataFrame = pd.DataFrame(
