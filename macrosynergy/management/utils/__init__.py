@@ -23,6 +23,7 @@ from .df_utils import (
     ticker_df_to_qdf,
     apply_slip,
     downsample_df_on_real_date,
+    downsample_wide_df_on_real_date,
     update_df,
     update_tickers,
     update_categories,
@@ -36,6 +37,7 @@ from .df_utils import (
     years_btwn_dates,
     quarters_btwn_dates,
     get_eops,
+    estimate_release_frequency
 )
 
 from .math import (
@@ -66,6 +68,7 @@ __all__ = [
     "ticker_df_to_qdf",
     "apply_slip",
     "downsample_df_on_real_date",
+    "downsample_wide_df_on_real_date",
     "update_df",
     "df_tickers",
     "update_tickers",
@@ -81,6 +84,7 @@ __all__ = [
     "years_btwn_dates",
     "quarters_btwn_dates",
     "get_eops",
+    "estimate_release_frequency",
     "expanding_mean_with_nan",
 
 ]

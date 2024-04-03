@@ -1,15 +1,14 @@
 """
 Module for calculating contract signals based on cross-section-specific signals,
 and hedging them with a basket of contracts. Main function is `contract_signals`.
-
-::docs::contract_signals::sort_first::
 """
 
 import numpy as np
 import pandas as pd
 import warnings
+
 from numbers import Number
-from typing import List, Union, Tuple, Optional, Set
+from typing import List, Union, Tuple, Optional, Set, Any
 
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.panel import make_relative_value
@@ -19,10 +18,166 @@ from macrosynergy.management.utils import (
     ticker_df_to_qdf,
     qdf_to_ticker_df,
     reduce_df,
-    update_df,
-    get_cid,
-    get_xcat,
+    estimate_release_frequency,
 )
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def _check_scaling_args(
+    ctypes: List[str],
+    cscales: Optional[List[Union[Number, str]]] = None,
+    csigns: Optional[List[int]] = None,
+    hbasket: Optional[List[str]] = None,
+    hscales: Optional[List[Union[Number, str]]] = None,
+    hratios: Optional[str] = None,
+) -> Tuple[Any, Any, Any, Any, Any]:
+
+    ## Check cscales and csigns
+    if cscales is not None:
+        # check that the number of scales is the same as the number of ctypes
+        if len(cscales) != len(ctypes):
+            raise ValueError("`cscales` must be of the same length as `ctypes`")
+        if not all([isinstance(x, (str, Number)) for x in cscales]):
+            raise TypeError("`cscales` must be a List of strings or numerical values")
+    else:
+        cscales: List[Number] = [1.0] * len(ctypes)
+
+    if csigns is not None:
+        # check that the number of signs is the same as the number of ctypes
+        if len(csigns) != len(ctypes):
+            raise ValueError("`csigns` must be of the same length as `ctypes`")
+        if not all([isinstance(x, int) for x in csigns]):
+            raise TypeError("`csigns` must be a List of integers")
+        if not all([x in [-1, 1] for x in csigns]):
+            warnings.warn(
+                "`csigns` must be a List of -1 or 1, coercing to -1 or 1",
+                UserWarning,
+            )
+            csigns: List[int] = [x / abs(x) for x in csigns]
+    else:
+        csigns: List[int] = [1] * len(ctypes)
+
+    ## Check hbasket and hscales
+    if hbasket is not None:
+        if not (bool(hratios) and bool(hscales)):
+            raise ValueError(
+                "`hratios` and `hscales` must be provided if `hbasket` is provided"
+            )
+        else:
+            # check that the number of scales is the same as the number of hbasket
+            if len(hscales) != len(hbasket):
+                raise ValueError("`hscales` must be of the same length as `hbasket`")
+            if not all([isinstance(x, (str, Number)) for x in hscales]):
+                raise TypeError(
+                    "`hscales` must be a List of strings or numerical values"
+                )
+
+    return cscales, csigns, hbasket, hscales, hratios
+
+
+def _check_arg_types(
+    df: Optional[pd.DataFrame] = None,
+    sig: Optional[str] = None,
+    cids: Optional[List[str]] = None,
+    ctypes: Optional[List[str]] = None,
+    cscales: Optional[List[Union[Number, str]]] = None,
+    csigns: Optional[List[int]] = None,
+    hbasket: Optional[List[str]] = None,
+    hscales: Optional[List[Union[Number, str]]] = None,
+    hratios: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    blacklist: Optional[dict] = None,
+    sname: Optional[str] = None,
+) -> bool:
+    """
+    Auxiliary function to check the types of the arguments passed to the main function.
+    Accepts all arguments from `contract_signals()` as optional keyword arguments, and
+    checks that they are of the correct type.
+
+    :params: see `contract_signals()`
+    :return <bool>: True if all arguments are of the correct type, False otherwise.
+    """
+    correct_types: bool = all(
+        [
+            isinstance(df, (pd.DataFrame, NoneType)),
+            isinstance(sig, (str, NoneType)),
+            isinstance(cids, (list, NoneType)),
+            isinstance(ctypes, (list, NoneType)),
+            isinstance(cscales, (list, NoneType)),
+            isinstance(csigns, (list, NoneType)),
+            isinstance(hbasket, (list, NoneType)),
+            isinstance(hscales, (list, NoneType)),
+            isinstance(hratios, (str, NoneType)),
+            isinstance(start, (str, NoneType)),
+            isinstance(end, (str, NoneType)),
+            isinstance(blacklist, (dict, NoneType)),
+            isinstance(sname, (str, NoneType)),
+        ]
+    )
+
+    try:
+        non_empty_iterables: bool = all(
+            [
+                df is None or len(df) > 0,
+                cids is None or len(cids) > 0,
+                ctypes is None or len(ctypes) > 0,
+                cscales is None or len(cscales) > 0,
+                csigns is None or len(csigns) > 0,
+                hbasket is None or len(hbasket) > 0,
+                hscales is None or len(hscales) > 0,
+            ]
+        )
+    except TypeError:
+        non_empty_iterables: bool = False
+
+    correct_nested_types: bool = (
+        correct_types
+        and non_empty_iterables
+        and all(
+            [
+                cids is None or all([isinstance(x, str) for x in cids]),
+                ctypes is None or all([isinstance(x, str) for x in ctypes]),
+                cscales is None or all([isinstance(x, (str, Number)) for x in cscales]),
+                csigns is None or all([isinstance(x, int) for x in csigns]),
+                hbasket is None or all([isinstance(x, str) for x in hbasket]),
+                hscales is None or all([isinstance(x, (str, Number)) for x in hscales]),
+            ]
+        )
+    )
+
+    return correct_nested_types
+
+
+def _check_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.DataFrame:
+    """
+    Check the timeseries to see if the estimated frequency matches the actual frequency.
+
+    :param <pd.DataFrame> df_wide: dataframe in wide format with the contract signals.
+    :param <str> est_freq: the estimated frequency of the contract signals.
+
+    :return <pd.DataFrame>: dataframe with the estimated frequency.
+
+    :raises <ValueError>: if the estimated frequency does not match the actual frequency.
+    """
+
+    estimated_freq: pd.Series = estimate_release_frequency(df_wide=df_wide)
+
+    # for each series in the dataframe, check if the estimated frequency matches the rebal_freq
+    for _col in df_wide.columns:
+        if estimated_freq[_col] is None:
+            warnings.warn(
+                f"Unable to estimate frequency for `{_col}`",
+            )
+        elif estimated_freq[_col] != rebal_freq:
+            warnings.warn(
+                f"Estimated frequency for `{_col}` does not match "
+                f"the rebalancing frequency`{rebal_freq}`",
+            )
+
+    return df_wide
 
 
 def _make_relative_value(
@@ -69,10 +224,18 @@ def _gen_contract_signals(
 
     :return <pd.DataFrame>: dataframe with scaling applied.
     """
-    expected_contract_signals: List[str] = [f"{cx}_{sig}" for cx in cids]
+    # Type checks
+    if not _check_arg_types(
+        df=df_wide,
+        cids=cids,
+        sig=sig,
+        ctypes=ctypes,
+        cscales=cscales,
+        csigns=csigns,
+    ):
+        raise TypeError("Invalid arguments passed to `_gen_contract_tickers()`")
 
-    # Copy the dataframe to avoid modifying the original
-    df_wide: pd.DataFrame = df_wide.copy()
+    expected_contract_signals: List[str] = [f"{cx}_{sig}" for cx in cids]
 
     # Check that all the contract signals are in the dataframe
     if not set(expected_contract_signals).issubset(set(df_wide.columns)):
@@ -113,9 +276,16 @@ def _apply_hedge_ratios(
     hscales: List[Union[Number, str]],
     hratios: str,
 ) -> pd.DataFrame:
+    # Type checks
+    if not _check_arg_types(
+        df=df_wide,
+        cids=cids,
+        hbasket=hbasket,
+        hscales=hscales,
+        hratios=hratios,
+    ):
+        raise TypeError("Invalid arguments passed to `apply_hedge_ratios()`")
 
-    # Copy the dataframe to avoid modifying the original
-    df_wide: pd.DataFrame = df_wide.copy()
     # check if the CID_SIG is in the dataframe
     expc_cid_sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
     expc_cid_hr: List[str] = [f"{cx}_{hratios}" for cx in cids]
@@ -166,18 +336,18 @@ def _apply_hedge_ratios(
 
 
 def _add_hedged_signals(
-    df_contract_signals: pd.DataFrame,
-    df_hedge_signals: Optional[pd.DataFrame] = None,
+    df_wide_cs: pd.DataFrame,
+    df_wide_hs: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
-    if df_hedge_signals is None:
-        return df_contract_signals
+    if df_wide_hs is None:
+        return df_wide_cs
 
-    for _col in set(df_hedge_signals.columns):
-        if _col not in df_contract_signals.columns:
-            df_contract_signals[_col] = 0.0
-        df_contract_signals[_col] += df_hedge_signals[_col]
+    for _col in set(df_wide_hs.columns):
+        if _col not in df_wide_cs.columns:
+            df_wide_cs[_col] = 0.0
+        df_wide_cs[_col] += df_wide_hs[_col]
 
-    return df_contract_signals
+    return df_wide_cs
 
 
 def contract_signals(
@@ -193,6 +363,7 @@ def contract_signals(
     relative_value: bool = False,
     start: Optional[str] = None,
     end: Optional[str] = None,
+    rebal_freq: str = "M",
     blacklist: Optional[dict] = None,
     sname: str = "STRAT",
     *args,
@@ -299,45 +470,23 @@ def contract_signals(
             f"\nMissing: {set(expected_base_signals) - found_base_signals}"
         )
 
-    ## Check cscales and csigns
-    if cscales is not None:
-        # check that the number of scales is the same as the number of ctypes
-        if len(cscales) != len(ctypes):
-            raise ValueError("`cscales` must be of the same length as `ctypes`")
-        if not all([isinstance(x, (str, Number)) for x in cscales]):
-            raise TypeError("`cscales` must be a List of strings or numerical values")
-    else:
-        cscales: List[Number] = [1.0] * len(ctypes)
+    ## Check the scaling and hedging arguments
+    cscales, csigns, hbasket, hscales, hratios = _check_scaling_args(
+        ctypes=ctypes,
+        cscales=cscales,
+        csigns=csigns,
+        hbasket=hbasket,
+        hscales=hscales,
+        hratios=hratios,
+    )
 
-    if csigns is not None:
-        # check that the number of signs is the same as the number of ctypes
-        if len(csigns) != len(ctypes):
-            raise ValueError("`csigns` must be of the same length as `ctypes`")
-        if not all([isinstance(x, int) for x in csigns]):
-            raise TypeError("`csigns` must be a List of integers")
-        if not all([x in [-1, 1] for x in csigns]):
-            warnings.warn(
-                "`csigns` must be a List of -1 or 1, coercing to -1 or 1",
-                UserWarning,
-            )
-            csigns: List[int] = [x / abs(x) for x in csigns]
-    else:
-        csigns: List[int] = [1] * len(ctypes)
+    ## Cast the dataframe to wide format
+    df_wide: pd.DataFrame = qdf_to_ticker_df(df)
 
-    ## Check hbasket and hscales
-    if hbasket is not None:
-        if not (bool(hratios) and bool(hscales)):
-            raise ValueError(
-                "`hratios` and `hscales` must be provided if `hbasket` is provided"
-            )
-        else:
-            # check that the number of scales is the same as the number of hbasket
-            if len(hscales) != len(hbasket):
-                raise ValueError("`hscales` must be of the same length as `hbasket`")
-            if not all([isinstance(x, (str, Number)) for x in hscales]):
-                raise TypeError(
-                    "`hscales` must be a List of strings or numerical values"
-                )
+    ## Check rebal_freq or downsample the dataframe
+    df_wide: pd.DataFrame = _check_estimation_frequency(
+        df_wide=df_wide, rebal_freq=rebal_freq
+    )
 
     # Actual calculation
 
@@ -349,7 +498,7 @@ def contract_signals(
 
     ## Generate primary contract signals
     df_contract_signals: pd.DataFrame = _gen_contract_signals(
-        df_wide=df_wide,
+        df_wide=df,
         cids=cids,
         sig=sig,
         ctypes=ctypes,
@@ -361,7 +510,7 @@ def contract_signals(
     df_hedge_signals: Optional[pd.DataFrame] = None
     if hbasket is not None:
         df_hedge_signals: pd.DataFrame = _apply_hedge_ratios(
-            df_wide=df_wide,
+            df_wide=df,
             cids=cids,
             sig=sig,
             hbasket=hbasket,
@@ -370,12 +519,18 @@ def contract_signals(
         )
 
     # Add the hedge signals to the contract signals
-    df_out_wide: pd.DataFrame = _add_hedged_signals(
-        df_contract_signals=df_contract_signals,
-        df_hedge_signals=df_hedge_signals,
+    df_out: pd.DataFrame = _add_hedged_signals(
+        df_wide_cs=df_contract_signals,
+        df_wide_hs=df_hedge_signals,
     )
 
-    return ticker_df_to_qdf(df=df_out_wide)
+    ## Wide to quantamental
+    df_out: pd.DataFrame = ticker_df_to_qdf(df=df_out)
+
+    # Append the strategy name to all the xcats
+    df_out["xcat"] = df_out["xcat"] + "_" + sname
+
+    return df_out
 
 
 if __name__ == "__main__":
