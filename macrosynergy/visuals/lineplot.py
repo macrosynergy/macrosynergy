@@ -8,8 +8,7 @@ from typing import List, Dict, Tuple, Optional
 import matplotlib.pyplot as plt
 
 from macrosynergy.visuals.plotter import Plotter
-from macrosynergy.management.types import Numeric, NoneType
-
+from numbers import Number
 from macrosynergy.management.simulate import make_test_df
 
 
@@ -69,9 +68,9 @@ class LinePlot(Plotter):
         compare_series: Optional[str] = None,
         # Plotting specific arguments
         # fig args
-        figsize: Tuple[Numeric, Numeric] = (12, 8),
-        aspect: Numeric = 1.618,
-        height: Numeric = 0.8,
+        figsize: Tuple[Number, Number] = (12, 8),
+        aspect: Number = 1.618,
+        height: Number = 0.8,
         # plot args
         grid: bool = True,
         x_axis_label: Optional[str] = None,
@@ -80,8 +79,8 @@ class LinePlot(Plotter):
         # title args
         title: Optional[str] = None,
         title_fontsize: int = 16,
-        title_xadjust: Numeric = 0.5,
-        title_yadjust: Numeric = 1.05,
+        title_xadjust: Number = 0.5,
+        title_yadjust: Number = 1.05,
         # legend args
         legend: bool = True,
         legend_labels: Optional[List[str]] = None,
@@ -89,7 +88,7 @@ class LinePlot(Plotter):
         legend_loc: Optional[str] = "best",
         legend_fontsize: int = 14,
         legend_ncol: int = 1,
-        legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,
+        legend_bbox_to_anchor: Optional[Tuple[Number, Number]] = None,
         legend_frame: bool = True,
         # return args
         show: bool = True,
