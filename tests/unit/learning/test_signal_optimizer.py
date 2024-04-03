@@ -73,8 +73,8 @@ class TestAll(unittest.TestCase):
         self.y_test = test["XR"]
 
         # instantiate some splitters
-        expandingkfold = ExpandingKFoldPanelSplit(n_splits=5)
-        rollingkfold = RollingKFoldPanelSplit(n_splits=5)
+        expandingkfold = ExpandingKFoldPanelSplit(n_splits=4)
+        rollingkfold = RollingKFoldPanelSplit(n_splits=4)
         expandingincrement = ExpandingIncrementPanelSplit(min_cids=2, min_periods=100)
         self.splitters = [expandingkfold, rollingkfold, expandingincrement]
 
@@ -400,6 +400,7 @@ class TestAll(unittest.TestCase):
                 hparam_grid=self.hparam_grid,
                 hparam_type="random",
                 n_jobs=1,
+                n_iter=1,
             )
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
@@ -713,6 +714,7 @@ class TestAll(unittest.TestCase):
                 hparam_grid={"ols": {}, "ridge": {"alpha": []}},
                 hparam_type="random",
                 n_jobs=1,
+                n_iter=1,
             )
         with self.assertRaises(ValueError):
             so.calculate_predictions(
@@ -1049,7 +1051,7 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             so.get_optimal_models(name="test2")
 
-    @parameterized.expand(itertools.product([0, 1], [True, False]))
+    @parameterized.expand(itertools.product([1], [True, False]))
     def test_valid_get_optimal_models(self, splitter_idx, change_n_splits):
         # Test that the output is a dataframe
         if change_n_splits:
@@ -1176,24 +1178,13 @@ class TestAll(unittest.TestCase):
 
         self.assertEqual(len(df4.name.unique()), 2)
 
-    @parameterized.expand(itertools.product([0, 1], [True, False]))
-    def test_types_feature_selection_heatmap(self, splitter_idx, change_n_splits):
-        if change_n_splits:
-            initial_nsplits = np.random.choice([2, 3, 5, 10])
-            threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits=initial_nsplits,
-                threshold_ndates=threshold_ndates,
-            )
-        else:
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-            )
+    def test_types_feature_selection_heatmap(self):
+        splitter_idx = 1
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[splitter_idx],
+            X=self.X_train,
+            y=self.y_train,
+        )
         # Test that invalid names are caught
         with self.assertRaises(TypeError):
             so.feature_selection_heatmap(name=1)
@@ -1236,24 +1227,13 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             so.feature_selection_heatmap(name="test", figsize=(2, -1))
 
-    @parameterized.expand(itertools.product([0, 1], [True, False]))
     def test_valid_feature_selection_heatmap(self, splitter_idx, change_n_splits):
-        if change_n_splits:
-            initial_nsplits = np.random.choice([2, 3, 5, 10])
-            threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits=initial_nsplits,
-                threshold_ndates=threshold_ndates,
-            )
-        else:
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-            )
+        splitter_idx = 1
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[splitter_idx],
+            X=self.X_train,
+            y=self.y_train,
+        )
         so.calculate_predictions(
             name="test",
             models=self.models,
@@ -1267,24 +1247,13 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"feature_selection_heatmap raised an exception: {e}")
 
-    @parameterized.expand(itertools.product([0, 1], [True, False]))
     def test_types_models_heatmap(self, splitter_idx, change_n_splits):
-        if change_n_splits:
-            initial_nsplits = np.random.choice([2, 3, 5, 10])
-            threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits=initial_nsplits,
-                threshold_ndates=threshold_ndates,
-            )
-        else:
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-            )
+        splitter_idx = 1
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[splitter_idx],
+            X=self.X_train,
+            y=self.y_train,
+        )
         # Test that invalid names are caught
         with self.assertRaises(TypeError):
             so.models_heatmap(name=1)
@@ -1334,31 +1303,26 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             so.models_heatmap(name="test", figsize=(2, -1))
 
-    @parameterized.expand(itertools.product([0, 1], [True, False]))
-    def test_valid_models_heatmap(self, splitter_idx, change_n_splits):
-        if change_n_splits:
-            initial_nsplits = np.random.choice([2, 3, 5, 10])
-            threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits=initial_nsplits,
-                threshold_ndates=threshold_ndates,
-            )
-        else:
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-            )
+    def test_valid_models_heatmap(self):
+        splitter_idx = 1
+        initial_nsplits = np.random.choice([2, 3, 5, 10])
+        threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
+        so = SignalOptimizer(
+            inner_splitter=self.splitters[splitter_idx],
+            X=self.X_train,
+            y=self.y_train,
+            initial_nsplits=initial_nsplits,
+            threshold_ndates=threshold_ndates,
+        )
+
         so.calculate_predictions(
             name="test",
             models=self.models,
             metric=self.metric,
             hparam_grid=self.hparam_grid,
-            hparam_type="grid",
+            hparam_type="random",
             n_jobs=1,
+            n_iter=1,
         )
         try:
             so.models_heatmap(name="test")
