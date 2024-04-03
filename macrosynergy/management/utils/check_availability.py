@@ -10,6 +10,7 @@ from typing import List, Tuple
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.types import QuantamentalDataFrame
 import macrosynergy.visuals as msv
 
 
@@ -63,11 +64,15 @@ def check_availability(
         visual_paneldates(dfe, size=end_size, use_last_businessday=use_last_businessday)
 
 
-def missing_in_df(df: pd.DataFrame, xcats: List[str] = None, cids: List[str] = None):
+def missing_in_df(
+    df: QuantamentalDataFrame,
+    xcats: List[str] = None,
+    cids: List[str] = None,
+):
     """
     Print missing cross-sections and categories
 
-    :param <pd.DataFrame> df: standardized DataFrame with the following necessary
+    :param <QuantamentalDataFrame> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcat', 'real_date'.
     :param <List[str]> xcats: extended categories to be checked on. Default is all
         in the DataFrame.
@@ -75,14 +80,36 @@ def missing_in_df(df: pd.DataFrame, xcats: List[str] = None, cids: List[str] = N
         the DataFrame.
 
     """
-    print("Missing xcats across df: ", list(set(xcats) - set(df["xcat"])))
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("`df` must be a QuantamentalDataFrame/pd.DataFrame")
+
+    if df.empty:
+        raise ValueError("`df` is empty.")
+
+    for lst, name in zip([xcats, cids], ["xcats", "cids"]):
+        if (lst is not None) and not (
+            isinstance(lst, list) and all(isinstance(x, str) for x in lst)
+        ):
+            raise TypeError(f"`{name}` should be a `List[str]` and not {type(lst)}.")
+
+    missing_across_df = list(set(xcats) - set(df["xcat"]))
+    if len(missing_across_df) > 0:
+        print("Missing XCATs across DataFrame: ", missing_across_df)
+    else:
+        print("No missing XCATs across DataFrame.")
 
     cids = df["cid"].unique() if cids is None else cids
     xcats_used = sorted(list(set(xcats).intersection(set(df["xcat"]))))
+    if len(xcats_used) == 0:
+        print("No XCATs found in the DataFrame.")
+        return
 
+    max_xcat_len = max(map(len, xcats_used))
     for xcat in xcats_used:
         cids_xcat = df.loc[df["xcat"] == xcat, "cid"].unique()
-        print(f"Missing cids for {xcat}: ", list(set(cids) - set(cids_xcat)))
+        missing_cids = sorted(set(cids) - set(cids_xcat))
+        msg = f"Missing cids for {xcat}: " + " " * (max_xcat_len - len(xcat))
+        print(msg, missing_cids)
 
 
 def check_startyears(df: pd.DataFrame):
