@@ -10,6 +10,7 @@ from macrosynergy.pnl.contract_signals import (
     _gen_contract_signals,
     _add_hedged_signals,
     _apply_hedge_ratios,
+    _check_scaling_args,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import (
@@ -161,6 +162,37 @@ class TestContractSignals(unittest.TestCase):
         # self.assertTrue(dfcs.eq(_add_hedged_signals(dfcs, None)).all().all())
         self.assertTrue(np.all(dfcs.values == _add_hedged_signals(dfcs, None).values))
 
+    def test_check_scaling_args(self):
+        good_args = dict(
+            ctypes=self.ctypes,
+            cscales=self.cscales,
+            csigns=self.csigns,
+            hbasket=self.hbasket,
+            hscales=self.hscales,
+            hratios=self.hratios,
+        ).copy()
+        # full run
+        _check_scaling_args(**good_args)
+
+        # should raise error when the following pairs are not the same length
+        # - cscales, csigns
+        # - cscales, csigns
+        # - hscales, hbasket
+        for argx in ["cscales", "csigns", "hscales", "hbasket"]:
+            bad_args = good_args.copy()
+            bad_args[argx] = bad_args[argx][:-1]
+            with self.assertRaises(ValueError):
+                _check_scaling_args(**bad_args)
+
+        # with cscales/csigns = None, the return cscales/csigns should be all ones
+        bad_args = good_args.copy()
+        bad_args["cscales"] = None
+        bad_args["csigns"] = None
+        cscales, csigns, *_ = _check_scaling_args(**bad_args)
+
+        self.assertTrue(np.all(np.array(cscales) == 1))
+        self.assertTrue(np.all(np.array(csigns) == 1))
+
     def test_contract_signal_main(self):
         good_args = dict(
             df=self._testDF(),
@@ -201,6 +233,12 @@ class TestContractSignals(unittest.TestCase):
             bad_args[date_var] = "bad_date"
             with self.assertRaises(ValueError):
                 contract_signals(**bad_args)
+
+        # test for improper qdf
+        bad_args = good_args.copy()
+        bad_args["df"] = bad_args["df"].rename(columns={"cid": "foo"})
+        with self.assertRaises(ValueError):
+            contract_signals(**bad_args)
 
         # test for missing tickers
         bad_args = good_args.copy()
