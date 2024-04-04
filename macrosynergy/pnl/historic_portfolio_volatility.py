@@ -14,7 +14,9 @@ TODO Proposed workflow:
 import logging
 import warnings
 
+import functools
 from typing import Dict, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Generator
 
 import numpy as np
 import pandas as pd
@@ -28,13 +30,14 @@ from macrosynergy.management.utils import (
     standardise_dataframe,
     ticker_df_to_qdf,
 )
-from macrosynergy.management.utils.math import estimate_variance_covariance
+from macrosynergy.panel.historic_vol import expo_weights
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
 
 
 logger = logging.getLogger(__name__)
 
+cache = functools.lru_cache(maxsize=None)
 
 # TODO move to constants?
 __MAP_ANNUALIZE = {
@@ -44,6 +47,98 @@ __MAP_ANNUALIZE = {
     "Q": 4
 }
 
+
+
+@cache
+def flat_weights_arr(lback_periods: int, *args, **kwargs) -> np.ndarray:
+    """Flat weights for the look-back period."""
+    return np.ones(lback_periods) / lback_periods
+
+
+@cache
+def expo_weights_arr(lback_periods: int, half_life: int, *args, **kwargs) -> np.ndarray:
+    """Exponential weights for the lookback period."""
+    return expo_weights(lback_periods=lback_periods, half_life=half_life)
+
+
+def _weighted_covariance(
+    x: np.ndarray,
+    y: np.ndarray,
+    weights_func: Callable[[int, int], np.ndarray],
+    lback_periods: int,
+    *args,
+    **kwargs,
+) -> float:
+    """
+    Estimate covariance between two series after applying weights.
+
+    """
+    assert x.ndim == 1 or x.shape[1] == 1, "`x` must be a 1D array or a column vector"
+    assert y.ndim == 1 or y.shape[1] == 1, "`y` must be a 1D array or a column vector"
+    assert x.shape[0] == y.shape[0], "`x` and `y` must have same length"
+
+    # if either of x or y is all NaNs, return NaN
+    if np.isnan(x).all() or np.isnan(y).all():
+        return np.nan
+
+    xnans, ynans = np.isnan(x), np.isnan(y)
+    wmask = xnans | ynans
+    weightslen = min(sum(~wmask), lback_periods if lback_periods > 0 else len(x))
+
+    # drop NaNs and only consider the most recent lback_periods
+    x, y = x[~wmask][-weightslen:], y[~wmask][-weightslen:]
+
+    # assert x.shape[0] == weightslen  # TODO what happens if it is less...
+    for arr in [x, y]:
+        if arr.shape[0] < weightslen:
+            warnings.warn(
+                f"Length of x is less than the weightslen: {arr.shape[0]} < {weightslen}"
+            )
+    w: np.ndarray = weights_func(
+        lback_periods=weightslen,
+        half_life=min(weightslen // 2, kwargs.get("half_life", 11)),
+    )
+
+    xmean, ymean = (w * x).sum(), (w * y).sum()
+
+    rss = (x - xmean) * (y - ymean)
+
+    return w.T.dot(rss)
+
+
+def estimate_variance_covariance(
+    piv_ret: pd.DataFrame,
+    # weights_func: Callable[[int, int], np.ndarray],
+    # lback_periods: int,
+    # half_life: int,
+    # remove_zeros: bool,
+    *args,
+    **kwargs,
+) -> pd.DataFrame:
+    """Estimation of the variance-covariance matrix needs to have the following configuration options
+
+    1. Absolutely vs squared deviations,
+    2. Flat weights (equal) vs. exponential weights,
+    3. Frequency of estimation (daily, weekly, monthly, quarterly) and their weights.
+    """
+
+    cov_mat = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
+    logger.info(f"Estimating variance-covariance matrix for {piv_ret.columns}")
+
+    for i_b, c_b in enumerate(piv_ret.columns):
+        for i_a, c_a in enumerate(piv_ret.columns[: i_b + 1]):
+            logger.debug(f"Estimating covariance between {c_a} and {c_b}")
+            est_vol = _weighted_covariance(
+                x=piv_ret[c_a].values,
+                y=piv_ret[c_b].values,
+                *args,
+                **kwargs,
+            )
+            cov_mat[i_a, i_b] = cov_mat[i_b, i_a] = est_vol
+
+    assert np.all((cov_mat.T == cov_mat) ^ np.isnan(cov_mat))
+
+    return pd.DataFrame(cov_mat, index=piv_ret.columns, columns=piv_ret.columns)
 
 
 def _nan_ratio(x, remove_zeros: bool = True) -> float:
@@ -103,33 +198,40 @@ def _downsample_returns(
     # TODO upper case frequency strings?
     assert freq.upper() in ("D", "W", "M", "Q"), f"Unknown frequency: {freq}"
     # TODO test [1] input data is daily and [2] daily gives daily output
+
+    freq = _map_to_business_day_frequency(freq)
+
     piv_new_freq: pd.DataFrame = ((1 + piv_df / 100).resample(freq).prod() - 1) * 100
     return piv_new_freq
 
 
-def _multifreq_volatility(
-    trigger_indices_dict: Dict[str, pd.Series],
+def _multifreq_vcv_matrix(
+    est_freqs: List[str],
+    rebal_dates: pd.Series,
     pivot_returns: pd.DataFrame,
-    pivot_signals: pd.DataFrame,
     lback_periods: int,
     nan_tolerance: float,
     remove_zeros: bool,
     *args,
     **kwargs,
-) -> pd.DataFrame:
+) -> Generator[Dict[str, pd.DataFrame], None, None]:
+
     if lback_periods < 0:
         assert lback_periods == -1
         lbextra = 0
     else:
         lbextra = -1 * int(np.ceil(lback_periods * (1 + nan_tolerance)))
 
-    returns_values_dict = {freq: [] for freq in trigger_indices_dict.keys()}
+    dfs_dict: Dict[str, pd.DataFrame] = {
+        freq: _downsample_returns(pivot_returns, freq=freq) for freq in est_freqs
+    }
 
-    for freq, trigger_indices in trigger_indices_dict.items():
-        ds_piv_ret = _downsample_returns(pivot_returns, freq=freq)
-        for td in trigger_indices:
-            logger.debug(f"Calculating portfolio volatility for {td}")
-            ds_piv_ret = ds_piv_ret.loc[ds_piv_ret.index <= td].iloc[lbextra:]
+    vcvs_list: List[Dict[str, pd.DataFrame]] = []
+    result: Dict[str, pd.DataFrame] = {}
+    for td in rebal_dates:
+        for freq in est_freqs:
+            ds_piv_ret: pd.DataFrame = dfs_dict[freq].loc[dfs_dict[freq].index <= td]
+            ds_piv_ret = ds_piv_ret.iloc[lbextra:]
             masked_piv_ret = _mask_nans(
                 piv_df=ds_piv_ret,
                 lback_periods=lback_periods,
@@ -143,21 +245,63 @@ def _multifreq_volatility(
                 *args,
                 **kwargs,
             )
+            result[freq] = vcv
 
-            # TODO - NaN handing for signals?
+        vcvs_list.append(result)
+        yield result
 
+
+def _multifreq_volatility(
+    pivot_returns: pd.DataFrame,
+    pivot_signals: pd.DataFrame,
+    rebal_freq: str,
+    est_freqs: List[str],
+    lback_periods: int,
+    nan_tolerance: float,
+    remove_zeros: bool,
+    *args,
+    **kwargs,
+) -> pd.DataFrame:
+
+    rebal_dates = get_eops(dates=pivot_signals.index, freq=rebal_freq)
+
+    vol_values_dict: Dict[str, List[Tuple[pd.Timestamp, float]]] = {
+        freq: [] for freq in est_freqs
+    }
+    td_idx = 0
+    for vcv_dict in _multifreq_vcv_matrix(
+        lback_periods=lback_periods,
+        nan_tolerance=nan_tolerance,
+        remove_zeros=remove_zeros,
+        rebal_dates=rebal_dates,
+        est_freqs=est_freqs,
+        pivot_returns=pivot_returns,
+        *args,
+        **kwargs,
+    ):
+        td = rebal_dates[td_idx]
+        for freq in est_freqs:
+            vcv = vcv_dict[freq]
             sig_arr: pd.DataFrame = pivot_signals.loc[td, :]
-            returns_values_dict[freq] += [(td, sig_arr.T.dot(vcv).dot(sig_arr))]
+            vol_values_dict[freq] += [(td, sig_arr.T.dot(vcv).dot(sig_arr))]
 
-    return pd.concat(
+        td_idx += 1
+
+    assert td_idx == len(rebal_dates)
+
+    rdf: pd.DataFrame = functools.reduce(
+        lambda left, right: pd.merge(left, right, on=["real_date"], how="outer"),
         [
             pd.DataFrame(
-                returns_values_dict[freq],
+                vol_values_dict[freq],
                 columns=["real_date", freq],
             ).set_index("real_date")
-            for freq in returns_values_dict.keys()
-        ]
+            for freq in vol_values_dict.keys()
+        ],
     )
+
+    assert rdf.index.is_unique
+    return rdf
 
 
 def _calculate_portfolio_volatility(
@@ -203,13 +347,9 @@ def _calculate_portfolio_volatility(
         f"est_weights={est_weights}, portfolio_return_name={portfolio_return_name}"
     )
 
-    # TODO should be the same for all frequencies
-    trigger_indices_dict: Dict[str, pd.Series] = {
-        freq: get_eops(dates=pivot_signals.index, freq=freq) for freq in est_freqs
-    }
-
     mfreq_vol_df = _multifreq_volatility(
-        trigger_indices_dict=trigger_indices_dict,
+        rebal_freq=rebal_freq,
+        est_freqs=est_freqs,
         pivot_returns=pivot_returns,
         pivot_signals=pivot_signals,
         lback_periods=lback_periods,
@@ -230,9 +370,11 @@ def _calculate_portfolio_volatility(
     # normalize each row to sum to 1
     est_weights_df = est_weights_df.div(est_weights_df.sum(axis=1), axis=0)
 
-    mfreq_vol_df = mfreq_vol_df.mul(est_weights_df, axis=1).sum(axis=1)
-
-    return mfreq_vol_df.rename(columns={0: portfolio_return_name})
+    mfreq_vol_series = mfreq_vol_df.mul(est_weights_df, axis=1).sum(axis=1)
+    mfreq_vol_df = mfreq_vol_series.to_frame().rename(
+        columns={0: portfolio_return_name}
+    )
+    return mfreq_vol_df
 
 
 def _hist_vol(
@@ -283,12 +425,6 @@ def _hist_vol(
     # We use `get_eops` primarily because it has a clear and defined behaviour for all frequencies.
     # It was originally designed as part of the `historic_vol` module, but it is
     # used here as well.
-
-    # TODO we are currently not using the trigger_indices:
-    trigger_indices = get_eops(
-        dates=pivot_signals.index,
-        freq=rebal_freq,
-    )
 
     # TODO get the correct rebalance dates
     weights_func = flat_weights_arr if lback_meth == "ma" else expo_weights_arr

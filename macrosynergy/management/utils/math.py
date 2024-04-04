@@ -2,21 +2,17 @@
 Contains mathematical utility functions used across the package.
 """
 
-from typing import List, Union, Tuple, Callable
+from typing import List
 
 import pandas as pd
 import numpy as np
 import itertools
-import functools
 import logging
 
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.panel.historic_vol import expo_weights
-
-
-cache = functools.lru_cache(maxsize=None)
 
 logger = logging.getLogger(__name__)
+
 
 def expanding_mean_with_nan(
     dfw: pd.DataFrame, absolute: bool = False
@@ -73,102 +69,6 @@ def expanding_mean_with_nan(
     ret = list(map(mean_calc, rolling_summation, rolling_active_cross))
 
     return np.array(ret)
-
-
-
-
-@cache
-def flat_weights_arr(lback_periods: int, *args, **kwargs) -> np.ndarray:
-    """Flat weights for the look-back period."""
-    return np.ones(lback_periods) / lback_periods
-
-
-@cache
-def expo_weights_arr(lback_periods: int, half_life: int, *args, **kwargs) -> np.ndarray:
-    """Exponential weights for the look-back period."""
-    return expo_weights(lback_periods=lback_periods, half_life=half_life)
-
-
-def _weighted_covariance(
-    x: np.ndarray,
-    y: np.ndarray,
-    weights_func: Callable[[int, int], np.ndarray],
-    lback_periods: int,
-    *args,
-    **kwargs,
-) -> float:
-    """
-    Estimate covariance between two series after applying weights.
-
-    """
-    assert x.ndim == 1 or x.shape[1] == 1, "`x` must be a 1D array or a column vector"
-    assert y.ndim == 1 or y.shape[1] == 1, "`y` must be a 1D array or a column vector"
-    assert x.shape[0] == y.shape[0], "`x` and `y` must have same length"
-
-    # if either of x or y is all NaNs, return NaN
-    if np.isnan(x).all() or np.isnan(y).all():
-        return np.nan
-
-    xnans, ynans = np.isnan(x), np.isnan(y)
-    wmask = xnans | ynans
-    weightslen = min(sum(~wmask), lback_periods if lback_periods > 0 else len(x))
-
-    # drop NaNs and only consider the most recent lback_periods
-    x, y = x[~wmask][-weightslen:], y[~wmask][-weightslen:]
-
-    # assert x.shape[0] == weightslen  # TODO what happens if it is less...
-    for arr in [x, y]:
-        if arr.shape[0] < weightslen:
-            warnings.warn(
-                f"Length of x is less than the weightslen: {arr.shape[0]} < {weightslen}"
-            )
-    w: np.ndarray = weights_func(
-        lback_periods=weightslen,
-        half_life=min(weightslen // 2, kwargs.get("half_life", 11)),
-    )
-
-    xmean, ymean = (w * x).sum(), (w * y).sum()
-
-    rss = (x - xmean) * (y - ymean)
-
-    return w.T.dot(rss)
-
-
-def estimate_variance_covariance(
-    piv_ret: pd.DataFrame,
-    # weights_func: Callable[[int, int], np.ndarray],
-    # lback_periods: int,
-    # half_life: int,
-    # remove_zeros: bool,
-    *args,
-    **kwargs,
-) -> pd.DataFrame:
-    """Estimation of the variance-covariance matrix needs to have the following configuration options
-
-    1. Absolutely vs squared deviations,
-    2. Flat weights (equal) vs. exponential weights,
-    3. Frequency of estimation (daily, weekly, monthly, quarterly) and their weights.
-
-    """
-    # TODO incorporate with macrosynergy.panel.historic_vol.py - single estimation method
-
-    cov_mat = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
-    logger.info(f"Estimating variance-covariance matrix for {piv_ret.columns}")
-
-    for i_b, c_b in enumerate(piv_ret.columns):
-        for i_a, c_a in enumerate(piv_ret.columns[: i_b + 1]):
-            logger.debug(f"Estimating covariance between {c_a} and {c_b}")
-            est_vol = _weighted_covariance(
-                x=piv_ret[c_a].values,
-                y=piv_ret[c_b].values,
-                *args,
-                **kwargs,
-            )
-            cov_mat[i_a, i_b] = cov_mat[i_b, i_a] = est_vol
-
-    assert np.all((cov_mat.T == cov_mat) ^ np.isnan(cov_mat))
-
-    return pd.DataFrame(cov_mat, index=piv_ret.columns, columns=piv_ret.columns)
 
 
 if __name__ == "__main__":
