@@ -5,7 +5,7 @@ Module for calculating the historic portfolio volatility for a given strategy.
 import logging
 import warnings
 import functools
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Generator
 
 import numpy as np
 import pandas as pd
@@ -83,6 +83,11 @@ def _weighted_covariance(
     rss = (x - xmean) * (y - ymean)
 
     return w.T.dot(rss)
+
+
+class ConfigHistVolEst(object):
+    def __init__(self):
+        self.est_freq = ["d"]
 
 
 def _estimate_variance_covariance(
@@ -172,34 +177,38 @@ def _downsample_returns(
     piv_df: pd.DataFrame,
     freq: str = "m",
 ) -> pd.DataFrame:
-    assert freq in ("d", "w", "m", "q")
-    piv_new_freq: pd.DataFrame = ((1 + piv_df / 100).resample("m").prod() - 1) * 100
+    freq = _map_to_business_day_frequency(freq)
+    piv_new_freq: pd.DataFrame = ((1 + piv_df / 100).resample(freq).prod() - 1) * 100
     return piv_new_freq
 
 
-def _multifreq_volatility(
-    trigger_indices_dict: Dict[str, pd.Series],
+def _multifreq_vcv_matrix(
+    est_freqs: List[str],
+    rebal_dates: pd.Series,
     pivot_returns: pd.DataFrame,
-    pivot_signals: pd.DataFrame,
     lback_periods: int,
     nan_tolerance: float,
     remove_zeros: bool,
     *args,
     **kwargs,
-) -> pd.DataFrame:
+) -> Generator[Dict[str, pd.DataFrame], None, None]:
+
     if lback_periods < 0:
         assert lback_periods == -1
         lbextra = 0
     else:
         lbextra = -1 * int(np.ceil(lback_periods * (1 + nan_tolerance)))
 
-    returns_values_dict = {freq: [] for freq in trigger_indices_dict.keys()}
+    dfs_dict: Dict[str, pd.DataFrame] = {
+        freq: _downsample_returns(pivot_returns, freq=freq) for freq in est_freqs
+    }
 
-    for freq, trigger_indices in trigger_indices_dict.items():
-        ds_piv_ret = _downsample_returns(pivot_returns, freq=freq)
-        for td in trigger_indices:
-            logger.debug(f"Calculating portfolio volatility for {td}")
-            ds_piv_ret = ds_piv_ret.loc[ds_piv_ret.index <= td].iloc[lbextra:]
+    vcvs_list: List[Dict[str, pd.DataFrame]] = []
+    result: Dict[str, pd.DataFrame] = {}
+    for td in rebal_dates:
+        for freq in est_freqs:
+            ds_piv_ret: pd.DataFrame = dfs_dict[freq].loc[dfs_dict[freq].index <= td]
+            ds_piv_ret = ds_piv_ret.iloc[lbextra:]
             masked_piv_ret = _mask_nans(
                 piv_df=ds_piv_ret,
                 lback_periods=lback_periods,
@@ -213,21 +222,61 @@ def _multifreq_volatility(
                 *args,
                 **kwargs,
             )
+            result[freq] = vcv
 
-            # TODO - NaN handing for signals?
+        vcvs_list.append(result)
+        yield result
 
+
+def _multifreq_volatility(
+    pivot_returns: pd.DataFrame,
+    pivot_signals: pd.DataFrame,
+    rebal_freq: str,
+    est_freqs: List[str],
+    lback_periods: int,
+    nan_tolerance: float,
+    remove_zeros: bool,
+    *args,
+    **kwargs,
+) -> pd.DataFrame:
+
+    rebal_dates = get_eops(dates=pivot_signals.index, freq=rebal_freq)
+
+    vol_values_dict: Dict[str, List[Tuple[pd.Timestamp, float]]] = {
+        freq: [] for freq in est_freqs
+    }
+    td_idx = 0
+    for vcv_dict in _multifreq_vcv_matrix(
+        lback_periods=lback_periods,
+        nan_tolerance=nan_tolerance,
+        remove_zeros=remove_zeros,
+        rebal_dates=rebal_dates,
+        est_freqs=est_freqs,
+        pivot_returns=pivot_returns,
+        *args,
+        **kwargs,
+    ):
+        td = rebal_dates[td_idx]
+        for freq in est_freqs:
+            vcv = vcv_dict[freq]
             sig_arr: pd.DataFrame = pivot_signals.loc[td, :]
-            returns_values_dict[freq] += [(td, sig_arr.T.dot(vcv).dot(sig_arr))]
+            vol_values_dict[freq] += [(td, sig_arr.T.dot(vcv).dot(sig_arr))]
 
-    return pd.concat(
+        td_idx += 1
+
+    assert td_idx == len(rebal_dates)
+
+    rdf = pd.concat(
         [
             pd.DataFrame(
-                returns_values_dict[freq],
+                vol_values_dict[freq],
                 columns=["real_date", freq],
             ).set_index("real_date")
-            for freq in returns_values_dict.keys()
-        ]
+            for freq in vol_values_dict.keys()
+        ],
     )
+
+    return rdf
 
 
 def _calculate_portfolio_volatility(
@@ -273,12 +322,9 @@ def _calculate_portfolio_volatility(
         f"est_weights={est_weights}, portfolio_return_name={portfolio_return_name}"
     )
 
-    trigger_indices_dict: Dict[str, pd.Series] = {
-        freq: get_eops(dates=pivot_signals.index, freq=freq) for freq in est_freqs
-    }
-
     mfreq_vol_df = _multifreq_volatility(
-        trigger_indices_dict=trigger_indices_dict,
+        rebal_freq=rebal_freq,
+        est_freqs=est_freqs,
         pivot_returns=pivot_returns,
         pivot_signals=pivot_signals,
         lback_periods=lback_periods,
@@ -352,11 +398,6 @@ def _hist_vol(
     # We use `get_eops` primarily because it has a clear and defined behaviour for all frequencies.
     # It was originally designed as part of the `historic_vol` module, but it is
     # used here as well.
-
-    trigger_indices = get_eops(
-        dates=pivot_signals.index,
-        freq=rebal_freq,
-    )
 
     # TODO get the correct rebalance dates
 
