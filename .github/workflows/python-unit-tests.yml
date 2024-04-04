@@ -68,23 +68,17 @@ jobs:
           fi
 
   upload-coverage:
-    needs: run-unit-tests
+    needs: run-unit-tests-success
     runs-on: ubuntu-latest
     steps:
       - name: Download coverage reports from GitHub Actions
         uses: actions/download-artifact@v4
         with:
-          name: coverage-report-${{ github.sha }}-*
-
-      - name: Merge coverage reports
-        run: |
-          coverage combine
-          coverage report -m
+          pattern: coverage-report-${{ github.sha }}-*
+          path: ./coverage-reports
 
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
+          directory: ./coverage-reports
