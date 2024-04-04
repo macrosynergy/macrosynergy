@@ -36,7 +36,7 @@ bucket = s3.Bucket("macrosynergy-notebook-prod")
 objects_info = [(obj.key, obj.size) for obj in bucket.objects.all()]
 
 # Filter for notebook files
-notebooks_info = [(key, size) for key, size in objects_info if key.endswith(".ipynb") and key in ["Signal_optimization_basics.ipynb", "Regression-based_macro_trading_signals.ipynb", "Regression-based_FX_signals.ipynb"]]
+notebooks_info = [(key, size) for key, size in objects_info if key.endswith(".ipynb") and key not in ["Signal_optimization_basics.ipynb", "Regression-based_macro_trading_signals.ipynb", "Regression-based_FX_signals.ipynb"]]
 notebooks = [obj.key for obj in bucket.objects.filter(Prefix="")]
 notebooks = [notebook for notebook in notebooks if notebook.endswith(".ipynb")]
 sorted_notebooks_info = sorted(notebooks_info, key=lambda x: x[1])
