@@ -265,6 +265,70 @@ def _multifreq_volatility(
 
     rebal_dates = get_eops(dates=pivot_signals.index, freq=rebal_freq)
 
+    signals = pivot_signals.loc[rebal_dates, :]
+
+    # Returns batches
+    logger.info("Rebalance portfolio from %s to %s (%s times)", rebal_dates.min(), rebal_dates.max(), rebal_dates.shape[0])
+    batches = {td: pivot_returns.loc[pivot_returns.index <= td] for td in rebal_dates}
+    
+    td = rebal_dates.iloc[-1]
+
+    # TODO convert frequencies
+    list_vcv: List[pd.DataFrame] = []
+    list_pvol: List[Tuple[pd.Timestamp, np.float64]] = []
+    for td in rebal_dates:
+        dict_vcv: Dict[str, pd.DataFrame] = {
+            freq: 
+            __MAP_ANNUALIZE[freq] * estimate_variance_covariance(
+                piv_ret=_mask_nans(
+                    piv_df=_downsample_returns(
+                        batches[td],
+                        freq=freq
+                    ),
+                    lback_periods=lback_periods,
+                    nan_tolerance=nan_tolerance,
+                    remove_zeros=remove_zeros,
+                ),
+                lback_periods=lback_periods,
+                remove_zeros=remove_zeros,
+                *args,
+                **kwargs,
+            )
+            for freq in est_freqs
+        }
+        # est_freqs[0]
+        # TODO how to generically aggregate with weights?
+        vcv = 1/3 * dict_vcv["D"] + 1/3 * dict_vcv["W"] + 1/3 * dict_vcv["M"]
+        # TODO drop duplicates in variance/covariance matrix...
+        list_vcv.append(
+            vcv
+            .rename_axis("fid1", axis=0)
+            .rename_axis("fid2", axis=1)
+            .stack()
+            .to_frame("value")
+            .reset_index()
+            .assign(real_date=td)
+        )
+
+        # pvol: Portfolio volatility
+        pvol: float = np.sqrt(signals.loc[td].T.dot(vcv).dot(signals.loc[td]))
+        list_pvol.append((td, pvol))
+
+    pvol = pd.DataFrame(list_pvol, columns=["real_date", "portfolio_asd"]).set_index("real_date")
+    vcv = pd.concat(list_vcv, axis=0)
+
+    
+
+    # TODO aggregate to single variance-covariance matrix...
+
+    # TODO correlations (convert variance-covariance matrix to correlations):
+    # TODO requires unstacking and per real date
+    # [(row, col, vcv.loc[row, col] / (np.sqrt(vcv.loc[row, row]) * np.sqrt(vcv.loc[col, col]))) for row in vcv.index for col in vcv.columns]
+
+    # TODO calculate variance-covariance matrix for each batch
+
+    batches = [(td, signals.loc[td], pivot_returns.loc[pivot_returns.index <= td]) for td in rebal_dates]
+
     vol_values_dict: Dict[str, List[Tuple[pd.Timestamp, float]]] = {
         freq: [] for freq in est_freqs
     }
