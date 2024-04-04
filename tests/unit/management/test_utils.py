@@ -732,7 +732,7 @@ class TestFunctions(unittest.TestCase):
         with self.assertRaises(ValueError):
             get_eops(start_date="2023-01-01", end_date="2024-01-01", freq="X")
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             get_eops(start_date="2023-01-01", freq=1)
 
         with self.assertRaises(ValueError):
