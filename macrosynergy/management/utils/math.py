@@ -148,7 +148,9 @@ def estimate_variance_covariance(
     1. Absolutely vs squared deviations,
     2. Flat weights (equal) vs. exponential weights,
     3. Frequency of estimation (daily, weekly, monthly, quarterly) and their weights.
+
     """
+    # TODO incorporate with macrosynergy.panel.historic_vol.py - single estimation method
 
     cov_mat = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
     logger.info(f"Estimating variance-covariance matrix for {piv_ret.columns}")
