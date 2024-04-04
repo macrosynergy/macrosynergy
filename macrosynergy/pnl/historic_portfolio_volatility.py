@@ -266,7 +266,8 @@ def _multifreq_volatility(
 
     assert td_idx == len(rebal_dates)
 
-    rdf = pd.concat(
+    rdf: pd.DataFrame = functools.reduce(
+        lambda left, right: pd.merge(left, right, on=["real_date"], how="outer"),
         [
             pd.DataFrame(
                 vol_values_dict[freq],
@@ -276,6 +277,7 @@ def _multifreq_volatility(
         ],
     )
 
+    assert rdf.index.is_unique
     return rdf
 
 
@@ -345,9 +347,11 @@ def _calculate_portfolio_volatility(
     # normalize each row to sum to 1
     est_weights_df = est_weights_df.div(est_weights_df.sum(axis=1), axis=0)
 
-    mfreq_vol_df = mfreq_vol_df.mul(est_weights_df, axis=1).sum(axis=1)
-
-    return mfreq_vol_df.rename(columns={0: portfolio_return_name})
+    mfreq_vol_series = mfreq_vol_df.mul(est_weights_df, axis=1).sum(axis=1)
+    mfreq_vol_df = mfreq_vol_series.to_frame().rename(
+        columns={0: portfolio_return_name}
+    )
+    return mfreq_vol_df
 
 
 def _hist_vol(
