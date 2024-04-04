@@ -73,16 +73,12 @@ jobs:
     steps:
       - name: Download coverage reports from GitHub Actions
         uses: actions/download-artifact@v4
-        # with:
-        #   name: coverage-report-${{ github.sha }}-*
-
-      - name: Merge coverage reports
-        run: |
-          coverage combine
-          coverage report -m
+        with:
+          pattern: coverage-report-${{ github.sha }}-*
+          path: ./coverage-reports
 
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.xml
+          directory: ./coverage-reports
