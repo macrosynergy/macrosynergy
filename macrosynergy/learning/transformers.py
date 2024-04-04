@@ -20,8 +20,11 @@ from typing import Union, Any, List, Optional
 
 import warnings
 
+
 class ENetSelector(BaseEstimator, SelectorMixin):
-    def __init__(self, alpha: Union[float, int] = 1.0, l1_ratio = 0.5, positive: bool = True):
+    def __init__(
+        self, alpha: Union[float, int] = 1.0, l1_ratio=0.5, positive: bool = True
+    ):
         """
         Transformer class to use "Elastic Net" as a feature selection algorithm.
         Given two hyper-parameters, `alpha` and `l1_ratio`, the Elastic Net model is fit and
@@ -43,11 +46,9 @@ class ENetSelector(BaseEstimator, SelectorMixin):
             )
         if alpha < 0:
             raise ValueError("The 'alpha' hyper-parameter must be non-negative.")
-        
+
         if not (isinstance(l1_ratio, float) or isinstance(l1_ratio, np.floating)):
-            raise TypeError(
-                "The 'l1_ratio' hyper-parameter must be a float."
-            )
+            raise TypeError("The 'l1_ratio' hyper-parameter must be a float.")
         if (l1_ratio < 0) or (l1_ratio > 1):
             raise ValueError(
                 "The 'l1_ratio' hyper-parameter must be in the interval [0,1]."
@@ -56,7 +57,7 @@ class ENetSelector(BaseEstimator, SelectorMixin):
             warnings.warn(
                 "Setting the 'l1_ratio' hyper-parameter to be <= 0.01 is not reliable.",
                 UserWarning,
-            )            
+            )
         if not isinstance(positive, bool):
             raise TypeError("The 'positive' hyper-parameter must be a boolean.")
 
@@ -113,14 +114,16 @@ class ENetSelector(BaseEstimator, SelectorMixin):
 
         if self.positive:
 
-            self.enet = ElasticNet(alpha=self.alpha, l1_ratio=self.l1_ratio, positive=True).fit(X, y)
+            self.enet = ElasticNet(
+                alpha=self.alpha, l1_ratio=self.l1_ratio, positive=True
+            ).fit(X, y)
         else:
             self.enet = ElasticNet(alpha=self.alpha, l1_ratio=self.l1_ratio).fit(X, y)
 
         self.selected_ftr_idxs = [i for i in range(self.p) if self.enet.coef_[i] != 0]
 
         return self
-    
+
     def _get_support_mask(self):
         """
         Private method to return a boolean mask of the features selected for the Pandas dataframe.
@@ -128,13 +131,13 @@ class ENetSelector(BaseEstimator, SelectorMixin):
         mask = np.zeros(self.p, dtype=bool)
         mask[self.selected_ftr_idxs] = True
         return mask
-    
+
     def get_support(self, indices=False):
         """
         Method to return a mask, or integer index, of the features selected for the Pandas dataframe.
-        
+
         :param <bool> indices: Boolean to specify whether to return the column indices of the selected features instead of a boolean mask
-        
+
         :return <np.ndarray>: Boolean mask or integer index of the selected features
         """
         if self.feature_names_in_ is None:
@@ -142,15 +145,13 @@ class ENetSelector(BaseEstimator, SelectorMixin):
                 "The Elastic Net selector has not been fitted. Please fit the selector before calling get_support()."
             )
         if not isinstance(indices, (bool, np.bool_)):
-            raise ValueError(
-                "The 'indices' parameter must be a boolean."
-            )
+            raise ValueError("The 'indices' parameter must be a boolean.")
         if indices:
             return self.selected_ftr_idxs
         else:
             mask = self._get_support_mask()
             return mask
-        
+
     def get_feature_names_out(self):
         """
         Method to mask feature names according to selected features.
@@ -159,7 +160,7 @@ class ENetSelector(BaseEstimator, SelectorMixin):
             raise NotFittedError(
                 "The Elastic Net selector has not been fitted. Please fit the selector before calling get_feature_names_out()."
             )
-        
+
         return self.feature_names_in_[self.get_support(indices=False)]
 
     def transform(self, X: pd.DataFrame):
@@ -197,6 +198,7 @@ class ENetSelector(BaseEstimator, SelectorMixin):
             return X.iloc[:, :0]
 
         return X.iloc[:, self.selected_ftr_idxs]
+
 
 class LassoSelector(BaseEstimator, SelectorMixin):
     def __init__(self, alpha: Union[float, int], positive: bool = True):
@@ -278,7 +280,7 @@ class LassoSelector(BaseEstimator, SelectorMixin):
         self.selected_ftr_idxs = [i for i in range(self.p) if self.lasso.coef_[i] != 0]
 
         return self
-    
+
     def _get_support_mask(self):
         """
         Private method to return a boolean mask of the features selected for the Pandas dataframe.
@@ -286,13 +288,13 @@ class LassoSelector(BaseEstimator, SelectorMixin):
         mask = np.zeros(self.p, dtype=bool)
         mask[self.selected_ftr_idxs] = True
         return mask
-    
+
     def get_support(self, indices=False):
         """
         Method to return a mask, or integer index, of the features selected for the Pandas dataframe.
-        
+
         :param <bool> indices: Boolean to specify whether to return the column indices of the selected features instead of a boolean mask
-        
+
         :return <np.ndarray>: Boolean mask or integer index of the selected features
         """
         if self.feature_names_in_ is None:
@@ -300,15 +302,13 @@ class LassoSelector(BaseEstimator, SelectorMixin):
                 "The LASSO selector has not been fitted. Please fit the selector before calling get_support()."
             )
         if not isinstance(indices, (bool, np.bool_)):
-            raise ValueError(
-                "The 'indices' parameter must be a boolean."
-            )
+            raise ValueError("The 'indices' parameter must be a boolean.")
         if indices:
             return self.selected_ftr_idxs
         else:
             mask = self._get_support_mask()
             return mask
-        
+
     def get_feature_names_out(self):
         """
         Method to mask feature names according to selected features.
@@ -317,7 +317,7 @@ class LassoSelector(BaseEstimator, SelectorMixin):
             raise NotFittedError(
                 "The LASSO selector has not been fitted. Please fit the selector before calling get_feature_names_out()."
             )
-        
+
         return self.feature_names_in_[self.get_support(indices=False)]
 
     def transform(self, X: pd.DataFrame):
@@ -384,7 +384,15 @@ class MapSelector(BaseEstimator, SelectorMixin):
             raise TypeError("The 'positive' parameter must be a boolean.")
         if not isinstance(method, str):
             raise TypeError("The 'method' parameter must be a string.")
-        if method not in ["lbfgs", "bfgs", "nm", "powell", "cg", "basinhopping", "minimize"]:
+        if method not in [
+            "lbfgs",
+            "bfgs",
+            "nm",
+            "powell",
+            "cg",
+            "basinhopping",
+            "minimize",
+        ]:
             raise ValueError(
                 "The 'method' parameter must be one of the following: 'lbfgs', 'bfgs', 'nm', 'powell', 'cg', 'basinhopping', 'minimize'."
             )
@@ -446,7 +454,7 @@ class MapSelector(BaseEstimator, SelectorMixin):
             model = MixedLM(y.values, ftr, groups).fit(reml=False, method=self.method)
             est = model.params.iloc[1]
             pval = model.pvalues.iloc[1]
-            if (pval < self.threshold):
+            if pval < self.threshold:
                 if self.positive:
                     if est > 0:
                         self.ftrs.append(col)
@@ -454,26 +462,24 @@ class MapSelector(BaseEstimator, SelectorMixin):
                     self.ftrs.append(col)
 
         return self
-    
+
     def _get_support_mask(self):
         """
         Private method to return a boolean mask of the features selected for the Pandas dataframe.
         """
         mask = [col in self.ftrs for col in self.feature_names_in_]
         return np.array(mask)
-    
+
     def get_support(self, indices=False):
         """
         Method to return a mask, or integer index, of the features selected for the Pandas dataframe.
-        
+
         :param <bool> indices: Boolean to specify whether to return the column indices of the selected features instead of a boolean mask
-        
+
         :return <np.ndarray>: Boolean mask or integer index of the selected features
         """
         if not isinstance(indices, (bool, np.bool_)):
-            raise TypeError(
-                "The 'indices' parameter must be a boolean."
-            )
+            raise TypeError("The 'indices' parameter must be a boolean.")
         if self.feature_names_in_ is None:
             raise NotFittedError(
                 "The MAP selector has not been fitted. Please fit the selector before calling get_support()."
@@ -482,16 +488,18 @@ class MapSelector(BaseEstimator, SelectorMixin):
 
         if indices:
             return np.where(mask)[0]
-        
+
         return mask
-        
+
     def get_feature_names_out(self):
         """
         Method to mask feature names according to selected features.
         """
         if self.feature_names_in_ is None:
-            raise ValueError("The feature names are not available. Please fit the transformer first.")
-        
+            raise ValueError(
+                "The feature names are not available. Please fit the transformer first."
+            )
+
         return self.feature_names_in_[self.get_support(indices=False)]
 
     def transform(self, X: pd.DataFrame):
@@ -940,16 +948,13 @@ if __name__ == "__main__":
     X = dfd2.drop(columns=["XR"])
     y = dfd2["XR"]
 
-
     selector = LassoSelector(0.2)
     selector.fit(X, y)
     print(selector.transform(X).columns)
-    
+
     selector = MapSelector(1e-20)
     selector.fit(X, y)
     print(selector.transform(X).columns)
-
-
 
     # Split X and y into training and test sets
     X_train, X_test = (

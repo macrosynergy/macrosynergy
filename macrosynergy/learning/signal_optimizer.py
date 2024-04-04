@@ -181,9 +181,11 @@ class SignalOptimizer:
             columns=["real_date", "name"] + list(X.columns)
         )
         self.intercepts = pd.DataFrame(columns=["real_date", "name", "intercepts"])
-        # Create initial dataframe to store selected features at each time, assuming 
+        # Create initial dataframe to store selected features at each time, assuming
         # some feature selection stage is used in a sklearn pipeline
-        self.selected_ftrs = pd.DataFrame(columns=["real_date", "name"] + list(X.columns))
+        self.selected_ftrs = pd.DataFrame(
+            columns=["real_date", "name"] + list(X.columns)
+        )
 
     def _checks_init_params(
         self,
@@ -392,9 +394,11 @@ class SignalOptimizer:
                 hparam_type=hparam_type,
                 hparam_grid=hparam_grid,
                 n_iter=n_iter,
-                nsplits_add=np.floor(idx / self.threshold_ndates)
-                if self.initial_nsplits
-                else None,
+                nsplits_add=(
+                    np.floor(idx / self.threshold_ndates)
+                    if self.initial_nsplits
+                    else None
+                ),
             )
             for idx, (train_idx, test_idx) in tqdm(
                 enumerate(train_test_splits),
@@ -768,8 +772,16 @@ class SignalOptimizer:
                 name,
             ] + [np.nan for _ in range(X_train_i.shape[1])]
             intercept_data = [test_date_levels.date[0], name, np.nan]
-            ftr_selection_data = [test_date_levels.date[0],name] + [1 for _ in range(X_train_i.shape[1])]
-            return prediction_date, modelchoice_data, coefficients_data, intercept_data, ftr_selection_data
+            ftr_selection_data = [test_date_levels.date[0], name] + [
+                1 for _ in range(X_train_i.shape[1])
+            ]
+            return (
+                prediction_date,
+                modelchoice_data,
+                coefficients_data,
+                intercept_data,
+                ftr_selection_data,
+            )
         # Store the best estimator predictions
         preds: np.ndarray = optim_model.predict(X_test_i)
         prediction_data = [name, test_xs_levels, test_date_levels, preds]
@@ -820,10 +832,14 @@ class SignalOptimizer:
         # Store information about the chosen model at each time.
         if len(ftr_names) == X_train_i.shape[1]:
             # Then all features were selected
-            ftr_selection_data = [test_date_levels.date[0], name] + [1 for _ in ftr_names]
+            ftr_selection_data = [test_date_levels.date[0], name] + [
+                1 for _ in ftr_names
+            ]
         else:
             # Then some features were excluded
-            ftr_selection_data = [test_date_levels.date[0], name] + [1 if name in ftr_names else 0 for name in np.array(X_train_i.columns)]
+            ftr_selection_data = [test_date_levels.date[0], name] + [
+                1 if name in ftr_names else 0 for name in np.array(X_train_i.columns)
+            ]
         modelchoice_data = [
             test_date_levels.date[0],
             name,
@@ -837,7 +853,13 @@ class SignalOptimizer:
         ] + coefs
         intercept_data = [test_date_levels.date[0], name, intercepts]
 
-        return prediction_data, modelchoice_data, coefficients_data, intercept_data, ftr_selection_data
+        return (
+            prediction_data,
+            modelchoice_data,
+            coefficients_data,
+            intercept_data,
+            ftr_selection_data,
+        )
 
     def get_optimized_signals(
         self, name: Optional[Union[str, List]] = None
@@ -903,8 +925,10 @@ class SignalOptimizer:
                         """
                     )
             return self.chosen_models[self.chosen_models.name.isin(name)]
-        
-    def get_selected_features(self, name: Optional[Union[str, List]] = None) -> pd.DataFrame:
+
+    def get_selected_features(
+        self, name: Optional[Union[str, List]] = None
+    ) -> pd.DataFrame:
         """
         Returns the selected features over time for one or more processes
 
@@ -960,7 +984,11 @@ class SignalOptimizer:
         # Get the selected features for the specified pipeline to visualise selection.
         selected_ftrs = self.get_selected_features(name=name)
         selected_ftrs["real_date"] = selected_ftrs["real_date"].dt.date
-        selected_ftrs = selected_ftrs.sort_values(by="real_date").drop(columns=["name"]).set_index("real_date")
+        selected_ftrs = (
+            selected_ftrs.sort_values(by="real_date")
+            .drop(columns=["name"])
+            .set_index("real_date")
+        )
 
         # Create the heatmap
         plt.figure(figsize=figsize)
@@ -1205,7 +1233,12 @@ class SignalOptimizer:
         return ftrcoef_df.mean(skipna=True), ftrcoef_df.std(skipna=True)
 
     def coefs_timeplot(
-        self, name: str, ftrs: List[str] = None, title: str = None, ftrs_renamed: dict = None, figsize: Tuple[Union[int, float], Union[int, float]]=(10, 6)
+        self,
+        name: str,
+        ftrs: List[str] = None,
+        title: str = None,
+        ftrs_renamed: dict = None,
+        figsize: Tuple[Union[int, float], Union[int, float]] = (10, 6),
     ):
         """
         Function to plot the time series of feature coefficients for a given pipeline.
@@ -1302,7 +1335,9 @@ class SignalOptimizer:
             ftrcoef_df = ftrcoef_df[ftrs]
         else:
             if ftrcoef_df.shape[1] > 11:
-                ftrcoef_df = pd.concat((ftrcoef_df.iloc[:, :10],ftrcoef_df.iloc[:, -1]), axis=1)
+                ftrcoef_df = pd.concat(
+                    (ftrcoef_df.iloc[:, :10], ftrcoef_df.iloc[:, -1]), axis=1
+                )
 
         # Create time series plot
         fig, ax = plt.subplots()
@@ -1380,7 +1415,12 @@ class SignalOptimizer:
         plt.show()
 
     def coefs_stackedbarplot(
-        self, name: str, ftrs: List[str] = None, title: str = None, ftrs_renamed: dict = None, figsize=(10, 6)
+        self,
+        name: str,
+        ftrs: List[str] = None,
+        title: str = None,
+        ftrs_renamed: dict = None,
+        figsize=(10, 6),
     ):
         """
         Function to create a stacked bar plot of feature coefficients for a given pipeline.
@@ -1434,7 +1474,7 @@ class SignalOptimizer:
                         for the pipeline {name}.
                         """
                     )
-                
+
         if not isinstance(title, str) and title is not None:
             raise TypeError("The title must be a string.")
         if ftrs_renamed is not None:
@@ -1474,15 +1514,19 @@ class SignalOptimizer:
         ftrcoef_df.drop(columns=["real_date", "name"], inplace=True)
 
         # Define colour map
-        default_cycle_colors = plt.rcParams['axes.prop_cycle'].by_key()['color'][:10]
-        cmap = mcolors.LinearSegmentedColormap.from_list("default_cycle", default_cycle_colors)
+        default_cycle_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"][:10]
+        cmap = mcolors.LinearSegmentedColormap.from_list(
+            "default_cycle", default_cycle_colors
+        )
 
         # Handle case where there are more than 10 features
         if ftrs is not None:
             ftrcoef_df = ftrcoef_df[ftrs + ["year"]]
         else:
             if ftrcoef_df.shape[1] > 11:
-                ftrcoef_df = pd.concat((ftrcoef_df.iloc[:, :10],ftrcoef_df.iloc[:, -1]), axis=1)
+                ftrcoef_df = pd.concat(
+                    (ftrcoef_df.iloc[:, :10], ftrcoef_df.iloc[:, -1]), axis=1
+                )
 
         # Average the coefficients for each year and separate into positive and negative values
         if ftrs_renamed is not None:
@@ -1517,11 +1561,16 @@ class SignalOptimizer:
         plt.ylabel("Average Coefficient Value")
         plt.axhline(0, color="black", linewidth=0.8)  # Adds a line at zero
 
-
         # Configure legend
         handles, labels = plt.gca().get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
-        plt.legend(by_label.values(), by_label.keys(), title="Coefficients", bbox_to_anchor=(1.05, 1), loc="upper left")
+        plt.legend(
+            by_label.values(),
+            by_label.keys(),
+            title="Coefficients",
+            bbox_to_anchor=(1.05, 1),
+            loc="upper left",
+        )
 
         # Display plot
         plt.tight_layout()
@@ -1645,7 +1694,7 @@ if __name__ == "__main__":
     models = {
         "OLS": Pipeline(
             [
-                #("selector", MapSelector(threshold=0.2)),
+                # ("selector", MapSelector(threshold=0.2)),
                 ("model", LinearRegression(fit_intercept=True)),
             ]
         ),
@@ -1665,7 +1714,7 @@ if __name__ == "__main__":
             pd.Timestamp(year=2100, month=1, day=1),
         ),
     }
-    for i in range(1,5):
+    for i in range(1, 5):
         X_train[f"CRY{i}"] = X_train["CRY"] + i
         X_train[f"GROWTH{i}"] = X_train["GROWTH"] + i
         X_train[f"INFL{i}"] = X_train["INFL"] + i
@@ -1688,7 +1737,9 @@ if __name__ == "__main__":
     )
     so.coefs_stackedbarplot("test", ftrs_renamed={"CRY": "carry", "GROWTH2": "growth2"})
     so.coefs_timeplot("test")
-    so.feature_selection_heatmap("test", title="Feature selection heatmap for pipeline: test")
+    so.feature_selection_heatmap(
+        "test", title="Feature selection heatmap for pipeline: test"
+    )
     so.intercepts_timeplot("test")
     so.nsplits_timeplot("test")
     # (1) Example SignalOptimizer usage.
