@@ -8,31 +8,6 @@ import numpy as np
 import pandas as pd
 
 
-class NumericType(type):
-    """
-    MetaClass to support type checks across `int`, `float`, `np.int64`, `np.float64`,
-    `SupportsInt`, and `SupportsFloat`.
-    """
-
-    # A tuple of the desired types
-    _numeric_types = (int, float, np.int64, np.float64)
-
-    def __instancecheck__(cls, instance):
-        # if type(instance) not in cls._numeric_types:
-        #     return False
-        return isinstance(instance, cls._numeric_types)
-
-
-class Numeric(metaclass=NumericType):
-    """
-    Custom class definition for a numeric type that supports type checks across `int`,
-    `float`, `np.int64`, `np.float64`, `SupportsInt`, and `SupportsFloat`.
-    """
-
-    # Alternatively, use `numbers.Number` directly
-    pass
-
-
 class NoneTypeMeta(type):
     """
     MetaClass to support type checks for `None`.
