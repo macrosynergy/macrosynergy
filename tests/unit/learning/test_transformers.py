@@ -427,14 +427,10 @@ class TestMapSelector(unittest.TestCase):
     @parameterized.expand([True, False])
     def test_valid_get_support(self, indices):
         # Test that the get_support() method works as expected
-        positive = np.random.choice([True, False])
         selector = self.fitted_selectors[0]
         support = selector.get_support(indices=indices)
         # check that the get_support method returns the correct features
-        if positive:
-            mask = [col in self.restr_ftrs for col in self.X.columns]
-        else:
-            mask = [col in self.unrestr_ftrs for col in self.X.columns]
+        mask = [col in self.restr_ftrs for col in self.X.columns]
 
         if indices:
             true_support = np.where(mask)[0]

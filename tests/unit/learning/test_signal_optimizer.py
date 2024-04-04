@@ -135,7 +135,7 @@ class TestAll(unittest.TestCase):
             "linreg": {},
             "ridge": {"alpha": [0.1, 1.0]},
         }
-
+        
         so = SignalOptimizer(
             inner_splitter=self.splitters[1],
             X=self.X_train,
@@ -930,9 +930,31 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             so.get_optimized_signals(name="test2")
 
-    def test_valid_get_optimized_signals(self):
+    @parameterized.expand(itertools.product([0, 1], [True, False]))
+    def test_valid_get_optimized_signals(self, splitter_idx, change_n_splits):
         # Test that the output is a dataframe
-        so = self.so_with_calculated_preds
+        if change_n_splits:
+            initial_nsplits = np.random.choice([2, 3, 5, 10])
+            threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
+            so = SignalOptimizer(
+                inner_splitter=self.splitters[splitter_idx],
+                X=self.X_train,
+                y=self.y_train,
+                initial_nsplits=initial_nsplits,
+                threshold_ndates=threshold_ndates,
+            )
+            so.calculate_predictions(
+                name="test",
+                models=self.models,
+                metric=self.metric,
+                hparam_grid=self.hparam_grid,
+                hparam_type="random",
+                n_iter=1,
+                n_jobs=1,
+            )
+        else:
+            so = self.so_with_calculated_preds
+        
         df1 = so.get_optimized_signals(name="test")
         self.assertIsInstance(df1, pd.DataFrame)
         self.assertEqual(df1.shape[1], 4)
@@ -947,7 +969,8 @@ class TestAll(unittest.TestCase):
             models=self.models,
             metric=self.metric,
             hparam_grid=self.hparam_grid,
-            hparam_type="grid",
+            hparam_type="random",
+            n_iter=1,
             n_jobs=1,
         )
         df2 = so.get_optimized_signals(name="test2")
@@ -976,7 +999,7 @@ class TestAll(unittest.TestCase):
         self.assertEqual(len(df4.xcat.unique()), 2)
 
     def test_types_get_optimal_models(self):
-
+        
         so = self.so_with_calculated_preds
         with self.assertRaises(TypeError):
             so.get_optimal_models(name=1)
@@ -986,7 +1009,7 @@ class TestAll(unittest.TestCase):
             so.get_optimal_models(name=["test", "test2"])
         with self.assertRaises(ValueError):
             so.get_optimal_models(name="test2")
-
+            
         splitter_idx = 0
         # Test that if no signals have been calculated, an error is raised
         so = SignalOptimizer(
@@ -1124,7 +1147,7 @@ class TestAll(unittest.TestCase):
 
     def test_types_feature_selection_heatmap(self):
         so = self.so_with_calculated_preds
-
+        
         with self.assertRaises(TypeError):
             so.feature_selection_heatmap(name=1)
         with self.assertRaises(TypeError):
