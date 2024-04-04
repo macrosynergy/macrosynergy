@@ -286,7 +286,7 @@ def _multifreq_volatility(
                         freq=freq
                     ),
                     lback_periods=lback_periods,
-                    nan_tolerance=nan_tolerance,
+                    nan_tolerance=nan_tolerance,  # TODO N/A tolerance too aggressive?
                     remove_zeros=remove_zeros,
                 ),
                 lback_periods=lback_periods,
@@ -311,6 +311,7 @@ def _multifreq_volatility(
         )
 
         # pvol: Portfolio volatility
+        # TODO fill N/A in variance-covariance matrix with zero (assummign signal is zero...)?
         pvol: float = np.sqrt(signals.loc[td].T.dot(vcv).dot(signals.loc[td]))
         list_pvol.append((td, pvol))
 
@@ -521,16 +522,17 @@ def _hist_vol(
     # TODO annualisation depends on the frequency of the returns
     # df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name] * 252)
 
-    rebal_freq = rebal_freq.upper()
-    ffills = {"D": 1, "W": 5, "M": 24, "Q": 64}
-    # TODO remove re-index! 
-    df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[rebal_freq])
-    nanindex = df_out.index[df_out[portfolio_return_name].isnull()]
-    if len(nanindex) > 0:
-        df_out = df_out.dropna()
-        logger.debug(
-            f"Found {len(nanindex)} NaNs in {portfolio_return_name} at {nanindex}, dropping all NaNs."
-        )
+    # rebal_freq = rebal_freq.upper()
+    # ffills = {"D": 1, "W": 5, "M": 24, "Q": 64}
+    # # TODO remove re-index! 
+    # df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[rebal_freq])
+    # nanindex = df_out.index[df_out[portfolio_return_name].isnull()]
+    # if len(nanindex) > 0:
+    #     df_out = df_out.dropna()
+    #     logger.debug(
+    #         f"Found {len(nanindex)} NaNs in {portfolio_return_name} at {nanindex}, dropping all NaNs."
+    #     )
+
     # TODO check df_out is of frequency rebal_freq
     # TODO - should below not be forward filled with the previous volatility value...
     assert (

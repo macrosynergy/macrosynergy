@@ -101,7 +101,7 @@ def _vol_target_positions(
     df_wide: pd.DataFrame,
     sname: str,
     fids: List[str],
-    dollar_per_signal: Number = 1.0,
+    aum: Number = 100,
     vol_target: Number = 10,
     rebal_freq: str = "m",
     lback_periods: int = 21,
@@ -111,7 +111,7 @@ def _vol_target_positions(
     lback_meth: str = "ma",
     rstring: str = "XR",
     pname: str = "VPOS",
-) -> QuantamentalDataFrame:
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Uses historic portfolio volatility to calculate notional positions based on
     contract signals, volatility targeting and other relevant parameters.
@@ -119,12 +119,10 @@ def _vol_target_positions(
 
     _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
 
-    vol_target: float = vol_target / 100
-
     sig_ident: str = f"_CSIG_{sname}"
 
     # TODO what is the units of histpvol?
-    histpvol = historic_portfolio_vol(
+    histpvol: QuantamentalDataFrame = historic_portfolio_vol(
         df=ticker_df_to_qdf(df_wide),  # TODO why stack it again?
         sname=sname,
         fids=fids,
@@ -136,29 +134,27 @@ def _vol_target_positions(
         rebal_freq=rebal_freq,
         remove_zeros=remove_zeros,
     )
-    # TODO get rebalance dates
-
-    # TODO should we not multiply by 100 again (for vol-target)?
-    histpvol["value"] = vol_target * dollar_per_signal / histpvol["value"]
-    vlen = len(histpvol["value"])
+    # histpvol: only on rebalance dates...
+    histpvol["leverage"] = ((vol_target / histpvol["value"]) * aum).replace(np.inf, np.nan)
+    # TODO check inf => convert to NaN
+    histpvol.set_index("real_date", inplace=True)
+    # df_wide[]
+    # vlen = len(histpvol["value"])
 
     out_df = pd.DataFrame(index=df_wide.index)
 
-    # TODO: check if this is correct
-    # TODO why loop?
-    for contx in fids:
-        pos_col = contx + "_" + pname
-        cont_name = contx + sig_ident
-        out_df.loc[:, pos_col] = np.nan
-        out_df.loc[:, pos_col].iloc[-vlen:] = (
-            histpvol["value"].values * df_wide[cont_name].iloc[-vlen:].values
-        )
-    # TODO we are missing scale from AUM...
-        
+    signal_columns: List[str] = [f"{contx:s}{sig_ident:s}" for contx in fids]
+    df_signals: pd.DataFrame = df_wide.loc[histpvol.index, signal_columns]
+
+    out_df = histpvol["leverage"].to_frame("leverage").dot(np.ones(shape=(1, df_signals.shape[1]))).values * df_signals
+    # TODO how to deal with unbalanced panel
+
     # drop rows with all na
     # TODO add log statement of how many N/A values are dropped
-    out_df = out_df.dropna(how="all")
-    return out_df
+    # TODO forward fill for N/A blacklist (zero position...)
+    out_df = out_df.reindex(df_wide.index).ffill().dropna(how="all")
+
+    return out_df, histpvol[["cid", "xcat", "value"]]
 
 
 def _leverage_positions(
@@ -168,7 +164,7 @@ def _leverage_positions(
     aum: Number = 100,
     leverage: Number = 1.0,
     pname: str = "POS",
-) -> QuantamentalDataFrame:
+) -> pd.DataFrame:
     """"""
     _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
 
@@ -201,6 +197,7 @@ def notional_positions(
     dollar_per_signal: Number = 1.0,
     leverage: Optional[Number] = None,
     vol_target: Optional[Number] = None,
+    nan_tolerance: float = 0.25,
     rebal_freq: str = "m",
     slip: int = 1,
     lback_periods: int = 21,
@@ -366,12 +363,11 @@ def notional_positions(
         )
 
     else:
-        # TODO no AUM (vol target is as percent of AUM ASD for portfolio)?
-        return_df: pd.DataFrame = _vol_target_positions(
+        return_df, pvol = _vol_target_positions(
             df_wide=df_wide,
             sname=sname,
             fids=fids,
-            dollar_per_signal=dollar_per_signal,  # TODO dollar per signal => signal * dollars = position
+            aum=aum,
             vol_target=vol_target,
             rebal_freq=rebal_freq,
             lback_periods=lback_periods,
@@ -379,7 +375,10 @@ def notional_positions(
             half_life=half_life,
             rstring=rstring,
             pname=pname,
+            nan_tolerance=0.25,
         )
+
+    # TODO dollar_per_signal: Number = 1.0 (dollar per signal => signal * dollars = position)
 
     return ticker_df_to_qdf(df=return_df).dropna()
 
