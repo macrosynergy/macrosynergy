@@ -13,13 +13,12 @@ TODO Proposed workflow:
 
 import logging
 import warnings
-import functools
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
-from macrosynergy.panel.historic_vol import expo_weights
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.management.utils import (
     _map_to_business_day_frequency,
@@ -29,10 +28,10 @@ from macrosynergy.management.utils import (
     standardise_dataframe,
     ticker_df_to_qdf,
 )
+from macrosynergy.management.utils.math import estimate_variance_covariance
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
 
-cache = functools.lru_cache(maxsize=None)
 
 logger = logging.getLogger(__name__)
 
@@ -45,96 +44,6 @@ __MAP_ANNUALIZE = {
     "Q": 4
 }
 
-@cache
-def flat_weights_arr(lback_periods: int, *args, **kwargs) -> np.ndarray:
-    """Flat weights for the look-back period."""
-    return np.ones(lback_periods) / lback_periods
-
-
-@cache
-def expo_weights_arr(lback_periods: int, half_life: int, *args, **kwargs) -> np.ndarray:
-    """Exponential weights for the look-back period."""
-    return expo_weights(lback_periods=lback_periods, half_life=half_life)
-
-
-def _weighted_covariance(
-    x: np.ndarray,
-    y: np.ndarray,
-    weights_func: Callable[[int, int], np.ndarray],
-    lback_periods: int,
-    *args,
-    **kwargs,
-) -> float:
-    """
-    Estimate covariance between two series after applying weights.
-
-    """
-    assert x.ndim == 1 or x.shape[1] == 1, "`x` must be a 1D array or a column vector"
-    assert y.ndim == 1 or y.shape[1] == 1, "`y` must be a 1D array or a column vector"
-    assert x.shape[0] == y.shape[0], "`x` and `y` must have same length"
-
-    # if either of x or y is all NaNs, return NaN
-    if np.isnan(x).all() or np.isnan(y).all():
-        return np.nan
-
-    xnans, ynans = np.isnan(x), np.isnan(y)
-    wmask = xnans | ynans
-    weightslen = min(sum(~wmask), lback_periods if lback_periods > 0 else len(x))
-
-    # drop NaNs and only consider the most recent lback_periods
-    x, y = x[~wmask][-weightslen:], y[~wmask][-weightslen:]
-
-    # assert x.shape[0] == weightslen  # TODO what happens if it is less...
-    for arr in [x, y]:
-        if arr.shape[0] < weightslen:
-            warnings.warn(
-                f"Length of x is less than the weightslen: {arr.shape[0]} < {weightslen}"
-            )
-    w: np.ndarray = weights_func(
-        lback_periods=weightslen,
-        half_life=min(weightslen // 2, kwargs.get("half_life", 11)),
-    )
-
-    xmean, ymean = (w * x).sum(), (w * y).sum()
-
-    rss = (x - xmean) * (y - ymean)
-
-    return w.T.dot(rss)
-
-
-def _estimate_variance_covariance(
-    piv_ret: pd.DataFrame,
-    # weights_func: Callable[[int, int], np.ndarray],
-    # lback_periods: int,
-    # half_life: int,
-    # remove_zeros: bool,
-    *args,
-    **kwargs,
-) -> pd.DataFrame:
-    """Estimation of the variance-covariance matrix needs to have the following configuration options
-
-    1. Absolutely vs squared deviations,
-    2. Flat weights (equal) vs. exponential weights,
-    3. Frequency of estimation (daily, weekly, monthly, quarterly) and their weights.
-    """
-
-    cov_mat = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
-    logger.info(f"Estimating variance-covariance matrix for {piv_ret.columns}")
-
-    for i_b, c_b in enumerate(piv_ret.columns):
-        for i_a, c_a in enumerate(piv_ret.columns[: i_b + 1]):
-            logger.debug(f"Estimating covariance between {c_a} and {c_b}")
-            est_vol = _weighted_covariance(
-                x=piv_ret[c_a].values,
-                y=piv_ret[c_b].values,
-                *args,
-                **kwargs,
-            )
-            cov_mat[i_a, i_b] = cov_mat[i_b, i_a] = est_vol
-
-    assert np.all((cov_mat.T == cov_mat) ^ np.isnan(cov_mat))
-
-    return pd.DataFrame(cov_mat, index=piv_ret.columns, columns=piv_ret.columns)
 
 
 def _nan_ratio(x, remove_zeros: bool = True) -> float:
@@ -175,7 +84,7 @@ def _mask_nans(
                     )
                 )
 
-    if any(mask.values == True):
+    if mask.any():
         logger.debug(
             f"Dropping columns {mask[mask].index}"
             f" from {piv_df.index.min()} to {piv_df.index.max()}"
@@ -189,7 +98,10 @@ def _downsample_returns(
     piv_df: pd.DataFrame,
     freq: str = "m",
 ) -> pd.DataFrame:
-    assert freq in ("d", "w", "m", "q")
+    # TODO create as a general convert_frequency function
+    # TODO current aggregator is `art` (check definition of name in R code)
+    # TODO upper case frequency strings?
+    assert freq.upper() in ("D", "W", "M", "Q"), f"Unknown frequency: {freq}"
     # TODO test [1] input data is daily and [2] daily gives daily output
     piv_new_freq: pd.DataFrame = ((1 + piv_df / 100).resample(freq).prod() - 1) * 100
     return piv_new_freq
@@ -224,7 +136,7 @@ def _multifreq_volatility(
                 nan_tolerance=nan_tolerance,
                 remove_zeros=remove_zeros,
             )
-            vcv: pd.DataFrame = _estimate_variance_covariance(
+            vcv: pd.DataFrame = __MAP_ANNUALIZE[freq] * estimate_variance_covariance(
                 piv_ret=masked_piv_ret,
                 lback_periods=lback_periods,
                 remove_zeros=remove_zeros,
@@ -406,7 +318,7 @@ def _hist_vol(
 
     # Annualised standard deviation (ASD)
     # TODO annualisation depends on the frequency of the returns
-    df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name] * 252)
+    # df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name] * 252)
 
     rebal_freq = rebal_freq.upper()
     ffills = {"D": 1, "W": 5, "M": 24, "Q": 64}
@@ -438,8 +350,8 @@ def historic_portfolio_vol(
     rstring: str = "XR",
     rebal_freq: str = "m",
     lback_meth: str = "ma",
-    lback_periods: int = 21,
-    half_life: int = 11,
+    lback_periods: List[int] = [254*3, 52*3, 12*3],  # 3 years of data in look-back window
+    half_life: List[int] = 11,  # TODO what to specify here for weekly and monthly?
     est_freqs: List[str] = ["D", "W", "M"],  # "m", "w", "d", "q"
     est_weights: Optional[List[float]] = None,
     start: Optional[str] = None,
@@ -621,6 +533,8 @@ def historic_portfolio_vol(
     pivot_signals: pd.DataFrame = df.loc[df["ticker"].isin(filt_csigs)].pivot(
         index="real_date", columns="fid", values="value"
     )
+    # TODO reduce signals to only trigger dates?
+
     pivot_returns: pd.DataFrame = df.loc[df["ticker"].isin(filt_xrs)].pivot(
         index="real_date", columns="fid", values="value"
     )
@@ -639,21 +553,16 @@ def historic_portfolio_vol(
         nan_tolerance=nan_tolerance,
         remove_zeros=remove_zeros,
     )
-
+    # TODO return variance-covariance matrix together with portfolio volatility
     return ticker_df_to_qdf(df=hist_port_vol)
 
 
 if __name__ == "__main__":
-    from contract_signals import contract_signals
-
     from macrosynergy.management.simulate import simulate_returns_and_signals
-
-    # np seed 42
-    np.random.seed(42)
+    np.random.seed(42)  # Fix numpy seed to 42 for reproducibility
 
     # Signals: FXCRY_NSA, EQCRY_NSA (rename to FX_CSIG_STRAT, EQ_CSIG_STRAT)
     # Returns: FXXR_NSA, EQXR_NSA (renamed to FXXR, EQXR)
-
     cids: List[str] = ["EUR", "GBP", "AUD", "CAD"]
     xcats: List[str] = ["EQ"]
     ctypes = xcats.copy()
@@ -673,7 +582,7 @@ if __name__ == "__main__":
     # TODO simulate_returns_and_signals are risk-signals, not contract signals. We need to adjust for volatility and common (observed) factor.
     end = df["real_date"].max().strftime("%Y-%m-%d")
 
-    df_copy = df.copy()
+    df_copy = df.copy()  # TODO why copy?
 
     N_p_nans = 0.01
     df["value"] = df["value"].apply(
