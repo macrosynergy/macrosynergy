@@ -70,7 +70,9 @@ def panel_significance_probability(
     return 1 - pval
 
 
-def regression_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> float:
+def regression_accuracy(
+    y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]
+) -> float:
     """
     Function to return the accuracy between the signs of the predictions and targets.
 

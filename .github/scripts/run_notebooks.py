@@ -6,6 +6,7 @@ import boto3
 import pandas as pd
 import paramiko
 from botocore.exceptions import ClientError
+from datetime import datetime
 import logging
 
 #logging.basicConfig(level=logging.DEBUG)
@@ -35,7 +36,7 @@ bucket = s3.Bucket("macrosynergy-notebook-prod")
 objects_info = [(obj.key, obj.size) for obj in bucket.objects.all()]
 
 # Filter for notebook files
-notebooks_info = [(key, size) for key, size in objects_info if key.endswith(".ipynb") and key != "Signal_optimization_basics.ipynb" and key != "Regression-based_macro_trading_signals.ipynb"]
+notebooks_info = [(key, size) for key, size in objects_info if key.endswith(".ipynb") and key in ["Signal_optimization_basics.ipynb", "Regression-based_macro_trading_signals.ipynb", "Regression-based_FX_signals.ipynb"]]
 notebooks = [obj.key for obj in bucket.objects.filter(Prefix="")]
 notebooks = [notebook for notebook in notebooks if notebook.endswith(".ipynb")]
 sorted_notebooks_info = sorted(notebooks_info, key=lambda x: x[1])
@@ -43,13 +44,13 @@ notebooks = [name for name, size in sorted_notebooks_info]
 print(f"Found {len(notebooks)} notebooks in the s3 bucket")
 
 # Uncomment if you want to run a small batch for test purposes
-# batch_size = 2
+#batch_size = 1
 
 # Batch the notebooks
 batches = []
 for i in range(len(list(instances))):
     batch = notebooks[i::len(list(instances))]
-    # batch = batch[:batch_size]
+#    batch = batch[:batch_size]
     batches.append(batch)
 bucket_url = os.getenv("AWS_NOTEBOOK_BUCKET")
 
@@ -129,13 +130,13 @@ def run_commands_on_ec2(instance, notebooks):
         stdout.channel.recv_exit_status()
         print(f"Venv commands completed on {instance.id}")
 
+        # Pip and nohup commands
         print(f"Running pip commands on {instance.id}...")
         pip_commands = f"myvenv/bin/python -m pip install linearmodels jupyter nbformat git+https://github.com/macrosynergy/macrosynergy@{branch_name}  --upgrade"
         stdin, stdout, stderr = ssh_client.exec_command(pip_commands, timeout=50)
         stdout.channel.recv_exit_status()
         print(f"Pip commands completed on {instance.id}")
 
-        # Pip and nohup commands
         notebook_runner_cmd = "nohup myvenv/bin/python run_notebooks.py > nohup.out 2>&1 &"
         print(f"Running notebook runner commands on {instance.id}...")
         ssh_client.exec_command(notebook_runner_cmd, timeout=50)
@@ -144,8 +145,20 @@ def run_commands_on_ec2(instance, notebooks):
         successful_notebooks, failed_notebooks = get_output_from_instance(ssh_client)
         outputs["succeeded"].extend(successful_notebooks)
         outputs["failed"].extend(failed_notebooks)
-        print(f"Stopping instance... {instance.id}")
     finally:
+        print(f"Downloading logs from instance... {instance.id}")
+
+        timestamp = datetime.fromtimestamp(start_time).strftime('%Y-%m-%d.%H:%M:%S')
+
+        log_commands = f"aws s3 cp notebooks/ s3://{os.getenv("AWS_NB_RUNNER_LOGS")}/{instance.id}_{timestamp}/notebooks --recursive"
+        stdin, stdout, stderr = ssh_client.exec_command(log_commands, timeout=50)
+        stdout.channel.recv_exit_status()
+
+        log_commands = f"aws s3 cp nohup.out s3://{os.getenv("AWS_NB_RUNNER_LOGS")}/{instance.id}_{timestamp}/nohup.out"
+        stdin, stdout, stderr = ssh_client.exec_command(log_commands, timeout=50)
+        stdout.channel.recv_exit_status()
+
+        print(f"Stopping instance... {instance.id}")
         ssh_client.close()
         instance.stop()
     return outputs

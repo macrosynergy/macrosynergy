@@ -14,7 +14,7 @@ import pandas as pd
 from matplotlib.gridspec import GridSpec
 
 from macrosynergy.visuals.plotter import Plotter
-from macrosynergy.management.types import Numeric, NoneType
+from numbers import Number
 
 
 def _get_square_grid(
@@ -169,30 +169,30 @@ class FacetPlot(Plotter):
     #     xcats: Optional[List[str]] = None,
     #     metric: Optional[str] = None,
     #     # fig arguments
-    #     figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
+    #     figsize: Tuple[Number, Number] = (16.0, 9.0),
     #     ncols: int = 3,
     #     attempt_square: bool = False,
     #     # xcats_mean: bool = False,
     #     # title arguments
     #     title: Optional[str] = None,
     #     title_fontsize: int = 20,
-    #     title_xadjust: Optional[Numeric] = None,
-    #     title_yadjust: Optional[Numeric] = None,
+    #     title_xadjust: Optional[Number] = None,
+    #     title_yadjust: Optional[Number] = None,
     #     # subplot axis arguments
     #     ax_grid: bool = True,
     #     ax_hline: bool = False,
-    #     ax_hline_val: Numeric = 0.0,
+    #     ax_hline_val: Number = 0.0,
     #     ax_vline: bool = False,
-    #     ax_vline_val: Numeric = 0.0,
+    #     ax_vline_val: Number = 0.0,
     #     x_axis_label: Optional[str] = None,
     #     y_axis_label: Optional[str] = None,
     #     axis_fontsize: int = 12,
     #     # subplot arguments
-    #     facet_size: Optional[Tuple[Numeric, Numeric]] = None,
+    #     facet_size: Optional[Tuple[Number, Number]] = None,
     #     facet_titles: Optional[List[str]] = None,
     #     facet_title_fontsize: int = 12,
-    #     facet_title_xadjust: Numeric = 0.5,
-    #     facet_title_yadjust: Numeric = 1.0,
+    #     facet_title_xadjust: Number = 0.5,
+    #     facet_title_yadjust: Number = 1.0,
     #     facet_xlabel: Optional[str] = None,
     #     facet_ylabel: Optional[str] = None,
     #     facet_label_fontsize: int = 12,
@@ -201,7 +201,7 @@ class FacetPlot(Plotter):
     #     legend_labels: Optional[List[str]] = None,
     #     legend_loc: str = "upper center",
     #     legend_ncol: int = 1,
-    #     legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,  # (1.0, 0.5),
+    #     legend_bbox_to_anchor: Optional[Tuple[Number, Number]] = None,  # (1.0, 0.5),
     #     legend_frame: bool = True,
     #     # return args
     #     show: bool = True,
@@ -244,24 +244,24 @@ class FacetPlot(Plotter):
         share_x: bool = False,
         # xcats_mean: bool = False,
         # title arguments
-        figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
+        figsize: Tuple[Number, Number] = (16.0, 9.0),
         title: Optional[str] = None,
         title_fontsize: int = 22,
-        title_xadjust: Optional[Numeric] = None,
-        title_yadjust: Optional[Numeric] = None,
+        title_xadjust: Optional[Number] = None,
+        title_yadjust: Optional[Number] = None,
         # subplot axis arguments
         ax_grid: bool = False,
-        ax_hline: Optional[Numeric] = 0.0,
+        ax_hline: Optional[Number] = 0.0,
         ax_vline: Optional[str] = None,
         x_axis_label: Optional[str] = None,
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 12,
         # subplot arguments
-        facet_size: Optional[Tuple[Numeric, Numeric]] = None,
+        facet_size: Optional[Tuple[Number, Number]] = None,
         facet_titles: Optional[List[str]] = None,
         facet_title_fontsize: int = 14,
-        facet_title_xadjust: Numeric = 0.5,
-        facet_title_yadjust: Numeric = 1.0,
+        facet_title_xadjust: Number = 0.5,
+        facet_title_yadjust: Number = 1.0,
         facet_xlabel: Optional[str] = None,
         facet_ylabel: Optional[str] = None,
         # legend arguments
@@ -270,7 +270,7 @@ class FacetPlot(Plotter):
         legend_loc: Optional[str] = "lower center",
         legend_fontsize: int = 12,
         legend_ncol: int = 1,
-        legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,  # (1.0, 0.5),
+        legend_bbox_to_anchor: Optional[Tuple[Number, Number]] = None,  # (1.0, 0.5),
         legend_frame: bool = True,
         # return args
         show: bool = True,
@@ -312,7 +312,7 @@ class FacetPlot(Plotter):
             `True`.
         :param <bool> share_x: whether to share the x-axis across all plots. Default is
             `True`.
-        :param <Tuple[Numeric, Numeric]> figsize: a tuple of floats specifying the width
+        :param <Tuple[Number, Number]> figsize: a tuple of floats specifying the width
             and height of the figure. Default is `(16.0, 9.0)`.
         :param <str> title: the title of the plot. Default is `None`.
         :param <int> title_fontsize: the font size of the title. Default is `20`.
@@ -320,7 +320,7 @@ class FacetPlot(Plotter):
         :param <float> title_yadjust: the y-adjustment of the title. Default is `None`.
         :param <bool> ax_grid: whether to show the grid on the axes, applied to all plots.
             Default is `True`.
-        :param <Numeric> ax_hline: the value of the horizontal line on the axes, applied
+        :param <Number> ax_hline: the value of the horizontal line on the axes, applied
             to all plots. Default is `None`, meaning no horizontal line will be shown.
         :param <str> ax_vline: the value of the vertical line on the axes, applied
             to all plots. The value must be a ISO-8601 formatted date-string.
@@ -328,7 +328,7 @@ class FacetPlot(Plotter):
         :param <str> x_axis_label: the label for the x-axis. Default is `None`.
         :param <str> y_axis_label: the label for the y-axis. Default is `None`.
         :param <int> axis_fontsize: the font size of the axis labels. Default is `12`.
-        :param <Tuple[Numeric, Numeric]> facet_size: a tuple of floats specifying the
+        :param <Tuple[Number, Number]> facet_size: a tuple of floats specifying the
             width and height of each facet. Default is `None`, meaning the facet size will
             be inferred from the `figsize` argument. If specified, the `figsize` argument
             will be ignored and the figure size will be inferred from the dimensions of
@@ -445,10 +445,11 @@ class FacetPlot(Plotter):
                 tks: List[str] = [ticker]
                 if compare_series is not None:
                     tks.append(compare_series)
-                plot_dict[i]: Dict[str, Union[str, List[str]]] = {
+                plot_dict[i] = {
                     "X": "real_date",
                     "Y": tks,
                 }
+                # plot_dict[i] --> Dict[str, Union[str, List[str]]]
 
         if cid_grid or xcat_grid:
             # flipper handles resolution between cid_grid and xcat_grid for binary
@@ -481,11 +482,12 @@ class FacetPlot(Plotter):
                 if tks == [compare_series]:
                     continue
 
-                plot_dict[i]: Dict[str, Union[str, List[str]]] = {
+                plot_dict[i] = {
                     "X": "real_date",
                     "Y": tks + ([compare_series] if compare_series else []),
                     "title": facet_titles[i],
                 }
+                # plot_dict[i] --> Dict[str, Union[str, List[str]]]
 
         if cid_xcat_grid:
             # NB : legend goes away in cid_xcat_grid
@@ -494,11 +496,12 @@ class FacetPlot(Plotter):
             for i, cid in enumerate(_cids):
                 for j, xcat in enumerate(_xcats):
                     tk: str = "_".join([cid, xcat])
-                    plot_dict[i * len(_xcats) + j]: Dict[str, List[str]] = {
+                    plot_dict[i * len(_xcats) + j] = {
                         "X": "real_date",
                         "Y": [tk],
                         "title": tk,
                     }
+                    # plot_dict[i * len(_xcats) + j] --> Dict[str, List[str]]
 
         if len(plot_dict) == 0:
             raise ValueError("Unable to resolve plot settings.")
@@ -590,7 +593,9 @@ class FacetPlot(Plotter):
 
                 plot_func_args = {}
                 if legend_color_map:
-                    plot_func_args["color"] = legend_color_map.get(xcatx if cid_grid else cidx)
+                    plot_func_args["color"] = legend_color_map.get(
+                        xcatx if cid_grid else cidx
+                    )
 
                 if y == compare_series:
                     plot_func_args["color"] = "red"
@@ -637,12 +642,12 @@ class FacetPlot(Plotter):
 
         self.df.reset_index(inplace=True)
 
-        for ax in ax_list[len(plot_dict):]:
+        for ax in ax_list[len(plot_dict) :]:
             fig.delaxes(ax)
-        ax_list = ax_list[:len(plot_dict)]
-        
+        ax_list = ax_list[: len(plot_dict)]
+
         if share_x:
-            for target_ax in ax_list[(len(plot_dict) - grid_dim[0]):]:
+            for target_ax in ax_list[(len(plot_dict) - grid_dim[0]) :]:
                 target_ax.xaxis.set_tick_params(labelbottom=True)
 
         if legend:
@@ -658,8 +663,14 @@ class FacetPlot(Plotter):
                 frameon=legend_frame,
             )
 
-            leg_width, leg_height = leg.get_window_extent().width, leg.get_window_extent().height
-            fig_width, fig_height = fig.get_window_extent().width, fig.get_window_extent().height
+            leg_width, leg_height = (
+                leg.get_window_extent().width,
+                leg.get_window_extent().height,
+            )
+            fig_width, fig_height = (
+                fig.get_window_extent().width,
+                fig.get_window_extent().height,
+            )
 
             if "lower" in legend_loc:
                 re_adj[1] += leg_height / fig_height
@@ -764,7 +775,7 @@ if __name__ == "__main__":
             title="Another test title",
             # save_to_file="test_1.png",
             show=True,
-            share_x=True
+            share_x=True,
         )
         fp.lineplot(
             cids=cids_C,
