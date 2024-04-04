@@ -2,16 +2,12 @@
 Contains mathematical utility functions used across the package.
 """
 
-from typing import List
+from typing import List, Union, Tuple
 
 import pandas as pd
 import numpy as np
 import itertools
-import logging
-
 from macrosynergy.management.simulate import make_qdf
-
-logger = logging.getLogger(__name__)
 
 
 def expanding_mean_with_nan(
