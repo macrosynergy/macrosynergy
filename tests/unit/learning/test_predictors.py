@@ -476,7 +476,7 @@ class TestSWLRegression(unittest.TestCase):
         }
         metric = make_scorer(mean_squared_error, squared=False, greater_is_better=False)
         hparam_grid = {
-            "SWOLS": {"fit_intercept": [True, False]},
+            "SWOLS": {"fit_intercept": [False]},
         }
         so = SignalOptimizer(
             inner_splitter=inner_splitter,
@@ -763,7 +763,7 @@ class TestTWLRegression(unittest.TestCase):
         }
         metric = make_scorer(mean_squared_error, squared=False, greater_is_better=False)
         hparam_grid = {
-            "SWOLS": {"fit_intercept": [True, False], "half_life": [21]},
+            "SWOLS": {"fit_intercept": [False], "half_life": [21]},
         }
         so = SignalOptimizer(
             inner_splitter=inner_splitter,

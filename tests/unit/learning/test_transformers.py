@@ -21,6 +21,7 @@ from sklearn.linear_model import Lasso
 
 from sklearn.exceptions import NotFittedError
 
+
 class TestLassoSelector(unittest.TestCase):
     @classmethod
     def setUpClass(self):
@@ -97,7 +98,7 @@ class TestLassoSelector(unittest.TestCase):
             self.fail(f"Fit method for the Lasso selector raised an exception: {e}")
         self.assertTrue(np.all(selector.feature_names_in_ == np.array(self.X.columns)))
         self.assertEqual(selector.p, self.X.shape[1])
-        lasso = Lasso(alpha=0.1,positive=False)
+        lasso = Lasso(alpha=0.1, positive=False)
         lasso.fit(self.X, self.y)
         chosen_ftrs = [i for i in range(len(lasso.coef_)) if lasso.coef_[i] != 0]
         self.assertTrue(np.all(selector.selected_ftr_idxs == chosen_ftrs))
@@ -109,7 +110,7 @@ class TestLassoSelector(unittest.TestCase):
             self.fail(f"Fit method for the Lasso selector raised an exception: {e}")
         self.assertTrue(np.all(selector.feature_names_in_ == np.array(self.X.columns)))
         self.assertEqual(selector.p, self.X.shape[1])
-        lasso = Lasso(alpha=0.1,positive=False)
+        lasso = Lasso(alpha=0.1, positive=False)
         lasso.fit(self.X, self.y)
         chosen_ftrs = [i for i in range(len(lasso.coef_)) if lasso.coef_[i] != 0]
         self.assertTrue(np.all(selector.selected_ftr_idxs == chosen_ftrs))
@@ -121,9 +122,11 @@ class TestLassoSelector(unittest.TestCase):
             selector_restrict.fit(self.X, self.y)
         except Exception as e:
             self.fail(f"Fit method for the Lasso selector raised an exception: {e}")
-        self.assertTrue(np.all(selector_restrict.feature_names_in_ == np.array(self.X.columns)))
+        self.assertTrue(
+            np.all(selector_restrict.feature_names_in_ == np.array(self.X.columns))
+        )
         self.assertEqual(selector_restrict.p, self.X.shape[1])
-        lasso = Lasso(alpha=0.1,positive=True)
+        lasso = Lasso(alpha=0.1, positive=True)
         lasso.fit(self.X, self.y)
         chosen_ftrs = [i for i in range(len(lasso.coef_)) if lasso.coef_[i] != 0]
         self.assertTrue(np.all(selector_restrict.selected_ftr_idxs == chosen_ftrs))
@@ -132,9 +135,11 @@ class TestLassoSelector(unittest.TestCase):
             selector_restrict.fit(self.X, self.y.to_frame())
         except Exception as e:
             self.fail(f"Fit method for the Lasso selector raised an exception: {e}")
-        self.assertTrue(np.all(selector_restrict.feature_names_in_ == np.array(self.X.columns)))
+        self.assertTrue(
+            np.all(selector_restrict.feature_names_in_ == np.array(self.X.columns))
+        )
         self.assertEqual(selector_restrict.p, self.X.shape[1])
-        lasso = Lasso(alpha=0.1,positive=True)
+        lasso = Lasso(alpha=0.1, positive=True)
         lasso.fit(self.X, self.y)
         chosen_ftrs = [i for i in range(len(lasso.coef_)) if lasso.coef_[i] != 0]
         self.assertTrue(np.all(selector_restrict.selected_ftr_idxs == chosen_ftrs))
@@ -186,13 +191,13 @@ class TestLassoSelector(unittest.TestCase):
         # Sample alpha between zero and 10000 and binary 'positive'
         alpha = np.random.uniform(0.0001, 10000)
         positive = bool(np.random.choice([True, False]))
-        # Check the Lasso selector with these hparams chooses the 
+        # Check the Lasso selector with these hparams chooses the
         # same features that the Lasso would
-        our_selector = LassoSelector(alpha=alpha, positive = positive)
+        our_selector = LassoSelector(alpha=alpha, positive=positive)
         our_selector.fit(self.X, self.y)
         supp_our_selector = our_selector.get_support(indices=indices)
         lasso = Lasso(alpha=alpha, positive=positive)
-        their_selector = SelectFromModel(lasso,threshold=1e-10)
+        their_selector = SelectFromModel(lasso, threshold=1e-10)
         their_selector.fit(self.X, self.y)
         supp_their_selector = their_selector.get_support(indices=indices)
         self.assertTrue(np.all(supp_our_selector == supp_their_selector))
@@ -202,13 +207,13 @@ class TestLassoSelector(unittest.TestCase):
         # First check that a NotFittedError is raised if get_support is called without fitting
         alpha = np.random.uniform(0.0001, 10000)
         positive = bool(np.random.choice([True, False]))
-        our_selector = LassoSelector(alpha=alpha, positive = positive)
+        our_selector = LassoSelector(alpha=alpha, positive=positive)
         with self.assertRaises(NotFittedError):
             our_selector.get_support(indices=indices)
         # Now check that a ValueError is raised if a non-boolean indices parameter is entered
         alpha = np.random.uniform(0.0001, 10000)
         positive = bool(np.random.choice([True, False]))
-        our_selector = LassoSelector(alpha=alpha, positive = positive)
+        our_selector = LassoSelector(alpha=alpha, positive=positive)
         our_selector.fit(self.X, self.y)
         with self.assertRaises(ValueError):
             our_selector.get_support(indices="indices")
@@ -221,18 +226,23 @@ class TestLassoSelector(unittest.TestCase):
         positive = bool(np.random.choice([True, False]))
         # Check that the LASSO selector with these hparams chooses the same
         # features that the LASSO would
-        our_selector = LassoSelector(alpha=alpha, positive = positive)
+        our_selector = LassoSelector(alpha=alpha, positive=positive)
         our_selector.fit(self.X, self.y)
         lasso = Lasso(alpha=alpha, positive=positive)
-        their_selector = SelectFromModel(lasso,threshold=1e-10)
+        their_selector = SelectFromModel(lasso, threshold=1e-10)
         their_selector.fit(self.X, self.y)
-        self.assertTrue(np.all(our_selector.get_feature_names_out() == their_selector.get_feature_names_out()))
+        self.assertTrue(
+            np.all(
+                our_selector.get_feature_names_out()
+                == their_selector.get_feature_names_out()
+            )
+        )
 
     def test_types_get_feature_names_out(self):
         # Check that a NotFittedError is raised if get_feature_names_out is called without fitting
         alpha = np.random.uniform(0.0001, 10000)
         positive = bool(np.random.choice([True, False]))
-        our_selector = LassoSelector(alpha=alpha, positive = positive)
+        our_selector = LassoSelector(alpha=alpha, positive=positive)
         with self.assertRaises(NotFittedError):
             our_selector.get_feature_names_out()
 
@@ -278,6 +288,7 @@ class TestLassoSelector(unittest.TestCase):
         with self.assertRaises(ValueError):
             selector.transform(self.X.drop(columns="CPI"))
 
+
 class TestMapSelector(unittest.TestCase):
     @classmethod
     def setUpClass(self):
@@ -322,15 +333,30 @@ class TestMapSelector(unittest.TestCase):
             ftr = self.X[col]
             ftr = add_constant(ftr)
             groups = ftr.index.get_level_values(1)
-            model = MixedLM(self.y,ftr,groups).fit(reml=False)
+            model = MixedLM(self.y, ftr, groups).fit(reml=False)
             est = model.params.iloc[1]
             pval = model.pvalues.iloc[1]
             self.est.append(est)
             self.pval.append(pval)
 
-        # get chosen features with and without the positive restriction 
-        self.restr_ftrs = [self.X.columns[idx] for idx, est in enumerate(self.est) if self.pval[idx] < 0.05 and est > 0]
-        self.unrestr_ftrs = [self.X.columns[idx] for idx, est in enumerate(self.est) if self.pval[idx] < 0.05]
+        # get chosen features with and without the positive restriction
+        self.restr_ftrs = [
+            self.X.columns[idx]
+            for idx, est in enumerate(self.est)
+            if self.pval[idx] < 0.05 and est > 0
+        ]
+        self.unrestr_ftrs = [
+            self.X.columns[idx]
+            for idx, est in enumerate(self.est)
+            if self.pval[idx] < 0.05
+        ]
+
+        threshold = 0.05
+        positive_selector = MapSelector(threshold=threshold, positive=True)
+        positive_selector.fit(self.X, self.y)
+        negative_selector = MapSelector(threshold=threshold, positive=False)
+        negative_selector.fit(self.X, self.y)
+        self.fitted_selectors = [positive_selector, negative_selector]
 
     @parameterized.expand([0.01, 0.05, 0.1, 1.0])
     def test_valid_init(self, threshold):
@@ -401,10 +427,8 @@ class TestMapSelector(unittest.TestCase):
     @parameterized.expand([True, False])
     def test_valid_get_support(self, indices):
         # Test that the get_support() method works as expected
-        threshold = 0.05
         positive = np.random.choice([True, False])
-        selector = MapSelector(threshold=threshold, positive=positive)
-        selector.fit(self.X, self.y)
+        selector = self.fitted_selectors[0]
         support = selector.get_support(indices=indices)
         # check that the get_support method returns the correct features
         if positive:
@@ -427,27 +451,24 @@ class TestMapSelector(unittest.TestCase):
         with self.assertRaises(NotFittedError):
             selector.get_support()
         # Test that a TypeError is raised if a non-boolean indices parameter is entered
-        selector.fit(self.X, self.y)
+        selector = self.fitted_selectors[0]
         with self.assertRaises(TypeError):
             selector.get_support(indices="indices")
 
-    def test_valid_get_feature_names_out(self):
+    @parameterized.expand([0, 1])
+    def test_valid_get_feature_names_out(self, selector_idx):
         # Test that the get_feature_names_out() method works as expected
-        threshold = 0.05
-        positive = np.random.choice([True, False])
-        selector = MapSelector(threshold=threshold, positive=positive)
-        selector.fit(self.X, self.y)
+        selector = self.fitted_selectors[selector_idx]
         feature_names_out = selector.get_feature_names_out()
         # check that the get_feature_names_out method returns the correct features
-        if positive:
+        if selector_idx == 0:
             self.assertTrue(np.all(feature_names_out == self.restr_ftrs))
         else:
             self.assertTrue(np.all(feature_names_out == self.unrestr_ftrs))
-            
+
     def test_valid_transform(self):
         # Test that the transform() method works as expected
-        selector = MapSelector(threshold=0.05)
-        selector.fit(self.X, self.y)
+        selector = self.fitted_selectors[1]
         # check that the transformed dataframe equals self.X[self.ftrs]
         X_transformed = selector.transform(self.X)
         self.assertTrue(np.all(X_transformed.columns == self.X[selector.ftrs].columns))
@@ -464,6 +485,7 @@ class TestMapSelector(unittest.TestCase):
         # Test that value error is raised if the columns of X don't match the columns of self.X
         with self.assertRaises(ValueError):
             selector.transform(self.X.drop(columns="CPI"))
+
 
 class TestFeatureAverager(unittest.TestCase):
     @classmethod
@@ -536,10 +558,20 @@ class TestFeatureAverager(unittest.TestCase):
         self.assertIsInstance(X_transformed.index, pd.MultiIndex)
         if use_signs:
             # check that X_transformed is the sign of the mean across columns of X
-            self.assertTrue(np.all(X_transformed.values.reshape(-1) == np.sign(self.X.mean(axis=1)).astype(int).values.reshape(-1)))
+            self.assertTrue(
+                np.all(
+                    X_transformed.values.reshape(-1)
+                    == np.sign(self.X.mean(axis=1)).astype(int).values.reshape(-1)
+                )
+            )
         else:
             # check that X_transformed is the mean across columns of X
-            self.assertTrue(np.all(X_transformed.values.reshape(-1) == self.X.mean(axis=1).values.reshape(-1)))
+            self.assertTrue(
+                np.all(
+                    X_transformed.values.reshape(-1)
+                    == self.X.mean(axis=1).values.reshape(-1)
+                )
+            )
 
     def test_types_transform(self):
         selector = FeatureAverager()
@@ -550,6 +582,7 @@ class TestFeatureAverager(unittest.TestCase):
         # Test that value error is raised if the X index isn't a multi-index
         with self.assertRaises(ValueError):
             selector.transform(self.X.reset_index())
+
 
 class TestPanelMinMaxScaler(unittest.TestCase):
     @classmethod
@@ -629,6 +662,7 @@ class TestPanelMinMaxScaler(unittest.TestCase):
         self.assertIsInstance(X_transformed, pd.DataFrame)
         # check that X_transformed has the same index as X
         self.assertTrue(np.all(X_transformed.index == self.X.index))
+
 
 class TestPanelStandardScaler(unittest.TestCase):
     @classmethod
@@ -788,7 +822,7 @@ class TestZnScoreAverager(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             averager.fit("not_a_dataframe")
-            
+
         with self.assertRaises(ValueError):
             averager.fit(pd.DataFrame())
 
@@ -801,7 +835,7 @@ class TestZnScoreAverager(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             averager.fit("not_a_dataframe")
-            
+
         with self.assertRaises(ValueError):
             averager.fit(pd.DataFrame())
 
@@ -835,7 +869,12 @@ class TestZnScoreAverager(unittest.TestCase):
 
     def test_get_expanding_count(self):
         averager = ZnScoreAverager(neutral="zero")
-        self.assertTrue(np.all(averager._get_expanding_count(self.X)[-1] == np.array([len(self.X)]*self.X.columns.size)))
+        self.assertTrue(
+            np.all(
+                averager._get_expanding_count(self.X)[-1]
+                == np.array([len(self.X)] * self.X.columns.size)
+            )
+        )
 
 
 if __name__ == "__main__":
