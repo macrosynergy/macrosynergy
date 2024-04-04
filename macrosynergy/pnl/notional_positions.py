@@ -123,8 +123,9 @@ def _vol_target_positions(
 
     sig_ident: str = f"_CSIG_{sname}"
 
+    # TODO what is the units of histpvol?
     histpvol = historic_portfolio_vol(
-        df=ticker_df_to_qdf(df_wide),
+        df=ticker_df_to_qdf(df_wide),  # TODO why stack it again?
         sname=sname,
         fids=fids,
         rstring=rstring,
@@ -136,12 +137,14 @@ def _vol_target_positions(
         remove_zeros=remove_zeros,
     )
 
+    # TODO should we not multiply by 100 again (for vol-target)?
     histpvol["value"] = vol_target * dollar_per_signal / histpvol["value"]
     vlen = len(histpvol["value"])
 
     out_df = pd.DataFrame(index=df_wide.index)
 
     # TODO: check if this is correct
+    # TODO why loop?
     for contx in fids:
         pos_col = contx + "_" + pname
         cont_name = contx + sig_ident
@@ -149,8 +152,10 @@ def _vol_target_positions(
         out_df.loc[:, pos_col].iloc[-vlen:] = (
             histpvol["value"].values * df_wide[cont_name].iloc[-vlen:].values
         )
-
+    # TODO we are missing scale from AUM...
+        
     # drop rows with all na
+    # TODO add log statement of how many N/A values are dropped
     out_df = out_df.dropna(how="all")
     return out_df
 
@@ -360,11 +365,12 @@ def notional_positions(
         )
 
     else:
+        # TODO no AUM (vol target is as percent of AUM ASD for portfolio)?
         return_df: pd.DataFrame = _vol_target_positions(
             df_wide=df_wide,
             sname=sname,
             fids=fids,
-            dollar_per_signal=dollar_per_signal,
+            dollar_per_signal=dollar_per_signal,  # TODO dollar per signal => signal * dollars = position
             vol_target=vol_target,
             rebal_freq=rebal_freq,
             lback_periods=lback_periods,
