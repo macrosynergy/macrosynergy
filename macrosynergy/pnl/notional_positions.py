@@ -136,6 +136,7 @@ def _vol_target_positions(
         rebal_freq=rebal_freq,
         remove_zeros=remove_zeros,
     )
+    # TODO get rebalance dates
 
     # TODO should we not multiply by 100 again (for vol-target)?
     histpvol["value"] = vol_target * dollar_per_signal / histpvol["value"]

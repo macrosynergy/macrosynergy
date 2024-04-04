@@ -300,6 +300,7 @@ def _multifreq_volatility(
         ],
     )
 
+    # TODO not a function call: .is_unique? 
     assert rdf.index.is_unique
     return rdf
 
@@ -458,6 +459,7 @@ def _hist_vol(
 
     rebal_freq = rebal_freq.upper()
     ffills = {"D": 1, "W": 5, "M": 24, "Q": 64}
+    # TODO remove re-index! 
     df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[rebal_freq])
     nanindex = df_out.index[df_out[portfolio_return_name].isnull()]
     if len(nanindex) > 0:
@@ -465,7 +467,7 @@ def _hist_vol(
         logger.debug(
             f"Found {len(nanindex)} NaNs in {portfolio_return_name} at {nanindex}, dropping all NaNs."
         )
-
+    # TODO check df_out is of frequency rebal_freq
     # TODO - should below not be forward filled with the previous volatility value...
     assert (
         not df_out.loc[
@@ -486,7 +488,7 @@ def historic_portfolio_vol(
     rstring: str = "XR",
     rebal_freq: str = "m",
     lback_meth: str = "ma",
-    lback_periods: List[int] = [254*3, 52*3, 12*3],  # 3 years of data in look-back window
+    lback_periods: List[int] = -1,  # default all
     half_life: List[int] = 11,  # TODO what to specify here for weekly and monthly?
     est_freqs: List[str] = ["D", "W", "M"],  # "m", "w", "d", "q"
     est_weights: Optional[List[float]] = None,
@@ -558,6 +560,7 @@ def historic_portfolio_vol(
     the dates for which this happened.
     """
     ## Check inputs
+    # TODO create function for this? Also, do we want to create the set of failures (not just first one)?
     for varx, namex, typex in [
         (df, "df", pd.DataFrame),
         (sname, "sname", str),
@@ -582,6 +585,7 @@ def historic_portfolio_vol(
     ## Check the dates
     if start is None:
         start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
+
     if end is None:
         end: str = pd.Timestamp(df["real_date"].max()).strftime("%Y-%m-%d")
 
@@ -664,7 +668,7 @@ def historic_portfolio_vol(
         + "_"
         + df["xcat"]
         .str.split("_")
-        .map(lambda x: x[0][:-len(rstring)] if x[0].endswith(rstring) else x[0])
+        .map(lambda x: x[0][:-len(rstring.split("_")[0])] if x[0].endswith(rstring.split("_")[0]) else x[0])
     )
     pivot_signals: pd.DataFrame = df.loc[df["ticker"].isin(filt_csigs)].pivot(
         index="real_date", columns="fid", values="value"
