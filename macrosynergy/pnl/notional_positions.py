@@ -135,18 +135,16 @@ def _vol_target_positions(
         remove_zeros=remove_zeros,
     )
     # histpvol: only on rebalance dates...
-    histpvol["leverage"] = ((vol_target / histpvol["value"]) * aum).replace(np.inf, np.nan)
+    histpvol["scale"] = ((vol_target / histpvol["value"]) * aum).replace(np.inf, np.nan)
     # TODO check inf => convert to NaN
     histpvol.set_index("real_date", inplace=True)
-    # df_wide[]
-    # vlen = len(histpvol["value"])
 
     out_df = pd.DataFrame(index=df_wide.index)
 
     signal_columns: List[str] = [f"{contx:s}{sig_ident:s}" for contx in fids]
     df_signals: pd.DataFrame = df_wide.loc[histpvol.index, signal_columns]
 
-    out_df = histpvol["leverage"].to_frame("leverage").dot(np.ones(shape=(1, df_signals.shape[1]))).values * df_signals
+    out_df = histpvol[["scale"]].dot(np.ones(shape=(1, df_signals.shape[1]))).values * df_signals
     # TODO how to deal with unbalanced panel
 
     # drop rows with all na

@@ -16,7 +16,7 @@ import warnings
 
 import functools
 from typing import Dict, List, Optional
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Generator
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Generator, Any, Union
 
 import numpy as np
 import pandas as pd
@@ -316,9 +316,7 @@ def _multifreq_volatility(
         list_pvol.append((td, pvol))
 
     pvol = pd.DataFrame(list_pvol, columns=["real_date", "portfolio_asd"]).set_index("real_date")
-    vcv = pd.concat(list_vcv, axis=0)
-
-    
+    vcv = pd.concat(list_vcv, axis=0)  # TODO pass?
 
     # TODO aggregate to single variance-covariance matrix...
 
@@ -328,46 +326,46 @@ def _multifreq_volatility(
 
     # TODO calculate variance-covariance matrix for each batch
 
-    batches = [(td, signals.loc[td], pivot_returns.loc[pivot_returns.index <= td]) for td in rebal_dates]
+    # batches = [(td, signals.loc[td], pivot_returns.loc[pivot_returns.index <= td]) for td in rebal_dates]
 
-    vol_values_dict: Dict[str, List[Tuple[pd.Timestamp, float]]] = {
-        freq: [] for freq in est_freqs
-    }
-    td_idx = 0
-    for vcv_dict in _multifreq_vcv_matrix(
-        lback_periods=lback_periods,
-        nan_tolerance=nan_tolerance,
-        remove_zeros=remove_zeros,
-        rebal_dates=rebal_dates,
-        est_freqs=est_freqs,
-        pivot_returns=pivot_returns,
-        *args,
-        **kwargs,
-    ):
-        td = rebal_dates[td_idx]
-        for freq in est_freqs:
-            vcv = vcv_dict[freq]
-            sig_arr: pd.DataFrame = pivot_signals.loc[td, :]
-            vol_values_dict[freq] += [(td, sig_arr.T.dot(vcv).dot(sig_arr))]
+    # vol_values_dict: Dict[str, List[Tuple[pd.Timestamp, float]]] = {
+    #     freq: [] for freq in est_freqs
+    # }
+    # td_idx = 0
+    # for vcv_dict in _multifreq_vcv_matrix(
+    #     lback_periods=lback_periods,
+    #     nan_tolerance=nan_tolerance,
+    #     remove_zeros=remove_zeros,
+    #     rebal_dates=rebal_dates,
+    #     est_freqs=est_freqs,
+    #     pivot_returns=pivot_returns,
+    #     *args,
+    #     **kwargs,
+    # ):
+    #     td = rebal_dates[td_idx]
+    #     for freq in est_freqs:
+    #         vcv = vcv_dict[freq]
+    #         sig_arr: pd.DataFrame = pivot_signals.loc[td, :]
+    #         vol_values_dict[freq] += [(td, sig_arr.T.dot(vcv).dot(sig_arr))]
 
-        td_idx += 1
+    #     td_idx += 1
 
-    assert td_idx == len(rebal_dates)
+    # assert td_idx == len(rebal_dates)
 
-    rdf: pd.DataFrame = functools.reduce(
-        lambda left, right: pd.merge(left, right, on=["real_date"], how="outer"),
-        [
-            pd.DataFrame(
-                vol_values_dict[freq],
-                columns=["real_date", freq],
-            ).set_index("real_date")
-            for freq in vol_values_dict.keys()
-        ],
-    )
+    # rdf: pd.DataFrame = functools.reduce(
+    #     lambda left, right: pd.merge(left, right, on=["real_date"], how="outer"),
+    #     [
+    #         pd.DataFrame(
+    #             vol_values_dict[freq],
+    #             columns=["real_date", freq],
+    #         ).set_index("real_date")
+    #         for freq in vol_values_dict.keys()
+    #     ],
+    # )
 
-    # TODO not a function call: .is_unique? 
-    assert rdf.index.is_unique
-    return rdf
+    # # TODO not a function call: .is_unique? 
+    # assert rdf.index.is_unique
+    return pvol
 
 
 def _calculate_portfolio_volatility(
@@ -547,6 +545,23 @@ def _hist_vol(
     return df_out
 
 
+def check_input_arguments(arguments: List[Tuple[Any, str, Union[type, Tuple[type, type]]]]):
+    # TODO move to general utils
+    for varx, namex, typex in arguments:
+        if not isinstance(varx, typex):
+            raise ValueError(f"`{namex}` must be {typex}.")
+        if typex in [str, list, dict] and len(varx) == 0:
+            raise ValueError(f"`{namex}` must not be an empty {str(typex)}.")
+
+
+def check_frequency(freq: str, freq_type: str):
+    # TODO move to general utils
+    try:
+        _map_to_business_day_frequency(freq)
+    except ValueError as e:
+        raise ValueError(f"`{freq_type:s}` ({freq:s}) must be a valid frequency string: {e}")
+
+
 def historic_portfolio_vol(
     df: pd.DataFrame,
     sname: str,
@@ -627,53 +642,29 @@ def historic_portfolio_vol(
     """
     ## Check inputs
     # TODO create function for this? Also, do we want to create the set of failures (not just first one)?
-    for varx, namex, typex in [
-        (df, "df", pd.DataFrame),
-        (sname, "sname", str),
-        (fids, "fids", list),
-        (rebal_freq, "rebal_freq", str),
-        (lback_periods, "lback_periods", int),
-        (lback_meth, "lback_meth", str),
-        (half_life, "half_life", int),
-        (rstring, "rstring", str),
-        (start, "start", (str, NoneType)),
-        (end, "end", (str, NoneType)),
-        (blacklist, "blacklist", (dict, NoneType)),
-    ]:
-        if not isinstance(varx, typex):
-            raise ValueError(f"`{namex}` must be {typex}.")
-        if typex in [str, list, dict] and len(varx) == 0:
-            raise ValueError(f"`{namex}` must not be an empty {str(typex)}.")
-
-    ## Standardize and copy DF
-    df: pd.DataFrame = standardise_dataframe(df.copy())
-
-    ## Check the dates
-    if start is None:
-        start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
-
-    if end is None:
-        end: str = pd.Timestamp(df["real_date"].max()).strftime("%Y-%m-%d")
-
-    for dx, nx in [(start, "start"), (end, "end")]:
-        if not is_valid_iso_date(dx):
-            raise ValueError(f"`{nx}` must be a valid ISO-8601 date string")
+    check_input_arguments(
+        arguments=[
+            (df, "df", pd.DataFrame),
+            (sname, "sname", str),
+            (fids, "fids", list),
+            (rebal_freq, "rebal_freq", str),
+            (lback_periods, "lback_periods", int),
+            (lback_meth, "lback_meth", str),
+            (half_life, "half_life", int),
+            (rstring, "rstring", str),
+            (start, "start", (str, NoneType)),
+            (end, "end", (str, NoneType)),
+            (blacklist, "blacklist", (dict, NoneType)),
+        ]
+    )
 
     # Check the frequency arguments
-    try:
-        _map_to_business_day_frequency(rebal_freq)
-    except ValueError as e:
-        raise ValueError(f"`rebal_freq` must be a valid frequency string: {e}")
+    check_frequency(freq=rebal_freq, freq_type="rebal_freq")
 
     for ix, freq in enumerate(est_freqs):
-        try:
-            _map_to_business_day_frequency(freq)
-        except ValueError as e:
-            raise ValueError(
-                f"`est_freqs[{ix}]` ({freq}) must be a valid frequency string: {e}"
-            )
+        check_frequency(freq=freq, freq_type=f"est_freq[{ix:d}]")
 
-    ## Check frequency weights
+    ## Check estimation frequency weights
     if est_weights is None:
         est_weights = [1 / len(est_freqs) for _ in est_freqs]
     else:
@@ -694,13 +685,22 @@ def historic_portfolio_vol(
             warnings.warn("`est_weights` do not sum to 1. They will be normalized.")
             est_weights = [w / sum(est_weights) for w in est_weights]
 
+    ## Standardize and copy DF
+    df: pd.DataFrame = standardise_dataframe(df.copy())
+
+    ## Check the dates
+    if start is None:
+        start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
+
+    if end is None:
+        end: str = pd.Timestamp(df["real_date"].max()).strftime("%Y-%m-%d")
+
+    for dx, nx in [(start, "start"), (end, "end")]:
+        if not is_valid_iso_date(dx):
+            raise ValueError(f"`{nx}` must be a valid ISO-8601 date string")
+
     ## Reduce the dataframe
     df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
-
-    ## Check the strategy name
-    if not isinstance(sname, str):
-        raise ValueError("`sname` must be a string.")
-
     df["ticker"] = df["cid"] + "_" + df["xcat"]
 
     ## Check that there is atleast one contract signal for the strategy
@@ -724,11 +724,7 @@ def historic_portfolio_vol(
             f"The dataframe is missing the following return series: {missing_tickers}"
         )
 
-    ## Filter DF and select CSIGs and XR
-    filt_csigs: List[str] = [tx for tx in u_tickers if tx.endswith(f"_CSIG_{sname}")]
-
-    filt_xrs: List[str] = [tx for tx in u_tickers if tx.endswith(rstring)]
-
+    # Add financial identifier (fid) to DataFrame
     df["fid"] = (
         df["cid"]
         + "_"
@@ -736,10 +732,16 @@ def historic_portfolio_vol(
         .str.split("_")
         .map(lambda x: x[0][:-len(rstring.split("_")[0])] if x[0].endswith(rstring.split("_")[0]) else x[0])
     )
+
+    ## Filter out data-frame and select contract signals (CSIG) and returns (XR)
+    filt_csigs: List[str] = [tx for tx in u_tickers if tx.endswith(f"_CSIG_{sname}")]
+    filt_xrs: List[str] = [tx for tx in u_tickers if tx.endswith(rstring)]
+
+    # TODO check if all exists
+   
     pivot_signals: pd.DataFrame = df.loc[df["ticker"].isin(filt_csigs)].pivot(
         index="real_date", columns="fid", values="value"
     )
-    # TODO reduce signals to only trigger dates?
 
     pivot_returns: pd.DataFrame = df.loc[df["ticker"].isin(filt_xrs)].pivot(
         index="real_date", columns="fid", values="value"
