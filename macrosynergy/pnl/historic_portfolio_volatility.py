@@ -21,7 +21,9 @@ from typing import Callable, Dict, Iterable, List, Optional, Tuple, Generator, A
 import numpy as np
 import pandas as pd
 
+from macrosynergy.panel.historic_vol import expo_std, flat_std, expo_weights
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
+from macrosynergy.management.constants import FFILL_LIMITS
 from macrosynergy.management.utils import (
     _map_to_business_day_frequency,
     get_eops,
@@ -29,6 +31,9 @@ from macrosynergy.management.utils import (
     reduce_df,
     standardise_dataframe,
     ticker_df_to_qdf,
+    get_eops,
+    get_cid,
+    _map_to_business_day_frequency,
 )
 from macrosynergy.panel.historic_vol import expo_weights
 
@@ -445,7 +450,7 @@ def _hist_vol(
     pivot_signals: pd.DataFrame,
     pivot_returns: pd.DataFrame,
     sname: str,
-    rebal_freq: str = "m",
+    rebal_freq: str = "M",
     lback_meth: str = "ma",
     *args,  # TODO drop *args? See below VisualStudio Code warning
     **kwargs,
@@ -687,6 +692,7 @@ def historic_portfolio_vol(
 
     ## Standardize and copy DF
     df: pd.DataFrame = standardise_dataframe(df.copy())
+    rebal_freq = _map_to_business_day_frequency(rebal_freq)
 
     ## Check the dates
     if start is None:
