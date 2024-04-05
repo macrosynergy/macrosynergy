@@ -27,6 +27,7 @@ def correl_matrix(
     size: Tuple[float] = (14, 8),
     max_color: float = None,
     show: bool = True,
+    **kwargs: Any,
 ):
     """
     Visualize correlation across categories or cross-sections of panels.
@@ -74,6 +75,7 @@ def correl_matrix(
         coefficients for color scale. Default is none. If a value is given it applies
         symmetrically to positive and negative values.
     :param <bool> show: if True the figure will be displayed. Default is True.
+    :param **kwargs: Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
     N.B:. The function displays the heatmap of a correlation matrix across categories or
     cross-sections (depending on which parameter has received multiple elements).
@@ -96,6 +98,7 @@ def correl_matrix(
         size=size,
         max_color=max_color,
         show=show,
+        **kwargs,
     )
 
 
@@ -161,4 +164,6 @@ if __name__ == "__main__":
         max_color=None,
         lags=None,
         lags_secondary=None,
+        annot=True,
+        fmt=".2f",
     )

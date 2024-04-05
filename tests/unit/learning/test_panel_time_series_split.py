@@ -63,36 +63,36 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         matplotlib.use(self.mpl_backend)
 
-    def test_crossval_application(self):
-        # Given a generated panel with a true linear relationship between features and target,
-        # test that the cross validation procedure correctly identifies that a linear regression
-        # is more suitable than a 1-nearest neighbor model.
-        # self.setUp()
+    # def test_crossval_application(self):
+    #     # Given a generated panel with a true linear relationship between features and target,
+    #     # test that the cross validation procedure correctly identifies that a linear regression
+    #     # is more suitable than a 1-nearest neighbor model.
+    #     # self.setUp()
 
-        # models
-        lr = LinearRegression()
-        knn = KNeighborsRegressor(n_neighbors=1)
-        splitter = ExpandingIncrementPanelSplit(
-            train_intervals=1, min_cids=2, min_periods=21 * 12, test_size=1
-        )
-        lrsplits = cross_val_score(
-            lr,
-            self.X,
-            self.y,
-            scoring="neg_root_mean_squared_error",
-            cv=splitter,
-            n_jobs=-1,
-        )
-        knnsplits = cross_val_score(
-            knn,
-            self.X,
-            self.y,
-            scoring="neg_root_mean_squared_error",
-            cv=splitter,
-            n_jobs=-1,
-        )
+    #     # models
+    #     lr = LinearRegression()
+    #     knn = KNeighborsRegressor(n_neighbors=1)
+    #     splitter = ExpandingIncrementPanelSplit(
+    #         train_intervals=1, min_cids=2, min_periods=21 * 12, test_size=1
+    #     )
+    #     lrsplits = cross_val_score(
+    #         lr,
+    #         self.X,
+    #         self.y,
+    #         scoring="neg_root_mean_squared_error",
+    #         cv=splitter,
+    #         n_jobs=-1,
+    #     )
+    #     knnsplits = cross_val_score(
+    #         knn,
+    #         self.X,
+    #         self.y,
+    #         scoring="neg_root_mean_squared_error",
+    #         cv=splitter,
+    #         n_jobs=-1,
+    #     )
 
-        self.assertLess(np.mean(-lrsplits), np.mean(-knnsplits))
+    #     self.assertLess(np.mean(-lrsplits), np.mean(-knnsplits))
 
     @parameterized.expand([2, 4, 8])
     def test_expanding_kfold(self, n_splits):

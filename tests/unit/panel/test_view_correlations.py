@@ -152,7 +152,13 @@ class TestAll(unittest.TestCase):
 
         try:
             correl_matrix(
-                self.dfd, xcats=["XR"], cids=self.cids, max_color=0.1, show=False
+                self.dfd,
+                xcats=["XR"],
+                cids=self.cids,
+                max_color=0.1,
+                show=False,
+                annot=True,
+                fmt=".2f",
             )
         except Exception as e:
             self.fail(f"correl_matrix raised {e} unexpectedly")

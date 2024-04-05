@@ -14,17 +14,13 @@ The `macrosynergy.visuals` subpackage features the following functionality:
 
 ### User-facing functions:
 
-- `view.*` functions: A set of preset methods to view data in commonly used contexts.
-
-  - `timelines()`: A function for viewing time-series data as line plots. Settings include viewing grouped by `cids`, `xcats`, or both.
-
-  To be implemented:
-  - `availability()`: A function for viewing data availability. Plots a heatmap of the data availability for each `cid` and `xcat`.
-  - `correlation()`: A function for viewing correlation matrices.
-  - `metrics()`: A function for viewing metrics. Designed to view any on a heatmap; not ideal for viewing `value`.
-  - `ranges()`: A function for viewing ranges with box plots and bar charts.
-  - `reg_scatter()`: A function for viewing scatter plots with regression lines.
-  - `distribution()`: A function for viewing distributions as histograms or scatter plots. Can be extended to view distributions for a `reg_scatter` plot.
+- `timelines()`: A function for viewing time-series data as line plots.
+- `metrics()`: A function for viewing metrics as heatmaps.
+- `ranges()`: A function for viewing ranges with box plots and bar charts.
+- `multiple_reg_scatter()`: A function for viewing multiple scatter plots with regression lines.
+- `metrics()`: A function for viewing metrics. Designed to view any on a heatmap; not ideal for viewing `value`.
+- `grading()`: A function for viewing grading data.
+- `correlation()`: A function for viewing correlation matrices.
 
 ### Backend functions:
 
@@ -33,6 +29,7 @@ The `macrosynergy.visuals` subpackage features the following functionality:
   - `.lineplot()`: A method for creating line plots.
 
   To be implemented:
+
   - `.scatterplot()`: A method for creating scatter plots.
   - `.from_subplots()`: A method for copying and arranging a list of individual subplots (of any type) into a facet plot.
 
@@ -123,7 +120,7 @@ We use a direct subset of `matplotlib`'s functions, with some renaming where con
 Here are the generic arguments that behave the same across all plotting methods:
 
 ```text
-:param <Tuple[Numeric, Numeric]> figsize: a tuple of floats specifying the width and height of the figure.
+:param <Tuple[Number, Number]> figsize: a tuple of floats specifying the width and height of the figure.
 
 :param <str> title: the title of the plot.
 
@@ -161,28 +158,7 @@ Here are the generic arguments that behave the same across all plotting methods:
 Type hinting is used extensively, and allows for syntax validation across almost all utilities. The validation is done by `argvalidation`. It uses a series of "tricks" to allow for type hinting of arguments, and to validate them against their type hints. These are better explained by reading the code itself. (See `macrosynergy.visuals.plotter`)
 
 One problem with type hinting is that it can quickly become too verbose, and therefore unreadable.
-To mitigate situations such as:
-
-```python
-...
-figsize: Tuple[Union[int, float, np.int64, np.float64], Union[int, float, np.int64, np.float64]] = (12, 8)
-# or even
-facet_size: Tuple[Union[SupportsFloat, np.int64, np.float64], Union[SupportsFloat, np.int64, np.float64]] = (12, 8)
-...
-```
-
-two generic type-aliases are defined in `macrosynergy.visuals.common`:
-
-```python
-NoneType = type(None)
-Numeric = Union[int, float, np.int64, np.float64, SupportsInt, SupportsFloat]
-# used as:
-...
-figsize: Tuple[Numeric, Numeric] = (12, 8)
-```
-
-This will most likely be extendable for a package/subpackage-wide type-alias file in the future. (`macrosynergy.typing`, or
-`macrosynergy.visuals.typing` etc.)
+To mitigate situations it is recommended we use more generic type hints where possible (such as Iterable (over list), and Number (over Union[int, float]).
 
 ### Arg Copying and `argcopy`
 

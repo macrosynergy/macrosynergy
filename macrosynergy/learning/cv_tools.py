@@ -52,7 +52,7 @@ def panel_cv_scores(
         Default is -1, which uses all cores.
 
     :return <pd.DataFrame> metrics_df: dataframe comprising means & standard deviations of
-        cross-validation metrics for each sklearn estimator, over the walk-forward 
+        cross-validation metrics for each sklearn estimator, over the walk-forward
         history.
 
     N.B.: The performance metrics dataframe returned is multi-indexed with the outer index

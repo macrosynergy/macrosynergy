@@ -19,7 +19,7 @@ from typing import (
     get_origin,
 )
 from inspect import signature
-from macrosynergy.management.types import Numeric, NoneType
+from macrosynergy.management.types import NoneType
 import pandas as pd
 import numpy as np
 from packaging import version
@@ -145,7 +145,7 @@ def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
     if origin in [tuple, Tuple]:
         if not isinstance(value, tuple) or len(value) != len(args):
             return False
-        # don't switch order of get_origin and is_matching_subscripted_type, is 
+        # don't switch order of get_origin and is_matching_subscripted_type, is
         # short-circuiting
         return all(
             [

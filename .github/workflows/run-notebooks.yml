@@ -18,8 +18,7 @@ env:
 
 jobs:
   build:
-    runs-on: self-hosted
-
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,6 +52,7 @@ jobs:
           EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           AWS_NOTEBOOK_BUCKET: ${{ secrets.AWS_NOTEBOOK_BUCKET }}
+          AWS_NB_RUNNER_LOGS: ${{ secrets.AWS_NB_RUNNER_LOGS }}
         run: |
           python .github/scripts/run_notebooks.py 
 

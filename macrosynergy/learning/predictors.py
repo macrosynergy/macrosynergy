@@ -16,6 +16,7 @@ from abc import abstractmethod, ABC
 
 import numbers
 
+
 class NaivePredictor(BaseEstimator, RegressorMixin):
     """
     Naive predictor class to output a column of features as the predictions themselves.
@@ -192,7 +193,9 @@ class TimeWeightedRegressor(BaseWeightedRegressor):
         weights = np.power(2, -np.arange(num_dates) / self.half_life)
 
         weight_map = dict(zip(dates, weights))
-        self.sample_weights = targets.index.get_level_values(1).map(weight_map).to_numpy()
+        self.sample_weights = (
+            targets.index.get_level_values(1).map(weight_map).to_numpy()
+        )
 
         return self.sample_weights
 
@@ -244,20 +247,20 @@ class SignWeightedLinearRegression(SignWeightedRegressor):
             n_jobs=self.n_jobs,
             positive=self.positive,
         )
-        self.coef_ = None 
+        self.coef_ = None
         self.intercept_ = None
         super().__init__(model)
 
     def set_params(self, **params):
         super().set_params(**params)
-        if 'fit_intercept' in params or 'positive' in params:
+        if "fit_intercept" in params or "positive" in params:
             # Re-initialize the LinearRegression instance with updated parameters
             self.model = LinearRegression(
-                fit_intercept=self.fit_intercept,
-                positive=self.positive
+                fit_intercept=self.fit_intercept, positive=self.positive
             )
 
         return self
+
 
 class TimeWeightedLinearRegression(TimeWeightedRegressor):
     def __init__(
@@ -306,14 +309,14 @@ class TimeWeightedLinearRegression(TimeWeightedRegressor):
 
     def set_params(self, **params):
         super().set_params(**params)
-        if 'fit_intercept' in params or 'positive' in params:
+        if "fit_intercept" in params or "positive" in params:
             # Re-initialize the LinearRegression instance with updated parameters
             self.model = LinearRegression(
-                fit_intercept=self.fit_intercept,
-                positive=self.positive
+                fit_intercept=self.fit_intercept, positive=self.positive
             )
 
         return self
+
 
 class SignWeightedLADRegressor(SignWeightedRegressor):
     def __init__(
@@ -353,11 +356,10 @@ class SignWeightedLADRegressor(SignWeightedRegressor):
 
     def set_params(self, **params):
         super().set_params(**params)
-        if 'fit_intercept' in params or 'positive' in params:
+        if "fit_intercept" in params or "positive" in params:
             # Re-initialize the LinearRegression instance with updated parameters
             self.model = LADRegressor(
-                fit_intercept=self.fit_intercept,
-                positive=self.positive
+                fit_intercept=self.fit_intercept, positive=self.positive
             )
 
         return self
@@ -395,17 +397,22 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
 
     def set_params(self, **params):
         super().set_params(**params)
-        if 'fit_intercept' in params or 'positive' in params:
+        if "fit_intercept" in params or "positive" in params:
             # Re-initialize the LinearRegression instance with updated parameters
             self.model = LADRegressor(
-                fit_intercept=self.fit_intercept,
-                positive=self.positive
+                fit_intercept=self.fit_intercept, positive=self.positive
             )
 
         return self
 
+
 class LADRegressor(BaseEstimator, RegressorMixin):
-    def __init__(self, fit_intercept=True, positive=False, tol=None, ):
+    def __init__(
+        self,
+        fit_intercept=True,
+        positive=False,
+        tol=None,
+    ):
         """
         Custom class to create a linear regression model with model fit determined
         by minimising L1 (absolute) loss.
@@ -542,7 +549,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 sample_weight=sample_weight,
             ),
             x0=init_weights,
-            method="SLSQP", # TODO: make this an option in the constructor.
+            method="SLSQP",  # TODO: make this an option in the constructor.
             bounds=bounds,
             tol=self.tol,
         )

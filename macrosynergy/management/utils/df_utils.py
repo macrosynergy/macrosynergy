@@ -153,17 +153,11 @@ def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFr
         )
         value_column: str = cols[0]
 
-    df: pd.DataFrame = df.copy()
-
-    df["ticker"] = df["cid"] + "_" + df["xcat"]
-    # drop cid and xcat
-    df = (
-        df.drop(columns=["cid", "xcat"])
+    return (
+        df.assign(ticker=df["cid"] + "_" + df["xcat"])
         .pivot(index="real_date", columns="ticker", values=value_column)
         .rename_axis(None, axis=1)
     )
-
-    return df
 
 
 def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
@@ -833,11 +827,8 @@ def get_eops(
     :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
         not passed.
     """
-    if (not isinstance(freq, str)) or (freq.upper() not in FREQUENCY_MAP.keys()):
-        raise ValueError(
-            f"Frequency must be one of {list(FREQUENCY_MAP.keys())}, but received {freq}."
-        )
-    freq: str = freq.upper()
+
+    freq = _map_to_business_day_frequency(freq)
 
     if bool(start_date) != bool(end_date):
         raise ValueError(
@@ -876,20 +867,20 @@ def get_eops(
 
     min_date: pd.Timestamp = dts["real_date"].min()
 
-    if freq == "D":
+    if freq == _map_to_business_day_frequency("D"):
         max_date = dts["real_date"].max()
         dtx = pd.bdate_range(start=min_date, end=max_date)
         return dtx[dtx.isin(dts["real_date"])]
 
-    if freq == "M":
+    if freq == _map_to_business_day_frequency("M"):
         func = months_btwn_dates
-    elif freq == "W":
+    elif freq == _map_to_business_day_frequency("W"):
         func = weeks_btwn_dates
-    elif freq == "Q":
+    elif freq == _map_to_business_day_frequency("Q"):
         func = quarters_btwn_dates
-    elif freq == "A":
+    elif freq == _map_to_business_day_frequency("A"):
         func = years_btwn_dates
-    # elif freq == "D":
+    # elif freq == _map_to_business_day_frequency("D"):
     #     func = lambda x, y: len(pd.bdate_range(x, y)) - 1
     else:
         raise ValueError("Frequency parameter must be one of D, M, W, Q, or A.")

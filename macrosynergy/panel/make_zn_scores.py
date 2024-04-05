@@ -1,6 +1,7 @@
 """
 Module for calculating z-scores for a panel around a neutral level ("zn scores").
 """
+
 import numpy as np
 import pandas as pd
 from typing import List, Union
@@ -11,7 +12,7 @@ from macrosynergy.management.utils import (
     reduce_df,
     _map_to_business_day_frequency,
 )
-from macrosynergy.management.types import Numeric
+from numbers import Number
 
 
 def expanding_stat(
@@ -186,7 +187,7 @@ def make_zn_scores(
 
     if thresh is not None:
         err: str = "The `thresh` parameter must a numerical value >= 1.0."
-        if not isinstance(thresh, Numeric):
+        if not isinstance(thresh, Number):
             raise TypeError(err)
         elif thresh < 1.0:
             raise ValueError(err)
@@ -198,7 +199,7 @@ def make_zn_scores(
         "The `pan_weight` parameter must be a numerical value between 0 and 1 "
         "(inclusive)."
     )
-    if not isinstance(pan_weight, Numeric):
+    if not isinstance(pan_weight, Number):
         raise TypeError(err)
     elif not (0 <= pan_weight <= 1):
         raise ValueError(err)
