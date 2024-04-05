@@ -155,17 +155,11 @@ def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFr
         )
         value_column: str = cols[0]
 
-    df: pd.DataFrame = df.copy()
-
-    df["ticker"] = df["cid"] + "_" + df["xcat"]
-    # drop cid and xcat
-    df = (
-        df.drop(columns=["cid", "xcat"])  # TODO why drop?
+    return (
+        df.assign(ticker=df["cid"] + "_" + df["xcat"])
         .pivot(index="real_date", columns="ticker", values=value_column)
         .rename_axis(None, axis=1)  # TODO why rename axis?
     )
-
-    return df
 
 
 def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
