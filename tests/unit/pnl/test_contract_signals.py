@@ -158,8 +158,6 @@ class TestContractSignals(unittest.TestCase):
         df = _add_hedged_signals(dfcs, dfhr)
         # all should be ones
         self.assertTrue(np.all(df.values == 1))
-
-        # self.assertTrue(dfcs.eq(_add_hedged_signals(dfcs, None)).all().all())
         self.assertTrue(np.all(dfcs.values == _add_hedged_signals(dfcs, None).values))
 
     def test_check_scaling_args(self):
@@ -183,6 +181,17 @@ class TestContractSignals(unittest.TestCase):
             bad_args[argx] = bad_args[argx][:-1]
             with self.assertRaises(ValueError):
                 _check_scaling_args(**bad_args)
+
+            if argx != "hbasket":
+                bad_args[argx] = [(None, None) for _ in range(len(good_args[argx]))]
+                with self.assertRaises(TypeError):
+                    _check_scaling_args(**bad_args)
+
+        bad_args = good_args.copy()
+        # set hratios to None
+        bad_args["hratios"] = None
+        with self.assertRaises(ValueError):
+            _check_scaling_args(**bad_args)
 
         # with cscales/csigns = None, the return cscales/csigns should be all ones
         bad_args = good_args.copy()
@@ -237,7 +246,7 @@ class TestContractSignals(unittest.TestCase):
         # test for improper qdf
         bad_args = good_args.copy()
         bad_args["df"] = bad_args["df"].rename(columns={"cid": "foo"})
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             contract_signals(**bad_args)
 
         # test for missing tickers
