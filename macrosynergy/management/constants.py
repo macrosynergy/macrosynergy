@@ -39,6 +39,19 @@ FREQUENCY_MAP = {
     "A": "BA",
 }
 
+ANNUALIZATION_FACTORS = {
+    "D": 252,
+    "W": 52,
+    "M": 12,
+    "Q": 4,
+    "A": 1,
+    "B": 252,
+    "W-FRI": 52,
+    "BM": 12,
+    "BQ": 4,
+    "BA": 1,
+}
+
 
 FFILL_LIMITS = {
     "D": 1,
