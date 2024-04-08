@@ -152,9 +152,16 @@ def _vol_target_positions(
     # drop rows with all na
     # TODO add log statement of how many N/A values are dropped
     # TODO forward fill for N/A blacklist (zero position...)
-    out_df = out_df.reindex(df_wide.index).ffill().dropna(how="all")
+    out_df = out_df.reindex(df_wide.index)
+    rebal_dates = out_df.index.values
+    for num, rb in enumerate(histpvol.index):
+        if rb < max(rebal_dates):
+            mask = (out_df.index >= rb) & (out_df.index < rebal_dates[num+1])
+        else:
+            mask = (out_df.index >= rb)
+        out_df.loc[mask, :] = out_df.loc[mask, :].ffill()
 
-    return out_df, histpvol[["cid", "xcat", "value"]]
+    return out_df.dropna(how="all"), histpvol[["cid", "xcat", "value"]]
 
 
 def _leverage_positions(
