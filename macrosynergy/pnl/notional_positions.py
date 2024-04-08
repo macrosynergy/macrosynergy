@@ -113,7 +113,7 @@ def _vol_target_positions(
     lback_meth: str = "ma",
     rstring: str = "XR",
     pname: str = "VPOS",
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Uses historic portfolio volatility to calculate notional positions based on
     contract signals, volatility targeting and other relevant parameters.
@@ -124,7 +124,9 @@ def _vol_target_positions(
     sig_ident: str = f"_CSIG_{sname}"
 
     # TODO what is the units of histpvol?
-    histpvol: QuantamentalDataFrame = historic_portfolio_vol(
+    histpvol: QuantamentalDataFrame
+    vcv_df: pd.DataFrame
+    histpvol, vcv_df = historic_portfolio_vol(
         df=ticker_df_to_qdf(df_wide),  # TODO why stack it again?
         sname=sname,
         fids=fids,
@@ -135,6 +137,7 @@ def _vol_target_positions(
         nan_tolerance=nan_tolerance,
         rebal_freq=rebal_freq,
         remove_zeros=remove_zeros,
+        return_variance_covariance=True,
     )
     # histpvol: only on rebalance dates...
     histpvol["scale"] = ((vol_target / histpvol["value"]) * aum).replace(np.inf, np.nan)
@@ -146,22 +149,36 @@ def _vol_target_positions(
     signal_columns: List[str] = [f"{contx:s}{sig_ident:s}" for contx in fids]
     df_signals: pd.DataFrame = df_wide.loc[histpvol.index, signal_columns]
 
-    out_df = histpvol[["scale"]].dot(np.ones(shape=(1, df_signals.shape[1]))).values * df_signals
+    out_df: pd.DataFrame = (
+        histpvol[["scale"]].dot(np.ones(shape=(1, df_signals.shape[1]))).values
+        * df_signals
+    )
     # TODO how to deal with unbalanced panel
 
     # drop rows with all na
     # TODO add log statement of how many N/A values are dropped
-    # TODO forward fill for N/A blacklist (zero position...)
     out_df = out_df.reindex(df_wide.index)
-    rebal_dates = out_df.index.values
+    rebal_dates = sorted(histpvol.index.values)
     for num, rb in enumerate(histpvol.index):
-        if rb < max(rebal_dates):
-            mask = (out_df.index >= rb) & (out_df.index < rebal_dates[num+1])
+        if rb < rebal_dates[-1]:
+            mask = (out_df.index >= rb) & (out_df.index < rebal_dates[num + 1])
         else:
-            mask = (out_df.index >= rb)
+            mask = out_df.index >= rb
         out_df.loc[mask, :] = out_df.loc[mask, :].ffill()
 
-    return out_df.dropna(how="all"), histpvol[["cid", "xcat", "value"]]
+    # get na values per column
+    na_per_col = out_df.isna().sum()
+    na_per_col = na_per_col[na_per_col > 0]
+    log_str = f"Columns with N/A values: {na_per_col.index.tolist()}"
+
+    out_df.rename(
+        columns={
+            col: col.replace(sig_ident, "_" + pname) for col in out_df.columns.tolist()
+        },
+        inplace=True,
+    )
+
+    return (out_df.dropna(how="all"), histpvol[["cid", "xcat", "value"]], vcv_df)
 
 
 def _leverage_positions(
