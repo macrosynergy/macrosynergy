@@ -149,6 +149,7 @@ def _downsample_returns(
     # TODO test [1] input data is daily and [2] daily gives daily output
 
     freq = _map_to_business_day_frequency(freq)
+    # TODO we should fix why we get the warnings...
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         piv_new_freq: pd.DataFrame = (
@@ -232,7 +233,17 @@ def _calculate_portfolio_volatility(
             .assign(real_date=td)
         )
 
-        pvol: float = np.sqrt(signals.loc[td, :].T.dot(vcv_df).dot(signals.loc[td, :]))
+        # TODO adjust for signal zero or N/A
+        s = signals.loc[td, :]
+        mask: pd.Series = s.isnull() | (s.abs() < 1e-8)
+        vcv_df.loc[s.index[mask], :] = 0
+        vcv_df.loc[:, s.index[mask]] = 0
+        s[mask] = 0
+        assert vcv_df.isnull().sum().sum() == 0, (
+            f"N/A values in variance-covariance matrix!\n{vcv_df}"
+        )
+
+        pvol: float = np.sqrt(s.T.dot(vcv_df).dot(s))
         list_pvol.append((td, pvol))
 
     pvol = pd.DataFrame(
