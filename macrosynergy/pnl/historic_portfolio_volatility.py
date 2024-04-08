@@ -241,6 +241,9 @@ def _calculate_portfolio_volatility(
         vcv_df.loc[s.index[mask], :] = 0
         vcv_df.loc[:, s.index[mask]] = 0
         s[mask] = 0
+        assert vcv_df.isnull().sum().sum() == 0, (
+            f"N/A values in variance-covariance matrix!\n{vcv_df}"
+        )
 
         pvol: float = np.sqrt(s.T.dot(vcv_df).dot(s))
         list_pvol.append((td, pvol))
