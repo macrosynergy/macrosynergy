@@ -16,14 +16,24 @@ import warnings
 
 import functools
 from typing import Dict, List, Optional
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Generator, Any, Union
+from typing import (
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Generator,
+    Any,
+    Union,
+)
 
 import numpy as np
 import pandas as pd
-
+import seaborn as sns, matplotlib.pyplot as plt
 from macrosynergy.panel.historic_vol import expo_std, flat_std, expo_weights
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
-from macrosynergy.management.constants import FFILL_LIMITS
+from macrosynergy.management.constants import FFILL_LIMITS, ANNUALIZATION_FACTORS
 from macrosynergy.management.utils import (
     _map_to_business_day_frequency,
     get_eops,
@@ -44,15 +54,6 @@ logger = logging.getLogger(__name__)
 
 cache = functools.lru_cache(maxsize=None)
 
-# TODO move to constants?
-__MAP_ANNUALIZE = {
-    "D": 252,
-    "W": 52,
-    "M": 12,
-    "Q": 4
-}
-
-
 
 @cache
 def flat_weights_arr(lback_periods: int, *args, **kwargs) -> np.ndarray:
@@ -71,13 +72,14 @@ def _weighted_covariance(
     y: np.ndarray,
     weights_func: Callable[[int, int], np.ndarray],
     lback_periods: int,
-    *args,
-    **kwargs,
+    half_life: int,
 ) -> float:
     """
     Estimate covariance between two series after applying weights.
 
     """
+    assert half_life > 0, "half_life must be greater than 0"
+    assert lback_periods > 0 or lback_periods == -1, "lback_periods must be >0"
     assert x.ndim == 1 or x.shape[1] == 1, "`x` must be a 1D array or a column vector"
     assert y.ndim == 1 or y.shape[1] == 1, "`y` must be a 1D array or a column vector"
     assert x.shape[0] == y.shape[0], "`x` and `y` must have same length"
@@ -86,39 +88,29 @@ def _weighted_covariance(
     if np.isnan(x).all() or np.isnan(y).all():
         return np.nan
 
-    xnans, ynans = np.isnan(x), np.isnan(y)
-    wmask = xnans | ynans
+    wmask = np.isnan(x) | np.isnan(y)
     weightslen = min(sum(~wmask), lback_periods if lback_periods > 0 else len(x))
 
     # drop NaNs and only consider the most recent lback_periods
     x, y = x[~wmask][-weightslen:], y[~wmask][-weightslen:]
 
-    # assert x.shape[0] == weightslen  # TODO what happens if it is less...
-    for arr in [x, y]:
-        if arr.shape[0] < weightslen:
-            warnings.warn(
-                f"Length of x is less than the weightslen: {arr.shape[0]} < {weightslen}"
-            )
-    w: np.ndarray = weights_func(
-        lback_periods=weightslen,
-        half_life=min(weightslen // 2, kwargs.get("half_life", 11)),
-    )
+    if len(x) < weightslen:
+        return np.nan
 
-    xmean, ymean = (w * x).sum(), (w * y).sum()
-
-    rss = (x - xmean) * (y - ymean)
+    assert x.shape[0] == weightslen
+    w: np.ndarray = weights_func(lback_periods=weightslen, half_life=half_life)
+    x_wsum, y_wsum = (w * x).sum(), (w * y).sum()
+    rss = (x - x_wsum) * (y - y_wsum)
 
     return w.T.dot(rss)
 
 
 def estimate_variance_covariance(
     piv_ret: pd.DataFrame,
-    # weights_func: Callable[[int, int], np.ndarray],
-    # lback_periods: int,
-    # half_life: int,
-    # remove_zeros: bool,
-    *args,
-    **kwargs,
+    remove_zeros: bool,
+    weights_func: Callable[[int, int], np.ndarray],
+    lback_periods: int,
+    half_life: int,
 ) -> pd.DataFrame:
     """Estimation of the variance-covariance matrix needs to have the following configuration options
 
@@ -130,14 +122,18 @@ def estimate_variance_covariance(
     cov_mat = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
     logger.info(f"Estimating variance-covariance matrix for {piv_ret.columns}")
 
+    if remove_zeros:
+        piv_ret = piv_ret.replace(0, np.nan)
+
     for i_b, c_b in enumerate(piv_ret.columns):
         for i_a, c_a in enumerate(piv_ret.columns[: i_b + 1]):
             logger.debug(f"Estimating covariance between {c_a} and {c_b}")
             est_vol = _weighted_covariance(
                 x=piv_ret[c_a].values,
                 y=piv_ret[c_b].values,
-                *args,
-                **kwargs,
+                weights_func=weights_func,
+                lback_periods=lback_periods,
+                half_life=half_life,
             )
             cov_mat[i_a, i_b] = cov_mat[i_b, i_a] = est_vol
 
@@ -146,266 +142,37 @@ def estimate_variance_covariance(
     return pd.DataFrame(cov_mat, index=piv_ret.columns, columns=piv_ret.columns)
 
 
-def _nan_ratio(x, remove_zeros: bool = True) -> float:
-    return (sum(np.isnan(x)) + (sum(x == 0) if remove_zeros else 0)) / len(x)
-
-
-def _mask_nans(
-    piv_df: pd.DataFrame,
-    lback_periods: int,
-    nan_tolerance: float,
-    remove_zeros: bool,
-) -> pd.DataFrame:
-    """Mask NaNs in the dataframe"""
-    lback_periods = 0 if lback_periods < 0 else lback_periods
-    mask = (
-        piv_df.iloc[-lback_periods:].apply(_nan_ratio, remove_zeros=remove_zeros)
-        > nan_tolerance
-    )
-    piv_df.loc[:, mask] = np.nan
-
-    lgstr = (
-        "Dropping columns {dropcols} from {start} to {end} "
-        "due to insufficient data despite bringing prior non-NaN "
-        + ("and non-zero " if remove_zeros else "")
-        + "values."
-    )
-
-    if lback_periods:
-        for col in piv_df.loc[:, ~mask].columns:
-            _ts = piv_df[col]
-            if remove_zeros:
-                _ts = _ts.replace(0, np.nan)
-            if len(piv_df[col].dropna()) < lback_periods:
-                piv_df.loc[:, col] = np.nan
-                logger.debug(
-                    lgstr.format(
-                        dropcols=col, start=piv_df.index.min(), end=piv_df.index.max()
-                    )
-                )
-
-    if mask.any():
-        logger.debug(
-            f"Dropping columns {mask[mask].index}"
-            f" from {piv_df.index.min()} to {piv_df.index.max()}"
-            f" due to NaN ratio > {nan_tolerance}"
-        )
-
-    return piv_df
-
-
 def _downsample_returns(
     piv_df: pd.DataFrame,
     freq: str = "m",
 ) -> pd.DataFrame:
     # TODO create as a general convert_frequency function
     # TODO current aggregator is `art` (check definition of name in R code)
-    # TODO upper case frequency strings?
-    assert freq.upper() in ("D", "W", "M", "Q"), f"Unknown frequency: {freq}"
     # TODO test [1] input data is daily and [2] daily gives daily output
 
     freq = _map_to_business_day_frequency(freq)
-
-    piv_new_freq: pd.DataFrame = ((1 + piv_df / 100).resample(freq).prod() - 1) * 100
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        piv_new_freq: pd.DataFrame = (
+            (1 + piv_df / 100).resample(freq).prod() - 1
+        ) * 100
+        warnings.resetwarnings()
     return piv_new_freq
-
-
-def _multifreq_vcv_matrix(
-    est_freqs: List[str],
-    rebal_dates: pd.Series,
-    pivot_returns: pd.DataFrame,
-    lback_periods: int,
-    nan_tolerance: float,
-    remove_zeros: bool,
-    *args,
-    **kwargs,
-) -> Generator[Dict[str, pd.DataFrame], None, None]:
-
-    if lback_periods < 0:
-        assert lback_periods == -1
-        lbextra = 0
-    else:
-        lbextra = -1 * int(np.ceil(lback_periods * (1 + nan_tolerance)))
-
-    dfs_dict: Dict[str, pd.DataFrame] = {
-        freq: _downsample_returns(pivot_returns, freq=freq) for freq in est_freqs
-    }
-
-    vcvs_list: List[Dict[str, pd.DataFrame]] = []
-    result: Dict[str, pd.DataFrame] = {}
-    for td in rebal_dates:
-        for freq in est_freqs:
-            ds_piv_ret: pd.DataFrame = dfs_dict[freq].loc[dfs_dict[freq].index <= td]
-            ds_piv_ret = ds_piv_ret.iloc[lbextra:]
-            masked_piv_ret = _mask_nans(
-                piv_df=ds_piv_ret,
-                lback_periods=lback_periods,
-                nan_tolerance=nan_tolerance,
-                remove_zeros=remove_zeros,
-            )
-            vcv: pd.DataFrame = __MAP_ANNUALIZE[freq] * estimate_variance_covariance(
-                piv_ret=masked_piv_ret,
-                lback_periods=lback_periods,
-                remove_zeros=remove_zeros,
-                *args,
-                **kwargs,
-            )
-            result[freq] = vcv
-
-        vcvs_list.append(result)
-        yield result
-
-
-def _multifreq_volatility(
-    pivot_returns: pd.DataFrame,
-    pivot_signals: pd.DataFrame,
-    rebal_freq: str,
-    est_freqs: List[str],
-    lback_periods: int,
-    nan_tolerance: float,
-    remove_zeros: bool,
-    *args,
-    **kwargs,
-) -> pd.DataFrame:
-
-    rebal_dates = get_eops(dates=pivot_signals.index, freq=rebal_freq)
-
-    signals = pivot_signals.loc[rebal_dates, :]
-
-    # Returns batches
-    logger.info("Rebalance portfolio from %s to %s (%s times)", rebal_dates.min(), rebal_dates.max(), rebal_dates.shape[0])
-    batches = {td: pivot_returns.loc[pivot_returns.index <= td] for td in rebal_dates}
-    
-    td = rebal_dates.iloc[-1]
-
-    # TODO convert frequencies
-    list_vcv: List[pd.DataFrame] = []
-    list_pvol: List[Tuple[pd.Timestamp, np.float64]] = []
-    for td in rebal_dates:
-        dict_vcv: Dict[str, pd.DataFrame] = {
-            freq: 
-            __MAP_ANNUALIZE[freq] * estimate_variance_covariance(
-                piv_ret=_mask_nans(
-                    piv_df=_downsample_returns(
-                        batches[td],
-                        freq=freq
-                    ),
-                    lback_periods=lback_periods,
-                    nan_tolerance=nan_tolerance,  # TODO N/A tolerance too aggressive?
-                    remove_zeros=remove_zeros,
-                ),
-                lback_periods=lback_periods,
-                remove_zeros=remove_zeros,
-                *args,
-                **kwargs,
-            )
-            for freq in est_freqs
-        }
-        # est_freqs[0]
-        # TODO how to generically aggregate with weights?
-        vcv = 1/3 * dict_vcv["D"] + 1/3 * dict_vcv["W"] + 1/3 * dict_vcv["M"]
-        # TODO drop duplicates in variance/covariance matrix...
-        list_vcv.append(
-            vcv
-            .rename_axis("fid1", axis=0)
-            .rename_axis("fid2", axis=1)
-            .stack()
-            .to_frame("value")
-            .reset_index()
-            .assign(real_date=td)
-        )
-
-        # pvol: Portfolio volatility
-        # TODO fill N/A in variance-covariance matrix with zero (assummign signal is zero...)?
-        pvol: float = np.sqrt(signals.loc[td].T.dot(vcv).dot(signals.loc[td]))
-        list_pvol.append((td, pvol))
-
-    pvol = pd.DataFrame(list_pvol, columns=["real_date", "portfolio_asd"]).set_index("real_date")
-    vcv = pd.concat(list_vcv, axis=0)  # TODO pass?
-
-    # TODO aggregate to single variance-covariance matrix...
-
-    # TODO correlations (convert variance-covariance matrix to correlations):
-    # TODO requires unstacking and per real date
-    # [(row, col, vcv.loc[row, col] / (np.sqrt(vcv.loc[row, row]) * np.sqrt(vcv.loc[col, col]))) for row in vcv.index for col in vcv.columns]
-
-    # TODO calculate variance-covariance matrix for each batch
-
-    # batches = [(td, signals.loc[td], pivot_returns.loc[pivot_returns.index <= td]) for td in rebal_dates]
-
-    # vol_values_dict: Dict[str, List[Tuple[pd.Timestamp, float]]] = {
-    #     freq: [] for freq in est_freqs
-    # }
-    # td_idx = 0
-    # for vcv_dict in _multifreq_vcv_matrix(
-    #     lback_periods=lback_periods,
-    #     nan_tolerance=nan_tolerance,
-    #     remove_zeros=remove_zeros,
-    #     rebal_dates=rebal_dates,
-    #     est_freqs=est_freqs,
-    #     pivot_returns=pivot_returns,
-    #     *args,
-    #     **kwargs,
-    # ):
-    #     td = rebal_dates[td_idx]
-    #     for freq in est_freqs:
-    #         vcv = vcv_dict[freq]
-    #         sig_arr: pd.DataFrame = pivot_signals.loc[td, :]
-    #         vol_values_dict[freq] += [(td, sig_arr.T.dot(vcv).dot(sig_arr))]
-
-    #     td_idx += 1
-
-    # assert td_idx == len(rebal_dates)
-
-    # rdf: pd.DataFrame = functools.reduce(
-    #     lambda left, right: pd.merge(left, right, on=["real_date"], how="outer"),
-    #     [
-    #         pd.DataFrame(
-    #             vol_values_dict[freq],
-    #             columns=["real_date", freq],
-    #         ).set_index("real_date")
-    #         for freq in vol_values_dict.keys()
-    #     ],
-    # )
-
-    # # TODO not a function call: .is_unique? 
-    # assert rdf.index.is_unique
-    return pvol
 
 
 def _calculate_portfolio_volatility(
     pivot_returns: pd.DataFrame,
     pivot_signals: pd.DataFrame,
-    lback_periods: int,
-    nan_tolerance: float,
     rebal_freq: str,
     est_freqs: List[str],
     est_weights: List[float],
-    portfolio_return_name: str,
+    weights_func: Callable[[int, int], np.ndarray],
+    lback_periods: int,
+    half_life: int,
+    nan_tolerance: float,
     remove_zeros: bool,
-    *args,
-    **kwargs,
-    # weights_func: Optional[np.ndarray],
-):
-    """
-    Calculate the portfolio volatility for each trigger date.
-    Backed function for `_hist_vol`, to increase readability.
-
-    :param <pd.DatetimeIndex> trigger_indices: the DateTimeIndex of the trigger dates.
-    :param <pd.DataFrame> pivot_returns: the pivot table of the contract returns.
-    :param <pd.DataFrame> pivot_signals: the pivot table of the contract signals.
-    :param <int> lback_periods: the number of periods to use for the look-back period
-        of the volatility-targeting method. Default is 21.
-    :param <int> half_life: Refers to the half-time for "xma" and full look-back period
-        for "ma". Default is 11.
-    :param <callable> weights_func: the function to use for the weights array. Default
-        is None, which means that the weights are equal.
-    :param <float> nan_tolerance: maximum ratio of NaNs to non-NaNs in a look-back window,
-        if exceeded the resulting volatility is set to NaN. Default is 0.25.
-    :param <str> portfolio_return_name: the name of the portfolio return series.
-    :param <dict> kwargs: additional keyword arguments to pass to the variance-covariance
-        estimation function.
-    """
+    portfolio_return_name: str,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     logger.info(
         f"Calculating portfolio volatility "
         f"for FIDS={pivot_returns.columns.tolist()} "
@@ -413,37 +180,81 @@ def _calculate_portfolio_volatility(
         f"to {max(pivot_returns.index.max(), pivot_signals.index.max())}, with "
         f"lback_periods={lback_periods}, nan_tolerance={nan_tolerance}, "
         f"remove_zeros={remove_zeros}, rebal_freq={rebal_freq}, est_freqs={est_freqs}, "
-        f"est_weights={est_weights}, portfolio_return_name={portfolio_return_name}"
+        f"est_weights={est_weights} "
     )
 
-    mfreq_vol_df = _multifreq_volatility(
-        rebal_freq=rebal_freq,
-        est_freqs=est_freqs,
-        pivot_returns=pivot_returns,
-        pivot_signals=pivot_signals,
-        lback_periods=lback_periods,
-        nan_tolerance=nan_tolerance,
-        remove_zeros=remove_zeros,
-        *args,
-        **kwargs,
-    )  # index is the real_date
+    rebal_dates = get_eops(dates=pivot_signals.index, freq=rebal_freq)
 
-    est_weights_df = pd.DataFrame(
-        data=[est_weights],
-        columns=est_freqs,
-        index=mfreq_vol_df.index,
+    signals = pivot_signals.loc[rebal_dates, :]
+
+    # Returns batches
+    logger.info(
+        "Rebalance portfolio from %s to %s (%s times)",
+        rebal_dates.min(),
+        rebal_dates.max(),
+        rebal_dates.shape[0],
     )
 
-    # where the results are nans, set the weights to nan
-    est_weights_df[mfreq_vol_df.isnull()] = np.nan
-    # normalize each row to sum to 1
-    est_weights_df = est_weights_df.div(est_weights_df.sum(axis=1), axis=0)
+    td = rebal_dates.iloc[-1]
 
-    mfreq_vol_series = mfreq_vol_df.mul(est_weights_df, axis=1).sum(axis=1)
-    mfreq_vol_df = mfreq_vol_series.to_frame().rename(
-        columns={0: portfolio_return_name}
+    lback_max = (
+        int(np.ceil(lback_periods * (1 + nan_tolerance))) if lback_periods > 0 else 0
     )
-    return mfreq_vol_df
+
+    # TODO convert frequencies
+    list_vcv: List[pd.DataFrame] = []
+    list_pvol: List[Tuple[pd.Timestamp, np.float64]] = []
+    for td in rebal_dates:
+        window_df = pivot_returns.loc[pivot_returns.index <= td].iloc[-lback_max:]
+        dict_vcv: Dict[str, pd.DataFrame] = {
+            freq: estimate_variance_covariance(
+                piv_ret=_downsample_returns(window_df, freq=freq),
+                lback_periods=lback_periods,
+                remove_zeros=remove_zeros,
+                weights_func=weights_func,
+                half_life=half_life,
+            )
+            for ix, freq in enumerate(est_freqs)
+        }
+
+        vcv_df: pd.DataFrame = sum(
+            [
+                est_weights[ix] * ANNUALIZATION_FACTORS[freq] * dict_vcv[freq]
+                for ix, freq in enumerate(est_freqs)
+            ]
+        )
+        # reshape and drop duplicates in vcv
+
+        list_vcv.append(
+            vcv_df.rename_axis("fid1", axis=0)
+            .rename_axis("fid2", axis=1)
+            .stack()
+            .to_frame("value")
+            .reset_index()
+            .assign(real_date=td)
+        )
+
+        pvol: float = np.sqrt(signals.loc[td, :].T.dot(vcv_df).dot(signals.loc[td, :]))
+        list_pvol.append((td, pvol))
+
+    pvol = pd.DataFrame(
+        list_pvol,
+        columns=["real_date", portfolio_return_name],
+    ).set_index("real_date")
+
+    vcv_df = pd.concat(list_vcv, axis=0)  # add to cls.vcv
+
+    vcv_df["helper"] = vcv_df[["fid1", "fid2", "real_date"]].apply(
+        func=(lambda x: "-".join(sorted([x["fid1"], x["fid2"]])) + str(x["real_date"])),
+        axis=1,
+    )
+    vcv_df = (
+        vcv_df.drop_duplicates(subset=["helper"])
+        .drop(columns=["helper"])
+        .reset_index(drop=True)
+    )
+
+    return pvol, vcv_df
 
 
 def _hist_vol(
@@ -452,15 +263,14 @@ def _hist_vol(
     sname: str,
     rebal_freq: str = "M",
     lback_meth: str = "ma",
-    *args,  # TODO drop *args? See below VisualStudio Code warning
-    **kwargs,
-    # lback_periods: int = 21,
-    # est_freqs: List[str] = ["D", "W", "M"],
-    # est_weights: List[float] = [1, 1, 1],
-    # half_life=11,
-    # nan_tolerance: float = 0.25,
-    # remove_zeros: bool = True,
-) -> pd.DataFrame:
+    lback_periods: int = 21,
+    est_freqs: List[str] = ["D", "W", "M"],
+    est_weights: List[float] = [1, 2, 3],
+    half_life=11,
+    nan_tolerance: float = 0.25,
+    remove_zeros: bool = True,
+    return_variance_covariance: bool = False,
+) -> List[pd.DataFrame]:
     """
     Calculates historic volatility for a given strategy. It assumes that the dataframe
     is composed solely of the relevant signals and returns for the strategy.
@@ -489,12 +299,6 @@ def _hist_vol(
             f"`lback_meth` must be 'ma' or 'xma'; got {lback_meth}"
         )
 
-    # NOTE: `get_eops` helps identify the dates for which the volatility calculation
-    # will be performed. This is done by identifying the last date of each cycle.
-    # We use `get_eops` primarily because it has a clear and defined behaviour for all frequencies.
-    # It was originally designed as part of the `historic_vol` module, but it is
-    # used here as well.
-
     # TODO get the correct rebalance dates
     weights_func = flat_weights_arr if lback_meth == "ma" else expo_weights_arr
     logger.info(
@@ -502,55 +306,75 @@ def _hist_vol(
     )
     portfolio_return_name = f"{sname}{RETURN_SERIES_XCAT}"
 
-    df_out: pd.DataFrame = _calculate_portfolio_volatility(
+    pvol_df: pd.DataFrame
+    vcv_df: pd.DataFrame
+    pvol_df, vcv_df = _calculate_portfolio_volatility(
         pivot_returns=pivot_returns,
         pivot_signals=pivot_signals,
         rebal_freq=rebal_freq,
         weights_func=weights_func,
         portfolio_return_name=portfolio_return_name,
-        *args,
-        **kwargs,
-        # lback_periods=lback_periods,
-        # remove_zeros=remove_zeros,
-        # nan_tolerance=nan_tolerance,
-        # half_life=half_life,
-        # est_freqs=est_freqs,
-        # est_weights=est_weights,
+        lback_periods=lback_periods,
+        remove_zeros=remove_zeros,
+        nan_tolerance=nan_tolerance,
+        half_life=half_life,
+        est_freqs=est_freqs,
+        est_weights=est_weights,
     )
 
     # assert portfolio_return_name the only column
-    assert df_out.columns == [portfolio_return_name]
+    assert pvol_df.columns.tolist() == [portfolio_return_name]
 
-    # Annualised standard deviation (ASD)
-    # TODO annualisation depends on the frequency of the returns
-    # df_out[portfolio_return_name] = np.sqrt(df_out[portfolio_return_name] * 252)
-
-    # rebal_freq = rebal_freq.upper()
-    # ffills = {"D": 1, "W": 5, "M": 24, "Q": 64}
-    # # TODO remove re-index! 
-    # df_out = df_out.reindex(pivot_returns.index).ffill(limit=ffills[rebal_freq])
-    # nanindex = df_out.index[df_out[portfolio_return_name].isnull()]
-    # if len(nanindex) > 0:
-    #     df_out = df_out.dropna()
-    #     logger.debug(
-    #         f"Found {len(nanindex)} NaNs in {portfolio_return_name} at {nanindex}, dropping all NaNs."
-    #     )
+    # # TODO remove re-index!
+    df_out = pvol_df.reindex(pivot_returns.index).ffill(limit=FFILL_LIMITS[rebal_freq])
+    nanindex = df_out.index[df_out[portfolio_return_name].isnull()]
+    if len(nanindex) > 0:
+        df_out = df_out.dropna()
+        logger.debug(
+            f"Found {len(nanindex)} NaNs in {portfolio_return_name} at {nanindex}, dropping all NaNs."
+        )
 
     # TODO check df_out is of frequency rebal_freq
     # TODO - should below not be forward filled with the previous volatility value...
-    assert (
-        not df_out.loc[
+    nan_df = df_out[
+        df_out.loc[
             df_out.first_valid_index() : df_out.last_valid_index(),
             portfolio_return_name,
-        ]
-        .isnull()
-        .any()
-    )
+        ].isnull()
+    ]
 
-    return df_out
+    if not nan_df.empty:
+        logger.warning(
+            f"Found NaNs in {portfolio_return_name} at: {nan_df.index.tolist()}, dropping all NaNs."
+        )
+        df_out = df_out.dropna()
+
+    if return_variance_covariance:
+        return [df_out, vcv_df]
+    return [df_out]
 
 
-def check_input_arguments(arguments: List[Tuple[Any, str, Union[type, Tuple[type, type]]]]):
+def unstack_covariances(
+    vcv_df: pd.DataFrame,
+    fillna: bool = False,
+) -> Dict[str, pd.DataFrame]:
+    """Unstack the covariance matrix DataFrame."""
+    # return vcv_df.pivot(index="real_date", columns=["fid1", "fid2"], values="value")
+
+    vcvs: Dict[str, pd.DataFrame] = {}
+    for dt, df in vcv_df.groupby("real_date"):
+        vcv = df.pivot(index="fid2", columns="fid1", values="value")
+        if fillna:
+            vcv = vcv.fillna(vcv.T)
+            assert all(vcv == vcv.T)
+        vcvs[pd.Timestamp(dt).strftime("%Y-%m-%d")] = vcv
+
+    return vcvs
+
+
+def _check_input_arguments(
+    arguments: List[Tuple[Any, str, Union[type, Tuple[type, type]]]]
+):
     # TODO move to general utils
     for varx, namex, typex in arguments:
         if not isinstance(varx, typex):
@@ -559,12 +383,58 @@ def check_input_arguments(arguments: List[Tuple[Any, str, Union[type, Tuple[type
             raise ValueError(f"`{namex}` must not be an empty {str(typex)}.")
 
 
-def check_frequency(freq: str, freq_type: str):
+def _check_frequency(freq: str, freq_type: str):
     # TODO move to general utils
     try:
         _map_to_business_day_frequency(freq)
     except ValueError as e:
-        raise ValueError(f"`{freq_type:s}` ({freq:s}) must be a valid frequency string: {e}")
+        raise ValueError(
+            f"`{freq_type:s}` ({freq:s}) must be a valid frequency string: {e}"
+        )
+
+
+def _check_missing_data(
+    df: pd.DataFrame, sname: str, fids: List[str], rstring: str
+) -> None:
+    ## Check that there is atleast one contract signal for the strategy
+    if not any(df["ticker"].str.endswith(f"_CSIG_{sname}")):
+        raise ValueError(f"No contract signals for strategy `{sname}`.")
+
+    u_tickers: List[str] = list(df["ticker"].unique())
+    for contx in fids:
+        if not any(
+            [tx.startswith(contx) and tx.endswith(f"_CSIG_{sname}") for tx in u_tickers]
+        ):
+            raise ValueError(f"Contract identifier `{contx}` not in dataframe.")
+
+    if not all([f"{contx}{rstring}" in u_tickers for contx in fids]):
+        missing_tickers = [
+            f"{contx}{rstring}"
+            for contx in fids
+            if f"{contx}{rstring}" not in u_tickers
+        ]
+        raise ValueError(
+            f"The dataframe is missing the following return series: {missing_tickers}"
+        )
+
+
+def _check_weights(weights: List[float], freqs: List[str]) -> List[float]:
+    if weights is None:
+        weights = [1 / len(freqs) for _ in freqs]
+    else:
+        if len(weights) != len(freqs):
+            raise ValueError(
+                f"Length of `weights` ({len(weights)}) must be equal to length of `freqs` ({len(freqs)})"
+            )
+
+        if not all([isinstance(w, (int, float)) for w in weights]):
+            raise ValueError("`weights` must be a list of floats or integers.")
+
+        if not np.isclose(sum(weights), 1):
+            warnings.warn("`weights` do not sum to 1. They will be normalized.")
+            weights = [w / sum(weights) for w in weights]
+
+    return weights
 
 
 def historic_portfolio_vol(
@@ -583,6 +453,7 @@ def historic_portfolio_vol(
     blacklist: Optional[dict] = None,
     nan_tolerance: float = 0.25,
     remove_zeros: bool = True,
+    return_variance_covariance: bool = False,
 ) -> QuantamentalDataFrame:
     """Historical portfolio volatility.
 
@@ -647,7 +518,7 @@ def historic_portfolio_vol(
     """
     ## Check inputs
     # TODO create function for this? Also, do we want to create the set of failures (not just first one)?
-    check_input_arguments(
+    _check_input_arguments(
         arguments=[
             (df, "df", pd.DataFrame),
             (sname, "sname", str),
@@ -664,31 +535,13 @@ def historic_portfolio_vol(
     )
 
     # Check the frequency arguments
-    check_frequency(freq=rebal_freq, freq_type="rebal_freq")
+    _check_frequency(freq=rebal_freq, freq_type="rebal_freq")
 
     for ix, freq in enumerate(est_freqs):
-        check_frequency(freq=freq, freq_type=f"est_freq[{ix:d}]")
+        _check_frequency(freq=freq, freq_type=f"est_freq[{ix:d}]")
 
     ## Check estimation frequency weights
-    if est_weights is None:
-        est_weights = [1 / len(est_freqs) for _ in est_freqs]
-    else:
-        if (
-            (not isinstance(est_weights, list))
-            or len(est_weights) != len(est_freqs)
-            or (not all([isinstance(w, (int, float)) for w in est_weights]))
-        ):
-            raise ValueError(
-                "`est_weights` must be a list of floats with the same length as `est_freqs`."
-            )
-
-        assert all(x > 0 for x in est_weights), (
-            f"Non-positive est_weights not allowed: {est_weights}"
-        )
-
-        if not np.isclose(sum(est_weights), 1):
-            warnings.warn("`est_weights` do not sum to 1. They will be normalized.")
-            est_weights = [w / sum(est_weights) for w in est_weights]
+    est_weights: List[float] = _check_weights(weights=est_weights, freqs=est_freqs)
 
     ## Standardize and copy DF
     df: pd.DataFrame = standardise_dataframe(df.copy())
@@ -704,31 +557,13 @@ def historic_portfolio_vol(
     for dx, nx in [(start, "start"), (end, "end")]:
         if not is_valid_iso_date(dx):
             raise ValueError(f"`{nx}` must be a valid ISO-8601 date string")
-
     ## Reduce the dataframe
     df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
     df["ticker"] = df["cid"] + "_" + df["xcat"]
-
-    ## Check that there is atleast one contract signal for the strategy
-    if not any(df["ticker"].str.endswith(f"_CSIG_{sname}")):
-        raise ValueError(f"No contract signals for strategy `{sname}`.")
-
     u_tickers: List[str] = list(df["ticker"].unique())
-    for contx in fids:
-        if not any(
-            [tx.startswith(contx) and tx.endswith(f"_CSIG_{sname}") for tx in u_tickers]
-        ):
-            raise ValueError(f"Contract identifier `{contx}` not in dataframe.")
 
-    if not all([f"{contx}{rstring}" in u_tickers for contx in fids]):
-        missing_tickers = [
-            f"{contx}{rstring}"
-            for contx in fids
-            if f"{contx}{rstring}" not in u_tickers
-        ]
-        raise ValueError(
-            f"The dataframe is missing the following return series: {missing_tickers}"
-        )
+    ## Check for missing data
+    _check_missing_data(df=df, sname=sname, fids=fids, rstring=rstring)
 
     # Add financial identifier (fid) to DataFrame
     df["fid"] = (
@@ -736,7 +571,13 @@ def historic_portfolio_vol(
         + "_"
         + df["xcat"]
         .str.split("_")
-        .map(lambda x: x[0][:-len(rstring.split("_")[0])] if x[0].endswith(rstring.split("_")[0]) else x[0])
+        .map(
+            lambda x: (
+                x[0][: -len(rstring.split("_")[0])]
+                if x[0].endswith(rstring.split("_")[0])
+                else x[0]
+            )
+        )
     )
 
     ## Filter out data-frame and select contract signals (CSIG) and returns (XR)
@@ -744,7 +585,7 @@ def historic_portfolio_vol(
     filt_xrs: List[str] = [tx for tx in u_tickers if tx.endswith(rstring)]
 
     # TODO check if all exists
-   
+
     pivot_signals: pd.DataFrame = df.loc[df["ticker"].isin(filt_csigs)].pivot(
         index="real_date", columns="fid", values="value"
     )
@@ -754,7 +595,9 @@ def historic_portfolio_vol(
     )
     assert set(pivot_signals.columns) == set(pivot_returns.columns)
 
-    hist_port_vol: pd.DataFrame = _hist_vol(
+    # assert
+
+    result: List[pd.DataFrame] = _hist_vol(
         pivot_returns=pivot_returns,
         pivot_signals=pivot_signals,
         sname=sname,
@@ -766,13 +609,20 @@ def historic_portfolio_vol(
         half_life=half_life,
         nan_tolerance=nan_tolerance,
         remove_zeros=remove_zeros,
+        return_variance_covariance=return_variance_covariance,
     )
-    # TODO return variance-covariance matrix together with portfolio volatility
-    return ticker_df_to_qdf(df=hist_port_vol)
+
+    assert len(result) == 1 + int(return_variance_covariance)
+
+    result[0] = ticker_df_to_qdf(df=result[0])
+    if return_variance_covariance:
+        return result[0], result[1]
+    return result[0]
 
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import simulate_returns_and_signals
+
     np.random.seed(42)  # Fix numpy seed to 42 for reproducibility
 
     # Signals: FXCRY_NSA, EQCRY_NSA (rename to FX_CSIG_STRAT, EQ_CSIG_STRAT)
@@ -803,7 +653,7 @@ if __name__ == "__main__":
         lambda x: x if np.random.rand() > N_p_nans else np.nan
     )
 
-    df_vol: pd.DataFrame = historic_portfolio_vol(
+    df_vol, vcv_df = historic_portfolio_vol(
         df=df,
         sname="STRAT",
         fids=fids,
@@ -814,7 +664,21 @@ if __name__ == "__main__":
         rstring="XR",
         start=start,
         end=end,
+        return_variance_covariance=True,
     )
+
+    vcvs_dict = unstack_covariances(vcv_df)
+    dates = [
+        dt.strftime("%Y-%m-%d")
+        for dt in sorted(pd.to_datetime(list(vcvs_dict.keys())))[-9:]
+    ]
+    with sns.axes_style("whitegrid"):
+        fig, ax = plt.subplots(3, 3, figsize=(15, 15))
+        for ix, dt in enumerate(dates):
+            sns.heatmap(vcvs_dict[dt], ax=ax[ix // 3, ix % 3])
+            ax[ix // 3, ix % 3].set_title(dt)
+        plt.tight_layout()
+        plt.show()
 
     df_copy_vol: pd.DataFrame = historic_portfolio_vol(
         df=df_copy,
