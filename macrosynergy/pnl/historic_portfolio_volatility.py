@@ -23,7 +23,6 @@ from typing import (
     List,
     Optional,
     Tuple,
-    Generator,
     Any,
     Union,
 )
@@ -31,7 +30,7 @@ from typing import (
 import numpy as np
 import pandas as pd
 import seaborn as sns, matplotlib.pyplot as plt
-from macrosynergy.panel.historic_vol import expo_std, flat_std, expo_weights
+from macrosynergy.panel.historic_vol import expo_weights
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.management.constants import FFILL_LIMITS, ANNUALIZATION_FACTORS
 from macrosynergy.management.utils import (
@@ -42,7 +41,6 @@ from macrosynergy.management.utils import (
     standardise_dataframe,
     ticker_df_to_qdf,
     get_eops,
-    get_cid,
     _map_to_business_day_frequency,
 )
 from macrosynergy.panel.historic_vol import expo_weights
@@ -453,8 +451,8 @@ def historic_portfolio_vol(
     blacklist: Optional[dict] = None,
     nan_tolerance: float = 0.25,
     remove_zeros: bool = True,
-    return_variance_covariance: bool = False,
-) -> QuantamentalDataFrame:
+    return_variance_covariance: bool = True,
+) -> Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, pd.DataFrame]]:
     """Historical portfolio volatility.
 
     Estimates annualized standard deviations of a portfolio, based on historic
