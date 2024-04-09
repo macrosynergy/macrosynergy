@@ -11,7 +11,8 @@ from typing import List, Union, Tuple, Optional, Dict, Callable
 from numbers import Number
 import functools
 
-from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.simulate import make_test_df
+from macrosynergy.download.transaction_costs import download_transaction_costs
 from macrosynergy.management.utils import (
     reduce_df,
     get_cid,
@@ -48,59 +49,6 @@ def extrapolate_cost(
         b = (pct90_cost - median_cost) / (pct90_size - median_size)
         cost = median_cost + b * (trade_size - median_size)
     return cost
-
-
-class PartialCalc:
-    def __init__(
-        self,
-        df_wide: pd.DataFrame,
-        target_arg: str,
-        func: Callable,
-        params: Dict[str, str],
-        diff_index: pd.Index = None,
-    ):
-        self.func = func
-        reqd_args = self.func.__code__.co_varnames[: self.func.__code__.co_argcount]
-        if not set(reqd_args).issubset(set(params.keys())):
-            raise ValueError(
-                f"Function {self.func.__name__} is missing required arguments: "
-                + str(set(reqd_args) - set(params.keys()))
-            )
-        self.params = params
-        self.diff_index = diff_index
-        if not set(list(params.values()) + [target_arg]).issubset(set(df_wide.columns)):
-            raise ValueError(
-                f"Columns missing in df_wide: "
-                + str(set(list(params.values()) + [target_arg]) - set(df_wide.columns))
-            )
-
-        self.partials, self.params_index = self._create_partials(df_wide)
-
-    def _create_partials(self, df_wide: pd.DataFrame) -> Dict[str, Callable]:
-        partials = {
-            index: functools.partial(
-                self.func, **{k: row[v] for k, v in self.params.items()}
-            )
-            for index, row in df_wide.iterrows()
-        }
-        params_index = {
-            index: {k: row[v] for k, v in df_wide.columns}
-            for index, row in df_wide.iterrows()
-        }
-        return partials, params_index
-
-    def calc(
-        self,
-        date: pd.Timestamp,
-        target_arg_val: Number,
-    ):
-        if self.diff_index is not None:
-            if date not in self.diff_index:
-                return None
-        partial = self.partials[date]
-        params = self.params_index[date]
-        params[self.params["target_arg"]] = target_arg_val
-        return partial(**params)
 
 
 def check_df_for_txn_stats(
@@ -148,6 +96,44 @@ def get_diff_index(df_wide: pd.DataFrame, freq: str) -> pd.Index:
     df_diff = df_wide.diff(axis=0)
     change_index = df_diff.index[((df_diff.abs() > 0) | df_diff.isnull()).any(axis=1)]
     return change_index
+
+
+class TransactionStats:
+    def __init__(
+        self,
+        df: QuantamentalDataFrame,
+        fids: List[str],
+        tcost_n: str,
+        rcost_n: str,
+        size_n: str,
+        tcost_l: str,
+        rcost_l: str,
+        size_l: str,
+    ):
+        _mtrs = [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
+        assert isinstance(df, QuantamentalDataFrame)
+        assert set(_mtrs).issubset(set(df["xcat"]))
+        df_red = reduce_df(df=df, xcats=_mtrs, intersect=True)
+        missing_cids = set(get_cid(fids)) - set(df_red["cid"])
+        if len(missing_cids) > 0:
+            raise ValueError(f"Missing transaction statistics for {missing_cids}")
+
+        self.df_wide = qdf_to_ticker_df(df_red)
+        self.tcost_n = tcost_n
+        self.rcost_n = rcost_n
+        self.size_n = size_n
+        self.tcost_l = tcost_l
+        self.rcost_l = rcost_l
+        self.size_l = size_l
+        self._xcats = [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
+
+    def get_stats(self, real_date: str, fid: str):
+        last_valid_idx = self.df_wide.loc[:real_date].last_valid_index()
+        dfx: pd.Series = self.df_wide.loc[
+            last_valid_idx, [f"{ get_cid(fid)}_{x}" for x in self._xcats]
+        ]
+        # return as a dictionary
+        return dfx.to_dict()
 
 
 def proxy_pnl_calc(
@@ -255,9 +241,60 @@ def proxy_pnl_calc(
     # Reduce the dataframe
     _xcats = [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
     df = reduce_df(df=df, xcats=_xcats, start=start, end=end, blacklist=blacklist)
-
+    txn_args = dict(
+        df=df,
+        fids=fids,
+        tcost_n=tcost_n,
+        rcost_n=rcost_n,
+        size_n=size_n,
+        tcost_l=tcost_l,
+        rcost_l=rcost_l,
+        size_l=size_l,
+    )
     # Check the dataframe for the necessary tickers
-    check_df_for_txn_stats(df, fids, tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l)
+    check_df_for_txn_stats(**txn_args)
+
+    txnStats = TransactionStats(**txn_args)
 
     # Create the wide dataframe
     df_wide = qdf_to_ticker_df(df=df)
+
+
+if __name__ == "__main__":
+    test_df = make_test_df()
+    txn_costs_df: pd.DataFrame = download_transaction_costs(verbose=True)
+
+    cids = txn_costs_df["cid"].unique().tolist()
+
+    xts = [
+        f"{op}_{sz}"
+        for sz in ["90PCTL", "MEDIAN"]
+        for op in ["SIZE", "BIDOFFER", "ROLLCOST"]
+    ]
+    uxcats: List[str] = txn_costs_df["xcat"].unique().tolist()
+    contracts = list(
+        set([xc.replace(xt, "") for xc in uxcats for xt in xts if xc.endswith(xt)])
+    )
+    # FX, EQ, IR, COM, FI
+    txn_args = dict(
+        df=pd.concat([test_df, txn_costs_df]).reset_index(drop=True),
+        fids=[f"{c}_FX" for c in (set(cids) - set(["USD", "UIG", "UHY"]))],
+        tcost_n=f"FXBIDOFFER_MEDIAN",
+        tcost_l=f"FXBIDOFFER_90PCTL",
+        rcost_n=f"FXROLLCOST_MEDIAN",
+        rcost_l=f"FXROLLCOST_90PCTL",
+        size_n=f"FXSIZE_MEDIAN",
+        size_l=f"FXSIZE_90PCTL",
+    )
+    print(txn_costs_df.head())
+
+    assert TransactionStats(
+        **txn_args,
+    ).get_stats("2011-01-01", "GBP_FX") == {
+        "GBP_FXBIDOFFER_MEDIAN": 0.0224707153696722,
+        "GBP_FXROLLCOST_MEDIAN": 0.0022470715369672,
+        "GBP_FXSIZE_MEDIAN": 50.0,
+        "GBP_FXBIDOFFER_90PCTL": 0.0449414307393445,
+        "GBP_FXROLLCOST_90PCTL": 0.0052431669195902,
+        "GBP_FXSIZE_90PCTL": 200.0,
+    }
