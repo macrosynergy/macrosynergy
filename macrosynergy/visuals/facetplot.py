@@ -242,6 +242,7 @@ class FacetPlot(Plotter):
         compare_series: Optional[str] = None,
         share_y: bool = False,
         share_x: bool = False,
+        cumulative: bool = False,
         # xcats_mean: bool = False,
         # title arguments
         figsize: Tuple[Number, Number] = (16.0, 9.0),
@@ -601,7 +602,8 @@ class FacetPlot(Plotter):
                     plot_func_args["color"] = "red"
                     plot_func_args["linestyle"] = "--"
 
-                X, Y = self._insert_nans(X, Y)
+                if not cumulative:
+                    X, Y = self._insert_nans(X, Y)
                 ax_i.plot(X, Y, **plot_func_args)
 
             if not cid_xcat_grid:
