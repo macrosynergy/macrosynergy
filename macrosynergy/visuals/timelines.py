@@ -240,7 +240,7 @@ def timelines(
                 facet_size=facet_size,
                 legend_ncol=legend_ncol,
                 legend_fontsize=legend_fontsize,
-                cumulative=cumsum,
+                interpolate=cumsum,
             )
 
     elif single_chart or (len(cids) == 1):
@@ -303,7 +303,7 @@ def timelines(
                 legend_ncol=legend_ncol,
                 legend_labels=xcat_labels or None,
                 legend_fontsize=legend_fontsize,
-                cumulative=cumsum,
+                interpolate=cumsum,
             )
 
 

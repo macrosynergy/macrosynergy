@@ -242,7 +242,7 @@ class FacetPlot(Plotter):
         compare_series: Optional[str] = None,
         share_y: bool = False,
         share_x: bool = False,
-        cumulative: bool = False,
+        interpolate: bool = False,
         # xcats_mean: bool = False,
         # title arguments
         figsize: Tuple[Number, Number] = (16.0, 9.0),
@@ -313,6 +313,8 @@ class FacetPlot(Plotter):
             `True`.
         :param <bool> share_x: whether to share the x-axis across all plots. Default is
             `True`.
+        :param <bool> interpolate: if `True`, gaps in the time series will be interpolated.
+            Default is `False`.
         :param <Tuple[Number, Number]> figsize: a tuple of floats specifying the width
             and height of the figure. Default is `(16.0, 9.0)`.
         :param <str> title: the title of the plot. Default is `None`.
@@ -602,7 +604,7 @@ class FacetPlot(Plotter):
                     plot_func_args["color"] = "red"
                     plot_func_args["linestyle"] = "--"
 
-                if not cumulative:
+                if not interpolate:
                     X, Y = self._insert_nans(X, Y)
                 ax_i.plot(X, Y, **plot_func_args)
 
