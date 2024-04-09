@@ -3,6 +3,8 @@ import numpy as np
 from typing import List
 from macrosynergy.management.simulate.simulate_quantamental_data import make_qdf
 from macrosynergy.management.utils import categories_df
+from statsmodels.tsa.stattools import adfuller, kpss, acf, pacf
+from arch.unitroot import PhillipsPerron, ADF, DFGLS
 
 """
 Implementation of correlation functions for quantamental data.
@@ -37,9 +39,9 @@ class IntertemporalCorrelation(object):
         end: str = None,
         blacklist: dict = None,
         freq: str = None,
-        lag: int = None,
-        fwin: int = None,
-        xcat_aggs: List[str] = None,
+        lag: int = 0,
+        fwin: int = 1,
+        xcat_aggs: List[str] = ["mean", "mean"],
     ):
         self.df = categories_df(
             df,
@@ -53,23 +55,59 @@ class IntertemporalCorrelation(object):
             fwin=fwin,
             xcat_aggs=xcat_aggs,
         )
+        self.xcats = xcats
+        self.cids = cids
 
-    def calc_probabilities_of_non_stationarity(
-        self, df: pd.DataFrame, statistical_test: str
+    def calc_prob_of_non_stationarity(
+        self, lags: int = None, trend="c"
     ) -> pd.DataFrame:
         """
         Calculate the probabilities of non-stationarity
         """
 
-        # ADF test HERE
+        index = pd.MultiIndex.from_product(
+            [self.cids, self.xcats], names=["cid", "xcat"]
+        )
 
-        # Phillips-Perron (PP) test HERE
+        df_result = pd.DataFrame(
+            index=index, columns=["ADF P Value", "Phillips-Perron P Value"]
+        )
+
+        for idx in index:
+            cid = idx[0]
+            xcat = idx[1]
+            if cid in self.df[xcat]:
+                adf_result = ADF(
+                    self.df[xcat][cid].dropna().values,
+                    lags=lags,
+                    trend=trend,
+                )
+                df_result.loc[(cid, xcat), "ADF P Value"] = adf_result[1]
+
+                PP_result = PhillipsPerron(
+                    self.df[xcat][cid].dropna().values,
+                    lags=lags,
+                    trend=trend,
+                )
+                df_result.loc[(cid, xcat), "Phillips-Perron P Value"] = (
+                    PP_result.pvalue
+                )
+
+                dfgls_result = DFGLS(
+                    self.df[xcat][cid].dropna().values,
+                    lags=lags,
+                    trend=trend
+                )
+                df_result.loc[(cid, xcat), "DFGLS P Value"] = (
+                    dfgls_result.pvalue
+                )
+                
 
         # KPSS test HERE
 
         # ADF-GLS test HERE
 
-        pass
+        return df_result
 
     def plot_time_series_components(self):
         """
@@ -143,7 +181,7 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfd["grading"] = np.ones(dfd.shape[0])
-    black = {"AUD": ["2000-01-01", "2003-12-31"], "GBP": ["2018-01-01", "2100-01-01"]}
+    # black = {"AUD": ["2000-01-01", "2003-12-31"], "GBP": ["2018-01-01", "2100-01-01"]}
 
     itc = IntertemporalCorrelation(
         dfd,
@@ -151,8 +189,9 @@ if __name__ == "__main__":
         cids=cids,
         start="2000-01-01",
         end="2020-12-31",
-        blacklist=black,
+        # blacklist=black,
         freq="M",
     )
 
     print(itc.df.head())
+    print(itc.calc_prob_of_non_stationarity(lags=12, regression_trend="ct"))
