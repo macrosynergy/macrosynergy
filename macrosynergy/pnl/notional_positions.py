@@ -103,7 +103,7 @@ def _vol_target_positions(
     df_wide: pd.DataFrame,
     sname: str,
     fids: List[str],
-    dollar_per_signal: Number = 1.0,
+    aum: Number = 100,
     vol_target: Number = 10,
     rebal_freq: str = "m",
     lback_periods: int = 21,
@@ -113,7 +113,7 @@ def _vol_target_positions(
     lback_meth: str = "ma",
     rstring: str = "XR",
     pname: str = "VPOS",
-) -> QuantamentalDataFrame:
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Uses historic portfolio volatility to calculate notional positions based on
     contract signals, volatility targeting and other relevant parameters.
@@ -121,12 +121,13 @@ def _vol_target_positions(
 
     _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
 
-    vol_target: float = vol_target / 100
-
     sig_ident: str = f"_CSIG_{sname}"
 
-    histpvol = historic_portfolio_vol(
-        df=ticker_df_to_qdf(df_wide),
+    # TODO what is the units of histpvol?
+    histpvol: QuantamentalDataFrame
+    vcv_df: pd.DataFrame
+    histpvol, vcv_df = historic_portfolio_vol(
+        df=ticker_df_to_qdf(df_wide),  # TODO why stack it again?
         sname=sname,
         fids=fids,
         rstring=rstring,
@@ -136,25 +137,48 @@ def _vol_target_positions(
         nan_tolerance=nan_tolerance,
         rebal_freq=rebal_freq,
         remove_zeros=remove_zeros,
+        return_variance_covariance=True,
     )
-
-    histpvol["value"] = vol_target * dollar_per_signal / histpvol["value"]
-    vlen = len(histpvol["value"])
+    # histpvol: only on rebalance dates...
+    histpvol["scale"] = ((vol_target / histpvol["value"]) * aum).replace(np.inf, np.nan)
+    # TODO check inf => convert to NaN
+    histpvol.set_index("real_date", inplace=True)
 
     out_df = pd.DataFrame(index=df_wide.index)
 
-    # TODO: check if this is correct
-    for contx in fids:
-        pos_col = contx + "_" + pname
-        cont_name = contx + sig_ident
-        out_df.loc[:, pos_col] = np.nan
-        out_df.loc[:, pos_col].iloc[-vlen:] = (
-            histpvol["value"].values * df_wide[cont_name].iloc[-vlen:].values
-        )
+    signal_columns: List[str] = [f"{contx:s}{sig_ident:s}" for contx in fids]
+    df_signals: pd.DataFrame = df_wide.loc[histpvol.index, signal_columns]
+
+    out_df: pd.DataFrame = (
+        histpvol[["scale"]].dot(np.ones(shape=(1, df_signals.shape[1]))).values
+        * df_signals
+    )
+    # TODO how to deal with unbalanced panel
 
     # drop rows with all na
-    out_df = out_df.dropna(how="all")
-    return out_df
+    # TODO add log statement of how many N/A values are dropped
+    out_df = out_df.reindex(df_wide.index)
+    rebal_dates = sorted(histpvol.index.values)
+    for num, rb in enumerate(histpvol.index):
+        if rb < rebal_dates[-1]:
+            mask = (out_df.index >= rb) & (out_df.index < rebal_dates[num + 1])
+        else:
+            mask = out_df.index >= rb
+        out_df.loc[mask, :] = out_df.loc[mask, :].ffill()
+
+    # get na values per column
+    na_per_col = out_df.isna().sum()
+    na_per_col = na_per_col[na_per_col > 0]
+    log_str = f"Columns with N/A values: {na_per_col.index.tolist()}"
+
+    out_df.rename(
+        columns={
+            col: col.replace(sig_ident, "_" + pname) for col in out_df.columns.tolist()
+        },
+        inplace=True,
+    )
+
+    return (out_df.dropna(how="all"), histpvol[["cid", "xcat", "value"]], vcv_df)
 
 
 def _leverage_positions(
@@ -164,7 +188,7 @@ def _leverage_positions(
     aum: Number = 100,
     leverage: Number = 1.0,
     pname: str = "POS",
-) -> QuantamentalDataFrame:
+) -> pd.DataFrame:
     """"""
     _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
 
@@ -197,6 +221,7 @@ def notional_positions(
     dollar_per_signal: Number = 1.0,
     leverage: Optional[Number] = None,
     vol_target: Optional[Number] = None,
+    nan_tolerance: float = 0.25,
     rebal_freq: str = "m",
     slip: int = 1,
     lback_periods: int = 21,
@@ -364,11 +389,11 @@ def notional_positions(
         )
 
     else:
-        return_df: pd.DataFrame = _vol_target_positions(
+        return_df, pvol, vcv_df = _vol_target_positions(
             df_wide=df_wide,
             sname=sname,
             fids=fids,
-            dollar_per_signal=dollar_per_signal,
+            aum=aum,
             vol_target=vol_target,
             rebal_freq=rebal_freq,
             lback_periods=lback_periods,
@@ -376,7 +401,12 @@ def notional_positions(
             half_life=half_life,
             rstring=rstring,
             pname=pname,
+            nan_tolerance=0.25,
         )
+
+    notional_positions._pvol = pvol
+    notional_positions._vcv_df = vcv_df
+    # TODO dollar_per_signal: Number = 1.0 (dollar per signal => signal * dollars = position)
 
     return ticker_df_to_qdf(df=return_df).dropna()
 
