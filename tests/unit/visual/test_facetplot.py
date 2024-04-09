@@ -41,19 +41,19 @@ class TestAll(unittest.TestCase):
         plt.close("all")
 
     @parameterized.expand(["2010-01-05", "2010-05-15", "2010-07-15"])
-    def test_fill_gaps(self, blacklist_start_date: str):
+    def test_insert_nans(self, blacklist_start_date: str):
         df = self.df[(self.df.cid == "AUD") & (self.df.xcat == "INFL")]
         fp = FacetPlot(df=df)
         black_list = {"AUD": [blacklist_start_date, "2010-12-10"]}
 
         fp.df = reduce_df(fp.df, blacklist=black_list)
-        X, Y = fp._fill_gaps(fp.df.real_date.to_numpy(), fp.df.value.to_numpy())
+        X, Y = fp._insert_nans(fp.df.real_date.to_numpy(), fp.df.value.to_numpy())
 
         idx = np.argwhere(X == blacklist_start_date)[0][0]
 
         np.testing.assert_equal(Y[idx], np.nan)
 
-    def test_fill_gaps_multiple(self):
+    def test_insert_nans_multiple(self):
 
         first_date_start = "2010-01-05"
         first_date_end = "2010-02-10"
@@ -68,30 +68,30 @@ class TestAll(unittest.TestCase):
         }
 
         fp.df = reduce_df(fp.df, blacklist=black_list)
-        X, Y = fp._fill_gaps(fp.df.real_date.to_numpy(), fp.df.value.to_numpy())
+        X, Y = fp._insert_nans(fp.df.real_date.to_numpy(), fp.df.value.to_numpy())
 
         for date in [first_date_start, second_date_start]:
             idx = np.argwhere(X == date)[0][0]
             np.testing.assert_equal(Y[idx], np.nan)
 
-    def test_fill_gaps_no_gaps(self):
+    def test_insert_nans_no_gaps(self):
         df = self.df[(self.df.cid == "AUD") & (self.df.xcat == "INFL")]
         fp = FacetPlot(df=df)
 
-        X, Y = fp._fill_gaps(fp.df.real_date.to_numpy(), fp.df.value.to_numpy())
+        X, Y = fp._insert_nans(fp.df.real_date.to_numpy(), fp.df.value.to_numpy())
 
         self.assertFalse(np.isnan(Y).any())
 
-    def test_fill_gaps_no_data(self):
+    def test_insert_nans_no_data(self):
         df = self.df[(self.df.cid == "AUD") & (self.df.xcat == "INFL")]
         fp = FacetPlot(df=df)
 
-        X, Y = fp._fill_gaps([], [])
+        X, Y = fp._insert_nans([], [])
 
         self.assertTrue(len(X) == 0)
         self.assertTrue(len(Y) == 0)
 
-    def test_fill_gaps_monthly_freq(self):
+    def test_insert_nans_monthly_freq(self):
         df = self.df[(self.df.cid == "AUD") & (self.df.xcat == "INFL")]
         fp = FacetPlot(df=df)
         black_list = {
@@ -101,6 +101,6 @@ class TestAll(unittest.TestCase):
         fp.df = downsample_df_on_real_date(fp.df, ["xcat", "cid"], freq="M")
         fp.df = reduce_df(fp.df, blacklist=black_list)
 
-        X, Y = fp._fill_gaps(fp.df.real_date.to_numpy(), fp.df.value.to_numpy())
+        X, Y = fp._insert_nans(fp.df.real_date.to_numpy(), fp.df.value.to_numpy())
 
         np.testing.assert_equal(Y[1], np.nan)

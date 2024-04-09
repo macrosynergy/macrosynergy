@@ -601,7 +601,7 @@ class FacetPlot(Plotter):
                     plot_func_args["color"] = "red"
                     plot_func_args["linestyle"] = "--"
 
-                X, Y = self._fill_gaps(X, Y)
+                X, Y = self._insert_nans(X, Y)
                 ax_i.plot(X, Y, **plot_func_args)
 
             if not cid_xcat_grid:
@@ -693,9 +693,9 @@ class FacetPlot(Plotter):
         if return_figure:
             return fig
 
-    def _fill_gaps(self, X: Union[np.ndarray, List], Y: Union[np.ndarray, List]):
+    def _insert_nans(self, X: Union[np.ndarray, List], Y: Union[np.ndarray, List]):
         """
-        Fills gaps in time series data with NaN values.
+        Inserts a single NaN value in each inferred gap in the time series.
 
         :param <np.ndarray> X: Array of dates.
         :param <np.ndarray> Y: Array of values.
