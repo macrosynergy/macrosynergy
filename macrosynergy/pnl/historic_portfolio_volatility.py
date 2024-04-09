@@ -271,11 +271,11 @@ def _hist_vol(
     pivot_returns: pd.DataFrame,
     sname: str,
     rebal_freq: str = "M",
-    lback_meth: str = "ma",
-    lback_periods: int = 21,
+    lback_meth: str = "ma",  # TODO allow for different method at different frequencies
+    lback_periods: int = 21,  # TODO need to be on a per-frequency basis
     est_freqs: List[str] = ["D", "W", "M"],
-    est_weights: List[float] = [1, 2, 3],
-    half_life=11,
+    est_weights: List[float] = [1, 2, 3],  # TODO weights must sum to 1!
+    half_life=11,  # TODO need to be on a per-frequency basis
     nan_tolerance: float = 0.25,
     remove_zeros: bool = True,
     return_variance_covariance: bool = False,
@@ -566,6 +566,7 @@ def historic_portfolio_vol(
     for dx, nx in [(start, "start"), (end, "end")]:
         if not is_valid_iso_date(dx):
             raise ValueError(f"`{nx}` must be a valid ISO-8601 date string")
+
     ## Reduce the dataframe
     df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
     df["ticker"] = df["cid"] + "_" + df["xcat"]
