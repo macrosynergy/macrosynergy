@@ -7,22 +7,159 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from typing import List, Union, Tuple, Optional
+from typing import List, Union, Tuple, Optional, Dict, Callable
+from numbers import Number
+import functools
 
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.utils import (
+    reduce_df,
+    get_cid,
+    get_xcat,
+    ticker_df_to_qdf,
+    qdf_to_ticker_df,
+)
+from macrosynergy.management.types import QuantamentalDataFrame
+
+
+def extrapolate_cost(
+    trade_size: Number,
+    median_size: Number,
+    median_cost: Number,
+    pct90_size: Number,
+    pct90_cost: Number,
+) -> Number:
+    err_msg = "{k} must be a number > 0"
+    for k, v in [
+        ("trade_size", trade_size),
+        ("median_size", median_size),
+        ("median_cost", median_cost),
+        ("pct90_size", pct90_size),
+        ("pct90_cost", pct90_cost),
+    ]:
+        if not isinstance(v, Number):
+            raise TypeError(err_msg.format(k=k))
+        if v <= 0:
+            raise ValueError(err_msg.format(k=k))
+
+    if trade_size <= median_size:
+        cost = median_cost
+    else:
+        b = (pct90_cost - median_cost) / (pct90_size - median_size)
+        cost = median_cost + b * (trade_size - median_size)
+    return cost
+
+
+class PartialCalc:
+    def __init__(
+        self,
+        df_wide: pd.DataFrame,
+        target_arg: str,
+        func: Callable,
+        params: Dict[str, str],
+        diff_index: pd.Index = None,
+    ):
+        self.func = func
+        reqd_args = self.func.__code__.co_varnames[: self.func.__code__.co_argcount]
+        if not set(reqd_args).issubset(set(params.keys())):
+            raise ValueError(
+                f"Function {self.func.__name__} is missing required arguments: "
+                + str(set(reqd_args) - set(params.keys()))
+            )
+        self.params = params
+        self.diff_index = diff_index
+        if not set(list(params.values()) + [target_arg]).issubset(set(df_wide.columns)):
+            raise ValueError(
+                f"Columns missing in df_wide: "
+                + str(set(list(params.values()) + [target_arg]) - set(df_wide.columns))
+            )
+
+        self.partials, self.params_index = self._create_partials(df_wide)
+
+    def _create_partials(self, df_wide: pd.DataFrame) -> Dict[str, Callable]:
+        partials = {
+            index: functools.partial(
+                self.func, **{k: row[v] for k, v in self.params.items()}
+            )
+            for index, row in df_wide.iterrows()
+        }
+        params_index = {
+            index: {k: row[v] for k, v in df_wide.columns}
+            for index, row in df_wide.iterrows()
+        }
+        return partials, params_index
+
+    def calc(
+        self,
+        date: pd.Timestamp,
+        target_arg_val: Number,
+    ):
+        if self.diff_index is not None:
+            if date not in self.diff_index:
+                return None
+        partial = self.partials[date]
+        params = self.params_index[date]
+        params[self.params["target_arg"]] = target_arg_val
+        return partial(**params)
+
+
+def check_df_for_txn_stats(
+    df: QuantamentalDataFrame,
+    fids: List[str],
+    tcost_n: str,
+    rcost_n: str,
+    size_n: str,
+    tcost_l: str,
+    rcost_l: str,
+    size_l: str,
+) -> None:
+    u_cids = list(set(map(get_cid, fids)))
+    expected_tickers = [
+        f"{cid}_{txn_ticker}"
+        for cid in u_cids
+        for txn_ticker in [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
+    ]
+    found_tickers = list(set(df["cid"] + "_" + df["xcat"]))
+    if not set(expected_tickers).issubset(set(found_tickers)):
+        raise ValueError(
+            "The dataframe is missing the following tickers: "
+            + ", ".join(set(expected_tickers) - set(found_tickers))
+        )
+
+    last_avails = None
+    for ticker in expected_tickers:
+        avail_dates = (
+            df.loc[df["cid"] + "_" + df["xcat"] == ticker]
+            .drop(columns=["cid", "xcat"])
+            .set_index("real_date")
+            .dropna()
+            .index
+        )
+        if last_avails is None:
+            last_avails = avail_dates
+        else:
+            if not last_avails.equals(avail_dates):
+                raise ValueError(
+                    f"The available dates for {ticker} do not match the available dates for the other tickers"
+                )
+
+
+def get_diff_index(df_wide: pd.DataFrame, freq: str) -> pd.Index:
+    df_diff = df_wide.diff(axis=0)
+    change_index = df_diff.index[((df_diff.abs() > 0) | df_diff.isnull()).any(axis=1)]
+    return change_index
 
 
 def proxy_pnl_calc(
     df: pd.DataFrame,
     spos: str,
     fids: List[str],
-    tcost_n: Optional[str] = None,
-    rcost_n: Optional[str] = None,
-    size_n: Optional[str] = None,
-    tcost_l: Optional[str] = None,
-    rcost_l: Optional[str] = None,
-    size_l: Optional[str] = None,
+    tcost_n: str,
+    rcost_n: str,
+    size_n: str,
+    tcost_l: str,
+    rcost_l: str,
+    size_l: str,
     roll_freqs: Optional[dict] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
@@ -90,15 +227,15 @@ def proxy_pnl_calc(
     """
 
     for _varx, _namex, _typex in [
-        (df, "df", pd.DataFrame),
+        (df, "df", QuantamentalDataFrame),
         (spos, "spos", str),
         (fids, "fids", list),
-        (tcost_n, "tcost_n", (str, type(None))),
-        (rcost_n, "rcost_n", (str, type(None))),
-        (size_n, "size_n", (str, type(None))),
-        (tcost_l, "tcost_l", (str, type(None))),
-        (rcost_l, "rcost_l", (str, type(None))),
-        (size_l, "size_l", (str, type(None))),
+        (tcost_n, "tcost_n", str),
+        (rcost_n, "rcost_n", str),
+        (size_n, "size_n", str),
+        (tcost_l, "tcost_l", str),
+        (rcost_l, "rcost_l", str),
+        (size_l, "size_l", str),
         (roll_freqs, "roll_freqs", (dict, type(None))),
         (start, "start", (str, type(None))),
         (end, "end", (str, type(None))),
@@ -107,3 +244,20 @@ def proxy_pnl_calc(
         if not isinstance(_varx, _typex):
             raise TypeError(f"{_namex} must be {_typex}")
 
+        if _typex in [list, str, dict] and len(_varx) == 0:
+            raise ValueError(f"`{_namex}` must not be an empty {str(_typex)}")
+
+    if start is None:
+        start = df["real_date"].min().strftime("%Y-%m-%d")
+    if end is None:
+        end = df["real_date"].max().strftime("%Y-%m-%d")
+
+    # Reduce the dataframe
+    _xcats = [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
+    df = reduce_df(df=df, xcats=_xcats, start=start, end=end, blacklist=blacklist)
+
+    # Check the dataframe for the necessary tickers
+    check_df_for_txn_stats(df, fids, tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l)
+
+    # Create the wide dataframe
+    df_wide = qdf_to_ticker_df(df=df)
