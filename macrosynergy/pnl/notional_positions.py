@@ -21,8 +21,6 @@ from macrosynergy.management.utils import (
     reduce_df,
     qdf_to_ticker_df,
     ticker_df_to_qdf,
-    get_cid,
-    get_xcat,
 )
 
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
@@ -158,8 +156,9 @@ def _vol_target_positions(
     # drop rows with all na
     # TODO add log statement of how many N/A values are dropped
     out_df = out_df.reindex(df_wide.index)
-    rebal_dates = sorted(histpvol.index.values)
-    for num, rb in enumerate(histpvol.index):
+    rebal_dates = sorted(histpvol[histpvol["value"].diff() != 0].index)
+
+    for num, rb in enumerate(rebal_dates):
         if rb < rebal_dates[-1]:
             mask = (out_df.index >= rb) & (out_df.index < rebal_dates[num + 1])
         else:
