@@ -403,8 +403,8 @@ def notional_positions(
             nan_tolerance=0.25,
         )
 
-    notional_positions._pvol = pvol
-    notional_positions._vcv_df = vcv_df
+        notional_positions._pvol = pvol
+        notional_positions._vcv_df = vcv_df
     # TODO dollar_per_signal: Number = 1.0 (dollar per signal => signal * dollars = position)
 
     return ticker_df_to_qdf(df=return_df).dropna()
