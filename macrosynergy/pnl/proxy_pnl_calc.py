@@ -9,8 +9,6 @@ import seaborn as sns
 
 from typing import List, Union, Tuple, Optional, Dict, Callable
 from numbers import Number
-import operator
-import functools
 
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.download.transaction_costs import download_transaction_costs
@@ -136,12 +134,12 @@ class TransactionStats:
         self.size_l = size_l
         self._xcats = [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
 
-    def get_stats(self, real_date: str, fid: str):
+    def get_stats(self, real_date: str, fid: str) -> pd.Series:
         last_valid_idx = self.df_wide.loc[:real_date].last_valid_index()
         dfx: pd.Series = self.df_wide.loc[
             last_valid_idx, [f"{fid}{x}" for x in self._xcats]
         ]
-        return dfx.to_dict()
+        return dfx
 
 
 class ExtrapolateCosts:
@@ -157,18 +155,15 @@ class ExtrapolateCosts:
         size_l: str,
     ):
 
-        self.args = dict(
+        self.txnStats = TransactionStats(
+            df=df,
+            fids=fids,
             tcost_n=tcost_n,
             rcost_n=rcost_n,
             size_n=size_n,
             tcost_l=tcost_l,
             rcost_l=rcost_l,
             size_l=size_l,
-        )
-        self.txnStats = TransactionStats(
-            df=df,
-            fids=fids,
-            **self.args,
         )
 
     @staticmethod
@@ -366,7 +361,7 @@ if __name__ == "__main__":
 
     assert TransactionStats(
         **txn_args,
-    ).get_stats("2011-01-01", "GBP_FX") == {
+    ).get_stats("2011-01-01", "GBP_FX").to_dict() == {
         "GBP_FXBIDOFFER_MEDIAN": 0.0224707153696722,
         "GBP_FXROLLCOST_MEDIAN": 0.0022470715369672,
         "GBP_FXSIZE_MEDIAN": 50.0,
@@ -383,7 +378,8 @@ if __name__ == "__main__":
     )
 
     start = time.time()
-    for i in range(1000):
+    test_iters = 1000
+    for i in range(test_iters):
         ex.bidoffer(
             "GBP_FX",
             random.randint(1, 100),
@@ -391,4 +387,4 @@ if __name__ == "__main__":
         )
     end = time.time()
     print(f"Time taken: {end - start}")
-    print(f"Time per iteration: {(end - start) / 1000}")
+    print(f"Time per iteration: {(end - start) / test_iters}")
