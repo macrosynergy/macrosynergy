@@ -601,6 +601,7 @@ class FacetPlot(Plotter):
                     plot_func_args["color"] = "red"
                     plot_func_args["linestyle"] = "--"
 
+                X, Y = self._insert_nans(X, Y)
                 ax_i.plot(X, Y, **plot_func_args)
 
             if not cid_xcat_grid:
@@ -691,6 +692,47 @@ class FacetPlot(Plotter):
 
         if return_figure:
             return fig
+
+    def _insert_nans(self, X: Union[np.ndarray, List], Y: Union[np.ndarray, List]):
+        """
+        Inserts a single NaN value in each inferred gap in the time series.
+
+        :param <np.ndarray> X: Array of dates.
+        :param <np.ndarray> Y: Array of values.
+
+        :return <Tuple[np.ndarray, np.ndarray]>: Tuple of arrays with gaps filled.
+        """
+
+        if len(X) == 0 or len(Y) == 0:
+            return X, Y
+
+        df = pd.DataFrame({"X": X, "Y": Y})
+        df["X"] = pd.to_datetime(df["X"])
+
+        # Infer the most common frequency of the time series
+        differences = df["X"].diff().dt.total_seconds().dropna()
+        frequency_seconds = differences.mode()[0]
+        frequency = pd.to_timedelta(frequency_seconds, unit="s")
+
+        # Ignore weekends if daily
+        freq_threshold = max(frequency_seconds * 1.5, 60 * 60 * 24 * 3)
+        gaps = differences > freq_threshold
+        gap_positions = gaps[gaps].index.tolist()
+
+        new_rows = []
+        for pos in gap_positions:
+            gap_date = df.loc[pos - 1, "X"] + frequency
+            new_rows.append({"X": gap_date, "Y": np.nan})
+
+        if new_rows:
+            new_rows_df = pd.DataFrame(new_rows)
+            df = (
+                pd.concat([df, new_rows_df], ignore_index=True)
+                .sort_values(by="X")
+                .reset_index(drop=True)
+            )
+
+        return df.X, df.Y
 
 
 if __name__ == "__main__":
