@@ -342,6 +342,7 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     else:
         df = update_categories(df, df_add)
 
+    # sort same as in `standardise_dataframe`
     return df.sort_values(by=["real_date", "cid", "xcat"]).reset_index(drop=True)
 
 
