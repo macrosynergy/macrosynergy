@@ -13,7 +13,6 @@ import requests
 import requests.compat
 from packaging import version
 
-from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.constants import FREQUENCY_MAP
 
 
