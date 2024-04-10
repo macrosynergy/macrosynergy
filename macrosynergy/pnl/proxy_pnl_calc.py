@@ -9,6 +9,7 @@ import seaborn as sns
 
 from typing import List, Union, Tuple, Optional, Dict, Callable
 from numbers import Number
+import operator
 import functools
 
 from macrosynergy.management.simulate import make_test_df
@@ -112,8 +113,16 @@ class TransactionStats:
     ):
         _mtrs = [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
         assert isinstance(df, QuantamentalDataFrame)
-        assert set(_mtrs).issubset(set(df["xcat"]))
-        df_red = reduce_df(df=df, xcats=_mtrs, intersect=True)
+        found_mtr = {
+            mtr: sum([str(xc).endswith(mtr) for xc in list(set(df["xcat"]))])
+            for mtr in _mtrs
+        }
+        if not all([found_mtr[mtr] == found_mtr[_mtrs[0]]] for mtr in _mtrs):
+            raise ValueError(
+                f"Incomplete transaction statistics: {found_mtr} for {_mtrs}"
+            )
+        _reduce_xcats = [f"{get_xcat(fid)}{mtr}" for fid in fids for mtr in _mtrs]
+        df_red = reduce_df(df=df, xcats=_reduce_xcats, intersect=True)
         missing_cids = set(get_cid(fids)) - set(df_red["cid"])
         if len(missing_cids) > 0:
             raise ValueError(f"Missing transaction statistics for {missing_cids}")
@@ -130,10 +139,75 @@ class TransactionStats:
     def get_stats(self, real_date: str, fid: str):
         last_valid_idx = self.df_wide.loc[:real_date].last_valid_index()
         dfx: pd.Series = self.df_wide.loc[
-            last_valid_idx, [f"{ get_cid(fid)}_{x}" for x in self._xcats]
+            last_valid_idx, [f"{fid}{x}" for x in self._xcats]
         ]
-        # return as a dictionary
         return dfx.to_dict()
+
+
+class ExtrapolateCosts:
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        fids: List[str],
+        tcost_n: str,
+        rcost_n: str,
+        size_n: str,
+        tcost_l: str,
+        rcost_l: str,
+        size_l: str,
+    ):
+
+        self.args = dict(
+            tcost_n=tcost_n,
+            rcost_n=rcost_n,
+            size_n=size_n,
+            tcost_l=tcost_l,
+            rcost_l=rcost_l,
+            size_l=size_l,
+        )
+        self.txnStats = TransactionStats(
+            df=df,
+            fids=fids,
+            **self.args,
+        )
+
+    @staticmethod
+    def extrapolate_cost(
+        trade_size: Number,
+        median_size: Number,
+        median_cost: Number,
+        pct90_size: Number,
+        pct90_cost: Number,
+    ) -> Number:
+        return extrapolate_cost(
+            trade_size=trade_size,
+            median_size=median_size,
+            median_cost=median_cost,
+            pct90_size=pct90_size,
+            pct90_cost=pct90_cost,
+        )
+
+    def bidoffer(self, fid: str, trade_size: Number, real_date: str) -> Number:
+        stats = self.txnStats.get_stats(fid=fid, real_date=real_date)
+        d = dict(
+            trade_size=trade_size,
+            median_size=stats[f"{fid}{self.txnStats.size_n}"],
+            median_cost=stats[f"{fid}{self.txnStats.tcost_n}"],
+            pct90_size=stats[f"{fid}{self.txnStats.size_l}"],
+            pct90_cost=stats[f"{fid}{self.txnStats.tcost_l}"],
+        )
+        return self.extrapolate_cost(**d)
+
+    def rollcost(self, fid: str, trade_size: Number, real_date: str) -> Number:
+        stats = self.txnStats.get_stats(fid=fid, real_date=real_date)
+        d = dict(
+            trade_size=trade_size,
+            median_size=stats[f"{fid}{self.txnStats.size_n}"],
+            median_cost=stats[f"{fid}{self.txnStats.rcost_n}"],
+            pct90_size=stats[f"{fid}{self.txnStats.size_l}"],
+            pct90_cost=stats[f"{fid}{self.txnStats.rcost_l}"],
+        )
+        return self.extrapolate_cost(**d)
 
 
 def proxy_pnl_calc(
@@ -254,13 +328,15 @@ def proxy_pnl_calc(
     # Check the dataframe for the necessary tickers
     check_df_for_txn_stats(**txn_args)
 
-    txnStats = TransactionStats(**txn_args)
+    extrapolateCosts = ExtrapolateCosts(**txn_args)
 
     # Create the wide dataframe
     df_wide = qdf_to_ticker_df(df=df)
 
 
 if __name__ == "__main__":
+    import time, random
+
     test_df = make_test_df()
     txn_costs_df: pd.DataFrame = download_transaction_costs(verbose=True)
 
@@ -279,12 +355,12 @@ if __name__ == "__main__":
     txn_args = dict(
         df=pd.concat([test_df, txn_costs_df]).reset_index(drop=True),
         fids=[f"{c}_FX" for c in (set(cids) - set(["USD", "UIG", "UHY"]))],
-        tcost_n=f"FXBIDOFFER_MEDIAN",
-        tcost_l=f"FXBIDOFFER_90PCTL",
-        rcost_n=f"FXROLLCOST_MEDIAN",
-        rcost_l=f"FXROLLCOST_90PCTL",
-        size_n=f"FXSIZE_MEDIAN",
-        size_l=f"FXSIZE_90PCTL",
+        tcost_n=f"BIDOFFER_MEDIAN",
+        tcost_l=f"BIDOFFER_90PCTL",
+        rcost_n=f"ROLLCOST_MEDIAN",
+        rcost_l=f"ROLLCOST_90PCTL",
+        size_n=f"SIZE_MEDIAN",
+        size_l=f"SIZE_90PCTL",
     )
     print(txn_costs_df.head())
 
@@ -298,3 +374,21 @@ if __name__ == "__main__":
         "GBP_FXROLLCOST_90PCTL": 0.0052431669195902,
         "GBP_FXSIZE_90PCTL": 200.0,
     }
+
+    ExtrapolateCosts(**txn_args).bidoffer("GBP_FX", 100, "2011-01-01")
+    ex = ExtrapolateCosts(**txn_args)
+
+    tx_costs_dates = pd.bdate_range(
+        txn_costs_df["real_date"].min(), txn_costs_df["real_date"].max()
+    )
+
+    start = time.time()
+    for i in range(1000):
+        ex.bidoffer(
+            "GBP_FX",
+            random.randint(1, 100),
+            random.choice(tx_costs_dates).strftime("%Y-%m-%d"),
+        )
+    end = time.time()
+    print(f"Time taken: {end - start}")
+    print(f"Time per iteration: {(end - start) / 1000}")
