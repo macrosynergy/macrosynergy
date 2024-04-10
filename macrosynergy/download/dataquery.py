@@ -184,14 +184,20 @@ def request_wrapper(
                 method, url, headers=headers, params=params, **kwargs
             ).prepare()
 
-            response: requests.Response = requests.Session().send(
+            with requests.Session().send(
                 prepared_request,
                 proxies=proxy,
                 cert=cert,
-            )
-
-            if isinstance(response, requests.Response):
-                return validate_response(response=response, user_id=user_id)
+            ) as response:
+                if isinstance(response, requests.Response):
+                    return validate_response(response=response, user_id=user_id)
+                else:
+                    raise InvalidResponseError(
+                        f"Request did not return a response.\n"
+                        f"User ID: {user_id}\n"
+                        f"Requested URL: {log_url}\n"
+                        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}; \n"
+                    )
 
         except Exception as exc:
             # if keyboard interrupt, raise as usual
