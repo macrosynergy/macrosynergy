@@ -33,6 +33,7 @@ from macrosynergy.download.exceptions import (
 from macrosynergy.management.utils import (
     is_valid_iso_date,
     form_full_url,
+    Timer
 )
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
