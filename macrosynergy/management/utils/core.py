@@ -4,17 +4,16 @@ that are used across the package.
 """
 
 import datetime
-import itertools
-
-from macrosynergy.management.types import QuantamentalDataFrame
-import warnings
-from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
-from macrosynergy.management.constants import FREQUENCY_MAP
+import time
+from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload, Tuple
 
 import numpy as np
 import pandas as pd
 import requests
 import requests.compat
+from packaging import version
+
+from macrosynergy.management.constants import FREQUENCY_MAP
 
 
 @overload
@@ -322,3 +321,42 @@ def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type
                 return result
 
     return None
+
+
+class Timer(object):
+    def __init__(self):
+        self.t0 = time.perf_counter()
+
+    def __format__(self, format_spec: str):
+        if "r" in format_spec:
+            return repr(self).__format__(format_spec)
+        elif "f" in format_spec:
+            return float(self).__format__(format_spec)
+        else:
+            return str(self).__format__(format_spec)
+
+    def __str__(self) -> str:
+        return f"{self.lap():.2f} seconds"
+
+    def __repr__(self) -> str:
+        return f"<Time lapsed {str(self):s}>"
+
+    def __float__(self) -> float:
+        return self.lap()
+
+    def timer(self) -> Tuple[float, float]:
+        x = time.perf_counter()
+        return x, x - self.t0
+
+    def lap(self) -> float:
+        self.t0, dt = self.timer()
+        return dt
+
+
+def check_package_version(required_version: str):
+    from macrosynergy import __version__ as msy_version
+
+    assert version.parse(msy_version) >= version.parse(required_version), (
+        f"Current version {msy_version:s} is less than required {required_version:s}"
+        " - please upgrade using `pip install macrosynergy --upgrade`"
+    )
