@@ -355,12 +355,10 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     """
     df_tickers = df["cid"] + "_" + df["xcat"]
     df_add_tickers = df_add["cid"] + "_" + df_add["xcat"]
-    agg_df_tick = set(df_tickers)
-    add_df_tick = set(df_add_tickers)
 
     # If the ticker is already defined in the DataFrame, replace with the new series
     # otherwise append the series to the aggregate DataFrame.
-    df = df[~df_tickers.isin(list(agg_df_tick.intersection(add_df_tick)))]
+    df = df[~df_tickers.isin(list(set(df_tickers).intersection(set(df_add_tickers))))]
 
     df = pd.concat([df, df_add], axis=0, ignore_index=True)
     return df
