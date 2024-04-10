@@ -184,14 +184,13 @@ def request_wrapper(
                 method, url, headers=headers, params=params, **kwargs
             ).prepare()
 
-            response: requests.Response = requests.Session().send(
+            with requests.Session().send(
                 prepared_request,
                 proxies=proxy,
                 cert=cert,
-            )
-
-            if isinstance(response, requests.Response):
-                return validate_response(response=response, user_id=user_id)
+            ) as response:
+                if isinstance(response, requests.Response):
+                    return validate_response(response=response, user_id=user_id)
 
         except Exception as exc:
             # if keyboard interrupt, raise as usual
@@ -1045,6 +1044,7 @@ class DataQueryInterface(object):
         :raises <ConnectionError(HeartbeatError)>: if the heartbeat fails.
         :raises <Exception>: other exceptions may be raised by underlying functions.
         """
+        timer = Timer()
         tracking_id: str = TIMESERIES_TRACKING_ID
         if end_date is None:
             end_date = datetime.today().strftime("%Y-%m-%d")
@@ -1141,6 +1141,8 @@ class DataQueryInterface(object):
                 len(final_output),
                 len(self.unavailable_expressions),
             )
+
+        print(f"Time taken to download data: {timer:s}")
 
         return final_output
 

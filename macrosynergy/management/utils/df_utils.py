@@ -355,8 +355,8 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     :param <pd.DataFrame> df_add: DataFrame with the latest values.
 
     """
-    df["ticker"] = df["cid"] + "_" + df["xcat"]
-    df_add["ticker"] = df_add["cid"] + "_" + df_add["xcat"]
+    df.loc[:, "ticker"] = df["cid"] + "_" + df["xcat"]
+    df_add.loc[:, "ticker"] = df_add["cid"] + "_" + df_add["xcat"]
     agg_df_tick = set(df["ticker"])
     add_df_tick = set(df_add["ticker"])
 
