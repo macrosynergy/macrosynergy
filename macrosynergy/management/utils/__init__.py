@@ -11,6 +11,8 @@ from .core import (
     get_dict_max_depth,
     _map_to_business_day_frequency,
     rec_search_dict,
+    Timer,
+    check_package_version,
 )
 
 
@@ -56,6 +58,8 @@ __all__ = [
     "generate_random_date",
     "get_dict_max_depth",
     "rec_search_dict",
+    "Timer",
+    "check_package_version",
     "standardise_dataframe",
     "drop_nan_series",
     "qdf_to_ticker_df",
