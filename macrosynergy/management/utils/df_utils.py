@@ -344,7 +344,8 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     else:
         df = update_categories(df, df_add)
 
-    return df.reset_index(drop=True)
+    # sort same as in `standardise_dataframe`
+    return df.sort_values(by=["real_date", "cid", "xcat"]).reset_index(drop=True)
 
 
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
@@ -355,21 +356,15 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     :param <pd.DataFrame> df_add: DataFrame with the latest values.
 
     """
-    df["ticker"] = df["cid"] + "_" + df["xcat"]
-    df_add["ticker"] = df_add["cid"] + "_" + df_add["xcat"]
-    agg_df_tick = set(df["ticker"])
-    add_df_tick = set(df_add["ticker"])
+    df_tickers = df["cid"] + "_" + df["xcat"]
+    df_add_tickers = df_add["cid"] + "_" + df_add["xcat"]
 
     # If the ticker is already defined in the DataFrame, replace with the new series
     # otherwise append the series to the aggregate DataFrame.
-    df = df[~df["ticker"].isin(list(agg_df_tick.intersection(add_df_tick)))]
+    df = df[~df_tickers.isin(list(set(df_tickers).intersection(set(df_add_tickers))))]
 
     df = pd.concat([df, df_add], axis=0, ignore_index=True)
-
-    df = df.drop(["ticker"], axis=1)
-    df_add = df_add.drop(["ticker"], axis=1)
-
-    return df.sort_values(["xcat", "cid", "real_date"])
+    return df
 
 
 def update_categories(df: pd.DataFrame, df_add):

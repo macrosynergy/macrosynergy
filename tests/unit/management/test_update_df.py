@@ -357,8 +357,9 @@ class TestAll(unittest.TestCase):
         self.assertTrue(dfd_test.shape == dfd_update.shape)
 
         # Order the two DataFrames and confirm the values match.
-        dfd_test = dfd_test.sort_values(["xcat", "cid", "real_date"])
-        dfd_update = dfd_update.sort_values(["xcat", "cid", "real_date"])
+        _idx = ["xcat", "cid", "real_date"]
+        dfd_test = dfd_test.sort_values(_idx).reset_index(drop=True)
+        dfd_update = dfd_update.sort_values(_idx).reset_index(drop=True)
         self.assertTrue(np.all(dfd_test["value"] == dfd_update["value"]))
 
         dfd_2_rv = make_relative_value(
