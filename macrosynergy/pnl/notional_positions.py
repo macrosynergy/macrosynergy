@@ -162,6 +162,7 @@ def _vol_target_positions(
         mask = (out_df.index >= rb) & (out_df.index < rebal_dates[num + 1])
         out_df.loc[mask, :] = out_df.loc[mask, :].ffill()
     mask = out_df.index >= rebal_dates[-1]
+    out_df.loc[mask, :] = out_df.loc[mask, :].ffill()
 
     # get na values per column
     na_per_col = out_df.isna().sum()
