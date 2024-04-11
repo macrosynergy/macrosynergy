@@ -156,28 +156,29 @@ def _vol_target_positions(
     # drop rows with all na
     # TODO add log statement of how many N/A values are dropped
     out_df = out_df.reindex(df_wide.index)
-    rebal_dates = sorted(histpvol[histpvol["value"].diff() != 0].index)
+    rebal_dates = sorted(histpvol.index.tolist())
 
-    for num, rb in enumerate(rebal_dates):
-        if rb < rebal_dates[-1]:
-            mask = (out_df.index >= rb) & (out_df.index < rebal_dates[num + 1])
-        else:
-            mask = out_df.index >= rb
+    for num, rb in enumerate(rebal_dates[:-1]):
+        mask = (out_df.index >= rb) & (out_df.index < rebal_dates[num + 1])
         out_df.loc[mask, :] = out_df.loc[mask, :].ffill()
+    mask = out_df.index >= rebal_dates[-1]
 
     # get na values per column
     na_per_col = out_df.isna().sum()
     na_per_col = na_per_col[na_per_col > 0]
     log_str = f"Columns with N/A values: {na_per_col.index.tolist()}"
 
-    out_df.rename(
+    out_df = out_df.rename(
         columns={
             col: col.replace(sig_ident, "_" + pname) for col in out_df.columns.tolist()
         },
-        inplace=True,
-    )
+    ).dropna(how="all")
 
-    return (out_df.dropna(how="all"), histpvol[["cid", "xcat", "value"]], vcv_df)
+    return (
+        out_df,
+        standardise_dataframe(histpvol[["cid", "xcat", "value"]]),
+        vcv_df,
+    )
 
 
 def _leverage_positions(
