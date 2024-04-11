@@ -26,6 +26,7 @@ from typing import (
     Any,
     Union,
 )
+from numbers import Number
 
 import numpy as np
 import pandas as pd
@@ -159,6 +160,17 @@ def _downsample_returns(
     return piv_new_freq
 
 
+def get_max_lookback(lb: int, nt: float) -> int:
+    """
+    Calculate the maximum lookback period for a given lookback period and nan tolerance.
+
+    :param <int> lb: the lookback period.
+    :param <float> nt: the nan tolerance.
+    :return <int>: the maximum lookback period.
+    """
+    return int(np.ceil(lb * (1 + nt))) if lb > 0 else 0
+
+
 def _calculate_portfolio_volatility(
     pivot_returns: pd.DataFrame,
     pivot_signals: pd.DataFrame,
@@ -196,15 +208,6 @@ def _calculate_portfolio_volatility(
 
     td = rebal_dates.iloc[-1]
 
-    lback_max = (
-        int(np.ceil(lback_periods * (1 + nan_tolerance))) if lback_periods > 0 else 0
-    )
-    def get_nan_tolerance(lback, nan_tol):
-        lback_max = (
-            int(np.ceil(lback_periods * (1 + nan_tolerance))) if lback_periods > 0 else 0
-        )
-        return lback_max
-
     # TODO convert frequencies
     list_vcv: List[pd.DataFrame] = []
     list_pvol: List[Tuple[pd.Timestamp, np.float64]] = []
@@ -212,7 +215,9 @@ def _calculate_portfolio_volatility(
         window_df = pivot_returns.loc[pivot_returns.index <= td]
         dict_vcv: Dict[str, pd.DataFrame] = {
             freq: estimate_variance_covariance(
-                piv_ret=_downsample_returns(window_df, freq=freq).iloc[-get_nan_tolerance(lback=lb, nan_tol=nan_tolerance):],
+                piv_ret=_downsample_returns(window_df, freq=freq).iloc[
+                    -get_max_lookback(lb=lb, nt=nan_tolerance) :
+                ],
                 lback_periods=lb,
                 remove_zeros=remove_zeros,
                 weights_func=weights_func,
@@ -277,10 +282,10 @@ def _hist_vol(
     sname: str,
     rebal_freq: str = "M",
     lback_meth: str = "ma",  # TODO allow for different method at different frequencies
-    lback_periods: int = 21,  # TODO need to be on a per-frequency basis
+    lback_periods: List[int] = [-1, -1, -1],  # default all for all
+    half_life=[10, 5, 2],
     est_freqs: List[str] = ["D", "W", "M"],
     est_weights: List[float] = [1, 2, 3],  # TODO weights must sum to 1!
-    half_life=11,  # TODO need to be on a per-frequency basis
     nan_tolerance: float = 0.25,
     remove_zeros: bool = True,
     return_variance_covariance: bool = False,
@@ -418,9 +423,16 @@ def _check_missing_data(
         )
 
 
-def _check_weights(weights: List[float], freqs: List[str]) -> List[float]:
+def _check_weights(
+    weights: List[float],
+    freqs: List[str],
+    normalize: bool = True,
+    fill_value: Number = None,
+) -> List[float]:
     if weights is None:
-        weights = [1 / len(freqs) for _ in freqs]
+        if fill_value is None:
+            fill_value = 1 / len(freqs)
+        weights = [fill_value] * len(freqs)
     else:
         if len(weights) != len(freqs):
             raise ValueError(
@@ -430,11 +442,50 @@ def _check_weights(weights: List[float], freqs: List[str]) -> List[float]:
         if not all([isinstance(w, (int, float)) for w in weights]):
             raise ValueError("`weights` must be a list of floats or integers.")
 
-        if not np.isclose(sum(weights), 1):
-            warnings.warn("`weights` do not sum to 1. They will be normalized.")
-            weights = [w / sum(weights) for w in weights]
+        if normalize:
+            if not np.isclose(sum(weights), 1):
+                weights = [w / sum(weights) for w in weights]
 
     return weights
+
+
+def _check_est_args(
+    est_freqs: List[str],
+    est_weights: List[Number],
+    lback_periods: List[int],
+    half_life: List[int],
+) -> Tuple[List[str], List[float], List[int], List[int]]:
+    ilen = max(map(len, [est_freqs, est_weights, lback_periods, half_life]))
+
+    # if any of est_weights, lback_periods, and half_life are
+    if ilen != 1:
+        if len(est_weights) == 1:
+            est_weights = est_weights * ilen
+        if len(lback_periods) == 1:
+            lback_periods = lback_periods * ilen
+        if len(half_life) == 1:
+            half_life = half_life * ilen
+
+    for ix, (freq, weight, lback, hl) in enumerate(
+        zip(est_freqs, est_weights, lback_periods, half_life)
+    ):
+        if freq not in ["D", "W", "M", "Q"]:
+            raise ValueError(f"Invalid frequency {freq} in `est_freqs` at index {ix:d}")
+
+        if not isinstance(weight, (int, float)):
+            raise ValueError(
+                f"Invalid weight {weight} in `est_weights` at index {ix:d}"
+            )
+
+        if not isinstance(lback, int) or (lback < 0 and lback != -1):
+            raise ValueError(
+                f"Invalid lookback period {lback} in `lback_periods` at index {ix:d}"
+            )
+
+        if not isinstance(hl, int) or hl < 0:
+            raise ValueError(f"Invalid half-life {hl} in `half_life` at index {ix:d}")
+
+    return est_freqs, est_weights, lback_periods, half_life
 
 
 def historic_portfolio_vol(
@@ -444,8 +495,8 @@ def historic_portfolio_vol(
     rstring: str = "XR",
     rebal_freq: str = "m",
     lback_meth: str = "ma",
-    lback_periods: List[int] = -1,  # default all
-    half_life: List[int] = 11,  # TODO what to specify here for weekly and monthly?
+    lback_periods: List[int] = [-1, -1, -1],  # default all for all
+    half_life: List[int] = [5],
     est_freqs: List[str] = ["D", "W", "M"],  # "m", "w", "d", "q"
     est_weights: Optional[List[float]] = None,
     start: Optional[str] = None,
@@ -485,11 +536,13 @@ def historic_portfolio_vol(
     :param <str> lback_meth: the method to use for the lookback period of the
         volatility-targeting method. Default is "ma" for moving average. Alternative is
         "xma", for exponential moving average.
-    :param <int> lback_periods: the number of periods to use for the lookback period
-        of the volatility-targeting method. Default is 21 for daily (TODO verify).
-    :param <int> half_life: the half-life of the exponential moving average for the
-        volatility-targeting method. This is disregarded when using `lback_meth="ma"`.
-        Default is 11.
+    :param <List[int]> lback_periods: the number of periods to use for the lookback
+        period of the volatility-targeting method. Each element corresponds to the
+        the same index in `est_freqs`. Passing a single element will apply the same
+        value to all frequencies. Default is [-1], which means that the lookback period
+        is the full available data for all specified frequencies.
+    :param <List[int]> half_life: number of periods in the half-life of the exponential
+        moving average. Each element corresponds to the same index in `est_freqs`.
     :param <str> start: the start date of the data. Default is None, which means that
         the start date is taken from the dataframe.
     :param <str> end: the end date of the data. Default is None, which means that
@@ -516,6 +569,15 @@ def historic_portfolio_vol(
     at least 11 days the function returns an NaN for that date and sends a warning of all
     the dates for which this happened.
     """
+    if isinstance(lback_periods, Number):
+        lback_periods = [lback_periods]
+    if isinstance(half_life, Number):
+        half_life = [half_life]
+    if isinstance(est_weights, Number):
+        est_weights = [est_weights]
+    if isinstance(est_freqs, str):
+        est_freqs = [est_freqs]
+
     ## Check inputs
     # TODO create function for this? Also, do we want to create the set of failures (not just first one)?
     _check_input_arguments(
@@ -523,14 +585,19 @@ def historic_portfolio_vol(
             (df, "df", pd.DataFrame),
             (sname, "sname", str),
             (fids, "fids", list),
-            (rebal_freq, "rebal_freq", str),
-            (lback_periods, "lback_periods", int),
-            (lback_meth, "lback_meth", str),
-            (half_life, "half_life", int),
             (rstring, "rstring", str),
+            (rebal_freq, "rebal_freq", str),
+            (lback_meth, "lback_meth", str),
+            (lback_periods, "lback_periods", list),
+            (half_life, "half_life", list),
+            (est_freqs, "est_freqs", list),
+            (est_weights, "est_weights", (list, NoneType)),
             (start, "start", (str, NoneType)),
             (end, "end", (str, NoneType)),
             (blacklist, "blacklist", (dict, NoneType)),
+            (nan_tolerance, "nan_tolerance", float),
+            (remove_zeros, "remove_zeros", bool),
+            (return_variance_covariance, "return_variance_covariance", bool),
         ]
     )
 
@@ -542,6 +609,12 @@ def historic_portfolio_vol(
 
     ## Check estimation frequency weights
     est_weights: List[float] = _check_weights(weights=est_weights, freqs=est_freqs)
+    est_freqs, est_weights, lback_periods, half_life = _check_est_args(
+        est_freqs=est_freqs,
+        est_weights=est_weights,
+        lback_periods=lback_periods,
+        half_life=half_life,
+    )
 
     ## Standardize and copy DF
     df: pd.DataFrame = standardise_dataframe(df.copy())
@@ -659,9 +732,11 @@ if __name__ == "__main__":
         sname="STRAT",
         fids=fids,
         rebal_freq="m",
-        lback_periods=-1,
-        lback_meth="ma",
-        half_life=11,
+        est_freqs=["D", "W", "M"],
+        est_weights=[0.1, 0.2, 0.7],
+        lback_periods=[30, 20, -1],
+        half_life=[10, 5, 2],
+        lback_meth="xma",
         rstring="XR",
         start=start,
         end=end,
@@ -673,13 +748,13 @@ if __name__ == "__main__":
         dt.strftime("%Y-%m-%d")
         for dt in sorted(pd.to_datetime(list(vcvs_dict.keys())))[-9:]
     ]
-    with sns.axes_style("whitegrid"):
-        fig, ax = plt.subplots(3, 3, figsize=(15, 15))
-        for ix, dt in enumerate(dates):
-            sns.heatmap(vcvs_dict[dt], ax=ax[ix // 3, ix % 3])
-            ax[ix // 3, ix % 3].set_title(dt)
-        plt.tight_layout()
-        plt.show()
+    # with sns.axes_style("whitegrid"):
+    #     fig, ax = plt.subplots(3, 3, figsize=(15, 15))
+    #     for ix, dt in enumerate(dates):
+    #         sns.heatmap(vcvs_dict[dt], ax=ax[ix // 3, ix % 3])
+    #         ax[ix // 3, ix % 3].set_title(dt)
+    #     plt.tight_layout()
+    #     plt.show()
 
     df_copy_vol: pd.DataFrame = historic_portfolio_vol(
         df=df_copy,
@@ -692,6 +767,7 @@ if __name__ == "__main__":
         rstring="XR",
         start=start,
         end=end,
+        return_variance_covariance=False,
     )
 
     expc_idx = pd.Timestamp("2019-04-26")
