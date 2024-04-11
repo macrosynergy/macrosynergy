@@ -476,7 +476,7 @@ def historic_portfolio_vol(
     est_freqs: Union[str, List[str]] = ["D", "W", "M"],  # "m", "w", "d", "q"
     lback_periods: Union[int, List[int]] = [-1, -1, -1],  # default all for all
     half_life: Union[int, List[int]] = [11, 5, 6],
-    est_weights: Optional[Union[float, List[float]]] = None,
+    est_weights: Union[Number, List[Number]] = [1, 2, 3],  # TODO weights must sum to 1!
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
@@ -569,7 +569,7 @@ def historic_portfolio_vol(
             (lback_periods, "lback_periods", list),
             (half_life, "half_life", list),
             (est_freqs, "est_freqs", list),
-            (est_weights, "est_weights", (list, NoneType)),
+            (est_weights, "est_weights", list),
             (start, "start", (str, NoneType)),
             (end, "end", (str, NoneType)),
             (blacklist, "blacklist", (dict, NoneType)),
