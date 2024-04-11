@@ -476,7 +476,7 @@ def historic_portfolio_vol(
     est_freqs: Union[str, List[str]] = ["D", "W", "M"],  # "m", "w", "d", "q"
     lback_periods: Union[int, List[int]] = [-1, -1, -1],  # default all for all
     half_life: Union[int, List[int]] = [11, 5, 6],
-    est_weights: Union[Number, List[Number]] = [1, 2, 3],  # TODO weights must sum to 1!
+    est_weights: Union[Number, List[Number]] = [1, 2, 3],
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
@@ -586,7 +586,6 @@ def historic_portfolio_vol(
         _check_frequency(freq=freq, freq_type=f"est_freq[{ix:d}]")
 
     ## Check estimation frequency weights
-    est_weights: List[float] = _check_weights(weights=est_weights, freqs=est_freqs)
     est_freqs, est_weights, lback_periods, half_life = _check_est_args(
         est_freqs=est_freqs,
         est_weights=est_weights,
