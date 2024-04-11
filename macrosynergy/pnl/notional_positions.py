@@ -220,11 +220,11 @@ def notional_positions(
     fids: List[str],
     aum: Number = 100,
     dollar_per_signal: Number = 1.0,
+    slip: int = 1,
     leverage: Optional[Number] = None,
     vol_target: Optional[Number] = None,
     nan_tolerance: float = 0.25,
     rebal_freq: str = "m",
-    slip: int = 1,
     lback_periods: int = 21,
     lback_meth: str = "ma",
     half_life=11,
@@ -402,7 +402,7 @@ def notional_positions(
             half_life=half_life,
             rstring=rstring,
             pname=pname,
-            nan_tolerance=0.25,
+            nan_tolerance=nan_tolerance,
         )
 
         notional_positions._pvol = pvol
