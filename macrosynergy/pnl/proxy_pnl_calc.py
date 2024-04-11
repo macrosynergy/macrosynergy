@@ -21,6 +21,7 @@ from macrosynergy.management.utils import (
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 
+# TODO hard-coded not best practise!
 COST_COLUMNS: List[str] = [
     "SIZE_MEDIAN", "SIZE_90PCTL",
     "BIDOFFER_MEDIAN", "BIDOFFER_90PCTL",
@@ -135,8 +136,8 @@ class CostsPerFID(object):
         assert len(df["fid"].unique()) == 1
 
         pivot = df.pivot(index="real_date", columns="cost_type", values="value")
-        check = set(pivot.columns) - set(COST_COLUMNS)
-        assert check == set(), f"Missing columns: {check}"
+        # check = set(pivot.columns) - set(COST_COLUMNS)
+        # assert check == set(), f"Missing columns: {check}"
 
         change_index = get_diff_index(change_index=pivot)
         pivot = pivot.loc[change_index]
@@ -170,8 +171,8 @@ class CostsPerFID(object):
 class TransactionCosts(object):
     def __init__(self, df: QuantamentalDataFrame, fids: Optional[List[str]] = None):
         # TODO specify / extract transaction costs directly (with other data...)
-        ctypes = df["xcat"].unique().map(lambda x: x[:2])  # DO always have 2 characters?
-        assert set(ctypes) <= set(["FX", "EQ", "DU"])
+        ctypes = list(set([x[:2] for x in df["xcat"].unique()]))  # Does it always have 2 characters?
+        assert set(ctypes) <= set(["FX", "EQ", "DU"]), f"Unknown contract type: {ctypes}"
 
         # TODO split out fids...
         df["fid"] = df["cid"] + "_" + df["xcat"].map(lambda x: x[:2])
@@ -182,7 +183,7 @@ class TransactionCosts(object):
         
         columns: List[str] = ["fid", "cost_type", "real_date", "value"]
         self._costs_per_market = {
-            fid: CostsPerFID(df=df.loc[df["cid"] == fid, columns].copy())
+            fid: CostsPerFID(df=df.loc[df["fid"] == fid, columns].copy())
             for fid in fids
         }
     
@@ -191,12 +192,13 @@ class TransactionCosts(object):
         """Constructor for TransactionCosts from a general QuantamentalDataFrame."""
         xcats = [
             x for x in df_qf["xcat"].unique()
+            if any([x.endswith(y) for y in COST_COLUMNS])
         ]
         df: pd.DataFrame = reduce_df(df_qf.copy(), xcats=xcats)
         return cls(df=df, fids=None)
 
     def plot(self):
-        #  TODO visualised all FIDs...
+        # TODO visualise all FIDs...
         pass
 
     def get_costs(self, fid: str, real_date: str) -> Tuple[float, float]:
