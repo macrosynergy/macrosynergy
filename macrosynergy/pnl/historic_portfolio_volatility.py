@@ -280,15 +280,15 @@ def _hist_vol(
     pivot_signals: pd.DataFrame,
     pivot_returns: pd.DataFrame,
     sname: str,
-    rebal_freq: str = "M",
-    lback_meth: str = "ma",  # TODO allow for different method at different frequencies
-    lback_periods: List[int] = [-1, -1, -1],  # default all for all
-    half_life=[10, 5, 2],
-    est_freqs: List[str] = ["D", "W", "M"],
-    est_weights: List[float] = [1, 2, 3],  # TODO weights must sum to 1!
-    nan_tolerance: float = 0.25,
-    remove_zeros: bool = True,
-    return_variance_covariance: bool = False,
+    rebal_freq: str,
+    lback_meth: str,  # TODO allow for different method at different frequencies
+    lback_periods: List[int],  # default all for all
+    half_life,
+    est_freqs: List[str],
+    est_weights: List[float],
+    nan_tolerance: float,
+    remove_zeros: bool,
+    return_variance_covariance: bool,
 ) -> List[pd.DataFrame]:
     """
     Calculates historic volatility for a given strategy. It assumes that the dataframe
