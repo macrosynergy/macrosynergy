@@ -239,9 +239,9 @@ def _calculate_portfolio_volatility(
         vcv_df.loc[s.index[mask], :] = 0
         vcv_df.loc[:, s.index[mask]] = 0
         s[mask] = 0
-        assert vcv_df.isnull().sum().sum() == 0, (
-            f"N/A values in variance-covariance matrix!\n{vcv_df}"
-        )
+        assert (
+            vcv_df.isnull().sum().sum() == 0
+        ), f"N/A values in variance-covariance matrix!\n{vcv_df}"
 
         pvol: float = np.sqrt(s.T.dot(vcv_df).dot(s))
         list_pvol.append((td, pvol))
@@ -332,35 +332,21 @@ def _hist_vol(
     )
 
     # assert portfolio_return_name the only column
-    assert pvol_df.columns.tolist() == [portfolio_return_name]
+    pvol_df = pvol_df.reset_index()
+    assert set(pvol_df.columns.tolist()) == set([portfolio_return_name, "real_date"])
 
-    # # TODO remove re-index!
-    df_out = pvol_df.reindex(pivot_returns.index).ffill(limit=FFILL_LIMITS[rebal_freq])
-    nanindex = df_out.index[df_out[portfolio_return_name].isnull()]
-    if len(nanindex) > 0:
-        df_out = df_out.dropna()
-        logger.debug(
-            f"Found {len(nanindex)} NaNs in {portfolio_return_name} at {nanindex}, dropping all NaNs."
-        )
-
-    # TODO check df_out is of frequency rebal_freq
-    # TODO - should below not be forward filled with the previous volatility value...
-    nan_df = df_out[
-        df_out.loc[
-            df_out.first_valid_index() : df_out.last_valid_index(),
-            portfolio_return_name,
-        ].isnull()
-    ]
-
-    if not nan_df.empty:
+    nan_dates = pvol_df[pvol_df[portfolio_return_name].isna()]["real_date"].copy()
+    if len(nan_dates) > 0:
         logger.warning(
-            f"Found NaNs in {portfolio_return_name} at: {nan_df.index.tolist()}, dropping all NaNs."
+            f"Found NaNs in {portfolio_return_name} at: {nan_dates.tolist()}, dropping all NaNs."
         )
-        df_out = df_out.dropna()
+        pvol_df = pvol_df[~pvol_df["real_date"].isin(nan_dates)].copy()
+
+    pvol_df = pvol_df.set_index("real_date")
 
     if return_variance_covariance:
-        return [df_out, vcv_df]
-    return [df_out]
+        return [pvol_df, vcv_df]
+    return [pvol_df]
 
 
 def unstack_covariances(
