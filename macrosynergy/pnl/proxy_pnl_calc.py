@@ -91,10 +91,91 @@ def check_df_for_txn_stats(
                 )
 
 
-def get_diff_index(df_wide: pd.DataFrame, freq: str) -> pd.Index:
+def get_diff_index(df_wide: pd.DataFrame) -> pd.Index:
     df_diff = df_wide.diff(axis=0)
+    # TODO not isnull but first valid index (and check not nulls between first and last valid index...)? 
     change_index = df_diff.index[((df_diff.abs() > 0) | df_diff.isnull()).any(axis=1)]
     return change_index
+
+
+class PeriodTransactionCost(object):
+    def __init__(self, trade_size: float, median_size: float, median_cost: float, pct90_size: float, pct90_cost: float):
+        for k, v in [
+            ("trade_size", trade_size),
+            ("median_size", median_size),
+            ("median_cost", median_cost),
+            ("pct90_size", pct90_size),
+            ("pct90_cost", pct90_cost),
+        ]:
+            if not isinstance(v, Number):
+                raise TypeError(f"{k} ({v}) must be a number")
+
+            if v <= 0:
+                raise ValueError(f"{k} must be a number > 0 not {v}")
+            
+        self.trade_size = trade_size
+        self.median_size = median_size
+        self.median_cost = median_cost
+        self.pct90_size = pct90_size
+        self.pct90_cost = pct90_cost
+
+        self.cost_floor = median_cost
+        self.size_floor = median_size
+        self.cost_coefficient = (pct90_cost - median_cost) / (pct90_size - median_size)
+
+    def extrapolate_cost(self, trade_size: Number) -> Number:
+        assert trade_size >= 0
+        
+        adjusted_size = max(trade_size, self.size_floor)  # Minimum floor on costs
+        cost = self.cost_floor * (trade_size > 0) + self.cost_coefficient * (adjusted_size - self.size_floor)
+        return cost
+
+
+class CostsPerFID(object):
+    def __init__(self, df: pd.DataFrame):
+        assert len(df["fid"].unique()) == 1
+
+        pivot = df.pivot(index="real_date", columns="cost_type", values="value")
+        check = set(pivot.columns) - set(["SIZE_MEDIAN", "SIZE_90PCTL", "BIDOFFER_MEDIAN", "BIDOFFER_90PCTL", "ROLLCOST_MEDIAN", "ROLLCOST_90PCTL"])
+        assert check == set(), f"Missing columns: {check}"
+
+        change_index = get_diff_index(change_index=pivot)
+        pivot = pivot.loc[change_index]
+
+        self.cost_dates = {
+            rd: {
+                "ROLL": PeriodTransactionCost(),
+                "SPREAD": PeriodTransactionCost(),
+            }
+            for rd in change_index
+        }
+
+    
+    def get_costs(self, real_date):
+        pass
+
+
+class TransactionCosts(object):
+    def __init__(self, df: QuantamentalDataFrame, fids: Optional[List[str]] = None):
+        # TODO specify / extract transaction costs directly (with other data...)
+        ctypes = df["xcat"].unique().map(lambda x: x[:2])  # DO always have 2 characters?
+        assert set(ctypes) <= set(["FX", "EQ", "DU"])
+
+        # TODO split out fids...
+        df["fid"] = df["cid"] + "_" + df["xcat"].map(lambda x: x[:2])
+        df["cost_type"] = df["xcat"].map(lambda x: x[2:])
+
+        if fids is None:
+            fids = list(df["cid"].unique())
+        
+        columns: List[str] = ["fid", "cost_type", "real_date", "value"]
+        self._costs_per_market = {
+            fid: CostsPerFID(df=df.loc[df["cid"] == fid, columns].copy())
+            for fid in fids
+        }
+    
+    def get_costs(self, fid: str, real_date: str) -> (float, float):
+        return self._costs_per_market[fid].get_costs(real_date=real_date)
 
 
 class TransactionStats:
