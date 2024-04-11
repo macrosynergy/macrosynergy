@@ -21,6 +21,12 @@ from macrosynergy.management.utils import (
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 
+COST_COLUMNS: List[str] = [
+    "SIZE_MEDIAN", "SIZE_90PCTL",
+    "BIDOFFER_MEDIAN", "BIDOFFER_90PCTL",
+    "ROLLCOST_MEDIAN", "ROLLCOST_90PCTL"
+]
+
 
 def extrapolate_cost(
     trade_size: Number,
@@ -99,9 +105,8 @@ def get_diff_index(df_wide: pd.DataFrame) -> pd.Index:
 
 
 class PeriodTransactionCost(object):
-    def __init__(self, trade_size: float, median_size: float, median_cost: float, pct90_size: float, pct90_cost: float):
+    def __init__(self, median_size: float, median_cost: float, pct90_size: float, pct90_cost: float):
         for k, v in [
-            ("trade_size", trade_size),
             ("median_size", median_size),
             ("median_cost", median_cost),
             ("pct90_size", pct90_size),
@@ -112,12 +117,6 @@ class PeriodTransactionCost(object):
 
             if v <= 0:
                 raise ValueError(f"{k} must be a number > 0 not {v}")
-            
-        self.trade_size = trade_size
-        self.median_size = median_size
-        self.median_cost = median_cost
-        self.pct90_size = pct90_size
-        self.pct90_cost = pct90_cost
 
         self.cost_floor = median_cost
         self.size_floor = median_size
@@ -136,7 +135,7 @@ class CostsPerFID(object):
         assert len(df["fid"].unique()) == 1
 
         pivot = df.pivot(index="real_date", columns="cost_type", values="value")
-        check = set(pivot.columns) - set(["SIZE_MEDIAN", "SIZE_90PCTL", "BIDOFFER_MEDIAN", "BIDOFFER_90PCTL", "ROLLCOST_MEDIAN", "ROLLCOST_90PCTL"])
+        check = set(pivot.columns) - set(COST_COLUMNS)
         assert check == set(), f"Missing columns: {check}"
 
         change_index = get_diff_index(change_index=pivot)
@@ -144,15 +143,28 @@ class CostsPerFID(object):
 
         self.cost_dates = {
             rd: {
-                "ROLL": PeriodTransactionCost(),
-                "SPREAD": PeriodTransactionCost(),
+                name: PeriodTransactionCost(
+                    median_size=row["SIZE_MEDIAN"],
+                    pct90_size=row["SIZE_90PCTL"],
+                    median_cost=row[f"{name}_MEDIAN"],
+                    pct90_cost=row[f"{name}_90PCTL"]
+                )
+                for name in ["BIDOFFER", "ROLLCOST"]
             }
-            for rd in change_index
+            for rd, row in change_index.iterrows()
         }
 
-    
-    def get_costs(self, real_date):
-        pass
+    def get_costs(self, real_date, trade_size: Number) -> Tuple[float, float]:
+        key_date = max([d for d in self.cost_dates.keys() if d <= real_date])
+        cost_funcs = self.cost_dates[key_date]
+
+        # Trading costs (bid-offer spread)
+        tc = cost_funcs["BIDOFFER"].extrapolate_cost(trade_size=trade_size)
+
+        # Roll costs
+        rc = cost_funcs["ROLLCOST"].extrapolate_cost(trade_size=trade_size)
+
+        return tc, rc
 
 
 class TransactionCosts(object):
@@ -174,7 +186,20 @@ class TransactionCosts(object):
             for fid in fids
         }
     
-    def get_costs(self, fid: str, real_date: str) -> (float, float):
+    @classmethod
+    def qf_data(cls, df_qf: QuantamentalDataFrame) -> "TransactionCosts":
+        """Constructor for TransactionCosts from a general QuantamentalDataFrame."""
+        xcats = [
+            x for x in df_qf["xcat"].unique()
+        ]
+        df: pd.DataFrame = reduce_df(df_qf.copy(), xcats=xcats)
+        return cls(df=df, fids=None)
+
+    def plot(self):
+        #  TODO visualised all FIDs...
+        pass
+
+    def get_costs(self, fid: str, real_date: str) -> Tuple[float, float]:
         return self._costs_per_market[fid].get_costs(real_date=real_date)
 
 
@@ -361,6 +386,8 @@ def proxy_pnl_calc(
         size, with the slope determined by the normal and large positions, if all relevant
         series are applied.
     """
+
+    # TODO add TransactionCosts argument (initalised object...)...
 
     for _varx, _namex, _typex in [
         (df, "df", QuantamentalDataFrame),
