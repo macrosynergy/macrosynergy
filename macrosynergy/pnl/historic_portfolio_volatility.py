@@ -166,8 +166,8 @@ def _calculate_portfolio_volatility(
     est_freqs: List[str],
     est_weights: List[float],
     weights_func: Callable[[int, int], np.ndarray],
-    lback_periods: int,
-    half_life: int,
+    lback_periods: List[int],
+    half_life: List[int],
     nan_tolerance: float,
     remove_zeros: bool,
     portfolio_return_name: str,
@@ -199,21 +199,26 @@ def _calculate_portfolio_volatility(
     lback_max = (
         int(np.ceil(lback_periods * (1 + nan_tolerance))) if lback_periods > 0 else 0
     )
+    def get_nan_tolerance(lback, nan_tol):
+        lback_max = (
+            int(np.ceil(lback_periods * (1 + nan_tolerance))) if lback_periods > 0 else 0
+        )
+        return lback_max
 
     # TODO convert frequencies
     list_vcv: List[pd.DataFrame] = []
     list_pvol: List[Tuple[pd.Timestamp, np.float64]] = []
     for td in rebal_dates:
-        window_df = pivot_returns.loc[pivot_returns.index <= td].iloc[-lback_max:]
+        window_df = pivot_returns.loc[pivot_returns.index <= td]
         dict_vcv: Dict[str, pd.DataFrame] = {
             freq: estimate_variance_covariance(
-                piv_ret=_downsample_returns(window_df, freq=freq),
-                lback_periods=lback_periods,
+                piv_ret=_downsample_returns(window_df, freq=freq).iloc[-get_nan_tolerance(lback=lb, nan_tol=nan_tolerance):],
+                lback_periods=lb,
                 remove_zeros=remove_zeros,
                 weights_func=weights_func,
-                half_life=half_life,
+                half_life=hl,
             )
-            for ix, freq in enumerate(est_freqs)
+            for freq, lb, hl in zip(est_freqs, lback_periods, half_life)
         }
 
         vcv_df: pd.DataFrame = sum(
