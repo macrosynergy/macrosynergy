@@ -495,10 +495,10 @@ def historic_portfolio_vol(
     rstring: str = "XR",
     rebal_freq: str = "m",
     lback_meth: str = "ma",
-    est_freqs: List[str] = ["D", "W", "M"],  # "m", "w", "d", "q"
-    lback_periods: List[int] = [-1, -1, -1],  # default all for all
-    half_life: List[int] = [11, 5, 6],
-    est_weights: Optional[List[float]] = None,
+    est_freqs: Union[str, List[str]] = ["D", "W", "M"],  # "m", "w", "d", "q"
+    lback_periods: Union[int, List[int]] = [-1, -1, -1],  # default all for all
+    half_life: Union[int, List[int]] = [11, 5, 6],
+    est_weights: Optional[Union[float, List[float]]] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
