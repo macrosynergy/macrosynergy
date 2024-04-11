@@ -423,32 +423,6 @@ def _check_missing_data(
         )
 
 
-def _check_weights(
-    weights: List[float],
-    freqs: List[str],
-    normalize: bool = True,
-    fill_value: Number = None,
-) -> List[float]:
-    if weights is None:
-        if fill_value is None:
-            fill_value = 1 / len(freqs)
-        weights = [fill_value] * len(freqs)
-    else:
-        if len(weights) != len(freqs):
-            raise ValueError(
-                f"Length of `weights` ({len(weights)}) must be equal to length of `freqs` ({len(freqs)})"
-            )
-
-        if not all([isinstance(w, (int, float)) for w in weights]):
-            raise ValueError("`weights` must be a list of floats or integers.")
-
-        if normalize:
-            if not np.isclose(sum(weights), 1):
-                weights = [w / sum(weights) for w in weights]
-
-    return weights
-
-
 def _check_est_args(
     est_freqs: List[str],
     est_weights: List[Number],
@@ -466,24 +440,28 @@ def _check_est_args(
         if len(half_life) == 1:
             half_life = half_life * ilen
 
+    inv_weights_msg = "Invalid weights in `est_weights` at index {ix:d}"
+    inv_lback_msg = "Invalid lookback period in `lback_periods` at index {ix:d}: {lb:d}"
+    inv_hl_msg = "Invalid half-life in `half_life` at index {ix:d}: {hl:d}"
+
     for ix, (freq, weight, lback, hl) in enumerate(
         zip(est_freqs, est_weights, lback_periods, half_life)
     ):
-        if freq not in ["D", "W", "M", "Q"]:
-            raise ValueError(f"Invalid frequency {freq} in `est_freqs` at index {ix:d}")
+        _check_frequency(freq=freq, freq_type=f"est_freq[{ix:d}]")
 
-        if not isinstance(weight, (int, float)):
-            raise ValueError(
-                f"Invalid weight {weight} in `est_weights` at index {ix:d}"
-            )
+        if not isinstance(weight, Number) or weight < 0:
+            raise ValueError(inv_weights_msg.format(ix=ix))
 
+        # stated idiosyncratically to allow for -1
         if not isinstance(lback, int) or (lback < 0 and lback != -1):
-            raise ValueError(
-                f"Invalid lookback period {lback} in `lback_periods` at index {ix:d}"
-            )
+            raise ValueError(inv_lback_msg.format(ix=ix, lb=lback))
 
         if not isinstance(hl, int) or hl < 0:
-            raise ValueError(f"Invalid half-life {hl} in `half_life` at index {ix:d}")
+            raise ValueError(inv_hl_msg.format(ix=ix, hl=hl))
+
+    # normalize est_weights
+    if not np.isclose(np.sum(est_weights), 1):
+        est_weights = list(np.array(est_weights) / np.sum(est_weights))
 
     return est_freqs, est_weights, lback_periods, half_life
 
