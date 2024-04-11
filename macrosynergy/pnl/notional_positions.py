@@ -228,6 +228,7 @@ def notional_positions(
     leverage: Optional[Number] = None,
     vol_target: Optional[Number] = None,
     nan_tolerance: float = 0.25,
+    remove_zeros: bool = True,
     rebal_freq: str = "m",
     lback_meth: str = "ma",
     est_freqs: Union[str, List[str]] = ["D", "W", "M"],
@@ -413,6 +414,7 @@ def notional_positions(
             rstring=rstring,
             pname=pname,
             nan_tolerance=nan_tolerance,
+            remove_zeros=remove_zeros,
         )
 
         notional_positions._pvol = pvol
