@@ -21,8 +21,6 @@ from macrosynergy.management.utils import (
     reduce_df,
     qdf_to_ticker_df,
     ticker_df_to_qdf,
-    get_cid,
-    get_xcat,
 )
 
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
@@ -158,27 +156,30 @@ def _vol_target_positions(
     # drop rows with all na
     # TODO add log statement of how many N/A values are dropped
     out_df = out_df.reindex(df_wide.index)
-    rebal_dates = sorted(histpvol.index.values)
-    for num, rb in enumerate(histpvol.index):
-        if rb < rebal_dates[-1]:
-            mask = (out_df.index >= rb) & (out_df.index < rebal_dates[num + 1])
-        else:
-            mask = out_df.index >= rb
+    rebal_dates = sorted(histpvol.index.tolist())
+
+    for num, rb in enumerate(rebal_dates[:-1]):
+        mask = (out_df.index >= rb) & (out_df.index < rebal_dates[num + 1])
         out_df.loc[mask, :] = out_df.loc[mask, :].ffill()
+    mask = out_df.index >= rebal_dates[-1]
+    out_df.loc[mask, :] = out_df.loc[mask, :].ffill()
 
     # get na values per column
     na_per_col = out_df.isna().sum()
     na_per_col = na_per_col[na_per_col > 0]
     log_str = f"Columns with N/A values: {na_per_col.index.tolist()}"
 
-    out_df.rename(
+    out_df = out_df.rename(
         columns={
             col: col.replace(sig_ident, "_" + pname) for col in out_df.columns.tolist()
         },
-        inplace=True,
-    )
+    ).dropna(how="all")
 
-    return (out_df.dropna(how="all"), histpvol[["cid", "xcat", "value"]], vcv_df)
+    return (
+        out_df,
+        standardise_dataframe(histpvol[["cid", "xcat", "value"]]),
+        vcv_df,
+    )
 
 
 def _leverage_positions(
@@ -404,8 +405,8 @@ def notional_positions(
             nan_tolerance=0.25,
         )
 
-    notional_positions._pvol = pvol
-    notional_positions._vcv_df = vcv_df
+        notional_positions._pvol = pvol
+        notional_positions._vcv_df = vcv_df
     # TODO dollar_per_signal: Number = 1.0 (dollar per signal => signal * dollars = position)
 
     return ticker_df_to_qdf(df=return_df).dropna()
