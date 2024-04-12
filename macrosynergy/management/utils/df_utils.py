@@ -14,6 +14,7 @@ from numbers import Number
 
 import numpy as np
 import pandas as pd
+import datetime
 import requests
 import requests.compat
 from .core import get_cid, get_xcat, _map_to_business_day_frequency, is_valid_iso_date
@@ -783,114 +784,6 @@ def categories_df(
     return dfc.dropna(axis=0, how="all")
 
 
-def years_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
-    """Returns the number of years between two dates."""
-    return end_date.year - start_date.year
-
-
-def quarters_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
-    """Returns the number of quarters between two dates."""
-    return (end_date.year - start_date.year) * 4 + (
-        end_date.quarter - start_date.quarter
-    )
-
-
-def months_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
-    """Returns the number of months between two dates."""
-    return (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month)
-
-
-def weeks_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
-    """Returns the number of business weeks between two dates."""
-    next_monday = start_date + pd.offsets.Week(weekday=0)
-    dif = (end_date - next_monday).days // 7 + 1
-    return dif
-
-
-def get_eops(
-    dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
-    start_date: Optional[Union[str, pd.Timestamp]] = None,
-    end_date: Optional[Union[str, pd.Timestamp]] = None,
-    freq: str = "M",
-) -> pd.Series:
-    """
-    Returns a series of end-of-period dates for a given frequency.
-    Dates can be passed as a series, index, a generic iterable or as a start and end date.
-
-    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
-    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
-        be used to generate the end-of-period dates. Can be passed as a series, index, a
-        generic iterable or as a start and end date.
-    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
-        not passed.
-    """
-
-    freq = _map_to_business_day_frequency(freq)
-
-    if bool(start_date) != bool(end_date):
-        raise ValueError(
-            "Both `start_date` and `end_date` must be passed when using "
-            "dates as a start and end date."
-        )
-
-    if bool(start_date) and bool(dates):
-        raise ValueError(
-            "Only one of `dates` or `start_date` and `end_date` must be passed."
-        )
-
-    if bool(start_date):
-        assert bool(end_date)
-        for date, dname in zip([start_date, end_date], ["start_date", "end_date"]):
-            if not isinstance(date, (str, pd.Timestamp)):
-                raise TypeError(f"{dname} must be a string or a pandas Timestamp.")
-            if isinstance(date, str):
-                if not is_valid_iso_date(date):
-                    raise ValueError(
-                        "Both `start_date` and `end_date` must be valid ISO dates when passed as "
-                        "strings."
-                    )
-
-        if pd.Timestamp(start_date) > pd.Timestamp(end_date):
-            start_date, end_date = end_date, start_date
-
-    dts: pd.DataFrame = pd.DataFrame(
-        (
-            dates
-            if (dates is not None)
-            else pd.bdate_range(start=start_date, end=end_date)
-        ),
-        columns=["real_date"],
-    ).apply(pd.to_datetime, axis=1)
-
-    min_date: pd.Timestamp = dts["real_date"].min()
-
-    if freq == _map_to_business_day_frequency("D"):
-        max_date = dts["real_date"].max()
-        dtx = pd.bdate_range(start=min_date, end=max_date)
-        return dtx[dtx.isin(dts["real_date"])]
-
-    if freq == _map_to_business_day_frequency("M"):
-        func = months_btwn_dates
-    elif freq == _map_to_business_day_frequency("W"):
-        func = weeks_btwn_dates
-    elif freq == _map_to_business_day_frequency("Q"):
-        func = quarters_btwn_dates
-    elif freq == _map_to_business_day_frequency("A"):
-        func = years_btwn_dates
-    # elif freq == _map_to_business_day_frequency("D"):
-    #     func = lambda x, y: len(pd.bdate_range(x, y)) - 1
-    else:
-        raise ValueError("Frequency parameter must be one of D, M, W, Q, or A.")
-
-    dts["period"] = dts["real_date"].apply(func, args=(min_date,))
-
-    t_indices: pd.Series = dts["period"].shift(-1) != dts["period"]
-
-    t_dates: pd.Series = dts["real_date"].loc[t_indices].reset_index(drop=True)
-
-    return t_dates
-
-
 def estimate_release_frequency(
     timeseries: Optional[pd.Series] = None,
     df_wide: Optional[pd.DataFrame] = None,
@@ -966,3 +859,173 @@ def estimate_release_frequency(
     # infer the frequency of the timeseries
 
     return pd.infer_freq(timeseries.index)
+
+
+def years_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of years between two dates."""
+    return end_date.year - start_date.year
+
+
+def quarters_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of quarters between two dates."""
+    return (end_date.year - start_date.year) * 4 + (
+        end_date.quarter - start_date.quarter
+    )
+
+
+def months_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of months between two dates."""
+    return (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month)
+
+
+def weeks_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of business weeks between two dates."""
+    next_monday = start_date + pd.offsets.Week(weekday=0)
+    dif = (end_date - next_monday).days // 7 + 1
+    return dif
+
+
+def _get_edge_dates(
+    dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
+    start_date: Optional[Union[str, pd.Timestamp]] = None,
+    end_date: Optional[Union[str, pd.Timestamp]] = None,
+    freq: str = "M",
+    direction: str = "end",
+) -> pd.Series:
+    assert direction in ["start", "end"], "Direction must be either 'start' or 'end'."
+    datettypes = [pd.Timestamp, str, np.datetime64, datetime.date]
+
+    freq = _map_to_business_day_frequency(freq)
+
+    if bool(start_date) != bool(end_date):
+        raise ValueError(
+            "Both `start_date` and `end_date` must be passed when using "
+            "dates as a start and end date."
+        )
+
+    if dates is not None:
+        if not isinstance(dates, (pd.DatetimeIndex, pd.Series, Iterable)):
+            raise TypeError(
+                "Dates must be a pandas DatetimeIndex, Series, or a generic iterable."
+            )
+        if isinstance(dates, pd.DataFrame):
+            dates = dates.iloc[:, 0]
+        if isinstance(dates, (pd.DatetimeIndex, pd.Series)):
+            dates = dates.tolist()
+        dates = list(dates)
+
+        for ix, dt in enumerate(dates):
+            try:
+                dates[ix] = pd.to_datetime(dt)
+            except Exception as e:
+                raise TypeError(
+                    f"Error converting date at index {ix} to a pandas Timestamp: {e}"
+                )
+
+    if bool(start_date) and bool(dates):
+        raise ValueError(
+            "Only one of `dates` or `start_date` and `end_date` must be passed."
+        )
+
+    if bool(start_date):
+        assert bool(end_date)
+        for date, dname in zip([start_date, end_date], ["start_date", "end_date"]):
+            if not isinstance(date, (str, pd.Timestamp)):
+                raise TypeError(f"{dname} must be a string or a pandas Timestamp.")
+            if isinstance(date, str):
+                if not is_valid_iso_date(date):
+                    raise ValueError(
+                        "Both `start_date` and `end_date` must be valid ISO dates when passed as "
+                        "strings."
+                    )
+
+        if pd.Timestamp(start_date) > pd.Timestamp(end_date):
+            start_date, end_date = end_date, start_date
+
+    dts: pd.DataFrame = pd.DataFrame(
+        (
+            dates
+            if (dates is not None)
+            else pd.bdate_range(start=start_date, end=end_date)
+        ),
+        columns=["real_date"],
+    ).apply(pd.to_datetime, axis=1)
+    min_date: pd.Timestamp = dts["real_date"].min()
+
+    if freq == _map_to_business_day_frequency("D"):
+        max_date = dts["real_date"].max()
+        dtx = pd.bdate_range(start=min_date, end=max_date)
+        return dtx[dtx.isin(dts["real_date"])]
+
+    if freq == _map_to_business_day_frequency("M"):
+        func = months_btwn_dates
+    elif freq == _map_to_business_day_frequency("W"):
+        func = weeks_btwn_dates
+    elif freq == _map_to_business_day_frequency("Q"):
+        func = quarters_btwn_dates
+    elif freq == _map_to_business_day_frequency("A"):
+        func = years_btwn_dates
+    else:
+        raise ValueError("Frequency parameter must be one of D, M, W, Q, or A.")
+
+    dts["period"] = dts["real_date"].apply(func, args=(min_date,))
+
+    dx = -1 if direction == "end" else 1
+    t_indices: pd.Series = dts["period"].shift(dx) != dts["period"]
+    t_dates: pd.Series = dts["real_date"].loc[t_indices].reset_index(drop=True)
+
+    return t_dates
+
+
+def get_eops(
+    dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
+    start_date: Optional[Union[str, pd.Timestamp]] = None,
+    end_date: Optional[Union[str, pd.Timestamp]] = None,
+    freq: str = "M",
+) -> pd.Series:
+    """
+    Returns a series of end-of-period dates for a given frequency.
+    Dates can be passed as a series, index, a generic iterable or as a start and end date.
+
+    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
+    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
+        be used to generate the end-of-period dates. Can be passed as a series, index, a
+        generic iterable or as a start and end date.
+    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
+        not passed.
+    """
+    direction = "end"
+    return _get_edge_dates(
+        dates=dates,
+        start_date=start_date,
+        end_date=end_date,
+        freq=freq,
+        direction=direction,
+    )
+
+
+def get_sops(
+    dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
+    start_date: Optional[Union[str, pd.Timestamp]] = None,
+    end_date: Optional[Union[str, pd.Timestamp]] = None,
+    freq: str = "M",
+) -> pd.Series:
+    """
+    Returns a series of start-of-period dates for a given frequency.
+    Dates can be passed as a series, index, a generic iterable or as a start and end date.
+
+    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
+    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
+        be used to generate the start-of-period dates. Can be passed as a series, index, a
+        generic iterable or as a start and end date.
+    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
+        not passed.
+    """
+    direction = "start"
+    return _get_edge_dates(
+        dates=dates,
+        start_date=start_date,
+        end_date=end_date,
+        freq=freq,
+        direction=direction,
+    )
