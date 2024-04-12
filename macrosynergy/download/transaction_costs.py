@@ -3,6 +3,7 @@ import pandas as pd
 import warnings
 import requests
 import numpy as np
+from typing import List
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import get_cid, get_xcat
 from io import StringIO
@@ -30,6 +31,17 @@ def _request_wrapper(url: str, verbose: bool = True, **kwargs) -> str:
                 print(f"Error downloading {url}: {e}")
             continue
     raise requests.exceptions.RequestException(f"Failed to download {url}")
+
+
+AVAILABLE_CTYPES = ["FX", "IRS", "CDS"]
+AVAIALBLE_COSTS = ["BIDOFFER", "ROLLCOST", "SIZE"]
+AVAILABLE_STATS = ["MEDIAN", "90PCTL"]
+AVAILABLE_XCATS = [
+    f"{c}_{t}_{s}"
+    for c in AVAILABLE_CTYPES
+    for t in AVAIALBLE_COSTS
+    for s in AVAILABLE_STATS
+]
 
 
 def download_transaction_costs(
@@ -64,6 +76,17 @@ def download_transaction_costs(
             print(ers)
 
     return dfd
+
+
+def get_fids(df: QuantamentalDataFrame) -> list:
+    def repl(x: str, yL: List[str]) -> str:
+        for y in yL:
+            x = x.replace(y, "")
+        return x
+
+    return list(
+        set(df["cid"] + "_" + df["xcat"].apply(lambda x: repl(x, AVAILABLE_XCATS)))
+    )
 
 
 if __name__ == "__main__":
