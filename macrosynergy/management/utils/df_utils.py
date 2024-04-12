@@ -12,6 +12,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
 
 import numpy as np
 import pandas as pd
+import datetime
 import requests
 import requests.compat
 from .core import get_cid, get_xcat, _map_to_business_day_frequency, is_valid_iso_date
