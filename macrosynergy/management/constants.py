@@ -83,3 +83,14 @@ cids_dm = cids_dmca + cids_dmec
 cids_em = cids_latm + cids_emea + cids_emas
 
 all_cids = sorted(cids_dm + cids_em)
+
+MARKET_AREAS = {
+    "DMCA": cids_dmca,
+    "DMEC": cids_dmec,
+    "LATM": cids_latm,
+    "EMEA": cids_emea,
+    "EMAS": cids_emas,
+    "DM": cids_dm,
+    "EM": cids_em,
+    "ALL": all_cids,
+}
