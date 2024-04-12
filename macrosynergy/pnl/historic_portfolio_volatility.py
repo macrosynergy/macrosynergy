@@ -41,7 +41,6 @@ from macrosynergy.management.utils import (
     reduce_df,
     standardise_dataframe,
     ticker_df_to_qdf,
-    get_eops,
     _map_to_business_day_frequency,
 )
 from macrosynergy.panel.historic_vol import expo_weights
