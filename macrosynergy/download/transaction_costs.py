@@ -36,8 +36,8 @@ def _request_wrapper(url: str, verbose: bool = True, **kwargs) -> str:
 AVAILABLE_CTYPES = ["FX", "IRS", "CDS"]
 AVAIALBLE_COSTS = ["BIDOFFER", "ROLLCOST", "SIZE"]
 AVAILABLE_STATS = ["MEDIAN", "90PCTL"]
-AVAILABLE_XCATS = [
-    f"{c}_{t}_{s}"
+AVAILABLE_CATS = [
+    f"{c}{t}_{s}"
     for c in AVAILABLE_CTYPES
     for t in AVAIALBLE_COSTS
     for s in AVAILABLE_STATS
@@ -85,7 +85,7 @@ def get_fids(df: QuantamentalDataFrame) -> list:
         return x
 
     return list(
-        set(df["cid"] + "_" + df["xcat"].apply(lambda x: repl(x, AVAILABLE_XCATS)))
+        set(df["cid"] + "_" + df["xcat"].apply(lambda x: repl(x, AVAILABLE_CATS)))
     )
 
 
