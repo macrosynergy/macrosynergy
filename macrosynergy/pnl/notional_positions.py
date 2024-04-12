@@ -21,8 +21,6 @@ from macrosynergy.management.utils import (
     reduce_df,
     qdf_to_ticker_df,
     ticker_df_to_qdf,
-    get_cid,
-    get_xcat,
 )
 
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
@@ -103,16 +101,18 @@ def _vol_target_positions(
     df_wide: pd.DataFrame,
     sname: str,
     fids: List[str],
-    aum: Number = 100,
-    vol_target: Number = 10,
-    rebal_freq: str = "m",
-    lback_periods: int = 21,
-    half_life: int = 11,
-    nan_tolerance: float = 0.25,
-    remove_zeros: bool = True,
-    lback_meth: str = "ma",
-    rstring: str = "XR",
-    pname: str = "VPOS",
+    aum: Number,
+    vol_target: Number,
+    rebal_freq: str,
+    est_freqs: Union[str, List[str]],
+    est_weights: Union[Number, List[Number]],
+    lback_periods: Union[int, List[int]],
+    half_life: Union[int, List[int]],
+    nan_tolerance: float,
+    remove_zeros: bool,
+    lback_meth: str,
+    rstring: str,
+    pname: str,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Uses historic portfolio volatility to calculate notional positions based on
@@ -131,9 +131,11 @@ def _vol_target_positions(
         sname=sname,
         fids=fids,
         rstring=rstring,
+        lback_meth=lback_meth,
+        est_freqs=est_freqs,
+        est_weights=est_weights,
         lback_periods=lback_periods,
         half_life=half_life,
-        lback_meth=lback_meth,
         nan_tolerance=nan_tolerance,
         rebal_freq=rebal_freq,
         remove_zeros=remove_zeros,
@@ -158,27 +160,30 @@ def _vol_target_positions(
     # drop rows with all na
     # TODO add log statement of how many N/A values are dropped
     out_df = out_df.reindex(df_wide.index)
-    rebal_dates = sorted(histpvol.index.values)
-    for num, rb in enumerate(histpvol.index):
-        if rb < rebal_dates[-1]:
-            mask = (out_df.index >= rb) & (out_df.index < rebal_dates[num + 1])
-        else:
-            mask = out_df.index >= rb
+    rebal_dates = sorted(histpvol.index.tolist())
+
+    for num, rb in enumerate(rebal_dates[:-1]):
+        mask = (out_df.index >= rb) & (out_df.index < rebal_dates[num + 1])
         out_df.loc[mask, :] = out_df.loc[mask, :].ffill()
+    mask = out_df.index >= rebal_dates[-1]
+    out_df.loc[mask, :] = out_df.loc[mask, :].ffill()
 
     # get na values per column
     na_per_col = out_df.isna().sum()
     na_per_col = na_per_col[na_per_col > 0]
     log_str = f"Columns with N/A values: {na_per_col.index.tolist()}"
 
-    out_df.rename(
+    out_df = out_df.rename(
         columns={
             col: col.replace(sig_ident, "_" + pname) for col in out_df.columns.tolist()
         },
-        inplace=True,
-    )
+    ).dropna(how="all")
 
-    return (out_df.dropna(how="all"), histpvol[["cid", "xcat", "value"]], vcv_df)
+    return (
+        out_df,
+        standardise_dataframe(histpvol[["cid", "xcat", "value"]]),
+        vcv_df,
+    )
 
 
 def _leverage_positions(
@@ -219,14 +224,17 @@ def notional_positions(
     fids: List[str],
     aum: Number = 100,
     dollar_per_signal: Number = 1.0,
+    slip: int = 1,
     leverage: Optional[Number] = None,
     vol_target: Optional[Number] = None,
     nan_tolerance: float = 0.25,
+    remove_zeros: bool = True,
     rebal_freq: str = "m",
-    slip: int = 1,
-    lback_periods: int = 21,
     lback_meth: str = "ma",
-    half_life=11,
+    est_freqs: Union[str, List[str]] = ["D", "W", "M"],
+    est_weights: Union[Number, List[Number]] = [1, 2, 3],
+    lback_periods: Union[int, List[int]] = [-1, -1, -1],
+    half_life: Union[int, List[int]] = [11, 5, 6],
     rstring: str = "XR",
     start: Optional[str] = None,
     end: Optional[str] = None,
@@ -309,9 +317,11 @@ def notional_positions(
         (vol_target, "vol_target", (Number, NoneType)),
         (rebal_freq, "rebal_freq", str),
         (slip, "slip", int),
-        (lback_periods, "lback_periods", int),
         (lback_meth, "lback_meth", str),
-        (half_life, "half_life", int),
+        (est_freqs, "est_freqs", (str, list)),
+        (est_weights, "est_weights", (Number, list)),
+        (lback_periods, "lback_periods", (int, list)),
+        (half_life, "half_life", (int, list)),
         (rstring, "rstring", str),
         (start, "start", (str, NoneType)),
         (end, "end", (str, NoneType)),
@@ -396,16 +406,19 @@ def notional_positions(
             aum=aum,
             vol_target=vol_target,
             rebal_freq=rebal_freq,
-            lback_periods=lback_periods,
             lback_meth=lback_meth,
+            est_freqs=est_freqs,
+            est_weights=est_weights,
+            lback_periods=lback_periods,
             half_life=half_life,
             rstring=rstring,
             pname=pname,
-            nan_tolerance=0.25,
+            nan_tolerance=nan_tolerance,
+            remove_zeros=remove_zeros,
         )
 
-    notional_positions._pvol = pvol
-    notional_positions._vcv_df = vcv_df
+        notional_positions._pvol = pvol
+        notional_positions._vcv_df = vcv_df
     # TODO dollar_per_signal: Number = 1.0 (dollar per signal => signal * dollars = position)
 
     return ticker_df_to_qdf(df=return_df).dropna()
