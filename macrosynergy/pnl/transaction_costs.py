@@ -131,7 +131,7 @@ class TransactionCosts(object):
     @classmethod
     def download(self) -> "TransactionCosts":
         df = download_transaction_costs()
-        return self.__init__(df=df, fids=get_fids(df), **self.DEFAULT_ARGS)
+        return TransactionCosts(df=df, fids=get_fids(df), **self.DEFAULT_ARGS)
 
     def __init__(
         self,
@@ -144,7 +144,8 @@ class TransactionCosts(object):
         rcost_l: str,
         size_l: str,
     ) -> None:
-        self.sparse_costs = SparseCosts(
+        self.sparse_costs = SparseCosts(df)
+        check_df_for_txn_stats(
             df, fids, tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l
         )
         self.tcost_n = tcost_n
@@ -232,8 +233,7 @@ class ExampleAdapter(TransactionCosts):
 if __name__ == "__main__":
     import time, random
 
-    txn_costs_df: pd.DataFrame = download_transaction_costs(verbose=True)
-
+    tx_costs_dates = pd.bdate_range("1990-01-01", "2022-12-30")
     txn_costs_obj: TransactionCosts = TransactionCosts.download()
 
     assert txn_costs_obj.sparse_costs.get_costs(
@@ -246,10 +246,6 @@ if __name__ == "__main__":
         "GBP_FXROLLCOST_90PCTL": 0.0052431669195902,
         "GBP_FXSIZE_90PCTL": 200.0,
     }
-
-    tx_costs_dates = pd.bdate_range(
-        txn_costs_df["real_date"].min(), txn_costs_df["real_date"].max()
-    )
 
     start = time.time()
     test_iters = 1000
