@@ -924,3 +924,29 @@ def get_eops(
         direction=direction,
     )
 
+
+def get_sops(
+    dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
+    start_date: Optional[Union[str, pd.Timestamp]] = None,
+    end_date: Optional[Union[str, pd.Timestamp]] = None,
+    freq: str = "M",
+) -> pd.Series:
+    """
+    Returns a series of start-of-period dates for a given frequency.
+    Dates can be passed as a series, index, a generic iterable or as a start and end date.
+
+    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
+    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
+        be used to generate the start-of-period dates. Can be passed as a series, index, a
+        generic iterable or as a start and end date.
+    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
+        not passed.
+    """
+    direction = "start"
+    return _get_edge_dates(
+        dates=dates,
+        start_date=start_date,
+        end_date=end_date,
+        freq=freq,
+        direction=direction,
+    )
