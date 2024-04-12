@@ -57,11 +57,21 @@ def sample_real_data_frame() -> QuantamentalDataFrame:
         ].copy()
     )
 
-    df["cid"] = df["cid"].apply(get_market_area)
+    # df["cid"] = df["cid"].apply(get_market_area)
 
     # first group the dataframe by cid,xcat,real_date. keep only the first value for each group
-    df = df.groupby(["cid", "xcat", "real_date"]).mean().reset_index()
+    # df = df.groupby(["cid", "xcat", "real_date"]).mean().reset_index()
 
     tdf = qdf_to_ticker_df(df)
+    id_cols = {}
+    for ic, col in enumerate(tdf.columns):
+        for colx in list(tdf.columns)[len(tdf.columns) - ic :]:
+            if np.isclose(tdf[col], tdf[colx]).all():
+                id_cols[col] = id_cols.get(col, []) + [colx]
+
+    print(id_cols)
 
     return tdf
+
+
+sample_real_data_frame()
