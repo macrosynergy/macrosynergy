@@ -10,8 +10,6 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import seaborn as sns
 
-import datetime
-
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.base import BaseEstimator
 from sklearn.feature_selection import SelectorMixin
@@ -49,7 +47,7 @@ class SignalOptimizer:
         Optimization is performed through nested cross-validation, with the outer splitter
         an instance of `ExpandingIncrementPanelSplit` reflecting a pipeline through time
         simulating the experience of an investor. In each iteration of the outer splitter,
-        a training and test set are created, and a grid search using the specified
+        a training and test set are created, and a hyperparameter search using the specified
         'inner_splitter' is performed to determine an optimal model amongst a set of
         candidate models. Once this is selected, the chosen model is used to make the test
         set forecasts. Lastly, we cast these forecasts back by a frequency period to
@@ -744,7 +742,10 @@ class SignalOptimizer:
             try:
                 search_object.fit(X_train_i, y_train_i)
             except Exception as e:
-                continue
+                warnings.warn(
+                    f"Error in the grid search for {model_name} at test time {test_date_levels[0]}: {e}.",
+                    RuntimeWarning,
+                )
             score = search_object.best_score_
             if score > optim_score:
                 optim_score = score
@@ -755,7 +756,7 @@ class SignalOptimizer:
         # Handle case where no model was chosen
         if optim_model is None:
             warnings.warn(
-                f"No model was chosen for {name} at date {test_date_levels[0]}. Setting to zero.",
+                f"No model was chosen for {name} at test time {test_date_levels[0]}. Setting to zero.",
                 RuntimeWarning,
             )
             preds = np.zeros(X_test_i.shape[0])
