@@ -265,6 +265,7 @@ class SignalOptimizer:
         hparam_type: str = "grid",
         min_cids: int = 4,
         min_periods: int = 12 * 3,
+        test_size: int = 1,
         max_periods: Optional[int] = None,
         n_iter: Optional[int] = 10,
         n_jobs: Optional[int] = -1,
@@ -335,6 +336,7 @@ class SignalOptimizer:
             hparam_type=hparam_type,
             min_cids=min_cids,
             min_periods=min_periods,
+            test_size=test_size,
             max_periods=max_periods,
             n_iter=n_iter,
             n_jobs=n_jobs,
@@ -367,8 +369,8 @@ class SignalOptimizer:
         # (2) Set up the splitter, outputs to store the predictions and model choices
 
         outer_splitter = ExpandingIncrementPanelSplit(
-            train_intervals=1,
-            test_size=1,
+            train_intervals=test_size,
+            test_size=test_size,
             min_cids=min_cids,
             min_periods=min_periods,
             max_periods=max_periods,
@@ -393,7 +395,7 @@ class SignalOptimizer:
                 hparam_grid=hparam_grid,
                 n_iter=n_iter,
                 nsplits_add=(
-                    np.floor(idx / self.threshold_ndates)
+                    np.floor(idx * test_size / self.threshold_ndates)
                     if self.initial_nsplits
                     else None
                 ),
@@ -423,8 +425,8 @@ class SignalOptimizer:
             ftr_selection_data.append(ftrselect_data)
 
         # Condense the collected data into a single dataframe
-        for column_name, xs_levels, date_levels, predictions in prediction_data:
-            idx = pd.MultiIndex.from_product([xs_levels, date_levels])
+        for column_name, idx, predictions in prediction_data:
+            #idx = pd.MultiIndex.from_product([xs_levels, date_levels])
             signal_df.loc[idx, column_name] = predictions
 
         signal_df = signal_df.groupby(level=0).ffill()
@@ -529,6 +531,7 @@ class SignalOptimizer:
         hparam_grid: Dict[str, Dict[str, List]],
         hparam_type: str,
         min_cids: int,
+        test_size: int,
         min_periods: int,
         max_periods: Optional[int],
         n_iter: Optional[int],
@@ -623,7 +626,7 @@ class SignalOptimizer:
                 "dictionary."
             )
 
-        # Check the min_cids, min_periods, max_periods, n_iter and n_jobs arguments
+        # Check the min_cids, min_periods, test_size, max_periods, n_iter and n_jobs arguments
         # are correctly formatted
         if not isinstance(min_cids, int):
             raise TypeError("The min_cids argument must be an integer.")
@@ -633,6 +636,10 @@ class SignalOptimizer:
             raise TypeError("The min_periods argument must be an integer.")
         if min_periods < 1:
             raise ValueError("The min_periods argument must be greater than zero.")
+        if not isinstance(test_size, int):
+            raise TypeError("The test_size argument must be an integer.")
+        if test_size < 1:
+            raise ValueError("The test_size argument must be greater than zero.")
         if max_periods is not None:
             if not isinstance(max_periods, int):
                 raise TypeError("The max_periods argument must be an integer.")
@@ -692,9 +699,10 @@ class SignalOptimizer:
         X_test_i: pd.DataFrame = self.X.iloc[test_idx]
 
         # Get correct indices to match with
-        test_xs_levels: List[str] = X_test_i.index.get_level_values(0).unique()
+        #test_xs_levels: List[str] = X_test_i.index.get_level_values(0).unique()
+        test_index = X_test_i.index
         test_date_levels: List[pd.Timestamp] = sorted(
-            X_test_i.index.get_level_values(1).unique()
+            test_index.get_level_values(1).unique()
         )
 
         # Since the features lag behind the targets, the dates need to be adjusted
@@ -760,7 +768,7 @@ class SignalOptimizer:
                 RuntimeWarning,
             )
             preds = np.zeros(X_test_i.shape[0])
-            prediction_date = [name, test_xs_levels, test_date_levels, preds]
+            prediction_date = [name, test_index, preds]
             modelchoice_data = [
                 test_date_levels.date[0],
                 name,
@@ -785,7 +793,7 @@ class SignalOptimizer:
             )
         # Store the best estimator predictions
         preds: np.ndarray = optim_model.predict(X_test_i)
-        prediction_data = [name, test_xs_levels, test_date_levels, preds]
+        prediction_data = [name, test_index, preds]
 
         # See if the best model has coefficients and intercepts
         # First see if the best model is a pipeline object
@@ -1680,6 +1688,7 @@ if __name__ == "__main__":
     train = msm.categories_df(
         df=dfd, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
     ).dropna()
+    train = train[train.index.get_level_values(1) >= pd.Timestamp(year=2005,month=8,day=1)]
 
     X_train = train.drop(columns=["XR"])
     y_train = train["XR"]
@@ -1689,8 +1698,8 @@ if __name__ == "__main__":
     )
 
     # (1) Example SignalOptimizer usage.
-    #     We get adaptive signals for a linear regression and a KNN regressor, with the
-    #     hyperparameters for the latter optimised across regression balanced accuracy.
+    #     We get adaptive signals for a linear regression.
+    #     Hyperparameters: whether or not to fit an intercept, usage of positive restriction.
 
     models = {
         "OLS": Pipeline(
@@ -1703,7 +1712,7 @@ if __name__ == "__main__":
     metric = make_scorer(regression_balanced_accuracy, greater_is_better=True)
     inner_splitter = RollingKFoldPanelSplit(n_splits=4)
     grid = {
-        "OLS": {},
+        "OLS": {"model__fit_intercept": [True, False], "model__positive": [True, False]},
     }
     black = {
         "GBP": (
@@ -1715,10 +1724,6 @@ if __name__ == "__main__":
             pd.Timestamp(year=2100, month=1, day=1),
         ),
     }
-    for i in range(1, 5):
-        X_train[f"CRY{i}"] = X_train["CRY"] + i
-        X_train[f"GROWTH{i}"] = X_train["GROWTH"] + i
-        X_train[f"INFL{i}"] = X_train["INFL"] + i
 
     so = SignalOptimizer(
         inner_splitter=inner_splitter,
@@ -1734,123 +1739,61 @@ if __name__ == "__main__":
         metric=metric,
         hparam_grid=grid,
         hparam_type="grid",
-        n_jobs=-1,
+        test_size=6,
+        n_jobs=1,
     )
-    so.coefs_stackedbarplot("test", ftrs_renamed={"CRY": "carry", "GROWTH2": "growth2"})
+    so.models_heatmap(name="test")
+    so.coefs_stackedbarplot("test", ftrs_renamed={"CRY": "carry", "GROWTH": "growth"})
     so.coefs_timeplot("test")
     so.feature_selection_heatmap(
         "test", title="Feature selection heatmap for pipeline: test"
     )
     so.intercepts_timeplot("test")
     so.nsplits_timeplot("test")
-    # (1) Example SignalOptimizer usage.
-    #     We get adaptive signals for a linear regression and a KNN regressor, with the
-    #     hyperparameters for the latter optimised across regression balanced accuracy.
-
-    models = {
-        "OLS": LinearRegression(),
-        "KNN": KNeighborsRegressor(),
-    }
-    metric = make_scorer(regression_balanced_accuracy, greater_is_better=True)
-
-    inner_splitter = RollingKFoldPanelSplit(n_splits=4)
-
-    hparam_grid = {
-        "OLS": {},
-        "KNN": {"n_neighbors": [1, 2, 5]},
-    }
-
-    start_time = timeit.default_timer()
-    so = SignalOptimizer(
-        inner_splitter=inner_splitter,
-        X=X_train,
-        y=y_train,
-        blacklist=black,
-    )
-
-    so.calculate_predictions(
-        name="test",
-        models=models,
-        metric=metric,
-        hparam_grid=hparam_grid,
-        hparam_type="grid",
-        n_jobs=1,
-    )
-    end_time = timeit.default_timer()
-    print(f"Elapsed time: {end_time - start_time}")
-
-    print(so.get_optimized_signals("test"))
-    so.models_heatmap(name="test", cap=5)
 
     # (2) Example SignalOptimizer usage.
-    #     We get adaptive signals for a linear regression and a KNN regressor, with the
-    #     hyperparameters for the latter optimised across regression balanced accuracy.
-    #     This time, enforce that the number of cross-validation splits increases with
-    #     the data size.
+    #     We get adaptive signals for a linear regression with feature selection.
+    #     Hyperparameters: whether or not to fit an intercept, usage of positive restriction.
 
     models = {
-        "OLS": LinearRegression(),
-        "KNN": KNeighborsRegressor(),
+        "OLS": Pipeline(
+            [
+                ("selector", MapSelector(threshold=0.2)),
+                ("model", LinearRegression(fit_intercept=True)),
+            ]
+        ),
     }
+
     metric = make_scorer(regression_balanced_accuracy, greater_is_better=True)
 
     inner_splitter = RollingKFoldPanelSplit(n_splits=4)
 
     hparam_grid = {
-        "OLS": {},
-        "KNN": {"n_neighbors": [1, 2, 5]},
+        "OLS": {"model__fit_intercept": [True, False], "model__positive": [True, False]},
     }
 
-    start_time = timeit.default_timer()
     so = SignalOptimizer(
         inner_splitter=inner_splitter,
         X=X_train,
         y=y_train,
         blacklist=black,
-        change_n_splits=True,
+        initial_nsplits=5,
+        threshold_ndates=24,
     )
-
     so.calculate_predictions(
         name="test",
         models=models,
         metric=metric,
-        hparam_grid=hparam_grid,
+        hparam_grid=grid,
         hparam_type="grid",
-        n_jobs=-1,
+        test_size=6,
+        n_jobs=1,
     )
-    end_time = timeit.default_timer()
-    print(f"Elapsed time: {end_time - start_time}")
-
-    print(so.get_optimized_signals("test"))
-    so.models_heatmap(name="test", cap=5)
-
-    plt.title("Number of splits chosen over time")
-    plt.plot(so.chosen_models.real_date, so.chosen_models.n_splits_used)
-    plt.show()
-
-    # (3) Example SignalOptimizer usage.
-    #     We get adaptive signals for two KNN regressors.
-    #     All chosen models are visualised in a heatmap.
-    models2 = {
-        "KNN1": KNeighborsRegressor(),
-        "KNN2": KNeighborsRegressor(),
-    }
-    hparam_grid2 = {
-        "KNN1": {"n_neighbors": [5, 10]},
-        "KNN2": {"n_neighbors": [1, 2]},
-    }
-
-    so.calculate_predictions(
-        name="test2",
-        models=models2,
-        metric=metric,
-        hparam_grid=hparam_grid2,
-        hparam_type="grid",
+    so.models_heatmap(name="test")
+    so.coefs_stackedbarplot("test", ftrs_renamed={"CRY": "carry", "GROWTH": "growth"})
+    so.coefs_timeplot("test")
+    so.feature_selection_heatmap(
+        "test", title="Feature selection heatmap for pipeline: test"
     )
-
-    so.models_heatmap(name="test2", cap=4)
-
-    # (4) Example SignalOptimizer usage.
-    #     Print the predictions and model choices for all pipelines.
-    print(so.get_optimized_signals())
-    print(so.get_optimal_models())
+    so.intercepts_timeplot("test")
+    so.nsplits_timeplot("test")
