@@ -574,7 +574,7 @@ class SignalReturnRelations:
             df=dfd,
             slip=self.slip,
             cids=cids,
-            xcats=xcat[-1],
+            xcats=[xcat[-1]],
             metrics=metric_cols,
         )
 
