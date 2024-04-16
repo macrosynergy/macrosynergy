@@ -194,7 +194,7 @@ def get_output_from_instance(ssh_client):
             error = stderr.read().decode("utf-8")
             print(output)
             python_running = False
-    
+
     print("Python process has finished, getting failed notebooks...")
     command = "cat failed_notebooks.txt"
     stdin, stdout, stderr = ssh_client.exec_command(command)
