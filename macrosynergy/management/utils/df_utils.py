@@ -12,6 +12,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
 
 import numpy as np
 import pandas as pd
+import datetime
 import requests
 import requests.compat
 from .core import get_cid, get_xcat, _map_to_business_day_frequency, is_valid_iso_date
@@ -805,23 +806,15 @@ def weeks_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
     return dif
 
 
-def get_eops(
+def _get_edge_dates(
     dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
     start_date: Optional[Union[str, pd.Timestamp]] = None,
     end_date: Optional[Union[str, pd.Timestamp]] = None,
     freq: str = "M",
+    direction: str = "end",
 ) -> pd.Series:
-    """
-    Returns a series of end-of-period dates for a given frequency.
-    Dates can be passed as a series, index, a generic iterable or as a start and end date.
-
-    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
-    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
-        be used to generate the end-of-period dates. Can be passed as a series, index, a
-        generic iterable or as a start and end date.
-    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
-        not passed.
-    """
+    assert direction in ["start", "end"], "Direction must be either 'start' or 'end'."
+    datettypes = [pd.Timestamp, str, np.datetime64, datetime.date]
 
     freq = _map_to_business_day_frequency(freq)
 
@@ -830,6 +823,25 @@ def get_eops(
             "Both `start_date` and `end_date` must be passed when using "
             "dates as a start and end date."
         )
+
+    if dates is not None:
+        if not isinstance(dates, (pd.DatetimeIndex, pd.Series, Iterable)):
+            raise TypeError(
+                "Dates must be a pandas DatetimeIndex, Series, or a generic iterable."
+            )
+        if isinstance(dates, pd.DataFrame):
+            dates = dates.iloc[:, 0]
+        if isinstance(dates, (pd.DatetimeIndex, pd.Series)):
+            dates = dates.tolist()
+        dates = list(dates)
+
+        for ix, dt in enumerate(dates):
+            try:
+                dates[ix] = pd.to_datetime(dt)
+            except Exception as e:
+                raise TypeError(
+                    f"Error converting date at index {ix} to a pandas Timestamp: {e}"
+                )
 
     if bool(start_date) and bool(dates):
         raise ValueError(
@@ -859,7 +871,6 @@ def get_eops(
         ),
         columns=["real_date"],
     ).apply(pd.to_datetime, axis=1)
-
     min_date: pd.Timestamp = dts["real_date"].min()
 
     if freq == _map_to_business_day_frequency("D"):
@@ -875,15 +886,67 @@ def get_eops(
         func = quarters_btwn_dates
     elif freq == _map_to_business_day_frequency("A"):
         func = years_btwn_dates
-    # elif freq == _map_to_business_day_frequency("D"):
-    #     func = lambda x, y: len(pd.bdate_range(x, y)) - 1
     else:
         raise ValueError("Frequency parameter must be one of D, M, W, Q, or A.")
 
     dts["period"] = dts["real_date"].apply(func, args=(min_date,))
 
-    t_indices: pd.Series = dts["period"].shift(-1) != dts["period"]
-
+    dx = -1 if direction == "end" else 1
+    t_indices: pd.Series = dts["period"].shift(dx) != dts["period"]
     t_dates: pd.Series = dts["real_date"].loc[t_indices].reset_index(drop=True)
 
     return t_dates
+
+
+def get_eops(
+    dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
+    start_date: Optional[Union[str, pd.Timestamp]] = None,
+    end_date: Optional[Union[str, pd.Timestamp]] = None,
+    freq: str = "M",
+) -> pd.Series:
+    """
+    Returns a series of end-of-period dates for a given frequency.
+    Dates can be passed as a series, index, a generic iterable or as a start and end date.
+
+    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
+    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
+        be used to generate the end-of-period dates. Can be passed as a series, index, a
+        generic iterable or as a start and end date.
+    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
+        not passed.
+    """
+    direction = "end"
+    return _get_edge_dates(
+        dates=dates,
+        start_date=start_date,
+        end_date=end_date,
+        freq=freq,
+        direction=direction,
+    )
+
+
+def get_sops(
+    dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
+    start_date: Optional[Union[str, pd.Timestamp]] = None,
+    end_date: Optional[Union[str, pd.Timestamp]] = None,
+    freq: str = "M",
+) -> pd.Series:
+    """
+    Returns a series of start-of-period dates for a given frequency.
+    Dates can be passed as a series, index, a generic iterable or as a start and end date.
+
+    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
+    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
+        be used to generate the start-of-period dates. Can be passed as a series, index, a
+        generic iterable or as a start and end date.
+    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
+        not passed.
+    """
+    direction = "start"
+    return _get_edge_dates(
+        dates=dates,
+        start_date=start_date,
+        end_date=end_date,
+        freq=freq,
+        direction=direction,
+    )

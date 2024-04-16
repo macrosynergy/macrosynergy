@@ -23,8 +23,9 @@ from macrosynergy.management.utils import (
     ticker_df_to_qdf,
     qdf_to_ticker_df,
     get_eops,
+    get_sops,
     _map_to_business_day_frequency,
-    Timer
+    Timer,
 )
 from macrosynergy.management.constants import FREQUENCY_MAP
 from macrosynergy.management.utils.math import expanding_mean_with_nan
@@ -742,6 +743,60 @@ class TestFunctions(unittest.TestCase):
         test_result_7 = get_eops(dates=test_case_5, freq="A")
         self.assertTrue(len(test_result_7) == 2)  # as there are 2 years
 
+    def test_get_sops(self):
+        daterange = pd.bdate_range(start="2023-01-01", end="2023-04-01")
+        test_case = pd.DataFrame({"real_date": pd.Series(daterange)})
+        test_result = get_sops(dates=test_case, freq="M")
+        expected_dates = set(
+            [
+                pd.Timestamp("2023-01-02"),
+                pd.Timestamp("2023-02-01"),
+                pd.Timestamp("2023-03-01"),
+            ]
+        )
+        result_dates = set(test_result.tolist())
+        self.assertEqual(expected_dates, result_dates)
+
+        daterange2 = pd.bdate_range(start="2023-01-01", end="2023-12-31")
+        test_case_2 = pd.DataFrame({"real_date": pd.Series(daterange2)})
+        test_result_2 = get_sops(dates=test_case_2, freq="Q")
+        expected_dates_2 = set(
+            [
+                pd.Timestamp("2023-01-02"),
+                pd.Timestamp("2023-04-03"),
+                pd.Timestamp("2023-07-03"),
+                pd.Timestamp("2023-10-02"),
+            ]
+        )
+        result_dates_2 = set(test_result_2.tolist())
+        self.assertEqual(expected_dates_2, result_dates_2)
+
+        daterange3 = pd.bdate_range(start="2022-01-01", end="2023-01-01")
+        test_case_3 = pd.DataFrame({"real_date": pd.Series(daterange3)})
+        test_result_3 = get_sops(dates=test_case_3, freq="A")
+        expected_dates_3 = set([pd.Timestamp("2022-01-03")])
+        result_dates_3 = set(test_result_3.tolist())
+        self.assertEqual(expected_dates_3, result_dates_3)
+
+        daterange4 = pd.bdate_range(start="2023-03-25", end="2023-04-05")
+        test_case_4 = pd.DataFrame({"real_date": pd.Series(daterange4)})
+        test_result_4 = get_sops(dates=test_case_4, freq="D")
+        expected_dates_4 = set(daterange4)
+        result_dates_4 = set(test_result_4.tolist())
+        self.assertEqual(expected_dates_4, result_dates_4)
+
+        with self.assertRaises(TypeError):
+            get_sops(start_date=1, end_date="2023-12-31", freq="D")
+
+        with self.assertRaises(ValueError):
+            get_sops(start_date="invalid-date", end_date="2023-12-31", freq="D")
+
+        with self.assertRaises(ValueError):
+            get_sops(start_date="2022-01-01", end_date="2023-01-01", freq="unknown")
+
+        with self.assertRaises(TypeError):
+            get_sops(dates="not-a-date-series", freq="M")
+
     def test_map_to_business_day_frequency(self):
         fm_copy = FREQUENCY_MAP.copy()
         for k in fm_copy.keys():
@@ -773,7 +828,7 @@ class TestTimer(unittest.TestCase):
     def test_timer(self):
         t = Timer()
         self.assertIsInstance(t, Timer)
-    
+
     def test_timer_str(self):
         t = Timer()
         self.assertIsInstance(str(t), str)
@@ -781,7 +836,7 @@ class TestTimer(unittest.TestCase):
         self.assertIsInstance(f"{t:s}", str)
 
         self.assertIn(" seconds", str(t))
-    
+
     def test_timer_repr(self):
         t = Timer()
         self.assertIsInstance(repr(t), str)
@@ -789,7 +844,7 @@ class TestTimer(unittest.TestCase):
         self.assertIn(" seconds>", repr(t))
 
         self.assertIsInstance(f"{t!r}", str)
-    
+
     def test_timer_float(self):
         t = Timer()
         self.assertIsInstance(float(t), float)
