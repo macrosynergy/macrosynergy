@@ -116,11 +116,6 @@ class TransactionCosts(object):
         size_l="SIZE_90PCTL",
     )
 
-    @classmethod
-    def download(self) -> "TransactionCosts":
-        df = download_transaction_costs()
-        return TransactionCosts(df=df, fids=get_fids(df), **self.DEFAULT_ARGS)
-
     def __init__(
         self,
         df: QuantamentalDataFrame,
@@ -144,6 +139,11 @@ class TransactionCosts(object):
         self.rcost_l = rcost_l
         self.size_l = size_l
         self._txn_stats = [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
+
+    @classmethod
+    def download(cls) -> "TransactionCosts":
+        df = download_transaction_costs()
+        return cls(df=df, fids=get_fids(df), **cls.DEFAULT_ARGS)
 
     def get_costs(self, fid: str, real_date: str) -> pd.Series:
         assert fid in self.fids
