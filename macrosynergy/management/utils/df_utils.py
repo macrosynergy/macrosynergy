@@ -239,7 +239,12 @@ def apply_slip(
 
     slip: int = slip.__neg__()
 
-    df[metrics] = df.groupby("tickers")[metrics].shift(slip)
+    filtered_df = df[df["tickers"] == sel_tickers]
+
+    filtered_df[metrics] = filtered_df.groupby("tickers")[metrics].shift(slip)
+
+    df.loc[df["tickers"] == sel_tickers, metrics] = filtered_df[metrics]
+
     df = df.drop(columns=["tickers"])
 
     return df
