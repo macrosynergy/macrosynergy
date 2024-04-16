@@ -129,7 +129,14 @@ class TransactionCosts(object):
     ) -> None:
         self.sparse_costs = SparseCosts(df)
         check_df_for_txn_stats(
-            df, fids, tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l
+            df=df,
+            fids=fids,
+            tcost_n=tcost_n,
+            rcost_n=rcost_n,
+            size_n=size_n,
+            tcost_l=tcost_l,
+            rcost_l=rcost_l,
+            size_l=size_l,
         )
         self.fids = sorted(set(fids))
         self.tcost_n = tcost_n
