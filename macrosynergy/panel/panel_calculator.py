@@ -240,7 +240,7 @@ def _check_calcs(formulas: List[str]):
 
     :return <List[str]>: list of formulas.
     """
-    pattern = r"[-+*()/](?=[A-Zi])|(?<=[A-Zi])[-+*()/]"
+    pattern = r"[-+*()/](?=i?[A-Z])|(?<=[A-Z])[-+*()/]"
 
     for formula in formulas:
         for term in formula.split():
