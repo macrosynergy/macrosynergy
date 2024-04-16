@@ -209,9 +209,10 @@ class ExampleAdapter(TransactionCosts):
         pct90_cost: Number,
     ) -> Number:
         # just as an example
-        u = trade_size * median_cost * median_cost / (median_size * median_size)
-        v = trade_size * pct90_cost * pct90_cost / (pct90_size * pct90_size)
-        return (u + v) / 2
+        u = median_cost / median_size
+        v = pct90_cost / pct90_size
+        avg_costs = (u + v) / 2
+        return trade_size * avg_costs
 
     def bidoffer(self, fid: str, trade_size: Number, real_date: str) -> Number:
         return super().bidoffer(fid, trade_size, real_date)
