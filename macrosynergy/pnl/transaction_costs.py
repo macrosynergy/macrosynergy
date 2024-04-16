@@ -40,8 +40,6 @@ def check_df_for_txn_stats(
             + ", ".join(set(expected_tickers) - set(found_tickers))
         )
 
-    return None
-
 
 def get_diff_index(df_wide: pd.DataFrame, freq: str = "D") -> pd.Index:
     df_diff = df_wide.diff(axis=0)
