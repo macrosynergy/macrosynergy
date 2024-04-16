@@ -28,10 +28,9 @@ def check_df_for_txn_stats(
     rcost_l: str,
     size_l: str,
 ) -> None:
-    u_cids = list(set(map(get_cid, fids)))
     expected_tickers = [
-        f"{cid}_{txn_ticker}"
-        for cid in u_cids
+        f"{_fid}{txn_ticker}"
+        for _fid in fids
         for txn_ticker in [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
     ]
     found_tickers = list(set(df["cid"] + "_" + df["xcat"]))
@@ -41,22 +40,7 @@ def check_df_for_txn_stats(
             + ", ".join(set(expected_tickers) - set(found_tickers))
         )
 
-    last_avails = None
-    for ticker in expected_tickers:
-        avail_dates = (
-            df.loc[df["cid"] + "_" + df["xcat"] == ticker]
-            .drop(columns=["cid", "xcat"])
-            .set_index("real_date")
-            .dropna()
-            .index
-        )
-        if last_avails is None:
-            last_avails = avail_dates
-        else:
-            if not last_avails.equals(avail_dates):
-                raise ValueError(
-                    f"The available dates for {ticker} do not match the available dates for the other tickers"
-                )
+    return None
 
 
 def get_diff_index(df_wide: pd.DataFrame, freq: str = "D") -> pd.Index:
@@ -105,13 +89,19 @@ class SparseCosts(object):
         if not isinstance(df, QuantamentalDataFrame):
             raise TypeError("df must be a QuantamentalDataFrame")
         df_wide = qdf_to_ticker_df(df)
+        self._all_fids = get_fids(df)
         change_index = get_diff_index(df_wide)  # drop rows with no change
         df_wide = df_wide.loc[change_index]
         self.df_wide = df_wide
 
-    def get_costs(self, fid: str, real_date: str) -> pd.Series:
-        last_valid_index = self.df_wide.loc[fid].loc[:real_date].last_valid_index()
-        return self.df_wide.loc[fid].loc[last_valid_index]
+    def get_costs(self, fid: str, real_date: str) -> pd.DataFrame:
+        assert fid in self._all_fids
+        cost_names = [col for col in self.df_wide.columns if col.startswith(fid)]
+        if not cost_names:
+            raise ValueError(f"Could not find any costs for {fid}")
+        df_loc = self.df_wide.loc[:real_date, cost_names]
+        last_valid_index = df_loc.last_valid_index()
+        return df_loc.loc[last_valid_index]
 
 
 class TransactionCosts(object):
@@ -148,12 +138,19 @@ class TransactionCosts(object):
         check_df_for_txn_stats(
             df, fids, tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l
         )
+        self.fids = sorted(set(fids))
         self.tcost_n = tcost_n
         self.rcost_n = rcost_n
         self.size_n = size_n
         self.tcost_l = tcost_l
         self.rcost_l = rcost_l
         self.size_l = size_l
+        self._txn_stats = [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
+
+    def get_costs(self, fid: str, real_date: str) -> pd.Series:
+        assert fid in self.fids
+        assert hasattr(self, "sparse_costs") and hasattr(self.sparse_costs, "df_wide")
+        return self.sparse_costs.get_costs(fid=fid, real_date=real_date)
 
     @staticmethod
     def extrapolate_cost(
@@ -175,10 +172,10 @@ class TransactionCosts(object):
         row = self.sparse_costs.get_costs(fid=fid, real_date=real_date)
         d = dict(
             trade_size=trade_size,
-            median_size=row[self.size_n],
-            median_cost=row[self.tcost_n],
-            pct90_size=row[self.size_l],
-            pct90_cost=row[self.tcost_l],
+            median_size=row[fid + self.size_n],
+            median_cost=row[fid + self.tcost_n],
+            pct90_size=row[fid + self.size_l],
+            pct90_cost=row[fid + self.tcost_l],
         )
         return self.extrapolate_cost(**d)
 
@@ -186,10 +183,10 @@ class TransactionCosts(object):
         row = self.sparse_costs.get_costs(fid=fid, real_date=real_date)
         d = dict(
             trade_size=trade_size,
-            median_size=row[self.size_n],
-            median_cost=row[self.rcost_n],
-            pct90_size=row[self.size_l],
-            pct90_cost=row[self.rcost_l],
+            median_size=row[fid + self.size_n],
+            median_cost=row[fid + self.rcost_n],
+            pct90_size=row[fid + self.size_l],
+            pct90_cost=row[fid + self.rcost_l],
         )
         return self.extrapolate_cost(**d)
 
@@ -233,12 +230,10 @@ class ExampleAdapter(TransactionCosts):
 if __name__ == "__main__":
     import time, random
 
-    tx_costs_dates = pd.bdate_range("1990-01-01", "2022-12-30")
+    tx_costs_dates = pd.bdate_range("1999-01-01", "2022-12-30")
     txn_costs_obj: TransactionCosts = TransactionCosts.download()
 
-    assert txn_costs_obj.sparse_costs.get_costs(
-        fid="GBP_FX", real_date="2011-01-01"
-    ).to_dict() == {
+    assert txn_costs_obj.get_costs(fid="GBP_FX", real_date="2011-01-01").to_dict() == {
         "GBP_FXBIDOFFER_MEDIAN": 0.0224707153696722,
         "GBP_FXROLLCOST_MEDIAN": 0.0022470715369672,
         "GBP_FXSIZE_MEDIAN": 50.0,

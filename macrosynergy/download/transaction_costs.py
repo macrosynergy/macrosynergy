@@ -84,9 +84,10 @@ def get_fids(df: QuantamentalDataFrame) -> list:
             x = x.replace(y, "")
         return x
 
-    return list(
-        set(df["cid"] + "_" + df["xcat"].apply(lambda x: repl(x, AVAILABLE_CATS)))
-    )
+    fid_endings = [f"{t}_{s}" for t in AVAIALBLE_COSTS for s in AVAILABLE_STATS]
+    tickers = list(set(df["cid"] + "_" + df["xcat"]))
+
+    return list(set(map(lambda x: repl(x, fid_endings), tickers)))
 
 
 if __name__ == "__main__":
