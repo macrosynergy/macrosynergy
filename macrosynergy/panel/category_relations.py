@@ -139,7 +139,7 @@ class CategoryRelations(object):
                 df=df,
                 slip=self.slip,
                 cids=self.cids,
-                xcats=self.xcats,
+                xcats=[self.xcats[1]],
                 metrics=metrics_found,
             )
 
