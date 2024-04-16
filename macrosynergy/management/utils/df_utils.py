@@ -198,13 +198,13 @@ def apply_slip(
     raise_error: bool = True,
 ) -> pd.DataFrame:
     """
-    Applied a slip, i.e. a negative lag, to the target DataFrame
+    Applies a slip, i.e. a negative lag, to the DataFrame
     for the given cross-sections and categories, on the given metrics.
 
     :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
     :param <int> slip: Slip to be applied.
     :param <List[str]> cids: List of cross-sections.
-    :param <List[str]> xcats: List of categories.
+    :param <List[str]> xcats: List of target categories.
     :param <List[str]> metrics: List of metrics to which the slip is applied.
     :return <pd.DataFrame> target_df: DataFrame with the slip applied.
     :raises <TypeError>: If the provided parameters are not of the expected type.
