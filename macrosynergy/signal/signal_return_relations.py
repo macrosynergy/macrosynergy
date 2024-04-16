@@ -59,7 +59,7 @@ class SignalReturnRelations:
         accordance with the signal.
     :param <int> slip: implied slippage of feature availability for relationship with
         the target category. This mimics the relationship between trading signals and
-        returns, which is often characterized by a delay due to the setup of of positions.
+        returns, which is often characterized by a delay due to the setup of positions.
         Technically, this is a negative lag (early arrival) of the target category
         in working days prior to any frequency conversion. Default is 0.
     :param <bool> ms_panel_test: if True the Macrosynergy Panel test is calculated. Please
@@ -574,7 +574,7 @@ class SignalReturnRelations:
             df=dfd,
             slip=self.slip,
             cids=cids,
-            xcats=xcat,
+            xcats=xcat[-1],
             metrics=metric_cols,
         )
 
