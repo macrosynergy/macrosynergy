@@ -16,9 +16,13 @@ from macrosynergy.management.utils import (
 )
 from macrosynergy.management.constants import MARKET_AREAS
 import pandas as pd
+import os
+import hashlib
 from pandas.core.groupby import DataFrameGroupBy
 import numpy as np
 import random
+import io
+import json
 from macrosynergy.download import download_transaction_costs
 
 BIDOFFER_MEDIAN: str = "BIDOFFER_MEDIAN"
@@ -57,21 +61,53 @@ def sample_real_data_frame() -> QuantamentalDataFrame:
         ].copy()
     )
 
-    # df["cid"] = df["cid"].apply(get_market_area)
-
-    # first group the dataframe by cid,xcat,real_date. keep only the first value for each group
-    # df = df.groupby(["cid", "xcat", "real_date"]).mean().reset_index()
-
     tdf = qdf_to_ticker_df(df)
-    id_cols = {}
-    for ic, col in enumerate(tdf.columns):
-        for colx in list(tdf.columns)[len(tdf.columns) - ic :]:
-            if np.isclose(tdf[col], tdf[colx]).all():
-                id_cols[col] = id_cols.get(col, []) + [colx]
 
-    print(id_cols)
+    index_dates = pd.Series(tdf.index).apply(lambda x: x.strftime("%Y-%m-%d"))
+    assert index_dates.nunique() == len(index_dates)
 
-    return tdf
+    col_hashes: Dict[str, str] = {
+        col: str(hashlib.md5(str(tdf[col].values).encode()).hexdigest())
+        for col in tdf.columns
+    }
+    hash_values: Dict[str, pd.Series] = {
+        _hash: tdf[col] for col, _hash in col_hashes.items()
+    }
+    hash_values_df = pd.DataFrame(hash_values).T
+    hash_values_df.columns = list(hash_values_df.columns)
+    hash_values_df = hash_values_df.rename(
+        columns={
+            colname: pd.Timestamp(colname).strftime("%Y-%m-%d")
+            for colname in hash_values_df.columns
+        }
+    )
+    # change to list of float
+    hash_values = {_hash: hash_values[_hash].tolist() for _hash in hash_values}
+    hash_values_df_csv_str = hash_values_df.to_csv()
+
+    hash_cols: Dict[str, List[str]] = {}
+    for col, _hash in col_hashes.items():
+        hash_cols[_hash] = hash_cols.get(_hash, []) + [col]
+
+    hash_dict: Dict[str, Dict[str, List[str]]] = {}
+    for _hash, cols in hash_cols.items():
+        cidgroup = ",".join(sorted(set(get_cid(cols))))
+        _xc = set(get_xcat(cols))
+        assert len(_xc) == 1
+        xcat = list(_xc)[0]
+        if cidgroup not in hash_dict:
+            hash_dict[cidgroup] = {"xcats": [xcat], "hashes": [_hash]}
+        else:
+            hash_dict[cidgroup]["xcats"].append(xcat)
+            hash_dict[cidgroup]["hashes"].append(_hash)
+
+    hash_dict_json = json.dumps(hash_dict)
+
+    return {
+        "hash_values": hash_values,
+        "hash_values_df_csv_str": hash_values_df_csv_str,
+        "hash_dict_json": hash_dict_json,
+    }
 
 
 sample_real_data_frame()
