@@ -391,9 +391,17 @@ def contract_signals(
 
     ## Calculate relative value if requested
     if relative_value:
-        df = _make_relative_value(
-            df=df, blacklist=blacklist, cids=cids, start=start, end=end, *args, **kwargs
+        rel_signals = _make_relative_value(
+            df=df,
+            sig=sig,
+            blacklist=blacklist,
+            cids=cids,
+            start=start,
+            end=end,
+            *args,
+            **kwargs,
         )
+        df = update_df(df=df, df_add=rel_signals)
 
     ## Cast the dataframe to wide format
     df_wide: pd.DataFrame = qdf_to_ticker_df(df)
