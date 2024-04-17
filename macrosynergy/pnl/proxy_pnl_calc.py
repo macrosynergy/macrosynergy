@@ -23,9 +23,87 @@ from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.pnl.transaction_costs import TransactionCosts
 
 
-def proxy_pnl_calc(
-    df: pd.DataFrame,
+def get_diff_index(df_wide: pd.DataFrame) -> pd.Index:
+    df_diff = df_wide.diff(axis=0)
+    change_index = df_diff.index[(df_diff.abs() > 0).any(axis=1)]
+    return change_index
+
+
+def _replace_strs(
+    list_of_strs: List[str], old_str: str, new_str: str = ""
+) -> List[str]:
+    return [_.replace(old_str, new_str) for _ in list_of_strs]
+
+
+def pnl_excl_costs(
+    df: QuantamentalDataFrame,
     spos: str,
+    rstring: str,
+    pnl_name: str = "PNL",
+) -> pd.DataFrame:
+    df_wide = qdf_to_ticker_df(df=df.copy())
+
+    # Filter
+    u_tickers: List[str] = list(set(df["cid"] + "_" + df["xcat"]))
+    filt_xrs: List[str] = [tx for tx in u_tickers if tx.endswith(rstring)]
+    # do xrs contain `spos` at this point?
+    filt_pos = [tx for tx in u_tickers if tx.endswith(spos)]
+
+    assert set(_replace_strs(filt_xrs, rstring)) == set(
+        _replace_strs(filt_pos, f"_{spos}")
+    )
+
+    # Pivot the dataframes
+    pivot_returns: pd.DataFrame = df_wide.loc[:, filt_xrs]
+    pivot_pos: pd.DataFrame = df_wide.loc[:, filt_pos]
+
+    # warn about NAs
+    dfx: pd.DataFrame
+    for dfx, dfname in [(pivot_returns, "returns"), (pivot_pos, "positions")]:
+        # for each column warns for dates of nas
+        for col in dfx.columns:
+            nas_idx = dfx[col].loc[dfx[col].isna()]
+            if not nas_idx.empty:
+                print(
+                    f"Warning: Series {col} has NAs at the following dates: {nas_idx.index}"
+                )
+
+    # Get the diff index for positions
+    pos_diff_index: pd.DatetimeIndex = get_diff_index(df_wide=pivot_pos)
+    start: str = pivot_pos.first_valid_index().strftime("%Y-%m-%d")
+    end: str = pivot_pos.last_valid_index().strftime("%Y-%m-%d")
+
+    # List of rebal_dates - with end date as the last date of the PNL calc
+
+    rebal_dates = sorted(set(pos_diff_index) | {pd.Timestamp(end)})
+
+    # rename cols in pivot_pos and pivot_returns so that they match on mul.
+    pivot_pos.columns = _replace_strs(pivot_pos.columns, f"_{spos}")
+    pivot_returns.columns = _replace_strs(pivot_returns.columns, rstring)
+    pivot_pos = pivot_pos[sorted(pivot_pos.columns)]
+    pivot_returns = pivot_returns[sorted(pivot_returns.columns)]
+
+    # Create DF with asset names and full date index
+    return_df_cols = pivot_pos.columns.tolist()
+    pnl_df = pd.DataFrame(index=pd.bdate_range(start, end), columns=return_df_cols)
+
+    # between each rebalancing date
+    for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
+        curr_pos: pd.Series = pivot_pos.loc[dt1]
+        curr_rets: pd.DataFrame = pivot_returns.loc[dt1:dt2]
+        cumprod_rets: pd.Series = (1 + curr_rets).cumprod()
+        pnl_df.loc[dt1:dt2] = curr_pos * cumprod_rets
+
+    # sum cols, ignore nans
+    pnl_df[spos + pnl_name] = pnl_df.sum(axis=1, skipna=True)
+
+    return pnl_df
+
+
+def proxy_pnl_calc(
+    df: QuantamentalDataFrame,
+    spos: str,
+    rstring: str,
     fids: List[str],
     tcost_n: str,
     rcost_n: str,
@@ -37,11 +115,12 @@ def proxy_pnl_calc(
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
+    pnl_name: str = "PNL",
 ):
     """
     Calculates an approximate nominal PnL under consideration of transaction costs
 
-    :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
+    :param <QuantamentalDataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
         This dataframe must contain the contract-specific signals and possibly
         related return series (for vol-targeting).
@@ -125,10 +204,16 @@ def proxy_pnl_calc(
     if end is None:
         end = df["real_date"].max().strftime("%Y-%m-%d")
 
-    # Reduce the dataframe
-    _xcats = [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
-    df = reduce_df(df=df, xcats=_xcats, start=start, end=end, blacklist=blacklist)
-    txn_args = dict(
+    # Reduce the dataframe - keep only the txn costs, and the spos xcats
+    df = reduce_df(
+        df=df,
+        start=start,
+        end=end,
+        blacklist=blacklist,
+    )
+
+    # Initialize the TransactionCosts class
+    transcation_costs: TransactionCosts = TransactionCosts(
         df=df,
         fids=fids,
         tcost_n=tcost_n,
@@ -139,15 +224,16 @@ def proxy_pnl_calc(
         size_l=size_l,
     )
 
-    TransactionCosts(**txn_args).bidoffer(
-        fid="GBP_FX",
-        trade_size=100,
-        real_date="2011-01-01",
-    )
-
     # Create the wide dataframe
     df_wide = qdf_to_ticker_df(df=df)
 
 
 if __name__ == "__main__":
-    ...
+    dfxcn = pd.read_pickle("data/dfxcn.pkl")
+    pnl_excl_costs(
+        df=dfxcn,
+        spos="STRAT_POS",
+        rstring="XR_NSA",
+        # start=min(dfxcn.real_date),
+        # end=max(dfxcn.real_date),
+    )
