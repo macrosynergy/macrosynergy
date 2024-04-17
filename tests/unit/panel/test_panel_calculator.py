@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from tests.simulate import make_qdf
 from macrosynergy.management.simulate import make_test_df
-from macrosynergy.panel.panel_calculator import panel_calculator
+from macrosynergy.panel.panel_calculator import panel_calculator, _check_calcs
 import warnings
 from random import randint, choice
 from typing import List, Dict, Tuple, Union, Optional, Set
@@ -383,6 +383,17 @@ class TestAll(unittest.TestCase):
         row_value_cad = df_new1.loc[date][cross_section]
 
         self.assertTrue(round(growth, 5) == round(row_value_cad, 5))
+
+    def test_check_calcs(self):
+
+        invalid_calcs = ["NEW1 = GROWTH + INFL)"]
+        self.assertRaises(ValueError, _check_calcs, invalid_calcs)
+
+        invalid_calcs = ["NEW1 = GROWTH +INFL"]
+        self.assertRaises(ValueError, _check_calcs, invalid_calcs)
+
+        invalid_calcs = ["NEW1 = GROWTH - INFL", "NEW1 = (GROWTH ) - INFL"]
+        self.assertRaises(ValueError, _check_calcs, invalid_calcs)
 
 
 if __name__ == "__main__":
