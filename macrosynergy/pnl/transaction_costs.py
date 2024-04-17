@@ -40,8 +40,6 @@ def check_df_for_txn_stats(
             + ", ".join(set(expected_tickers) - set(found_tickers))
         )
 
-    return None
-
 
 def get_diff_index(df_wide: pd.DataFrame, freq: str = "D") -> pd.Index:
     df_diff = df_wide.diff(axis=0)
@@ -118,11 +116,6 @@ class TransactionCosts(object):
         size_l="SIZE_90PCTL",
     )
 
-    @classmethod
-    def download(self) -> "TransactionCosts":
-        df = download_transaction_costs()
-        return TransactionCosts(df=df, fids=get_fids(df), **self.DEFAULT_ARGS)
-
     def __init__(
         self,
         df: QuantamentalDataFrame,
@@ -136,7 +129,14 @@ class TransactionCosts(object):
     ) -> None:
         self.sparse_costs = SparseCosts(df)
         check_df_for_txn_stats(
-            df, fids, tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l
+            df=df,
+            fids=fids,
+            tcost_n=tcost_n,
+            rcost_n=rcost_n,
+            size_n=size_n,
+            tcost_l=tcost_l,
+            rcost_l=rcost_l,
+            size_l=size_l,
         )
         self.fids = sorted(set(fids))
         self.tcost_n = tcost_n
@@ -146,6 +146,11 @@ class TransactionCosts(object):
         self.rcost_l = rcost_l
         self.size_l = size_l
         self._txn_stats = [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
+
+    @classmethod
+    def download(cls) -> "TransactionCosts":
+        df = download_transaction_costs()
+        return cls(df=df, fids=get_fids(df), **cls.DEFAULT_ARGS)
 
     def get_costs(self, fid: str, real_date: str) -> pd.Series:
         assert fid in self.fids
@@ -204,9 +209,10 @@ class ExampleAdapter(TransactionCosts):
         pct90_cost: Number,
     ) -> Number:
         # just as an example
-        u = trade_size * median_cost * median_cost / (median_size * median_size)
-        v = trade_size * pct90_cost * pct90_cost / (pct90_size * pct90_size)
-        return (u + v) / 2
+        u = median_cost / median_size
+        v = pct90_cost / pct90_size
+        avg_costs = (u + v) / 2
+        return trade_size * avg_costs
 
     def bidoffer(self, fid: str, trade_size: Number, real_date: str) -> Number:
         return super().bidoffer(fid, trade_size, real_date)

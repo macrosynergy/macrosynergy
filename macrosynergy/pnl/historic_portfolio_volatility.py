@@ -36,12 +36,11 @@ from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.management.constants import FFILL_LIMITS, ANNUALIZATION_FACTORS
 from macrosynergy.management.utils import (
     _map_to_business_day_frequency,
-    get_eops,
+    get_sops,
     is_valid_iso_date,
     reduce_df,
     standardise_dataframe,
     ticker_df_to_qdf,
-    get_eops,
     _map_to_business_day_frequency,
 )
 from macrosynergy.panel.historic_vol import expo_weights
@@ -194,7 +193,7 @@ def _calculate_portfolio_volatility(
         f"est_weights={est_weights} "
     )
 
-    rebal_dates = get_eops(dates=pivot_signals.index, freq=rebal_freq)
+    rebal_dates = get_sops(dates=pivot_signals.index, freq=rebal_freq)
 
     signals = pivot_signals.loc[rebal_dates, :]
 
