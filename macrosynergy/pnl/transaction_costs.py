@@ -76,30 +76,51 @@ def extrapolate_cost(
 
 
 class SparseCosts(object):
-    """
-    Interface to query transaction statistics dataframe.
-    """
-
-    def __init__(
-        self,
-        df: QuantamentalDataFrame,
-    ) -> None:
+    def __init__(self, df):
         if not isinstance(df, QuantamentalDataFrame):
             raise TypeError("df must be a QuantamentalDataFrame")
-        df_wide = qdf_to_ticker_df(df)
-        self._all_fids = get_fids(df)
+        self.df = df
+        self.prepare_data()
+
+    def prepare_data(self):
+        """
+        Prepares data for use within the class,
+        including setting up the wide DataFrame and fids.
+        This method can be called again to refresh the data and cache.
+        """
+        df_wide = qdf_to_ticker_df(self.df)
+        self._all_fids = get_fids(self.df)
         change_index = get_diff_index(df_wide)  # drop rows with no change
         df_wide = df_wide.loc[change_index]
         self.df_wide = df_wide
+        self._get_costs.cache_clear()  # Clear the cache whenever the data is re-prepared
 
     def get_costs(self, fid: str, real_date: str) -> pd.DataFrame:
-        assert fid in self._all_fids
+        """
+        Returns the costs for a given FID and date.
+
+        :param <str> fid: The FID (financial contract identifier) to get costs for.
+        :param <str> real_date: The date to get costs for.
+        """
+        return self._get_costs(fid, real_date)
+
+    @functools.lru_cache(maxsize=None)
+    def _get_costs(self, fid: str, real_date: str) -> pd.DataFrame:
+        """
+        Cached backend method to get costs for a given FID and date.
+        """
+        assert fid in self._all_fids, f"Invalid FID: {fid} is not in the dataframe"
         cost_names = [col for col in self.df_wide.columns if col.startswith(fid)]
         if not cost_names:
             raise ValueError(f"Could not find any costs for {fid}")
         df_loc = self.df_wide.loc[:real_date, cost_names]
         last_valid_index = df_loc.last_valid_index()
-        return df_loc.loc[last_valid_index]
+        return (
+            df_loc.loc[last_valid_index]
+            if last_valid_index is not None
+            else pd.DataFrame()
+        )
+
 
 
 class TransactionCosts(object):
