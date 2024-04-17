@@ -17,6 +17,7 @@ from macrosynergy.management.utils import (
     standardise_dataframe,
     ticker_df_to_qdf,
     qdf_to_ticker_df,
+    update_df,
     reduce_df,
     estimate_release_frequency,
 )
@@ -108,14 +109,13 @@ def _check_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.Da
 
 def _make_relative_value(
     df: pd.DataFrame,
+    sig: str,
     *args,
     **kwargs,
 ) -> pd.DataFrame:
-
     assert isinstance(df, QuantamentalDataFrame), "`df` must be a QuantamentalDataFrame"
-    xcats = df["xcat"].unique().tolist()
-    rdf = make_relative_value(df=df, xcats=xcats, postfix="", *args, **kwargs)
-    return rdf
+    df = df[df["xcat"] == sig].copy()
+    return make_relative_value(df=df, xcats=[sig], postfix="", *args, **kwargs)
 
 
 def _gen_contract_signals(
