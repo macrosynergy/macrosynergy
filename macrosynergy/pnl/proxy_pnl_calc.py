@@ -112,6 +112,48 @@ def pnl_excl_costs(
     return pnl_df
 
 
+def pnl_incl_costs(
+    df: QuantamentalDataFrame,
+    spos: str,
+    rstring: str,
+    fids: List[str],
+    tcost_n: str,
+    rcost_n: str,
+    size_n: str,
+    tcost_l: str,
+    rcost_l: str,
+    size_l: str,
+    roll_freqs: Optional[dict] = None,
+    pnl_name: str = "PNL",
+) -> pd.DataFrame:
+
+    pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
+        df=df, spos=spos, rstring=rstring
+    )
+
+    # Initialize the TransactionCosts class
+    transcation_costs: TransactionCosts = TransactionCosts(
+        df=df,
+        fids=fids,
+        tcost_n=tcost_n,
+        rcost_n=rcost_n,
+        size_n=size_n,
+        tcost_l=tcost_l,
+        rcost_l=rcost_l,
+        size_l=size_l,
+    )
+
+    for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
+        curr_pos: pd.Series = pivot_pos.loc[dt1]
+        next_pos: pd.Series = pivot_pos.loc[dt2]
+        curr_rets: pd.DataFrame = pivot_returns.loc[dt1:dt2]
+        cumprod_rets: pd.Series = (1 + curr_rets).cumprod()
+        pnl_df.loc[dt1:dt2] = curr_pos * cumprod_rets
+        avg_pos_size = curr_pos.mean()
+        delta_pos = sum(abs(next_pos.values - curr_pos.values))
+        ...
+
+
 def proxy_pnl_calc(
     df: QuantamentalDataFrame,
     spos: str,
