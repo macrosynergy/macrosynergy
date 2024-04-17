@@ -35,12 +35,11 @@ def _replace_strs(
     return [_.replace(old_str, new_str) for _ in list_of_strs]
 
 
-def pnl_excl_costs(
+def _prep_dfs_for_pnl_calcs(
     df: QuantamentalDataFrame,
     spos: str,
     rstring: str,
-    pnl_name: str = "PNL",
-) -> pd.DataFrame:
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, List[pd.Timestamp]]:
     df_wide = qdf_to_ticker_df(df=df.copy())
 
     # Filter
@@ -70,8 +69,8 @@ def pnl_excl_costs(
 
     # Get the diff index for positions
     pos_diff_index: pd.DatetimeIndex = get_diff_index(df_wide=pivot_pos)
-    start: str = pivot_pos.first_valid_index().strftime("%Y-%m-%d")
-    end: str = pivot_pos.last_valid_index().strftime("%Y-%m-%d")
+    start: str = pivot_pos.first_valid_index()
+    end: str = pivot_pos.last_valid_index()
 
     # List of rebal_dates - with end date as the last date of the PNL calc
 
@@ -83,9 +82,22 @@ def pnl_excl_costs(
     pivot_pos = pivot_pos[sorted(pivot_pos.columns)]
     pivot_returns = pivot_returns[sorted(pivot_returns.columns)]
 
-    # Create DF with asset names and full date index
     return_df_cols = pivot_pos.columns.tolist()
     pnl_df = pd.DataFrame(index=pd.bdate_range(start, end), columns=return_df_cols)
+
+    return pnl_df, pivot_pos, pivot_returns, rebal_dates
+
+
+def pnl_excl_costs(
+    df: QuantamentalDataFrame,
+    spos: str,
+    rstring: str,
+    pnl_name: str = "PNL",
+) -> pd.DataFrame:
+
+    pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
+        df=df, spos=spos, rstring=rstring
+    )
 
     # between each rebalancing date
     for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
@@ -229,6 +241,7 @@ def proxy_pnl_calc(
 
 
 if __name__ == "__main__":
+    ...
     dfxcn = pd.read_pickle("data/dfxcn.pkl")
     pnl_excl_costs(
         df=dfxcn,
