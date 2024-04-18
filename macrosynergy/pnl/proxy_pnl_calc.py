@@ -85,9 +85,8 @@ def _prep_dfs_for_pnl_calcs(
     start: str = pivot_pos.first_valid_index()
     end: str = pivot_pos.last_valid_index()
 
-    # List of rebal_dates - with end date as the last date of the PNL calc
-
-    rebal_dates = sorted(set(pos_diff_index) | {pd.Timestamp(end)})
+    # List of rebal_dates
+    rebal_dates = sorted(pos_diff_index.tolist())
 
     # rename cols in pivot_pos and pivot_returns so that they match on mul.
     pivot_pos.columns = _replace_strs(pivot_pos.columns, f"_{spos}")
@@ -111,7 +110,10 @@ def pnl_excl_costs(
     pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
         df=df, spos=spos, rstring=rstring
     )
-
+    # Add last end date - as position taken on the last rebal date,
+    # is held until notional_positions data is available
+    _end = pd.Timestamp(pivot_pos.last_valid_index())
+    rebal_dates = sorted(set(rebal_dates + [_end]))
     # between each rebalancing date
     for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
         curr_pos: pd.Series = pivot_pos.loc[dt1]
@@ -143,7 +145,10 @@ def pnl_incl_costs(
     pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
         df=df, spos=spos, rstring=rstring
     )
-
+    # Add last end date - as position taken on the last rebal date,
+    # is held until notional_positions data is available
+    _end = pd.Timestamp(pivot_pos.last_valid_index())
+    rebal_dates = sorted(set(rebal_dates + [_end]))
     # Initialize the TransactionCosts class
     transcation_costs: TransactionCosts = TransactionCosts(
         df=df,
