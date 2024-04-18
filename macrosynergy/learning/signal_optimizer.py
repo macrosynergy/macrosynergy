@@ -3,7 +3,6 @@ Class to handle the calculation of quantamental predictions based on adaptive
 hyperparameter and model selection.
 """
 
-import timeit
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -51,13 +50,18 @@ class SignalOptimizer:
         'inner_splitter' is performed to determine an optimal model amongst a set of
         candidate models. Once this is selected, the chosen model is used to make the test
         set forecasts. Lastly, we cast these forecasts back by a frequency period to
-        account for the lagged features, creating point-in-time signals.
+        account for the lagged features, creating point-in-time signals. In other words, 
+        a prediction $\mathbb{E}[r_{t+1}|\Gamma_{t}]$ is recorded at time $t$, where 
+        $r_{t+1}$ refers to the cumulative return at time $t+1$ and $\Gamma_{t}$ is the
+        information set at time $t$.
 
         The features in the dataframe, X, are expected to be lagged quantamental
         indicators, at a single native frequency unit, with the targets, in y, being the
-        cumulative returns at the native frequency. By providing a blacklisting
-        dictionary, preferably through macrosynergy.management.make_blacklist, the user
-        can specify time periods to ignore.
+        cumulative returns at the native frequency. The timestamps in the multi-indexes 
+        should refer to those of the unlagged returns/targets, as returned by `categories_df`
+        within `macrosynergy.management`. By providing a blacklisting dictionary,
+        preferably through macrosynergy.management.make_blacklist, the user can specify
+        time periods to ignore.
 
         :param <BasePanelSplit> inner_splitter: Panel splitter that is used to split
             each training set into smaller (training, test) pairs for cross-validation.
@@ -699,20 +703,27 @@ class SignalOptimizer:
         X_test_i: pd.DataFrame = self.X.iloc[test_idx]
 
         # Get correct indices to match with
-        #test_xs_levels: List[str] = X_test_i.index.get_level_values(0).unique()
         test_index = X_test_i.index
-        test_date_levels: List[pd.Timestamp] = sorted(
-            test_index.get_level_values(1).unique()
-        )
+        test_xs_levels = test_index.get_level_values(0)
+        test_date_levels = test_index.get_level_values(1)
+        sorted_date_levels = sorted(test_date_levels.unique())
 
         # Since the features lag behind the targets, the dates need to be adjusted
         # by a single frequency unit
         locs: np.ndarray = (
-            np.searchsorted(original_date_levels, test_date_levels, side="left") - 1
+            np.searchsorted(original_date_levels, sorted_date_levels, side="left") - 1
         )
-        test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
+        adj_test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
             [original_date_levels[i] if i >= 0 else pd.NaT for i in locs]
         )
+
+        # Adjust the test index based on adjusted dates
+        date_map = dict(zip(test_date_levels, adj_test_date_levels))
+        mapped_dates = test_date_levels.map(date_map)
+        adjusted_test_index = pd.MultiIndex.from_arrays(
+            [test_xs_levels, mapped_dates], names=["cid", "real_date"]
+        )
+
         optim_name = None
         optim_model = None
         optim_score = -np.inf
@@ -751,7 +762,7 @@ class SignalOptimizer:
                 search_object.fit(X_train_i, y_train_i)
             except Exception as e:
                 warnings.warn(
-                    f"Error in the grid search for {model_name} at test time {test_date_levels[0]}: {e}.",
+                    f"Error in the grid search for {model_name} at {adj_test_date_levels[0]}: {e}.",
                     RuntimeWarning,
                 )
             score = search_object.best_score_
@@ -764,24 +775,24 @@ class SignalOptimizer:
         # Handle case where no model was chosen
         if optim_model is None:
             warnings.warn(
-                f"No model was chosen for {name} at test time {test_date_levels[0]}. Setting to zero.",
+                f"No model was chosen for {name} at {adj_test_date_levels[0]}. Setting to zero.",
                 RuntimeWarning,
             )
             preds = np.zeros(X_test_i.shape[0])
-            prediction_date = [name, test_index, preds]
+            prediction_date = [name, adjusted_test_index, preds]
             modelchoice_data = [
-                test_date_levels.date[0],
+                adj_test_date_levels.date[0],
                 name,
                 "None",
                 {},
                 int(n_splits),
             ]
             coefficients_data = [
-                test_date_levels.date[0],
+                adj_test_date_levels.date[0],
                 name,
             ] + [np.nan for _ in range(X_train_i.shape[1])]
-            intercept_data = [test_date_levels.date[0], name, np.nan]
-            ftr_selection_data = [test_date_levels.date[0], name] + [
+            intercept_data = [adj_test_date_levels.date[0], name, np.nan]
+            ftr_selection_data = [adj_test_date_levels.date[0], name] + [
                 1 for _ in range(X_train_i.shape[1])
             ]
             return (
@@ -793,7 +804,7 @@ class SignalOptimizer:
             )
         # Store the best estimator predictions
         preds: np.ndarray = optim_model.predict(X_test_i)
-        prediction_data = [name, test_index, preds]
+        prediction_data = [name, adjusted_test_index, preds]
 
         # See if the best model has coefficients and intercepts
         # First see if the best model is a pipeline object
@@ -838,29 +849,30 @@ class SignalOptimizer:
                 intercepts = final_estimator.intercept_
         else:
             intercepts = np.nan
+
         # Store information about the chosen model at each time.
         if len(ftr_names) == X_train_i.shape[1]:
             # Then all features were selected
-            ftr_selection_data = [test_date_levels.date[0], name] + [
+            ftr_selection_data = [adj_test_date_levels.date[0], name] + [
                 1 for _ in ftr_names
             ]
         else:
             # Then some features were excluded
-            ftr_selection_data = [test_date_levels.date[0], name] + [
+            ftr_selection_data = [adj_test_date_levels.date[0], name] + [
                 1 if name in ftr_names else 0 for name in np.array(X_train_i.columns)
             ]
         modelchoice_data = [
-            test_date_levels.date[0],
+            adj_test_date_levels.date[0],
             name,
             optim_name,
             optim_params,
             int(n_splits),
         ]
         coefficients_data = [
-            test_date_levels.date[0],
+            adj_test_date_levels.date[0],
             name,
         ] + coefs
-        intercept_data = [test_date_levels.date[0], name, intercepts]
+        intercept_data = [adj_test_date_levels.date[0], name, intercepts]
 
         return (
             prediction_data,
@@ -1631,6 +1643,8 @@ class SignalOptimizer:
         models_df = models_df.iloc[:, -1]
 
         # Create time series plot
+        # TODO: extend the number of splits line until the first date that the number of splits is incremented
+        # This translates into vertical lines at each increment date as opposed to linear interpolation between them.
         fig, ax = plt.subplots()
         models_df.plot(ax=ax, figsize=figsize)
         if title is not None:
