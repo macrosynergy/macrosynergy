@@ -141,12 +141,12 @@ class TransactionCosts(object):
         self,
         df: QuantamentalDataFrame,
         fids: List[str],
-        tcost_n: str,
-        rcost_n: str,
-        size_n: str,
-        tcost_l: str,
-        rcost_l: str,
-        size_l: str,
+        tcost_n: str = "BIDOFFER_MEDIAN",
+        rcost_n: str = "ROLLCOST_MEDIAN",
+        size_n: str = "SIZE_MEDIAN",
+        tcost_l: str = "BIDOFFER_90PCTL",
+        rcost_l: str = "ROLLCOST_90PCTL",
+        size_l: str = "SIZE_90PCTL",
     ) -> None:
         self.sparse_costs = SparseCosts(df)
         check_df_for_txn_stats(
