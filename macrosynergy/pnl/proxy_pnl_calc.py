@@ -24,9 +24,22 @@ from macrosynergy.pnl.transaction_costs import TransactionCosts
 
 
 def get_diff_index(df_wide: pd.DataFrame) -> pd.Index:
+    # get the diff along long axis
     df_diff = df_wide.diff(axis=0)
+
+    # change_index -- where there is any value change across rows
     change_index = df_diff.index[(df_diff.abs() > 0).any(axis=1)]
-    return change_index
+
+    # rows where the previous row was all NaN
+    # but the current row has at least one non-NaN value
+    prev_all_na = df_wide.shift(1).isna().all(axis=1)
+    curr_any_value = df_wide.notna().any(axis=1)
+    from_na_to_value_index = df_wide.index[prev_all_na & curr_any_value]
+
+    # combine indices
+    combined_index = change_index.union(from_na_to_value_index)
+
+    return combined_index
 
 
 def _replace_strs(
