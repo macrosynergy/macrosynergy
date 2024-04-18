@@ -245,10 +245,10 @@ class ExampleAdapter(TransactionCosts):
         row = self.sparse_costs.get_costs(fid=fid, real_date=real_date)
         d = dict(
             trade_size=trade_size,
-            median_size=row[self.size_n],
-            median_cost=row[self.rcost_n],
-            pct90_size=row[self.size_l],
-            pct90_cost=row[self.rcost_l],
+            median_size=row[fid + self.size_n],
+            median_cost=row[fid + self.rcost_n],
+            pct90_size=row[fid + self.size_l],
+            pct90_cost=row[fid + self.rcost_l],
         )
         d["roll_cost"] = d["roll_cost"] * factor
         return self.extrapolate_cost(**d)
