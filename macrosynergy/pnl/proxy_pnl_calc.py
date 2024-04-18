@@ -23,7 +23,75 @@ from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.pnl.transaction_costs import TransactionCosts, get_fids
 
 
-def get_diff_index(df_wide: pd.DataFrame) -> pd.Index:
+def _replace_strs(
+    list_of_strs: List[str], old_str: str, new_str: str = ""
+) -> List[str]:
+    return [_.replace(old_str, new_str) for _ in list_of_strs]
+
+
+def _split_returns_positions_tickers(
+    tickers: List[str], spos: str, rstring: str
+) -> Tuple[List[str], List[str]]:
+    # Filter tickers based on the specific suffixes
+    returns_tickers: List[str] = [
+        ticker for ticker in tickers if ticker.endswith(rstring)
+    ]
+    positions_tickers: List[str] = [
+        ticker for ticker in tickers if ticker.endswith(spos)
+    ]
+
+    assert set(_replace_strs(returns_tickers, rstring)) == set(
+        _replace_strs(positions_tickers, f"_{spos}")
+    )
+
+    return returns_tickers, positions_tickers
+
+
+def _check_df(df: QuantamentalDataFrame, spos: str, rstring: str) -> None:
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("Input must be a pandas DataFrame.")
+
+    returns_tickers, positions_tickers = _split_returns_positions_tickers(
+        tickers=list(set(df["cid"] + "_" + df["xcat"])),
+        spos=spos,
+        rstring=rstring,
+    )
+
+    err_msg = "The following tickers are missing in the dataframe: \n"
+    missing_tickers = []
+    for ticker in returns_tickers:
+        if ticker.replace(rstring, f"_{spos}") not in positions_tickers:
+            missing_tickers.append(ticker)
+    for ticker in positions_tickers:
+        if ticker.replace(f"_{spos}", rstring) not in returns_tickers:
+            missing_tickers.append(ticker)
+
+    if missing_tickers:
+        raise ValueError(err_msg + ", ".join(missing_tickers))
+
+
+def _split_returns_positions_df(
+    df_wide: pd.DataFrame, spos: str, rstring: str
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    # Filter tickers based on the specific suffixes
+    returns_tickers, positions_tickers = _split_returns_positions_tickers(
+        tickers=df_wide.columns.tolist(),
+        spos=spos,
+        rstring=rstring,
+    )
+
+    # Pivot the dataframes
+    pivot_returns: pd.DataFrame = df_wide.loc[:, returns_tickers]
+    pivot_pos: pd.DataFrame = df_wide.loc[:, positions_tickers]
+
+    assert set(_replace_strs(pivot_returns.columns, rstring)) == set(
+        _replace_strs(pivot_pos.columns, f"_{spos}")
+    )
+
+    return pivot_returns, pivot_pos
+
+
+def _get_rebal_dates(df_wide: pd.DataFrame) -> List[pd.Timestamp]:
     # get the diff along long axis
     df_diff = df_wide.diff(axis=0)
 
@@ -38,36 +106,20 @@ def get_diff_index(df_wide: pd.DataFrame) -> pd.Index:
 
     # combine indices
     combined_index = change_index.union(from_na_to_value_index)
-
-    return combined_index
-
-
-def _replace_strs(
-    list_of_strs: List[str], old_str: str, new_str: str = ""
-) -> List[str]:
-    return [_.replace(old_str, new_str) for _ in list_of_strs]
+    rebal_dates = sorted(combined_index.tolist())
+    return rebal_dates
 
 
 def _prep_dfs_for_pnl_calcs(
-    df: QuantamentalDataFrame,
+    df_wide: QuantamentalDataFrame,
     spos: str,
     rstring: str,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, List[pd.Timestamp]]:
-    df_wide = qdf_to_ticker_df(df=df.copy())
 
-    # Filter
-    u_tickers: List[str] = list(set(df["cid"] + "_" + df["xcat"]))
-    filt_xrs: List[str] = [tx for tx in u_tickers if tx.endswith(rstring)]
-    # do xrs contain `spos` at this point?
-    filt_pos = [tx for tx in u_tickers if tx.endswith(spos)]
-
-    assert set(_replace_strs(filt_xrs, rstring)) == set(
-        _replace_strs(filt_pos, f"_{spos}")
+    # Split the returns and positions dataframes
+    pivot_returns, pivot_pos = _split_returns_positions_df(
+        df_wide=df_wide, spos=spos, rstring=rstring
     )
-
-    # Pivot the dataframes
-    pivot_returns: pd.DataFrame = df_wide.loc[:, filt_xrs]
-    pivot_pos: pd.DataFrame = df_wide.loc[:, filt_pos]
 
     # warn about NAs
     dfx: pd.DataFrame
@@ -81,12 +133,11 @@ def _prep_dfs_for_pnl_calcs(
                 )
 
     # Get the diff index for positions
-    pos_diff_index: pd.DatetimeIndex = get_diff_index(df_wide=pivot_pos)
     start: str = pivot_pos.first_valid_index()
     end: str = pivot_pos.last_valid_index()
 
     # List of rebal_dates
-    rebal_dates = sorted(pos_diff_index.tolist())
+    rebal_dates = _get_rebal_dates(pivot_pos)
 
     # rename cols in pivot_pos and pivot_returns so that they match on mul.
     pivot_pos.columns = _replace_strs(pivot_pos.columns, f"_{spos}")
@@ -101,20 +152,21 @@ def _prep_dfs_for_pnl_calcs(
 
 
 def pnl_excl_costs(
-    df: QuantamentalDataFrame,
+    df_wide: pd.DataFrame,
     spos: str,
     rstring: str,
     pnl_name: str = "PNL",
 ) -> pd.DataFrame:
 
     pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
-        df=df, spos=spos, rstring=rstring
+        df_wide=df_wide, spos=spos, rstring=rstring
     )
     # Add last end date - as position taken on the last rebal date,
     # is held until notional_positions data is available
     _end = pd.Timestamp(pivot_pos.last_valid_index())
     rebal_dates = sorted(set(rebal_dates + [_end]))
-    # between each rebalancing date
+
+    # loop between each rebalancing date
     for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
         dt2x = dt2 - pd.offsets.BDay(1)
         curr_pos: pd.Series = pivot_pos.loc[dt1]
@@ -127,54 +179,85 @@ def pnl_excl_costs(
         1 + pivot_returns.loc[rebal_dates[-1] :]
     ).cumprod(axis=0)
 
+    # append <spos>_<pnl_name> to all columns
+    pnl_df.columns = _replace_strs(pnl_df.columns, "", f"_{spos}_{pnl_name}")
     # sum cols, ignore nans
     pnl_df[f"{spos}_{pnl_name}"] = pnl_df.sum(axis=1, skipna=True)
+
     return pnl_df
 
 
-def pnl_incl_costs(
-    df: QuantamentalDataFrame,
+def calculate_trading_costs(
+    df_wide: pd.DataFrame,
     spos: str,
     rstring: str,
     transaction_costs: TransactionCosts,
-    roll_freqs: Optional[dict] = None,
-    pnl_name: str = "PNL",
+    tc_name: str = "TCOST",
 ) -> pd.DataFrame:
 
-    pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
-        df=df, spos=spos, rstring=rstring
+    pivot_returns, pivot_pos = _split_returns_positions_df(
+        df_wide=df_wide, spos=spos, rstring=rstring
     )
+    rebal_dates = _get_rebal_dates(pivot_pos)
     # Add last end date - as position taken on the last rebal date,
     # is held until notional_positions data is available
     _end = pd.Timestamp(pivot_pos.last_valid_index())
     rebal_dates = sorted(set(rebal_dates + [_end]))
-    bo_df = pd.DataFrame(index=pnl_df.index, columns=pnl_df.columns)
-    rc_df = pd.DataFrame(index=pnl_df.index, columns=pnl_df.columns)
-    fids = pnl_df.columns.tolist()
+    tc_df = pd.DataFrame(index=pivot_pos.index, columns=pivot_pos.columns)
+    tickers = pivot_pos.columns.tolist()
     for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
         dt2x = dt2 - pd.offsets.BDay(1)
-        prev_pos = pivot_pos.loc[dt1]
+        prev_pos, next_pos = pivot_pos.loc[dt1], pivot_pos.loc[dt2]
         curr_pos = pivot_pos.loc[dt1:dt2x]
-        next_pos = pivot_pos.loc[dt2]
-        curr_rets = pivot_returns.loc[dt1:dt2x]
-        cumprod_rets = (1 + curr_rets).cumprod(axis=0)
+
         avg_pos = curr_pos.mean(axis=0)
-        delta_pos = np.nansum(np.abs(next_pos.values - prev_pos.values))
+        delta_pos = (next_pos - prev_pos).abs()
 
-        for fid in fids:
-            # bid offer spread is on dt2, as
-            bo_df.loc[dt1:dt2x, fid] = transaction_costs.bidoffer(
-                trade_size=delta_pos[fid], fid=fid, real_date=dt2
+        for ticker in tickers:
+            _fid = ticker.replace(f"_{spos}", "")
+            bidoffer = transaction_costs.bidoffer(
+                trade_size=delta_pos[ticker],
+                fid=_fid,
+                real_date=dt2,
             )
-            # roll cost is on dt1 - as they are being paid to as "currently held"
-            rc_df.loc[dt1:dt2x, fid] = transaction_costs.rollcost(
-                trade_size=avg_pos[fid], fid=fid, real_date=dt1
+            rollcost = transaction_costs.rollcost(
+                trade_size=avg_pos[ticker],
+                fid=_fid,
+                real_date=dt1,
             )
+            tc_df.loc[dt1:dt2x, ticker] = bidoffer + rollcost
 
-    ...
-    # sum cols, ignore nans
-    pnl_df[f"{spos}_{pnl_name}"] = pnl_df.sum(axis=1, skipna=True)
-    return pnl_df
+    # append <spos>_<tc_name> to all columns
+    tc_df.columns = [f"{col}_{spos}_{tc_name}" for col in tc_df.columns]
+    tc_df[f"{spos}_{tc_name}"] = tc_df.sum(axis=1, skipna=True)
+    nan_mask = tc_df.isna()
+    assert (tc_df[~nan_mask] >= 0).all().all()
+    return tc_df
+
+
+def apply_trading_costs(
+    pnle_wide_df: pd.DataFrame,
+    tc_wide_df: pd.DataFrame,
+    spos: str,
+    tc_name: str,
+    pnl_name: str,
+) -> pd.DataFrame:
+    pnls_list = sorted(pnle_wide_df.columns.tolist())
+    tcs_list = sorted(tc_wide_df.columns.tolist())
+    assert len(pnls_list) == len(tcs_list)
+    assert all(
+        a.replace(f"_{spos}_{pnl_name}", "") == b.replace(f"_{spos}_{tc_name}", "")
+        for a, b in zip(pnls_list, tcs_list)
+    )
+
+    out_df = pnle_wide_df.copy()
+    for pnl_col, tc_col in zip(pnls_list, tcs_list):
+        assert pnl_col.replace(f"_{spos}_{pnl_name}", "") == tc_col.replace(
+            f"_{spos}_{tc_name}", ""
+        )
+        out_df[pnl_col] -= tc_wide_df[tc_col]
+
+    return out_df
 
 
 def proxy_pnl_calc(
@@ -193,7 +276,10 @@ def proxy_pnl_calc(
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
     pnl_name: str = "PNL",
-):
+    tc_name: str = "TCOST",
+    return_pnl_excl_costs: bool = False,
+    return_costs: bool = False,
+) -> Union[pd.DataFrame, Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]:
     """
     Calculates an approximate nominal PnL under consideration of transaction costs
 
@@ -288,7 +374,7 @@ def proxy_pnl_calc(
         end=end,
         blacklist=blacklist,
     )
-
+    _check_df(df=df, spos=spos, rstring=rstring)
     # Initialize the TransactionCosts class
     transcation_costs: TransactionCosts = TransactionCosts(
         df=df,
@@ -301,26 +387,67 @@ def proxy_pnl_calc(
         size_l=size_l,
     )
 
-    # Create the wide dataframe
-    df_wide = qdf_to_ticker_df(df=df)
+    df_wide = qdf_to_ticker_df(df)
+
+    # Calculate the PnL excluding costs
+    df_outs: Dict[str, pd.DataFrame] = {}
+    df_outs["pnl_excl_costs"] = pnl_excl_costs(
+        df_wide=df_wide,
+        spos=spos,
+        rstring=rstring,
+        pnl_name=pnl_name,
+    )
+
+    # tc_wide_df: pd.DataFrame = calculate_trading_costs(
+    df_outs["tc_wide"] = calculate_trading_costs(
+        df_wide=df_wide,
+        spos=spos,
+        rstring=rstring,
+        transaction_costs=transcation_costs,
+        tc_name=tc_name,
+    )
+
+    df_outs["pnl_incl_costs"] = apply_trading_costs(
+        pnle_wide_df=df_outs["pnl_excl_costs"],
+        tc_wide_df=df_outs["tc_wide"],
+        spos=spos,
+        tc_name=tc_name,
+        pnl_name=pnl_name,
+    )
+    if not (return_pnl_excl_costs or return_costs):
+        return df_outs["pnl_incl_costs"]
+    elif return_pnl_excl_costs and return_costs:
+        return (
+            df_outs["pnl_incl_costs"],
+            df_outs["pnl_excl_costs"],
+            df_outs["tc_wide"],
+        )
+    elif return_pnl_excl_costs:
+        return df_outs["pnl_incl_costs"], df_outs["pnl_excl_costs"]
+    elif return_costs:
+        return df_outs["pnl_incl_costs"], df_outs["tc_wide"]
 
 
 if __name__ == "__main__":
-    dftxn = pd.read_pickle("data/tc.pkl")
-    dfxcn = pd.read_pickle("data/dfxcn.pkl")
-    pnl_excl_costs(
-        df=dfxcn,
+    dftxn = pd.read_pickle("data/tc.pkl")[["cid", "xcat", "real_date", "value"]]
+    dfxcn = pd.read_pickle("data/dfxcn.pkl")[["cid", "xcat", "real_date", "value"]]
+
+    cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
+    cids_dmec = ["DEM", "ESP", "FRF", "ITL"]
+    cids_nofx: List[str] = ["USD", "EUR", "CNY", "SGD"]
+    cids_dmfx: List[str] = list(set(cids_dmca) - set(cids_nofx))
+
+    fidsx = [
+        f"{cid}_FX"
+        for cid in sorted(set(dfxcn["cid"].unique().tolist()) - set(cids_nofx))
+    ]
+    dfx = pd.concat([dftxn, dfxcn], axis=0).drop_duplicates().reset_index(drop=True)
+
+    ppnl = proxy_pnl_calc(
+        df=dfx,
         spos="STRAT_POS",
         rstring="XR_NSA",
-        # start=min(dfxcn.real_date),
-        # end=max(dfxcn.real_date),
+        fids=fidsx,
+        **TransactionCosts.DEFAULT_ARGS,
     )
-
-    tx = TransactionCosts(df=dftxn, fids=get_fids(dftxn))
-
-    pnl_incl_costs(
-        df=dfxcn,
-        spos="STRAT_POS",
-        rstring="XR_NSA",
-        transaction_costs=tx,
-    )
+    ppnl.head()
