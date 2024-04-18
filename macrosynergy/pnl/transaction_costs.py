@@ -7,7 +7,11 @@ from typing import List, Union, Tuple, Optional, Dict, Callable
 from numbers import Number
 import functools
 from macrosynergy.management.simulate import make_test_df
-from macrosynergy.download.transaction_costs import download_transaction_costs, get_fids
+from macrosynergy.download.transaction_costs import (
+    download_transaction_costs,
+    AVAIALBLE_COSTS,
+    AVAILABLE_STATS,
+)
 from macrosynergy.management.utils import (
     reduce_df,
     get_cid,
@@ -16,6 +20,18 @@ from macrosynergy.management.utils import (
     qdf_to_ticker_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
+
+
+def get_fids(df: QuantamentalDataFrame) -> list:
+    def repl(x: str, yL: List[str]) -> str:
+        for y in yL:
+            x = x.replace(y, "")
+        return x
+
+    fid_endings = [f"{t}_{s}" for t in AVAIALBLE_COSTS for s in AVAILABLE_STATS]
+    tickers = list(set(df["cid"] + "_" + df["xcat"]))
+
+    return list(set(map(lambda x: repl(x, fid_endings), tickers)))
 
 
 def check_df_for_txn_stats(
@@ -120,7 +136,6 @@ class SparseCosts(object):
             if last_valid_index is not None
             else pd.DataFrame()
         )
-
 
 
 class TransactionCosts(object):
