@@ -20,7 +20,7 @@ from macrosynergy.management.utils import (
     qdf_to_ticker_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.pnl.transaction_costs import TransactionCosts
+from macrosynergy.pnl.transaction_costs import TransactionCosts, get_fids
 
 
 def get_diff_index(df_wide: pd.DataFrame) -> pd.Index:
@@ -136,13 +136,7 @@ def pnl_incl_costs(
     df: QuantamentalDataFrame,
     spos: str,
     rstring: str,
-    fids: List[str],
-    tcost_n: str,
-    rcost_n: str,
-    size_n: str,
-    tcost_l: str,
-    rcost_l: str,
-    size_l: str,
+    transaction_costs: TransactionCosts,
     roll_freqs: Optional[dict] = None,
     pnl_name: str = "PNL",
 ) -> pd.DataFrame:
@@ -154,29 +148,33 @@ def pnl_incl_costs(
     # is held until notional_positions data is available
     _end = pd.Timestamp(pivot_pos.last_valid_index())
     rebal_dates = sorted(set(rebal_dates + [_end]))
-    # Initialize the TransactionCosts class
-    transcation_costs: TransactionCosts = TransactionCosts(
-        df=df,
-        fids=fids,
-        tcost_n=tcost_n,
-        rcost_n=rcost_n,
-        size_n=size_n,
-        tcost_l=tcost_l,
-        rcost_l=rcost_l,
-        size_l=size_l,
-    )
+    bo_df = pd.DataFrame(index=pnl_df.index, columns=pnl_df.columns)
+    rc_df = pd.DataFrame(index=pnl_df.index, columns=pnl_df.columns)
+    fids = pnl_df.columns.tolist()
+    for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
+        dt2x = dt2 - pd.offsets.BDay(1)
+        prev_pos = pivot_pos.loc[dt1]
+        curr_pos = pivot_pos.loc[dt1:dt2x]
+        next_pos = pivot_pos.loc[dt2]
+        curr_rets = pivot_returns.loc[dt1:dt2x]
+        cumprod_rets = (1 + curr_rets).cumprod(axis=0)
+        avg_pos = curr_pos.mean(axis=0)
+        delta_pos = np.nansum(np.abs(next_pos.values - prev_pos.values))
 
-    # for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
-    #     curr_pos: pd.Series = pivot_pos.loc[dt1]
-    #     next_pos: pd.Series = pivot_pos.loc[dt2]
-    #     curr_rets: pd.DataFrame = pivot_returns.loc[dt1:dt2]
-    #     cumprod_rets: pd.Series = (1 + curr_rets).cumprod()
-    #     pnl_df.loc[dt1:dt2] = curr_pos * cumprod_rets
-    #     avg_pos_size = curr_pos.mean()
-    #     delta_pos = sum(abs(next_pos.values - curr_pos.values))
-    # delta is actually curr-prev so loop over 3 dates
-    for dt0, dt1, dt2 in zip(rebal_dates[:-2], rebal_dates[1:-1], rebal_dates[2:]):
-        ...
+        for fid in fids:
+            # bid offer spread is on dt2, as
+            bo_df.loc[dt1:dt2x, fid] = transaction_costs.bidoffer(
+                trade_size=delta_pos[fid], fid=fid, real_date=dt2
+            )
+            # roll cost is on dt1 - as they are being paid to as "currently held"
+            rc_df.loc[dt1:dt2x, fid] = transaction_costs.rollcost(
+                trade_size=avg_pos[fid], fid=fid, real_date=dt1
+            )
+
+    ...
+    # sum cols, ignore nans
+    pnl_df[f"{spos}_{pnl_name}"] = pnl_df.sum(axis=1, skipna=True)
+    return pnl_df
 
 
 def proxy_pnl_calc(
@@ -308,7 +306,7 @@ def proxy_pnl_calc(
 
 
 if __name__ == "__main__":
-    ...
+    dftxn = pd.read_pickle("data/tc.pkl")
     dfxcn = pd.read_pickle("data/dfxcn.pkl")
     pnl_excl_costs(
         df=dfxcn,
@@ -316,4 +314,13 @@ if __name__ == "__main__":
         rstring="XR_NSA",
         # start=min(dfxcn.real_date),
         # end=max(dfxcn.real_date),
+    )
+
+    tx = TransactionCosts(df=dftxn, fids=get_fids(dftxn))
+
+    pnl_incl_costs(
+        df=dfxcn,
+        spos="STRAT_POS",
+        rstring="XR_NSA",
+        transaction_costs=tx,
     )
