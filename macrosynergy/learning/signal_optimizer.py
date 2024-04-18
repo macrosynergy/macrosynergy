@@ -1743,13 +1743,14 @@ if __name__ == "__main__":
     )
 
     # (1) Example SignalOptimizer usage.
-    #     We get adaptive signals for a linear regression.
+    #     We get adaptive signals for a linear regression with feature selection.
     #     Hyperparameters: whether or not to fit an intercept, usage of positive restriction.
+    #     We impose that retraining occurs once every quarter as opposed to every month.
 
     models = {
         "OLS": Pipeline(
             [
-                # ("selector", MapSelector(threshold=0.2)),
+                ("selector", MapSelector(threshold=0.2)),
                 ("model", LinearRegression(fit_intercept=True)),
             ]
         ),
@@ -1784,8 +1785,8 @@ if __name__ == "__main__":
         metric=metric,
         hparam_grid=grid,
         hparam_type="grid",
-        test_size=6,
-        n_jobs=1,
+        test_size=3,
+        n_jobs=-1, # Set to 1 when debugging.
     )
     so.models_heatmap(name="test")
     so.coefs_stackedbarplot("test", ftrs_renamed={"CRY": "carry", "GROWTH": "growth"})
@@ -1797,13 +1798,13 @@ if __name__ == "__main__":
     so.nsplits_timeplot("test")
 
     # (2) Example SignalOptimizer usage.
-    #     We get adaptive signals for a linear regression with feature selection.
+    #     We get adaptive signals for a linear regression.
     #     Hyperparameters: whether or not to fit an intercept, usage of positive restriction.
 
     models = {
         "OLS": Pipeline(
             [
-                ("selector", MapSelector(threshold=0.2)),
+                # ("selector", MapSelector(threshold=0.2)),
                 ("model", LinearRegression(fit_intercept=True)),
             ]
         ),
@@ -1831,7 +1832,6 @@ if __name__ == "__main__":
         metric=metric,
         hparam_grid=grid,
         hparam_type="grid",
-        test_size=6,
         n_jobs=1,
     )
     so.models_heatmap(name="test")
