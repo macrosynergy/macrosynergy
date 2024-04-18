@@ -70,7 +70,9 @@ def extrapolate_cost(
     pct90_size: Number,
     pct90_cost: Number,
 ) -> Number:
-    err_msg = "{k} must be a number > 0"
+    err_msg = "`{k}` must be a number > 0"
+    trade_size = abs(trade_size)
+
     for k, v in [
         ("trade_size", trade_size),
         ("median_size", median_size),
@@ -80,7 +82,7 @@ def extrapolate_cost(
     ]:
         if not isinstance(v, Number):
             raise TypeError(err_msg.format(k=k))
-        if v <= 0:
+        if v < 0:
             raise ValueError(err_msg.format(k=k))
 
     if trade_size <= median_size:
