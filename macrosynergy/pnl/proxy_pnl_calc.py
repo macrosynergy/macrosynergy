@@ -116,14 +116,19 @@ def pnl_excl_costs(
     rebal_dates = sorted(set(rebal_dates + [_end]))
     # between each rebalancing date
     for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
+        dt2x = dt2 - pd.offsets.BDay(1)
         curr_pos: pd.Series = pivot_pos.loc[dt1]
-        curr_rets: pd.DataFrame = pivot_returns.loc[dt1:dt2]
-        cumprod_rets: pd.Series = (1 + curr_rets).cumprod()
-        pnl_df.loc[dt1:dt2] = curr_pos * cumprod_rets
+        curr_rets: pd.DataFrame = pivot_returns.loc[dt1:dt2x]
+        cumprod_rets: pd.Series = (1 + curr_rets).cumprod(axis=0)
+        pnl_df.loc[dt1:dt2x] = curr_pos * cumprod_rets
+
+    # on dt2, we need to hold the position
+    pnl_df.loc[rebal_dates[-1] :] = pivot_pos.loc[rebal_dates[-1]] * (
+        1 + pivot_returns.loc[rebal_dates[-1] :]
+    ).cumprod(axis=0)
 
     # sum cols, ignore nans
-    pnl_df[spos + pnl_name] = pnl_df.sum(axis=1, skipna=True)
-
+    pnl_df[f"{spos}_{pnl_name}"] = pnl_df.sum(axis=1, skipna=True)
     return pnl_df
 
 
@@ -161,14 +166,16 @@ def pnl_incl_costs(
         size_l=size_l,
     )
 
-    for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
-        curr_pos: pd.Series = pivot_pos.loc[dt1]
-        next_pos: pd.Series = pivot_pos.loc[dt2]
-        curr_rets: pd.DataFrame = pivot_returns.loc[dt1:dt2]
-        cumprod_rets: pd.Series = (1 + curr_rets).cumprod()
-        pnl_df.loc[dt1:dt2] = curr_pos * cumprod_rets
-        avg_pos_size = curr_pos.mean()
-        delta_pos = sum(abs(next_pos.values - curr_pos.values))
+    # for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
+    #     curr_pos: pd.Series = pivot_pos.loc[dt1]
+    #     next_pos: pd.Series = pivot_pos.loc[dt2]
+    #     curr_rets: pd.DataFrame = pivot_returns.loc[dt1:dt2]
+    #     cumprod_rets: pd.Series = (1 + curr_rets).cumprod()
+    #     pnl_df.loc[dt1:dt2] = curr_pos * cumprod_rets
+    #     avg_pos_size = curr_pos.mean()
+    #     delta_pos = sum(abs(next_pos.values - curr_pos.values))
+    # delta is actually curr-prev so loop over 3 dates
+    for dt0, dt1, dt2 in zip(rebal_dates[:-2], rebal_dates[1:-1], rebal_dates[2:]):
         ...
 
 
