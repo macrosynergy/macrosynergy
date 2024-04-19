@@ -284,7 +284,11 @@ def proxy_pnl_calc(
     tc_name: str = "TCOST",
     return_pnl_excl_costs: bool = False,
     return_costs: bool = False,
-) -> Union[pd.DataFrame, Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]:
+) -> Union[
+    QuantamentalDataFrame,
+    Tuple[QuantamentalDataFrame, pd.DataFrame],
+    Tuple[QuantamentalDataFrame, pd.DataFrame, pd.DataFrame],
+]:
     """
     Calculates an approximate nominal PnL under consideration of transaction costs
 
@@ -367,6 +371,11 @@ def proxy_pnl_calc(
         if _typex in [list, str, dict] and len(_varx) == 0:
             raise ValueError(f"`{_namex}` must not be an empty {str(_typex)}")
 
+    if roll_freqs is not None:
+        raise NotImplementedError(
+            "Functionality to support `roll_freqs` is not yet implemented."
+        )
+
     if start is None:
         start = df["real_date"].min().strftime("%Y-%m-%d")
     if end is None:
@@ -437,6 +446,9 @@ def proxy_pnl_calc(
             f"Warning: The following columns are all NaNs and have been dropped: {all_nan_cols.columns}"
         )
         df_outs["pnl_incl_costs"] = df_outs["pnl_incl_costs"].dropna(how="all", axis=1)
+
+    # Pnl Incl costs as QDF
+    df_outs["pnl_incl_costs"] = ticker_df_to_qdf(df_outs["pnl_incl_costs"])
 
     if not (return_pnl_excl_costs or return_costs):
         return df_outs["pnl_incl_costs"]
