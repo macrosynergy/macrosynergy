@@ -2,10 +2,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-
 from typing import List, Union, Tuple, Optional, Dict, Callable
 from numbers import Number
 import functools
+import macrosynergy.visuals as msv
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.download.transaction_costs import (
     download_transaction_costs,
@@ -109,6 +109,7 @@ class SparseCosts(object):
         df_wide = qdf_to_ticker_df(self.df)
         self._all_fids = get_fids(self.df)
         change_index = get_diff_index(df_wide)  # drop rows with no change
+        self.change_index = change_index
         df_wide = df_wide.loc[change_index]
         self.df_wide = df_wide
         self._get_costs.cache_clear()  # Clear the cache whenever the data is re-prepared
@@ -184,6 +185,7 @@ class TransactionCosts(object):
         self.rcost_l = rcost_l
         self.size_l = size_l
         self._txn_stats = [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
+        self.change_index = self.sparse_costs.change_index
 
     @classmethod
     def download(cls) -> "TransactionCosts":
@@ -232,6 +234,19 @@ class TransactionCosts(object):
             pct90_cost=row[fid + self.rcost_l],
         )
         return self.extrapolate_cost(**d)
+
+    def plot_costs(self, fids: List[str], cost_type: str = None, *args, **kwargs):
+
+        assert cost_type in ["BIDOFFER", "ROLLCOST"], "Invalid cost type"
+
+        if not hasattr(self, "sparse_costs"):
+            raise ValueError("The TransactionCosts object has not been initialised")
+        for fid in fids:
+            if fid not in self.fids:
+                raise ValueError(f"Invalid FID: {fid} is not in the dataframe")
+
+        fig, ax = plt.subplots()
+        # TODO change plot such that all fids are plotted as a facetgrid
 
 
 class ExampleAdapter(TransactionCosts):
