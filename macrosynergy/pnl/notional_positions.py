@@ -309,6 +309,10 @@ def notional_positions(
     :param <dict> blacklist: a dictionary of contract identifiers to exclude from
         the calculation. Default is None, which means that no contracts are excluded.
     :param <str> pname: the name of the position. Default is 'POS'.
+    :param <bool> return_pvol: whether to return the historic portfolio volatility.
+        Default is False.
+    :param <bool> return_vcv: whether to return the variance-covariance matrix.
+        Default is False.
 
     :return: <pd.DataFrame> with the positions for all traded contracts and the
         specified strategy in USD million. It has the standard JPMaQS DataFrame.
