@@ -241,7 +241,14 @@ def notional_positions(
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
     pname: str = "POS",
-):
+    return_pvol: bool = False,
+    return_vcv: bool = False,
+) -> Union[
+    QuantamentalDataFrame,
+    Tuple[QuantamentalDataFrame, QuantamentalDataFrame],
+    Tuple[QuantamentalDataFrame, pd.DataFrame],
+    Tuple[QuantamentalDataFrame, QuantamentalDataFrame, pd.DataFrame],
+]:
     """
     Calculates contract positions based on contract signals, assets under management (AUM)
     and other specifications.
@@ -418,11 +425,25 @@ def notional_positions(
             remove_zeros=remove_zeros,
         )
 
-        notional_positions._pvol = pvol
-        notional_positions._vcv_df = vcv_df
-    # TODO dollar_per_signal: Number = 1.0 (dollar per signal => signal * dollars = position)
+    # return ticker_df_to_qdf(df=return_df).dropna()
+    return_pvol = return_pvol and (locals().get("pvol") is not None)
+    return_vcv = return_vcv and (locals().get("vcv_df") is not None)
 
-    return ticker_df_to_qdf(df=return_df).dropna()
+    if return_pvol and return_vcv:
+        return (
+            ticker_df_to_qdf(df=return_df).dropna(),
+            ticker_df_to_qdf(df=pvol).dropna(),
+            vcv_df,
+        )
+    elif return_pvol:
+        return (
+            ticker_df_to_qdf(df=return_df).dropna(),
+            ticker_df_to_qdf(df=pvol).dropna(),
+        )
+    elif return_vcv:
+        return ticker_df_to_qdf(df=return_df).dropna(), vcv_df
+    else:
+        return ticker_df_to_qdf(df=return_df).dropna()
 
 
 if __name__ == "__main__":
