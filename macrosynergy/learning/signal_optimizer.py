@@ -40,7 +40,7 @@ class SignalOptimizer:
         blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]] = None,
         initial_nsplits: Optional[Union[int, np.int_]] = None,
         threshold_ndates: Optional[Union[int, np.int_]] = None,
-        castback_dates: bool = True,
+        lagged_features: bool = True,
     ):
         """
         Class for sequential optimization of raw signals based on quantamental features.
@@ -59,15 +59,15 @@ class SignalOptimizer:
         with the targets, in y, being the cumulative returns at the native frequency.
         The timestamps in the multi-indexes should refer to those of the unlagged
         returns/targets, as returned by `categories_df` within `macrosynergy.management`.
-        Under this methodology, the parameter 'castback_dates' is required to be True by
+        Under this methodology, the parameter 'lagged_features' is required to be True by
         default, in order to cast these forecasts back by a frequency period, accounting
         for the lagged features, and hence creating point-in-time signals. In other words, 
         a prediction $\mathbb{E}[r_{t+1}|\Gamma_{t}]$ is recorded at time $t$, where 
         $r_{t+1}$ refers to the cumulative return at time $t+1$ and $\Gamma_{t}$ is the
         information set at time $t$.
 
-        The reason 'castback_dates' is provided as an argument is to allow for concurrent 
-        forecasts in special cases such as market beta estimation. When castback_dates is
+        The reason 'lagged_features' is provided as an argument is to allow for concurrent 
+        forecasts in special cases such as market beta estimation. When lagged_features is
         False, it is expected that the timestamps in each row match for the features
         and the target. In this case, no adjustment is made to the timestamps of the 
         predictions. 
@@ -89,7 +89,7 @@ class SignalOptimizer:
             returns/targets provided in 'y'. The frequency of features (and targets) determines the
             frequency at which model predictions are made and evaluated.
             This means that if we have monthly data, the learning process concerns
-            forecasting returns one month ahead. If 'castback_dates' is False,
+            forecasting returns one month ahead. If 'lagged_features' is False,
             then the assumption of lagged features is dropped. 
         :param <Union[pd.DataFrame,pd.Series]> y: Pandas dataframe or series of targets,
             multi-indexed by cross-sections and timestamps. The multi-index must match 
@@ -106,7 +106,7 @@ class SignalOptimizer:
             in units of the native dataset frequency, to be made available for the currently-used
             number of cross-validation splits to increase by one. If not None, the "initial_nsplits"
             parameter must be set. Default is None.
-        :param <bool> castback_dates: Boolean indicating whether or not (feature, target)
+        :param <bool> lagged_features: Boolean indicating whether or not (feature, target)
             tuples are lagged by a single frequency unit, or unlagged. It is recommended
             to keep this attribute as True, as per the primary use case of this class. 
             For certain problems, it may be valuable to predict concurrent returns, for
@@ -121,7 +121,7 @@ class SignalOptimizer:
         The training set itself is split into various (training, test) pairs by the
         `inner_splitter` argument for cross-validation. Based on inner cross-validation,
         an optimal model is chosen and used for predicting the targets of the next period,
-        assuming that 'castback_dates' is True. A prediction for a particular cross-section
+        assuming that 'lagged_features' is True. A prediction for a particular cross-section
         and time period is made only if all required information has been available for that pair.
         Primarily, optimized signals that are produced by the class are always stored for the
         end of the original data period that precedes the predicted period.
@@ -177,7 +177,7 @@ class SignalOptimizer:
         """
         # Checks
         self._checks_init_params(
-            inner_splitter, X, y, blacklist, initial_nsplits, threshold_ndates, castback_dates
+            inner_splitter, X, y, blacklist, initial_nsplits, threshold_ndates, lagged_features
         )
 
         # Set instance attributes
@@ -187,7 +187,7 @@ class SignalOptimizer:
         self.blacklist = blacklist
         self.initial_nsplits = initial_nsplits
         self.threshold_ndates = threshold_ndates
-        self.castback_dates = castback_dates
+        self.lagged_features = lagged_features
 
         if self.initial_nsplits:
             warnings.warn(
@@ -221,7 +221,7 @@ class SignalOptimizer:
         blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]],
         initial_nsplits: Optional[Union[int, np.int_]],
         threshold_ndates: Optional[Union[int, np.int_]],
-        castback_dates: bool,
+        lagged_features: bool,
     ):
         """
         Private method to check the initialisation parameters of the class.
@@ -285,9 +285,9 @@ class SignalOptimizer:
                     "argument is set."
                 )
             
-        # Check castback_dates
-        if not isinstance(castback_dates, (bool, np.bool_)):
-            raise TypeError("The castback_dates argument must be a boolean.")
+        # Check lagged_features
+        if not isinstance(lagged_features, (bool, np.bool_)):
+            raise TypeError("The lagged_features argument must be a boolean.")
 
     def calculate_predictions(
         self,
@@ -736,7 +736,7 @@ class SignalOptimizer:
         test_date_levels = test_index.get_level_values(1)
         sorted_date_levels = sorted(test_date_levels.unique())
 
-        if self.castback_dates:
+        if self.lagged_features:
             # Since the features lag behind the targets, the dates need to be adjusted
             # by a single frequency unit
             locs: np.ndarray = (
