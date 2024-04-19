@@ -175,7 +175,8 @@ def _vol_target_positions(
 
     out_df = out_df.rename(
         columns={
-            col: col.replace(sig_ident, "_" + pname) for col in out_df.columns.tolist()
+            col: col.replace(sig_ident, f"_{sname}_{pname}")
+            for col in out_df.columns.tolist()
         },
     ).dropna(how="all")
 
@@ -213,7 +214,7 @@ def _leverage_positions(
         df_wide[pos_col] = df_wide[cont_name] * aum * leverage / rowsums
 
     # filter df to only contain position columns
-    df_wide = df_wide.loc[:, [f"{contx}_{pname}" for contx in fids]]
+    df_wide = df_wide.loc[:, [f"{contx}_{sname}_{pname}" for contx in fids]]
 
     return df_wide
 

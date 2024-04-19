@@ -78,17 +78,5 @@ def download_transaction_costs(
     return dfd
 
 
-def get_fids(df: QuantamentalDataFrame) -> list:
-    def repl(x: str, yL: List[str]) -> str:
-        for y in yL:
-            x = x.replace(y, "")
-        return x
-
-    fid_endings = [f"{t}_{s}" for t in AVAIALBLE_COSTS for s in AVAILABLE_STATS]
-    tickers = list(set(df["cid"] + "_" + df["xcat"]))
-
-    return list(set(map(lambda x: repl(x, fid_endings), tickers)))
-
-
 if __name__ == "__main__":
     print(download_transaction_costs(verbose=True).head())

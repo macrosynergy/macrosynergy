@@ -7,7 +7,11 @@ from typing import List, Union, Tuple, Optional, Dict, Callable
 from numbers import Number
 import functools
 from macrosynergy.management.simulate import make_test_df
-from macrosynergy.download.transaction_costs import download_transaction_costs, get_fids
+from macrosynergy.download.transaction_costs import (
+    download_transaction_costs,
+    AVAIALBLE_COSTS,
+    AVAILABLE_STATS,
+)
 from macrosynergy.management.utils import (
     reduce_df,
     get_cid,
@@ -16,6 +20,18 @@ from macrosynergy.management.utils import (
     qdf_to_ticker_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
+
+
+def get_fids(df: QuantamentalDataFrame) -> list:
+    def repl(x: str, yL: List[str]) -> str:
+        for y in yL:
+            x = x.replace(y, "")
+        return x
+
+    fid_endings = [f"{t}_{s}" for t in AVAIALBLE_COSTS for s in AVAILABLE_STATS]
+    tickers = list(set(df["cid"] + "_" + df["xcat"]))
+
+    return list(set(map(lambda x: repl(x, fid_endings), tickers)))
 
 
 def check_df_for_txn_stats(
@@ -54,7 +70,9 @@ def extrapolate_cost(
     pct90_size: Number,
     pct90_cost: Number,
 ) -> Number:
-    err_msg = "{k} must be a number > 0"
+    err_msg = "`{k}` must be a number > 0"
+    trade_size = abs(trade_size)
+
     for k, v in [
         ("trade_size", trade_size),
         ("median_size", median_size),
@@ -64,7 +82,7 @@ def extrapolate_cost(
     ]:
         if not isinstance(v, Number):
             raise TypeError(err_msg.format(k=k))
-        if v <= 0:
+        if v < 0:
             raise ValueError(err_msg.format(k=k))
 
     if trade_size <= median_size:
@@ -76,30 +94,50 @@ def extrapolate_cost(
 
 
 class SparseCosts(object):
-    """
-    Interface to query transaction statistics dataframe.
-    """
-
-    def __init__(
-        self,
-        df: QuantamentalDataFrame,
-    ) -> None:
+    def __init__(self, df):
         if not isinstance(df, QuantamentalDataFrame):
             raise TypeError("df must be a QuantamentalDataFrame")
-        df_wide = qdf_to_ticker_df(df)
-        self._all_fids = get_fids(df)
+        self.df = df
+        self.prepare_data()
+
+    def prepare_data(self):
+        """
+        Prepares data for use within the class,
+        including setting up the wide DataFrame and fids.
+        This method can be called again to refresh the data and cache.
+        """
+        df_wide = qdf_to_ticker_df(self.df)
+        self._all_fids = get_fids(self.df)
         change_index = get_diff_index(df_wide)  # drop rows with no change
         df_wide = df_wide.loc[change_index]
         self.df_wide = df_wide
+        self._get_costs.cache_clear()  # Clear the cache whenever the data is re-prepared
 
     def get_costs(self, fid: str, real_date: str) -> pd.DataFrame:
-        assert fid in self._all_fids
+        """
+        Returns the costs for a given FID and date.
+
+        :param <str> fid: The FID (financial contract identifier) to get costs for.
+        :param <str> real_date: The date to get costs for.
+        """
+        return self._get_costs(fid, real_date)
+
+    @functools.lru_cache(maxsize=None)
+    def _get_costs(self, fid: str, real_date: str) -> pd.DataFrame:
+        """
+        Cached backend method to get costs for a given FID and date.
+        """
+        assert fid in self._all_fids, f"Invalid FID: {fid} is not in the dataframe"
         cost_names = [col for col in self.df_wide.columns if col.startswith(fid)]
         if not cost_names:
             raise ValueError(f"Could not find any costs for {fid}")
         df_loc = self.df_wide.loc[:real_date, cost_names]
         last_valid_index = df_loc.last_valid_index()
-        return df_loc.loc[last_valid_index]
+        return (
+            df_loc.loc[last_valid_index]
+            if last_valid_index is not None
+            else pd.DataFrame()
+        )
 
 
 class TransactionCosts(object):
@@ -120,12 +158,12 @@ class TransactionCosts(object):
         self,
         df: QuantamentalDataFrame,
         fids: List[str],
-        tcost_n: str,
-        rcost_n: str,
-        size_n: str,
-        tcost_l: str,
-        rcost_l: str,
-        size_l: str,
+        tcost_n: str = "BIDOFFER_MEDIAN",
+        rcost_n: str = "ROLLCOST_MEDIAN",
+        size_n: str = "SIZE_MEDIAN",
+        tcost_l: str = "BIDOFFER_90PCTL",
+        rcost_l: str = "ROLLCOST_90PCTL",
+        size_l: str = "SIZE_90PCTL",
     ) -> None:
         self.sparse_costs = SparseCosts(df)
         check_df_for_txn_stats(
@@ -224,10 +262,10 @@ class ExampleAdapter(TransactionCosts):
         row = self.sparse_costs.get_costs(fid=fid, real_date=real_date)
         d = dict(
             trade_size=trade_size,
-            median_size=row[self.size_n],
-            median_cost=row[self.rcost_n],
-            pct90_size=row[self.size_l],
-            pct90_cost=row[self.rcost_l],
+            median_size=row[fid + self.size_n],
+            median_cost=row[fid + self.rcost_n],
+            pct90_size=row[fid + self.size_l],
+            pct90_cost=row[fid + self.rcost_l],
         )
         d["roll_cost"] = d["roll_cost"] * factor
         return self.extrapolate_cost(**d)
