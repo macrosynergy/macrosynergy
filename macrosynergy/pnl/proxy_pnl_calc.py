@@ -9,7 +9,7 @@ import seaborn as sns
 
 from typing import List, Union, Tuple, Optional, Dict, Callable
 from numbers import Number
-
+import warnings
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.download.transaction_costs import download_transaction_costs
 from macrosynergy.management.utils import (
@@ -180,7 +180,7 @@ def pnl_excl_costs(
     ).cumprod(axis=0)
 
     # append <spos>_<pnl_name> to all columns
-    pnl_df.columns = _replace_strs(pnl_df.columns, "", f"_{spos}_{pnl_name}")
+    pnl_df.columns = [f"{col}_{spos}_{pnl_name}" for col in pnl_df.columns]
     # sum cols, ignore nans
     pnl_df[f"{spos}_{pnl_name}"] = pnl_df.sum(axis=1, skipna=True)
 
@@ -226,12 +226,14 @@ def calculate_trading_costs(
                 real_date=dt1,
             )
             tc_df.loc[dt1:dt2x, ticker] = bidoffer + rollcost
+            assert not any(tc_df.loc[dt1:dt2x, ticker] < 0)
 
-    # append <spos>_<tc_name> to all columns
-    tc_df.columns = [f"{col}_{spos}_{tc_name}" for col in tc_df.columns]
+    tc_df.columns = [f"{col}_{tc_name}" for col in tc_df.columns]
     tc_df[f"{spos}_{tc_name}"] = tc_df.sum(axis=1, skipna=True)
-    nan_mask = tc_df.isna()
-    assert (tc_df[~nan_mask] >= 0).all().all()
+
+    # check that all non-nan values are positive
+    assert not (tc_df < 0).any().any()
+
     return tc_df
 
 
@@ -244,6 +246,9 @@ def apply_trading_costs(
 ) -> pd.DataFrame:
     pnls_list = sorted(pnle_wide_df.columns.tolist())
     tcs_list = sorted(tc_wide_df.columns.tolist())
+    pnls_list.pop(pnls_list.index(f"{spos}_{pnl_name}"))
+    tcs_list.pop(tcs_list.index(f"{spos}_{tc_name}"))
+
     assert len(pnls_list) == len(tcs_list)
     assert all(
         a.replace(f"_{spos}_{pnl_name}", "") == b.replace(f"_{spos}_{tc_name}", "")
@@ -414,6 +419,25 @@ def proxy_pnl_calc(
         tc_name=tc_name,
         pnl_name=pnl_name,
     )
+    # get rows that are all nans
+    all_nan_rows = df_outs["pnl_incl_costs"].loc[
+        df_outs["pnl_incl_costs"].isna().all(axis=1)
+    ]
+    if not all_nan_rows.empty:
+        warnings.warn(
+            f"Warning: The following rows are all NaNs and have been dropped: {all_nan_rows.index}"
+        )
+        df_outs["pnl_incl_costs"] = df_outs["pnl_incl_costs"].dropna(how="all")
+
+    all_nan_cols = df_outs["pnl_incl_costs"].loc[
+        :, df_outs["pnl_incl_costs"].isna().all(axis=0)
+    ]
+    if not all_nan_cols.empty:
+        warnings.warn(
+            f"Warning: The following columns are all NaNs and have been dropped: {all_nan_cols.columns}"
+        )
+        df_outs["pnl_incl_costs"] = df_outs["pnl_incl_costs"].dropna(how="all", axis=1)
+
     if not (return_pnl_excl_costs or return_costs):
         return df_outs["pnl_incl_costs"]
     elif return_pnl_excl_costs and return_costs:
