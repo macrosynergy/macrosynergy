@@ -3,6 +3,7 @@ JPMaQS Download Interface
 """
 
 import datetime
+from dateutil.relativedelta import relativedelta
 import io
 import logging
 import os
@@ -562,6 +563,7 @@ class JPMaQSDownload(DataQueryInterface):
         self.msg_warnings: List[str] = []
         self.unavailable_expressions: List[str] = []
         self.downloaded_data: Dict = {}
+        self.jpmaqs_access: bool = True
 
         super().__init__(
             oauth=oauth,
@@ -767,6 +769,13 @@ class JPMaQSDownload(DataQueryInterface):
         if isinstance(download_outputs[0], QuantamentalDataFrame):
             return concat_single_metric_qdfs(download_outputs)
             # cannot chain QDFs with different metrics
+        if not self.jpmaqs_access:
+            raise ValueError(
+                f"The credentials you have provided are for Dataquery access only and "
+                f"hence have no JPMaQS entitlements. Because of this you are only able "
+                f"to download data from 2000-01-01 to "
+                f"{(datetime.datetime.now() - relativedelta(months=6)).strftime('%Y-%m-%d')}."
+            )
 
         raise NotImplementedError(
             f"Cannot chain download outputs that are List of : {list(set(map(type, download_outputs)))}."
@@ -815,6 +824,10 @@ class JPMaQSDownload(DataQueryInterface):
                         " No explanation was provided."
                     )
                 ts_list[its] = None
+
+            if "message" in ts["attributes"][0]:
+                if "[FT] Limited Dataset Access Only" in ts["attributes"][0]["message"]:
+                    self.jpmaqs_access = False
 
         ts_list: List[dict] = list(filter(None, ts_list))
         logger.debug(f"Downloaded data for {len(ts_list)} expressions.")
@@ -1123,6 +1136,13 @@ class JPMaQSDownload(DataQueryInterface):
             **kwargs,
         )
 
+        if not self.jpmaqs_access:
+            print(
+                "Credentials provided only have access to Dataquery and have not been "
+                "granted access to JPMAQS. You can only access data after 2000-01-01 and "
+                "before 6 months from the current date."
+            )
+
         download_time_taken: float = timer() - download_time_taken
 
         if report_time_taken:
@@ -1160,7 +1180,7 @@ class JPMaQSDownload(DataQueryInterface):
 if __name__ == "__main__":
     cids = ["AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "EUR", "GBP", "USD"]
     xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
-    start_date: str = "2024-02-07"
+    start_date: str = "2024-01-07"
     end_date: str = "2024-02-09"
 
     with JPMaQSDownload(
