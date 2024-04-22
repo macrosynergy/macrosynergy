@@ -103,8 +103,6 @@ class ProxyPnL(object):
         end: Optional[str] = None,
         blacklist: Optional[dict] = None,
         pname: str = "POS",
-        return_pvol: bool = False,
-        return_vcv: bool = False,
     ) -> Union[
         QuantamentalDataFrame,
         Tuple[QuantamentalDataFrame, QuantamentalDataFrame],
@@ -112,7 +110,15 @@ class ProxyPnL(object):
         Tuple[QuantamentalDataFrame, QuantamentalDataFrame, pd.DataFrame],
     ]:
         fids = fids or self.fids
-        df = df or self.cs_df or self.contract_signals()
+        df = df or self.cs_df
+        if df is None:
+            if hasattr(self, "cs_df") and self.cs_df is not None:
+                df = self.cs_df
+            else:
+                raise ValueError(
+                    "Either pass a DataFrame with contract signals "
+                    "or run `ProxyPnL.contract_signals` first."
+                )
         sname = sname or self.sname
         start = start or self.start
         end = end or self.end
@@ -139,28 +145,22 @@ class ProxyPnL(object):
             end=end,
             blacklist=blacklist,
             pname=pname,
-            return_pvol=return_pvol,
-            return_vcv=return_vcv,
+            return_pvol=True,
+            return_vcv=True,
         )
-        outs: Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]] = (
+        outs: Tuple[QuantamentalDataFrame, QuantamentalDataFrame, pd.DataFrame] = (
             notional_positions(**np_args)
         )
-        assert isinstance(outs, (tuple, QuantamentalDataFrame))
-        if isinstance(outs, QuantamentalDataFrame):
-            outs = (outs,)
-        assert len(outs) in [1, 2, 3]
+        assert len(outs) == 3
         assert isinstance(outs[0], QuantamentalDataFrame)
+        assert isinstance(outs[1], QuantamentalDataFrame)
+        assert isinstance(outs[2], pd.DataFrame)
 
-        np_df: QuantamentalDataFrame = outs[0]
-        if return_pvol:
-            pvol_df = outs[1]
-            self.pvol_df: QuantamentalDataFrame = pvol_df
-        if return_vcv:
-            vcv_df = outs[int(return_pvol) + 1]
-            self.vcv_df: QuantamentalDataFrame = vcv_df
-
-        self.npos_df: QuantamentalDataFrame = np_df
-        return np_df
+        self.npos_df: QuantamentalDataFrame = outs[0]
+        self.pvol_df: QuantamentalDataFrame = outs[1]
+        self.vcv_df: QuantamentalDataFrame = outs[2]
+        outs = None
+        return self.npos_df
 
     def proxy_pnl_calc(
         self,
@@ -176,8 +176,6 @@ class ProxyPnL(object):
         roll_freqs: Optional[dict] = None,
         pnl_name: str = "PNL",
         tc_name: str = "TCOST",
-        return_pnl_excl_costs: bool = False,
-        return_costs: bool = False,
     ) -> Union[
         QuantamentalDataFrame,
         Tuple[QuantamentalDataFrame, pd.DataFrame],
@@ -215,24 +213,20 @@ class ProxyPnL(object):
             blacklist=self.blacklist,
             pnl_name=pnl_name,
             tc_name=tc_name,
-            return_pnl_excl_costs=return_pnl_excl_costs,
-            return_costs=return_costs,
+            return_pnl_excl_costs=True,
+            return_costs=True,
         )
-        outs = proxy_pnl_calc(**pp_args)
-        assert isinstance(outs, (tuple, QuantamentalDataFrame))
-        if isinstance(outs, QuantamentalDataFrame):
-            outs = (outs,)
-        assert len(outs) in [1, 2, 3]
+        outs: Tuple[QuantamentalDataFrame, pd.DataFrame, pd.DataFrame] = proxy_pnl_calc(
+            **pp_args
+        )
+        assert len(outs) == 3
         assert isinstance(outs[0], QuantamentalDataFrame)
+        assert isinstance(outs[1], pd.DataFrame)
+        assert isinstance(outs[2], pd.DataFrame)
 
-        proxy_pnl: QuantamentalDataFrame = outs[0]
-        if return_pnl_excl_costs:
-            pnl_excl_costs = outs[1]
-            self.pnl_excl_costs: QuantamentalDataFrame = pnl_excl_costs
-        if return_costs:
-            txn_costs_df = outs[int(return_pnl_excl_costs) + 1]
-            self.txn_costs_df: pd.DataFrame = txn_costs_df
+        self.proxy_pnl: QuantamentalDataFrame = outs[0]
+        self.txn_costs_df: pd.DataFrame = outs[1]
+        self.pnl_excl_costs: QuantamentalDataFrame = outs[2]
+        outs = None
 
-        self.proxy_pnl: QuantamentalDataFrame = proxy_pnl
-
-        return proxy_pnl
+        return self.proxy_pnl
