@@ -207,7 +207,7 @@ def _leverage_positions(
     rowsums[rowsums == 0] = np.nan
 
     for ic, contx in enumerate(fids):
-        pos_col: str = contx + "_" + pname
+        pos_col: str = f"{contx}_{sname}_{pname}"
         cont_name: str = contx + sig_ident
         # NOTE: this should be
         # dfw_pos = dfw_sigs * aum * leverage / rowsums(dfw_sigs)
@@ -433,21 +433,15 @@ def notional_positions(
     return_pvol = return_pvol and (locals().get("pvol") is not None)
     return_vcv = return_vcv and (locals().get("vcv_df") is not None)
 
+    return_df = ticker_df_to_qdf(df=return_df).dropna()
     if return_pvol and return_vcv:
-        return (
-            ticker_df_to_qdf(df=return_df).dropna(),
-            ticker_df_to_qdf(df=pvol).dropna(),
-            vcv_df,
-        )
+        return (return_df, pvol, vcv_df)
     elif return_pvol:
-        return (
-            ticker_df_to_qdf(df=return_df).dropna(),
-            ticker_df_to_qdf(df=pvol).dropna(),
-        )
+        return (return_df, pvol)
     elif return_vcv:
-        return ticker_df_to_qdf(df=return_df).dropna(), vcv_df
+        return (return_df, vcv_df)
     else:
-        return ticker_df_to_qdf(df=return_df).dropna()
+        return return_df
 
 
 if __name__ == "__main__":
@@ -511,4 +505,6 @@ if __name__ == "__main__":
         lback_meth="xma",
         lback_periods=-1,
         half_life=20,
+        return_pvol=True,
+        return_vcv=True,
     )
