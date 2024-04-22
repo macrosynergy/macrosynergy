@@ -52,11 +52,13 @@ jobs:
         run: |
           python -m pytest tests/unit/${{ matrix.folder }}
 
-      - name: Upload coverage reports to Codecov
-        run: |
-          curl -Os https://uploader.codecov.io/latest/linux/codecov
-          chmod +x codecov
-          ./codecov -t ${CODECOV_TOKEN}
+      - name: Upload coverage reports to GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          # name coverage-report-(commit)-(folder)
+          name: coverage-report-${{ github.sha }}-${{ matrix.folder }}-${{ matrix.python-version }}
+          # all .coverage files in the project
+          path: .coverage
 
   run-unit-tests-release-success:
     needs: run-unit-tests-release
@@ -108,3 +110,19 @@ jobs:
           else
             echo "Build settings test passed"
           fi
+
+  upload-coverage:
+    needs: test-build-settings-matrix-success
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download coverage reports from GitHub Actions
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-report-${{ github.sha }}-*
+          path: ./coverage-reports
+
+      - name: Upload coverage report to Codecov
+        uses: codecov/codecov-action@v2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./coverage-reports

@@ -47,7 +47,7 @@ assert data.shape[0] > 0
 data.info()
 ```
 
-Alternatively, you can also the certificate and private key pair, to access DataQuery as:
+Alternatively, you can also specify your certificate and private key pair, to access DataQuery as shown below:
 ```python
 import pandas as pd
 from macrosynergy.download import JPMaQSDownload
@@ -198,14 +198,14 @@ basket_1 = Basket(
 )
 basket_1.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
 ```
-Using the basket class you have access to the methods such as visulasing the weights associated with each contract,
+Using the basket class you have access to the methods such as visualising the weights associated with each contract,
 or returning the weight or basket.
 ```python
 basket_1.return_basket()
 basket_1.return_weights()
 basket_1.weight_visualiser(basket_name="GLB_EQUAL")
 ```
-You can also calculate and visualise the following and more with built-in functions.
+You can also calculate and visualise the following and more, with built-in functions.
 1.  [historic volatility](./macrosynergy/panel/historic_vol.py)
 2.  [z-scores](./macrosynergy/panel/make_zn_scores.py)
 3.  [beta values](./macrosynergy/panel/return_beta.py)

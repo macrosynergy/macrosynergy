@@ -143,6 +143,8 @@ class BasePanelSplit(BaseCrossValidator):
         real_dates = Xy.index.get_level_values(1).unique().sort_values()
 
         freq_est = pd.infer_freq(real_dates)
+        if freq_est is None:
+            freq_est = real_dates.to_series().diff().min()
         freq_offset = pd.tseries.frequencies.to_offset(freq_est)
 
         splits: List[Tuple[np.ndarray[int], np.ndarray[int]]] = list(self.split(X, y))
@@ -201,22 +203,33 @@ class BasePanelSplit(BaseCrossValidator):
 
         # Finally, apply all your operations on the ax object.
         for cs_idx, idx, xranges, color, label in operations:
-            ax[cs_idx, idx].broken_barh(
-                xranges, (-0.4, 0.8), facecolors=color, label=label
-            )
-            ax[cs_idx, idx].set_xlim(real_dates.min(), real_dates.max() + difference)
-            ax[cs_idx, idx].set_yticks([0])
-            ax[cs_idx, idx].set_yticklabels([cross_sections[cs_idx]])
-            ax[cs_idx, idx].tick_params(axis="x", rotation=90)
+            if len(cross_sections) == 1:
+                ax[idx].broken_barh(
+                    xranges, (-0.4, 0.8), facecolors=color, label=label
+                )
+                ax[idx].set_xlim(real_dates.min(), real_dates.max() + difference)
+                ax[idx].set_yticks([0])
+                ax[idx].set_yticklabels([cross_sections[0]])
+                ax[idx].tick_params(axis="x", rotation=90)
+                ax[idx].set_title(f"{split_titles[idx]}")
 
-            # Ensure only the last row has x-axis labels.
-            if cs_idx == len(ax) - 1:
-                ax[cs_idx, idx].tick_params(axis="x", rotation=90)
             else:
-                ax[cs_idx, idx].tick_params(axis="x", labelbottom=False)
+                ax[cs_idx, idx].broken_barh(
+                    xranges, (-0.4, 0.8), facecolors=color, label=label
+                )
+                ax[cs_idx, idx].set_xlim(real_dates.min(), real_dates.max() + difference)
+                ax[cs_idx, idx].set_yticks([0])
+                ax[cs_idx, idx].set_yticklabels([cross_sections[cs_idx]])
+                ax[cs_idx, idx].tick_params(axis="x", rotation=90)
 
-            if cs_idx == 0:
-                ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
+                # Ensure only the last row has x-axis labels.
+                if cs_idx == len(ax) - 1:
+                    ax[cs_idx, idx].tick_params(axis="x", rotation=90)
+                else:
+                    ax[cs_idx, idx].tick_params(axis="x", labelbottom=False)
+
+                if cs_idx == 0:
+                    ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
 
         plt.suptitle(
             f"Training and test set pairs, number of training sets={self.n_splits}"
@@ -621,14 +634,17 @@ if __name__ == "__main__":
     # 1) Demonstration of basic functionality
 
     # a) n_splits = 4, n_split_method = expanding
-    splitter = ExpandingKFoldPanelSplit(n_splits=4)
+    """splitter = ExpandingKFoldPanelSplit(n_splits=4)
     splitter.split(X2, y2)
     cv_results = cross_validate(
         LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
     )
     splitter.visualise_splits(X2, y2)
 
-    # b) n_splits = 4, n_split_method = rolling
+    # b) n_splits = 4, n_split_method = expanding, Australia only visualisation
+    splitter.visualise_splits(X2[X2.index.get_level_values(0)=="AUD"], y2[y2.index.get_level_values(0)=="AUD"])
+
+    # c) n_splits = 4, n_split_method = rolling
     splitter = RollingKFoldPanelSplit(n_splits=4)
     splitter.split(X2, y2)
     cv_results = cross_validate(
@@ -636,22 +652,30 @@ if __name__ == "__main__":
     )
     splitter.visualise_splits(X2, y2)
 
-    # c) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4
+    # d) n_splits = 4, n_split_method = rolling, Canada only visualisation
+    splitter.visualise_splits(X2[X2.index.get_level_values(0)=="CAD"], y2[y2.index.get_level_values(0)=="CAD"]) 
+
+    # e) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4
     splitter = ExpandingIncrementPanelSplit(
-        train_intervals=21 * 12, test_size=1, min_periods=21, min_cids=4
+        train_intervals=21 * 12, test_size=1, min_periods=21 * 12, min_cids=4
     )
     splitter.split(X2, y2)
     cv_results = cross_validate(
         LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
     )
-    splitter.visualise_splits(X2, y2)
+    splitter.visualise_splits(X2, y2)"""
 
-    # d) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4,
-    # max_periods=12*21
+    # f) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, Britain only visualisation
+    splitter = ExpandingIncrementPanelSplit(
+        train_intervals=21 * 12, test_size=1, min_periods=21 * 12, min_cids=1
+    )
+    splitter.visualise_splits(X2[X2.index.get_level_values(0)=="GBP"], y2[y2.index.get_level_values(0)=="GBP"])
+
+    # g) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, max_periods=12*21
     splitter = ExpandingIncrementPanelSplit(
         train_intervals=21 * 12,
         test_size=21 * 12,
-        min_periods=21,
+        min_periods=21 * 12,
         min_cids=4,
         max_periods=12 * 21,
     )
@@ -660,6 +684,16 @@ if __name__ == "__main__":
         LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
     )
     splitter.visualise_splits(X2, y2)
+
+    # h) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, max_periods=12*21, USD only visualisation
+    splitter = ExpandingIncrementPanelSplit(
+        train_intervals=21 * 12,
+        test_size=21 * 12,
+        min_periods=21 * 12,
+        min_cids=1,
+        max_periods=12 * 21,
+    )
+    splitter.visualise_splits(X2[X2.index.get_level_values(0)=="USD"], y2[y2.index.get_level_values(0)=="USD"])
 
     # 2) Grid search capabilities
     lasso = Lasso()

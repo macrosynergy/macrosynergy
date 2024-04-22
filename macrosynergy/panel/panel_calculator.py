@@ -3,6 +3,7 @@ Implementation of panel calculation functions for quantamental data.
 The functionality allows applying mathematical operations on time-series data.
 
 """
+
 import numpy as np
 import pandas as pd
 from typing import List, Tuple
@@ -154,6 +155,8 @@ def panel_calculator(
     assert all([isinstance(elem, str) for elem in calcs]), error_formula
     assert isinstance(cids, list), "List of cross-sections expected."
 
+    _check_calcs(calcs)
+
     # B. Collect new category names and their formulas.
 
     ops = {}
@@ -227,6 +230,26 @@ def panel_calculator(
         df_out = drop_nan_series(df=df_out, raise_warning=True)
 
     return df_out
+
+
+def _check_calcs(formulas: List[str]):
+    """
+    Check formulas for invalid characters in xcats.
+
+    :param <List[str]> calcs: list of formulas.
+
+    :return <List[str]>: list of formulas.
+    """
+    pattern = r"[-+*()/](?=i?[A-Z])|(?<=[A-Z])[-+*()/]"
+
+    for formula in formulas:
+        for term in formula.split():
+            # Search for any occurrences of the pattern in the input string
+            if re.search(pattern, term):
+                raise ValueError(
+                    f"Invalid character found next to a capital letter or 'i' in string: {term}. "
+                    + "Arithmetic operators and parentheses must be separated by spaces."
+                )
 
 
 if __name__ == "__main__":

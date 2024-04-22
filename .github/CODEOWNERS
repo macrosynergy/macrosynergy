@@ -1,8 +1,8 @@
 * @macrosynergy/package-maintainers
 
-/macrosynergy/pnl/* @rsueppel  @macrosynergy/package-maintainers
-/macrosynergy/signal/* @rsueppel  @macrosynergy/package-maintainers
-/macrosynergy/panel/* @rsueppel  @macrosynergy/package-maintainers
+/macrosynergy/pnl/* @lsimonsen @macrosynergy/package-maintainers
+/macrosynergy/signal/* @macrosynergy/package-maintainers
+/macrosynergy/panel/* @macrosynergy/package-maintainers
 
 /docs/scripts/* @Magnus167 @macrosynergy/package-maintainers
 /macrosynergy/download/* @Magnus167 @macrosynergy/package-maintainers
