@@ -243,7 +243,7 @@ def apply_slip(
 
     filtered_df = df[df["tickers"].isin(sel_tickers)]
 
-    filtered_df[metrics] = filtered_df.groupby("tickers")[metrics].shift(slip)
+    filtered_df.loc[:, metrics] = filtered_df.groupby("tickers")[metrics].shift(slip)
 
     df.loc[df["tickers"].isin(sel_tickers), metrics] = filtered_df[metrics]
 
