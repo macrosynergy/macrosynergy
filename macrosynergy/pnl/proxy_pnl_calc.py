@@ -144,10 +144,10 @@ def _prep_dfs_for_pnl_calcs(
     pivot_returns.columns = _replace_strs(pivot_returns.columns, rstring)
     pivot_pos = pivot_pos[sorted(pivot_pos.columns)]
     pivot_returns = pivot_returns[sorted(pivot_returns.columns)]
-
+    assert pivot_pos.index.name == pivot_returns.index.name == "real_date"
     return_df_cols = pivot_pos.columns.tolist()
     pnl_df = pd.DataFrame(index=pd.bdate_range(start, end), columns=return_df_cols)
-
+    pnl_df.index.name = "real_date"
     return pnl_df, pivot_pos, pivot_returns, rebal_dates
 
 
