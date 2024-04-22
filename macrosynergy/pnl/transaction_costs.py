@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-
 from typing import List, Union, Tuple, Optional, Dict, Callable
 from numbers import Number
 import functools
@@ -109,6 +108,7 @@ class SparseCosts(object):
         df_wide = qdf_to_ticker_df(self.df)
         self._all_fids = get_fids(self.df)
         change_index = get_diff_index(df_wide)  # drop rows with no change
+        self.change_index = change_index
         df_wide = df_wide.loc[change_index]
         self.df_wide = df_wide
         self._get_costs.cache_clear()  # Clear the cache whenever the data is re-prepared
@@ -154,6 +154,12 @@ class TransactionCosts(object):
         size_l="SIZE_90PCTL",
     )
 
+    def check_init(self):
+        if not hasattr(self, "sparse_costs") or not hasattr(
+            self.sparse_costs, "df_wide"
+        ):
+            raise ValueError("The TransactionCosts object has not been initialised")
+
     def __init__(
         self,
         df: QuantamentalDataFrame,
@@ -184,6 +190,12 @@ class TransactionCosts(object):
         self.rcost_l = rcost_l
         self.size_l = size_l
         self._txn_stats = [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
+        self.change_index = self.sparse_costs.change_index
+
+    @property
+    def df_wide(self):
+        self.check_init()
+        return self.sparse_costs.df_wide
 
     @classmethod
     def download(cls) -> "TransactionCosts":
@@ -191,8 +203,9 @@ class TransactionCosts(object):
         return cls(df=df, fids=get_fids(df), **cls.DEFAULT_ARGS)
 
     def get_costs(self, fid: str, real_date: str) -> pd.Series:
+        self.check_init()
         assert fid in self.fids
-        assert hasattr(self, "sparse_costs") and hasattr(self.sparse_costs, "df_wide")
+
         return self.sparse_costs.get_costs(fid=fid, real_date=real_date)
 
     @staticmethod
@@ -212,6 +225,7 @@ class TransactionCosts(object):
         )
 
     def bidoffer(self, fid: str, trade_size: Number, real_date: str) -> Number:
+        self.check_init()
         row = self.sparse_costs.get_costs(fid=fid, real_date=real_date)
         d = dict(
             trade_size=trade_size,
@@ -223,6 +237,7 @@ class TransactionCosts(object):
         return self.extrapolate_cost(**d)
 
     def rollcost(self, fid: str, trade_size: Number, real_date: str) -> Number:
+        self.check_init()
         row = self.sparse_costs.get_costs(fid=fid, real_date=real_date)
         d = dict(
             trade_size=trade_size,
@@ -232,6 +247,86 @@ class TransactionCosts(object):
             pct90_cost=row[fid + self.rcost_l],
         )
         return self.extrapolate_cost(**d)
+
+    def plot_costs(self, fids=None, cost_type="BIDOFFER", ncol=8, *args, **kwargs):
+        self.check_init()
+        if fids is None:
+            fids = self.fids
+        if not isinstance(fids, list) or not all(isinstance(fid, str) for fid in fids):
+            raise ValueError("fids must be a list of strings")
+
+        costfunc = self.bidoffer if cost_type == "BIDOFFER" else self.rollcost
+
+        nrows = len(fids) // ncol + (len(fids) % ncol > 0)
+        sns.set_theme(style="whitegrid")
+        fig, axes = plt.subplots(
+            nrows=nrows, ncols=ncol, figsize=(5 * ncol, 5 * nrows), layout="constrained"
+        )
+        fig.suptitle(f"{cost_type.capitalize()}")
+
+        # Define colors for each date range
+        colors = sns.color_palette("viridis", n_colors=len(self.change_index))
+
+        idx_dates = self.change_index.tolist()
+        label_fmt = lambda x: x.strftime("%Y-%m-%d")
+        labels = [
+            f"{label_fmt(d1)} to {label_fmt(d2 - pd.offsets.BDay(1))}"
+            for d1, d2 in zip(idx_dates[:-1], idx_dates[1:])
+        ]
+        labels.append(f"{label_fmt(idx_dates[-1])} to Present")
+        color_map = dict(zip(labels, colors))
+
+        legend_handles = {}
+        ax: plt.Axes
+        for i, fid in enumerate(sorted(fids)):
+            r, c = divmod(i, ncol)
+            ax = axes[r, c] if nrows > 1 else axes[c]
+            max_trade_size = self.df_wide[fid + self.size_l].max()
+            trade_sizes = np.arange(1, max_trade_size + 101, 10)
+
+            for dt, lb in zip(idx_dates, labels):
+                trade_costs = [
+                    costfunc(fid=fid, trade_size=ts, real_date=dt) for ts in trade_sizes
+                ]
+                line = sns.lineplot(
+                    x=trade_sizes,
+                    y=trade_costs,
+                    ax=ax,
+                    color=color_map[lb],
+                    label=lb,
+                    zorder=10,
+                )
+
+                median_trade_size = self.df_wide.loc[dt, fid + self.size_n]
+                large_trade_size = self.df_wide.loc[dt, fid + self.size_l]
+                median_xcost = self.df_wide.loc[
+                    dt,
+                    fid + (self.tcost_n if cost_type == "BIDOFFER" else self.rcost_n),
+                ]
+                large_xcost = self.df_wide.loc[
+                    dt,
+                    fid + (self.tcost_l if cost_type == "BIDOFFER" else self.rcost_l),
+                ]
+                sns.scatterplot(
+                    x=[median_trade_size, large_trade_size],
+                    y=[median_xcost, large_xcost],
+                    ax=ax,
+                    color="red",
+                    zorder=20,
+                )
+
+                ax.set_xlim(left=0)
+                ax.set_title(f"{fid}") 
+
+                if lb not in legend_handles:
+                    legend_handles[lb] = line.lines[0]
+
+        # Remove individual subplot legends
+        for ax in axes.flat[1:]:
+            ax.get_legend().remove()
+
+        # plt.tight_layout()
+        plt.show()
 
 
 class ExampleAdapter(TransactionCosts):
@@ -275,7 +370,9 @@ if __name__ == "__main__":
     import time, random
 
     tx_costs_dates = pd.bdate_range("1999-01-01", "2022-12-30")
-    txn_costs_obj: TransactionCosts = TransactionCosts.download()
+    # txn_costs_obj: TransactionCosts = TransactionCosts.download()
+    dftc = pd.read_pickle(r"C:\Users\PalashTyagi\Code\msx\macrosynergy\data\tc.pkl")
+    txn_costs_obj: TransactionCosts = TransactionCosts(dftc, get_fids(dftc))
 
     assert txn_costs_obj.get_costs(fid="GBP_FX", real_date="2011-01-01").to_dict() == {
         "GBP_FXBIDOFFER_MEDIAN": 0.0224707153696722,
@@ -286,14 +383,16 @@ if __name__ == "__main__":
         "GBP_FXSIZE_90PCTL": 200.0,
     }
 
-    start = time.time()
-    test_iters = 1000
-    for i in range(test_iters):
-        txn_costs_obj.bidoffer(
-            fid="GBP_FX",
-            trade_size=random.randint(1, 100),
-            real_date=random.choice(tx_costs_dates).strftime("%Y-%m-%d"),
-        )
-    end = time.time()
-    print(f"Time taken: {end - start}")
-    print(f"Time per iteration: {(end - start) / test_iters}")
+    txn_costs_obj.plot_costs(cost_type="ROLLCOST", fids=txn_costs_obj.fids[:16], ncol=4)
+
+    # start = time.time()
+    # test_iters = 1000
+    # for i in range(test_iters):
+    #     txn_costs_obj.bidoffer(
+    #         fid="GBP_FX",
+    #         trade_size=random.randint(1, 100),
+    #         real_date=random.choice(tx_costs_dates).strftime("%Y-%m-%d"),
+    #     )
+    # end = time.time()
+    # print(f"Time taken: {end - start}")
+    # print(f"Time per iteration: {(end - start) / test_iters}")
