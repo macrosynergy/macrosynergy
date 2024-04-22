@@ -1139,7 +1139,7 @@ class JPMaQSDownload(DataQueryInterface):
         if not self.jpmaqs_access:
             print(
                 "Credentials provided only have access to Dataquery and have not been "
-                "granted access to JPMAQS. You can only access data after 2000-01-01 and "
+                "granted access to JPMaQS. You can only access data after 2000-01-01 and "
                 "before 6 months from the current date."
             )
 
