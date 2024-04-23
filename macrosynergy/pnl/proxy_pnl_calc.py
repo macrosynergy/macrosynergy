@@ -307,8 +307,8 @@ def proxy_pnl_calc(
     return_costs: bool = False,
 ) -> Union[
     QuantamentalDataFrame,
-    Tuple[QuantamentalDataFrame, pd.DataFrame],
-    Tuple[QuantamentalDataFrame, pd.DataFrame, pd.DataFrame],
+    Tuple[QuantamentalDataFrame, QuantamentalDataFrame],
+    Tuple[QuantamentalDataFrame, QuantamentalDataFrame, QuantamentalDataFrame],
 ]:
     """
     Calculates an approximate nominal PnL under consideration of transaction costs
