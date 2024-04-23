@@ -25,6 +25,7 @@ In particular, the class allows proceeding in three separate steps, implemented 
 - The method `proxy_pnl` multiplies positions with proxy returns and estimates transaction costs. In particular, it uses a trading_cost method to apply transaction costs and their size dependency to discretionary position changes. And it applies a roll_cost method to apply roll costs to positions at certain intervals. This function also should provide some analytics as to estimated PnLs across sections and the impact of trading costs.
 
 ### Terminology
+
 To calculate proxy PnL we define our signals (and returns) into three different stages:
 
 1. Risk signals and returns: not tradable assets (purely theoretical construct), but idiosyncratic property makes it attractive for signal construction.
@@ -44,31 +45,56 @@ The typical flow when using the `ProxyPnL` class is as follows:
 ```{mermaid}
   flowchart TD;
       Sig[Signals]
+      CSCALES[Contract Specific Scaling]
       HR[Hedge-Ratios]
-      CS(Contract Signals)
+      HB[Hedge Basket]
+      CSfunc(`contract_signals`)
+      CS[Contract Signals]
       AUM[AUM]
       LVG[Leverage]
       LVGP[Leverage Position]
       VT[Volatility Target]
+      NPfunc(`notional_positions`)
       NP(Notional Positions)
+      HPVfunc(`historical_portfolio_volatility`)
       HPV[Historical Portfolio Volatility]
       TC[Trading Cost]
       RC[Roll Cost]
       Distr[Transaction Statistics]
       PP(Proxy PnL)
+      ESTF[Frequencies of Estimation]
+      ESTW[Weights per Freq. of Est.]
 
-      Sig-->CS
-      HR-->CS
+      subgraph "Contract Signals Functionality"
+        subgraph "User Inputs"
+          Sig
+          HR
+          HB
+          CSCALES
+        end
 
-      VT-->HPV
-      CS-->HPV
-      CS-->LVGP
-      LVG-->LVGP
-      AUM-->LVGP
+        Sig-->CSfunc
+        HR-->CSfunc
+        HB-->CSfunc
+        CSCALES-->CSfunc
+      end
+        CSfunc--o CS
+
+      subgraph "Notional Positions Functionality"
+        LVG-.->LVGP
+
+        AUM-->NPfunc
+        CS-->NPfunc
+        LVG-->NPfunc
+        VT-->NPfunc
 
 
-      HPV-->NP
-      LVGP-->NP
+        NPfunc-->HPVfunc
+        VT-.->HPVfunc
+        HPVfunc--o HPV
+
+
+      end
 
       TC-->PP
       RC-->PP
