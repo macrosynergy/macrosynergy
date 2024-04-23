@@ -478,7 +478,7 @@ if __name__ == "__main__":
     cids_nofx: List[str] = ["USD", "EUR", "CNY", "SGD"]
     cids_dmfx: List[str] = list(set(cids_dmca) - set(cids_nofx))
 
-    dfx = pd.read_pickle(r"C:\Users\PalashTyagi\Code\ms\macrosynergy\data\r.pkl")
+    dfx = pd.read_pickle("data/dfx.pkl")
     df_pnl, df_pnlx, df_costs = proxy_pnl_calc(
         df=dfx,
         spos="STRAT_POS",
