@@ -362,16 +362,12 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     :param <pd.DataFrame> df_add: DataFrame with the latest values.
 
     """
-    df_tickers = df["cid"] + "_" + df["xcat"]
-    df_add_tickers = df_add["cid"] + "_" + df_add["xcat"]
-
-    # If the ticker is already defined in the DataFrame, replace with the new series
-    # otherwise append the series to the aggregate DataFrame.
-    df = df[~df_tickers.isin(list(set(df_tickers).intersection(set(df_add_tickers))))]
-
     df = pd.concat([df, df_add], axis=0, ignore_index=True)
-    return df
 
+    df = df.drop_duplicates(
+        subset=["real_date", "xcat", "cid"], keep="last"
+    ).reset_index(drop=True)
+    return df
 
 def update_categories(df: pd.DataFrame, df_add):
     """
