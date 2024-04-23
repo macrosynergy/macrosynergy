@@ -11,7 +11,7 @@ from macrosynergy.management.utils import (
     standardise_dataframe,
     is_valid_iso_date,
 )
-from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.types import QuantamentalDataFrame, NoneType
 from macrosynergy.pnl import (
     notional_positions,
     contract_signals,
@@ -58,7 +58,9 @@ class ProxyPnL(object):
         *args,
         **kwargs,
     ) -> QuantamentalDataFrame:
-        cs_args = dict(
+        self.fids = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
+
+        cs_df: QuantamentalDataFrame = contract_signals(
             df=self.df,
             sig=sig,
             cids=cids,
@@ -72,11 +74,9 @@ class ProxyPnL(object):
             end=self.end,
             blacklist=self.blacklist,
             sname=self.sname,
+            *args,
+            **kwargs,
         )
-        cs_args.update(kwargs)
-        self.fids = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
-
-        cs_df: QuantamentalDataFrame = contract_signals(**cs_args)
         self.cs_df: QuantamentalDataFrame = cs_df
         return cs_df
 
@@ -123,7 +123,11 @@ class ProxyPnL(object):
         start = start or self.start
         end = end or self.end
         blacklist = blacklist or self.blacklist
-        np_args = dict(
+
+        outs: Union[
+            Tuple[QuantamentalDataFrame, QuantamentalDataFrame, pd.DataFrame],
+            QuantamentalDataFrame,
+        ] = notional_positions(
             df=df,
             sname=sname,
             fids=fids,
@@ -148,13 +152,13 @@ class ProxyPnL(object):
             return_pvol=True,
             return_vcv=True,
         )
-        outs: Tuple[QuantamentalDataFrame, QuantamentalDataFrame, pd.DataFrame] = (
-            notional_positions(**np_args)
-        )
+        if isinstance(outs, QuantamentalDataFrame):
+            assert isinstance(outs, QuantamentalDataFrame)
+            outs = (outs, None, None)  # to avoid multiple flow control
         assert len(outs) == 3
         assert isinstance(outs[0], QuantamentalDataFrame)
-        assert isinstance(outs[1], QuantamentalDataFrame)
-        assert isinstance(outs[2], pd.DataFrame)
+        assert isinstance(outs[1], (QuantamentalDataFrame, NoneType))
+        assert isinstance(outs[2], (pd.DataFrame, NoneType))
 
         self.npos_df: QuantamentalDataFrame = outs[0]
         self.pvol_df: QuantamentalDataFrame = outs[1]
@@ -181,7 +185,7 @@ class ProxyPnL(object):
         Tuple[QuantamentalDataFrame, pd.DataFrame],
         Tuple[QuantamentalDataFrame, pd.DataFrame, pd.DataFrame],
     ]:
-        df: QuantamentalDataFrame = df or self.npos_df or self.notional_positions()
+        df: QuantamentalDataFrame = df or self.npos_df
         spos: str = spos or self.sname + "_" + self.pname
         fids: List[str] = fids or self.fids
         txn_obj_args = dict(
@@ -197,7 +201,7 @@ class ProxyPnL(object):
             for k, v in txn_obj_args.items()
         }
 
-        pp_args: Dict[str, Union[QuantamentalDataFrame, str, List[str], dict]] = dict(
+        outs: Tuple[QuantamentalDataFrame, pd.DataFrame, pd.DataFrame] = proxy_pnl_calc(
             df=df,
             spos=spos,
             fids=fids,
@@ -215,9 +219,6 @@ class ProxyPnL(object):
             tc_name=tc_name,
             return_pnl_excl_costs=True,
             return_costs=True,
-        )
-        outs: Tuple[QuantamentalDataFrame, pd.DataFrame, pd.DataFrame] = proxy_pnl_calc(
-            **pp_args
         )
         assert len(outs) == 3
         assert isinstance(outs[0], QuantamentalDataFrame)
