@@ -25,6 +25,8 @@ def get_notebooks(bucket_name):
 
     notebooks = [obj.key for obj in bucket.objects.all() if obj.key.endswith(".ipynb")]
 
+    notebooks.remove("Regression-based_macro_trading_signals.ipynb") # Requires 64 GB of memory currently which is too expensive
+
     return notebooks
 
 
@@ -121,7 +123,7 @@ task_arns = []
 for notebook in notebooks:
     if notebook in [
         "Signal_optimization_basics.ipynb",
-        "Regression-based_macro_trading_signals.ipynb",
+        #"Regression-based_macro_trading_signals.ipynb",
         "Regression-based_FX_signals.ipynb",
     ]:
         cpu = 16384
