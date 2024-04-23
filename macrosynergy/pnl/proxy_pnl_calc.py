@@ -177,7 +177,7 @@ def pnl_excl_costs(
     df_wide: pd.DataFrame,
     spos: str,
     rstring: str,
-    pnlx_name: str = "PNLx",
+    pnl_name: str 
 ) -> pd.DataFrame:
 
     pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
@@ -202,7 +202,7 @@ def pnl_excl_costs(
     ).cumprod(axis=0)
 
     # append <spos>_<pnl_name> to all columns
-    pnl_df.columns = [f"{col}_{spos}_{pnlx_name}" for col in pnl_df.columns]
+    pnl_df.columns = [f"{col}_{spos}_{pnl_name}" for col in pnl_df.columns]
 
     return pnl_df
 
@@ -269,18 +269,18 @@ def apply_trading_costs(
 
     assert len(pnls_list) == len(tcs_list)
     assert all(
-        a.replace(f"_{spos}_{pnlx_name}", "") == b.replace(f"_{spos}_{tc_name}", "")
+        a.replace(f"_{spos}_{pnl_name}", "") == b.replace(f"_{spos}_{tc_name}", "")
         for a, b in zip(pnls_list, tcs_list)
     )
 
     out_df = pnlx_wide_df.copy()
     for pnl_col, tc_col in zip(pnls_list, tcs_list):
-        assert pnl_col.replace(f"_{spos}_{pnlx_name}", "") == tc_col.replace(
+        assert pnl_col.replace(f"_{spos}_{pnl_name}", "") == tc_col.replace(
             f"_{spos}_{tc_name}", ""
         )
         out_df[pnl_col] = out_df[pnl_col] - tc_wide_df[tc_col]
 
-    rename_pnl = lambda x: x.replace(f"_{spos}_{pnlx_name}", f"_{spos}_{pnl_name}")
+    rename_pnl = lambda x: x.replace(f"_{spos}_{pnl_name}", f"_{spos}_{pnlx_name}")
     out_df = out_df.rename(columns=rename_pnl)
 
     return out_df
@@ -432,7 +432,7 @@ def proxy_pnl_calc(
         df_wide=df_wide,
         spos=spos,
         rstring=rstring,
-        pnlx_name=pnlx_name,
+        pnl_name=pnl_name,
     )
 
     # tc_wide_df: pd.DataFrame = calculate_trading_costs(
@@ -449,8 +449,8 @@ def proxy_pnl_calc(
         tc_wide_df=df_outs["tc_wide"],
         spos=spos,
         tc_name=tc_name,
-        pnl_name=pnl_name,
         pnlx_name=pnlx_name,
+        pnl_name=pnl_name,
     )
 
     # # Convert to QDFs
@@ -479,7 +479,7 @@ if __name__ == "__main__":
     cids_dmfx: List[str] = list(set(cids_dmca) - set(cids_nofx))
 
     dfx = pd.read_pickle("data/dfx.pkl")
-    df_pnl, df_pnlx, df_costs = proxy_pnl_calc(
+    df_pnlx, df_pnl, df_costs = proxy_pnl_calc(
         df=dfx,
         spos="STRAT_POS",
         rstring="XR_NSA",
