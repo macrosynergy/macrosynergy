@@ -55,11 +55,11 @@ class ProxyPnL(object):
         hbasket: Optional[List[str]] = None,
         hscales: Optional[List[Union[Number, str]]] = None,
         hratios: Optional[str] = None,
+        blacklist: Optional[dict] = None,
         *args,
         **kwargs,
     ) -> QuantamentalDataFrame:
         self.fids = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
-
         cs_df: QuantamentalDataFrame = contract_signals(
             df=self.df,
             sig=sig,
@@ -72,7 +72,7 @@ class ProxyPnL(object):
             hratios=hratios,
             start=self.start,
             end=self.end,
-            blacklist=self.blacklist,
+            blacklist=blacklist or self.blacklist,
             sname=self.sname,
             *args,
             **kwargs,

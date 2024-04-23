@@ -282,7 +282,7 @@ class TransactionCosts(object):
             r, c = divmod(i, ncol)
             ax = axes[r, c] if nrows > 1 else axes[c]
             max_trade_size = self.df_wide[fid + self.size_l].max()
-            trade_sizes = np.arange(1, max_trade_size + 101, 10)
+            trade_sizes = np.arange(1, max_trade_size + 101, 1)
 
             for dt, lb in zip(idx_dates, labels):
                 trade_costs = [

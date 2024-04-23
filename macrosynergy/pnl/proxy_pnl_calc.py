@@ -174,10 +174,7 @@ def _prep_dfs_for_pnl_calcs(
 
 
 def pnl_excl_costs(
-    df_wide: pd.DataFrame,
-    spos: str,
-    rstring: str,
-    pnlx_name: str = "PNLx",
+    df_wide: pd.DataFrame, spos: str, rstring: str, pnl_name: str
 ) -> pd.DataFrame:
 
     pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
@@ -193,16 +190,16 @@ def pnl_excl_costs(
         dt2x = dt2 - pd.offsets.BDay(1)
         curr_pos: pd.Series = pivot_pos.loc[dt1]
         curr_rets: pd.DataFrame = pivot_returns.loc[dt1:dt2x]
-        cumprod_rets: pd.Series = (1 + curr_rets).cumprod(axis=0)
+        cumprod_rets: pd.Series = (1 + curr_rets / 100).cumprod(axis=0)
         pnl_df.loc[dt1:dt2x] = curr_pos * cumprod_rets
 
     # on dt2, we need to hold the position
     pnl_df.loc[rebal_dates[-1] :] = pivot_pos.loc[rebal_dates[-1]] * (
-        1 + pivot_returns.loc[rebal_dates[-1] :]
+        1 + pivot_returns.loc[rebal_dates[-1] :] / 100
     ).cumprod(axis=0)
 
     # append <spos>_<pnl_name> to all columns
-    pnl_df.columns = [f"{col}_{spos}_{pnlx_name}" for col in pnl_df.columns]
+    pnl_df.columns = [f"{col}_{spos}_{pnl_name}" for col in pnl_df.columns]
 
     return pnl_df
 
@@ -213,6 +210,8 @@ def calculate_trading_costs(
     rstring: str,
     transaction_costs: TransactionCosts,
     tc_name: str,
+    bidoffer_name: str = "BIDOFFER",
+    rollcost_name: str = "ROLLCOST",
 ) -> pd.DataFrame:
 
     pivot_returns, pivot_pos = _split_returns_positions_df(
@@ -223,34 +222,70 @@ def calculate_trading_costs(
     # is held until notional_positions data is available
     _end = pd.Timestamp(pivot_pos.last_valid_index())
     rebal_dates = sorted(set(rebal_dates + [_end]))
-    tc_df = pd.DataFrame(index=pivot_pos.index, columns=pivot_pos.columns)
+    pos_cols = pivot_pos.columns.tolist()
+    tc_cols = [
+        f"{col}_{tc_name}_{cost_type}"
+        for col in pos_cols
+        for cost_type in [bidoffer_name, rollcost_name]
+    ]
+    # Create a dataframe to store the trading costs with all 0s
+    tc_df = pd.DataFrame(data=0.0, index=pivot_pos.index, columns=tc_cols)
+
     tickers = pivot_pos.columns.tolist()
-    for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
+
+    ## Taking the 1st position
+    ## Here, only the bidoffer is considered, as there is nothing to roll
+    first_pos = pivot_pos.loc[rebal_dates[0]]
+    for ticker in tickers:
+        _fid = ticker.replace(f"_{spos}", "")
+        bidoffer = transaction_costs.bidoffer(
+            trade_size=first_pos[ticker],
+            fid=_fid,
+            real_date=rebal_dates[0],
+        )
+        # Add a 0 for rollcost
+        tc_df.loc[rebal_dates[0], f"{ticker}_{tc_name}_{rollcost_name}"] = 0
+        tc_df.loc[rebal_dates[0], f"{ticker}_{tc_name}_{bidoffer_name}"] = (
+            bidoffer / 100
+        )
+
+    for ix, (dt1, dt2) in enumerate(zip(rebal_dates[:-1], rebal_dates[1:])):
         dt2x = dt2 - pd.offsets.BDay(1)
         prev_pos, next_pos = pivot_pos.loc[dt1], pivot_pos.loc[dt2]
         curr_pos = pivot_pos.loc[dt1:dt2x]
-
-        avg_pos = curr_pos.mean(axis=0)
+        avg_pos = curr_pos.abs().mean(axis=0)
         delta_pos = (next_pos - prev_pos).abs()
-
         for ticker in tickers:
             _fid = ticker.replace(f"_{spos}", "")
+            _rcn = f"{ticker}_{tc_name}_{rollcost_name}"
+            _bon = f"{ticker}_{tc_name}_{bidoffer_name}"
+            rollcost = transaction_costs.rollcost(
+                trade_size=avg_pos[ticker],
+                fid=_fid,
+                real_date=dt2,
+            )
             bidoffer = transaction_costs.bidoffer(
                 trade_size=delta_pos[ticker],
                 fid=_fid,
                 real_date=dt2,
             )
-            rollcost = transaction_costs.rollcost(
-                trade_size=avg_pos[ticker],
-                fid=_fid,
-                real_date=dt1,
-            )
-            tc_df.loc[dt1:dt2x, ticker] = bidoffer + rollcost
-            assert not any(tc_df.loc[dt1:dt2x, ticker] < 0)
+            tc_df.loc[dt2, _rcn] = rollcost / 100
+            tc_df.loc[dt2, _bon] = bidoffer / 100
 
-    tc_df.columns = [f"{col}_{tc_name}" for col in tc_df.columns]
+    # Sum TICKER_TCOST_BIDOFFER and TICKER_TCOST_ROLLCOST into TICKER_TCOST
+    for ticker in tickers:
+        tc_df[f"{ticker}_{tc_name}"] = tc_df[
+            [
+                f"{ticker}_{tc_name}_{bidoffer_name}",
+                f"{ticker}_{tc_name}_{rollcost_name}",
+            ]
+        ].sum(axis=1)
 
-    # check that all non-nan values are positive
+    # Drop rows with no trading costs
+    tc_df = tc_df.loc[tc_df.abs().sum(axis=1) > 0]
+
+    # check that remaining dates are part of rebal_dates
+    assert set(tc_df.index) <= set(rebal_dates)
     assert not (tc_df < 0).any().any()
 
     return tc_df
@@ -263,24 +298,41 @@ def apply_trading_costs(
     tc_name: str,
     pnl_name: str,
     pnlx_name: str,
+    bidoffer_name: str = "BIDOFFER",
+    rollcost_name: str = "ROLLCOST",
 ) -> pd.DataFrame:
     pnls_list = sorted(pnlx_wide_df.columns.tolist())
     tcs_list = sorted(tc_wide_df.columns.tolist())
+    # remove all that ends with tc_name_bidoffer or tc_name_rollcost
+    tcs_list = sorted(
+        set(
+            [
+                tc
+                for tc in tcs_list
+                if not any(
+                    [
+                        tc.endswith(f"_{tc_name}_{cost_type}")
+                        for cost_type in [bidoffer_name, rollcost_name]
+                    ]
+                )
+            ]
+        )
+    )
 
     assert len(pnls_list) == len(tcs_list)
-    assert all(
-        a.replace(f"_{spos}_{pnlx_name}", "") == b.replace(f"_{spos}_{tc_name}", "")
-        for a, b in zip(pnls_list, tcs_list)
+    assert set(_replace_strs(pnls_list, f"_{spos}_{pnl_name}")) == set(
+        _replace_strs(tcs_list, f"_{spos}_{tc_name}")
     )
 
     out_df = pnlx_wide_df.copy()
     for pnl_col, tc_col in zip(pnls_list, tcs_list):
-        assert pnl_col.replace(f"_{spos}_{pnlx_name}", "") == tc_col.replace(
+        assert pnl_col.replace(f"_{spos}_{pnl_name}", "") == tc_col.replace(
             f"_{spos}_{tc_name}", ""
         )
+
         out_df[pnl_col] = out_df[pnl_col] - tc_wide_df[tc_col]
 
-    rename_pnl = lambda x: x.replace(f"_{spos}_{pnlx_name}", f"_{spos}_{pnl_name}")
+    rename_pnl = lambda x: x.replace(f"_{spos}_{pnl_name}", f"_{spos}_{pnlx_name}")
     out_df = out_df.rename(columns=rename_pnl)
 
     return out_df
@@ -303,6 +355,8 @@ def proxy_pnl_calc(
     blacklist: Optional[dict] = None,
     pnl_name: str = "PNL",
     tc_name: str = "TCOST",
+    bidoffer_name: str = "BIDOFFER",
+    rollcost_name: str = "ROLLCOST",
     return_pnl_excl_costs: bool = False,
     return_costs: bool = False,
 ) -> Union[
@@ -432,7 +486,7 @@ def proxy_pnl_calc(
         df_wide=df_wide,
         spos=spos,
         rstring=rstring,
-        pnlx_name=pnlx_name,
+        pnl_name=pnl_name,
     )
 
     # tc_wide_df: pd.DataFrame = calculate_trading_costs(
@@ -449,8 +503,8 @@ def proxy_pnl_calc(
         tc_wide_df=df_outs["tc_wide"],
         spos=spos,
         tc_name=tc_name,
-        pnl_name=pnl_name,
         pnlx_name=pnlx_name,
+        pnl_name=pnl_name,
     )
 
     # # Convert to QDFs
@@ -472,14 +526,19 @@ def proxy_pnl_calc(
 
 
 if __name__ == "__main__":
+    import macrosynergy.management as msm
 
     cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
     cids_dmec = ["DEM", "ESP", "FRF", "ITL"]
     cids_nofx: List[str] = ["USD", "EUR", "CNY", "SGD"]
     cids_dmfx: List[str] = list(set(cids_dmca) - set(cids_nofx))
 
+    dftc = pd.read_pickle("data/tc.pkl")
     dfx = pd.read_pickle("data/dfx.pkl")
-    df_pnl, df_pnlx, df_costs = proxy_pnl_calc(
+
+    dfx = msm.update_df(df=dfx, df_add=dftc)
+
+    df_pnlx, df_pnl, df_costs = proxy_pnl_calc(
         df=dfx,
         spos="STRAT_POS",
         rstring="XR_NSA",
@@ -492,6 +551,27 @@ if __name__ == "__main__":
         size_l="SIZE_90PCTL",
         pnl_name="PNL",
         tc_name="TCOST",
+        start="2000-01-01",
+        end="2024-12-31",
         return_pnl_excl_costs=True,
         return_costs=True,
+    )
+    df_all = pd.concat(
+        [
+            df_pnlx,
+            df_pnl,
+            df_costs,
+        ],
+        axis=0,
+    )
+
+    import macrosynergy.visuals as msv, numpy as np, PIL.Image as Image
+
+    msv.FacetPlot(df=df_all).lineplot(
+        cid_grid=True,
+        # xcat_grid=True,
+        # xcats=[
+        #     "FX_STRAT_POS_TCOST_ROLLCOST",
+        #     "FX_STRAT_POS_TCOST_BIDOFFER",
+        # ],
     )
