@@ -439,27 +439,9 @@ def proxy_pnl_calc(
         pnlx_name=pnlx_name,
     )
 
-    # get rows that are all nans
-    all_nan_rows = df_outs["pnl_incl_costs"].loc[
-        df_outs["pnl_incl_costs"].isna().all(axis=1)
-    ]
-    if not all_nan_rows.empty:
-        warnings.warn(
-            f"Warning: The following rows are all NaNs and have been dropped: {all_nan_rows.index}"
-        )
-        df_outs["pnl_incl_costs"] = df_outs["pnl_incl_costs"].dropna(how="all")
-
-    all_nan_cols = df_outs["pnl_incl_costs"].loc[
-        :, df_outs["pnl_incl_costs"].isna().all(axis=0)
-    ]
-    if not all_nan_cols.empty:
-        warnings.warn(
-            f"Warning: The following columns are all NaNs and have been dropped: {all_nan_cols.columns}"
-        )
-        df_outs["pnl_incl_costs"] = df_outs["pnl_incl_costs"].dropna(how="all", axis=1)
-
-    # Pnl Incl costs as QDF
-    df_outs["pnl_incl_costs"] = ticker_df_to_qdf(df_outs["pnl_incl_costs"])
+    # # Convert to QDFs
+    for key in df_outs.keys():
+        df_outs[key] = ticker_df_to_qdf(df_outs[key])
 
     if not (return_pnl_excl_costs or return_costs):
         return df_outs["pnl_incl_costs"]
