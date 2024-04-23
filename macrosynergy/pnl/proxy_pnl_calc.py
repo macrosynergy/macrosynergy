@@ -193,13 +193,13 @@ def pnl_excl_costs(
         dt2x = dt2 - pd.offsets.BDay(1)
         curr_pos: pd.Series = pivot_pos.loc[dt1]
         curr_rets: pd.DataFrame = pivot_returns.loc[dt1:dt2x]
-        cumprod_rets: pd.Series = (1 + curr_rets).cumsum(axis=0)
+        cumprod_rets: pd.Series = (1 + curr_rets / 100).cumprod(axis=0)
         pnl_df.loc[dt1:dt2x] = curr_pos * cumprod_rets
 
     # on dt2, we need to hold the position
     pnl_df.loc[rebal_dates[-1] :] = pivot_pos.loc[rebal_dates[-1]] * (
-        1 + pivot_returns.loc[rebal_dates[-1] :]
-    ).cumsum(axis=0)
+        1 + pivot_returns.loc[rebal_dates[-1] :] / 100
+    ).cumprod(axis=0)
 
     # append <spos>_<pnl_name> to all columns
     pnl_df.columns = [f"{col}_{spos}_{pnlx_name}" for col in pnl_df.columns]
@@ -492,6 +492,12 @@ if __name__ == "__main__":
         size_l="SIZE_90PCTL",
         pnl_name="PNL",
         tc_name="TCOST",
+        start="2000-01-01",
+        end="2024-12-31",
         return_pnl_excl_costs=True,
         return_costs=True,
     )
+
+    import macrosynergy.visuals as msv
+
+    msv.FacetPlot(df_pnl).lineplot(cid_grid=True)
