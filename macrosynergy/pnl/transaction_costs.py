@@ -108,10 +108,9 @@ class SparseCosts(object):
         df_wide = qdf_to_ticker_df(self.df)
         self._all_fids = get_fids(self.df)
         change_index = get_diff_index(df_wide)  # drop rows with no change
-        self.change_index = change_index
+        self.change_index: pd.DatetimeIndex = change_index
         df_wide = df_wide.loc[change_index]
         self.df_wide = df_wide
-        self._get_costs.cache_clear()  # Clear the cache whenever the data is re-prepared
 
     def get_costs(self, fid: str, real_date: str) -> pd.DataFrame:
         """
@@ -120,24 +119,13 @@ class SparseCosts(object):
         :param <str> fid: The FID (financial contract identifier) to get costs for.
         :param <str> real_date: The date to get costs for.
         """
-        return self._get_costs(fid, real_date)
-
-    @functools.lru_cache(maxsize=None)
-    def _get_costs(self, fid: str, real_date: str) -> pd.DataFrame:
-        """
-        Cached backend method to get costs for a given FID and date.
-        """
         assert fid in self._all_fids, f"Invalid FID: {fid} is not in the dataframe"
         cost_names = [col for col in self.df_wide.columns if col.startswith(fid)]
         if not cost_names:
             raise ValueError(f"Could not find any costs for {fid}")
         df_loc = self.df_wide.loc[:real_date, cost_names]
         last_valid_index = df_loc.last_valid_index()
-        return (
-            df_loc.loc[last_valid_index]
-            if last_valid_index is not None
-            else pd.DataFrame()
-        )
+        return df_loc.loc[last_valid_index] if last_valid_index is not None else None
 
 
 class TransactionCosts(object):
@@ -171,7 +159,6 @@ class TransactionCosts(object):
         rcost_l: str = "ROLLCOST_90PCTL",
         size_l: str = "SIZE_90PCTL",
     ) -> None:
-        self.sparse_costs = SparseCosts(df)
         check_df_for_txn_stats(
             df=df,
             fids=fids,
@@ -190,12 +177,29 @@ class TransactionCosts(object):
         self.rcost_l = rcost_l
         self.size_l = size_l
         self._txn_stats = [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
-        self.change_index = self.sparse_costs.change_index
+
+        _cids = list(set(get_cid(fids)))
+        _xcats = [f"{xc}{tc}" for xc in set(get_xcat(fids)) for tc in self._txn_stats]
+
+        df = reduce_df(df=df, cids=_cids, xcats=_xcats)
+        # drop all nan rows
+        df = df.dropna(axis=0, how="any")
+        self.sparse_costs = SparseCosts(df)
 
     @property
-    def df_wide(self):
+    def change_index(self) -> pd.DatetimeIndex:
+        self.check_init()
+        return self.sparse_costs.change_index
+
+    @property
+    def df_wide(self) -> pd.DataFrame:
         self.check_init()
         return self.sparse_costs.df_wide
+
+    @property
+    def qdf(self) -> QuantamentalDataFrame:
+        self.check_init()
+        return self.sparse_costs.df
 
     @classmethod
     def download(cls) -> "TransactionCosts":
@@ -205,7 +209,6 @@ class TransactionCosts(object):
     def get_costs(self, fid: str, real_date: str) -> pd.Series:
         self.check_init()
         assert fid in self.fids
-
         return self.sparse_costs.get_costs(fid=fid, real_date=real_date)
 
     @staticmethod
@@ -227,6 +230,8 @@ class TransactionCosts(object):
     def bidoffer(self, fid: str, trade_size: Number, real_date: str) -> Number:
         self.check_init()
         row = self.sparse_costs.get_costs(fid=fid, real_date=real_date)
+        if row is None:
+            return np.nan
         d = dict(
             trade_size=trade_size,
             median_size=row[fid + self.size_n],
@@ -234,11 +239,14 @@ class TransactionCosts(object):
             pct90_size=row[fid + self.size_l],
             pct90_cost=row[fid + self.tcost_l],
         )
+
         return self.extrapolate_cost(**d)
 
     def rollcost(self, fid: str, trade_size: Number, real_date: str) -> Number:
         self.check_init()
         row = self.sparse_costs.get_costs(fid=fid, real_date=real_date)
+        if row is None:
+            return np.nan
         d = dict(
             trade_size=trade_size,
             median_size=row[fid + self.size_n],
@@ -316,7 +324,7 @@ class TransactionCosts(object):
                 )
 
                 ax.set_xlim(left=0)
-                ax.set_title(f"{fid}") 
+                ax.set_title(f"{fid}")
 
                 if lb not in legend_handles:
                     legend_handles[lb] = line.lines[0]
