@@ -500,4 +500,6 @@ if __name__ == "__main__":
 
     import macrosynergy.visuals as msv
 
-    msv.FacetPlot(df_pnl).lineplot(cid_grid=True)
+    msv.FacetPlot(df=df_pnl).lineplot(cid_grid=True, title="PnL excl. costs")
+    msv.FacetPlot(df=df_pnlx).lineplot(cid_grid=True, title="PnL incl. costs")
+    msv.FacetPlot(df=df_costs).lineplot(cid_grid=True, title="Costs")
