@@ -184,8 +184,6 @@ def pnl_excl_costs(
 
     # append <spos>_<pnl_name> to all columns
     pnl_df.columns = [f"{col}_{spos}_{pnlx_name}" for col in pnl_df.columns]
-    # sum cols, ignore nans
-    pnl_df[f"{spos}_{pnlx_name}"] = pnl_df.sum(axis=1, skipna=True)
 
     return pnl_df
 
@@ -232,7 +230,6 @@ def calculate_trading_costs(
             assert not any(tc_df.loc[dt1:dt2x, ticker] < 0)
 
     tc_df.columns = [f"{col}_{tc_name}" for col in tc_df.columns]
-    tc_df[f"{spos}_{tc_name}"] = tc_df.sum(axis=1, skipna=True)
 
     # check that all non-nan values are positive
     assert not (tc_df < 0).any().any()
@@ -250,8 +247,6 @@ def apply_trading_costs(
 ) -> pd.DataFrame:
     pnls_list = sorted(pnlx_wide_df.columns.tolist())
     tcs_list = sorted(tc_wide_df.columns.tolist())
-    pnls_list.pop(pnls_list.index(f"{spos}_{pnlx_name}"))
-    tcs_list.pop(tcs_list.index(f"{spos}_{tc_name}"))
 
     assert len(pnls_list) == len(tcs_list)
     assert all(
