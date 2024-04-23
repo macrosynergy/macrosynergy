@@ -245,7 +245,9 @@ def calculate_trading_costs(
         )
         # Add a 0 for rollcost
         tc_df.loc[rebal_dates[0], f"{ticker}_{tc_name}_{rollcost_name}"] = 0
-        tc_df.loc[rebal_dates[0], f"{ticker}_{tc_name}_{bidoffer_name}"] = bidoffer
+        tc_df.loc[rebal_dates[0], f"{ticker}_{tc_name}_{bidoffer_name}"] = (
+            bidoffer / 100
+        )
 
     for ix, (dt1, dt2) in enumerate(zip(rebal_dates[:-1], rebal_dates[1:])):
         dt2x = dt2 - pd.offsets.BDay(1)
