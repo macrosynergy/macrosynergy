@@ -113,6 +113,25 @@ def _get_rebal_dates(df_wide: pd.DataFrame) -> List[pd.Timestamp]:
     return rebal_dates
 
 
+def _warn_and_drop_nans(df_wide: pd.DataFrame) -> pd.DataFrame:
+    # get rows that are all nans
+    all_nan_rows = df_wide.loc[df_wide.isna().all(axis=1)]
+    if not all_nan_rows.empty:
+        warnings.warn(
+            f"Warning: The following rows are all NaNs and have been dropped: {all_nan_rows.index}"
+        )
+        df_wide = df_wide.dropna(how="all")
+
+    all_nan_cols = df_wide.loc[:, df_wide.isna().all(axis=0)]
+    if not all_nan_cols.empty:
+        warnings.warn(
+            f"Warning: The following columns are all NaNs and have been dropped: {all_nan_cols.columns}"
+        )
+        df_wide = df_wide.dropna(how="all", axis=1)
+
+    return df_wide
+
+
 def _prep_dfs_for_pnl_calcs(
     df_wide: QuantamentalDataFrame,
     spos: str,
