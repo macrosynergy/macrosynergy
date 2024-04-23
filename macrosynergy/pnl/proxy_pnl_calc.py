@@ -533,10 +533,7 @@ if __name__ == "__main__":
     cids_nofx: List[str] = ["USD", "EUR", "CNY", "SGD"]
     cids_dmfx: List[str] = list(set(cids_dmca) - set(cids_nofx))
 
-    dftc = pd.read_pickle("data/tc.pkl")
     dfx = pd.read_pickle("data/dfx.pkl")
-
-    dfx = msm.update_df(df=dfx, df_add=dftc)
 
     df_pnlx, df_pnl, df_costs = proxy_pnl_calc(
         df=dfx,
@@ -551,8 +548,6 @@ if __name__ == "__main__":
         size_l="SIZE_90PCTL",
         pnl_name="PNL",
         tc_name="TCOST",
-        start="2000-01-01",
-        end="2024-12-31",
         return_pnl_excl_costs=True,
         return_costs=True,
     )
