@@ -40,9 +40,12 @@ def _split_returns_positions_tickers(
         ticker for ticker in tickers if ticker.endswith(spos)
     ]
 
-    assert set(_replace_strs(returns_tickers, rstring)) == set(
-        _replace_strs(positions_tickers, f"_{spos}")
-    )
+    set_returns = set(_replace_strs(returns_tickers, rstring))
+    set_positions = set(_replace_strs(positions_tickers, f"_{spos}"))
+    assert len(set_positions - set_returns) == 0
+    returns_tickers: List[str] = [
+        ticker.replace(f"_{spos}", rstring) for ticker in positions_tickers
+    ]
 
     return returns_tickers, positions_tickers
 
@@ -110,6 +113,25 @@ def _get_rebal_dates(df_wide: pd.DataFrame) -> List[pd.Timestamp]:
     return rebal_dates
 
 
+def _warn_and_drop_nans(df_wide: pd.DataFrame) -> pd.DataFrame:
+    # get rows that are all nans
+    all_nan_rows = df_wide.loc[df_wide.isna().all(axis=1)]
+    if not all_nan_rows.empty:
+        warnings.warn(
+            f"Warning: The following rows are all NaNs and have been dropped: {all_nan_rows.index}"
+        )
+        df_wide = df_wide.dropna(how="all")
+
+    all_nan_cols = df_wide.loc[:, df_wide.isna().all(axis=0)]
+    if not all_nan_cols.empty:
+        warnings.warn(
+            f"Warning: The following columns are all NaNs and have been dropped: {all_nan_cols.columns}"
+        )
+        df_wide = df_wide.dropna(how="all", axis=1)
+
+    return df_wide
+
+
 def _prep_dfs_for_pnl_calcs(
     df_wide: QuantamentalDataFrame,
     spos: str,
@@ -155,7 +177,7 @@ def pnl_excl_costs(
     df_wide: pd.DataFrame,
     spos: str,
     rstring: str,
-    pnl_name: str = "PNL",
+    pnlx_name: str = "PNLx",
 ) -> pd.DataFrame:
 
     pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
@@ -180,9 +202,7 @@ def pnl_excl_costs(
     ).cumprod(axis=0)
 
     # append <spos>_<pnl_name> to all columns
-    pnl_df.columns = [f"{col}_{spos}_{pnl_name}" for col in pnl_df.columns]
-    # sum cols, ignore nans
-    pnl_df[f"{spos}_{pnl_name}"] = pnl_df.sum(axis=1, skipna=True)
+    pnl_df.columns = [f"{col}_{spos}_{pnlx_name}" for col in pnl_df.columns]
 
     return pnl_df
 
@@ -192,7 +212,7 @@ def calculate_trading_costs(
     spos: str,
     rstring: str,
     transaction_costs: TransactionCosts,
-    tc_name: str = "TCOST",
+    tc_name: str,
 ) -> pd.DataFrame:
 
     pivot_returns, pivot_pos = _split_returns_positions_df(
@@ -229,7 +249,6 @@ def calculate_trading_costs(
             assert not any(tc_df.loc[dt1:dt2x, ticker] < 0)
 
     tc_df.columns = [f"{col}_{tc_name}" for col in tc_df.columns]
-    tc_df[f"{spos}_{tc_name}"] = tc_df.sum(axis=1, skipna=True)
 
     # check that all non-nan values are positive
     assert not (tc_df < 0).any().any()
@@ -238,29 +257,31 @@ def calculate_trading_costs(
 
 
 def apply_trading_costs(
-    pnle_wide_df: pd.DataFrame,
+    pnlx_wide_df: pd.DataFrame,
     tc_wide_df: pd.DataFrame,
     spos: str,
     tc_name: str,
     pnl_name: str,
+    pnlx_name: str,
 ) -> pd.DataFrame:
-    pnls_list = sorted(pnle_wide_df.columns.tolist())
+    pnls_list = sorted(pnlx_wide_df.columns.tolist())
     tcs_list = sorted(tc_wide_df.columns.tolist())
-    pnls_list.pop(pnls_list.index(f"{spos}_{pnl_name}"))
-    tcs_list.pop(tcs_list.index(f"{spos}_{tc_name}"))
 
     assert len(pnls_list) == len(tcs_list)
     assert all(
-        a.replace(f"_{spos}_{pnl_name}", "") == b.replace(f"_{spos}_{tc_name}", "")
+        a.replace(f"_{spos}_{pnlx_name}", "") == b.replace(f"_{spos}_{tc_name}", "")
         for a, b in zip(pnls_list, tcs_list)
     )
 
-    out_df = pnle_wide_df.copy()
+    out_df = pnlx_wide_df.copy()
     for pnl_col, tc_col in zip(pnls_list, tcs_list):
-        assert pnl_col.replace(f"_{spos}_{pnl_name}", "") == tc_col.replace(
+        assert pnl_col.replace(f"_{spos}_{pnlx_name}", "") == tc_col.replace(
             f"_{spos}_{tc_name}", ""
         )
-        out_df[pnl_col] -= tc_wide_df[tc_col]
+        out_df[pnl_col] = out_df[pnl_col] - tc_wide_df[tc_col]
+
+    rename_pnl = lambda x: x.replace(f"_{spos}_{pnlx_name}", f"_{spos}_{pnl_name}")
+    out_df = out_df.rename(columns=rename_pnl)
 
     return out_df
 
@@ -286,8 +307,8 @@ def proxy_pnl_calc(
     return_costs: bool = False,
 ) -> Union[
     QuantamentalDataFrame,
-    Tuple[QuantamentalDataFrame, pd.DataFrame],
-    Tuple[QuantamentalDataFrame, pd.DataFrame, pd.DataFrame],
+    Tuple[QuantamentalDataFrame, QuantamentalDataFrame],
+    Tuple[QuantamentalDataFrame, QuantamentalDataFrame, QuantamentalDataFrame],
 ]:
     """
     Calculates an approximate nominal PnL under consideration of transaction costs
@@ -403,13 +424,15 @@ def proxy_pnl_calc(
 
     df_wide = qdf_to_ticker_df(df)
 
+    pnlx_name = pnl_name + "x"
+
     # Calculate the PnL excluding costs
     df_outs: Dict[str, pd.DataFrame] = {}
     df_outs["pnl_excl_costs"] = pnl_excl_costs(
         df_wide=df_wide,
         spos=spos,
         rstring=rstring,
-        pnl_name=pnl_name,
+        pnlx_name=pnlx_name,
     )
 
     # tc_wide_df: pd.DataFrame = calculate_trading_costs(
@@ -422,33 +445,17 @@ def proxy_pnl_calc(
     )
 
     df_outs["pnl_incl_costs"] = apply_trading_costs(
-        pnle_wide_df=df_outs["pnl_excl_costs"],
+        pnlx_wide_df=df_outs["pnl_excl_costs"],
         tc_wide_df=df_outs["tc_wide"],
         spos=spos,
         tc_name=tc_name,
         pnl_name=pnl_name,
+        pnlx_name=pnlx_name,
     )
-    # get rows that are all nans
-    all_nan_rows = df_outs["pnl_incl_costs"].loc[
-        df_outs["pnl_incl_costs"].isna().all(axis=1)
-    ]
-    if not all_nan_rows.empty:
-        warnings.warn(
-            f"Warning: The following rows are all NaNs and have been dropped: {all_nan_rows.index}"
-        )
-        df_outs["pnl_incl_costs"] = df_outs["pnl_incl_costs"].dropna(how="all")
 
-    all_nan_cols = df_outs["pnl_incl_costs"].loc[
-        :, df_outs["pnl_incl_costs"].isna().all(axis=0)
-    ]
-    if not all_nan_cols.empty:
-        warnings.warn(
-            f"Warning: The following columns are all NaNs and have been dropped: {all_nan_cols.columns}"
-        )
-        df_outs["pnl_incl_costs"] = df_outs["pnl_incl_costs"].dropna(how="all", axis=1)
-
-    # Pnl Incl costs as QDF
-    df_outs["pnl_incl_costs"] = ticker_df_to_qdf(df_outs["pnl_incl_costs"])
+    # # Convert to QDFs
+    for key in df_outs.keys():
+        df_outs[key] = ticker_df_to_qdf(df_outs[key])
 
     if not (return_pnl_excl_costs or return_costs):
         return df_outs["pnl_incl_costs"]
@@ -465,25 +472,26 @@ def proxy_pnl_calc(
 
 
 if __name__ == "__main__":
-    dftxn = pd.read_pickle("data/tc.pkl")[["cid", "xcat", "real_date", "value"]]
-    dfxcn = pd.read_pickle("data/dfxcn.pkl")[["cid", "xcat", "real_date", "value"]]
 
     cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
     cids_dmec = ["DEM", "ESP", "FRF", "ITL"]
     cids_nofx: List[str] = ["USD", "EUR", "CNY", "SGD"]
     cids_dmfx: List[str] = list(set(cids_dmca) - set(cids_nofx))
 
-    fidsx = [
-        f"{cid}_FX"
-        for cid in sorted(set(dfxcn["cid"].unique().tolist()) - set(cids_nofx))
-    ]
-    dfx = pd.concat([dftxn, dfxcn], axis=0).drop_duplicates().reset_index(drop=True)
-
-    ppnl = proxy_pnl_calc(
+    dfx = pd.read_pickle("data/dfx.pkl")
+    df_pnl, df_pnlx, df_costs = proxy_pnl_calc(
         df=dfx,
         spos="STRAT_POS",
         rstring="XR_NSA",
-        fids=fidsx,
-        **TransactionCosts.DEFAULT_ARGS,
+        fids=[f"{cc:s}_FX" for cc in cids_dmfx],
+        tcost_n="BIDOFFER_MEDIAN",
+        rcost_n="ROLLCOST_MEDIAN",
+        size_n="SIZE_MEDIAN",
+        tcost_l="BIDOFFER_90PCTL",
+        rcost_l="SIZE_90PCTL",
+        size_l="SIZE_90PCTL",
+        pnl_name="PNL",
+        tc_name="TCOST",
+        return_pnl_excl_costs=True,
+        return_costs=True,
     )
-    ppnl.head()
