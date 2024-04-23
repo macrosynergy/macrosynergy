@@ -435,45 +435,40 @@ def reduce_df(
         (for out_all True) DataFrame and available and selected xcats and cids.
     """
 
-    dfx = df.copy()
-
     if xcats is not None:
         if not isinstance(xcats, list):
             xcats = [xcats]
 
-    if start is not None:
-        dfx = dfx[dfx["real_date"] >= pd.to_datetime(start)]
+    if start:
+        df = df[df["real_date"] >= pd.to_datetime(start)]
 
-    if end is not None:
-        dfx = dfx[dfx["real_date"] <= pd.to_datetime(end)]
+    if end:
+        df = df[df["real_date"] <= pd.to_datetime(end)]
 
     if blacklist is not None:
-        masks = []
         for key, value in blacklist.items():
-            filt1 = dfx["cid"] == key[:3]
-            filt2 = dfx["real_date"] >= pd.to_datetime(value[0])
-            filt3 = dfx["real_date"] <= pd.to_datetime(value[1])
-            combined_mask = filt1 & filt2 & filt3
-            masks.append(combined_mask)
+            df = df[
+                ~(
+                    (df["cid"] == key[:3])
+                    & (df["real_date"] >= pd.to_datetime(value[0]))
+                    & (df["real_date"] <= pd.to_datetime(value[1]))
+                )
+            ]
 
-        if masks:
-            combined_mask = pd.concat(masks, axis=1).any(axis=1)
-            dfx = dfx[~combined_mask]
-
-    xcats_in_df = dfx["xcat"].unique()
     if xcats is None:
-        xcats = sorted(xcats_in_df)
+        xcats = sorted(df["xcat"].unique())
     else:
+        xcats_in_df = df["xcat"].unique()
         xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
 
-    dfx = dfx[dfx["xcat"].isin(xcats)]
+    df = df[df["xcat"].isin(xcats)]
 
     if intersect:
-        df_uns = dict(dfx.groupby("xcat")["cid"].unique())
-        df_uns = {k: set(v) for k, v in df_uns.items()}
-        cids_in_df = list(set.intersection(*list(df_uns.values())))
+        cids_in_df = set.intersection(
+            *(set(df[df["xcat"] == xcat]["cid"].unique()) for xcat in xcats)
+        )
     else:
-        cids_in_df = dfx["cid"].unique()
+        cids_in_df = df["cid"].unique()
 
     if cids is None:
         cids = sorted(cids_in_df)
@@ -481,13 +476,12 @@ def reduce_df(
         cids = [cids] if isinstance(cids, str) else cids
         cids = [cid for cid in cids if cid in cids_in_df]
 
-        cids = set(cids).intersection(cids_in_df)
-        dfx = dfx[dfx["cid"].isin(cids)]
+    df = df[df["cid"].isin(cids)]
 
     if out_all:
-        return dfx.drop_duplicates(), xcats, sorted(list(cids))
+        return df.drop_duplicates(), xcats, sorted(cids)
     else:
-        return dfx.drop_duplicates()
+        return df.drop_duplicates()
 
 
 def reduce_df_by_ticker(
