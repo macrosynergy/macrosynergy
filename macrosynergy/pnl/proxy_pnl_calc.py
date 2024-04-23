@@ -40,9 +40,12 @@ def _split_returns_positions_tickers(
         ticker for ticker in tickers if ticker.endswith(spos)
     ]
 
-    assert set(_replace_strs(returns_tickers, rstring)) == set(
-        _replace_strs(positions_tickers, f"_{spos}")
-    )
+    set_returns = set(_replace_strs(returns_tickers, rstring))
+    set_positions = set(_replace_strs(positions_tickers, f"_{spos}"))
+    assert len(set_positions - set_returns) == 0
+    returns_tickers: List[str] = [
+        ticker.replace(f"_{spos}", rstring) for ticker in positions_tickers
+    ]
 
     return returns_tickers, positions_tickers
 
