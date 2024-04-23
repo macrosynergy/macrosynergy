@@ -193,7 +193,7 @@ def pnl_excl_costs(
         dt2x = dt2 - pd.offsets.BDay(1)
         curr_pos: pd.Series = pivot_pos.loc[dt1]
         curr_rets: pd.DataFrame = pivot_returns.loc[dt1:dt2x]
-        cumprod_rets: pd.Series = (1 + curr_rets).cumsum(axis=0)
+        cumprod_rets: pd.Series = (1 + curr_rets).cumprod(axis=0)
         pnl_df.loc[dt1:dt2x] = curr_pos * cumprod_rets
 
     # on dt2, we need to hold the position
