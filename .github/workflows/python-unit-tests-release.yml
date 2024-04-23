@@ -56,7 +56,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           # name coverage-report-(commit)-(folder)
-          name: coverage-report-${{ github.sha }}-${{ matrix.folder }}
+          name: coverage-report-${{ github.sha }}-${{ matrix.folder }}-${{ matrix.python-version }}
           # all .coverage files in the project
           path: .coverage
 
