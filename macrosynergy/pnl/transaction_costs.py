@@ -231,11 +231,12 @@ class TransactionCosts(object):
         size_l="SIZE_90PCTL",
     )
 
-    def check_init(self):
+    def check_init(self) -> bool:
         if not hasattr(self, "sparse_costs") or not hasattr(
             self.sparse_costs, "df_wide"
         ):
             raise ValueError("The TransactionCosts object has not been initialised")
+        return True
 
     def __init__(
         self,
