@@ -25,6 +25,7 @@ In particular, the class allows proceeding in three separate steps, implemented 
 - The method `proxy_pnl` multiplies positions with proxy returns and estimates transaction costs. In particular, it uses a trading_cost method to apply transaction costs and their size dependency to discretionary position changes. And it applies a roll_cost method to apply roll costs to positions at certain intervals. This function also should provide some analytics as to estimated PnLs across sections and the impact of trading costs.
 
 ### Terminology
+
 To calculate proxy PnL we define our signals (and returns) into three different stages:
 
 1. Risk signals and returns: not tradable assets (purely theoretical construct), but idiosyncratic property makes it attractive for signal construction.
@@ -35,44 +36,143 @@ To calculate proxy PnL we define our signals (and returns) into three different 
 
 The typical flow when using the `ProxyPnL` class is as follows:
 
-- 1. Calculating `contract_signals` from cross-sectional hedge ratios and trading signals.
-- 2. Calculating `notional_positions` from contract signals and `AUM` or `volatility_target`.
+1. Calculating `contract_signals` from cross-sectional hedge ratios and trading signals.
+2. Calculating `notional_positions` from contract signals and `AUM` or `volatility_target`.
+3. (Download transaction statistics into a `QuantamentalDataFrame`)
+4. Calculating `proxy_pnl` from notional positions and transaction costs.
 
-- 3. (Download transaction statistics into a `QuantamentalDataFrame`)
-- 3. Calculating `proxy_pnl` from notional positions and transaction costs.
+### Flowchart and Diagrams
+
+### Contract Signals Flow
 
 ```{mermaid}
-  flowchart TD;
-      Sig[Signals]
-      HR[Hedge-Ratios]
-      CS(Contract Signals)
-      AUM[AUM]
-      LVG[Leverage]
-      LVGP[Leverage Position]
-      VT[Volatility Target]
-      NP(Notional Positions)
-      HPV[Historical Portfolio Volatility]
-      TC[Trading Cost]
-      RC[Roll Cost]
-      Distr[Transaction Statistics]
-      PP(Proxy PnL)
 
-      Sig-->CS
-      HR-->CS
+flowchart TD;
+    Sig[Signals]
+    CSCALES[Contract Specific Scaling]
+    HR[Hedge-Ratios]
+    HB[Hedge Basket]
+    CSfunc([`contract_signals`])
+    CSOutput{{Contract Signals}}
 
-      VT-->HPV
-      CS-->HPV
-      CS-->LVGP
-      LVG-->LVGP
-      AUM-->LVGP
+    subgraph CS_UINP[User Inputs]
+      Sig
+      HR
+      HB
+      CSCALES
+    end
+
+      CS_UINP --> CSfunc
+    CSfunc -.-o CSOutput
+```
+
+### Notional Positions Flow
+
+```{mermaid}
+flowchart TD
+  CS{{Contract Signals}}
+  AUM[AUM]
+  LVG[Leverage]
+  LVGfunc[`leverage_positions`]
+  VT[Volatility Target]
+  HPVfunc(`historical_portfolio_volatility`)
+  VTPOSfunc([`volatility_target_positions`])
+  NP{{Notional Positions}}
+  HPV{{Historical Portfolio Volatility}}
+  VCV{{Variance-Covariance Matrices}}
+  ESTF[Estimation Frequencies]
+  ESTW[Weights per Estimation Frequency]
+  NPfunc([`notional_positions`])
+    VT_UINP -.-> VTPOSfunc
+    LVG -.-> LVGfunc
 
 
-      HPV-->NP
-      LVGP-->NP
+    subgraph NP_UINP[User Inputs]
+      LVG
+      AUM
+      CS
+      subgraph VT_UINP[Volatility Target Specific Inputs]
+        VT
+        ESTF
+        ESTW
+      end
+    end
+    subgraph NP_METHODS[Methods]
+      NPfunc
 
-      TC-->PP
-      RC-->PP
-      NP-->PP
-      Distr-->PP
+      LVGfunc
+      VTPOSfunc
+      HPVfunc
+    end
+
+    subgraph OUTPUTS[Outputs]
+      NP
+      HPV
+      VCV
+    end
+    NPfunc -.-> VTPOSfunc
+
+    HPVfunc --> HPV
+    HPVfunc --> VCV
+    NPfunc -.-> LVGfunc
+    VTPOSfunc <-.-> HPVfunc
+
+    LVGfunc -.-o NP
+    NPfunc --> NP
+    VTPOSfunc -.-o NP
+    NP_UINP --> NPfunc
+```
+
+### Proxy PnL Flow
+
+```{mermaid}
+flowchart TD
+  PPfunc(Proxy PnL)
+  NP{{Notional Positions}}
+  PNLx{{PnL with Transaction Costs}}
+  PNLr{{PnL without any Costs}}
+  TCS{{Position-Specific Transaction Costs}}
+  TCObj[`TransactionCost` Object]
+
+  subgraph PP_UINP[User Inputs]
+    NP
+    TCObj
+  end
+
+  NP --> PPfunc
+  TCObj --> PPfunc
+
+  subgraph OUTPUTS[Outputs]
+    PNLx
+    PNLr
+    TCS
+  end
+  PPfunc --> PNLx
+  PPfunc --> PNLr
+  PPfunc --> TCS
+
+```
+
+### Transaction Costs Object
+
+```{mermaid}
+flowchart TD
+
+
+  subgraph TCObj[`TransactionCost` Object]
+    TCDownload[Download Transaction Statistics] --> CostDF[(Costs DataFrame)]
+
+
+    subgraph TCINTMETHODS[Internal Working]
+      CostDF -.-> TCExtrapolate[Extrapolate Transaction Statistics]
+    end
+    TCExtrapolate -.-> TCBidOffer[Calculate Bid-Offer Spread]
+    TCExtrapolate -.-> TCRoll[Calculate Roll Costs]
+  end
+  POSITION{{Trade Size, Cross Section, Date}}
+  BIDOFFER{{Bid-Offer Spread}}
+  ROLLCOST{{Roll Costs}}
+  POSITION --> TCBidOffer --> BIDOFFER
+  POSITION --> TCRoll --> ROLLCOST
 
 ```
