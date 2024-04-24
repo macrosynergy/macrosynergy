@@ -28,10 +28,12 @@ class ProxyPnL(object):
         start: Optional[str] = None,
         end: Optional[str] = None,
         blacklist: Optional[dict] = None,
+        portfolio_name: str = "GLB",
         sname: str = "STRAT",
         pname: str = "POS",
     ):
         self.sname = sname
+        self.portfolio_name = portfolio_name
         self.pname = pname
         self.blacklist = blacklist
         self.cs_df = None
@@ -171,6 +173,7 @@ class ProxyPnL(object):
     def proxy_pnl_calc(
         self,
         spos: str = None,
+        portfolio_name: str = None,
         df: QuantamentalDataFrame = None,
         roll_freqs: Optional[dict] = None,
         pnl_name: str = "PNL",
@@ -185,11 +188,13 @@ class ProxyPnL(object):
                     "or run `ProxyPnL.notional_positions` (and `contract_signals`) first."
                 )
         spos: str = spos or self.sname + "_" + self.pname
+        portfolio_name: str = portfolio_name or self.portfolio_name
         fids: List[str] = fids or self.fids
 
         outs: Tuple[QuantamentalDataFrame, ...] = proxy_pnl_calc(
             df=df,
             spos=spos,
+            portfolio_name=portfolio_name,
             roll_freqs=roll_freqs,
             start=self.start,
             end=self.end,

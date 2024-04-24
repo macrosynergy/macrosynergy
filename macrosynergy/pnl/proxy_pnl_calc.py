@@ -330,12 +330,60 @@ def _apply_trading_costs(
             f"_{spos}_{tc_name}", ""
         )
 
-        out_df[pnl_col] = out_df[pnl_col] - tc_wide_df[tc_col]
+        out_df[pnl_col] = out_df[pnl_col].sub(tc_wide_df[tc_col], fill_value=0)
 
     rename_pnl = lambda x: x.replace(f"_{spos}_{pnl_name}", f"_{spos}_{pnlx_name}")
     out_df = out_df.rename(columns=rename_pnl)
 
     return out_df
+
+
+def _portfolio_sums(
+    df_outs: Dict[str, pd.DataFrame],
+    spos: str,
+    portfolio_name: str,
+    pnl_name: str,
+    tc_name: str,
+    pnlx_name: str,
+    bidoffer_name: str,
+    rollcost_name: str,
+) -> Dict[str, pd.DataFrame]:
+    """
+    Calculate the sum of the PnLs and costs across all contracts in the portfolio
+    """
+    glb_pnl_incl_costs = df_outs["pnl_incl_costs"].sum(axis=1, skipna=True)
+    glb_pnl_excl_costs = df_outs["pnl_excl_costs"].sum(axis=1, skipna=True)
+
+    # Remove all that ends with tc_name_bidoffer or tc_name_rollcost
+    tcs_list = sorted(
+        set(
+            [
+                tc
+                for tc in df_outs["tc_wide"].columns.tolist()
+                if not any(
+                    [
+                        tc.endswith(f"_{tc_name}_{cost_type}")
+                        for cost_type in [bidoffer_name, rollcost_name]
+                    ]
+                )
+            ]
+        )
+    )
+
+    # Sum the trading costs
+    glb_tcosts = df_outs["tc_wide"].loc[:, tcs_list].sum(axis=1, skipna=True)
+
+    df_outs["pnl_incl_costs"].loc[
+        :, f"{portfolio_name}_{spos}_{pnl_name}"
+    ] = glb_pnl_incl_costs
+
+    df_outs["pnl_excl_costs"].loc[
+        :, f"{portfolio_name}_{spos}_{pnlx_name}"
+    ] = glb_pnl_excl_costs
+
+    df_outs["tc_wide"].loc[:, f"{portfolio_name}_{spos}_{tc_name}"] = glb_tcosts
+
+    return df_outs
 
 
 def proxy_pnl_calc(
@@ -347,6 +395,7 @@ def proxy_pnl_calc(
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
+    portfolio_name: str = "GLB",
     pnl_name: str = "PNL",
     tc_name: str = "TCOST",
     bidoffer_name: str = "BIDOFFER",
@@ -457,6 +506,17 @@ def proxy_pnl_calc(
         pnl_name=pnl_name,
     )
 
+    df_outs = _portfolio_sums(
+        df_outs=df_outs,
+        spos=spos,
+        portfolio_name=portfolio_name,
+        pnl_name=pnl_name,
+        tc_name=tc_name,
+        pnlx_name=pnlx_name,
+        bidoffer_name=bidoffer_name,
+        rollcost_name=rollcost_name,
+    )
+
     # # Convert to QDFs
     for key in df_outs.keys():
         df_outs[key] = ticker_df_to_qdf(df_outs[key])
@@ -497,8 +557,8 @@ if __name__ == "__main__":
         df=dfx,
         spos="STRAT_POS",
         rstring="XR_NSA",
-        # fids=[f"{cc:s}_FX" for cc in cids_dmfx],
         transaction_costs=tx,
+        portfolio_name="GLB",
         pnl_name="PNL",
         tc_name="TCOST",
         return_pnl_excl_costs=True,
@@ -508,18 +568,13 @@ if __name__ == "__main__":
         [
             df_pnlx,
             df_pnl,
-            df_costs,
         ],
         axis=0,
     )
 
-    import macrosynergy.visuals as msv, numpy as np, PIL.Image as Image
+    import macrosynergy.visuals as msv, numpy as np, PIL.Image as Image, matplotlib.pyplot as plt
 
     msv.FacetPlot(df=df_all).lineplot(
         cid_grid=True,
-        # xcat_grid=True,
-        # xcats=[
-        #     "FX_STRAT_POS_TCOST_ROLLCOST",
-        #     "FX_STRAT_POS_TCOST_BIDOFFER",
-        # ],
+        cids=["GLB"],
     )
