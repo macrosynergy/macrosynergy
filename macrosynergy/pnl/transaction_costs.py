@@ -92,6 +92,95 @@ def extrapolate_cost(
     return cost
 
 
+def _plot_costs_func(
+    tco: "TransactionCosts",
+    fids: Optional[List[str]],
+    cost_type: str,
+    ncol: int,
+    x_axis_label: str,
+    y_axis_label: str,
+    *args,
+    **kwargs,
+):
+    tco.check_init()
+    if fids is None:
+        fids = tco.fids
+    if not isinstance(fids, list) or not all(isinstance(fid, str) for fid in fids):
+        raise ValueError("fids must be a list of strings")
+
+    costfunc = tco.bidoffer if cost_type == "BIDOFFER" else tco.rollcost
+
+    nrows = len(fids) // ncol + (len(fids) % ncol > 0)
+    sns.set_theme(style="whitegrid")
+    fig, axes = plt.subplots(
+        nrows=nrows, ncols=ncol, figsize=(5 * ncol, 5 * nrows), layout="constrained"
+    )
+    fig.suptitle(f"{cost_type.capitalize()}", fontsize=28)
+
+    # Define colors for each date range
+    colors = sns.color_palette("viridis", n_colors=len(tco.change_index))
+
+    idx_dates = tco.change_index.tolist()
+    label_fmt = lambda x: pd.Timestamp(x).strftime("%Y-%m-%d")
+    labels = [
+        f"{label_fmt(d1)} to {label_fmt(d2 - pd.offsets.BDay(1))}"
+        for d1, d2 in zip(idx_dates[:-1], idx_dates[1:])
+    ]
+    labels.append(f"{label_fmt(idx_dates[-1])} to Present")
+    color_map = dict(zip(labels, colors))
+
+    legend_handles = {}
+    ax: plt.Axes
+    for i, fid in enumerate(sorted(fids)):
+        r, c = divmod(i, ncol)
+        ax = axes[r, c] if nrows > 1 else axes[c]
+        max_trade_size = tco.df_wide[fid + tco.size_l].max()
+        trade_sizes = np.arange(1, max_trade_size + 101, 1)
+
+        for dt, lb in zip(idx_dates, labels):
+            trade_costs = [
+                costfunc(fid=fid, trade_size=ts, real_date=dt) for ts in trade_sizes
+            ]
+            line = sns.lineplot(
+                x=trade_sizes,
+                y=trade_costs,
+                ax=ax,
+                color=color_map[lb],
+                label=lb,
+                zorder=10,
+            )
+
+            median_trade_size = tco.df_wide.loc[dt, fid + tco.size_n]
+            large_trade_size = tco.df_wide.loc[dt, fid + tco.size_l]
+            median_xcost = tco.df_wide.loc[
+                dt, fid + (tco.tcost_n if cost_type == "BIDOFFER" else tco.rcost_n)
+            ]
+            large_xcost = tco.df_wide.loc[
+                dt, fid + (tco.tcost_l if cost_type == "BIDOFFER" else tco.rcost_l)
+            ]
+            sns.scatterplot(
+                x=[median_trade_size, large_trade_size],
+                y=[median_xcost, large_xcost],
+                ax=ax,
+                color="red",
+                zorder=20,
+            )
+
+            ax.set_xlim(left=0)
+            ax.set_title(f"{fid}")
+
+            if lb not in legend_handles:
+                legend_handles[lb] = line.lines[0]
+
+    # Remove individual subplot legends
+    for ax in axes.flat[1:]:
+        ax.get_legend().remove()
+
+    fig.supxlabel("Trade size (USD, millions)")
+    fig.supylabel("Percent of outright forward")
+    plt.show()
+
+
 class SparseCosts(object):
     def __init__(self, df):
         if not isinstance(df, QuantamentalDataFrame):
@@ -256,85 +345,26 @@ class TransactionCosts(object):
         )
         return self.extrapolate_cost(**d)
 
-    def plot_costs(self, fids=None, cost_type="BIDOFFER", ncol=8, *args, **kwargs):
-        self.check_init()
-        if fids is None:
-            fids = self.fids
-        if not isinstance(fids, list) or not all(isinstance(fid, str) for fid in fids):
-            raise ValueError("fids must be a list of strings")
-
-        costfunc = self.bidoffer if cost_type == "BIDOFFER" else self.rollcost
-
-        nrows = len(fids) // ncol + (len(fids) % ncol > 0)
-        sns.set_theme(style="whitegrid")
-        fig, axes = plt.subplots(
-            nrows=nrows, ncols=ncol, figsize=(5 * ncol, 5 * nrows), layout="constrained"
+    def plot_costs(
+        self,
+        fids: Optional[List[str]] = None,
+        cost_type: str = "BIDOFFER",
+        ncol: int = 8,
+        x_axis_label: str = "Trade size (USD, millions)",
+        y_axis_label: str = "Percent of outright forward",
+        *args,
+        **kwargs,
+    ):
+        _plot_costs_func(
+            tco=self,
+            fids=fids,
+            cost_type=cost_type,
+            ncol=ncol,
+            x_axis_label=x_axis_label,
+            y_axis_label=y_axis_label,
+            *args,
+            **kwargs,
         )
-        fig.suptitle(f"{cost_type.capitalize()}")
-
-        # Define colors for each date range
-        colors = sns.color_palette("viridis", n_colors=len(self.change_index))
-
-        idx_dates = self.change_index.tolist()
-        label_fmt = lambda x: x.strftime("%Y-%m-%d")
-        labels = [
-            f"{label_fmt(d1)} to {label_fmt(d2 - pd.offsets.BDay(1))}"
-            for d1, d2 in zip(idx_dates[:-1], idx_dates[1:])
-        ]
-        labels.append(f"{label_fmt(idx_dates[-1])} to Present")
-        color_map = dict(zip(labels, colors))
-
-        legend_handles = {}
-        ax: plt.Axes
-        for i, fid in enumerate(sorted(fids)):
-            r, c = divmod(i, ncol)
-            ax = axes[r, c] if nrows > 1 else axes[c]
-            max_trade_size = self.df_wide[fid + self.size_l].max()
-            trade_sizes = np.arange(1, max_trade_size + 101, 1)
-
-            for dt, lb in zip(idx_dates, labels):
-                trade_costs = [
-                    costfunc(fid=fid, trade_size=ts, real_date=dt) for ts in trade_sizes
-                ]
-                line = sns.lineplot(
-                    x=trade_sizes,
-                    y=trade_costs,
-                    ax=ax,
-                    color=color_map[lb],
-                    label=lb,
-                    zorder=10,
-                )
-
-                median_trade_size = self.df_wide.loc[dt, fid + self.size_n]
-                large_trade_size = self.df_wide.loc[dt, fid + self.size_l]
-                median_xcost = self.df_wide.loc[
-                    dt,
-                    fid + (self.tcost_n if cost_type == "BIDOFFER" else self.rcost_n),
-                ]
-                large_xcost = self.df_wide.loc[
-                    dt,
-                    fid + (self.tcost_l if cost_type == "BIDOFFER" else self.rcost_l),
-                ]
-                sns.scatterplot(
-                    x=[median_trade_size, large_trade_size],
-                    y=[median_xcost, large_xcost],
-                    ax=ax,
-                    color="red",
-                    zorder=20,
-                )
-
-                ax.set_xlim(left=0)
-                ax.set_title(f"{fid}")
-
-                if lb not in legend_handles:
-                    legend_handles[lb] = line.lines[0]
-
-        # Remove individual subplot legends
-        for ax in axes.flat[1:]:
-            ax.get_legend().remove()
-
-        # plt.tight_layout()
-        plt.show()
 
 
 class ExampleAdapter(TransactionCosts):
