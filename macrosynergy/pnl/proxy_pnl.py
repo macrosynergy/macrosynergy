@@ -193,6 +193,7 @@ class ProxyPnL(object):
 
         outs: Tuple[QuantamentalDataFrame, ...] = proxy_pnl_calc(
             df=df,
+            transaction_costs_object=self.transaction_costs_object,
             spos=spos,
             portfolio_name=portfolio_name,
             roll_freqs=roll_freqs,

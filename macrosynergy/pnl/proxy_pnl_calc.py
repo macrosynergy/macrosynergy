@@ -390,7 +390,7 @@ def proxy_pnl_calc(
     df: QuantamentalDataFrame,
     spos: str,
     rstring: str,
-    transaction_costs: TransactionCosts,
+    transaction_costs_object: TransactionCosts,
     roll_freqs: Optional[dict] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
@@ -444,7 +444,7 @@ def proxy_pnl_calc(
     for _varx, _namex, _typex in [
         (df, "df", QuantamentalDataFrame),
         (spos, "spos", str),
-        (transaction_costs, "transaction_costs", TransactionCosts),
+        (transaction_costs_object, "transaction_costs", TransactionCosts),
         (roll_freqs, "roll_freqs", (dict, type(None))),
         (start, "start", (str, type(None))),
         (end, "end", (str, type(None))),
@@ -493,7 +493,7 @@ def proxy_pnl_calc(
         df_wide=df_wide,
         spos=spos,
         rstring=rstring,
-        transaction_costs=transaction_costs,
+        transaction_costs=transaction_costs_object,
         tc_name=tc_name,
     )
 
@@ -557,7 +557,7 @@ if __name__ == "__main__":
         df=dfx,
         spos="STRAT_POS",
         rstring="XR_NSA",
-        transaction_costs=tx,
+        transaction_costs_object=tx,
         portfolio_name="GLB",
         pnl_name="PNL",
         tc_name="TCOST",
