@@ -41,6 +41,8 @@ jobs:
           role-duration-seconds: 7200 # 2 Hours, role is set so can be max 4 hours
 
       - name: Run notebook script
+        run: |
+          python .github/scripts/run_notebooks.py
         env: 
           EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
@@ -48,7 +50,5 @@ jobs:
           ECR_IMAGE: ${{ secrets.ECR_IMAGE }}
           ECS_CLUSTER_NAME: ${{ secrets.ECS_CLUSTER_NAME }}
           SUBNET_IDS: ${{ secrets.SUBNET_IDS }}
-          EXECUTION_ROLE_ARN: ${{ secrets.EXECUTION_ROLE_ARN }}
-        run: |
-          python .github/scripts/run_notebooks.py 
+          EXECUTION_ROLE_ARN: ${{ secrets.EXECUTION_ROLE_ARN }} 
 
