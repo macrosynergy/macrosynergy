@@ -433,6 +433,10 @@ class TestAll(unittest.TestCase):
         self.assertTrue(dfd_update_df["grading"].isnull().all())
         self.assertTrue(dfd_update_df["mop_lag"].isnull().all())
 
+    def test_update_df_preserves_original(self):
+        test_df = self.dfd.copy()
+        result_df = update_df(test_df, test_df)
+        self.assertTrue(test_df.equals(self.dfd))
 
 if __name__ == "__main__":
     unittest.main()
