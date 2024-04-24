@@ -6,7 +6,7 @@ from botocore.exceptions import ClientError
 import pandas as pd
 
 AWS_BUCKET_NAME = os.getenv('AWS_BUCKET_NAME', None)
-REGION_NAME = os.getenv('REGION_NAME', None)
+REGION_NAME = "eu-west-2"
 ECR_IMAGE = os.getenv('ECR_IMAGE', None)
 ECS_CLUSTER_NAME = os.getenv('ECS_CLUSTER_NAME', None)
 SUBNET_IDS = os.getenv('SUBNET_IDS', None).split(' ')
