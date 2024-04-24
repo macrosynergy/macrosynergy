@@ -173,7 +173,7 @@ def _prep_dfs_for_pnl_calcs(
     return pnl_df, pivot_pos, pivot_returns, rebal_dates
 
 
-def pnl_excl_costs(
+def _pnl_excl_costs(
     df_wide: pd.DataFrame, spos: str, rstring: str, pnl_name: str
 ) -> pd.DataFrame:
 
@@ -204,7 +204,7 @@ def pnl_excl_costs(
     return pnl_df
 
 
-def calculate_trading_costs(
+def _calculate_trading_costs(
     df_wide: pd.DataFrame,
     spos: str,
     rstring: str,
@@ -291,7 +291,7 @@ def calculate_trading_costs(
     return tc_df
 
 
-def apply_trading_costs(
+def _apply_trading_costs(
     pnlx_wide_df: pd.DataFrame,
     tc_wide_df: pd.DataFrame,
     spos: str,
@@ -482,7 +482,7 @@ def proxy_pnl_calc(
 
     # Calculate the PnL excluding costs
     df_outs: Dict[str, pd.DataFrame] = {}
-    df_outs["pnl_excl_costs"] = pnl_excl_costs(
+    df_outs["pnl_excl_costs"] = _pnl_excl_costs(
         df_wide=df_wide,
         spos=spos,
         rstring=rstring,
@@ -490,7 +490,7 @@ def proxy_pnl_calc(
     )
 
     # tc_wide_df: pd.DataFrame = calculate_trading_costs(
-    df_outs["tc_wide"] = calculate_trading_costs(
+    df_outs["tc_wide"] = _calculate_trading_costs(
         df_wide=df_wide,
         spos=spos,
         rstring=rstring,
@@ -498,7 +498,7 @@ def proxy_pnl_calc(
         tc_name=tc_name,
     )
 
-    df_outs["pnl_incl_costs"] = apply_trading_costs(
+    df_outs["pnl_incl_costs"] = _apply_trading_costs(
         pnlx_wide_df=df_outs["pnl_excl_costs"],
         tc_wide_df=df_outs["tc_wide"],
         spos=spos,
