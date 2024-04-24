@@ -342,13 +342,7 @@ def proxy_pnl_calc(
     df: QuantamentalDataFrame,
     spos: str,
     rstring: str,
-    fids: List[str],
-    tcost_n: str,
-    rcost_n: str,
-    size_n: str,
-    tcost_l: str,
-    rcost_l: str,
-    size_l: str,
+    transaction_costs: TransactionCosts,
     roll_freqs: Optional[dict] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
@@ -359,11 +353,7 @@ def proxy_pnl_calc(
     rollcost_name: str = "ROLLCOST",
     return_pnl_excl_costs: bool = False,
     return_costs: bool = False,
-) -> Union[
-    QuantamentalDataFrame,
-    Tuple[QuantamentalDataFrame, QuantamentalDataFrame],
-    Tuple[QuantamentalDataFrame, QuantamentalDataFrame, QuantamentalDataFrame],
-]:
+) -> Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]]:
     """
     Calculates an approximate nominal PnL under consideration of transaction costs
 
@@ -380,29 +370,6 @@ def proxy_pnl_calc(
     :param <list[str]> fids: list of contract identifiers in the format
         "<cid>_<ctype>". It must correspond to contract signals in the dataframe in the
         format "<cid>_<ctype>_<sname>_<pname>".
-    :param <str> tcost_n: the postfix of the trading cost category for normal size. Values
-        are defined as the full bid-offer spread for a normal position size.
-        This must correspond to trading a cost category "<cid>_<ctype>_<tcost_n>"
-        in the dataframe.
-        Default is None: no trading costs are considered.
-    :param <str> rcost_n: the postfix of the roll cost category for normal size. Values
-        are defined as the roll charges for a normal position size.
-        This must correspond to a roll cost category "<cid>_<ctype>_<rcost_n>"
-        in the dataframe.
-        Default is None: no trading costs are considered.
-    :param <str> size_n: Normal size in USD million This must correspond to a normal
-        trade size category "<cid>_<ctype>_<size_n>" in the dataframe.
-        Default is None: all costs are are applied independent of size.
-    :param <str> tcost_l: the postfix of the trading cost category for large size.
-        Large here is defined as 90% percentile threshold of trades in the market.
-        Default is None: trading costs are are applied independent of size.
-    :param <str> rcost_l: the postfix of the roll cost category for large size. Values
-        are defined as the roll charges for a large position size.
-        This must correspond to a roll cost category "<cid>_<ctype>_<rcost_l>"
-        in the dataframe.
-        Default is None: no trading costs are considered.
-    :param <str> size_l: Large size in USD million. Default is None: all costs are
-        are applied independent of size.
     :param <dict> roll_freqs: dictionary of roll frequencies for each contract type.
         This must use the contract types as keys and frequency string ("w", "m", or "q")
         as values. The default frequency for all contracts not in the dictionary is
@@ -428,13 +395,7 @@ def proxy_pnl_calc(
     for _varx, _namex, _typex in [
         (df, "df", QuantamentalDataFrame),
         (spos, "spos", str),
-        (fids, "fids", list),
-        (tcost_n, "tcost_n", str),
-        (rcost_n, "rcost_n", str),
-        (size_n, "size_n", str),
-        (tcost_l, "tcost_l", str),
-        (rcost_l, "rcost_l", str),
-        (size_l, "size_l", str),
+        (transaction_costs, "transaction_costs", TransactionCosts),
         (roll_freqs, "roll_freqs", (dict, type(None))),
         (start, "start", (str, type(None))),
         (end, "end", (str, type(None))),
@@ -464,17 +425,6 @@ def proxy_pnl_calc(
         blacklist=blacklist,
     )
     _check_df(df=df, spos=spos, rstring=rstring)
-    # Initialize the TransactionCosts class
-    transcation_costs: TransactionCosts = TransactionCosts(
-        df=df,
-        fids=fids,
-        tcost_n=tcost_n,
-        rcost_n=rcost_n,
-        size_n=size_n,
-        tcost_l=tcost_l,
-        rcost_l=rcost_l,
-        size_l=size_l,
-    )
 
     df_wide = qdf_to_ticker_df(df)
 
@@ -494,7 +444,7 @@ def proxy_pnl_calc(
         df_wide=df_wide,
         spos=spos,
         rstring=rstring,
-        transaction_costs=transcation_costs,
+        transaction_costs=transaction_costs,
         tc_name=tc_name,
     )
 
@@ -527,11 +477,19 @@ def proxy_pnl_calc(
 
 if __name__ == "__main__":
     import macrosynergy.management as msm
+    import os, pickle
 
     cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
     cids_dmec = ["DEM", "ESP", "FRF", "ITL"]
     cids_nofx: List[str] = ["USD", "EUR", "CNY", "SGD"]
     cids_dmfx: List[str] = list(set(cids_dmca) - set(cids_nofx))
+
+    if not os.path.exists("data/txn.obj.pkl"):
+        with open("data/txn.obj.pkl", "wb") as f:
+            pickle.dump(TransactionCosts.download(), f)
+
+    with open("data/txn.obj.pkl", "rb") as f:
+        tx = pickle.load(f)
 
     dfx = pd.read_pickle("data/dfx.pkl")
 
@@ -539,13 +497,8 @@ if __name__ == "__main__":
         df=dfx,
         spos="STRAT_POS",
         rstring="XR_NSA",
-        fids=[f"{cc:s}_FX" for cc in cids_dmfx],
-        tcost_n="BIDOFFER_MEDIAN",
-        rcost_n="ROLLCOST_MEDIAN",
-        size_n="SIZE_MEDIAN",
-        tcost_l="BIDOFFER_90PCTL",
-        rcost_l="SIZE_90PCTL",
-        size_l="SIZE_90PCTL",
+        # fids=[f"{cc:s}_FX" for cc in cids_dmfx],
+        transaction_costs=tx,
         pnl_name="PNL",
         tc_name="TCOST",
         return_pnl_excl_costs=True,
