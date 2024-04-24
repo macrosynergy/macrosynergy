@@ -61,7 +61,11 @@ def run_task(
                         + region_name
                         + ".amazonaws.com/"
                         + nb_name,
-                    }
+                    },
+                    {
+                        "name": "BRANCH_NAME",
+                        "value": "test",
+                    },
                 ],
                 "logConfiguration": {
                     "logDriver": "awslogs",
@@ -95,25 +99,6 @@ def run_task(
 
     task_arn = response["tasks"][0]["taskArn"]
     return task_arn
-
-def send_email(subject, body, recipient, sender):
-    aws_region = "eu-west-2"
-
-    ses_client = boto3.client("ses", region_name=aws_region)
-
-    email_content = {"Subject": {"Data": subject}, "Body": {"Html": {"Data": body}}}
-
-    try:
-        response = ses_client.send_email(
-            Source=sender,
-            Destination={"ToAddresses": recipient},
-            Message=email_content,
-        )
-        print(f"Email sent! Message ID: {response['MessageId']}")
-
-    except ClientError as e:
-        print(f"Error sending email: {e.response['Error']['Message']}")
-
 
 notebooks = get_notebooks(AWS_BUCKET_NAME)
 ecs_client = boto3.client("ecs", region_name=REGION_NAME)
@@ -174,10 +159,3 @@ end_time = time.time()
 total_time = end_time - start_time
 
 print(total_time)
-
-email_subject = "Testing New Notebook Runner"
-email_body = f"Please note that the following notebooks failed: \n{pd.DataFrame(nb_exit_codes['failed']).to_html()}\nThe total time to run all notebooks was {total_time} seconds."
-recipient_email = os.getenv("EMAIL_RECIPIENTS").split(",")
-sender_email = os.getenv("SENDER_EMAIL")
-
-send_email(email_subject, email_body, recipient_email, sender_email)

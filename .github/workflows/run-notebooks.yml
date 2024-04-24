@@ -5,7 +5,7 @@ on:
 
   pull_request:
     branches:
-      - main
+      - develop
 
 permissions:
   id-token: write # This is required for aws oidc connection
@@ -39,13 +39,6 @@ jobs:
           aws-region: eu-west-2
           role-session-name: GitHub-OIDC-TERRAFORM
           role-duration-seconds: 7200 # 2 Hours, role is set so can be max 4 hours
-
-      - name: Save PEM certificate
-        env:
-          cert_variable: NOTEBOOK_RUNNER_PEM
-          cert_file: ./notebook_runner.pem
-        run: |
-          echo "${{ secrets.NOTEBOOK_RUNNER_PEM }}" > $cert_file
 
       - name: Run notebook script
         env: 
