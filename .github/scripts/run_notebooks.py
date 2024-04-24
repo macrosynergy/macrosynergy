@@ -102,7 +102,7 @@ def run_task(
 
 notebooks = get_notebooks(AWS_BUCKET_NAME)
 ecs_client = boto3.client("ecs", region_name=REGION_NAME)
-print(notebooks)
+print(AWS_BUCKET_NAME)
 task_arns = []
 
 for notebook in notebooks:
