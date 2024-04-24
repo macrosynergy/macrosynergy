@@ -55,12 +55,7 @@ def run_task(
                 "environment": [
                     {
                         "name": "NOTEBOOK_URL",
-                        "value": "https://"
-                        + bucket_name
-                        + ".s3."
-                        + region_name
-                        + ".amazonaws.com/"
-                        + nb_name,
+                        "value": f"https://{bucket_name}.s3.{region_name}.amazonaws.com/{nb_name}",
                     },
                     {
                         "name": "BRANCH_NAME",
@@ -102,7 +97,7 @@ def run_task(
 
 notebooks = get_notebooks(AWS_BUCKET_NAME)
 ecs_client = boto3.client("ecs", region_name=REGION_NAME)
-print(AWS_BUCKET_NAME + "HELLO")
+
 task_arns = []
 
 for notebook in notebooks:
