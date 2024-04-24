@@ -24,15 +24,12 @@ class ProxyPnL(object):
     def __init__(
         self,
         df: QuantamentalDataFrame,
+        transaction_costs_object: TransactionCosts,
         start: Optional[str] = None,
         end: Optional[str] = None,
         blacklist: Optional[dict] = None,
         sname: str = "STRAT",
         pname: str = "POS",
-        # TODO roll costs
-        # TODO bid-ask spread
-        # TODO size
-        # TODO slippage? In notional?
     ):
         self.sname = sname
         self.pname = pname
@@ -44,6 +41,12 @@ class ProxyPnL(object):
         self.end = end or df["real_date"].max().strftime("%Y-%m-%d")
         if not all(map(is_valid_iso_date, [self.start, self.end])):
             raise ValueError(f"Invalid date format: {self.start}, {self.end}")
+
+        if not isinstance(transaction_costs_object, TransactionCosts):
+            raise ValueError("Invalid transaction costs object.")
+        else:
+            transaction_costs_object.check_init()
+            self.transaction_costs_object: TransactionCosts = transaction_costs_object
 
     def contract_signals(
         self,
@@ -110,7 +113,6 @@ class ProxyPnL(object):
         Tuple[QuantamentalDataFrame, QuantamentalDataFrame, pd.DataFrame],
     ]:
         fids = fids or self.fids
-        df = df or self.cs_df
         if df is None:
             if hasattr(self, "cs_df") and self.cs_df is not None:
                 df = self.cs_df
@@ -170,47 +172,24 @@ class ProxyPnL(object):
         self,
         spos: str = None,
         df: QuantamentalDataFrame = None,
-        fids: List[str] = None,
-        tcost_n: Optional[str] = None,
-        rcost_n: Optional[str] = None,
-        size_n: Optional[str] = None,
-        tcost_l: Optional[str] = None,
-        rcost_l: Optional[str] = None,
-        size_l: Optional[str] = None,
         roll_freqs: Optional[dict] = None,
         pnl_name: str = "PNL",
         tc_name: str = "TCOST",
-    ) -> Union[
-        QuantamentalDataFrame,
-        Tuple[QuantamentalDataFrame, pd.DataFrame],
-        Tuple[QuantamentalDataFrame, pd.DataFrame, pd.DataFrame],
-    ]:
-        df: QuantamentalDataFrame = df or self.npos_df
+    ) -> Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]]:
+        if df is None:
+            if hasattr(self, "npos_df") and self.npos_df is not None:
+                df = self.npos_df
+            else:
+                raise ValueError(
+                    "Either pass a DataFrame with notional positions "
+                    "or run `ProxyPnL.notional_positions` (and `contract_signals`) first."
+                )
         spos: str = spos or self.sname + "_" + self.pname
         fids: List[str] = fids or self.fids
-        txn_obj_args = dict(
-            tcost_n=tcost_n,
-            rcost_n=rcost_n,
-            size_n=size_n,
-            tcost_l=tcost_l,
-            rcost_l=rcost_l,
-            size_l=size_l,
-        )
-        txn_obj_args = {
-            k: v if v is not None else TransactionCosts.DEFAULT_ARGS[k]
-            for k, v in txn_obj_args.items()
-        }
 
-        outs: Tuple[QuantamentalDataFrame, pd.DataFrame, pd.DataFrame] = proxy_pnl_calc(
+        outs: Tuple[QuantamentalDataFrame, ...] = proxy_pnl_calc(
             df=df,
             spos=spos,
-            fids=fids,
-            tcost_n=tcost_n,
-            rcost_n=rcost_n,
-            size_n=size_n,
-            tcost_l=tcost_l,
-            rcost_l=rcost_l,
-            size_l=size_l,  # TODO what happens if None?
             roll_freqs=roll_freqs,
             start=self.start,
             end=self.end,
@@ -221,12 +200,9 @@ class ProxyPnL(object):
             return_costs=True,
         )
         assert len(outs) == 3
-        assert isinstance(outs[0], QuantamentalDataFrame)
-        assert isinstance(outs[1], pd.DataFrame)
-        assert isinstance(outs[2], pd.DataFrame)
-
+        assert all(map(lambda x: isinstance(x, QuantamentalDataFrame), outs))
         self.proxy_pnl: QuantamentalDataFrame = outs[0]
-        self.txn_costs_df: pd.DataFrame = outs[1]
+        self.txn_costs_df: QuantamentalDataFrame = outs[1]
         self.pnl_excl_costs: QuantamentalDataFrame = outs[2]
         outs = None
 
