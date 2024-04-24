@@ -41,63 +41,142 @@ The typical flow when using the `ProxyPnL` class is as follows:
 3. (Download transaction statistics into a `QuantamentalDataFrame`)
 4. Calculating `proxy_pnl` from notional positions and transaction costs.
 
+### Flowchart and Diagrams
+
+### Contract Signals Flow
+
 ```{mermaid}
-  flowchart TD;
-      Sig[Signals]
-      CSCALES[Contract Specific Scaling]
-      HR[Hedge-Ratios]
-      HB[Hedge Basket]
-      CSfunc(`contract_signals`)
-      CS[Contract Signals]
-      AUM[AUM]
-      LVG[Leverage]
-      LVGP[Leverage Position]
-      VT[Volatility Target]
-      NPfunc(`notional_positions`)
-      NP(Notional Positions)
-      HPVfunc(`historical_portfolio_volatility`)
-      HPV[Historical Portfolio Volatility]
-      TC[Trading Cost]
-      RC[Roll Cost]
-      Distr[Transaction Statistics]
-      PP(Proxy PnL)
-      ESTF[Frequencies of Estimation]
-      ESTW[Weights per Freq. of Est.]
+%%{init: {"flowchart": {"htmlLabels": false}} }%%
 
-      subgraph "Contract Signals Functionality"
-        subgraph "User Inputs"
-          Sig
-          HR
-          HB
-          CSCALES
-        end
+flowchart TD;
+    Sig[Signals]
+    CSCALES[Contract Specific Scaling]
+    HR[Hedge-Ratios]
+    HB[Hedge Basket]
+    CSfunc([`contract_signals`])
+    CSOutput{{Contract Signals}}
 
-        Sig-->CSfunc
-        HR-->CSfunc
-        HB-->CSfunc
-        CSCALES-->CSfunc
+    subgraph CS_UINP[User Inputs]
+      Sig
+      HR
+      HB
+      CSCALES
+    end
+
+      CS_UINP --> CSfunc
+    CSfunc -.-o CSOutput
+```
+
+### Notional Positions Flow
+
+```{mermaid}
+%%{init: {"flowchart": {"htmlLabels": false}} }%%
+flowchart TD
+  CS{{Contract Signals}}
+  AUM[AUM]
+  LVG[Leverage]
+  LVGfunc[`leverage_positions`]
+  VT[Volatility Target]
+  HPVfunc(`historical_portfolio_volatility`)
+  VTPOSfunc([`volatility_target_positions`])
+  NP{{Notional Positions}}
+  HPV{{Historical Portfolio Volatility}}
+  VCV{{Variance-Covariance Matrices}}
+  ESTF[Estimation Frequencies]
+  ESTW[Weights per Estimation Frequency]
+  NPfunc([`notional_positions`])
+    VT_UINP -.-> VTPOSfunc
+    LVG -.-> LVGfunc
+
+
+    subgraph NP_UINP[User Inputs]
+      LVG
+      AUM
+      CS
+      subgraph VT_UINP[Volatility Target Specific Inputs]
+        VT
+        ESTF
+        ESTW
       end
-        CSfunc--o CS
+    end
+    subgraph NP_METHODS[Methods]
+      NPfunc
 
-      subgraph "Notional Positions Functionality"
-        LVG-.->LVGP
+      LVGfunc
+      VTPOSfunc
+      HPVfunc
+    end
 
-        AUM-->NPfunc
-        CS-->NPfunc
-        LVG-->NPfunc
-        VT-->NPfunc
+    subgraph OUTPUTS[Outputs]
+      NP
+      HPV
+      VCV
+    end
+    NPfunc -.-> VTPOSfunc
+
+    HPVfunc --> HPV
+    HPVfunc --> VCV
+    NPfunc -.-> LVGfunc
+    VTPOSfunc <-.-> HPVfunc
+
+    LVGfunc -.-o NP
+    NPfunc --> NP
+    VTPOSfunc -.-o NP
+    NP_UINP --> NPfunc
+```
+
+### Proxy PnL Flow
+
+```{mermaid}
+%%{init: {"flowchart": {"htmlLabels": false}} }%%
+flowchart TD
+  PPfunc(Proxy PnL)
+  NP{{Notional Positions}}
+  PNLx{{PnL with Transaction Costs}}
+  PNLr{{PnL without any Costs}}
+  TCS{{Position-Specific Transaction Costs}}
+  TCObj[`TransactionCost` Object]
+
+  subgraph PP_UINP[User Inputs]
+    NP
+    TCObj
+  end
+
+  NP --> PPfunc
+  TCObj --> PPfunc
+
+  subgraph OUTPUTS[Outputs]
+    PNLx
+    PNLr
+    TCS
+  end
+  PPfunc --> PNLx
+  PPfunc --> PNLr
+  PPfunc --> TCS
+
+```
+
+### Transaction Costs Object
+
+```{mermaid}
+%%{init: {"flowchart": {"htmlLabels": false}} }%%
+flowchart TD
 
 
-        NPfunc-->HPVfunc
-        VT-.->HPVfunc
-        HPVfunc--o HPV
+  subgraph TCObj[`TransactionCost` Object]
+    TCDownload[Download Transaction Statistics] --> CostDF[(Costs DataFrame)]
 
 
-      end
-
-      TC-->PP
-      RC-->PP
-      NP-->PP
-      Distr-->PP
+    subgraph TCINTMETHODS[Internal Working]
+      CostDF -.-> TCExtrapolate[Extrapolate Transaction Statistics]
+    end
+    TCExtrapolate -.-> TCBidOffer[Calculate Bid-Offer Spread]
+    TCExtrapolate -.-> TCRoll[Calculate Roll Costs]
+  end
+  POSITION{{Trade Size, Cross Section, Date}}
+  BIDOFFER{{Bid-Offer Spread}}
+  ROLLCOST{{Roll Costs}}
+  POSITION --> TCBidOffer --> BIDOFFER
+  POSITION --> TCRoll --> ROLLCOST
 
 ```
