@@ -46,7 +46,6 @@ The typical flow when using the `ProxyPnL` class is as follows:
 ### Contract Signals Flow
 
 ```{mermaid}
-%%{init: {"flowchart": {"htmlLabels": false}} }%%
 
 flowchart TD;
     Sig[Signals]
@@ -70,7 +69,6 @@ flowchart TD;
 ### Notional Positions Flow
 
 ```{mermaid}
-%%{init: {"flowchart": {"htmlLabels": false}} }%%
 flowchart TD
   CS{{Contract Signals}}
   AUM[AUM]
@@ -128,7 +126,6 @@ flowchart TD
 ### Proxy PnL Flow
 
 ```{mermaid}
-%%{init: {"flowchart": {"htmlLabels": false}} }%%
 flowchart TD
   PPfunc(Proxy PnL)
   NP{{Notional Positions}}
@@ -159,7 +156,6 @@ flowchart TD
 ### Transaction Costs Object
 
 ```{mermaid}
-%%{init: {"flowchart": {"htmlLabels": false}} }%%
 flowchart TD
 
 
