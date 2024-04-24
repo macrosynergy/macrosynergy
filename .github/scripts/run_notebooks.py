@@ -5,12 +5,12 @@ import time
 from botocore.exceptions import ClientError
 import pandas as pd
 
-AWS_BUCKET_NAME = os.getenv('AWS_BUCKET_NAME')
-REGION_NAME = os.getenv('REGION_NAME')
-ECR_IMAGE = os.getenv('ECR_IMAGE')
-ECS_CLUSTER_NAME = os.getenv('ECS_CLUSTER_NAME')
-SUBNET_IDS = os.getenv('SUBNET_IDS').split(' ')
-EXECUTION_ROLE_ARN = os.getenv('EXECUTION_ROLE_ARN')
+AWS_BUCKET_NAME = os.getenv('AWS_BUCKET_NAME', None)
+REGION_NAME = os.getenv('REGION_NAME', None)
+ECR_IMAGE = os.getenv('ECR_IMAGE', None)
+ECS_CLUSTER_NAME = os.getenv('ECS_CLUSTER_NAME', None)
+SUBNET_IDS = os.getenv('SUBNET_IDS', None).split(' ')
+EXECUTION_ROLE_ARN = os.getenv('EXECUTION_ROLE_ARN', None)
 
 start_time = time.time()
 
