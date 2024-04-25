@@ -167,18 +167,13 @@ def panel_calculator(
 
     # C. Check if all required categories are in the dataframe.
 
-    all_xcats_used, singles_used, single_cids = _get_xcats_used(ops)
+    old_xcats_used, singles_used, single_cids = _get_xcats_used(ops)
 
-    new_xcats = list(ops.keys())
-    old_xcats_used = list(set(all_xcats_used) - set(new_xcats))
+    old_xcats_used = list(set(old_xcats_used))
     missing = sorted(set(old_xcats_used) - set(df["xcat"].unique()))
 
     if len(missing) > 0:
         raise ValueError(f"Missing categories: {missing}.")
-
-    if len(singles_used) > 0:
-        if new_xcats == all_xcats_used:
-            old_xcats_used = new_xcats
 
     # If any of the elements of single_cids are not in cids, add them to cids.
     cids_used = cids + list(set(single_cids) - set(cids))
@@ -194,11 +189,11 @@ def panel_calculator(
         blacklist=blacklist,
         intersect=False,
     )
-    cidx = np.sort(dfx["cid"].unique())
+    # cidx = np.sort(dfx["cid"].unique())
 
-    if len(cidx) == len(single_cids):
-        if np.all(cidx == single_cids):
-            cidx = cids
+    # if len(cidx) == len(single_cids):
+    #     if np.all(cidx == single_cids):
+    #         cidx = cids
 
     # E. Create all required wide dataframes with category names.
 
@@ -216,8 +211,8 @@ def panel_calculator(
             dfx1 = dfxx.set_index("real_date")["value"].to_frame()
             dfx1 = dfx1.truncate(before=start, after=end)
 
-            dfw = pd.concat([dfx1] * len(cidx), axis=1, ignore_index=True)
-            dfw.columns = cidx
+            dfw = pd.concat([dfx1] * len(cids), axis=1, ignore_index=True)
+            dfw.columns = cids
             exec(f"{single} = dfw")
 
     # F. Calculate the panels and collect.
@@ -298,19 +293,32 @@ if __name__ == "__main__":
     dfdx = dfd[filt1]
 
     # First testcase.
+    dfd = reduce_df(dfd, xcats=["INFL", "XR"], cids=['USD', 'CAD'])
+    cidx = ["AUD", "EUR", "NZD", "GBP"]
+    iscores = ["INFL", "XR"]
+    calcs = []
+    for xc in iscores:
+        calcs += [f"{xc}1 = iUSD_{xc} + INFL"]
+    
+    df_calc = panel_calculator(
+        df=dfd, calcs=calcs, cids=cidx
+    )
+    
+    print(df_calc.cid.unique())
+    print(df_calc.xcat.unique())
 
-    f1 = "NEW_VAR1 = GROWTH - iEUR_INFL"
-    formulas = [f1]
-    cidx = ["AUD", "CAD"]
-    df_calc = panel_calculator(
-        df=dfd, calcs=formulas, cids=cidx, start=start, end=end, blacklist=black
-    )
-    # Second testcase: EUR is not passed in as one of the cross-sections in "cids"
-    # parameter but is defined in the dataframe. Therefore, code will not break.
-    cids = ["AUD", "CAD", "GBP", "USD", "NZD"]
-    formula = "NEW1 = XR - iUSD_XR"
-    formula_2 = "NEW2 = GROWTH - iEUR_INFL"
-    formulas = [formula, formula_2]
-    df_calc = panel_calculator(
-        df=dfd, calcs=formulas, cids=cids, start=start, end=end, blacklist=black
-    )
+    # f1 = "NEW_VAR1 = GROWTH - iEUR_INFL"
+    # formulas = [f1]
+    # cidx = ["AUD", "CAD"]
+    # df_calc = panel_calculator(
+    #     df=dfd, calcs=formulas, cids=cidx, start=start, end=end, blacklist=black
+    # )
+    # # Second testcase: EUR is not passed in as one of the cross-sections in "cids"
+    # # parameter but is defined in the dataframe. Therefore, code will not break.
+    # cids = ["AUD", "CAD", "GBP", "USD", "NZD"]
+    # formula = "NEW1 = XR - iUSD_XR"
+    # formula_2 = "NEW2 = GROWTH - iEUR_INFL"
+    # formulas = [formula, formula_2]
+    # df_calc = panel_calculator(
+    #     df=dfd, calcs=formulas, cids=cids, start=start, end=end, blacklist=black
+    # )
