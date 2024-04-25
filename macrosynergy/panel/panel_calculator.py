@@ -177,7 +177,7 @@ def panel_calculator(
         raise ValueError(f"Missing categories: {missing}.")
 
     # If any of the elements of single_cids are not in cids, add them to cids.
-    cids_used = list(set(single_cids) + set(cids))
+    cids_used = list(set(single_cids + cids))
 
     # D. Reduce dataframe with intersection requirement.
 
