@@ -88,7 +88,7 @@ def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
             singles_used += [s for s in op_list if re.match("^i", s)]
 
     single_xcats = [x[5:] for x in singles_used]
-    single_cids = [x[1:4] for x in singles_used]
+    single_cids = [x[1:4] for x in single_xcats]
     all_xcats_used = xcats_used + single_xcats
     return all_xcats_used, singles_used, single_cids
 
@@ -191,10 +191,6 @@ def panel_calculator(
         intersect=False,
     )
 
-    if len(cidx) == len(single_cids):
-        if np.all(cidx == single_cids):
-            cidx = cids
-
     # E. Create all required wide dataframes with category names.
 
     for xcat in old_xcats_used:
@@ -291,6 +287,8 @@ if __name__ == "__main__":
     # Example filter for dataframe.
     filt1 = (dfd["xcat"] == "XR") | (dfd["xcat"] == "CRY")
     dfdx = dfd[filt1]
+
+    # First testcase.
 
     f1 = "NEW_VAR1 = GROWTH - iEUR_INFL"
     formulas = [f1]
