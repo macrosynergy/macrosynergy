@@ -173,7 +173,7 @@ def _prep_dfs_for_pnl_calcs(
     return pnl_df, pivot_pos, pivot_returns, rebal_dates
 
 
-def pnl_excl_costs(
+def _pnl_excl_costs(
     df_wide: pd.DataFrame, spos: str, rstring: str, pnl_name: str
 ) -> pd.DataFrame:
 
@@ -204,7 +204,7 @@ def pnl_excl_costs(
     return pnl_df
 
 
-def calculate_trading_costs(
+def _calculate_trading_costs(
     df_wide: pd.DataFrame,
     spos: str,
     rstring: str,
@@ -291,7 +291,7 @@ def calculate_trading_costs(
     return tc_df
 
 
-def apply_trading_costs(
+def _apply_trading_costs(
     pnlx_wide_df: pd.DataFrame,
     tc_wide_df: pd.DataFrame,
     spos: str,
@@ -330,40 +330,79 @@ def apply_trading_costs(
             f"_{spos}_{tc_name}", ""
         )
 
-        out_df[pnl_col] = out_df[pnl_col] - tc_wide_df[tc_col]
+        out_df[pnl_col] = out_df[pnl_col].sub(tc_wide_df[tc_col], fill_value=0)
 
-    rename_pnl = lambda x: x.replace(f"_{spos}_{pnl_name}", f"_{spos}_{pnlx_name}")
+    rename_pnl = lambda x: str(x).replace(f"_{spos}_{pnl_name}", f"_{spos}_{pnlx_name}")
     out_df = out_df.rename(columns=rename_pnl)
 
     return out_df
+
+
+def _portfolio_sums(
+    df_outs: Dict[str, pd.DataFrame],
+    spos: str,
+    portfolio_name: str,
+    pnl_name: str,
+    tc_name: str,
+    pnlx_name: str,
+    bidoffer_name: str,
+    rollcost_name: str,
+) -> Dict[str, pd.DataFrame]:
+    """
+    Calculate the sum of the PnLs and costs across all contracts in the portfolio
+    """
+    glb_pnl_incl_costs = df_outs["pnl_incl_costs"].sum(axis=1, skipna=True)
+    glb_pnl_excl_costs = df_outs["pnl_excl_costs"].sum(axis=1, skipna=True)
+
+    # Remove all that ends with tc_name_bidoffer or tc_name_rollcost
+    tcs_list = sorted(
+        set(
+            [
+                tc
+                for tc in df_outs["tc_wide"].columns.tolist()
+                if not any(
+                    [
+                        tc.endswith(f"_{tc_name}_{cost_type}")
+                        for cost_type in [bidoffer_name, rollcost_name]
+                    ]
+                )
+            ]
+        )
+    )
+
+    # Sum the trading costs
+    glb_tcosts = df_outs["tc_wide"].loc[:, tcs_list].sum(axis=1, skipna=True)
+
+    df_outs["pnl_incl_costs"].loc[
+        :, f"{portfolio_name}_{spos}_{pnl_name}"
+    ] = glb_pnl_incl_costs
+
+    df_outs["pnl_excl_costs"].loc[
+        :, f"{portfolio_name}_{spos}_{pnlx_name}"
+    ] = glb_pnl_excl_costs
+
+    df_outs["tc_wide"].loc[:, f"{portfolio_name}_{spos}_{tc_name}"] = glb_tcosts
+
+    return df_outs
 
 
 def proxy_pnl_calc(
     df: QuantamentalDataFrame,
     spos: str,
     rstring: str,
-    fids: List[str],
-    tcost_n: str,
-    rcost_n: str,
-    size_n: str,
-    tcost_l: str,
-    rcost_l: str,
-    size_l: str,
+    transaction_costs_object: TransactionCosts,
     roll_freqs: Optional[dict] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
+    portfolio_name: str = "GLB",
     pnl_name: str = "PNL",
     tc_name: str = "TCOST",
     bidoffer_name: str = "BIDOFFER",
     rollcost_name: str = "ROLLCOST",
     return_pnl_excl_costs: bool = False,
     return_costs: bool = False,
-) -> Union[
-    QuantamentalDataFrame,
-    Tuple[QuantamentalDataFrame, QuantamentalDataFrame],
-    Tuple[QuantamentalDataFrame, QuantamentalDataFrame, QuantamentalDataFrame],
-]:
+) -> Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]]:
     """
     Calculates an approximate nominal PnL under consideration of transaction costs
 
@@ -380,29 +419,6 @@ def proxy_pnl_calc(
     :param <list[str]> fids: list of contract identifiers in the format
         "<cid>_<ctype>". It must correspond to contract signals in the dataframe in the
         format "<cid>_<ctype>_<sname>_<pname>".
-    :param <str> tcost_n: the postfix of the trading cost category for normal size. Values
-        are defined as the full bid-offer spread for a normal position size.
-        This must correspond to trading a cost category "<cid>_<ctype>_<tcost_n>"
-        in the dataframe.
-        Default is None: no trading costs are considered.
-    :param <str> rcost_n: the postfix of the roll cost category for normal size. Values
-        are defined as the roll charges for a normal position size.
-        This must correspond to a roll cost category "<cid>_<ctype>_<rcost_n>"
-        in the dataframe.
-        Default is None: no trading costs are considered.
-    :param <str> size_n: Normal size in USD million This must correspond to a normal
-        trade size category "<cid>_<ctype>_<size_n>" in the dataframe.
-        Default is None: all costs are are applied independent of size.
-    :param <str> tcost_l: the postfix of the trading cost category for large size.
-        Large here is defined as 90% percentile threshold of trades in the market.
-        Default is None: trading costs are are applied independent of size.
-    :param <str> rcost_l: the postfix of the roll cost category for large size. Values
-        are defined as the roll charges for a large position size.
-        This must correspond to a roll cost category "<cid>_<ctype>_<rcost_l>"
-        in the dataframe.
-        Default is None: no trading costs are considered.
-    :param <str> size_l: Large size in USD million. Default is None: all costs are
-        are applied independent of size.
     :param <dict> roll_freqs: dictionary of roll frequencies for each contract type.
         This must use the contract types as keys and frequency string ("w", "m", or "q")
         as values. The default frequency for all contracts not in the dictionary is
@@ -428,13 +444,7 @@ def proxy_pnl_calc(
     for _varx, _namex, _typex in [
         (df, "df", QuantamentalDataFrame),
         (spos, "spos", str),
-        (fids, "fids", list),
-        (tcost_n, "tcost_n", str),
-        (rcost_n, "rcost_n", str),
-        (size_n, "size_n", str),
-        (tcost_l, "tcost_l", str),
-        (rcost_l, "rcost_l", str),
-        (size_l, "size_l", str),
+        (transaction_costs_object, "transaction_costs", TransactionCosts),
         (roll_freqs, "roll_freqs", (dict, type(None))),
         (start, "start", (str, type(None))),
         (end, "end", (str, type(None))),
@@ -464,17 +474,6 @@ def proxy_pnl_calc(
         blacklist=blacklist,
     )
     _check_df(df=df, spos=spos, rstring=rstring)
-    # Initialize the TransactionCosts class
-    transcation_costs: TransactionCosts = TransactionCosts(
-        df=df,
-        fids=fids,
-        tcost_n=tcost_n,
-        rcost_n=rcost_n,
-        size_n=size_n,
-        tcost_l=tcost_l,
-        rcost_l=rcost_l,
-        size_l=size_l,
-    )
 
     df_wide = qdf_to_ticker_df(df)
 
@@ -482,7 +481,7 @@ def proxy_pnl_calc(
 
     # Calculate the PnL excluding costs
     df_outs: Dict[str, pd.DataFrame] = {}
-    df_outs["pnl_excl_costs"] = pnl_excl_costs(
+    df_outs["pnl_excl_costs"] = _pnl_excl_costs(
         df_wide=df_wide,
         spos=spos,
         rstring=rstring,
@@ -490,21 +489,32 @@ def proxy_pnl_calc(
     )
 
     # tc_wide_df: pd.DataFrame = calculate_trading_costs(
-    df_outs["tc_wide"] = calculate_trading_costs(
+    df_outs["tc_wide"] = _calculate_trading_costs(
         df_wide=df_wide,
         spos=spos,
         rstring=rstring,
-        transaction_costs=transcation_costs,
+        transaction_costs=transaction_costs_object,
         tc_name=tc_name,
     )
 
-    df_outs["pnl_incl_costs"] = apply_trading_costs(
+    df_outs["pnl_incl_costs"] = _apply_trading_costs(
         pnlx_wide_df=df_outs["pnl_excl_costs"],
         tc_wide_df=df_outs["tc_wide"],
         spos=spos,
         tc_name=tc_name,
         pnlx_name=pnlx_name,
         pnl_name=pnl_name,
+    )
+
+    df_outs = _portfolio_sums(
+        df_outs=df_outs,
+        spos=spos,
+        portfolio_name=portfolio_name,
+        pnl_name=pnl_name,
+        tc_name=tc_name,
+        pnlx_name=pnlx_name,
+        bidoffer_name=bidoffer_name,
+        rollcost_name=rollcost_name,
     )
 
     # # Convert to QDFs
@@ -527,11 +537,19 @@ def proxy_pnl_calc(
 
 if __name__ == "__main__":
     import macrosynergy.management as msm
+    import os, pickle
 
     cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
     cids_dmec = ["DEM", "ESP", "FRF", "ITL"]
     cids_nofx: List[str] = ["USD", "EUR", "CNY", "SGD"]
     cids_dmfx: List[str] = list(set(cids_dmca) - set(cids_nofx))
+
+    if not os.path.exists("data/txn.obj.pkl"):
+        with open("data/txn.obj.pkl", "wb") as f:
+            pickle.dump(TransactionCosts.download(), f)
+
+    with open("data/txn.obj.pkl", "rb") as f:
+        tx = pickle.load(f)
 
     dfx = pd.read_pickle("data/dfx.pkl")
 
@@ -539,13 +557,8 @@ if __name__ == "__main__":
         df=dfx,
         spos="STRAT_POS",
         rstring="XR_NSA",
-        fids=[f"{cc:s}_FX" for cc in cids_dmfx],
-        tcost_n="BIDOFFER_MEDIAN",
-        rcost_n="ROLLCOST_MEDIAN",
-        size_n="SIZE_MEDIAN",
-        tcost_l="BIDOFFER_90PCTL",
-        rcost_l="SIZE_90PCTL",
-        size_l="SIZE_90PCTL",
+        transaction_costs_object=tx,
+        portfolio_name="GLB",
         pnl_name="PNL",
         tc_name="TCOST",
         return_pnl_excl_costs=True,
@@ -555,18 +568,13 @@ if __name__ == "__main__":
         [
             df_pnlx,
             df_pnl,
-            df_costs,
         ],
         axis=0,
     )
 
-    import macrosynergy.visuals as msv, numpy as np, PIL.Image as Image
+    import macrosynergy.visuals as msv, numpy as np, PIL.Image as Image, matplotlib.pyplot as plt
 
     msv.FacetPlot(df=df_all).lineplot(
         cid_grid=True,
-        # xcat_grid=True,
-        # xcats=[
-        #     "FX_STRAT_POS_TCOST_ROLLCOST",
-        #     "FX_STRAT_POS_TCOST_BIDOFFER",
-        # ],
+        cids=["GLB"],
     )
