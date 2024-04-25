@@ -332,7 +332,7 @@ def _apply_trading_costs(
 
         out_df[pnl_col] = out_df[pnl_col].sub(tc_wide_df[tc_col], fill_value=0)
 
-    rename_pnl = lambda x: x.replace(f"_{spos}_{pnl_name}", f"_{spos}_{pnlx_name}")
+    rename_pnl = lambda x: str(x).replace(f"_{spos}_{pnl_name}", f"_{spos}_{pnlx_name}")
     out_df = out_df.rename(columns=rename_pnl)
 
     return out_df
