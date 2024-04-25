@@ -309,6 +309,8 @@ class TransactionCosts(object):
         pct90_size: Number,
         pct90_cost: Number,
     ) -> Number:
+        if np.isnan(trade_size):
+            return 0.0
         return extrapolate_cost(
             trade_size=trade_size,
             median_size=median_size,
