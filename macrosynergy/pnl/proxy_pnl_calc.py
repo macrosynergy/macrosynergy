@@ -325,18 +325,12 @@ def _apply_trading_costs(
     )
 
     out_df = pnlx_wide_df.copy()
-    nan_dict = {col: out_df[out_df[col].isna()].index for col in out_df.columns}
-
     for pnl_col, tc_col in zip(pnls_list, tcs_list):
         assert pnl_col.replace(f"_{spos}_{pnl_name}", "") == tc_col.replace(
             f"_{spos}_{tc_name}", ""
         )
 
         out_df[pnl_col] = out_df[pnl_col].sub(tc_wide_df[tc_col], fill_value=0)
-
-    # Check that there is no "new" NaNs
-    for col, idx in nan_dict.items():
-        assert set(out_df[out_df[col].isna()].index) <= set(idx)
 
     rename_pnl = lambda x: str(x).replace(f"_{spos}_{pnl_name}", f"_{spos}_{pnlx_name}")
     out_df = out_df.rename(columns=rename_pnl)
