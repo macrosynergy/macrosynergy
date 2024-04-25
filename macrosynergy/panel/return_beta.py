@@ -126,7 +126,7 @@ def hedge_calculator(
                 results: RegressionResults = sm.OLS(yvar, xvar).fit()
                 results_params: pd.Series = results.params
 
-            df_hrat.loc[d] = results_params.loc[xvar.name]
+            df_hrat.loc[d] = results_params.loc[benchmark_return.name]
 
     # Any dates prior to the minimum observation which would be classified by NaN values
     # remove from the DataFrame.
