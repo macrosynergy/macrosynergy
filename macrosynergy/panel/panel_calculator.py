@@ -172,11 +172,12 @@ def panel_calculator(
     old_xcats_used = list(set(old_xcats_used))
     missing = sorted(set(old_xcats_used) - set(df["xcat"].unique()))
 
-    if len(missing) > 0:
+    new_xcats = list(ops.keys())
+    if len(missing) > 0 and not set(missing).issubset(set(new_xcats)):
         raise ValueError(f"Missing categories: {missing}.")
 
     # If any of the elements of single_cids are not in cids, add them to cids.
-    cids_used = cids + list(set(single_cids) - set(cids))
+    cids_used = list(set(single_cids) + set(cids))
 
     # D. Reduce dataframe with intersection requirement.
 
@@ -189,11 +190,6 @@ def panel_calculator(
         blacklist=blacklist,
         intersect=False,
     )
-    # cidx = np.sort(dfx["cid"].unique())
-
-    # if len(cidx) == len(single_cids):
-    #     if np.all(cidx == single_cids):
-    #         cidx = cids
 
     # E. Create all required wide dataframes with category names.
 
@@ -292,33 +288,18 @@ if __name__ == "__main__":
     filt1 = (dfd["xcat"] == "XR") | (dfd["xcat"] == "CRY")
     dfdx = dfd[filt1]
 
-    # First testcase.
-    dfd = reduce_df(dfd, xcats=["INFL", "XR"], cids=['USD', 'CAD'])
-    cidx = ["AUD", "EUR", "NZD", "GBP"]
-    iscores = ["INFL", "XR"]
-    calcs = []
-    for xc in iscores:
-        calcs += [f"{xc}1 = iUSD_{xc} + INFL"]
-    
+    f1 = "NEW_VAR1 = GROWTH - iEUR_INFL"
+    formulas = [f1]
+    cidx = ["AUD", "CAD"]
     df_calc = panel_calculator(
-        df=dfd, calcs=calcs, cids=cidx
+        df=dfd, calcs=formulas, cids=cidx, start=start, end=end, blacklist=black
     )
-    
-    print(df_calc.cid.unique())
-    print(df_calc.xcat.unique())
-
-    # f1 = "NEW_VAR1 = GROWTH - iEUR_INFL"
-    # formulas = [f1]
-    # cidx = ["AUD", "CAD"]
-    # df_calc = panel_calculator(
-    #     df=dfd, calcs=formulas, cids=cidx, start=start, end=end, blacklist=black
-    # )
-    # # Second testcase: EUR is not passed in as one of the cross-sections in "cids"
-    # # parameter but is defined in the dataframe. Therefore, code will not break.
-    # cids = ["AUD", "CAD", "GBP", "USD", "NZD"]
-    # formula = "NEW1 = XR - iUSD_XR"
-    # formula_2 = "NEW2 = GROWTH - iEUR_INFL"
-    # formulas = [formula, formula_2]
-    # df_calc = panel_calculator(
-    #     df=dfd, calcs=formulas, cids=cids, start=start, end=end, blacklist=black
-    # )
+    # Second testcase: EUR is not passed in as one of the cross-sections in "cids"
+    # parameter but is defined in the dataframe. Therefore, code will not break.
+    cids = ["AUD", "CAD", "GBP", "USD", "NZD"]
+    formula = "NEW1 = XR - iUSD_XR"
+    formula_2 = "NEW2 = GROWTH - iEUR_INFL"
+    formulas = [formula, formula_2]
+    df_calc = panel_calculator(
+        df=dfd, calcs=formulas, cids=cids, start=start, end=end, blacklist=black
+    )
