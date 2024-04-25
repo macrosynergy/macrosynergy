@@ -85,6 +85,9 @@ def hedge_calculator(
     benchmark_return = benchmark_return.astype(dtype=np.float32)
     unhedged_return = unhedged_return.astype(dtype=np.float32)
 
+    if benchmark_return.name is None:
+        benchmark_return.name = "hedge"
+
     benchmark_return = benchmark_return[
         benchmark_return.first_valid_index() : benchmark_return.last_valid_index()
     ]
