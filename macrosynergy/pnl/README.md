@@ -43,7 +43,31 @@ The typical flow when using the `ProxyPnL` class is as follows:
 
 ### Flowchart and Diagrams
 
-### Contract Signals Flow
+#### Key
+
+In this example:
+
+- The shapes of each elements is indicative of the type of entity they represent.
+  - Hexagonal boxes represent outputs.
+  - Rounded boxes represent functions.
+  - Rectangular boxes represent inputs.
+  - "Cylindrical" boxes represent data stores (dataframes, disk storage, etc.).
+
+- `function` directly outputs to `direct output`.
+- `function` internally calls `backend function`.
+- `backend function` internally outputs `direct output`.
+- Any interactions represented by dotted lines are not directly exposed to the user.
+
+```{mermaid}
+flowchart LR
+  A[input]-->B([function])
+  B --> C{{output}}
+  B -.-> D([backend function])
+  D -.-> C
+
+```
+
+#### Contract Signals Flow
 
 ```{mermaid}
 
@@ -63,10 +87,10 @@ flowchart TD;
     end
 
       CS_UINP --> CSfunc
-    CSfunc -.-o CSOutput
+    CSfunc --> CSOutput
 ```
 
-### Notional Positions Flow
+#### Notional Positions Flow
 
 ```{mermaid}
 flowchart TD
@@ -75,7 +99,7 @@ flowchart TD
   LVG[Leverage]
   LVGfunc[`leverage_positions`]
   VT[Volatility Target]
-  HPVfunc(`historical_portfolio_volatility`)
+  HPVfunc([`historical_portfolio_volatility`])
   VTPOSfunc([`volatility_target_positions`])
   NP{{Notional Positions}}
   HPV{{Historical Portfolio Volatility}}
@@ -123,11 +147,11 @@ flowchart TD
     NP_UINP --> NPfunc
 ```
 
-### Proxy PnL Flow
+#### Proxy PnL Flow
 
 ```{mermaid}
 flowchart TD
-  PPfunc(Proxy PnL)
+  PPfunc([Proxy PnL])
   NP{{Notional Positions}}
   PNLx{{PnL with Transaction Costs}}
   PNLr{{PnL without any Costs}}
@@ -160,16 +184,16 @@ flowchart TD
 
 
   subgraph TCObj[`TransactionCost` Object]
-    TCDownload[Download Transaction Statistics] --> CostDF[(Costs DataFrame)]
+    TCDownload([Download Transaction Statistics]) --> CostDF[(Costs DataFrame)]
 
 
     subgraph TCINTMETHODS[Internal Working]
-      CostDF -.-> TCExtrapolate[Extrapolate Transaction Statistics]
+      CostDF -.-> TCExtrapolate([Extrapolate Transaction Statistics])
     end
-    TCExtrapolate -.-> TCBidOffer[Calculate Bid-Offer Spread]
-    TCExtrapolate -.-> TCRoll[Calculate Roll Costs]
+    TCExtrapolate -.-> TCBidOffer([Calculate Bid-Offer Spread])
+    TCExtrapolate -.-> TCRoll([Calculate Roll Costs])
   end
-  POSITION{{Trade Size, Cross Section, Date}}
+  POSITION[Postion i.e. Trade Size, Cross Section, Date]
   BIDOFFER{{Bid-Offer Spread}}
   ROLLCOST{{Roll Costs}}
   POSITION --> TCBidOffer --> BIDOFFER
