@@ -118,15 +118,15 @@ def hedge_calculator(
         if d > min_obs_date:
             curr_start_date: pd.Timestamp = rdates[max(0, rdates.index(d) - max_obs)]
             # Inclusive of the re-estimation date.
-            xvar = unhedged_return.loc[curr_start_date:d]
-            yvar = benchmark_return.loc[curr_start_date:d]
+            yvar = unhedged_return.loc[curr_start_date:d]
+            xvar = benchmark_return.loc[curr_start_date:d]
             # Condition currently redundant but will become relevant.
             if meth == "ols":
                 xvar = sm.add_constant(xvar)
                 results: RegressionResults = sm.OLS(yvar, xvar).fit()
                 results_params: pd.Series = results.params
 
-            df_hrat.loc[d] = results_params.loc[cross_section]
+            df_hrat.loc[d] = results_params.loc[xvar.name]
 
     # Any dates prior to the minimum observation which would be classified by NaN values
     # remove from the DataFrame.
