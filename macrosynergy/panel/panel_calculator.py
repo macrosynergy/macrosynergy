@@ -100,6 +100,7 @@ def panel_calculator(
     start: str = None,
     end: str = None,
     blacklist: dict = None,
+    external_func: dict = None
 ) -> pd.DataFrame:
     """
     Calculates new data panels through operations on existing panels.
@@ -118,6 +119,8 @@ def panel_calculator(
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
         the dataframe. If one cross section has several blacklist periods append numbers
         to the cross-section code.
+    :param <dict> external_func: dictionary of external functions to be used in the panel
+        calculation. The key is the name of the function and the value is the function.
 
     :return <pd.Dataframe>: standardized dataframe with all new categories in standard
         format, i.e the columns 'cid', 'xcat', 'real_date' and 'value'.
@@ -157,6 +160,9 @@ def panel_calculator(
     assert isinstance(cids, list), "List of cross-sections expected."
 
     _check_calcs(calcs)
+
+    if external_func:
+        globals().update(external_func)
 
     # B. Collect new category names and their formulas.
 
