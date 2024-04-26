@@ -1,11 +1,14 @@
 import unittest
+import math
+from typing import List, Dict
+
 import numpy as np
 import pandas as pd
-import warnings
 import statsmodels.api as sm
 from statsmodels.regression.linear_model import RegressionResults
 
 from tests.simulate import make_qdf
+
 from macrosynergy.panel.return_beta import (
     date_alignment,
     hedge_calculator,
@@ -13,9 +16,6 @@ from macrosynergy.panel.return_beta import (
     return_beta,
 )
 from macrosynergy.management.utils import reduce_df
-import math
-from typing import List, Dict
-
 
 class TestAll(unittest.TestCase):
     def setUp(self) -> None:
@@ -100,21 +100,14 @@ class TestAll(unittest.TestCase):
         for col_name in expc_cols:
             df_test.rename(columns={col_name: col_name + "_"}, inplace=True)
             with self.assertRaises(ValueError):
-                try:
-                    return_beta(
-                        df=df_test,
-                        cids=self.cids,
-                        xcat=self.xcats[0],
-                        benchmark_return=f"{self.cids[0]}_{self.xcats[0]}",
-                        start="2010-01-01",
-                    )
-                except ValueError as e:
-                    exp_err_str: str = (
-                        f"`df` must contain the following columns: {expc_cols}"
-                    )
-                    self.assertIn(exp_err_str, str(e))
-                    raise ValueError(e)
-
+                return_beta(
+                    df=df_test,
+                    cids=self.cids,
+                    xcat=self.xcats[0],
+                    benchmark_return=f"{self.cids[0]}_{self.xcats[0]}",
+                    start="2010-01-01",
+                )
+        
     def test_date_alignment(self):
         """
         Firstly, return_beta.py will potentially use a single asset to hedge a panel
@@ -173,6 +166,7 @@ class TestAll(unittest.TestCase):
         br: pd.Series = pd.Series(
             data=self.benchmark_df["value"].to_numpy(),
             index=self.benchmark_df["real_date"],
+            name="BR",
         ).astype(dtype=np.float16)
 
         # Apply the .date_alignment() method to establish the start & end date of the
@@ -242,19 +236,17 @@ class TestAll(unittest.TestCase):
         df_hrat = pd.DataFrame(data=data_column, index=dates_re, columns=["value"])
 
         min_obs_date = xr.index[min_observation]
-
         for d in dates_re:
             if d > min_obs_date:
                 curr_start_date: pd.Timestamp = dates_re[
                     max(0, dates_re.index(d) - MAX_OBS)
                 ]
-                xvar = xr.loc[curr_start_date:d]
-                yvar = br.loc[curr_start_date:d]
-                xvar = sm.add_constant(xvar)
+                yvar = xr.loc[curr_start_date:d]
+                xvar = sm.add_constant(br.loc[curr_start_date:d])
                 mod: sm.OLS = sm.OLS(yvar, xvar)
                 results: RegressionResults = mod.fit()
                 results_params: pd.Series = results.params
-                df_hrat.loc[d] = results_params.loc[cross_section]
+                df_hrat.loc[d] = results_params.loc[br.name]
 
         df_hrat = df_hrat.dropna(axis=0, how="all")
         df_hrat.index.name = "real_date"
@@ -357,7 +349,7 @@ class TestAll(unittest.TestCase):
 
         br_cat = "USD_EQXR_NSA"
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # The categories the respective DataFrame is defined over are
             # ['FXXR_NSA', 'GROWTHXR_NSA', 'INFLXR_NSA', 'EQXR_NSA']. Therefore, choosing
             # a benchmark of USD intuitive GDP growth will throw an error given the
@@ -400,7 +392,7 @@ class TestAll(unittest.TestCase):
         # The default number of minimum observations required to compute a hedge ratio is
         # 24. However, if the parameter is defined, the specified number must be greater
         # than 10 business days, two weeks.
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             df_hedge = return_beta(
                 df=self.dfd,
                 xcat="FXXR_NSA",
