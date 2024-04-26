@@ -373,7 +373,7 @@ def return_beta(
         df_hreturn["xcat"] = xcat + "_" + hr_name
         df_hedge = pd.concat([df_hedge, df_hreturn], ignore_index=True)
 
-    return df_hedge[cols]
+    return standardise_dataframe(df_hedge)
 
 
 def beta_display(df_hedge: pd.DataFrame, subplots: bool = False, hr_name: str = "H"):
