@@ -198,7 +198,7 @@ def adjusted_returns(
 
 
 def return_beta(
-    df: pd.DataFrame,
+    df: QuantamentalDataFrame,
     xcat: str = None,
     cids: List[str] = None,
     benchmark_return: str = None,
@@ -213,11 +213,11 @@ def return_beta(
     hedged_returns: bool = False,
     ratio_name: str = "_HR",
     hr_name: str = "H",
-) -> pd.DataFrame:
+) -> QuantamentalDataFrame:
     """
     Estimate sensitivities (betas) of return category with respect to single return.
 
-    :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
+    :param <QuantamentalDataFrame> df: standardized DataFrame with the necessary columns:
         'cid', 'xcat', 'real_date' and 'value.
     :param <str> xcat:  return category based on the type of positions that are
         to be hedged.
@@ -255,7 +255,7 @@ def return_beta(
     :param <str> hr_name: label used to distinguish the hedged returns in the DataFrame.
         The label is appended to the category being hedged. The default is "H".
 
-    :return <pd.Dataframe>: DataFrame with hedge ratio estimates that update at the
+    :return <QuantamentalDataFrame>: DataFrame with hedge ratio estimates that update at the
         chosen re-estimation frequency.
         Additionally, the dataframe can include the hedged returns if the parameter
         `benchmark_return` has been set to True.
