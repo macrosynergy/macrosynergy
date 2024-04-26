@@ -293,7 +293,8 @@ def return_beta(
 
     min_obs_error = (
         "The number of minimum observations required to compute a hedge "
-        "ratio is 10 business days, or two weeks."
+        "ratio is 10 business days, or two weeks. Please provide an integer "
+        "value greater than 10."
     )
     if not isinstance(min_obs, int) or min_obs < 10:
         raise ValueError(min_obs_error)
