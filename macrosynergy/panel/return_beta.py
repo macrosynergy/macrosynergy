@@ -2,6 +2,7 @@
 Functions for calculating the hedge ratios of a panel of returns with respect to a
 single return. 
 """
+
 import numpy as np
 import pandas as pd
 from typing import List, Tuple
@@ -20,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 def estimate_beta(
-        rt: pd.Series, bm: pd.Serie, method: str, weights: np.ndarray = None
-    ) -> np.float64:
+    rt: pd.Series, bm: pd.Serie, method: str, weights: np.ndarray = None
+) -> np.float64:
 
     assert not rt.isnull().any() and rt.ndim == 1
 
@@ -53,36 +54,54 @@ def estimate_beta(
         model = sm.GLS(yy, xx)
     else:
         # TODO add Quantile Regression (QR) and shrinkage methods
-        raise NotImplementedError(f"Estimation method {method} is not implemented - current methods are OLS and GLS.")
-    
+        raise NotImplementedError(
+            f"Estimation method {method} is not implemented - current methods are OLS and GLS."
+        )
+
     results = model.fit()
     # TODO return constant as well?
     return results.params[1]
 
 
-def rolling_estimate(rt: pd.Series, bm: pd.Series, method: str, max_obs: int = None, rebalance: str = "m", hft: int = None, skipna: bool = True) -> pd.Series:
+def rolling_estimate(
+    rt: pd.Series,
+    bm: pd.Series,
+    method: str,
+    max_obs: int = None,
+    rebalance: str = "m",
+    hft: int = None,
+    skipna: bool = True,
+) -> pd.Series:
     assert isinstance(rt, pd.Series) and isinstance(bm, pd.Series)
 
     assert rt.index.is_monotonic_increasing and bm.index.is_monotonic_increasing
 
     start = max(rt.first_valid_index(), bm.first_valid_index())
-    end = min(rt.last_valid_index(), bm.last_valid_index())  # TODO should be inclusive for both?
+    end = min(
+        rt.last_valid_index(), bm.last_valid_index()
+    )  # TODO should be inclusive for both?
 
     rt = rt.loc[start:end]  # TODO make sure include of end
     bm = bm.loc[start:end]
 
     if skipna:
         mask = ~rt.isnull()
-        logger.info("Dropping NaN values from the return series: %d NaN values dropped.", np.sum(~mask))
+        logger.info(
+            "Dropping NaN values from the return series: %d NaN values dropped.",
+            np.sum(~mask),
+        )
         rt = rt[mask]
         bm = bm.loc[rt.index]
 
     assert not rt.isnull().any() and not bm.isnull().any()
 
+    assert isinstance(min_obs, int) and min_obs > 0
+
+    assert isinstance(rebalance, str) and rebelance in ["d", "w", "m", "q"]
     # Find rebalance dates...
 
     # Loop through rebalance dates (batch-up calculations...)
-    
+
 
 def date_alignment(
     unhedged_return: pd.Series, benchmark_return: pd.Series
