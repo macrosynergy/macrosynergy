@@ -2,6 +2,7 @@
 Functions for calculating the hedge ratios of a panel of returns with respect to a
 single return. 
 """
+
 import warnings
 import numpy as np
 import pandas as pd
@@ -9,11 +10,14 @@ from typing import List, Tuple
 import statsmodels.api as sm
 from statsmodels.regression.linear_model import RegressionResults
 
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.utils import (
+    reduce_df,
+    _map_to_business_day_frequency,
+    standardise_dataframe,
+)
 import matplotlib.pyplot as plt
-
-from macrosynergy.management.utils import _map_to_business_day_frequency
 
 
 def date_alignment(
