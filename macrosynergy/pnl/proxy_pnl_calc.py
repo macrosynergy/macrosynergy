@@ -575,7 +575,17 @@ if __name__ == "__main__":
 
     import macrosynergy.visuals as msv, numpy as np, PIL.Image as Image, matplotlib.pyplot as plt
 
-    msv.FacetPlot(df=df_all).lineplot(
-        cid_grid=True,
-        cids=["GLB"],
-    )
+    df_wide = qdf_to_ticker_df(df_all)
+    df_wide = df_wide.loc[:, df_wide.columns.str.startswith("GLB_")]
+    assert len(df_wide.columns) == 2
+
+    pnlx_s = [col for col in df_wide.columns if str(col).endswith("PNLx")]
+    assert len(pnlx_s) == 1
+    pnlx = pnlx_s[0]
+
+    # subtract pnlx from pnl to get the costs
+    df_wide[pnlx + "_COST"] = df_wide[pnlx] - df_wide[pnlx.replace("PNLx", "PNL")]
+
+    df_all = ticker_df_to_qdf(df_wide)
+
+    msv.FacetPlot(df=df_all).lineplot(xcat_grid=True)
