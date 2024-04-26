@@ -253,7 +253,7 @@ def _calculate_trading_costs(
         dt2x = dt2 - pd.offsets.BDay(1)
         prev_pos, next_pos = pivot_pos.loc[dt1], pivot_pos.loc[dt2]
         curr_pos = pivot_pos.loc[dt1:dt2x]
-        avg_pos = curr_pos.abs().mean(axis=0)
+        avg_pos: pd.Series = curr_pos.abs().mean(axis=0)
         delta_pos = (next_pos - prev_pos).abs()
         for ticker in tickers:
             _fid = ticker.replace(f"_{spos}", "")
@@ -269,8 +269,9 @@ def _calculate_trading_costs(
                 fid=_fid,
                 real_date=dt2,
             )
-            tc_df.loc[dt2, _rcn] = rollcost / 100
-            tc_df.loc[dt2, _bon] = bidoffer / 100
+            # delta_pos and avg_pos are already in absolute terms
+            tc_df.loc[dt2, _rcn] = avg_pos[ticker] * rollcost / 100
+            tc_df.loc[dt2, _bon] = delta_pos[ticker] * bidoffer / 100
 
     # Sum TICKER_TCOST_BIDOFFER and TICKER_TCOST_ROLLCOST into TICKER_TCOST
     for ticker in tickers:
