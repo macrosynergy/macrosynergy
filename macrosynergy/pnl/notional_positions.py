@@ -207,7 +207,7 @@ def _leverage_positions(
     rowsums[rowsums == 0] = np.nan
 
     for ic, contx in enumerate(fids):
-        pos_col: str = contx + "_" + pname
+        pos_col: str = f"{contx}_{sname}_{pname}"
         cont_name: str = contx + sig_ident
         # NOTE: this should be
         # dfw_pos = dfw_sigs * aum * leverage / rowsums(dfw_sigs)
@@ -241,7 +241,14 @@ def notional_positions(
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
     pname: str = "POS",
-):
+    return_pvol: bool = False,
+    return_vcv: bool = False,
+) -> Union[
+    QuantamentalDataFrame,
+    Tuple[QuantamentalDataFrame, QuantamentalDataFrame],
+    Tuple[QuantamentalDataFrame, pd.DataFrame],
+    Tuple[QuantamentalDataFrame, QuantamentalDataFrame, pd.DataFrame],
+]:
     """
     Calculates contract positions based on contract signals, assets under management (AUM)
     and other specifications.
@@ -302,6 +309,10 @@ def notional_positions(
     :param <dict> blacklist: a dictionary of contract identifiers to exclude from
         the calculation. Default is None, which means that no contracts are excluded.
     :param <str> pname: the name of the position. Default is 'POS'.
+    :param <bool> return_pvol: whether to return the historic portfolio volatility.
+        Default is False.
+    :param <bool> return_vcv: whether to return the variance-covariance matrix.
+        Default is False.
 
     :return: <pd.DataFrame> with the positions for all traded contracts and the
         specified strategy in USD million. It has the standard JPMaQS DataFrame.
@@ -418,11 +429,19 @@ def notional_positions(
             remove_zeros=remove_zeros,
         )
 
-        notional_positions._pvol = pvol
-        notional_positions._vcv_df = vcv_df
-    # TODO dollar_per_signal: Number = 1.0 (dollar per signal => signal * dollars = position)
+    # return ticker_df_to_qdf(df=return_df).dropna()
+    return_pvol = return_pvol and (locals().get("pvol") is not None)
+    return_vcv = return_vcv and (locals().get("vcv_df") is not None)
 
-    return ticker_df_to_qdf(df=return_df).dropna()
+    return_df = ticker_df_to_qdf(df=return_df).dropna()
+    if return_pvol and return_vcv:
+        return (return_df, pvol, vcv_df)
+    elif return_pvol:
+        return (return_df, pvol)
+    elif return_vcv:
+        return (return_df, vcv_df)
+    else:
+        return return_df
 
 
 if __name__ == "__main__":
@@ -486,4 +505,6 @@ if __name__ == "__main__":
         lback_meth="xma",
         lback_periods=-1,
         half_life=20,
+        return_pvol=True,
+        return_vcv=True,
     )

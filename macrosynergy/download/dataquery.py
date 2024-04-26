@@ -1154,12 +1154,12 @@ class DataQueryInterface(object):
 if __name__ == "__main__":
     import os
 
-    client_id = os.getenv("DQ_CLIENT_ID")
-    client_secret = os.getenv("DQ_CLIENT_SECRET")
+    client_id: str = os.getenv("DQ_CLIENT_ID")
+    client_secret: str = os.getenv("DQ_CLIENT_SECRET")
 
     expressions = [
         "DB(JPMAQS,USD_EQXR_VT10,value)",
-        "DB(JPMAQS,AUD_EXALLOPENNESS_NSA_1YMA,value)",
+        "DB(JPMAQS,USD_EQXR_VT10,eop_lag)",
     ]
 
     with DataQueryInterface(
@@ -1170,9 +1170,11 @@ if __name__ == "__main__":
 
         data = dq.download_data(
             expressions=expressions,
-            start_date="2020-01-25",
-            end_date="2023-02-05",
+            start_date="2024-01-25",
+            end_date="2024-02-05",
             show_progress=True,
         )
+
+    print(data)
 
     print(f"Succesfully downloaded data for {len(data)} expressions.")

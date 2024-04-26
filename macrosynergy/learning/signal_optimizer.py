@@ -3,14 +3,11 @@ Class to handle the calculation of quantamental predictions based on adaptive
 hyperparameter and model selection.
 """
 
-import timeit
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import seaborn as sns
-
-import datetime
 
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.base import BaseEstimator
@@ -43,40 +40,62 @@ class SignalOptimizer:
         blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]] = None,
         initial_nsplits: Optional[Union[int, np.int_]] = None,
         threshold_ndates: Optional[Union[int, np.int_]] = None,
+        lagged_features: bool = True,
     ):
         """
         Class for sequential optimization of raw signals based on quantamental features.
         Optimization is performed through nested cross-validation, with the outer splitter
         an instance of `ExpandingIncrementPanelSplit` reflecting a pipeline through time
         simulating the experience of an investor. In each iteration of the outer splitter,
-        a training and test set are created, and a grid search using the specified
+        a training and test set are created, and a hyperparameter search using the specified
         'inner_splitter' is performed to determine an optimal model amongst a set of
         candidate models. Once this is selected, the chosen model is used to make the test
-        set forecasts. Lastly, we cast these forecasts back by a frequency period to
-        account for the lagged features, creating point-in-time signals.
+        set forecasts. 
+        
+        The primary functionality of this class is to forecast the (cumulative) return at
+        the NEXT rebalancing date and store the resulting predictions as trading signals 
+        within a quantamental dataframe. This means that features in the dataframe, X, are
+        expected to be lagged quantamental indicators, at a single native frequency unit,
+        with the targets, in y, being the cumulative returns at the native frequency.
+        The timestamps in the multi-indexes should refer to those of the unlagged
+        returns/targets, as returned by `categories_df` within `macrosynergy.management`.
+        Under this methodology, the parameter 'lagged_features' is required to be True by
+        default, in order to cast these forecasts back by a frequency period, accounting
+        for the lagged features, and hence creating point-in-time signals. In other words, 
+        a prediction $\mathbb{E}[r_{t+1}|\Gamma_{t}]$ is recorded at time $t$, where 
+        $r_{t+1}$ refers to the cumulative return at time $t+1$ and $\Gamma_{t}$ is the
+        information set at time $t$.
 
-        The features in the dataframe, X, are expected to be lagged quantamental
-        indicators, at a single native frequency unit, with the targets, in y, being the
-        cumulative returns at the native frequency. By providing a blacklisting
-        dictionary, preferably through macrosynergy.management.make_blacklist, the user
-        can specify time periods to ignore.
+        The reason 'lagged_features' is provided as an argument is to allow for concurrent 
+        forecasts in special cases such as market beta estimation. When lagged_features is
+        False, it is expected that the timestamps in each row match for the features
+        and the target. In this case, no adjustment is made to the timestamps of the 
+        predictions. 
+
+        By providing a blacklisting dictionary, preferably through
+        macrosynergy.management.make_blacklist, the user can specify time periods to
+        ignore.
 
         :param <BasePanelSplit> inner_splitter: Panel splitter that is used to split
             each training set into smaller (training, test) pairs for cross-validation.
             At present that splitter has to be an instance of `RollingKFoldPanelSplit`,
             `ExpandingKFoldPanelSplit` or `ExpandingIncrementPanelSplit`.
-        :param <pd.DataFrame> X: Wide pandas dataframe of features and date-time indexes
-            that capture the periods for which the signals are to be calculated.
-            Since signals must make time seried predictions, the features in `X` must be
-            lagged by one period, i.e., the values used for the current period must be
-            those that were originally recorded for the previous period.
-            The frequency of features (and targets) determines the frequency at which
-            model predictions are made and evaluated. This means that if we have monthly
-            data, the learning process uses the performance of monthly predictions.
-        :param <Union[pd.DataFrame,pd.Series]> y: Pandas dataframe or series of targets
-            corresponding with a time index equal to the features in `X`.
+        :param <pd.DataFrame> X: Wide pandas dataframe of features, multi-indexed by 
+            cross-sections and timestamps. The multi-index must match that of the targets
+            in 'y'. By default, it is expected that the features in `X` are
+            lagged by one period, i.e. the values used for the period denoted by the
+            timestamp must be those that were originally recorded for the previous period.
+            This means the timestamps in the multi-indices refer to those of the true unlagged
+            returns/targets provided in 'y'. The frequency of features (and targets) determines the
+            frequency at which model predictions are made and evaluated.
+            This means that if we have monthly data, the learning process concerns
+            forecasting returns one month ahead. If 'lagged_features' is False,
+            then the assumption of lagged features is dropped. 
+        :param <Union[pd.DataFrame,pd.Series]> y: Pandas dataframe or series of targets,
+            multi-indexed by cross-sections and timestamps. The multi-index must match 
+            that of the features in `X`.
         :param <Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]> blacklist: cross-sections
-            with date ranges that should be excluded from the data frame.
+            with date ranges that should be excluded from the dataframe.
         :param <Optional[Union[int, np.int_]]> initial_nsplits: The number of splits to be
             used in the initial training set for cross-validation. If not None, this parameter
             ovverrides the number of splits in the inner splitter. By setting this value,
@@ -87,18 +106,24 @@ class SignalOptimizer:
             in units of the native dataset frequency, to be made available for the currently-used
             number of cross-validation splits to increase by one. If not None, the "initial_nsplits"
             parameter must be set. Default is None.
+        :param <bool> lagged_features: Boolean indicating whether or not (feature, target)
+            tuples are lagged by a single frequency unit, or unlagged. It is recommended
+            to keep this attribute as True, as per the primary use case of this class. 
+            For certain problems, it may be valuable to predict concurrent returns, for
+            instance market beta estimation. Setting this parameter to False will allow
+            concurrent forecasts to be made. Default is True. 
 
         Note:
-        Optimization is based on expanding time series panels and maximizes a defined
+        Optimization is based on expanding/rolling time series panels and maximization of a defined
         criterion over a grid of sklearn pipelines and hyperparameters of the involved
-        models. The frequency of the input data sets `X` and `y` determines the frequency
-        at which the training set is expanded. The training set itself is split into
-        various (training, test) pairs by the `inner_splitter` argument for cross-
-        validation. Based on inner cross-validation an optimal model is chosen and used
-        for predicting the targets of the next period.
-        A prediction for a particular cross-section and time period is made only if all
-        required information has been available for that point.
-        Optimized signals that are produced by the class are always stored for the
+        models. The frequency of the input datasets, `X` and `y`, determines the frequency
+        at which the training set is expanded/rolled and at which forecasts are made.
+        The training set itself is split into various (training, test) pairs by the
+        `inner_splitter` argument for cross-validation. Based on inner cross-validation,
+        an optimal model is chosen and used for predicting the targets of the next period,
+        assuming that 'lagged_features' is True. A prediction for a particular cross-section
+        and time period is made only if all required information has been available for that pair.
+        Primarily, optimized signals that are produced by the class are always stored for the
         end of the original data period that precedes the predicted period.
         For example, if the frequency of the input data set is monthly, signals for
         a month are recorded at the end of the previous month. If the frequency is working
@@ -152,7 +177,7 @@ class SignalOptimizer:
         """
         # Checks
         self._checks_init_params(
-            inner_splitter, X, y, blacklist, initial_nsplits, threshold_ndates
+            inner_splitter, X, y, blacklist, initial_nsplits, threshold_ndates, lagged_features
         )
 
         # Set instance attributes
@@ -162,6 +187,7 @@ class SignalOptimizer:
         self.blacklist = blacklist
         self.initial_nsplits = initial_nsplits
         self.threshold_ndates = threshold_ndates
+        self.lagged_features = lagged_features
 
         if self.initial_nsplits:
             warnings.warn(
@@ -195,6 +221,7 @@ class SignalOptimizer:
         blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]],
         initial_nsplits: Optional[Union[int, np.int_]],
         threshold_ndates: Optional[Union[int, np.int_]],
+        lagged_features: bool,
     ):
         """
         Private method to check the initialisation parameters of the class.
@@ -257,6 +284,10 @@ class SignalOptimizer:
                     "The initial_nsplits argument must be set if the threshold_ndates "
                     "argument is set."
                 )
+            
+        # Check lagged_features
+        if not isinstance(lagged_features, (bool, np.bool_)):
+            raise TypeError("The lagged_features argument must be a boolean.")
 
     def calculate_predictions(
         self,
@@ -267,6 +298,7 @@ class SignalOptimizer:
         hparam_type: str = "grid",
         min_cids: int = 4,
         min_periods: int = 12 * 3,
+        test_size: int = 1,
         max_periods: Optional[int] = None,
         n_iter: Optional[int] = 10,
         n_jobs: Optional[int] = -1,
@@ -323,7 +355,7 @@ class SignalOptimizer:
         Note:
         The method produces signals for financial contract positions. They are calculated
         sequentially at the frequency of the input data set. Sequentially here means
-        that the training set is expanded by one base period of the frequency.
+        that the training set is expanded/rolled by one base period of the frequency.
         Each time the training set itself is split into  various (training, test) pairs by
         the `inner_splitter` argument. Based on inner cross-validation an optimal model
         is chosen and used for predicting the targets of the next period.
@@ -337,6 +369,7 @@ class SignalOptimizer:
             hparam_type=hparam_type,
             min_cids=min_cids,
             min_periods=min_periods,
+            test_size=test_size,
             max_periods=max_periods,
             n_iter=n_iter,
             n_jobs=n_jobs,
@@ -369,8 +402,8 @@ class SignalOptimizer:
         # (2) Set up the splitter, outputs to store the predictions and model choices
 
         outer_splitter = ExpandingIncrementPanelSplit(
-            train_intervals=1,
-            test_size=1,
+            train_intervals=test_size,
+            test_size=test_size,
             min_cids=min_cids,
             min_periods=min_periods,
             max_periods=max_periods,
@@ -395,7 +428,7 @@ class SignalOptimizer:
                 hparam_grid=hparam_grid,
                 n_iter=n_iter,
                 nsplits_add=(
-                    np.floor(idx / self.threshold_ndates)
+                    np.floor(idx * test_size / self.threshold_ndates)
                     if self.initial_nsplits
                     else None
                 ),
@@ -424,9 +457,8 @@ class SignalOptimizer:
             intercept_data.append(inter_data)
             ftr_selection_data.append(ftrselect_data)
 
-        # Condense the collected data into a single dataframe
-        for column_name, xs_levels, date_levels, predictions in prediction_data:
-            idx = pd.MultiIndex.from_product([xs_levels, date_levels])
+        # Condense the collected data into a single dataframe and forward fill 
+        for column_name, idx, predictions in prediction_data:
             signal_df.loc[idx, column_name] = predictions
 
         signal_df = signal_df.groupby(level=0).ffill()
@@ -531,6 +563,7 @@ class SignalOptimizer:
         hparam_grid: Dict[str, Dict[str, List]],
         hparam_type: str,
         min_cids: int,
+        test_size: int,
         min_periods: int,
         max_periods: Optional[int],
         n_iter: Optional[int],
@@ -625,7 +658,7 @@ class SignalOptimizer:
                 "dictionary."
             )
 
-        # Check the min_cids, min_periods, max_periods, n_iter and n_jobs arguments
+        # Check the min_cids, min_periods, test_size, max_periods, n_iter and n_jobs arguments
         # are correctly formatted
         if not isinstance(min_cids, int):
             raise TypeError("The min_cids argument must be an integer.")
@@ -635,6 +668,10 @@ class SignalOptimizer:
             raise TypeError("The min_periods argument must be an integer.")
         if min_periods < 1:
             raise ValueError("The min_periods argument must be greater than zero.")
+        if not isinstance(test_size, int):
+            raise TypeError("The test_size argument must be an integer.")
+        if test_size < 1:
+            raise ValueError("The test_size argument must be greater than zero.")
         if max_periods is not None:
             if not isinstance(max_periods, int):
                 raise TypeError("The max_periods argument must be an integer.")
@@ -694,19 +731,30 @@ class SignalOptimizer:
         X_test_i: pd.DataFrame = self.X.iloc[test_idx]
 
         # Get correct indices to match with
-        test_xs_levels: List[str] = X_test_i.index.get_level_values(0).unique()
-        test_date_levels: List[pd.Timestamp] = sorted(
-            X_test_i.index.get_level_values(1).unique()
-        )
+        test_index = X_test_i.index
+        test_xs_levels = test_index.get_level_values(0)
+        test_date_levels = test_index.get_level_values(1)
+        sorted_date_levels = sorted(test_date_levels.unique())
 
-        # Since the features lag behind the targets, the dates need to be adjusted
-        # by a single frequency unit
-        locs: np.ndarray = (
-            np.searchsorted(original_date_levels, test_date_levels, side="left") - 1
-        )
-        test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
-            [original_date_levels[i] if i >= 0 else pd.NaT for i in locs]
-        )
+        if self.lagged_features:
+            # Since the features lag behind the targets, the dates need to be adjusted
+            # by a single frequency unit
+            locs: np.ndarray = (
+                np.searchsorted(original_date_levels, sorted_date_levels, side="left") - 1
+            )
+            adj_test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
+                [original_date_levels[i] if i >= 0 else pd.NaT for i in locs]
+            )
+
+            # Adjust the test index based on adjusted dates
+            date_map = dict(zip(test_date_levels, adj_test_date_levels))
+            mapped_dates = test_date_levels.map(date_map)
+            test_index = pd.MultiIndex.from_arrays(
+                [test_xs_levels, mapped_dates], names=["cid", "real_date"]
+            )
+            test_date_levels = test_index.get_level_values(1)
+            sorted_date_levels = sorted(test_date_levels.unique())
+
         optim_name = None
         optim_model = None
         optim_score = -np.inf
@@ -744,7 +792,10 @@ class SignalOptimizer:
             try:
                 search_object.fit(X_train_i, y_train_i)
             except Exception as e:
-                continue
+                warnings.warn(
+                    f"Error in the grid search for {model_name} at {test_date_levels[0]}: {e}.",
+                    RuntimeWarning,
+                )
             score = search_object.best_score_
             if score > optim_score:
                 optim_score = score
@@ -755,11 +806,11 @@ class SignalOptimizer:
         # Handle case where no model was chosen
         if optim_model is None:
             warnings.warn(
-                f"No model was chosen for {name} at date {test_date_levels[0]}. Setting to zero.",
+                f"No model was chosen for {name} at {test_date_levels[0]}. Setting to zero.",
                 RuntimeWarning,
             )
             preds = np.zeros(X_test_i.shape[0])
-            prediction_date = [name, test_xs_levels, test_date_levels, preds]
+            prediction_date = [name, test_index, preds]
             modelchoice_data = [
                 test_date_levels.date[0],
                 name,
@@ -784,7 +835,7 @@ class SignalOptimizer:
             )
         # Store the best estimator predictions
         preds: np.ndarray = optim_model.predict(X_test_i)
-        prediction_data = [name, test_xs_levels, test_date_levels, preds]
+        prediction_data = [name, test_index, preds]
 
         # See if the best model has coefficients and intercepts
         # First see if the best model is a pipeline object
@@ -829,6 +880,7 @@ class SignalOptimizer:
                 intercepts = final_estimator.intercept_
         else:
             intercepts = np.nan
+
         # Store information about the chosen model at each time.
         if len(ftr_names) == X_train_i.shape[1]:
             # Then all features were selected
@@ -1622,6 +1674,8 @@ class SignalOptimizer:
         models_df = models_df.iloc[:, -1]
 
         # Create time series plot
+        # TODO: extend the number of splits line until the first date that the number of splits is incremented
+        # This translates into vertical lines at each increment date as opposed to linear interpolation between them.
         fig, ax = plt.subplots()
         models_df.plot(ax=ax, figsize=figsize)
         if title is not None:
@@ -1679,6 +1733,7 @@ if __name__ == "__main__":
     train = msm.categories_df(
         df=dfd, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
     ).dropna()
+    train = train[train.index.get_level_values(1) >= pd.Timestamp(year=2005,month=8,day=1)]
 
     X_train = train.drop(columns=["XR"])
     y_train = train["XR"]
@@ -1688,13 +1743,14 @@ if __name__ == "__main__":
     )
 
     # (1) Example SignalOptimizer usage.
-    #     We get adaptive signals for a linear regression and a KNN regressor, with the
-    #     hyperparameters for the latter optimised across regression balanced accuracy.
+    #     We get adaptive signals for a linear regression with feature selection.
+    #     Hyperparameters: whether or not to fit an intercept, usage of positive restriction.
+    #     We impose that retraining occurs once every quarter as opposed to every month.
 
     models = {
         "OLS": Pipeline(
             [
-                # ("selector", MapSelector(threshold=0.2)),
+                ("selector", MapSelector(threshold=0.2)),
                 ("model", LinearRegression(fit_intercept=True)),
             ]
         ),
@@ -1702,7 +1758,7 @@ if __name__ == "__main__":
     metric = make_scorer(regression_balanced_accuracy, greater_is_better=True)
     inner_splitter = RollingKFoldPanelSplit(n_splits=4)
     grid = {
-        "OLS": {},
+        "OLS": {"model__fit_intercept": [True, False], "model__positive": [True, False]},
     }
     black = {
         "GBP": (
@@ -1714,10 +1770,6 @@ if __name__ == "__main__":
             pd.Timestamp(year=2100, month=1, day=1),
         ),
     }
-    for i in range(1, 5):
-        X_train[f"CRY{i}"] = X_train["CRY"] + i
-        X_train[f"GROWTH{i}"] = X_train["GROWTH"] + i
-        X_train[f"INFL{i}"] = X_train["INFL"] + i
 
     so = SignalOptimizer(
         inner_splitter=inner_splitter,
@@ -1733,123 +1785,60 @@ if __name__ == "__main__":
         metric=metric,
         hparam_grid=grid,
         hparam_type="grid",
-        n_jobs=-1,
+        test_size=3,
+        n_jobs=-1, # Set to 1 when debugging.
     )
-    so.coefs_stackedbarplot("test", ftrs_renamed={"CRY": "carry", "GROWTH2": "growth2"})
+    so.models_heatmap(name="test")
+    so.coefs_stackedbarplot("test", ftrs_renamed={"CRY": "carry", "GROWTH": "growth"})
     so.coefs_timeplot("test")
     so.feature_selection_heatmap(
         "test", title="Feature selection heatmap for pipeline: test"
     )
     so.intercepts_timeplot("test")
     so.nsplits_timeplot("test")
-    # (1) Example SignalOptimizer usage.
-    #     We get adaptive signals for a linear regression and a KNN regressor, with the
-    #     hyperparameters for the latter optimised across regression balanced accuracy.
+
+    # (2) Example SignalOptimizer usage.
+    #     We get adaptive signals for a linear regression.
+    #     Hyperparameters: whether or not to fit an intercept, usage of positive restriction.
 
     models = {
-        "OLS": LinearRegression(),
-        "KNN": KNeighborsRegressor(),
+        "OLS": Pipeline(
+            [
+                # ("selector", MapSelector(threshold=0.2)),
+                ("model", LinearRegression(fit_intercept=True)),
+            ]
+        ),
     }
+
     metric = make_scorer(regression_balanced_accuracy, greater_is_better=True)
 
     inner_splitter = RollingKFoldPanelSplit(n_splits=4)
 
     hparam_grid = {
-        "OLS": {},
-        "KNN": {"n_neighbors": [1, 2, 5]},
+        "OLS": {"model__fit_intercept": [True, False], "model__positive": [True, False]},
     }
 
-    start_time = timeit.default_timer()
     so = SignalOptimizer(
         inner_splitter=inner_splitter,
         X=X_train,
         y=y_train,
         blacklist=black,
+        initial_nsplits=5,
+        threshold_ndates=24,
     )
-
     so.calculate_predictions(
         name="test",
         models=models,
         metric=metric,
-        hparam_grid=hparam_grid,
+        hparam_grid=grid,
         hparam_type="grid",
         n_jobs=1,
     )
-    end_time = timeit.default_timer()
-    print(f"Elapsed time: {end_time - start_time}")
-
-    print(so.get_optimized_signals("test"))
-    so.models_heatmap(name="test", cap=5)
-
-    # (2) Example SignalOptimizer usage.
-    #     We get adaptive signals for a linear regression and a KNN regressor, with the
-    #     hyperparameters for the latter optimised across regression balanced accuracy.
-    #     This time, enforce that the number of cross-validation splits increases with
-    #     the data size.
-
-    models = {
-        "OLS": LinearRegression(),
-        "KNN": KNeighborsRegressor(),
-    }
-    metric = make_scorer(regression_balanced_accuracy, greater_is_better=True)
-
-    inner_splitter = RollingKFoldPanelSplit(n_splits=4)
-
-    hparam_grid = {
-        "OLS": {},
-        "KNN": {"n_neighbors": [1, 2, 5]},
-    }
-
-    start_time = timeit.default_timer()
-    so = SignalOptimizer(
-        inner_splitter=inner_splitter,
-        X=X_train,
-        y=y_train,
-        blacklist=black,
-        change_n_splits=True,
+    so.models_heatmap(name="test")
+    so.coefs_stackedbarplot("test", ftrs_renamed={"CRY": "carry", "GROWTH": "growth"})
+    so.coefs_timeplot("test")
+    so.feature_selection_heatmap(
+        "test", title="Feature selection heatmap for pipeline: test"
     )
-
-    so.calculate_predictions(
-        name="test",
-        models=models,
-        metric=metric,
-        hparam_grid=hparam_grid,
-        hparam_type="grid",
-        n_jobs=-1,
-    )
-    end_time = timeit.default_timer()
-    print(f"Elapsed time: {end_time - start_time}")
-
-    print(so.get_optimized_signals("test"))
-    so.models_heatmap(name="test", cap=5)
-
-    plt.title("Number of splits chosen over time")
-    plt.plot(so.chosen_models.real_date, so.chosen_models.n_splits_used)
-    plt.show()
-
-    # (3) Example SignalOptimizer usage.
-    #     We get adaptive signals for two KNN regressors.
-    #     All chosen models are visualised in a heatmap.
-    models2 = {
-        "KNN1": KNeighborsRegressor(),
-        "KNN2": KNeighborsRegressor(),
-    }
-    hparam_grid2 = {
-        "KNN1": {"n_neighbors": [5, 10]},
-        "KNN2": {"n_neighbors": [1, 2]},
-    }
-
-    so.calculate_predictions(
-        name="test2",
-        models=models2,
-        metric=metric,
-        hparam_grid=hparam_grid2,
-        hparam_type="grid",
-    )
-
-    so.models_heatmap(name="test2", cap=4)
-
-    # (4) Example SignalOptimizer usage.
-    #     Print the predictions and model choices for all pipelines.
-    print(so.get_optimized_signals())
-    print(so.get_optimal_models())
+    so.intercepts_timeplot("test")
+    so.nsplits_timeplot("test")

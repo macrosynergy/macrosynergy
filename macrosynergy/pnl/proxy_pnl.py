@@ -11,26 +11,29 @@ from macrosynergy.management.utils import (
     standardise_dataframe,
     is_valid_iso_date,
 )
-from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.pnl import notional_positions, contract_signals, proxy_pnl_calc
-from macrosynergy.download.transaction_costs import download_transaction_costs
+from macrosynergy.management.types import QuantamentalDataFrame, NoneType
+from macrosynergy.pnl import (
+    notional_positions,
+    contract_signals,
+    proxy_pnl_calc,
+    TransactionCosts,
+)
 
 
 class ProxyPnL(object):
     def __init__(
         self,
         df: QuantamentalDataFrame,
+        transaction_costs_object: TransactionCosts,
         start: Optional[str] = None,
         end: Optional[str] = None,
         blacklist: Optional[dict] = None,
+        portfolio_name: str = "GLB",
         sname: str = "STRAT",
         pname: str = "POS",
-        # TODO roll costs
-        # TODO bid-ask spread
-        # TODO size
-        # TODO slippage? In notional?
     ):
         self.sname = sname
+        self.portfolio_name = portfolio_name
         self.pname = pname
         self.blacklist = blacklist
         self.cs_df = None
@@ -40,6 +43,12 @@ class ProxyPnL(object):
         self.end = end or df["real_date"].max().strftime("%Y-%m-%d")
         if not all(map(is_valid_iso_date, [self.start, self.end])):
             raise ValueError(f"Invalid date format: {self.start}, {self.end}")
+
+        if not isinstance(transaction_costs_object, TransactionCosts):
+            raise ValueError("Invalid transaction costs object.")
+        else:
+            transaction_costs_object.check_init()
+            self.transaction_costs_object: TransactionCosts = transaction_costs_object
 
     def contract_signals(
         self,
@@ -51,10 +60,12 @@ class ProxyPnL(object):
         hbasket: Optional[List[str]] = None,
         hscales: Optional[List[Union[Number, str]]] = None,
         hratios: Optional[str] = None,
+        blacklist: Optional[dict] = None,
         *args,
         **kwargs,
     ) -> QuantamentalDataFrame:
-        cs_args = dict(
+        self.fids = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
+        cs_df: QuantamentalDataFrame = contract_signals(
             df=self.df,
             sig=sig,
             cids=cids,
@@ -66,13 +77,11 @@ class ProxyPnL(object):
             hratios=hratios,
             start=self.start,
             end=self.end,
-            blacklist=self.blacklist,
+            blacklist=blacklist or self.blacklist,
             sname=self.sname,
+            *args,
+            **kwargs,
         )
-        cs_args.update(kwargs)
-        self.fids = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
-
-        cs_df: QuantamentalDataFrame = contract_signals(**cs_args)
         self.cs_df: QuantamentalDataFrame = cs_df
         return cs_df
 
@@ -83,75 +92,124 @@ class ProxyPnL(object):
         fids: List[str] = None,
         aum: Number = 100,
         dollar_per_signal: Number = 1.0,
+        slip: int = 1,
         leverage: Optional[Number] = None,
         vol_target: Optional[Number] = None,
+        nan_tolerance: float = 0.25,
+        remove_zeros: bool = True,
         rebal_freq: str = "m",
-        slip: int = 1,
-        lback_periods: int = 21,
         lback_meth: str = "ma",
-        half_life=11,
+        est_freqs: Union[str, List[str]] = ["D", "W", "M"],
+        est_weights: Union[Number, List[Number]] = [1, 2, 3],
+        lback_periods: Union[int, List[int]] = [-1, -1, -1],
+        half_life: Union[int, List[int]] = [11, 5, 6],
         rstring: str = "XR",
         start: Optional[str] = None,
         end: Optional[str] = None,
         blacklist: Optional[dict] = None,
         pname: str = "POS",
-    ) -> QuantamentalDataFrame:
+    ) -> Union[
+        QuantamentalDataFrame,
+        Tuple[QuantamentalDataFrame, QuantamentalDataFrame],
+        Tuple[QuantamentalDataFrame, pd.DataFrame],
+        Tuple[QuantamentalDataFrame, QuantamentalDataFrame, pd.DataFrame],
+    ]:
         fids = fids or self.fids
-        df = df or self.cs_df or self.contract_signals()
-        np_args = dict(
+        if df is None:
+            if hasattr(self, "cs_df") and self.cs_df is not None:
+                df = self.cs_df
+            else:
+                raise ValueError(
+                    "Either pass a DataFrame with contract signals "
+                    "or run `ProxyPnL.contract_signals` first."
+                )
+        sname = sname or self.sname
+        start = start or self.start
+        end = end or self.end
+        blacklist = blacklist or self.blacklist
+
+        outs: Union[
+            Tuple[QuantamentalDataFrame, QuantamentalDataFrame, pd.DataFrame],
+            QuantamentalDataFrame,
+        ] = notional_positions(
             df=df,
-            sname=sname or self.sname,
+            sname=sname,
             fids=fids,
             aum=aum,
             dollar_per_signal=dollar_per_signal,
+            slip=slip,
             leverage=leverage,
             vol_target=vol_target,
+            nan_tolerance=nan_tolerance,
+            remove_zeros=remove_zeros,
             rebal_freq=rebal_freq,
-            slip=slip,
-            lback_periods=lback_periods,
             lback_meth=lback_meth,
+            est_freqs=est_freqs,
+            est_weights=est_weights,
+            lback_periods=lback_periods,
             half_life=half_life,
             rstring=rstring,
-            start=start or self.start,
-            end=end or self.end,
-            blacklist=blacklist or self.blacklist,
+            start=start,
+            end=end,
+            blacklist=blacklist,
             pname=pname,
+            return_pvol=True,
+            return_vcv=True,
         )
-        np_df: QuantamentalDataFrame = notional_positions(**np_args)
-        self.npos_df: QuantamentalDataFrame = np_df
-        return np_df
+        if isinstance(outs, QuantamentalDataFrame):
+            assert isinstance(outs, QuantamentalDataFrame)
+            outs = (outs, None, None)  # to avoid multiple flow control
+        assert len(outs) == 3
+        assert isinstance(outs[0], QuantamentalDataFrame)
+        assert isinstance(outs[1], (QuantamentalDataFrame, NoneType))
+        assert isinstance(outs[2], (pd.DataFrame, NoneType))
+
+        self.npos_df: QuantamentalDataFrame = outs[0]
+        self.pvol_df: QuantamentalDataFrame = outs[1]
+        self.vcv_df: QuantamentalDataFrame = outs[2]
+        outs = None
+        return self.npos_df
 
     def proxy_pnl_calc(
         self,
-        spos: str,
+        spos: str = None,
+        portfolio_name: str = None,
         df: QuantamentalDataFrame = None,
-        fids: List[str] = None,
-        tcost_n: Optional[str] = None,
-        rcost_n: Optional[str] = None,
-        size_n: Optional[str] = None,
-        tcost_l: Optional[str] = None,
-        rcost_l: Optional[str] = None,
-        size_l: Optional[str] = None,
         roll_freqs: Optional[dict] = None,
-    ) -> QuantamentalDataFrame:
-        df: QuantamentalDataFrame = df or self.npos_df or self.notional_positions()
-        # TODO spos does not have a None option in type
+        pnl_name: str = "PNL",
+        tc_name: str = "TCOST",
+    ) -> Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]]:
+        if df is None:
+            if hasattr(self, "npos_df") and self.npos_df is not None:
+                df = self.npos_df
+            else:
+                raise ValueError(
+                    "Either pass a DataFrame with notional positions "
+                    "or run `ProxyPnL.notional_positions` (and `contract_signals`) first."
+                )
         spos: str = spos or self.sname + "_" + self.pname
+        portfolio_name: str = portfolio_name or self.portfolio_name
         fids: List[str] = fids or self.fids
-        pp_args: Dict[str, Union[QuantamentalDataFrame, str, List[str], dict]] = dict(
+
+        outs: Tuple[QuantamentalDataFrame, ...] = proxy_pnl_calc(
             df=df,
+            transaction_costs_object=self.transaction_costs_object,
             spos=spos,
-            fids=fids,
-            tcost_n=tcost_n,
-            rcost_n=rcost_n,
-            size_n=size_n,
-            tcost_l=tcost_l,
-            rcost_l=rcost_l,
-            size_l=size_l,  # TODO what happens if None?
+            portfolio_name=portfolio_name,
             roll_freqs=roll_freqs,
             start=self.start,
             end=self.end,
             blacklist=self.blacklist,
+            pnl_name=pnl_name,
+            tc_name=tc_name,
+            return_pnl_excl_costs=True,
+            return_costs=True,
         )
+        assert len(outs) == 3
+        assert all(map(lambda x: isinstance(x, QuantamentalDataFrame), outs))
+        self.proxy_pnl: QuantamentalDataFrame = outs[0]
+        self.txn_costs_df: QuantamentalDataFrame = outs[1]
+        self.pnl_excl_costs: QuantamentalDataFrame = outs[2]
+        outs = None
 
-        return proxy_pnl_calc(**pp_args)
+        return self.proxy_pnl

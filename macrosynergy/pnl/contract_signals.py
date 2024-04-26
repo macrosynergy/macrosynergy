@@ -275,7 +275,7 @@ def contract_signals(
     sname: str = "STRAT",
     *args,
     **kwargs,
-) -> pd.DataFrame:
+) -> QuantamentalDataFrame:
     """
     Calculate contract-specific signals based on cross section-specific signals.
 
@@ -447,6 +447,7 @@ def contract_signals(
     # Append the strategy name to all the xcats
     df_out["xcat"] = df_out["xcat"] + "_" + sname
 
+    assert isinstance(df_out, QuantamentalDataFrame)
     return df_out
 
 
