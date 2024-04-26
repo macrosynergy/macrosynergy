@@ -1,11 +1,14 @@
 import unittest
+import math
+from typing import List, Dict
+
 import numpy as np
 import pandas as pd
-import warnings
 import statsmodels.api as sm
 from statsmodels.regression.linear_model import RegressionResults
 
 from tests.simulate import make_qdf
+
 from macrosynergy.panel.return_beta import (
     date_alignment,
     hedge_calculator,
@@ -13,9 +16,6 @@ from macrosynergy.panel.return_beta import (
     return_beta,
 )
 from macrosynergy.management.utils import reduce_df
-import math
-from typing import List, Dict
-
 
 class TestAll(unittest.TestCase):
     def setUp(self) -> None:
@@ -173,6 +173,7 @@ class TestAll(unittest.TestCase):
         br: pd.Series = pd.Series(
             data=self.benchmark_df["value"].to_numpy(),
             index=self.benchmark_df["real_date"],
+            name="BR",
         ).astype(dtype=np.float16)
 
         # Apply the .date_alignment() method to establish the start & end date of the
@@ -242,19 +243,17 @@ class TestAll(unittest.TestCase):
         df_hrat = pd.DataFrame(data=data_column, index=dates_re, columns=["value"])
 
         min_obs_date = xr.index[min_observation]
-
         for d in dates_re:
             if d > min_obs_date:
                 curr_start_date: pd.Timestamp = dates_re[
                     max(0, dates_re.index(d) - MAX_OBS)
                 ]
-                xvar = xr.loc[curr_start_date:d]
-                yvar = br.loc[curr_start_date:d]
-                xvar = sm.add_constant(xvar)
+                yvar = xr.loc[curr_start_date:d]
+                xvar = sm.add_constant(br.loc[curr_start_date:d])
                 mod: sm.OLS = sm.OLS(yvar, xvar)
                 results: RegressionResults = mod.fit()
                 results_params: pd.Series = results.params
-                df_hrat.loc[d] = results_params.loc[cross_section]
+                df_hrat.loc[d] = results_params.loc[br.name]
 
         df_hrat = df_hrat.dropna(axis=0, how="all")
         df_hrat.index.name = "real_date"
