@@ -109,6 +109,16 @@ class TestAll(unittest.TestCase):
         black_range_2 = pd.date_range(start="2014-01-01", end="2014-12-31")
         self.assertTrue(not any(item in black_range_2 for item in dfd_cad["real_date"]))
 
+    def test_reduce_df_preserves_original(self):
+        black = {
+            "AUD_1": ["2011-01-01", "2012-12-31"],
+            "AUD_2": ["2018-01-01", "2100-01-01"],
+        }
+        test_df = self.dfd.copy()
+        dfd_x = reduce_df(self.dfd, xcats=["XR"], cids=self.cids, blacklist=black)
+        self.assertTrue(test_df.equals(self.dfd))
+
+
     def test_categories_df_conversion(self):
         dfc = categories_df(
             self.dfd,

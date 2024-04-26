@@ -17,7 +17,12 @@ import pandas as pd
 import datetime
 import requests
 import requests.compat
-from .core import get_cid, get_xcat, _map_to_business_day_frequency, is_valid_iso_date
+from macrosynergy.management.utils.core import (
+    get_cid,
+    get_xcat,
+    _map_to_business_day_frequency,
+    is_valid_iso_date,
+)
 
 
 def standardise_dataframe(
@@ -369,6 +374,7 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     ).reset_index(drop=True)
     return df
 
+
 def update_categories(df: pd.DataFrame, df_add):
     """
     Method used to update the DataFrame on the category level.
@@ -558,15 +564,19 @@ def categories_df_aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
     return dfx
 
 
-def categories_df_expln_df(
-    df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_condition: bool, lag: int
+def _categories_df_explanatory_df(
+    dfw: pd.DataFrame,
+    explanatory_xcats: List[str],
+    agg_method: str,
+    sum_condition: bool,
+    lag: int,
 ):
     """
     Produces the explanatory column(s) for the custom DataFrame.
 
-    :param <pd.DataFrame> df_w: group-by DataFrame which has been down-sampled. The
+    :param <pd.DataFrame> dfw: group-by DataFrame which has been down-sampled. The
         respective aggregation method will be applied.
-    :param <List[str]> xpls: list of explanatory category(s).
+    :param <List[str]> explanatory_xcats: list of explanatory category(s).
     :param <str> agg_meth: aggregation method used for all explanatory variables.
     :param <dict> sum_condition: required boolean to negate erroneous zeros if the
         aggregate method used, for the explanatory variable, is sum.
@@ -574,19 +584,19 @@ def categories_df_expln_df(
         category.
     """
 
-    dfw_xpls = pd.DataFrame()
-    for xpl in xpls:
+    dfw_explanatory = pd.DataFrame()
+    for xcat in explanatory_xcats:
         if not sum_condition:
-            xpl_col = df_w[xpl].agg(agg_meth).astype(dtype=np.float32)
+            explanatory_col = dfw[xcat].agg(agg_method).astype(dtype=np.float32)
         else:
-            xpl_col = df_w[xpl].sum(min_count=1)
+            explanatory_col = dfw[xcat].sum(min_count=1)
 
         if lag > 0:
-            xpl_col = xpl_col.groupby(level=0).shift(lag)
+            explanatory_col = explanatory_col.groupby(level=0).shift(lag)
 
-        dfw_xpls[xpl] = xpl_col
+        dfw_explanatory[xcat] = explanatory_col
 
-    return dfw_xpls
+    return dfw_explanatory
 
 
 def categories_df(
@@ -652,11 +662,6 @@ def categories_df(
 
     assert isinstance(xcats, list), f"<list> expected and not {type(xcats)}."
     assert all([isinstance(c, str) for c in xcats]), "List of categories expected."
-    xcat_error = (
-        "The minimum requirement is that a single dependent and explanatory "
-        "variable are included."
-    )
-    assert len(xcats) >= 2, xcat_error
 
     aggs_error = "List of strings, outlining the aggregation methods, expected."
     assert isinstance(xcat_aggs, list), aggs_error
@@ -679,7 +684,27 @@ def categories_df(
         )
         assert len(xcats) == 2, no_xcats
 
+    input_xcats = xcats
+    input_cids = cids
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
+
+    if len(xcats) < 2:
+        raise ValueError("The DataFrame must contain at least two categories. ")
+    elif set(xcats) != set(input_xcats):
+        missing_xcats = list(set(input_xcats) - set(xcats))
+        warnings.warn(
+            f"The following categories are missing from the DataFrame: {missing_xcats}"
+        )
+
+    if len(cids) < 1:
+        raise ValueError(
+            "The DataFrame must contain at least one valid cross section. "
+        )
+    elif input_cids and set(cids) != set(input_cids):
+        missing_cids = list(set(input_cids) - set(cids))
+        warnings.warn(
+            f"The following cross sections are missing from the DataFrame: {missing_cids}"
+        )
 
     metric = ["value", "grading", "mop_lag", "eop_lag"]
     val_error = (
@@ -700,23 +725,23 @@ def categories_df(
 
     df_output = []
     if years is None:
-        df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values=val)
+        dfw = df.pivot(index=("cid", "real_date"), columns="xcat", values=val)
 
         dep = xcats[-1]
         # The possibility of multiple explanatory variables.
-        xpls = xcats[:-1]
+        explanatory_xcats = xcats[:-1]
 
-        df_w = df_w.groupby(
+        dfw = dfw.groupby(
             [
                 pd.Grouper(level="cid"),
                 pd.Grouper(level="real_date", freq=freq),
             ]
         )
 
-        dfw_xpls = categories_df_expln_df(
-            df_w=df_w,
-            xpls=xpls,
-            agg_meth=xcat_aggs[0],
+        dfw_explanatory = _categories_df_explanatory_df(
+            dfw=dfw,
+            explanatory_xcats=explanatory_xcats,
+            agg_method=xcat_aggs[0],
             sum_condition=(xcat_aggs[0] == "sum"),
             lag=lag,
         )
@@ -726,38 +751,38 @@ def categories_df(
         # values will incorrectly be summed to the value zero which is misleading for
         # analysis.
         if not (xcat_aggs[-1] == "sum"):
-            dep_col = df_w[dep].agg(xcat_aggs[1]).astype(dtype=np.float32)
+            dep_col = dfw[dep].agg(xcat_aggs[1]).astype(dtype=np.float32)
         else:
-            dep_col = df_w[dep].sum(min_count=1)
+            dep_col = dfw[dep].sum(min_count=1)
 
         if fwin > 1:
             s = 1 - fwin
             dep_col = dep_col.rolling(window=fwin).mean().shift(s)
 
-        dfw_xpls[dep] = dep_col
+        dfw_explanatory[dep] = dep_col
         # Order such that the return category is the right-most column - will reflect the
         # order of the categories list.
-        dfc = dfw_xpls[xpls + [dep]]
+        dfc = dfw_explanatory[explanatory_xcats + [dep]]
 
     else:
-        s_year = pd.to_datetime(start).year
-        start_year = s_year
-        e_year = df["real_date"].max().year + 1
+        start_year = pd.to_datetime(start).year
+        end_year = df["real_date"].max().year + 1
 
-        grouping = int((e_year - s_year) / years)
-        remainder = (e_year - s_year) % years
+        grouping = int((end_year - start_year) / years)
+        remainder = (end_year - start_year) % years
 
         year_groups = {}
 
+        group_start_year = start_year
         for group in range(grouping):
-            value = [i for i in range(s_year, s_year + years)]
-            key = f"{s_year} - {s_year + (years - 1)}"
+            value = [i for i in range(group_start_year, group_start_year + years)]
+            key = f"{group_start_year} - {group_start_year + (years - 1)}"
             year_groups[key] = value
 
-            s_year += years
+            group_start_year += years
 
-        v = [i for i in range(s_year, s_year + (remainder + 1))]
-        year_groups[f"{s_year} - now"] = v
+        v = [i for i in range(group_start_year, group_start_year + (remainder + 1))]
+        year_groups[f"{group_start_year} - now"] = v
         list_y_groups = list(year_groups.keys())
 
         translate_ = lambda year: list_y_groups[int((year % start_year) / years)]
@@ -1023,4 +1048,40 @@ def get_sops(
         end_date=end_date,
         freq=freq,
         direction=direction,
+    )
+
+
+if __name__ == "__main__":
+    from macrosynergy.management.simulate import make_qdf
+
+    cids = ["AUD", "CAD", "GBP", "NZD"]
+    xcats = ["XR1", "XR2", "CRY1", "CRY2"]
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2000-01-01", "2020-12-31", 0.1, 1]
+    df_cids.loc["CAD"] = ["2001-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP"] = ["2002-01-01", "2020-11-30", 0, 2]
+    df_cids.loc["NZD"] = ["2002-01-01", "2020-09-30", -0.1, 2]
+
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
+    df_xcats.loc["XR1"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["XR2"] = ["2000-01-01", "2020-10-30", 1, 2, 0.95, 1]
+    df_xcats.loc["CRY1"] = ["2001-01-01", "2020-10-30", 1, 2, 0.9, 1]
+    df_xcats.loc["CRY2"] = ["2001-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+
+    dfw = categories_df(
+        df=dfd,
+        xcats=xcats[:2] + [ "test"],
+        cids=cids,
+        freq="M",
+        # lag=1,
+        xcat_aggs=["last", "sum"],
+        # years=5,
+        # start="2000-01-01",
     )
