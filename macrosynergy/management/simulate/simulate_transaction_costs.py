@@ -63,7 +63,9 @@ def sample_real_data_frame() -> QuantamentalDataFrame:
 
     tdf = qdf_to_ticker_df(df)
 
-    index_dates = pd.Series(tdf.index).apply(lambda x: x.strftime("%Y-%m-%d"))
+    index_dates = pd.Series(tdf.index).apply(
+        lambda x: pd.Timestamp(x).strftime("%Y-%m-%d")
+    )
     assert index_dates.nunique() == len(index_dates)
 
     col_hashes: Dict[str, str] = {
@@ -89,25 +91,39 @@ def sample_real_data_frame() -> QuantamentalDataFrame:
     for col, _hash in col_hashes.items():
         hash_cols[_hash] = hash_cols.get(_hash, []) + [col]
 
-    hash_dict: Dict[str, Dict[str, List[str]]] = {}
+    # for each set of columns that share a hash, select one
+    sel_dict: Dict[str, Dict[str, Union[str, List[str]]]] = {}
     for _hash, cols in hash_cols.items():
-        cidgroup = ",".join(sorted(set(get_cid(cols))))
-        _xc = set(get_xcat(cols))
-        assert len(_xc) == 1
-        xcat = list(_xc)[0]
-        if cidgroup not in hash_dict:
-            hash_dict[cidgroup] = {"xcats": [xcat], "hashes": [_hash]}
-        else:
-            hash_dict[cidgroup]["xcats"].append(xcat)
-            hash_dict[cidgroup]["hashes"].append(_hash)
+        cols = sorted(cols)
+        sel_dict[_hash] = {
+            "xcat": list(set(get_xcat(cols))),
+            "cids": list(set(get_cid(cols))),
+        }
 
-    hash_dict_json = json.dumps(hash_dict)
+    # further squeeze the data: find xcats that have the same cids
+    new_dict = {}
+    for _hash, val in sel_dict.items():
+        cids = val["cids"]
+        xcats = val["xcat"]
+        isnew = True
+        for nidx, ditem in new_dict.items():
+            # if cids are the same, add xcats to the existing xcats
+            if set(cids) == set(ditem["cids"]):
+                ditem["xcat"] = list(set(ditem["xcat"] + xcats))
+                isnew = False
+                break
+        if isnew:
+            new_dict[len(new_dict)] = {"cids": cids, "xcat": xcats}
 
-    return {
-        "hash_values": hash_values,
-        "hash_values_df_csv_str": hash_values_df_csv_str,
-        "hash_dict_json": hash_dict_json,
-    }
+    # now, where the cids are the same, group the xcats into one list
+    new_dict2 = {}
+    for nidx, ditem in new_dict.items():
+        cids = ditem["cids"]
+        xcats = ditem["xcat"]
+        for nidx2, ditem2 in new_dict.items():
+            if set(cids) == set(ditem2["cids"]):
+                xcats = list(set(xcats + ditem2["xcat"]))
+        new_dict2[len(new_dict2)] = {"cids": cids, "xcat": set(get_cid(xcats))}
 
 
 sample_real_data_frame()
