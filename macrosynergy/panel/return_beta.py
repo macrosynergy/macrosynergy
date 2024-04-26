@@ -2,7 +2,6 @@
 Functions for calculating the hedge ratios of a panel of returns with respect to a
 single return. 
 """
-import warnings
 import numpy as np
 import pandas as pd
 from typing import List, Tuple
