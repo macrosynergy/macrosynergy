@@ -56,10 +56,6 @@ class NaivePnL:
     ):
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
-        # Will host the benchmarks.
-        dfd = df.copy()
-
-        self.dfd = df
         assert isinstance(ret, str), "The return category expects a single <str>."
         self.ret = ret
         xcats = [ret] + sigs
