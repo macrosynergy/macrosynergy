@@ -129,6 +129,50 @@ def rolling_estimate(
     return beta
 
 
+def panel_estimate_beta(
+    dfd: pd.DataFrame,
+    cids: List[str],
+    xr: str,
+    bm_xr: str,
+    methods: str,
+    freqs: List[str],
+    freq_wgts: Optional[List[float]] = None,
+    hfts: Optional[List[int]] = None,
+    pcuts: Optional[List[float]] = None,  # Check
+    hmins: List[int] = None,
+    hmaxs: List[int] = None,
+    method: str = "OLS",
+    fill_forward: bool = True,
+    fill_back: bool = False,
+    skipna: bool = True,
+):
+    # # Estimate per frequency
+    # bm = dfd.loc[dfd.xcat == bm_xr]
+    # for cid in cids:
+    #     rt = dfd.loc[dfd["cid"] == cid & dfd.xcat == xr]
+        
+
+    #     for freq, freq_wgt, hft, pcut, hmin, hmax in zip(
+    #         freqs, freq_wgts, hfts, pcuts, hmins, hmaxs
+    #     ):
+    #         beta = rolling_estimate(
+    #             rt=rt,
+    #             bm=bm,
+    #             method=method,
+    #             min_obs=hmin,
+    #             max_obs=hmax,
+    #             rebalance=freq,
+    #             hft=hft,
+    #             skipna=skipna,
+    #         )
+
+    #         # TODO fill forward/backward
+    #         # TODO fill NA with 0
+    #         # TODO cut-off
+    #         # TODO save to dfd
+    ...
+
+
 def date_alignment(
     unhedged_return: pd.Series, benchmark_return: pd.Series
 ) -> Tuple[pd.Timestamp, pd.Timestamp]:
