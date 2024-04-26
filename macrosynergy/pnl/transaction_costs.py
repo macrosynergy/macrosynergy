@@ -179,14 +179,12 @@ def _plot_costs_func(
                 legend_handles[lb] = line.lines[0]
 
     # Remove individual subplot legends
-    if nrows > 1:
-        assert isinstance(axes, np.ndarray)
+    if isinstance(axes, plt.Axes):
+        axes.get_legend().remove()
+    else:
         for ax in axes.flat[1:]:
             if ax.get_legend() is not None:
                 ax.get_legend().remove()
-        else:
-            assert isinstance(axes, plt.Axes)
-            axes.get_legend().remove()
 
     fig.supxlabel(x_axis_label)
     fig.supylabel(y_axis_label)
