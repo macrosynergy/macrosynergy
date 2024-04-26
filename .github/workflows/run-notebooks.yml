@@ -5,7 +5,7 @@ on:
 
   pull_request:
     branches:
-      - develop
+      - main
 
 permissions:
   id-token: write # This is required for aws oidc connection
