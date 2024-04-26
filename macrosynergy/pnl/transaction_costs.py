@@ -188,8 +188,8 @@ def _plot_costs_func(
             assert isinstance(axes, plt.Axes)
             axes.get_legend().remove()
 
-    fig.supxlabel("Trade size (USD, millions)")
-    fig.supylabel("Percent of outright forward")
+    fig.supxlabel(x_axis_label)
+    fig.supylabel(y_axis_label)
     plt.show()
 
 
@@ -367,6 +367,9 @@ class TransactionCosts(object):
         ncol: int = 8,
         x_axis_label: str = "Trade size (USD, millions)",
         y_axis_label: str = "Percent of outright forward",
+        title: Optional[str] = None,
+        title_fontsize: int = 28,
+        facet_title_fontsize: int = 20,
         *args,
         **kwargs,
     ):
@@ -377,6 +380,9 @@ class TransactionCosts(object):
             ncol=ncol,
             x_axis_label=x_axis_label,
             y_axis_label=y_axis_label,
+            title=title,
+            facet_title_fontsize=facet_title_fontsize,
+            title_fontsize=title_fontsize,
             *args,
             **kwargs,
         )
