@@ -273,26 +273,30 @@ def return_beta(
 
     all_tix = np.unique(df["cid"] + "_" + df["xcat"])
     bm_error = f"Benchmark return ticker {benchmark_return} is not in the DataFrame."
-    assert benchmark_return in all_tix, bm_error
+    if not benchmark_return in all_tix:
+        raise ValueError(bm_error)
 
     error_xcat = (
         f"The field, xcat, must be a string but received <{type(xcat)}>. Only"
         f" a single category is used to hedge against the main asset."
     )
-    assert isinstance(xcat, str), error_xcat
+    if not isinstance(xcat, str):
+        raise ValueError(error_xcat)
 
     available_categories = df["xcat"].unique()
     error_hedging = (
         f"The return category used to be hedged, {xcat}, is "
         f"not defined in the dataframe."
     )
-    assert xcat in list(available_categories), error_hedging
+    if not xcat in list(available_categories):
+        raise ValueError(error_hedging)
 
     min_obs_error = (
         "The number of minimum observations required to compute a hedge "
         "ratio is 10 business days, or two weeks."
     )
-    assert min_obs >= 10, min_obs_error
+    if not isinstance(min_obs, int) or min_obs < 10:
+        raise ValueError(min_obs_error)
 
     if not isinstance(max_obs, int) or max_obs < min_obs:
         raise ValueError(f"`max_obs` must be an integer ≫ `min_obs`.")
