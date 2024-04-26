@@ -67,7 +67,7 @@ def hedge_calculator(
     of timestamps where the numeracy of dates added to the sample is instructed by the
     "refreq" parameter.
 
-    :param <pd.DataFrame> unhedged_return: the return series of the asset that is being
+    :param <pd.Series> unhedged_return: the return series of the asset that is being
         hedged.
     :param <pd.Series> benchmark_return: the return series of the asset being used to
         hedge against the main asset.
