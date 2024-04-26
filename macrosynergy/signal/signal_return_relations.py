@@ -93,7 +93,7 @@ class SignalReturnRelations:
             raise ValueError("Signal must be defined.")
         if not isinstance(df, pd.DataFrame):
             raise TypeError(f"DataFrame expected and not {type(df)}.")
-        if not isinstance(cids, str):
+        if not isinstance(cids, str) and cids is not None:
             if not isinstance(cids, list):
                 raise TypeError(f"List or string expected and not {type(cids)}.")
             else:
