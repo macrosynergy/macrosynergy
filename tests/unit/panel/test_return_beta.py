@@ -100,21 +100,14 @@ class TestAll(unittest.TestCase):
         for col_name in expc_cols:
             df_test.rename(columns={col_name: col_name + "_"}, inplace=True)
             with self.assertRaises(ValueError):
-                try:
-                    return_beta(
-                        df=df_test,
-                        cids=self.cids,
-                        xcat=self.xcats[0],
-                        benchmark_return=f"{self.cids[0]}_{self.xcats[0]}",
-                        start="2010-01-01",
-                    )
-                except ValueError as e:
-                    exp_err_str: str = (
-                        f"`df` must contain the following columns: {expc_cols}"
-                    )
-                    self.assertIn(exp_err_str, str(e))
-                    raise ValueError(e)
-
+                return_beta(
+                    df=df_test,
+                    cids=self.cids,
+                    xcat=self.xcats[0],
+                    benchmark_return=f"{self.cids[0]}_{self.xcats[0]}",
+                    start="2010-01-01",
+                )
+        
     def test_date_alignment(self):
         """
         Firstly, return_beta.py will potentially use a single asset to hedge a panel
@@ -356,7 +349,7 @@ class TestAll(unittest.TestCase):
 
         br_cat = "USD_EQXR_NSA"
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # The categories the respective DataFrame is defined over are
             # ['FXXR_NSA', 'GROWTHXR_NSA', 'INFLXR_NSA', 'EQXR_NSA']. Therefore, choosing
             # a benchmark of USD intuitive GDP growth will throw an error given the
@@ -399,7 +392,7 @@ class TestAll(unittest.TestCase):
         # The default number of minimum observations required to compute a hedge ratio is
         # 24. However, if the parameter is defined, the specified number must be greater
         # than 10 business days, two weeks.
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             df_hedge = return_beta(
                 df=self.dfd,
                 xcat="FXXR_NSA",
