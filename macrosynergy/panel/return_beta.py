@@ -266,15 +266,10 @@ def return_beta(
 
     """
 
-    # Assertions.
-
-    cols = ["cid", "xcat", "real_date", "value"]
-    if not set(cols).issubset(set(df.columns)):
-        raise ValueError(f"`df` must contain the following columns: {cols}")
-
-    df: pd.DataFrame = df[cols]
-
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    # Value checks
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError(f"Expected DataFrame but received <{type(df)}>.")
+    df: QuantamentalDataFrame = standardise_dataframe(df)
 
     all_tix = np.unique(df["cid"] + "_" + df["xcat"])
     bm_error = f"Benchmark return ticker {benchmark_return} is not in the DataFrame."
