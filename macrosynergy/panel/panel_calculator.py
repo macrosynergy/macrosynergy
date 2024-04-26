@@ -88,8 +88,9 @@ def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
             singles_used += [s for s in op_list if re.match("^i", s)]
 
     single_xcats = [x[5:] for x in singles_used]
+    single_cids = [x[1:4] for x in single_xcats]
     all_xcats_used = xcats_used + single_xcats
-    return all_xcats_used, singles_used
+    return all_xcats_used, singles_used, single_cids
 
 
 def panel_calculator(
@@ -99,6 +100,7 @@ def panel_calculator(
     start: str = None,
     end: str = None,
     blacklist: dict = None,
+    external_func: dict = None
 ) -> pd.DataFrame:
     """
     Calculates new data panels through operations on existing panels.
@@ -117,6 +119,8 @@ def panel_calculator(
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
         the dataframe. If one cross section has several blacklist periods append numbers
         to the cross-section code.
+    :param <dict> external_func: dictionary of external functions to be used in the panel
+        calculation. The key is the name of the function and the value is the function.
 
     :return <pd.Dataframe>: standardized dataframe with all new categories in standard
         format, i.e the columns 'cid', 'xcat', 'real_date' and 'value'.
@@ -157,6 +161,9 @@ def panel_calculator(
 
     _check_calcs(calcs)
 
+    if external_func:
+        globals().update(external_func)
+
     # B. Collect new category names and their formulas.
 
     ops = {}
@@ -166,31 +173,29 @@ def panel_calculator(
 
     # C. Check if all required categories are in the dataframe.
 
-    all_xcats_used, singles_used = _get_xcats_used(ops)
+    old_xcats_used, singles_used, single_cids = _get_xcats_used(ops)
 
-    new_xcats = list(ops.keys())
-    old_xcats_used = list(set(all_xcats_used) - set(new_xcats))
+    old_xcats_used = list(set(old_xcats_used))
     missing = sorted(set(old_xcats_used) - set(df["xcat"].unique()))
 
-    if len(missing) > 0:
+    new_xcats = list(ops.keys())
+    if len(missing) > 0 and not set(missing).issubset(set(new_xcats)):
         raise ValueError(f"Missing categories: {missing}.")
 
-    if len(singles_used) > 0:
-        if new_xcats == all_xcats_used:
-            old_xcats_used = new_xcats
+    # If any of the elements of single_cids are not in cids, add them to cids.
+    cids_used = list(set(single_cids + cids))
 
     # D. Reduce dataframe with intersection requirement.
 
     dfx = reduce_df(
         df,
         xcats=old_xcats_used,
-        cids=cids,
+        cids=cids_used,
         start=start,
         end=end,
         blacklist=blacklist,
         intersect=False,
     )
-    cidx = np.sort(dfx["cid"].unique())
 
     # E. Create all required wide dataframes with category names.
 
@@ -208,8 +213,8 @@ def panel_calculator(
             dfx1 = dfxx.set_index("real_date")["value"].to_frame()
             dfx1 = dfx1.truncate(before=start, after=end)
 
-            dfw = pd.concat([dfx1] * len(cidx), axis=1, ignore_index=True)
-            dfw.columns = cidx
+            dfw = pd.concat([dfx1] * len(cids), axis=1, ignore_index=True)
+            dfw.columns = cids
             exec(f"{single} = dfw")
 
     # F. Calculate the panels and collect.
