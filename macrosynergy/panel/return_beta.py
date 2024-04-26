@@ -6,15 +6,84 @@ import warnings
 import numpy as np
 import pandas as pd
 from typing import List, Tuple
+
+import logging
+
 import statsmodels.api as sm
 from statsmodels.regression.linear_model import RegressionResults
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
 import matplotlib.pyplot as plt
-
 from macrosynergy.management.utils import _map_to_business_day_frequency
 
+logger = logging.getLogger(__name__)
+
+
+def estimate_beta(
+        rt: pd.Series, bm: pd.Serie, method: str, weights: np.ndarray = None
+    ) -> np.float64:
+
+    assert not rt.isnull().any() and rt.ndim == 1
+
+    assert not bm.isnull().any() and bm.ndim == 1
+
+    assert 0 < rt.shape[0] and rt.shape[0] == bm.shape[0]
+
+    # TODO add docs and checks
+
+    if weights is not None:
+        # TODO np.ndarray...
+        assert weights.ndim == 1 and weights.shape[0] == rt.shape[0]
+
+        assert not weights.isnull().any()
+
+        assert all(0 <= w and w <= 1 for w in weights)
+
+        # TODO or normalise...
+        assert np.isclose(np.sum(weights), 1)
+    else:
+        weights = 1
+
+    yy = weights * rt
+    xx = sm.add_constant(weights * bm)
+
+    if method == "OLS":
+        model = sm.OLS(yy, xx)
+    elif method == "GLS":
+        model = sm.GLS(yy, xx)
+    else:
+        # TODO add Quantile Regression (QR) and shrinkage methods
+        raise NotImplementedError(f"Estimation method {method} is not implemented - current methods are OLS and GLS.")
+    
+    results = model.fit()
+    # TODO return constant as well?
+    return results.params[1]
+
+
+def rolling_estimate(rt: pd.Series, bm: pd.Series, method: str, max_obs: int = None, rebalance: str = "m", hft: int = None, skipna: bool = True) -> pd.Series:
+    assert isinstance(rt, pd.Series) and isinstance(bm, pd.Series)
+
+    assert rt.index.is_monotonic_increasing and bm.index.is_monotonic_increasing
+
+    start = max(rt.first_valid_index(), bm.first_valid_index())
+    end = min(rt.last_valid_index(), bm.last_valid_index())  # TODO should be inclusive for both?
+
+    rt = rt.loc[start:end]  # TODO make sure include of end
+    bm = bm.loc[start:end]
+
+    if skipna:
+        mask = ~rt.isnull()
+        logger.info("Dropping NaN values from the return series: %d NaN values dropped.", np.sum(~mask))
+        rt = rt[mask]
+        bm = bm.loc[rt.index]
+
+    assert not rt.isnull().any() and not bm.isnull().any()
+
+    # Find rebalance dates...
+
+    # Loop through rebalance dates (batch-up calculations...)
+    
 
 def date_alignment(
     unhedged_return: pd.Series, benchmark_return: pd.Series
@@ -118,15 +187,15 @@ def hedge_calculator(
         if d > min_obs_date:
             curr_start_date: pd.Timestamp = rdates[max(0, rdates.index(d) - max_obs)]
             # Inclusive of the re-estimation date.
-            xvar = unhedged_return.loc[curr_start_date:d]
-            yvar = benchmark_return.loc[curr_start_date:d]
+            yvar = unhedged_return.loc[curr_start_date:d]
+            xvar = benchmark_return.loc[curr_start_date:d]
             # Condition currently redundant but will become relevant.
             if meth == "ols":
                 xvar = sm.add_constant(xvar)
                 results: RegressionResults = sm.OLS(yvar, xvar).fit()
                 results_params: pd.Series = results.params
 
-            df_hrat.loc[d] = results_params.loc[cross_section]
+            df_hrat.loc[d] = results_params.loc[benchmark_return.name]
 
     # Any dates prior to the minimum observation which would be classified by NaN values
     # remove from the DataFrame.
@@ -194,15 +263,15 @@ def return_beta(
     df: pd.DataFrame,
     xcat: str = None,
     cids: List[str] = None,
-    benchmark_return: str = None,
+    benchmark_return: str = None,  # TODO is None a possible value?
     start: str = None,
     end: str = None,
     blacklist: dict = None,
     meth: str = "ols",
-    oos: bool = True,
+    oos: bool = True,  # TODO unused parameter?
     refreq: str = "M",
     min_obs: int = 24,
-    max_obs: int = 1000,
+    max_obs: int = 1000,  # TODO why specify max? Do we need to allow for this to be unlimited?
     hedged_returns: bool = False,
     ratio_name: str = "_HR",
     hr_name: str = "H",
@@ -300,9 +369,9 @@ def return_beta(
     post_fix = benchmark_return.split("_")
     xcat_hedge = "_".join(post_fix[1:])
     cid_hedge = post_fix[0]
-    if xcat_hedge == xcat:
+    if xcat_hedge == xcat and cid_hedge in cids:
         cids.remove(cid_hedge)
-        warnings.warn(
+        logger.info(
             f"Return to be hedged for cross section {cid_hedge} is the hedge "
             f"return and has been removed from the panel."
         )
