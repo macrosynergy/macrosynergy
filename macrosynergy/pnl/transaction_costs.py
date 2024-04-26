@@ -99,6 +99,9 @@ def _plot_costs_func(
     ncol: int,
     x_axis_label: str,
     y_axis_label: str,
+    title: Optional[str] = None,
+    title_fontsize: int = 28,
+    facet_title_fontsize: int = 20,
     *args,
     **kwargs,
 ):
@@ -115,7 +118,10 @@ def _plot_costs_func(
     fig, axes = plt.subplots(
         nrows=nrows, ncols=ncol, figsize=(5 * ncol, 5 * nrows), layout="constrained"
     )
-    fig.suptitle(f"{cost_type.capitalize()}", fontsize=28)
+    if title is None:
+        fig.suptitle(f"{cost_type.capitalize()}", fontsize=28)
+    else:
+        fig.suptitle(title, fontsize=title_fontsize)
 
     # Define colors for each date range
     colors = sns.color_palette("viridis", n_colors=len(tco.change_index))
@@ -133,7 +139,7 @@ def _plot_costs_func(
     ax: plt.Axes
     for i, fid in enumerate(sorted(fids)):
         r, c = divmod(i, ncol)
-        ax = axes[r, c] if nrows > 1 else axes[c]
+        ax = axes[r, c] if nrows > 1 else (axes[c] if ncol > 1 else axes)
         max_trade_size = tco.df_wide[fid + tco.size_l].max()
         trade_sizes = np.arange(1, max_trade_size + 101, 1)
 
@@ -167,14 +173,20 @@ def _plot_costs_func(
             )
 
             ax.set_xlim(left=0)
-            ax.set_title(f"{fid}")
+            ax.set_title(f"{fid}", fontsize=facet_title_fontsize)
 
             if lb not in legend_handles:
                 legend_handles[lb] = line.lines[0]
 
     # Remove individual subplot legends
-    for ax in axes.flat[1:]:
-        ax.get_legend().remove()
+    if nrows > 1:
+        assert isinstance(axes, np.ndarray)
+        for ax in axes.flat[1:]:
+            if ax.get_legend() is not None:
+                ax.get_legend().remove()
+        else:
+            assert isinstance(axes, plt.Axes)
+            axes.get_legend().remove()
 
     fig.supxlabel("Trade size (USD, millions)")
     fig.supylabel("Percent of outright forward")
