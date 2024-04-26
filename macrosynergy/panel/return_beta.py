@@ -20,6 +20,7 @@ from macrosynergy.management.utils import (
     _map_to_business_day_frequency,
     standardise_dataframe,
 )
+from macrosynergy.panel.historic_vol import expo_weights
 from macrosynergy.management.utils import _map_to_business_day_frequency
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,7 @@ def rolling_estimate(
     rt: pd.Series,
     bm: pd.Series,
     method: str,
+    min_obs: int = None,
     max_obs: int = None,
     rebalance: str = "m",
     hft: int = None,
@@ -102,10 +104,29 @@ def rolling_estimate(
 
     assert isinstance(min_obs, int) and min_obs > 0
 
-    assert isinstance(rebalance, str) and rebelance in ["d", "w", "m", "q"]
+    assert max_obs is None or isinstance(max_obs, int) and max_obs >= min_obs
+
+    if hft is not None:
+        assert isinstance(hft, int) and hft > 0
+        ew: np.ndarray = expo_weights(lback_periods=bm.shape[0], half_life=hft)
+    else:
+        assert max_obs is not None
+        ew: np.ndarray = None
+
+    assert isinstance(rebalance, str) and rebalance in ["d", "w", "m", "q"]
     # Find rebalance dates...
+    rebalance_dates = pd.DataFrame(
+        zip(rt.index, rt.index.to_period(rebalance.upper())),
+        columns=["real_date", "period"]
+    ).groupby(["period"])["real_date"].min().values
 
     # Loop through rebalance dates (batch-up calculations...)
+    results = {dd: None for dd in rebalance_dates}
+    for dd in rebalance_dates:
+        results[dd] = estimate_beta(rt=rt, bm=bm, method=method, weights=ew)
+    
+    beta = pd.Series(results).sort_index()
+    return beta
 
 
 def date_alignment(
