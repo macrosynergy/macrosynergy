@@ -93,6 +93,14 @@ class SignalReturnRelations:
             raise ValueError("Signal must be defined.")
         if not isinstance(df, pd.DataFrame):
             raise TypeError(f"DataFrame expected and not {type(df)}.")
+        if not isinstance(cids, str):
+            if not isinstance(cids, list):
+                raise TypeError(f"List or string expected and not {type(cids)}.")
+            else:
+                if not all(isinstance(cid, str) for cid in cids):
+                    raise TypeError(f"List of strings expected for cids.")
+            
+            
 
         required_columns = ["cid", "xcat", "real_date", "value"]
 
