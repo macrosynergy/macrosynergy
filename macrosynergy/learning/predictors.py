@@ -44,7 +44,7 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
 
         :param <BaseEstimator> model: The underlying model to be trained with weighted samples.
         :param <bool> sign_weighted: Whether to weight the samples based on the sign of the label.
-        :param <bool> time_weighedt: Whether to weight the samples based on the recency of the sample.
+        :param <bool> time_weighted: Whether to weight the samples based on the recency of the sample.
         :param <Union[float, int]> half_life: The number of time periods in units of the native data frequency for the weight attributed to the most recent sample (one) to decay by half.
         """
         self.model = model
