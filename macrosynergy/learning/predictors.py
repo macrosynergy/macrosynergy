@@ -12,7 +12,6 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import LinearRegression
 
 from typing import Union
-from abc import abstractmethod, ABC
 
 import numbers
 
@@ -38,7 +37,7 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
         model: BaseEstimator,
         sign_weighted: bool = False,
         time_weighted: bool = False,
-        half_life: Union[float, int] = None,
+        half_life: Union[float, int] = 12 * 21,
     ):
         """
         Base class for weighted regressors.
@@ -51,17 +50,13 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
         self.model = model
         self.sign_weighted = sign_weighted
         self.time_weighted = time_weighted
+        self.half_life = None
         if time_weighted:
             if not isinstance(half_life, (float, int)):
                 raise TypeError("half_life must be a float or an integer.")
             if half_life <= 1:
                 raise ValueError("The half-life must be greater than 1.")
             self.half_life = half_life
-
-        if not (sign_weighted or time_weighted):
-            raise ValueError(
-                "At least one of sign_weighted or time_weighted must be True."
-            )
 
     def fit(self, X: pd.DataFrame, y: Union[pd.DataFrame, pd.Series]):
         """
@@ -243,7 +238,7 @@ class WeightedLinearRegression(BaseWeightedRegressor):
         positive: bool = False,
         sign_weighted: bool = True,
         time_weighted: bool = True,
-        half_life: Union[float, int] = None,
+        half_life: Union[float, int] = 21 * 12,
     ):
         """
         Custom class to create a WLS linear regression model, with the sample weights
@@ -403,9 +398,9 @@ class WeightedLADRegressor(BaseWeightedRegressor):
         self,
         fit_intercept: bool = True,
         positive: bool = False,
-        sign_weighted: bool = False,
-        time_weighted: bool = False,
-        half_life: float | int = None,
+        sign_weighted: bool = True,
+        time_weighted: bool = True,
+        half_life: float | int = 21 * 12,
     ):
         if not isinstance(fit_intercept, bool):
             raise TypeError("fit_intercept must be a boolean.")
