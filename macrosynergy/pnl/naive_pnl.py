@@ -57,9 +57,8 @@ class NaivePnL:
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
         # Will host the benchmarks.
-        dfd = df.copy()
-
         self.dfd = df
+
         assert isinstance(ret, str), "The return category expects a single <str>."
         self.ret = ret
         xcats = [ret] + sigs
@@ -67,11 +66,10 @@ class NaivePnL:
         cols = ["cid", "xcat", "real_date", "value"]
         # Potentially excludes the benchmarks but will be held on the instance level
         # through self.dfd.
-        df, self.xcats, self.cids = reduce_df(
+        self.df, self.xcats, self.cids = reduce_df(
             df[cols], xcats, cids, start, end, blacklist, out_all=True
         )
 
-        self.df = df
         self.sigs = sigs
 
         ticker_func = lambda t: t[0] + "_" + t[1]
@@ -90,7 +88,7 @@ class NaivePnL:
 
             # Pass in the original DataFrame; negative signal will not have been applied
             # which will corrupt the use of the benchmark categories.
-            bm_dict = self.add_bm(df=dfd, bms=bms, tickers=self.tickers)
+            bm_dict = self.add_bm(df=self.dfd, bms=bms, tickers=self.tickers)
 
             self._bm_dict = bm_dict
 
