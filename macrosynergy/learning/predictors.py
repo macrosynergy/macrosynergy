@@ -400,7 +400,7 @@ class WeightedLADRegressor(BaseWeightedRegressor):
         positive: bool = False,
         sign_weighted: bool = True,
         time_weighted: bool = True,
-        half_life: float | int = 21 * 12,
+        half_life: Union[float, int] = 21 * 12,
     ):
         if not isinstance(fit_intercept, bool):
             raise TypeError("fit_intercept must be a boolean.")
