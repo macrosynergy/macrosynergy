@@ -358,7 +358,7 @@ class LassoSelector(BaseEstimator, SelectorMixin):
 
 
 class MapSelector(BaseEstimator, SelectorMixin):
-    def __init__(self, threshold: float, positive: bool = False, method: str = "bfgs"):
+    def __init__(self, threshold: float = 0.05, positive: bool = False, method: str = "bfgs"):
         """
         Selector class to select features from a training set
         based on the Macrosynergy panel test. This test involves creating
