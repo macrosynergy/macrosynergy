@@ -1,6 +1,7 @@
 """
 Classes and functions for analyzing and visualizing the relations of two panel categories.
 """
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -328,15 +329,14 @@ class CategoryRelations(object):
         return df
 
     def corr_prob_calc(
-        self, df_probability: Union[pd.DataFrame, List[pd.DataFrame]], prob_est
+        self, df_probability: Union[pd.DataFrame, List[pd.DataFrame]], prob_est: str
     ):
         """
         Compute the correlation coefficient and probability statistics.
 
         :param <List[pd.DataFrame] or pd.DataFrame> df_probability: pandas DataFrame
             containing the dependent and explanatory variables.
-        :param <bool> prob_bool: boolean parameter which determines whether the
-            probability value is included in the table. The default is True.
+        :param <str> prob_est: type of estimator for probability of significant relation.
 
         :return <List[tuple(float, float)]>:
 
@@ -370,8 +370,8 @@ class CategoryRelations(object):
 
     def corr_probability(
         self,
-        df_probability,
-        prob_est,
+        df_probability: Union[pd.DataFrame, List[pd.DataFrame]],
+        prob_est: str,
         time_period: str = "",
         coef_box_loc: str = "upper left",
         ax: plt.Axes = None,
@@ -382,6 +382,7 @@ class CategoryRelations(object):
         :param <List[pd.DataFrame] or pd.DataFrame> df_probability: pandas DataFrame
             containing the dependent and explanatory variables. Able to handle multiple
             DataFrames representing different time-periods of the original series.
+        :param <str> prob_est: type of estimator for probability of significant relation.
         :param <str> time_period: indicator used to clarify which time-period the
             statistics are computed for. For example, before 2010 and after 2010: the two
             periods experience very different macroeconomic conditions. The default is
@@ -555,7 +556,7 @@ class CategoryRelations(object):
         if coef_box_font_size == 0:
             set_font_size = True
             coef_box_font_size = 12
-        
+
         # If "separator" is type Integer, the scatter plot is split across two
         # time-periods where the divisor is the received year.
         if isinstance(separator, int):
