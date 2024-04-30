@@ -28,7 +28,7 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
     """
     Routing class for downloading data from a source.
     """
-    
+
     def __init__(
         self,
         oauth: bool = True,
@@ -52,40 +52,31 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         Initialize the class.
         """
         if source == "DataQuery":
-            self.source = source
-            DataQueryInterface.__init__(
-                self,
-                oauth=oauth,
-                client_id=client_id,
-                client_secret=client_secret,
-                crt=crt,
-                key=key,
-                username=username,
-                password=password,
-                proxy=proxy,
-                check_connection=check_connection,
-                suppress_warning=suppress_warning,
-                debug=debug,
-                *args,
-                **kwargs,
-            )  # Initialize only DataQueryInterface
+          self.source_interface = DataQueryInterface(
+                  oauth=oauth,
+                  client_id=client_id,
+                  client_secret=client_secret,
+                  crt=crt,
+                  key=key,
+                  username=username,
+                  password=password,
+                  proxy=proxy,
+                  check_connection=check_connection,
+                  suppress_warning=suppress_warning,
+                  debug=debug,
+                  **dq_download_kwargs
+              )
         elif source == "AWSLambda":
-            self.source = source
-            AWSLambdaInterface.__init__(
-                self,
+            self.source_interface = AWSLambdaInterface(
                 access_key_id=client_id,
                 secret_access_key=client_secret,
-                aws_session_token=None,
-                cred_file=None,
                 debug=debug,
-                batch_size=kwargs.get("batch_size", 15),
                 check_connection=check_connection,
-                base_url=kwargs.get("base_url", None),
-                token_url=kwargs.get("token_url", None),
                 suppress_warning=suppress_warning,
                 region="eu-west-2",
                 service="lambda",
-            )  # Initialize only AWSLambdaInterface
+                **kwargs
+            )
         else:
             raise ValueError("Unsupported source")
 
@@ -97,27 +88,15 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         """
         Get the list of unavailable expressions.
         """
-        if self.source == "DataQuery":
-            return DataQueryInterface._get_unavailable_expressions(
-                self, expected_exprs, dicts_list
-            )
-        elif self.source == "AWSLambda":
-            return AWSLambdaInterface._get_unavailable_expressions(
-                self, expected_exprs, dicts_list
-            )
-        else:
-            pass
+        return self.source_interface._get_unavailable_expressions(
+            expected_exprs, dicts_list
+        )
 
     def check_connection(self, verbose=False, raise_error: bool = False) -> bool:
         """
         Check the connection to the source.
         """
-        if self.source == "DataQuery":
-            return DataQueryInterface.check_connection(self, verbose, raise_error)
-        elif self.source == "AWSLambda":
-            return AWSLambdaInterface.check_connection(self, verbose, raise_error)
-        else:
-            pass
+        return self.source_interface.check_connection(verbose, raise_error)
 
     def _fetch(
         self,
@@ -128,12 +107,7 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         """
         Fetch data from the source.
         """
-        if self.source == "DataQuery":
-            return DataQueryInterface._fetch(self, url, params, tracking_id)
-        elif self.source == "AWSLambda":
-            return AWSLambdaInterface._fetch(self, url, params, tracking_id)
-        else:
-            pass
+        return self.source_interface._fetch(url, params, tracking_id)
 
     def _fetch_timeseries(
         self, url: str, params: dict, tracking_id: str = None, *args, **kwargs
@@ -141,16 +115,9 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         """
         Fetch timeseries data from the source.
         """
-        if self.source == "DataQuery":
-            return DataQueryInterface._fetch_timeseries(
-                self, url, params, tracking_id, *args, **kwargs
-            )
-        elif self.source == "AWSLambda":
-            return AWSLambdaInterface._fetch_timeseries(
-                self, url, params, tracking_id, *args, **kwargs
-            )
-        else:
-            pass
+        return self.source_interface._fetch_timeseries(
+            url, params, tracking_id, *args, **kwargs
+        )
 
     def get_catalogue(
         self,
@@ -160,12 +127,7 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         """
         Get the catalogue of available expressions.
         """
-        if self.source == "DataQuery":
-            return DataQueryInterface.get_catalogue(self, group_id, verbose)
-        elif self.source == "AWSLambda":
-            return AWSLambdaInterface.get_catalogue(self, group_id, verbose)
-        else:
-            pass
+        return self.source_interface.get_catalogue(group_id, verbose)
 
     def _concurrent_loop(
         self,
@@ -181,32 +143,16 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         """
         Concurrent loop to fetch data.
         """
-        if self.source == "DataQuery":
-            return DataQueryInterface._concurrent_loop(
-                self,
-                expr_batches,
-                show_progress,
-                url,
-                params,
-                tracking_id,
-                delay_param,
-                *args,
-                **kwargs,
-            )
-        elif self.source == "AWSLambda":
-            return AWSLambdaInterface._concurrent_loop(
-                self,
-                expr_batches,
-                show_progress,
-                url,
-                params,
-                tracking_id,
-                delay_param,
-                *args,
-                **kwargs,
-            )
-        else:
-            pass
+        return self.source_interface._concurrent_loop(
+            expr_batches,
+            show_progress,
+            url,
+            params,
+            tracking_id,
+            delay_param,
+            *args,
+            **kwargs,
+        )
 
     def _chain_download_outputs(
         self,
@@ -215,12 +161,7 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         """
         Chain the download outputs.
         """
-        if self.source == "DataQuery":
-            return DataQueryInterface._chain_download_outputs(self, download_outputs)
-        elif self.source == "AWSLambda":
-            return AWSLambdaInterface._chain_download_outputs(self, download_outputs)
-        else:
-            pass
+        return self.source_interface._chain_download_outputs(download_outputs)
 
     def _download(
         self,
@@ -237,34 +178,17 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         """
         Backend method to download data from the source.
         """
-        if self.source == "DataQuery":
-            return DataQueryInterface._download(
-                self,
-                expressions,
-                params,
-                url,
-                tracking_id,
-                delay_param,
-                show_progress,
-                retry_counter,
-                *args,
-                **kwargs,
-            )
-        elif self.source == "AWSLambda":
-            return AWSLambdaInterface._download(
-                self,
-                expressions,
-                params,
-                url,
-                tracking_id,
-                delay_param,
-                show_progress,
-                retry_counter,
-                *args,
-                **kwargs,
-            )
-        else:
-            pass
+        return self.source_interface._download(
+            expressions,
+            params,
+            url,
+            tracking_id,
+            delay_param,
+            show_progress,
+            retry_counter,
+            *args,
+            **kwargs,
+        )
 
     def download_data(
         self,
@@ -287,43 +211,20 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         """
         Download data from the source.
         """
-        if self.source == "DataQuery":
-            return DataQueryInterface.download_data(
-                self,
-                expressions,
-                start_date,
-                end_date,
-                show_progress,
-                endpoint,
-                calender,
-                frequency,
-                conversion,
-                nan_treatment,
-                reference_data,
-                retry_counter,
-                delay_param,
-                batch_size,
-                *args,
-                **kwargs,
-            )
-        elif self.source == "AWSLambda":
-            return AWSLambdaInterface.download_data(
-                self,
-                expressions,
-                start_date,
-                end_date,
-                show_progress,
-                endpoint,
-                calender,
-                frequency,
-                conversion,
-                nan_treatment,
-                reference_data,
-                retry_counter,
-                delay_param,
-                batch_size,
-                *args,
-                **kwargs,
-            )
-        else:
-            pass
+        return self.source_interface.download_data(
+            expressions,
+            start_date,
+            end_date,
+            show_progress,
+            endpoint,
+            calender,
+            frequency,
+            conversion,
+            nan_treatment,
+            reference_data,
+            retry_counter,
+            delay_param,
+            batch_size,
+            *args,
+            **kwargs,
+        )

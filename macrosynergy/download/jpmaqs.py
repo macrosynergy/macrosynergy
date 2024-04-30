@@ -1208,7 +1208,7 @@ if __name__ == "__main__":
         client_id=credentials.access_key,
         client_secret=credentials.secret_key,
         source="AWSLambda",
-        base_url=""
+        base_url="https://5tmml3wlv64wl55zssnjyjvh6a0yvwvo.lambda-url.eu-west-2.on.aws"
     ) as jpmaqs:
         data = jpmaqs.download(
             cids=cids,
