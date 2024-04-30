@@ -7,7 +7,7 @@ import io
 import warnings
 import requests
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Dict, Union, Tuple, AnyStr
+from typing import Any, List, Optional, Dict, Union, Tuple
 from tqdm import tqdm
 import boto3
 
