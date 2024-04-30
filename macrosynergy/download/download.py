@@ -52,20 +52,20 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         Initialize the class.
         """
         if source == "DataQuery":
-          self.source_interface = DataQueryInterface(
-                  oauth=oauth,
-                  client_id=client_id,
-                  client_secret=client_secret,
-                  crt=crt,
-                  key=key,
-                  username=username,
-                  password=password,
-                  proxy=proxy,
-                  check_connection=check_connection,
-                  suppress_warning=suppress_warning,
-                  debug=debug,
-                  **dq_download_kwargs
-              )
+            self.source_interface = DataQueryInterface(
+                oauth=oauth,
+                client_id=client_id,
+                client_secret=client_secret,
+                crt=crt,
+                key=key,
+                username=username,
+                password=password,
+                proxy=proxy,
+                check_connection=check_connection,
+                suppress_warning=suppress_warning,
+                debug=debug,
+                **dq_download_kwargs,
+            )
         elif source == "AWSLambda":
             self.source_interface = AWSLambdaInterface(
                 access_key_id=client_id,
@@ -75,7 +75,7 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
                 suppress_warning=suppress_warning,
                 region="eu-west-2",
                 service="lambda",
-                **kwargs
+                **kwargs,
             )
         else:
             raise ValueError("Unsupported source")
@@ -110,7 +110,7 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         return self.source_interface._fetch(url, params, tracking_id)
 
     def _fetch_timeseries(
-        self, url: str, params: dict, tracking_id: str = None, *args, **kwargs
+        self, url: str, params: dict, tracking_id: str = None,  *args, **kwargs
     ) -> List[Dict]:
         """
         Fetch timeseries data from the source.
