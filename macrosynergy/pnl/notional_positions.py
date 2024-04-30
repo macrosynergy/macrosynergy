@@ -1,9 +1,6 @@
 """
 Module for calculating notional positions based on contract signals, assets-under-management, 
 and other relevant parameters.
-
-# TODO positions taken at the end of the first trading day of the holding period (rebalance date)
-
 """
 
 import numpy as np
