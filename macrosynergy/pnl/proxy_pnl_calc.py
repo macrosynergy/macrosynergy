@@ -26,7 +26,7 @@ from macrosynergy.pnl.transaction_costs import TransactionCosts, get_fids
 def _replace_strs(
     list_of_strs: List[str], old_str: str, new_str: str = ""
 ) -> List[str]:
-    return [_.replace(old_str, new_str) for _ in list_of_strs]
+    return [ticker.replace(old_str, new_str) for ticker in list_of_strs]
 
 
 def _split_returns_positions_tickers(
@@ -409,8 +409,8 @@ def proxy_pnl_calc(
 
     :param <QuantamentalDataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
-        This dataframe must contain the contract-specific signals and possibly
-        related return series (for vol-targeting).
+        This dataframe must contain the notional positions and related notional return
+        series (for PnL calculations).
     :param <str> spos: the name of the strategy positions in the dataframe in
         the format "<sname>_<pname>".
         This must correspond to contract positions in the dataframe, which are categories
