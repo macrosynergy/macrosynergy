@@ -502,7 +502,6 @@ def historic_portfolio_vol(
     :param <str> rebal_freq: the frequency of rebalancing and volatility estimation.
         Default is 'M' for monthly. Alternatives are 'W' for business weekly, 'D' for
         daily, and 'Q' for quarterly. Estimations are conducted for the end of the period.
-        # TODO - case insensitive!
     :param <List[str]> est_freqs: the list of frequencies for which the volatility
         is estimated. Volatility for a given period is the weighted sum of the volatilities
         estimated for each frequency. Default is ["D", "W", "M"].
@@ -644,8 +643,6 @@ def historic_portfolio_vol(
         index="real_date", columns="fid", values="value"
     )
     assert set(pivot_signals.columns) == set(pivot_returns.columns)
-
-    # assert
 
     result: List[pd.DataFrame] = _hist_vol(
         pivot_returns=pivot_returns,

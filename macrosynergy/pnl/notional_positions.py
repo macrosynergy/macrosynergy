@@ -123,7 +123,7 @@ def _vol_target_positions(
     histpvol: QuantamentalDataFrame
     vcv_df: pd.DataFrame
     histpvol, vcv_df = historic_portfolio_vol(
-        df=ticker_df_to_qdf(df_wide),  # TODO why stack it again?
+        df=ticker_df_to_qdf(df_wide),
         sname=sname,
         fids=fids,
         rstring=rstring,
