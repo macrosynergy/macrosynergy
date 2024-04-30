@@ -998,7 +998,7 @@ if __name__ == "__main__":
 
     dfw = categories_df(
         df=dfd,
-        xcats=xcats[:2] + [ "test"],
+        xcats=xcats[:2] + ["test"],
         cids=cids,
         freq="M",
         # lag=1,
