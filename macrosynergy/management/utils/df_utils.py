@@ -264,13 +264,13 @@ def apply_slip(
 
     slip: int = slip.__neg__()
 
-    filtered_df = df[df["tickers"].isin(sel_tickers)]
+    filtered_df = df[df["ticker"].isin(sel_tickers)]
+    filtered_df.loc[:, metrics] = filtered_df.loc[:, metrics].astype(float)
+    filtered_df.loc[:, metrics] = filtered_df.groupby("ticker")[metrics].shift(slip)
 
-    filtered_df.loc[:, metrics] = filtered_df.groupby("tickers")[metrics].shift(slip)
+    df.loc[df["ticker"].isin(sel_tickers), metrics] = filtered_df[metrics]
 
-    df.loc[df["tickers"].isin(sel_tickers), metrics] = filtered_df[metrics]
-
-    df = df.drop(columns=["tickers"])
+    df = df.drop(columns=["ticker"])
 
     return df
 
