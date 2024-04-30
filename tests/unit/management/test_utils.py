@@ -25,6 +25,7 @@ from macrosynergy.management.utils import (
     get_eops,
     get_sops,
     _map_to_business_day_frequency,
+    apply_slip,
     Timer,
 )
 from macrosynergy.management.constants import FREQUENCY_MAP
@@ -822,6 +823,199 @@ class TestFunctions(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             _map_to_business_day_frequency("M", valid_freqs=1)
+
+    def test_apply_slip(self):
+        warnings.simplefilter("always")
+        # pick 3 random cids
+        sel_xcats: List[str] = ["XR", "CRY"]
+        sel_cids: List[str] = ["AUD", "CAD", "GBP"]
+        sel_dates: pd.DatetimeIndex = pd.bdate_range(
+            start="2020-01-01", end="2020-02-01"
+        )
+        cids: List[str] = ["AUD", "CAD", "GBP", "NZD", "JPY", "CHF"]
+        xcats: List[str] = ["XR", "CRY", "GROWTH", "INFL"]
+        # reduce the dataframe to the selected cids and xcats
+        test_df: pd.DataFrame = make_test_df(cids=cids, xcats=xcats)
+        test_df = test_df[
+            test_df["cid"].isin(sel_cids)
+            & test_df["xcat"].isin(sel_xcats)
+            & test_df["real_date"].isin(sel_dates)
+        ].reset_index(drop=True)
+
+        df: pd.DataFrame = test_df.copy()
+
+        # Test Case 1
+
+        # for every unique cid, xcat pair add a column "vx" which is just an integer 0→n ,
+        # where n is the number of unique dates for that cid, xcat pair
+        df["vx"] = (
+            df.groupby(["cid", "xcat"])["real_date"].rank(method="dense").astype(int)
+        )
+        test_slip: int = 5
+        # apply the slip method
+        out_df = apply_slip(
+            df=df,
+            slip=test_slip,
+            xcats=sel_xcats,
+            cids=sel_cids,
+            metrics=["value", "vx"],
+        )
+
+        # NOTE: casting df.vx to int as pandas casts it to float64
+        self.assertEqual(int(min(df["vx"])) + test_slip, int(min(out_df["vx"])))
+
+        for cid in sel_cids:
+            for xcat in sel_xcats:
+                inan_count = (
+                    df[(df["cid"] == cid) & (df["xcat"] == xcat)]["vx"].isna().sum()
+                )
+                onan_count = (
+                    out_df[(out_df["cid"] == cid) & (out_df["xcat"] == xcat)]["vx"]
+                    .isna()
+                    .sum()
+                )
+                assert inan_count == onan_count - test_slip
+
+        # Test Case 2 - slip is greater than the number of unique dates for a cid, xcat pair
+
+        df: pd.DataFrame = test_df.copy()
+        df["vx"] = (
+            df.groupby(["cid", "xcat"])["real_date"].rank(method="dense").astype(int)
+        )
+
+        test_slip = int(max(df["vx"])) + 1
+
+        out_df = apply_slip(
+            df=df,
+            slip=test_slip,
+            xcats=sel_xcats,
+            cids=sel_cids,
+            metrics=["value", "vx"],
+        )
+
+        self.assertTrue(out_df["vx"].isna().all())
+        self.assertTrue(out_df["value"].isna().all())
+
+        out_df = apply_slip(
+            df=df,
+            slip=test_slip,
+            xcats=sel_xcats,
+            cids=sel_cids,
+            metrics=["value"],
+        )
+
+        self.assertTrue((df["vx"] == out_df["vx"]).all())
+        self.assertTrue(out_df["value"].isna().all())
+
+        # case 3 - slip is negative
+        df: pd.DataFrame = test_df.copy()
+
+        with self.assertRaises(ValueError):
+            apply_slip(
+                df=df,
+                slip=-1,
+                xcats=sel_xcats,
+                cids=sel_cids,
+                metrics=["value"],
+            )
+
+        # case 4 - slip works with tickers
+        sel_tickers = [f"{cid}_{xcat}" for cid in sel_cids[:-2] for xcat in sel_xcats]
+        df: pd.DataFrame = test_df.copy()
+        out_df = apply_slip(
+            df=df,
+            slip=2,
+            tickers=sel_tickers,
+            metrics=["value"],
+        )
+        out_tickers = list(set(out_df["cid"] + "_" + out_df["xcat"]))
+        self.assertTrue(len(set(sel_tickers) - set(out_tickers)) == 0)
+
+        # iteratively for each cid_xcat pair, check that only sel_tickers changed and the rest are the same
+        for cid in sel_cids[:-2]:
+            for xcat in sel_xcats:
+                if f"{cid}_{xcat}" in sel_tickers:
+                    eq_series = out_df[
+                        (out_df["cid"] == cid) & (out_df["xcat"] == xcat)
+                    ]["value"] == df[(df["cid"] == cid) & (df["xcat"] == xcat)][
+                        "value"
+                    ].shift(
+                        -2
+                    )
+                    self.assertTrue(
+                        (
+                            eq_series
+                            ^ out_df[(out_df["cid"] == cid) & (out_df["xcat"] == xcat)][
+                                "value"
+                            ].isna()
+                        ).all()
+                    )
+                else:
+                    self.assertTrue(
+                        (
+                            out_df[(out_df["cid"] == cid) & (out_df["xcat"] == xcat)][
+                                "value"
+                            ]
+                            == df[(df["cid"] == cid) & (df["xcat"] == xcat)]["value"]
+                        ).all()
+                    )
+
+        # check that a value error is raised when cids and xcats are not in the dataframe
+        with warnings.catch_warnings(record=True) as w:
+            apply_slip(
+                df=df,
+                slip=2,
+                xcats=["metallica"],
+                cids=["ac_dc"],
+                metrics=["value"],
+                raise_error=False,
+            )
+            apply_slip(
+                df=df,
+                slip=2,
+                xcats=["metallica"],
+                cids=sel_cids,
+                metrics=["value"],
+                raise_error=False,
+            )
+            apply_slip(
+                df=df,
+                slip=2,
+                xcats=["metallica"],
+                cids=sel_cids,
+                metrics=["value"],
+                raise_error=False,
+            )
+            self.assertEqual(len(w), 3)
+            for ww in w:
+                self.assertTrue(issubclass(ww.category, UserWarning))
+
+        warnings.resetwarnings()
+
+        with self.assertRaises(ValueError):
+            apply_slip(
+                df=df,
+                slip=2,
+                xcats=["metallica"],
+                cids=["ac_dc"],
+                metrics=["value"],
+            )
+        with self.assertRaises(ValueError):
+            apply_slip(
+                df=df,
+                slip=2,
+                xcats=["metallica"],
+                cids=sel_cids,
+                metrics=["value"],
+            )
+        with self.assertRaises(ValueError):
+            apply_slip(
+                df=df,
+                slip=2,
+                xcats=["metallica"],
+                cids=sel_cids,
+                metrics=["value"],
+            )
 
 
 class TestTimer(unittest.TestCase):
