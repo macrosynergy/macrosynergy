@@ -62,7 +62,7 @@ def _apply_slip(
 
 
 def _check_df_for_contract_signals(
-    df_wide: QuantamentalDataFrame,
+    df_wide: pd.DataFrame,
     sname: str,
     fids: List[str],
 ) -> None:
@@ -70,7 +70,7 @@ def _check_df_for_contract_signals(
     Checks if the dataframe contains contract signals for the specified strategy
     and the specified contract identifiers.
 
-    :param <QuantamentalDataFrame> df: Quantamental dataframe with contract signals and returns.
+    :param <pd.DataFrame> df: Wide dataframe with contract signals and returns.
     :param <str> sname: the name of the strategy.
     :param <List[str]> fids: list of contract identifiers to apply the slip to.
     """
