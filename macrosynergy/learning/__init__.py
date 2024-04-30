@@ -25,8 +25,11 @@ from .signal_optimizer import SignalOptimizer
 
 from .predictors import (
     NaivePredictor,
+    BaseWeightedRegressor,
+    WeightedLinearRegression,
     SignWeightedLinearRegression,
     TimeWeightedLinearRegression,
+    WeightedLADRegressor,
     SignWeightedLADRegressor,
     TimeWeightedLADRegressor,
     LADRegressor,
