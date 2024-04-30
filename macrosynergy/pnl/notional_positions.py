@@ -16,7 +16,7 @@ from macrosynergy.management.utils import (
     is_valid_iso_date,
     apply_slip as apply_slip_util,
     reduce_df,
-    qdf_to_ticker_df, 
+    qdf_to_ticker_df,
     ticker_df_to_qdf,
 )
 
@@ -51,12 +51,10 @@ def _apply_slip(
     else:
         ticker_series: pd.Series = df["cid"] + "_" + df["xcat"]
         cdf: pd.DataFrame = df[ticker_series.str.startswith(tuple(fids))].copy()
-        cids: List[str] = cdf["cid"].unique().tolist()
-        xcats: List[str] = cdf["xcat"].unique().tolist()
+        tickers: List[str] = list(set(cdf["cid"] + "_" + cdf["xcat"]))
         return apply_slip_util(
             df=cdf,
-            cids=cids,
-            xcats=xcats,
+            tickers=tickers,
             slip=slip,
             raise_error=False,
             metrics=["value"],
