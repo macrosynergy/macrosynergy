@@ -270,7 +270,8 @@ def apply_slip(
 
     df.loc[df["ticker"].isin(sel_tickers), metrics] = filtered_df[metrics]
 
-    df = df.drop(columns=["ticker"])
+    df = df.drop(columns=["ticker"]).reset_index(drop=True)
+    assert isinstance(df, QuantamentalDataFrame), "Failed to apply slip."
 
     return df
 
