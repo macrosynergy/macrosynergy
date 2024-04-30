@@ -20,7 +20,6 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Union, Tuple, Any
 from timeit import default_timer as timer
 from tqdm import tqdm
-from aws_requests_auth.aws_auth import AWSRequestsAuth
 
 from macrosynergy import __version__ as ms_version_info
 from macrosynergy.download.exceptions import (
@@ -43,7 +42,7 @@ OAUTH_BASE_URL: str = (
 OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 JPMAQS_GROUP_ID: str = "JPMAQS"
-API_DELAY_PARAM: float = 0.2  # 300ms delay between requests
+API_DELAY_PARAM: float = 0.2  # 200ms delay between requests
 TOKEN_EXPIRY_BUFFER: float = 0.9  # 90% of token expiry time.
 API_RETRY_COUNT: int = 5  # retry count for transient errors
 HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
@@ -157,13 +156,8 @@ def request_wrapper(
     if method not in ["get", "post"]:
         raise ValueError(f"Invalid method: {method}")
     
-    aws_auth = "aws" in kwargs
 
-    if not aws_auth:
-        user_id: str = kwargs.pop("user_id", "unknown")
-    else: 
-        user_id: str = "AWS"
-        kwargs = kwargs["aws"]
+    user_id: str = kwargs.pop("user_id", "unknown")
 
     # insert tracking info in headers
     if headers is None:
@@ -439,49 +433,6 @@ class CertAuth(object):
             "user_id": user_id,
         }
 
-
-class AWSAuth(object):
-    """
-    Class for handling certificate based authentication for the DataQuery API.
-
-    :param <str> username: username for the DataQuery API.
-    :param <str> password: password for the DataQuery API.
-    :param <str> crt: path to the certificate file.
-    :param <str> key: path to the key file.
-
-    :return <CertAuth>: CertAuth object.
-
-    :raises <AssertionError>: if any of the parameters are of the wrong type.
-    :raises <FileNotFoundError>: if certificate or key file is missing from filesystem.
-    :raises <Exception>: other exceptions may be raised by underlying functions.
-    """
-
-    def __init__(
-        self,
-        client_id: str,
-        client_secret: str,
-        token: str,
-        host: str,
-        region: str = "eu-west-2",
-        service: str = "lambda",
-    ):
-        self.auth = AWSRequestsAuth(
-            aws_access_key=client_id,
-            aws_secret_access_key=client_secret,
-            aws_token=token,
-            aws_host=host,
-            aws_region=region,
-            aws_service=service,
-        )
-
-    def get_auth(self):
-        """
-        Returns a dictionary with the authentication information, in the same
-        format as the `macrosynergy.download.dataquery.OAuth.get_auth()` method.
-        """
-        return {"aws": {"auth": self.auth}}
-
-
 def validate_download_args(
     expressions: List[str],
     start_date: str,
@@ -635,7 +586,6 @@ class DataQueryInterface(object):
         base_url: str = OAUTH_BASE_URL,
         token_url: str = OAUTH_TOKEN_URL,
         suppress_warning: bool = True,
-        aws_auth: bool = False,
     ):
         self._check_connection: bool = check_connection
         self.msg_errors: List[str] = []
@@ -672,19 +622,12 @@ class DataQueryInterface(object):
             else:
                 oauth: bool = False
 
-        if oauth and not aws_auth:
+        if oauth:
             self.auth: OAuth = OAuth(
                 client_id=client_id,
                 client_secret=client_secret,
                 token_url=token_url,
                 proxy=proxy,
-            )
-        elif aws_auth:
-            self.auth: AWSAuth = AWSAuth(
-                client_id=client_id,
-                client_secret=client_secret,
-                token=None,
-                host=base_url.split("//")[1].split("/")[0],
             )
         else:
             if base_url == OAUTH_BASE_URL:

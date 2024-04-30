@@ -20,6 +20,7 @@ import itertools
 import pandas as pd
 
 from macrosynergy.download.dataquery import DataQueryInterface, API_DELAY_PARAM
+from macrosynergy.download.download import DownloadInterface
 from macrosynergy.download.exceptions import HeartbeatError, InvalidDataframeError
 from macrosynergy.management.utils import is_valid_iso_date, standardise_dataframe
 from macrosynergy.management.types import QuantamentalDataFrame
@@ -467,7 +468,7 @@ def validate_downloaded_df(
     return True
 
 
-class JPMaQSDownload(DataQueryInterface):
+class JPMaQSDownload(DownloadInterface):
     """
     JPMaQSDownload Object. This object is used to download JPMaQS data via the DataQuery API.
     It can be extended to include the use of proxies, and even request generic DataQuery expressions.
@@ -513,9 +514,10 @@ class JPMaQSDownload(DataQueryInterface):
         debug: bool = False,
         print_debug_data: bool = False,
         dq_download_kwargs: dict = {},
+        source = "DataQuery",
         *args,
         **kwargs,
-    ):
+    ):  
         vars_types_zip: List[Tuple[str, str]] = [
             (oauth, "oauth", bool),
             (check_connection, "check_connection", bool),
@@ -577,6 +579,7 @@ class JPMaQSDownload(DataQueryInterface):
             check_connection=check_connection,
             suppress_warning=suppress_warning,
             debug=debug,
+            source=source,
             *args,
             **kwargs,
         )
@@ -1186,6 +1189,26 @@ if __name__ == "__main__":
     with JPMaQSDownload(
         client_id=os.getenv("DQ_CLIENT_ID"),
         client_secret=os.getenv("DQ_CLIENT_SECRET"),
+    ) as jpmaqs:
+        data = jpmaqs.download(
+            cids=cids,
+            xcats=xcats,
+            start_date=start_date,
+            end_date=end_date,
+            show_progress=True,
+            report_time_taken=True,
+        )
+        print(data.info())
+        print(data)
+
+    import boto3
+    credentials = boto3.Session().get_credentials()
+
+    with JPMaQSDownload(
+        client_id=credentials.access_key,
+        client_secret=credentials.secret_key,
+        source="AWSLambda",
+        base_url=""
     ) as jpmaqs:
         data = jpmaqs.download(
             cids=cids,
