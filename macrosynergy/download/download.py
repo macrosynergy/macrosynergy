@@ -52,7 +52,8 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         Initialize the class.
         """
         if source == "DataQuery":
-            self.source_interface = DataQueryInterface(
+            DataQueryInterface.__init__(
+                self,
                 oauth=oauth,
                 client_id=client_id,
                 client_secret=client_secret,
@@ -66,8 +67,10 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
                 debug=debug,
                 **dq_download_kwargs,
             )
+            self.source_interface = DataQueryInterface
         elif source == "AWSLambda":
-            self.source_interface = AWSLambdaInterface(
+            AWSLambdaInterface.__init__(
+                self,
                 access_key_id=client_id,
                 secret_access_key=client_secret,
                 debug=debug,
@@ -77,6 +80,7 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
                 service="lambda",
                 **kwargs,
             )
+            self.source_interface = AWSLambdaInterface
         else:
             raise ValueError("Unsupported source")
 
@@ -89,14 +93,14 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         Get the list of unavailable expressions.
         """
         return self.source_interface._get_unavailable_expressions(
-            expected_exprs, dicts_list
+            self, expected_exprs, dicts_list
         )
 
     def check_connection(self, verbose=False, raise_error: bool = False) -> bool:
         """
         Check the connection to the source.
         """
-        return self.source_interface.check_connection(verbose, raise_error)
+        return self.source_interface.check_connection(self, verbose, raise_error)
 
     def _fetch(
         self,
@@ -107,16 +111,16 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         """
         Fetch data from the source.
         """
-        return self.source_interface._fetch(url, params, tracking_id)
+        return self.source_interface._fetch(self, url, params, tracking_id)
 
     def _fetch_timeseries(
-        self, url: str, params: dict, tracking_id: str = None,  *args, **kwargs
+        self, url: str, params: dict, tracking_id: str = None, *args, **kwargs
     ) -> List[Dict]:
         """
         Fetch timeseries data from the source.
         """
         return self.source_interface._fetch_timeseries(
-            url, params, tracking_id, *args, **kwargs
+            self, url, params, tracking_id, *args, **kwargs
         )
 
     def get_catalogue(
@@ -127,7 +131,7 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         """
         Get the catalogue of available expressions.
         """
-        return self.source_interface.get_catalogue(group_id, verbose)
+        return self.source_interface.get_catalogue(self, group_id, verbose)
 
     def _concurrent_loop(
         self,
@@ -144,6 +148,7 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         Concurrent loop to fetch data.
         """
         return self.source_interface._concurrent_loop(
+            self,
             expr_batches,
             show_progress,
             url,
@@ -161,7 +166,7 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         """
         Chain the download outputs.
         """
-        return self.source_interface._chain_download_outputs(download_outputs)
+        return self.source_interface._chain_download_outputs(self, download_outputs)
 
     def _download(
         self,
@@ -179,6 +184,7 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         Backend method to download data from the source.
         """
         return self.source_interface._download(
+            self,
             expressions,
             params,
             url,
@@ -212,6 +218,7 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         Download data from the source.
         """
         return self.source_interface.download_data(
+            self,
             expressions,
             start_date,
             end_date,
