@@ -52,7 +52,8 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
         Initialize the class.
         """
         if source == "DataQuery":
-            DataQueryInterface.__init__(
+            self.source_interface = DataQueryInterface
+            self.source_interface.__init__(
                 self,
                 oauth=oauth,
                 client_id=client_id,
@@ -67,9 +68,9 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
                 debug=debug,
                 **dq_download_kwargs,
             )
-            self.source_interface = DataQueryInterface
         elif source == "AWSLambda":
-            AWSLambdaInterface.__init__(
+            self.source_interface = AWSLambdaInterface
+            self.source_interface.__init__(
                 self,
                 access_key_id=client_id,
                 secret_access_key=client_secret,
@@ -80,7 +81,6 @@ class DownloadInterface(DataQueryInterface, AWSLambdaInterface):
                 service="lambda",
                 **kwargs,
             )
-            self.source_interface = AWSLambdaInterface
         else:
             raise ValueError("Unsupported source")
 
