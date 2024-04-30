@@ -66,6 +66,7 @@ def standardise_dataframe(
     df["cid"] = df["cid"].astype(str)
     df["xcat"] = df["xcat"].astype(str)
     df = df.sort_values(by=["real_date", "cid", "xcat"]).reset_index(drop=True)
+    df = df.drop_duplicates(subset=["cid", "xcat", "real_date"], keep="last")
 
     remaining_cols: Set[str] = set(df.columns) - set(idx_cols)
 
