@@ -39,7 +39,9 @@ def standardise_dataframe(
     :raises <ValueError>: If the input DataFrame is not in the correct format.
     """
     idx_cols: List[str] = QuantamentalDataFrame.IndexCols
-    commonly_used_cols: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+    metric_columns: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+
+    # Check if the input DF contains the standard columns
     if not set(df.columns).issuperset(set(idx_cols)):
         fail_str: str = (
             f"Error : Tried to standardize DataFrame but failed."
@@ -64,14 +66,22 @@ def standardise_dataframe(
         if len(df.columns) < 4:
             raise ValueError(fail_str)
 
+    # Convert date and ensure specific columns are strings in one step
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
     df["cid"] = df["cid"].astype(str)
     df["xcat"] = df["xcat"].astype(str)
-    df = df.sort_values(by=["real_date", "cid", "xcat"]).reset_index(drop=True)
+
+    df = (
+        df.drop_duplicates(subset=idx_cols, keep="last")
+        .sort_values(by=idx_cols)
+        .reset_index(drop=True)
+    )
+
+    # Sort the 'remaining' columns
+    ## No more row-reordering or shape changes after this point
 
     remaining_cols: Set[str] = set(df.columns) - set(idx_cols)
-
-    df = df[idx_cols + sorted(list(remaining_cols))]
+    df = df[idx_cols + sorted(remaining_cols)]
 
     # for every remaining col, try to convert to float
     for col in remaining_cols:
@@ -1077,7 +1087,7 @@ if __name__ == "__main__":
 
     dfw = categories_df(
         df=dfd,
-        xcats=xcats[:2] + [ "test"],
+        xcats=xcats[:2] + ["test"],
         cids=cids,
         freq="M",
         # lag=1,
