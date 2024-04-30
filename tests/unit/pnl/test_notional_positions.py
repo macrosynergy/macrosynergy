@@ -26,6 +26,28 @@ from macrosynergy.management.utils import (
 
 
 class TestNotionalPositions(unittest.TestCase):
+    def setUp(self) -> None:
+        self.cids: List[str] = ["USD", "EUR", "JPY", "GBP"]
+        self.fcats: List[str] = ["FX", "CDS", "IRS"]
+        self.sname: str = "STRATx"
+        self.pname: str = "POSz"
+        self.sig_ident: str = f"_CSIG_{self.sname}"
+        self.fids: List[str] = [
+            f"{cid}_{fcat}" for cid in self.cids for fcat in self.fcats
+        ]
+        ticker_endings = [f"{fcat}{self.sig_ident}" for fcat in self.fcats]
+        self.f_tickers: List[str] = [
+            f"{cid}_{te}" for cid in self.cids for te in ticker_endings
+        ]
+
+        self.mock_df = make_test_df(
+            start="2019-01-01",
+            end="2019-02-01",
+            cids=self.cids,
+            xcats=ticker_endings,
+        )
+        self.mock_df_wide = qdf_to_ticker_df(self.mock_df)
+
     def test__apply_slip(self):
         cids = ["USD", "EUR", "JPY", "GBP"]
         fcats = ["FX", "CDS", "IRS"]
@@ -38,26 +60,41 @@ class TestNotionalPositions(unittest.TestCase):
         self.assertIsInstance(result, QuantamentalDataFrame)
 
     def test__check_df_for_contract_signals(self):
-        cids = ["USD", "EUR", "JPY", "GBP"]
-        fcats = ["FX", "CDS", "IRS"]
-        sname = "testX"
-        sig_ident: str = f"_CSIG_{sname}"
-
-        wide_df = qdf_to_ticker_df(
-            make_test_df(start="2019-01-01", end="2019-02-01", cids=cids, xcats=fcats)
+        # Test vanilla case
+        wide_df = self.mock_df_wide.copy()
+        _check_df_for_contract_signals(
+            df_wide=wide_df, sname=self.sname, fids=self.fids
         )
-        fids = [f"{cid}_{fcat}" for cid in cids for fcat in fcats]
-
-        col_names = [f"{cid}_{fcat}{sig_ident}" for cid in cids for fcat in fcats]
-        wide_df.columns = col_names
-
-        _check_df_for_contract_signals(df_wide=wide_df, sname=sname, fids=fids)
-
-        # pop a random column
+        # Test ValueError with missing column
+        col_names = list(wide_df.columns)
         removed_col = col_names.pop(np.random.randint(len(col_names)))
         wide_df = wide_df.drop(columns=[removed_col])
         with self.assertRaises(ValueError):
-            _check_df_for_contract_signals(df_wide=wide_df, sname=sname, fids=fids)
+            _check_df_for_contract_signals(
+                df_wide=wide_df,
+                sname=self.sname,
+                fids=self.fids,
+            )
+
+    def test__leverage_positions(self):
+        df_wide = self.mock_df_wide.copy()
+        # set all values to 1
+        df_wide.loc[:, :] = 1
+        fx_fids = [f"{cid}_FX" for cid in self.cids]
+        result = _leverage_positions(
+            df_wide=df_wide,
+            sname=self.sname,
+            pname=self.pname,
+            fids=fx_fids,
+            leverage=1,
+        )
+        # col names should be the FID+strat+pos
+        expected_cols = [f"{fid}_{self.sname}_{self.pname}" for fid in fx_fids]
+        found_cols = list(result.columns)
+        self.assertEqual(set(expected_cols), set(found_cols))
+
+        for cola, colb in zip(found_cols[:-1], found_cols[1:]):
+            self.assertTrue(result[cola].equals(result[colb]))
 
 
 if __name__ == "__main__":
