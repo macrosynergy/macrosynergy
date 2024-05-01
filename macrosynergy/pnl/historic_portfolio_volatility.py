@@ -363,8 +363,6 @@ def unstack_covariances(
     fillna: bool = False,
 ) -> Dict[str, pd.DataFrame]:
     """Unstack the covariance matrix DataFrame."""
-    # return vcv_df.pivot(index="real_date", columns=["fid1", "fid2"], values="value")
-
     vcvs: Dict[str, pd.DataFrame] = {}
     for dt, df in vcv_df.groupby("real_date"):
         vcv = df.pivot(index="fid2", columns="fid1", values="value")
