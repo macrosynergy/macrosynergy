@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union, Any, Set
@@ -11,18 +12,44 @@ from macrosynergy.pnl.notional_positions import (
     _leverage_positions,
     notional_positions,
 )
+from macrosynergy.pnl.historic_portfolio_volatility import (
+    historic_portfolio_vol,
+    RETURN_SERIES_XCAT,
+)
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import (
     is_valid_iso_date,
     standardise_dataframe,
     ticker_df_to_qdf,
+    get_sops,
     qdf_to_ticker_df,
     reduce_df,
     update_df,
     get_cid,
     get_xcat,
 )
+
+
+def mock_historic_portfolio_volatility(
+    df: pd.DataFrame,
+    fids: List[str],
+    sname: str,
+    rstring: str,
+    start: str,
+    end: str,
+    **kwargs,
+) -> pd.DataFrame:
+    rebal_dates = get_sops(start_date=start, end_date=end, est_freq="m")
+    vol_df = pd.DataFrame(
+        {
+            "cid": sname,
+            "xcat": "a",
+            "real_date": rebal_dates,
+            "value": 1,
+        }
+    )
+    
 
 
 class TestNotionalPositions(unittest.TestCase):
@@ -77,16 +104,20 @@ class TestNotionalPositions(unittest.TestCase):
             )
 
     def test__leverage_positions(self):
+
+        ## Test 1 - Test with all values as 1
         df_wide = self.mock_df_wide.copy()
         # set all values to 1
         df_wide.loc[:, :] = 1
         fx_fids = [f"{cid}_FX" for cid in self.cids]
+        _aum, _leverage = 100, 1
         result = _leverage_positions(
             df_wide=df_wide,
             sname=self.sname,
             pname=self.pname,
             fids=fx_fids,
-            leverage=1,
+            leverage=_leverage,
+            aum=_aum,
         )
         # col names should be the FID+strat+pos
         expected_cols = [f"{fid}_{self.sname}_{self.pname}" for fid in fx_fids]
@@ -95,6 +126,85 @@ class TestNotionalPositions(unittest.TestCase):
 
         for cola, colb in zip(found_cols[:-1], found_cols[1:]):
             self.assertTrue(result[cola].equals(result[colb]))
+
+        # get all unique values
+        unique_values = set(result.values.flatten())
+        self.assertEqual(len(unique_values), 1)
+        expected_result_value = _aum * _leverage / len(fx_fids)
+        self.assertEqual(unique_values, {expected_result_value})
+
+        ## Test 2 - Test with a few nans
+        # The tests only need to check the logic of the calculation relative to input
+        # so we can set all values to 1
+        df_wide = self.mock_df_wide.copy()
+        df_wide.loc[:, :] = 1
+        fx_fids = [f"{cid}_FX" for cid in self.cids]
+        df_wide = df_wide[
+            [u for u in df_wide.columns if str(u).endswith(f"_FX_CSIG_{self.sname}")]
+        ]
+
+        for _leverage in [1, np.random.randint(1, 10), np.random.rand()]:
+            for _aum in [1, np.random.randint(1, int(1e6)), np.random.rand() * 1e6]:
+
+                # create a few nans in the dataframe randomly but record the locations
+                shuffled_fx_fids = [f"{t}_CSIG_{self.sname}" for t in fx_fids]
+                np.random.shuffle(shuffled_fx_fids)
+                random_dates = np.random.choice(df_wide.index, 3, replace=False)
+                nan_tuples = [
+                    (random_dates[0], f"{shuffled_fx_fids[0]}"),
+                    (random_dates[1], f"{shuffled_fx_fids[1]}"),
+                    (random_dates[1], f"{shuffled_fx_fids[2]}"),
+                    (random_dates[2], None),
+                ]
+
+                for date, fid in nan_tuples:
+                    if fid is None:
+                        df_wide.loc[date, :] = np.nan
+                    else:
+                        df_wide.loc[date, fid] = np.nan
+
+                result = _leverage_positions(
+                    df_wide=df_wide,
+                    sname=self.sname,
+                    pname=self.pname,
+                    fids=fx_fids,
+                    leverage=_leverage,
+                    aum=_aum,
+                )
+
+                # col names should be the FID+strat+pos
+                expected_cols = [f"{fid}_{self.sname}_{self.pname}" for fid in fx_fids]
+                found_cols = list(result.columns)
+                self.assertEqual(set(expected_cols), set(found_cols))
+
+                # check nan-locations - should be in the same place
+                for date, fidcsig in nan_tuples:
+                    if fidcsig is None:
+                        self.assertTrue(result.loc[date, :].isnull().all())
+                    else:
+                        posname: str = f"{fidcsig}_{self.pname}".replace("_CSIG", "")
+                        self.assertTrue(np.isnan(result.loc[date, posname]))
+
+                # iterate through all rows
+                for date, row in result.iterrows():
+                    # There should be one unique value in each row
+                    na_count: int = int(row.isna().sum())
+                    if na_count == len(fx_fids):
+                        continue  # this is the all nan row
+                    unique_values: Set = set(row.dropna().values)
+                    self.assertEqual(len(unique_values), 1)
+                    # the value should be LEV*AUM/NON-NAN-COUNT
+                    expected_result_value = _leverage * _aum / (len(fx_fids) - na_count)
+                    self.assertEqual(unique_values, {expected_result_value})
+
+    @mock.patch(
+        "macrosynergy.pnl.historic_portfolio_volatility.historic_portfolio_volatility",
+        side_effect=mock_historic_portfolio_volatility,
+    )
+    def test__vol_target_positions(
+        self,
+        mock_historic_portfolio_volatility: mock.MagicMock,
+    ): ...
 
 
 if __name__ == "__main__":
