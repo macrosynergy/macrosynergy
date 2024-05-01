@@ -586,6 +586,7 @@ class DataQueryInterface(object):
         base_url: str = OAUTH_BASE_URL,
         token_url: str = OAUTH_TOKEN_URL,
         suppress_warning: bool = True,
+        other_auth=None,
     ):
         self._check_connection: bool = check_connection
         self.msg_errors: List[str] = []
@@ -629,6 +630,8 @@ class DataQueryInterface(object):
                 token_url=token_url,
                 proxy=proxy,
             )
+        elif other_auth is not None:
+            self.auth = other_auth
         else:
             if base_url == OAUTH_BASE_URL:
                 base_url: str = CERT_BASE_URL
