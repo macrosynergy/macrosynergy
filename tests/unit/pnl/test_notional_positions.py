@@ -31,7 +31,7 @@ from macrosynergy.management.utils import (
 )
 
 
-def mock_historic_portfolio_volatility(
+def mock_historic_portfolio_vol(
     df: pd.DataFrame,
     fids: List[str],
     sname: str,
@@ -49,7 +49,20 @@ def mock_historic_portfolio_volatility(
             "value": 1,
         }
     )
-    
+
+    # create all possible tuples of 2x fids
+    fid_pairs = [
+        str(x).split("-")
+        for x in set(["-".join(sorted([fid1, fid2]) for fid1 in fids for fid2 in fids)])
+    ]
+    vcv_df = pd.DataFrame(columns=["real_date", "fid1", "fid2", "value"])
+    vcv_dict = {}
+    for dt in rebal_dates:
+        for fid1, fid2 in fid_pairs:
+            vcv_dict[(dt, fid1, fid2)] = 1
+    vcv_df = pd.DataFrame(vcv_dict).T.reset_index()
+    vcv_df.columns = ["real_date", "fid1", "fid2", "value"]
+    return vol_df, vcv_df
 
 
 class TestNotionalPositions(unittest.TestCase):
@@ -198,13 +211,54 @@ class TestNotionalPositions(unittest.TestCase):
                     self.assertEqual(unique_values, {expected_result_value})
 
     @mock.patch(
-        "macrosynergy.pnl.historic_portfolio_volatility.historic_portfolio_volatility",
-        side_effect=mock_historic_portfolio_volatility,
+        "macrosynergy.pnl.historic_portfolio_volatility.historic_portfolio_vol",
+        side_effect=mock_historic_portfolio_vol,
     )
     def test__vol_target_positions(
         self,
-        mock_historic_portfolio_volatility: mock.MagicMock,
-    ): ...
+        mock_historic_portfolio_vol: mock.MagicMock,
+    ):
+        # rename the columns, replace _CSIG_{self.sname} with _XR
+        _aum = 1
+        _vol_target = 0.1
+        dt_range = pd.bdate_range(start="2019-01-01", end="2021-01-01")
+        df_wide = pd.DataFrame(
+            columns=self.mock_df_wide.columns, index=dt_range, data=1
+        )
+        df_wide.index.name = "real_date"
+        # df_wide.loc[:, :] = 1
+        fx_fids = [f"{cid}_FX" for cid in self.cids]
+        good_args = dict(
+            sname=self.sname,
+            pname=self.pname,
+            fids=fx_fids,
+            vol_target=_vol_target,
+            aum=_aum,
+            rebal_freq="m",
+            est_freqs=["D", "W", "M"],
+            est_weights=[1, 2, 3],
+            lback_periods=[-1, -1, -1],
+            half_life=[11, 5, 6],
+            rstring="XR",
+            lback_meth="xma",
+            nan_tolerance=0.1,
+            remove_zeros=True,
+        )
+
+        df_wide = df_wide[
+            [u for u in df_wide.columns if str(u).endswith(f"_FX_CSIG_{self.sname}")]
+        ]
+        df_xr = df_wide.copy()
+        df_xr.columns = [
+            str(col).replace(f"_CSIG_{self.sname}", "XR") for col in df_xr.columns
+        ]
+        df_wide = pd.concat([df_wide, df_xr], axis=1)
+
+        result: Tuple[pd.DataFrame, ...] = _vol_target_positions(
+            df_wide=df_wide, **good_args
+        )
+
+        assert isinstance(result, Tuple)
 
 
 if __name__ == "__main__":
