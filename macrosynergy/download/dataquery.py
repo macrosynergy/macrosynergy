@@ -560,6 +560,9 @@ class DataQueryInterface(object):
     :param <str> token_url: token URL for the DataQuery API. Defaults to OAUTH_TOKEN_URL.
     :param <bool> suppress_warnings: whether to suppress warnings. Defaults to True.
 
+    :param custom_auth: custom authentication object. When specified oauth must be False 
+        and the object must have a get_auth method. Defaults to None.
+
     :return <DataQueryInterface>: DataQueryInterface object.
 
     :raises <TypeError>: if any of the parameters are of the wrong type.
@@ -586,6 +589,7 @@ class DataQueryInterface(object):
         base_url: str = OAUTH_BASE_URL,
         token_url: str = OAUTH_TOKEN_URL,
         suppress_warning: bool = True,
+        custom_auth=None,
     ):
         self._check_connection: bool = check_connection
         self.msg_errors: List[str] = []
@@ -629,6 +633,8 @@ class DataQueryInterface(object):
                 token_url=token_url,
                 proxy=proxy,
             )
+        elif custom_auth is not None:
+            self.auth = custom_auth
         else:
             if base_url == OAUTH_BASE_URL:
                 base_url: str = CERT_BASE_URL
