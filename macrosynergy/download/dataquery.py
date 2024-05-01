@@ -803,6 +803,7 @@ class DataQueryInterface(object):
     def get_catalogue(
         self,
         group_id: str = JPMAQS_GROUP_ID,
+        page_size: int = 1000,
         verbose: bool = True,
     ) -> List[str]:
         """
@@ -811,18 +812,30 @@ class DataQueryInterface(object):
         tickers in the JPMaQS group. The group ID can be changed to fetch a
         different group's catalogue.
 
-        :param <str> group_id: the group ID to fetch the catalogue for.
+        :param <str> group_id: the group ID to fetch the catalogue for. Defaults to
+            "JPMAQS".
+        :param <int> page_size: the number of tickers to fetch in a single request.
+            Defaults to 1000 (maximum allowed by the API).
 
-        :return <List[str]>: list of tickers in the JPMaQS group.
+        :return <List[str]>: list of tickers in the requested group.
 
         :raises <ValueError>: if the response from the server is not valid.
         """
+        if not isinstance(group_id, str):
+            raise TypeError("`group_id` must be a string.")
+
+        pgsize_err = "`page_size` must be an integer between 1 and 1000."
+        if not isinstance(page_size, int):
+            raise TypeError(pgsize_err)
+        elif (page_size < 1) or (page_size > 1000):
+            raise ValueError(pgsize_err)
+
         if verbose:
             print(f"Downloading the {group_id} catalogue from DataQuery...")
         try:
             response_list: Dict = self._fetch(
                 url=self.base_url + CATALOGUE_ENDPOINT,
-                params={"group-id": group_id},
+                params={"group-id": group_id, "limit": page_size},
                 tracking_id=CATALOGUE_TRACKING_ID,
             )
         except Exception as e:
