@@ -817,8 +817,12 @@ class DataQueryInterface(object):
         """
         if not isinstance(group_id, str):
             raise TypeError("`group_id` must be a string.")
+
+        pgsize_err = "`page_size` must be an integer between 1 and 1000."
         if not isinstance(page_size, int):
-            raise TypeError("`page_size` must be an integer.")
+            raise TypeError(pgsize_err)
+        elif (page_size < 1) or (page_size > 1000):
+            raise ValueError(pgsize_err)
 
         if verbose:
             print(f"Downloading the {group_id} catalogue from DataQuery...")
