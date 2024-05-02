@@ -361,7 +361,6 @@ class TestMapSelector(unittest.TestCase):
         ]
 
         threshold = 0.05
-        positive_selector = []
         positive_selector = MapSelector(threshold=threshold, positive=True)
         positive_selector.fit(self.X, self.y)
         negative_selector = MapSelector(threshold=threshold, positive=False)
