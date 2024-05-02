@@ -18,7 +18,6 @@ from statsmodels.tools.tools import add_constant
 
 from linearmodels.panel import RandomEffects
 
-
 from typing import Union, Any, List, Optional
 
 import warnings
@@ -382,7 +381,7 @@ class MapSelector(BaseEstimator, SelectorMixin):
             )
         if not isinstance(positive, (bool, np.bool_)):
             raise TypeError("The 'positive' parameter must be a boolean.")
-        
+
         self.threshold = threshold
         self.positive = positive
         self.feature_names_in_ = None
@@ -435,10 +434,10 @@ class MapSelector(BaseEstimator, SelectorMixin):
 
         # Convert cross-sections to numeric codes for compatibility with RandomEffects
         unique_xss = sorted(X.index.get_level_values(0).unique())
-        xs_codes = dict(zip(unique_xss,range(1,len(unique_xss)+1)))
+        xs_codes = dict(zip(unique_xss, range(1, len(unique_xss) + 1)))
 
-        X = X.rename(xs_codes,level=0,inplace=False).copy()
-        y = y.rename(xs_codes,level=0,inplace=False).copy()
+        X = X.rename(xs_codes, level=0, inplace=False).copy()
+        y = y.rename(xs_codes, level=0, inplace=False).copy()
 
         # For each column, obtain Wald test p-value
         # Keep significant features
@@ -449,8 +448,8 @@ class MapSelector(BaseEstimator, SelectorMixin):
             # as opposed to the cross-section
             re = RandomEffects(y.swaplevel(), ftr.swaplevel()).fit()
             est = re.params[col]
-            zstat = est/re.std_errors[col]
-            pval = 2*(1 - stats.norm.cdf(zstat))
+            zstat = est / re.std_errors[col]
+            pval = 2 * (1 - stats.norm.cdf(zstat))
             if pval < self.threshold:
                 if self.positive:
                     if est > 0:
