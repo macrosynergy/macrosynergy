@@ -23,6 +23,8 @@ from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.pnl.transaction_costs import TransactionCosts, get_fids
 
 
+
+
 def _replace_strs(
     list_of_strs: List[str], old_str: str, new_str: str = ""
 ) -> List[str]:
@@ -173,6 +175,34 @@ def _prep_dfs_for_pnl_calcs(
     return pnl_df, pivot_pos, pivot_returns, rebal_dates
 
 
+
+####################################################################################
+# __________________________________________________________________________________
+# In psuedo code:
+# [1] initial period (t=0)
+# pnl(0) = 0 (no position)
+# price(0) = 1 (value change exactly position)
+# pos(0) = pos*(0) (end-of-period position - that earns returns at the end of the next business day)
+# [2] End of next period (t=1) - no rebalancing
+# Daily PnL pnl(1) = pos(0) * price(0) * r(1) = pos*(0) * r(1) 
+# Value change of position: price(1) = price(0) * (1+ r(1)) = (1+ r(1))
+# Position: pos(1) = pos(0) = pos*(0) 
+# __________________________________________________________________________________
+# More generally:
+# [a] Non-rebalancing date t:
+# pnl(t) =  pos(t-1) * price(t-1) * r(t)
+# price(t) = price(t-1) * (1+r(t))
+# pos(t) = pos(t-1)
+# [b] Rebalancing date t:
+# pnl(t) =  pos(t-1) * price(t-1) * r(t)
+# price(t) = 1
+# pos(t) = pos*(t)
+# where pos*(t) is the "optimal" position for a rebalance on that day.
+# __________________________________________________________________________________
+####################################################################################
+
+
+
 def _pnl_excl_costs(
     df_wide: pd.DataFrame, spos: str, rstring: str, pnl_name: str
 ) -> pd.DataFrame:
@@ -185,23 +215,35 @@ def _pnl_excl_costs(
     _end = pd.Timestamp(pivot_pos.last_valid_index())
     rebal_dates = sorted(set(rebal_dates + [_end]))
 
-    # loop between each rebalancing date
+    # loop between each rebalancing date (month start)
+    # there are returns and positions for each date in between and on the rebalancing date
     for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
-        dt2x = dt2 - pd.offsets.BDay(1)
-        curr_pos: pd.Series = pivot_pos.loc[dt1]
-        curr_rets: pd.DataFrame = pivot_returns.loc[dt1:dt2x]
-        cumprod_rets: pd.Series = (1 + curr_rets / 100).cumprod(axis=0)
-        pnl_df.loc[dt1:dt2x] = curr_pos * cumprod_rets
+        # dt1 is the first day of current (new) position
+        # dt2 is the next rebalancing date, i.e.  position changes on dt2.
+        dt2x = dt2 - pd.offsets.BDay(1) # last day to hold the position
+        dt1x = dt1 + pd.offsets.BDay(1) # first day the current position made returns
+        
+        # current position is the position held from dt1 to dt2x
+        # current returns is the returns from dt1x to dt2
+        curr_pos = pivot_pos.loc[dt1:dt2x]
+        curr_returns = pivot_returns.loc[dt1x:dt2]
+        
+        # calculate prices separately for each day
+        prices = (1 + curr_returns).cumprod()
+        # reset the first price to 1
+        prices.iloc[0] = 1
 
-    # on dt2, we need to hold the position
-    pnl_df.loc[rebal_dates[-1] :] = pivot_pos.loc[rebal_dates[-1]] * (
-        1 + pivot_returns.loc[rebal_dates[-1] :] / 100
-    ).cumprod(axis=0)
+        # calculate the daily pnl
+        daily_pnl = curr_pos.shift(1) * prices.shift(1) * curr_returns
+        x = curr_pos.shift(1).values * prices.shift(1).values * curr_returns.values
+        pnl_df.loc[dt1:dt2x] = x
 
-    # append <spos>_<pnl_name> to all columns
-    pnl_df.columns = [f"{col}_{spos}_{pnl_name}" for col in pnl_df.columns]
+    # Drop rows with no pnl
+    nan_count_rows = pnl_df.isna().all(axis=1).sum()
+    pnl_df = pnl_df.loc[pnl_df.abs().sum(axis=1) > 0]
 
     return pnl_df
+
 
 
 def _calculate_trading_costs(
@@ -558,6 +600,8 @@ if __name__ == "__main__":
         df=dfx,
         spos="STRAT_POS",
         rstring="XR_NSA",
+        start='2001-01-01',
+        end='2020-01-01',
         transaction_costs_object=tx,
         portfolio_name="GLB",
         pnl_name="PNL",
