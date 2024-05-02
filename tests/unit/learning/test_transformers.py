@@ -21,6 +21,9 @@ from sklearn.linear_model import Lasso
 
 from sklearn.exceptions import NotFittedError
 
+import scipy.stats as stats
+from linearmodels.panel import RandomEffects
+
 
 class TestLassoSelector(unittest.TestCase):
     @classmethod
@@ -326,16 +329,22 @@ class TestMapSelector(unittest.TestCase):
         self.X = df.drop(columns="XR")
         self.y = df["XR"]
 
+        unique_xss = sorted(self.X.index.get_level_values(0).unique())
+        xs_codes = dict(zip(unique_xss, range(1, len(unique_xss) + 1)))
+
+        X_map_test = self.X.copy().rename(xs_codes, level=0, inplace=False).copy()
+        y_map_test = self.y.copy().rename(xs_codes, level=0, inplace=False).copy()
+
         # determine the 95% significant features according to the MAP test
         self.est = []
         self.pval = []
-        for col in self.X.columns:
-            ftr = self.X[col]
+        for col in X_map_test.columns:
+            ftr = X_map_test[col]
             ftr = add_constant(ftr)
-            groups = ftr.index.get_level_values(1)
-            model = MixedLM(self.y, ftr, groups).fit(reml=False)
-            est = model.params.iloc[1]
-            pval = model.pvalues.iloc[1]
+            re = RandomEffects(y_map_test.swaplevel(), ftr.swaplevel()).fit()
+            est = re.params[col]
+            zstat = est / re.std_errors[col]
+            pval = 2 * (1 - stats.norm.cdf(zstat))
             self.est.append(est)
             self.pval.append(pval)
 
