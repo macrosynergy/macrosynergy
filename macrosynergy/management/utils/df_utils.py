@@ -37,7 +37,9 @@ def standardise_dataframe(
     :raises <ValueError>: If the input DataFrame is not in the correct format.
     """
     idx_cols: List[str] = QuantamentalDataFrame.IndexCols
-    commonly_used_cols: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+    metric_columns: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+
+    # Check if the input DF contains the standard columns
     if not set(df.columns).issuperset(set(idx_cols)):
         fail_str: str = (
             f"Error : Tried to standardize DataFrame but failed."
@@ -62,14 +64,22 @@ def standardise_dataframe(
         if len(df.columns) < 4:
             raise ValueError(fail_str)
 
+    # Convert date and ensure specific columns are strings in one step
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
     df["cid"] = df["cid"].astype(str)
     df["xcat"] = df["xcat"].astype(str)
-    df = df.sort_values(by=["real_date", "cid", "xcat"]).reset_index(drop=True)
+
+    df = (
+        df.drop_duplicates(subset=idx_cols, keep="last")
+        .sort_values(by=idx_cols)
+        .reset_index(drop=True)
+    )
+
+    # Sort the 'remaining' columns
+    ## No more row-reordering or shape changes after this point
 
     remaining_cols: Set[str] = set(df.columns) - set(idx_cols)
-
-    df = df[idx_cols + sorted(list(remaining_cols))]
+    df = df[idx_cols + sorted(remaining_cols)]
 
     # for every remaining col, try to convert to float
     for col in remaining_cols:
@@ -195,62 +205,73 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
 
 
 def apply_slip(
-    df: pd.DataFrame,
+    df: QuantamentalDataFrame,
     slip: int,
-    cids: List[str],
-    xcats: List[str],
-    metrics: List[str],
+    cids: Optional[List[str]] = None,
+    xcats: Optional[List[str]] = None,
+    tickers: Optional[List[str]] = None,
+    metrics: List[str] = ["value"],
     raise_error: bool = True,
-) -> pd.DataFrame:
+) -> QuantamentalDataFrame:
     """
     Applies a slip, i.e. a negative lag, to the DataFrame
     for the given cross-sections and categories, on the given metrics.
 
-    :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
+    :param <QuantamentalDataFrame> target_df: DataFrame to which the slip is applied.
     :param <int> slip: Slip to be applied.
     :param <List[str]> cids: List of cross-sections.
     :param <List[str]> xcats: List of target categories.
     :param <List[str]> metrics: List of metrics to which the slip is applied.
-    :return <pd.DataFrame> target_df: DataFrame with the slip applied.
+    :return <QuantamentalDataFrame> target_df: DataFrame with the slip applied.
     :raises <TypeError>: If the provided parameters are not of the expected type.
     :raises <ValueError>: If the provided parameters are semantically incorrect.
     """
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
 
     df = df.copy()
     if not (isinstance(slip, int) and slip >= 0):
         raise ValueError("Slip must be a non-negative integer.")
 
+    if not any([cids, xcats, tickers]):
+        raise ValueError("One of `tickers`, `cids` or `xcats` must be provided.")
+    if tickers is not None:
+        if cids is not None or xcats is not None:
+            raise ValueError("Cannot specify both `tickers` and `cids`/`xcats`.")
     if cids is None:
-        cids = df["cid"].unique().tolist()
+        cids = df["cid"].unique()
     if xcats is None:
-        xcats = df["xcat"].unique().tolist()
+        xcats = df["xcat"].unique()
 
-    sel_tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
-    df["tickers"] = df["cid"] + "_" + df["xcat"]
+    if tickers is not None:
+        sel_tickers = tickers
+    else:
+        sel_tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
 
-    if not set(sel_tickers).issubset(set(df["tickers"].unique())):
+    df["ticker"] = df["cid"] + "_" + df["xcat"]
+    err_str = (
+        "Tickers targetted for applying slip are not present in the DataFrame.\n"
+        "Missing tickers: {tickers}"
+    )
+
+    if not set(sel_tickers).issubset(set(df["ticker"].unique())):
+        missing_tickers = sorted(list(set(sel_tickers) - set(df["ticker"].unique())))
+        _err_str = err_str.format(tickers=missing_tickers)
         if raise_error:
-            raise ValueError(
-                "Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: "
-                f"{sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
-            )
+            raise ValueError(_err_str)
         else:
-            warnings.warn(
-                "Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: "
-                f"{sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
-            )
+            warnings.warn(_err_str)
 
     slip: int = slip.__neg__()
 
-    filtered_df = df[df["tickers"].isin(sel_tickers)]
+    filtered_df = df[df["ticker"].isin(sel_tickers)]
+    filtered_df.loc[:, metrics] = filtered_df.loc[:, metrics].astype(float)
+    filtered_df.loc[:, metrics] = filtered_df.groupby("ticker")[metrics].shift(slip)
 
-    filtered_df.loc[:, metrics] = filtered_df.groupby("tickers")[metrics].shift(slip)
+    df.loc[df["ticker"].isin(sel_tickers), metrics] = filtered_df[metrics]
 
-    df.loc[df["tickers"].isin(sel_tickers), metrics] = filtered_df[metrics]
-
-    df = df.drop(columns=["tickers"])
+    df = df.drop(columns=["ticker"]).reset_index(drop=True)
+    assert isinstance(df, QuantamentalDataFrame), "Failed to apply slip."
 
     return df
 
@@ -998,7 +1019,7 @@ if __name__ == "__main__":
 
     dfw = categories_df(
         df=dfd,
-        xcats=xcats[:2] + [ "test"],
+        xcats=xcats[:2] + ["test"],
         cids=cids,
         freq="M",
         # lag=1,
