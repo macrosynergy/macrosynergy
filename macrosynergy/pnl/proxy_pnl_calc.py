@@ -7,7 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from typing import List, Union, Tuple, Optional, Dict, Callable
+from typing import List, Union, Tuple, Optional, Dict, Callable, Set
 from numbers import Number
 import warnings
 from macrosynergy.management.simulate import make_test_df
@@ -213,26 +213,32 @@ def _pnl_excl_costs(
     # Add last end date - as position taken on the last rebal date,
     # is held until notional_positions data is available
     _end = pd.Timestamp(pivot_pos.last_valid_index())
-    rebal_dates = sorted(set(rebal_dates + [_end]))
+    # rebal_dates = sorted(set(rebal_dates + [_end]))
+    rebal_dates: Set = set(rebal_dates + [_end])
+    # Initialize a DataFrame for prices
+    prices = pd.DataFrame(1.0, index=pnl_df.index, columns=pnl_df.columns)
 
-    prices_df = pnl_df.copy()
+    # Iterate through each date in pnl_df starting from the second date
+    for t in range(1, len(pnl_df.index)):
+        date = pnl_df.index[t]
+        prev_date = pnl_df.index[t - 1]
 
-    ## Setup the prices dataframe
-    # loop between each rebalancing date (month start)
-    # there are returns and positions for each date in between and on the rebalancing date
-    for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
-        # dt1 is the first day of current (new) position
-        # dt2 is the next rebalancing date, i.e.  position changes on dt2.
-        dt2x = dt2 - pd.offsets.BDay(1)  # last day to hold the position
-        dt1x = dt1 + pd.offsets.BDay(1)  # first day the current position made returns
-        # calculate prices for each day between dt1 and dt2x (inclusive)
-        prices = 1 + pivot_returns.loc[dt1x:dt2]
-        prices.iloc[0] = 1
-        prices_df.loc[dt1:dt2x] = prices.cumprod(axis=0).values
+        # Determine whether it's a rebalancing day and update prices
+        if date in rebal_dates:
+            # prices.loc[date] = 1  # Reset prices to 1 on rebalancing days
+            assert np.all(prices.loc[date] == 1)
+        else:
+            prices.loc[date] = prices.loc[prev_date] * (1 + pivot_returns.loc[date])
 
-    ## Calculate the PnL
-    pnl_df = pivot_pos.shift(1) * prices_df * pivot_returns
+        # Calculate daily PnL for each asset
+        pnl_df.loc[date] = (
+            pivot_pos.loc[prev_date] * prices.loc[prev_date] * pivot_returns.loc[date]
+        )
+        
 
+    
+    
+        
     # Drop rows with no pnl
     nan_count_rows = pnl_df.isna().all(axis=1).sum()
     assert nan_count_rows >= 1
@@ -583,6 +589,8 @@ def proxy_pnl_calc(
 
 if __name__ == "__main__":
     import macrosynergy.management as msm
+    import macrosynergy.visuals as msv, numpy as np, PIL.Image as Image, matplotlib.pyplot as plt
+
     import os, pickle
 
     cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
@@ -619,8 +627,6 @@ if __name__ == "__main__":
         ],
         axis=0,
     )
-
-    import macrosynergy.visuals as msv, numpy as np, PIL.Image as Image, matplotlib.pyplot as plt
 
     df_wide = qdf_to_ticker_df(df_all)
     df_wide = df_wide.loc[:, df_wide.columns.str.startswith("GLB_")]
