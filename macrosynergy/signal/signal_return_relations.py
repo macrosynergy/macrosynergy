@@ -576,7 +576,7 @@ class SignalReturnRelations:
             blacklist=self.blacklist,
         )
         metric_cols: List[str] = list(
-            set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
+            set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid", "ticker"])
         )
         dfd: pd.DataFrame = self.apply_slip(
             df=dfd,
@@ -1469,7 +1469,8 @@ if __name__ == "__main__":
         cosp=True,
         freqs="Q",
         start="2002-01-01",
-        ms_panel_test=True,
+        slip=1,
+        # ms_panel_test=True,
         additional_metrics=[spearman, granger, granger_pval],
     )
 
@@ -1487,6 +1488,7 @@ if __name__ == "__main__":
         cosp=True,
         freqs="M",
         start="2002-01-01",
+        sl
         additional_metrics=[spearman, granger, granger_pval],
     )
 
