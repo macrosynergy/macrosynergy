@@ -1469,8 +1469,7 @@ if __name__ == "__main__":
         cosp=True,
         freqs="Q",
         start="2002-01-01",
-        slip=1,
-        # ms_panel_test=True,
+        ms_panel_test=True,
         additional_metrics=[spearman, granger, granger_pval],
     )
 
@@ -1488,7 +1487,6 @@ if __name__ == "__main__":
         cosp=True,
         freqs="M",
         start="2002-01-01",
-        sl
         additional_metrics=[spearman, granger, granger_pval],
     )
 
