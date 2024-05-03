@@ -179,7 +179,6 @@ def _prep_dfs_for_pnl_calcs(
     return pnl_df, pivot_pos, pivot_returns, rebal_dates
 
 
-
 ####################################################################################
 # __________________________________________________________________________________
 # In psuedo code:
@@ -188,9 +187,9 @@ def _prep_dfs_for_pnl_calcs(
 # price(0) = 1 (value change exactly position)
 # pos(0) = pos*(0) (end-of-period position - that earns returns at the end of the next business day)
 # [2] End of next period (t=1) - no rebalancing
-# Daily PnL pnl(1) = pos(0) * price(0) * r(1) = pos*(0) * r(1) 
+# Daily PnL pnl(1) = pos(0) * price(0) * r(1) = pos*(0) * r(1)
 # Value change of position: price(1) = price(0) * (1+ r(1)) = (1+ r(1))
-# Position: pos(1) = pos(0) = pos*(0) 
+# Position: pos(1) = pos(0) = pos*(0)
 # __________________________________________________________________________________
 # More generally:
 # [a] Non-rebalancing date t:
@@ -204,7 +203,6 @@ def _prep_dfs_for_pnl_calcs(
 # where pos*(t) is the "optimal" position for a rebalance on that day.
 # __________________________________________________________________________________
 ####################################################################################
-
 
 
 def _pnl_excl_costs(
