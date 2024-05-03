@@ -150,9 +150,13 @@ def _prep_dfs_for_pnl_calcs(
     for dfx, dfname in [(pivot_returns, "returns"), (pivot_pos, "positions")]:
         # for each column warns for dates of nas
         for col in dfx.columns:
-            nas_idx = dfx[col].loc[dfx[col].isna()]
+            nas_idx = (
+                dfx[col]
+                .loc[dfx[col].isna()]
+                .loc[dfx[col].first_valid_index() : dfx[col].last_valid_index()]
+            )
             if not nas_idx.empty:
-                print(
+                warnings.warn(
                     f"Warning: Series {col} has NAs at the following dates: {nas_idx.index}"
                 )
 
