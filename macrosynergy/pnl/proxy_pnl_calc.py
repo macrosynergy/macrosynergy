@@ -23,8 +23,6 @@ from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.pnl.transaction_costs import TransactionCosts, get_fids
 
 
-
-
 def _replace_strs(
     list_of_strs: List[str], old_str: str, new_str: str = ""
 ) -> List[str]:
@@ -222,30 +220,31 @@ def _pnl_excl_costs(
     for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
         # dt1 is the first day of current (new) position
         # dt2 is the next rebalancing date, i.e.  position changes on dt2.
-        dt2x = dt2 - pd.offsets.BDay(1) # last day to hold the position
-        dt1x = dt1 + pd.offsets.BDay(1) # first day the current position made returns
-        
+        dt2x = dt2 - pd.offsets.BDay(1)  # last day to hold the position
+        dt1x = dt1 + pd.offsets.BDay(1)  # first day the current position made returns
+
         # current position is the position held from dt1 to dt2x
         # current returns is the returns from dt1x to dt2
         curr_pos = pivot_pos.loc[dt1:dt2x]
         curr_returns = pivot_returns.loc[dt1x:dt2]
-        
+
         # calculate prices separately for each day
         prices = (1 + curr_returns).cumprod()
         # reset the first price to 1
         prices.iloc[0] = 1
 
         # calculate the daily pnl
-        daily_pnl = curr_pos.shift(1) * prices.shift(1) * curr_returns
-        x = curr_pos.shift(1).values * prices.shift(1).values * curr_returns.values
-        pnl_df.loc[dt1:dt2x] = x
+        daily_pnl = (
+            curr_pos.shift(1).values * prices.shift(1).values * curr_returns.values
+        )
+        pnl_df.loc[dt1:dt2x] = daily_pnl
 
     # Drop rows with no pnl
     nan_count_rows = pnl_df.isna().all(axis=1).sum()
     pnl_df = pnl_df.loc[pnl_df.abs().sum(axis=1) > 0]
+    pnl_df.columns = [f"{col}_{spos}_{pnl_name}" for col in pnl_df.columns]
 
     return pnl_df
-
 
 
 def _calculate_trading_costs(
@@ -602,8 +601,8 @@ if __name__ == "__main__":
         df=dfx,
         spos="STRAT_POS",
         rstring="XR_NSA",
-        start='2001-01-01',
-        end='2020-01-01',
+        start="2001-01-01",
+        end="2020-01-01",
         transaction_costs_object=tx,
         portfolio_name="GLB",
         pnl_name="PNL",
