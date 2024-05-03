@@ -23,8 +23,6 @@ from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.pnl.transaction_costs import TransactionCosts, get_fids
 
 
-
-
 def _replace_strs(
     list_of_strs: List[str], old_str: str, new_str: str = ""
 ) -> List[str]:
@@ -150,9 +148,13 @@ def _prep_dfs_for_pnl_calcs(
     for dfx, dfname in [(pivot_returns, "returns"), (pivot_pos, "positions")]:
         # for each column warns for dates of nas
         for col in dfx.columns:
-            nas_idx = dfx[col].loc[dfx[col].isna()]
+            nas_idx = (
+                dfx[col]
+                .loc[dfx[col].isna()]
+                .loc[dfx[col].first_valid_index() : dfx[col].last_valid_index()]
+            )
             if not nas_idx.empty:
-                print(
+                warnings.warn(
                     f"Warning: Series {col} has NAs at the following dates: {nas_idx.index}"
                 )
 
@@ -175,7 +177,6 @@ def _prep_dfs_for_pnl_calcs(
     return pnl_df, pivot_pos, pivot_returns, rebal_dates
 
 
-
 ####################################################################################
 # __________________________________________________________________________________
 # In psuedo code:
@@ -184,9 +185,9 @@ def _prep_dfs_for_pnl_calcs(
 # price(0) = 1 (value change exactly position)
 # pos(0) = pos*(0) (end-of-period position - that earns returns at the end of the next business day)
 # [2] End of next period (t=1) - no rebalancing
-# Daily PnL pnl(1) = pos(0) * price(0) * r(1) = pos*(0) * r(1) 
+# Daily PnL pnl(1) = pos(0) * price(0) * r(1) = pos*(0) * r(1)
 # Value change of position: price(1) = price(0) * (1+ r(1)) = (1+ r(1))
-# Position: pos(1) = pos(0) = pos*(0) 
+# Position: pos(1) = pos(0) = pos*(0)
 # __________________________________________________________________________________
 # More generally:
 # [a] Non-rebalancing date t:
@@ -202,7 +203,6 @@ def _prep_dfs_for_pnl_calcs(
 ####################################################################################
 
 
-
 def _pnl_excl_costs(
     df_wide: pd.DataFrame, spos: str, rstring: str, pnl_name: str
 ) -> pd.DataFrame:
@@ -215,35 +215,38 @@ def _pnl_excl_costs(
     _end = pd.Timestamp(pivot_pos.last_valid_index())
     rebal_dates = sorted(set(rebal_dates + [_end]))
 
+    prices_df = pnl_df.copy()
+
+    ## Setup the prices dataframe
     # loop between each rebalancing date (month start)
     # there are returns and positions for each date in between and on the rebalancing date
     for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
         # dt1 is the first day of current (new) position
         # dt2 is the next rebalancing date, i.e.  position changes on dt2.
-        dt2x = dt2 - pd.offsets.BDay(1) # last day to hold the position
-        dt1x = dt1 + pd.offsets.BDay(1) # first day the current position made returns
-        
-        # current position is the position held from dt1 to dt2x
-        # current returns is the returns from dt1x to dt2
-        curr_pos = pivot_pos.loc[dt1:dt2x]
-        curr_returns = pivot_returns.loc[dt1x:dt2]
-        
-        # calculate prices separately for each day
-        prices = (1 + curr_returns).cumprod()
-        # reset the first price to 1
+        dt2x = dt2 - pd.offsets.BDay(1)  # last day to hold the position
+        dt1x = dt1 + pd.offsets.BDay(1)  # first day the current position made returns
+        # calculate prices for each day between dt1 and dt2x (inclusive)
+        prices = 1 + pivot_returns.loc[dt1x:dt2]
         prices.iloc[0] = 1
+        prices_df.loc[dt1:dt2x] = prices.cumprod(axis=0).values
 
-        # calculate the daily pnl
-        daily_pnl = curr_pos.shift(1) * prices.shift(1) * curr_returns
-        x = curr_pos.shift(1).values * prices.shift(1).values * curr_returns.values
-        pnl_df.loc[dt1:dt2x] = x
+    ## Calculate the PnL
+    pnl_df = pivot_pos.shift(1) * prices_df * pivot_returns
 
     # Drop rows with no pnl
     nan_count_rows = pnl_df.isna().all(axis=1).sum()
+    assert nan_count_rows >= 1
+    if nan_count_rows > 1:
+        warnings.warn(
+            "Warning: The following dates have no valid PnL: "
+            f"{pnl_df.loc[pnl_df.isna().all(axis=1)].index}"
+        )
     pnl_df = pnl_df.loc[pnl_df.abs().sum(axis=1) > 0]
 
-    return pnl_df
+    ## Rename the columns - append _<spos>_<pnl_name> to all columns
+    pnl_df.columns = [f"{col}_{spos}_{pnl_name}" for col in pnl_df.columns]
 
+    return pnl_df
 
 
 def _calculate_trading_costs(
@@ -600,8 +603,8 @@ if __name__ == "__main__":
         df=dfx,
         spos="STRAT_POS",
         rstring="XR_NSA",
-        start='2001-01-01',
-        end='2020-01-01',
+        start="2001-01-01",
+        end="2020-01-01",
         transaction_costs_object=tx,
         portfolio_name="GLB",
         pnl_name="PNL",
