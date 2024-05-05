@@ -9,7 +9,7 @@ from macrosynergy.management.constants import FREQUENCY_MAP
 
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
-
+import functools
 import numpy as np
 import pandas as pd
 import datetime
@@ -140,7 +140,7 @@ def drop_nan_series(
     return df.reset_index(drop=True)
 
 
-def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFrame:
+def qdf_to_ticker_df(df: pd.DataFrame, metric: str = "value") -> pd.DataFrame:
     """
     Converts a standardized JPMaQS DataFrame to a wide format DataFrame
     with each column representing a ticker.
@@ -155,28 +155,28 @@ def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFr
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
 
-    if not isinstance(value_column, str):
+    if not isinstance(metric, str):
         raise TypeError("Argument `value_column` must be a string.")
 
-    if not value_column in df.columns:
+    if not metric in df.columns:
         cols: List[str] = list(set(df.columns) - set(QuantamentalDataFrame.IndexCols))
         if "value" in cols:
-            value_column: str = "value"
+            metric: str = "value"
 
         warnings.warn(
-            f"Value column specified in `value_column` ({value_column}) "
+            f"Value column specified in `value_column` ({metric}) "
             f"is not present in the DataFrame. Defaulting to {cols[0]}."
         )
-        value_column: str = cols[0]
+        metric: str = cols[0]
 
     return (
         df.assign(ticker=df["cid"] + "_" + df["xcat"])
-        .pivot(index="real_date", columns="ticker", values=value_column)
+        .pivot(index="real_date", columns="ticker", values=metric)
         .rename_axis(None, axis=1)
     )
 
 
-def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
+def ticker_df_to_qdf(df: pd.DataFrame, metric: str = "value") -> QuantamentalDataFrame:
     """
     Converts a wide format DataFrame (with each column representing a ticker)
     to a standardized JPMaQS DataFrame.
@@ -187,11 +187,12 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Argument `df` must be a pandas DataFrame.")
 
+    if not isinstance(metric, str):
+        raise TypeError("Argument `metric` must be a string.")
+
     # pivot to long format
     df = (
-        df.stack(level=0)
-        .reset_index()
-        .rename(columns={0: "value", "level_1": "ticker"})
+        df.stack(level=0).reset_index().rename(columns={0: metric, "level_1": "ticker"})
     )
     # split ticker using get_cid and get_xcat
     df["cid"] = get_cid(df["ticker"])
@@ -202,6 +203,111 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
 
     # standardise and return
     return standardise_dataframe(df=df)
+
+
+def _concat_single_metric_qdfs(
+    df_list: List[QuantamentalDataFrame],
+    errors: str = "ignore",
+) -> QuantamentalDataFrame:
+    """
+    Combines a list of Quantamental DataFrames into a single DataFrame.
+
+    :param <List[QuantamentalDataFrame]> df_list: A list of Quantamental DataFrames.
+    :param <str> errors: The error handling method to use. If 'raise', then invalid
+        items in the list will raise an error. If 'ignore', then invalid items will be
+        ignored. Default is 'ignore'.
+    :return <QuantamentalDataFrame>: The combined DataFrame.
+    """
+    if not isinstance(df_list, list):
+        raise TypeError("Argument `df_list` must be a list.")
+
+    if errors not in ["raise", "ignore"]:
+        raise ValueError("`errors` must be one of 'raise' or 'ignore'.")
+
+    orig_len = len(df_list)
+    df_list = [df for df in df_list if isinstance(df, QuantamentalDataFrame)]
+
+    if errors == "raise":
+        if len(df_list) != orig_len:
+            raise TypeError(
+                "All elements in `df_list` must be Quantamental DataFrames."
+            )
+    else:
+        if len(df_list) == 0:
+            return None
+
+    def _get_metric(df: QuantamentalDataFrame) -> str:
+        lx = list(set(df.columns) - set(QuantamentalDataFrame.IndexCols))
+        if len(lx) != 1:
+            raise ValueError(
+                "Each QuantamentalDataFrame must have exactly one metric column."
+            )
+        return lx[0]
+
+    def _group_by_metric(
+        dfl: List[QuantamentalDataFrame], fm: List[str]
+    ) -> List[List[QuantamentalDataFrame]]:
+        r = [[] for _ in range(len(fm))]
+        while dfl:
+            metric = _get_metric(df=dfl[0])
+            r[fm.index(metric)] += [dfl.pop(0)]
+        return r
+
+    found_metrics = list(set(map(_get_metric, df_list)))
+
+    df_list = _group_by_metric(dfl=df_list, fm=found_metrics)
+
+    # use pd.merge to join on QuantamentalDataFrame.IndexCols
+    df: pd.DataFrame = functools.reduce(
+        lambda left, right: pd.merge(
+            left, right, on=["real_date", "cid", "xcat"], how="outer"
+        ),
+        map(
+            lambda fm: pd.concat(df_list.pop(0), axis=0, ignore_index=False),
+            found_metrics,
+        ),
+    )
+
+    return standardise_dataframe(df)
+
+
+def concat_qdfs(
+    df_list: List[QuantamentalDataFrame],
+    errors: str = "ignore",
+) -> QuantamentalDataFrame:
+    """
+    Combines a list of Quantamental DataFrames into a single DataFrame.
+
+    :param <List[QuantamentalDataFrame]> df_list: A list of Quantamental DataFrames.
+    :param <str> errors: The error handling method to use. If 'raise', then invalid
+        items in the list will raise an error. If 'ignore', then invalid items will be
+        ignored. Default is 'ignore'.
+    :return <QuantamentalDataFrame>: The combined DataFrame.
+    """
+    if not isinstance(df_list, list):
+        raise TypeError("Argument `df_list` must be a list.")
+
+    if errors not in ["raise", "ignore"]:
+        raise ValueError("`errors` must be one of 'raise' or 'ignore'.")
+
+    if errors == "raise":
+        if not all([isinstance(df, QuantamentalDataFrame) for df in df_list]):
+            raise TypeError(
+                "All elements in `df_list` must be Quantamental DataFrames."
+            )
+    else:
+        df_list = [df for df in df_list if isinstance(df, QuantamentalDataFrame)]
+        if len(df_list) == 0:
+            return None
+
+    new_dfs_list: List[QuantamentalDataFrame] = []
+    while len(df_list) > 0:
+        df = df_list.pop(0)
+        metrics = set(df.columns) - set(QuantamentalDataFrame.IndexCols)
+        for metric in metrics:
+            new_dfs_list.append(df[QuantamentalDataFrame.IndexCols + [metric]])
+
+    return _concat_single_metric_qdfs(df_list=new_dfs_list, errors=errors)
 
 
 def apply_slip(

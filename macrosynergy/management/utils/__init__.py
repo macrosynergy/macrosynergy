@@ -21,6 +21,7 @@ from .df_utils import (
     drop_nan_series,
     qdf_to_ticker_df,
     ticker_df_to_qdf,
+    concat_qdfs,
     apply_slip,
     downsample_df_on_real_date,
     update_df,
