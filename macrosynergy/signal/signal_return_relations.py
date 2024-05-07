@@ -93,6 +93,14 @@ class SignalReturnRelations:
             raise ValueError("Signal must be defined.")
         if not isinstance(df, pd.DataFrame):
             raise TypeError(f"DataFrame expected and not {type(df)}.")
+        if not isinstance(cids, str) and cids is not None:
+            if not isinstance(cids, list):
+                raise TypeError(f"List or string expected and not {type(cids)}.")
+            else:
+                if not all(isinstance(cid, str) for cid in cids):
+                    raise TypeError(f"List of strings expected for cids.")
+            
+            
 
         required_columns = ["cid", "xcat", "real_date", "value"]
 
@@ -568,7 +576,7 @@ class SignalReturnRelations:
             blacklist=self.blacklist,
         )
         metric_cols: List[str] = list(
-            set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
+            set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid", "ticker"])
         )
         dfd: pd.DataFrame = self.apply_slip(
             df=dfd,
