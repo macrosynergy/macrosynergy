@@ -68,10 +68,10 @@ def standardise_dataframe(
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
     df["cid"] = df["cid"].astype(str)
     df["xcat"] = df["xcat"].astype(str)
-
+    # sort by cid, xcat and real_date to allow viewing stacked timeseries easily
     df = (
         df.drop_duplicates(subset=idx_cols, keep="last")
-        .sort_values(by=idx_cols)
+        .sort_values(by=["cid", "xcat", "real_date"])
         .reset_index(drop=True)
     )
 
