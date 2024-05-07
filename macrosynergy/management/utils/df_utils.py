@@ -15,6 +15,7 @@ import pandas as pd
 import datetime
 import requests
 import requests.compat
+import macrosynergy.management.constants as ms_constants
 from macrosynergy.management.utils.core import (
     get_cid,
     get_xcat,
@@ -37,7 +38,7 @@ def standardise_dataframe(
     :raises <ValueError>: If the input DataFrame is not in the correct format.
     """
     idx_cols: List[str] = QuantamentalDataFrame.IndexCols
-    metric_columns: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+    metric_columns: List[str] = ms_constants.JPMAQS_METRICS
 
     # Check if the input DF contains the standard columns
     if not set(df.columns).issuperset(set(idx_cols)):
@@ -68,32 +69,32 @@ def standardise_dataframe(
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
     df["cid"] = df["cid"].astype(str)
     df["xcat"] = df["xcat"].astype(str)
-
+    # sort by cid, xcat and real_date to allow viewing stacked timeseries easily
     df = (
         df.drop_duplicates(subset=idx_cols, keep="last")
-        .sort_values(by=idx_cols)
+        .sort_values(by=["cid", "xcat", "real_date"])
         .reset_index(drop=True)
     )
 
     # Sort the 'remaining' columns
     ## No more row-reordering or shape changes after this point
 
-    remaining_cols: Set[str] = set(df.columns) - set(idx_cols)
-    df = df[idx_cols + sorted(remaining_cols)]
+    jpmaqs_metrics = [mtr for mtr in metric_columns if mtr in df.columns]
+    non_jpmaqs_metrics = (set(df.columns) - set(jpmaqs_metrics)) - set(idx_cols)
+    col_order = idx_cols + jpmaqs_metrics + sorted(list(non_jpmaqs_metrics))
+    df = df[col_order]
 
     # for every remaining col, try to convert to float
-    for col in remaining_cols:
+    for col in col_order:
         try:
             df[col] = df[col].astype(float)
         except:
             pass
 
-    non_idx_cols: list = sorted(list(set(df.columns) - set(idx_cols)))
-    return_df: pd.DataFrame = df[idx_cols + non_idx_cols]
     assert isinstance(
-        return_df, QuantamentalDataFrame
+        df, QuantamentalDataFrame
     ), "Failed to standardize DataFrame"
-    return return_df
+    return df
 
 
 def drop_nan_series(
