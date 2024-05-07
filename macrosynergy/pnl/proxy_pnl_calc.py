@@ -505,7 +505,7 @@ def proxy_pnl_calc(
 
     df_wide = qdf_to_ticker_df(df)
 
-    pnlx_name = pnl_name + "x"
+    pnle_name = pnl_name + "e"
 
     # Calculate the PnL excluding costs
     df_outs: Dict[str, pd.DataFrame] = {}
@@ -530,7 +530,7 @@ def proxy_pnl_calc(
         tc_wide_df=df_outs["tc_wide"],
         spos=spos,
         tc_name=tc_name,
-        pnlx_name=pnlx_name,
+        pnle_name=pnle_name,
         pnl_name=pnl_name,
     )
 
@@ -540,7 +540,7 @@ def proxy_pnl_calc(
         portfolio_name=portfolio_name,
         pnl_name=pnl_name,
         tc_name=tc_name,
-        pnlx_name=pnlx_name,
+        pnle_name=pnle_name,
         bidoffer_name=bidoffer_name,
         rollcost_name=rollcost_name,
     )
@@ -548,6 +548,9 @@ def proxy_pnl_calc(
     # # Convert to QDFs
     for key in df_outs.keys():
         df_outs[key] = ticker_df_to_qdf(df_outs[key])
+
+    if concat_dfs:
+        return standardise_dataframe(pd.concat(df_outs.values(), axis=0))
 
     if not (return_pnl_excl_costs or return_costs):
         return df_outs["pnl_incl_costs"]
