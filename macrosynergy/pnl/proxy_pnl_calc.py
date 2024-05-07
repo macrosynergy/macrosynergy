@@ -215,35 +215,28 @@ def _pnl_excl_costs(
     _end = pd.Timestamp(pivot_pos.last_valid_index())
     rebal_dates = sorted(set(rebal_dates + [_end]))
 
+    # Setup prices df
+    prices_df: pd.DataFrame = pd.DataFrame(
+        data=1.0,
+        index=pivot_returns.index,
+        columns=pivot_returns.columns,
+    )
+
     # loop between each rebalancing date (month start)
     # there are returns and positions for each date in between and on the rebalancing date
     for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
         # dt1 is the first day of current (new) position
         # dt2 is the next rebalancing date, i.e.  position changes on dt2.
-        dt2x = dt2 - pd.offsets.BDay(1)  # last day to hold the position
         dt1x = dt1 + pd.offsets.BDay(1)  # first day the current position made returns
+        # prices = (1 + pivot_returns.loc[dt1x:dt2] / 100).cumprod(axis=0)
+        prices_df.loc[dt1x:dt2] = (1 + pivot_returns.loc[dt1x:dt2] / 100).cumprod()
 
-        # current position is the position held from dt1 to dt2x
-        # current returns is the returns from dt1x to dt2
-        curr_pos = pivot_pos.loc[dt1:dt2x]
-        curr_returns = pivot_returns.loc[dt1x:dt2]
-
-        # calculate prices separately for each day
-        prices = (1 + curr_returns).cumprod()
-        # reset the first price to 1
-        prices.iloc[0] = 1
-
-        # calculate the daily pnl
-        daily_pnl = (
-            curr_pos.shift(1).values * prices.shift(1).values * curr_returns.values
-        )
-        pnl_df.loc[dt1:dt2x] = daily_pnl
-
+    # Actual PNL calculation
+    pnl_df = (pivot_returns / 100) * pivot_pos.shift(1) * prices_df.shift(1)
     # Drop rows with no pnl
     nan_count_rows = pnl_df.isna().all(axis=1).sum()
     pnl_df = pnl_df.loc[pnl_df.abs().sum(axis=1) > 0]
     pnl_df.columns = [f"{col}_{spos}_{pnl_name}" for col in pnl_df.columns]
-
     return pnl_df
 
 
