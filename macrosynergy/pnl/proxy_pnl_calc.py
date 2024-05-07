@@ -548,6 +548,7 @@ def proxy_pnl_calc(
 
 if __name__ == "__main__":
     import macrosynergy.management as msm
+    import macrosynergy.visuals as msv
     import os, pickle
 
     cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
@@ -562,7 +563,7 @@ if __name__ == "__main__":
     with open("data/txn.obj.pkl", "rb") as f:
         tx = pickle.load(f)
 
-    dfx = pd.read_pickle("data/dfx.pkl")
+    dfx = pd.read_pickle("data/dfxn.pkl")
 
     df_pnlx, df_pnl, df_costs = proxy_pnl_calc(
         df=dfx,
@@ -585,8 +586,6 @@ if __name__ == "__main__":
         axis=0,
     )
 
-    import macrosynergy.visuals as msv, numpy as np, PIL.Image as Image, matplotlib.pyplot as plt
-
     df_wide = qdf_to_ticker_df(df_all)
     df_wide = df_wide.loc[:, df_wide.columns.str.startswith("GLB_")]
     assert len(df_wide.columns) == 2
@@ -595,9 +594,14 @@ if __name__ == "__main__":
     assert len(pnlx_s) == 1
     pnlx = pnlx_s[0]
 
+    # apply cumsum
+    pnlp = pnlx.replace("PNLx", "PNL")
+    df_wide[pnlx] = df_wide[pnlx].cumsum()
+    df_wide[pnlp] = df_wide[pnlp].cumsum()
     # subtract pnlx from pnl to get the costs
-    df_wide[pnlx + "_COST"] = df_wide[pnlx] - df_wide[pnlx.replace("PNLx", "PNL")]
+    df_wide[pnlx + "_COST"] = df_wide[pnlx] - df_wide[pnlp]
 
     df_all = ticker_df_to_qdf(df_wide)
 
-    msv.FacetPlot(df=df_all).lineplot(xcat_grid=True)
+    # msv.FacetPlot(df=df_all).lineplot(cid_grid=True)
+    msv.LinePlot(df=df_all).plot()
