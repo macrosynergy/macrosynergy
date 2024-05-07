@@ -566,6 +566,41 @@ def proxy_pnl_calc(
         return df_outs["pnl_incl_costs"], df_outs["tc_wide"]
 
 
+def plot_pnl(
+    df: pd.DataFrame,
+    portfolio_name: str,
+    pnl_name: str,
+    tc_name: str,
+    pnle_name: str,
+    cumsum: bool = True,
+    title: str = "Cumulative PnLs and Costs",
+    ylabel: str = "PnL / USD Million",
+    xlabel: str = "Real Date",
+    hline: Optional[Union[Number, List[Number]]] = None,
+    **kwargs,
+) -> None:
+    """
+    Plot the PnLs and costs for the portfolio
+    """
+    df_wide = qdf_to_ticker_df(df)
+    df_wide = df_wide.loc[:, df_wide.columns.str.startswith(portfolio_name + "_")]
+    _ewcols = lambda x: df_wide.columns[df_wide.columns.str.endswith(x)].tolist()
+    pnl_cols = _ewcols(pnl_name)
+    pnle_cols = _ewcols(pnle_name)
+    tc_cols = _ewcols(tc_name)
+    df_wide = df_wide[pnl_cols + pnle_cols + tc_cols]
+    assert len(pnl_cols) == len(pnle_cols) == len(tc_cols) == 1
+    if cumsum:
+        df_wide[pnl_cols[0]] = df_wide[pnl_cols[0]].cumsum()
+        df_wide[pnle_cols[0]] = df_wide[pnle_cols[0]].cumsum()
+        df_wide[tc_cols[0]] = df_wide[tc_cols[0]].cumsum()
+
+    qdf = ticker_df_to_qdf(df_wide)
+    msv.LinePlot(df=qdf).plot(
+        title=title, y_axis_label=ylabel, x_axis_label=xlabel, **kwargs
+    )
+
+
 if __name__ == "__main__":
     import macrosynergy.management as msm
     import macrosynergy.visuals as msv
