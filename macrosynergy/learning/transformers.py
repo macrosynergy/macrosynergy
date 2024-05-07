@@ -7,14 +7,16 @@ import pandas as pd
 
 import datetime
 
+import scipy.stats as stats
+
 from sklearn.linear_model import Lasso, ElasticNet
 from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
 from sklearn.feature_selection import SelectorMixin
-
 from sklearn.exceptions import NotFittedError
 
 from statsmodels.tools.tools import add_constant
-from statsmodels.regression.mixed_linear_model import MixedLM
+
+from linearmodels.panel import RandomEffects
 
 from typing import Union, Any, List, Optional
 
@@ -358,7 +360,7 @@ class LassoSelector(BaseEstimator, SelectorMixin):
 
 
 class MapSelector(BaseEstimator, SelectorMixin):
-    def __init__(self, threshold: float = 0.05, positive: bool = False, method: str = "bfgs"):
+    def __init__(self, threshold: float = 0.05, positive: bool = False):
         """
         Selector class to select features from a training set
         based on the Macrosynergy panel test. This test involves creating
@@ -367,12 +369,9 @@ class MapSelector(BaseEstimator, SelectorMixin):
         parameter is used to perform the significance test.
 
         :param <float> threshold: Significance threshold. This should be in
-            the interval (0,1).
+            the interval (0,1). Default is 0.05.
         :param <bool> positive: Boolean indicating whether or not to only keep features
-            with positive estimated model coefficients.
-        :param <str> method: The method used to fit the mixed linear model. The default
-            is "bfgs". Options available are: "lbfgs", "bfgs", "nm", "powell", "cg", "basinhopping"
-            and "minimize". The "bfgs" method is the default.
+            with positive estimated model coefficients. Default is False.
         """
         if type(threshold) != float:
             raise TypeError("The threshold must be a float.")
@@ -382,23 +381,9 @@ class MapSelector(BaseEstimator, SelectorMixin):
             )
         if not isinstance(positive, (bool, np.bool_)):
             raise TypeError("The 'positive' parameter must be a boolean.")
-        if not isinstance(method, str):
-            raise TypeError("The 'method' parameter must be a string.")
-        if method not in [
-            "lbfgs",
-            "bfgs",
-            "nm",
-            "powell",
-            "cg",
-            "basinhopping",
-            "minimize",
-        ]:
-            raise ValueError(
-                "The 'method' parameter must be one of the following: 'lbfgs', 'bfgs', 'nm', 'powell', 'cg', 'basinhopping', 'minimize'."
-            )
+
         self.threshold = threshold
         self.positive = positive
-        self.method = method
         self.feature_names_in_ = None
 
     def fit(self, X: pd.DataFrame, y: Union[pd.Series, pd.DataFrame]):
@@ -447,13 +432,24 @@ class MapSelector(BaseEstimator, SelectorMixin):
         self.ftrs = []
         self.feature_names_in_ = np.array(X.columns)
 
+        # Convert cross-sections to numeric codes for compatibility with RandomEffects
+        unique_xss = sorted(X.index.get_level_values(0).unique())
+        xs_codes = dict(zip(unique_xss, range(1, len(unique_xss) + 1)))
+
+        X = X.rename(xs_codes, level=0, inplace=False).copy()
+        y = y.rename(xs_codes, level=0, inplace=False).copy()
+
+        # For each column, obtain Wald test p-value
+        # Keep significant features
         for col in self.feature_names_in_:
             ftr = X[col]
             ftr = add_constant(ftr)
-            groups = ftr.index.get_level_values(1)
-            model = MixedLM(y.values, ftr, groups).fit(reml=False, method=self.method)
-            est = model.params.iloc[1]
-            pval = model.pvalues.iloc[1]
+            # Swap levels so that random effects are placed on each time period,
+            # as opposed to the cross-section
+            re = RandomEffects(y.swaplevel(), ftr.swaplevel()).fit()
+            est = re.params[col]
+            zstat = est / re.std_errors[col]
+            pval = 2 * (1 - stats.norm.cdf(zstat))
             if pval < self.threshold:
                 if self.positive:
                     if est > 0:
