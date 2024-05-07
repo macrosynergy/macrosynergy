@@ -17,6 +17,7 @@ from macrosynergy.management.utils import (
     get_cid,
     get_xcat,
     ticker_df_to_qdf,
+    standardise_dataframe,
     qdf_to_ticker_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
@@ -308,7 +309,7 @@ def _apply_trading_costs(
     spos: str,
     tc_name: str,
     pnl_name: str,
-    pnlx_name: str,
+    pnle_name: str,
     bidoffer_name: str = "BIDOFFER",
     rollcost_name: str = "ROLLCOST",
 ) -> pd.DataFrame:
@@ -343,7 +344,7 @@ def _apply_trading_costs(
 
         out_df[pnl_col] = out_df[pnl_col].sub(tc_wide_df[tc_col], fill_value=0)
 
-    rename_pnl = lambda x: str(x).replace(f"_{spos}_{pnl_name}", f"_{spos}_{pnlx_name}")
+    rename_pnl = lambda x: str(x).replace(f"_{spos}_{pnl_name}", f"_{spos}_{pnle_name}")
     out_df = out_df.rename(columns=rename_pnl)
 
     return out_df
@@ -355,7 +356,7 @@ def _portfolio_sums(
     portfolio_name: str,
     pnl_name: str,
     tc_name: str,
-    pnlx_name: str,
+    pnle_name: str,
     bidoffer_name: str,
     rollcost_name: str,
 ) -> Dict[str, pd.DataFrame]:
@@ -389,7 +390,7 @@ def _portfolio_sums(
     ] = glb_pnl_incl_costs
 
     df_outs["pnl_excl_costs"].loc[
-        :, f"{portfolio_name}_{spos}_{pnlx_name}"
+        :, f"{portfolio_name}_{spos}_{pnle_name}"
     ] = glb_pnl_excl_costs
 
     df_outs["tc_wide"].loc[:, f"{portfolio_name}_{spos}_{tc_name}"] = glb_tcosts
@@ -413,6 +414,7 @@ def proxy_pnl_calc(
     rollcost_name: str = "ROLLCOST",
     return_pnl_excl_costs: bool = False,
     return_costs: bool = False,
+    concat_dfs: bool = False,
 ) -> Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]]:
     """
     Calculates an approximate nominal PnL under consideration of transaction costs
@@ -427,9 +429,10 @@ def proxy_pnl_calc(
         of the format "<cid>_<ctype>_<sname>_<pname>". The strategy name <sname> has
         usually been set by the `contract_signals` function and the string for <pname> by
         the `notional_positions` function.
-    :param <list[str]> fids: list of contract identifiers in the format
-        "<cid>_<ctype>". It must correspond to contract signals in the dataframe in the
-        format "<cid>_<ctype>_<sname>_<pname>".
+    :param <str> rstring: the string that identifies the returns series in the dataframe.
+    :param <TransactionCosts> transaction_costs_object: an initialized TransactionCosts
+        object (macrosynergy.pnl.transaction_costs.TransactionCosts) that contains the
+        transaction costs data.
     :param <dict> roll_freqs: dictionary of roll frequencies for each contract type.
         This must use the contract types as keys and frequency string ("w", "m", or "q")
         as values. The default frequency for all contracts not in the dictionary is
@@ -440,12 +443,26 @@ def proxy_pnl_calc(
         the end date is taken from the dataframe.
     :param <dict> blacklist: a dictionary of contract identifiers to exclude from
         the calculation. Default is None, which means that no contracts are excluded.
+    :param <str> portfolio_name: the name of the portfolio. Default is "GLB".
+    :param <str> pnl_name: the name of the PnL (including costs), Default is "PNL".
+        The series for PnL excluding costs is named with "...<pnl_name>e". The name is
+        appended with the strategy positions name, as "<portfolio_name>_<spos>_<pnl_name>".
+    :param <str> tc_name: the name of the trading costs series. Default is "TCOST".
+    :param <str> bidoffer_name: a sub-component of the trading costs, representing the
+        bid-offer spread. Default is "BIDOFFER".
+    :param <str> rollcost_name: a sub-component of the trading costs, representing the
+        roll costs. Default is "ROLLCOST".
+    :param <bool> return_pnl_excl_costs: whether to return the PnL excluding costs.
+        Default is False.
+    :param <bool> return_costs: whether to return the trading costs. Default is False.
+    :param <bool> concat_dfs: whether to concatenate the output dataframes. Default is
+        False.
 
-    return: <pd.DataFrame> of the standard JPMaQS format with "GLB" (Global) as cross
-        section and three categories "<sname>_<pname>_PNL" (total PnL in USD terms under
-        consideration of transaction costs), "<sname>_<pname>_COST" (all imputed trading
-        and roll costs in USD terms), and "<sname>_<pname>_PNLX" (total PnL in USD terms
-        without consideration of transaction costs).
+    :return <Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]>: When
+        either of `return_pnl_excl_costs` or `return_costs` is True, the function returns
+        a tuple of the PnL excluding costs, the PnL including costs, and the trading
+        costs. Otherwise, it returns the PnL including costs. If `concat_dfs` is True,
+        the function concatenates any output dataframes and returns a single dataframe.
 
     N.B.: Transaction costs as % of notional are considered to be a linear function of
         size, with the slope determined by the normal and large positions, if all relevant
