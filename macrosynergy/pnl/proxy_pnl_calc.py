@@ -576,7 +576,7 @@ def plot_pnl(
     title: str = "Cumulative PnLs and Costs",
     ylabel: str = "PnL / USD Million",
     xlabel: str = "Real Date",
-    hline: Optional[Union[Number, List[Number]]] = None,
+    hline: Optional[Union[Number, List[Number]]] = 0.0,
     **kwargs,
 ) -> None:
     """
@@ -597,7 +597,7 @@ def plot_pnl(
 
     qdf = ticker_df_to_qdf(df_wide)
     msv.LinePlot(df=qdf).plot(
-        title=title, y_axis_label=ylabel, x_axis_label=xlabel, **kwargs
+        title=title, y_axis_label=ylabel, x_axis_label=xlabel, ax_hline=hline, **kwargs
     )
 
 
