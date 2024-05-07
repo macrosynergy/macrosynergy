@@ -620,7 +620,7 @@ if __name__ == "__main__":
 
     dfx = pd.read_pickle("data/dfxn.pkl")
 
-    df_pnlx, df_pnl, df_costs = proxy_pnl_calc(
+    df_all = proxy_pnl_calc(
         df=dfx,
         spos="STRAT_POS",
         rstring="XR_NSA",
@@ -632,31 +632,16 @@ if __name__ == "__main__":
         tc_name="TCOST",
         return_pnl_excl_costs=True,
         return_costs=True,
-    )
-    df_all = pd.concat(
-        [
-            df_pnlx,
-            df_pnl,
-        ],
-        axis=0,
+        concat_dfs=True,
     )
 
-    df_wide = qdf_to_ticker_df(df_all)
-    df_wide = df_wide.loc[:, df_wide.columns.str.startswith("GLB_")]
-    assert len(df_wide.columns) == 2
-
-    pnlx_s = [col for col in df_wide.columns if str(col).endswith("PNLx")]
-    assert len(pnlx_s) == 1
-    pnlx = pnlx_s[0]
-
-    # apply cumsum
-    pnlp = pnlx.replace("PNLx", "PNL")
-    df_wide[pnlx] = df_wide[pnlx].cumsum()
-    df_wide[pnlp] = df_wide[pnlp].cumsum()
-    # subtract pnlx from pnl to get the costs
-    df_wide[pnlx + "_COST"] = df_wide[pnlx] - df_wide[pnlp]
-
-    df_all = ticker_df_to_qdf(df_wide)
-
-    # msv.FacetPlot(df=df_all).lineplot(cid_grid=True)
-    msv.LinePlot(df=df_all).plot()
+    plot_pnl(
+        df=df_all,
+        spos="STRAT_POS",
+        rstring="XR_NSA",
+        portfolio_name="GLB",
+        pnl_name="PNL",
+        tc_name="TCOST",
+        pnle_name="PNLe",
+        cumsum=True,
+    )
