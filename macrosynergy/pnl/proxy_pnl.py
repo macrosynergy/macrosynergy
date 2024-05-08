@@ -10,14 +10,33 @@ from macrosynergy.management.utils import (
     reduce_df,
     standardise_dataframe,
     is_valid_iso_date,
+    ticker_df_to_qdf,
+    qdf_to_ticker_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame, NoneType
+import macrosynergy.visuals as msv
 from macrosynergy.pnl import (
     notional_positions,
     contract_signals,
     proxy_pnl_calc,
     TransactionCosts,
 )
+
+
+def _plot_strategy(
+    df: QuantamentalDataFrame,
+    sig: str,
+    sname: str,
+    pname: str,
+    portfolio_name: str,
+    pnl_name: str,
+    tc_name: str,
+    start: str,
+    end: str,
+):
+    df_wide = qdf_to_ticker_df(df)
+    df_wide = df_wide.loc[start:end]
+    sel_tickers = [col for col in df_wide.columns]
 
 
 class ProxyPnL(object):
@@ -28,6 +47,7 @@ class ProxyPnL(object):
         start: Optional[str] = None,
         end: Optional[str] = None,
         blacklist: Optional[dict] = None,
+        rstring: str = "XR",
         portfolio_name: str = "GLB",
         sname: str = "STRAT",
         pname: str = "POS",
@@ -41,6 +61,7 @@ class ProxyPnL(object):
         self.df = reduce_df(df=standardise_dataframe(df), blacklist=blacklist)
         self.start = start or df["real_date"].min().strftime("%Y-%m-%d")
         self.end = end or df["real_date"].max().strftime("%Y-%m-%d")
+        self.rstring = rstring
         if not all(map(is_valid_iso_date, [self.start, self.end])):
             raise ValueError(f"Invalid date format: {self.start}, {self.end}")
 
@@ -103,7 +124,7 @@ class ProxyPnL(object):
         est_weights: Union[Number, List[Number]] = [1, 2, 3],
         lback_periods: Union[int, List[int]] = [-1, -1, -1],
         half_life: Union[int, List[int]] = [11, 5, 6],
-        rstring: str = "XR",
+        rstring: str = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
         blacklist: Optional[dict] = None,
@@ -127,12 +148,13 @@ class ProxyPnL(object):
         start = start or self.start
         end = end or self.end
         blacklist = blacklist or self.blacklist
+        rstring = rstring or self.rstring
 
         outs: Union[
             Tuple[QuantamentalDataFrame, QuantamentalDataFrame, pd.DataFrame],
             QuantamentalDataFrame,
         ] = notional_positions(
-            df=df,
+            df=pd.concat((self.df, df), axis=0),
             sname=sname,
             fids=fids,
             aum=aum,
@@ -176,6 +198,7 @@ class ProxyPnL(object):
         portfolio_name: str = None,
         df: QuantamentalDataFrame = None,
         roll_freqs: Optional[dict] = None,
+        rstring: str = None,
         pnl_name: str = "PNL",
         tc_name: str = "TCOST",
     ) -> Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]]:
@@ -189,12 +212,13 @@ class ProxyPnL(object):
                 )
         spos: str = spos or self.sname + "_" + self.pname
         portfolio_name: str = portfolio_name or self.portfolio_name
-        fids: List[str] = fids or self.fids
+        rstring: str = rstring or self.rstring
 
         outs: Tuple[QuantamentalDataFrame, ...] = proxy_pnl_calc(
-            df=df,
+            df=pd.concat((self.df, df), axis=0),
             transaction_costs_object=self.transaction_costs_object,
             spos=spos,
+            rstring=rstring,
             portfolio_name=portfolio_name,
             roll_freqs=roll_freqs,
             start=self.start,
