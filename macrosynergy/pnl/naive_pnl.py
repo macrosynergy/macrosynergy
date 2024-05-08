@@ -1232,78 +1232,78 @@ if __name__ == "__main__":
 
     # Instantiate a new instance to test the long-only functionality.
     # Benchmarks are used to calculate correlation against PnL series.
-    # pnl = NaivePnL(
-    #     dfd,
-    #     ret="EQXR_NSA",
-    #     sigs=["CRY", "GROWTH", "INFL"],
-    #     cids=cids,
-    #     start="2000-01-01",
-    #     blacklist=black,
-    #     bms=["EUR_EQXR_NSA", "USD_EQXR_NSA"],
-    # )
+    pnl = NaivePnL(
+        dfd,
+        ret="EQXR_NSA",
+        sigs=["CRY", "GROWTH", "INFL"],
+        cids=cids,
+        start="2000-01-01",
+        blacklist=black,
+        bms=["EUR_EQXR_NSA", "USD_EQXR_NSA"],
+    )
 
-    # pnl.make_pnl(
-    #     sig="GROWTH",
-    #     sig_op="zn_score_pan",
-    #     sig_neg=True,
-    #     sig_add=0.5,
-    #     rebal_freq="monthly",
-    #     vol_scale=5,
-    #     rebal_slip=1,
-    #     min_obs=250,
-    #     thresh=2,
-    # )
+    pnl.make_pnl(
+        sig="GROWTH",
+        sig_op="zn_score_pan",
+        sig_neg=True,
+        sig_add=0.5,
+        rebal_freq="monthly",
+        vol_scale=5,
+        rebal_slip=1,
+        min_obs=250,
+        thresh=2,
+    )
 
-    # pnl.make_long_pnl(vol_scale=10, label="Long")
+    pnl.make_long_pnl(vol_scale=10, label="Long")
 
-    # df_eval = pnl.evaluate_pnls(
-    #     pnl_cats=["PNL_GROWTH_NEG"], start="2015-01-01", end="2020-12-31"
-    # )
+    df_eval = pnl.evaluate_pnls(
+        pnl_cats=["PNL_GROWTH_NEG"], start="2015-01-01", end="2020-12-31"
+    )
 
-    # pnl.agg_signal_bars(
-    #     pnl_name="PNL_GROWTH_NEG",
-    #     freq="m",
-    #     metric="direction",
-    #     title=None,
-    # )
-    # pnl.plot_pnls(
-    #     pnl_cats=["PNL_GROWTH_NEG", "Long"],
-    #     title_fontsize=60,
-    #     xlab="date",
-    #     ylab="%",
-    # )
-    # pnl.plot_pnls(
-    #     pnl_cats=["PNL_GROWTH_NEG", "Long"],
-    #     facet=False,
-    #     xcat_labels=["S_1", "S_2"],
-    #     xlab="date",
-    #     ylab="%",
-    # )
-    # pnl.plot_pnls(
-    #     pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True, xcat_labels=["S_1", "S_2"]
-    # )
-    # pnl.plot_pnls(
-    #     pnl_cats=["PNL_GROWTH_NEG", "Long"],
-    #     facet=True,
-    # )
+    pnl.agg_signal_bars(
+        pnl_name="PNL_GROWTH_NEG",
+        freq="m",
+        metric="direction",
+        title=None,
+    )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"],
+        title_fontsize=60,
+        xlab="date",
+        ylab="%",
+    )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"],
+        facet=False,
+        xcat_labels=["S_1", "S_2"],
+        xlab="date",
+        ylab="%",
+    )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True, xcat_labels=["S_1", "S_2"]
+    )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"],
+        facet=True,
+    )
 
-    # pnl.plot_pnls(pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, xcat_labels=None)
+    pnl.plot_pnls(pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, xcat_labels=None)
 
-    # pnl.plot_pnls(
-    #     pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, facet=True, xcat_labels=None
-    # )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, facet=True, xcat_labels=None
+    )
 
-    # pnl.plot_pnls(
-    #     pnl_cats=["PNL_GROWTH_NEG"],
-    #     pnl_cids=cids,
-    #     same_y=True,
-    #     facet=True,
-    #     xcat_labels=None,
-    #     share_axis_labels=False,
-    #     xlab="Date",
-    #     ylab="PnL",
-    #     y_label_adj=0.1,
-    # )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG"],
+        pnl_cids=cids,
+        same_y=True,
+        facet=True,
+        xcat_labels=None,
+        share_axis_labels=False,
+        xlab="Date",
+        ylab="PnL",
+        y_label_adj=0.1,
+    )
 
     results_eq_ols = create_results_dataframe(
         title="Performance metrics, PARITY vs OLS, equity",
