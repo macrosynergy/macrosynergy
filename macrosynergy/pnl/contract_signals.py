@@ -230,6 +230,8 @@ def _apply_hedge_ratios(
 
             # Add the basket position to the exisitng basket_pos column in the df
             _posx: pd.Series = df_wide[cid_sig] * df_wide[cid_hr] * hb_hratio
+            # set nans to zero, to avoid nans in the final result
+            _posx = _posx.fillna(0.0)
             df_wide[basket_pos] += _posx
 
             hedged_assets_list.append(basket_pos)
