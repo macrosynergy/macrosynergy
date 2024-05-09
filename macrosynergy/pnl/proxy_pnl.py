@@ -238,22 +238,13 @@ class ProxyPnL(object):
 
         return self.proxy_pnl
 
-    def plot(self):
-        assert hasattr(self, "proxy_pnl")
-        assert isinstance(self.proxy_pnl, QuantamentalDataFrame)
+    def plot_strategy(self ):
+        csigs = self.cs_df.columns
+        poss = self.npos_df.columns
 
-        msv.FacetPlot(
-            pd.concat(
-                (
-                    self.cs_df,
-                    self.npos_df,
-                    self.proxy_pnl,
-                    self.txn_costs_df,
-                    self.pnl_excl_costs,
-                ),
-                axis=0,
-            )
-        ).lineplot(xcat_grid=True)
+        msv.FacetPlot(df=pd.concat((self.cs_df, self.npos_df), axis=0)).plot(
+            cols=csigs + poss, title="Contract Signals and Notional Positions"
+        )
 
 
 if __name__ == "__main__":
