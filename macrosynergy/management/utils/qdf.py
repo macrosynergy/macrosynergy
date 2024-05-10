@@ -1,15 +1,20 @@
-from typing import List, Optional, Union, TypeVar, overload, Dict
-from collections.abc import Iterable, Iterator, Callable, Mapping
+from typing import List, Optional, Union, TypeVar, overload
+from collections.abc import Iterable, Callable
 import pandas as pd
 import numpy as np
 import datetime
 import functools
+import os
+import glob
+import fnmatch
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import (
     ticker_df_to_qdf,
     qdf_to_ticker_df,
     standardise_dataframe,
     concat_qdfs,
+    get_cid,
+    get_xcat,
 )
 
 DateLike = TypeVar("DateLike", str, pd.Timestamp, np.datetime64, datetime.datetime)
@@ -139,7 +144,33 @@ def get_valid_local_expressions(
     xcats: Optional[Iterable[str]] = None,
     tickers: Optional[Iterable[str]] = None,
     metrics: Optional[Union[str, Iterable[str]]] = ["all"],
+    cid: Optional[str] = None,
+    xcat: Optional[str] = None,
+    ticker: Optional[str] = None,
 ) -> List[str]:
+    all_available_tickers = get_tickers_from_expression_df(df)
+
+    if isinstance(cid, str):
+        cids = [cid] + (cids or [])
+    if isinstance(xcat, str):
+        xcats = [xcat] + (xcats or [])
+    if isinstance(ticker, str):
+        tickers = [ticker] + (tickers or [])
+    if tickers is None:
+        if cids is None:
+            cids = get_cids_from_expression_df(df)
+        if xcats is None:
+            xcats = get_xcats_from_expression_df(df)
+        tickers = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+
+    _contains_wildcard = lambda x: "*" in x or "?" in x
+    wtickers = list(filter(_contains_wildcard, tickers))
+    if wtickers:
+        tickers = list(filter(lambda x: not _contains_wildcard(x), tickers))
+        new_tickers = []
+        for wtkr in wtickers:
+            new_tickers.extend(fnmatch.filter(all_available_tickers, wtkr))
+        tickers = list(set(tickers + new_tickers))
     local_exprs = create_local_expressions(
         cids=cids, xcats=xcats, tickers=tickers, metrics=metrics
     )
@@ -201,6 +232,14 @@ def load_wide_df(path: str) -> pd.DataFrame:
         df = df.set_index("real_date")
 
     return convert_to_local_expression_df(df)
+
+
+def get_cid_from_local_expression(expression: str) -> str:
+    return expression.split("_")[0]
+
+
+def get_xcat_from_local_expression(expression: str) -> str:
+    return expression.split("_", 1)[1]
 
 
 class LargeQDF:
@@ -273,22 +312,33 @@ class LargeQDF:
 
     @staticmethod
     def load_from_pickle(path: str):
+        if "*" in path or "?" in path:
+            paths: List[str] = list(map(os.path.normpath, glob.glob(path)))
+            if len(paths) > 1:
+                path = max(paths, key=os.path.getctime)
+            else:
+                path = paths[0]
+
         return LargeQDF(expression_df=load_wide_df(path))
 
     def save_to_pickle(self, path: str):
+        if not os.path.exists(os.path.dirname(path)):
+            os.makedirs(os.path.expanduser(path))
         self.source_df.to_pickle(path)
 
-    def info(self) -> Dict[str, pd.Series]:
-        return {
-            "start_date": self.start_date.strftime("%Y-%m-%d"),
-            "end_date": self.end_date.strftime("%Y-%m-%d"),
-            "ticker_count": len(self.tickers),
-            "metric_count": len(self.metrics),
-            "non_null_count": self.source_df.count().sum(),
-            "null_count": self.source_df.isnull().sum().sum(),
-            "total_count": self.source_df.size,
-            "memory_usage": f"{self.source_df.memory_usage(deep=True).sum() / (1024 ** 2):.2f} MB",
-        }
+    def info(self) -> pd.Series:
+        return pd.Series(
+            {
+                "start_date": self.start_date.strftime("%Y-%m-%d"),
+                "end_date": self.end_date.strftime("%Y-%m-%d"),
+                "ticker_count": len(self.tickers),
+                "metric_count": len(self.metrics),
+                "non_null_count": self.source_df.count().sum(),
+                "null_count": self.source_df.isnull().sum().sum(),
+                "total_count": self.source_df.size,
+                "memory_usage": f"{self.source_df.memory_usage(deep=True).sum() / (1024 ** 2):.2f} MB",
+            }
+        )
 
     def __str__(self) -> str:
         return (
@@ -314,7 +364,7 @@ class LargeQDF:
         start: Optional[DateLike] = None,
         end: Optional[DateLike] = None,
         date_range: Optional[Iterable[DateLike]] = None,
-        qdf: bool = False,
+        qdf: bool = True,
     ) -> QuantamentalDataFrame:
         metrics = [metrics] if isinstance(metrics, str) else []
         metrics = metrics + (metrics or [])
@@ -343,21 +393,62 @@ class LargeQDF:
         if start > end:
             start, end = end, start
 
-        if isinstance(cid, str):
-            cids = [cid] + (cids or [])
-        if isinstance(xcat, str):
-            xcats = [xcat] + (xcats or [])
-        if isinstance(ticker, str):
-            tickers = [ticker] + (tickers or [])
-
-        if tickers is None:
-            if cids is None:
-                cids = get_cids_from_expression_df(self.source_df)
-            if xcats is None:
-                xcats = get_xcats_from_expression_df(self.source_df)
-            tickers = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
-
         valid_local_exprs = get_valid_local_expressions(
-            self.source_df, cids=cids, xcats=xcats, tickers=tickers, metrics=metrics
+            self.source_df,
+            cids=cids,
+            xcats=xcats,
+            tickers=tickers,
+            metrics=metrics,
+            cid=cid,
+            xcat=xcat,
+            ticker=ticker,
         )
-        return expression_df_to_qdf(df=self.source_df.loc[start:end, valid_local_exprs])
+        if not qdf:
+            return self.source_df.loc[start:end, valid_local_exprs]
+        else:
+            return expression_df_to_qdf(
+                self.source_df.loc[start:end, valid_local_exprs]
+            )
+
+
+if __name__ == "__main__":
+    lqdf = LargeQDF.load_from_pickle("./data/jpmaqs_snap*.pkl")
+    lqdf.info()
+    start = "2024-01-01"
+    end = "2014-01-31"
+    import time
+
+    print("--" * 20)
+    print(f"Using LargeQDF object: {lqdf}")
+    print("--" * 20)
+    print("lQDF.info():")
+    print(lqdf.info())
+
+    print("--" * 20)
+
+    print(
+        "Looking up CID=[USD, GBP] and XCAT=[CPI*SJA*] for the period 2014-01-01 to 2014-01-31."
+    )
+    print("--" * 20)
+    st = time.time()
+    df = lqdf.get(
+        start=start,
+        end=end,
+        cids=["USD", "GBP"],
+        xcats=["CPI*SJA*"],
+        qdf=False,
+    )
+    print(f"Rows: {df.shape[0]}, Columns: {df.shape[1]}")
+    print(f"Time taken: {time.time() - st:.2f} seconds (without QDF conversion)")
+    print("--" * 20)
+    st = time.time()
+    df = lqdf.get(
+        start=start,
+        end=end,
+        cids=["USD", "GBP"],
+        xcats=["CPI*SJA*"],
+        qdf=True,
+    )
+    print(f"Rows: {df.shape[0]}, Columns: {df.shape[1]}")
+    print(f"Time taken: {time.time() - st:.2f} seconds (with QDF conversion)")
+    print("--" * 20)
