@@ -803,8 +803,8 @@ class SURollingLinearRegression(BaseEstimator, RegressorMixin):
 
         # Create data structures to store model information for each cross-section
         self.models = {}
-        self.coefs = {}
-        self.intercepts = {}
+        self.coefs_ = {}
+        self.intercepts_ = {}
 
     def fit(
         self,
@@ -838,11 +838,11 @@ class SURollingLinearRegression(BaseEstimator, RegressorMixin):
                 y_section = y_section[mask]
             # Fit the model
             lr_cid = LinearRegression(fit_intercept=self.fit_intercept, positive=self.positive)
-            lr_cid.fit(X_section, y_section)
+            lr_cid.fit(pd.DataFrame(X_section), y_section)
             # Store model and coefficients 
             self.models[section] = lr_cid
-            self.coefs[section] = lr_cid.coef_[0]
-            self.intercepts[section] = lr_cid.intercept_
+            self.coefs_[section] = lr_cid.coef_[0]
+            self.intercepts_[section] = lr_cid.intercept_
 
         return self
 

@@ -261,7 +261,7 @@ def neg_mean_abs_market_corr(
     NB: this scorer is a specialized function for use in market beta estimation.
     """
     market_returns = X_test.iloc[:, 0].copy()
-    contract_returns = y_test.iloc[:, 0].copy()
+    contract_returns = y_test.copy()
     test_cross_sections = X_test.index.get_level_values(
         0
     ).unique()  # Need the test cids to know which models to evaluate
