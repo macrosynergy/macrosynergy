@@ -465,6 +465,7 @@ class CategoryRelations(object):
         separator: Union[str, int] = None,
         title_adj: float = 1,
         single_chart: bool = False,
+        single_scatter: bool = False,
         ncol: int = None,
         ax: plt.Axes = None,
     ):
@@ -624,7 +625,7 @@ class CategoryRelations(object):
             if ylab is not None:
                 ax.set_ylabel(ylab)
 
-        elif separator == "cids":
+        elif separator == "cids" and not single_scatter:
             assert isinstance(single_chart, bool)
 
             dfx_copy = dfx.reset_index()
@@ -651,7 +652,10 @@ class CategoryRelations(object):
             # categories (dependent & explanatory variable) and the respective
             # cross-sections. The index will be the date timestamp.
 
-            fg = sns.FacetGrid(data=dfx_copy, col="cid", col_wrap=ncol)
+            facet_height = size[1]  # height of each facet in inches
+            facet_aspect = size[0] / size[1]  # aspect ratio of each facet
+
+            fg = sns.FacetGrid(data=dfx_copy, col="cid", col_wrap=ncol, height=facet_height, aspect=facet_aspect)
             fg.map(
                 sns.regplot,
                 self.xcats[0],
@@ -688,11 +692,63 @@ class CategoryRelations(object):
                     fg.axes[i].set_ylabel("")
 
                     if remainder == 0:
-                        fg.axes[no_columns].set_xlabel(xlab)
-                        fg.axes[no_columns].set_ylabel(ylab)
+                        fg.axes[no_columns - 1].set_xlabel(xlab)
+                        fg.axes[no_columns - 1].set_ylabel(ylab)
                     else:
                         fg.axes[-remainder].set_xlabel(xlab)
                         fg.axes[-remainder].set_ylabel(ylab)
+
+        elif separator == "cids" and single_scatter:
+
+            assert isinstance(single_chart, bool)
+
+            dfx_copy = dfx.reset_index()
+            cids = dfx_copy["cid"].unique()
+            n_cids = len(cids)
+
+            error_cids = (
+                "There must be more than one cross-section to use "
+                "separator = 'cids'."
+            )
+            assert n_cids > 1, error_cids
+
+            if ax is None:
+                fig, ax = plt.subplots(figsize=size)
+
+            dfx_list = [dfx_copy[dfx_copy["cid"] == c] for c in cids]
+            for i, dfx_i in enumerate(dfx_list):
+                sns.regplot(
+                    data=dfx_i,
+                    x=self.xcats[0],
+                    y=self.xcats[1],
+                    ci=reg_ci,
+                    order=reg_order,
+                    robust=reg_robust,
+                    fit_reg=fit_reg,
+                    scatter_kws={"s": 30, "alpha": 0.5},
+                    line_kws={"lw": 1},
+                    ax=ax,
+                    label=f'{cids[i]}'
+                )
+
+            if coef_box is not None:
+                data_table = self.corr_probability(
+                    df_probability=dfx_list,
+                    time_period="",
+                    coef_box_loc=coef_box,
+                    prob_est=prob_est,
+                    ax=ax,
+                )
+                data_table.scale(0.4, 2.5)
+                data_table.auto_set_font_size(set_font_size)
+                data_table.set_fontsize(coef_box_font_size)
+
+            ax.legend(loc="upper right", title="Cids")
+            ax.set_title(title, fontsize=14)
+            if xlab is not None:
+                ax.set_xlabel(xlab)
+            if ylab is not None:
+                ax.set_ylabel(ylab)
 
         elif separator is None:
             if ax is None:
@@ -756,6 +812,7 @@ class CategoryRelations(object):
         else:
             ValueError("Separator must be either a valid year <int> or 'cids' <str>.")
 
+        plt.tight_layout()
         if show_plot:
             plt.show()
 
@@ -814,51 +871,51 @@ if __name__ == "__main__":
 
     cidx = ["AUD", "CAD", "GBP", "USD", "PRY"]
 
-    cr = CategoryRelations(
-        dfdx,
-        xcats=["CRY", "XR"],
-        freq="M",
-        lag=1,
-        cids=cidx,
-        xcat_aggs=["mean", "sum"],
-        start="2001-01-01",
-        blacklist=black,
-        years=None,
-    )
+    # cr = CategoryRelations(
+    #     dfdx,
+    #     xcats=["CRY", "XR"],
+    #     freq="M",
+    #     lag=1,
+    #     cids=cidx,
+    #     xcat_aggs=["mean", "sum"],
+    #     start="2001-01-01",
+    #     blacklist=black,
+    #     years=None,
+    # )
 
-    cr.reg_scatter(
-        labels=False,
-        separator=None,
-        title="Carry and Return",
-        xlab="Carry",
-        ylab="Return",
-        coef_box="lower left",
-        prob_est="map",
-    )
+    # cr.reg_scatter(
+    #     labels=False,
+    #     separator=None,
+    #     title="Carry and Return",
+    #     xlab="Carry",
+    #     ylab="Return",
+    #     coef_box="lower left",
+    #     prob_est="map",
+    # )
 
-    # years parameter
+    # # years parameter
 
-    cr = CategoryRelations(
-        dfdx,
-        xcats=["CRY", "XR"],
-        freq="M",
-        years=5,
-        lag=0,
-        cids=cidx,
-        xcat_aggs=["mean", "sum"],
-        start="2001-01-01",
-        blacklist=black,
-    )
+    # cr = CategoryRelations(
+    #     dfdx,
+    #     xcats=["CRY", "XR"],
+    #     freq="M",
+    #     years=5,
+    #     lag=0,
+    #     cids=cidx,
+    #     xcat_aggs=["mean", "sum"],
+    #     start="2001-01-01",
+    #     blacklist=black,
+    # )
 
-    cr.reg_scatter(
-        labels=False,
-        separator=None,
-        title="Carry and Return, 5-year periods",
-        xlab="Carry",
-        ylab="Return",
-        coef_box="lower left",
-        prob_est="map",
-    )
+    # cr.reg_scatter(
+    #     labels=False,
+    #     separator=None,
+    #     title="Carry and Return, 5-year periods",
+    #     xlab="Carry",
+    #     ylab="Return",
+    #     coef_box="lower left",
+    #     prob_est="map",
+    # )
 
     cr = CategoryRelations(
         dfdx,
@@ -873,40 +930,42 @@ if __name__ == "__main__":
         years=None,
     )
 
-    cr.reg_scatter(
-        labels=False,
-        separator=2010,
-        title="Carry and Return",
-        xlab="Carry",
-        ylab="Return",
-        coef_box="lower left",
-        ncol=5,
-    )
+    # cr.reg_scatter(
+    #     labels=False,
+    #     separator=2010,
+    #     title="Carry and Return",
+    #     xlab="Carry",
+    #     ylab="Return",
+    #     coef_box="lower left",
+    #     ncol=5,
+    # )
     cr.reg_scatter(
         labels=False,
         separator="cids",
-        title="Carry and Return",
-        xlab="Carry",
-        ylab="Return",
+        title="Composite macro trend pressure indicator and subsequent IRS fixed receiver returns for USD and EUR, since 2000",
+        xlab="Composite macro trend pressure indicator",
+        ylab="Next month's return on 2-year IRS return, vol-targeted position, %",
         coef_box="lower left",
         ncol=2,
+        size=(12, 8),
+        #single_plot=True,
     )
 
-    # Passing Axes object for a subplot
-    fig, ax = plt.subplots(1, 2, figsize=(12, 8))
+    # # Passing Axes object for a subplot
+    # fig, ax = plt.subplots(1, 2, figsize=(12, 8))
 
-    for i in range(2):
-        cr.reg_scatter(
-            labels=False,
-            separator=None,
-            title="Carry and Return",
-            xlab="Carry",
-            ylab="Return",
-            coef_box="lower left",
-            prob_est="map",
-            ax=ax[i],
-        )
-    plt.show()
+    # for i in range(2):
+    #     cr.reg_scatter(
+    #         labels=False,
+    #         separator=None,
+    #         title="Carry and Return",
+    #         xlab="Carry",
+    #         ylab="Return",
+    #         coef_box="lower left",
+    #         prob_est="map",
+    #         ax=ax[i],
+    #     )
+    # plt.show()
 
-    cr.ols_table(type="pool")
-    cr.ols_table(type="re")
+    # cr.ols_table(type="pool")
+    # cr.ols_table(type="re")
