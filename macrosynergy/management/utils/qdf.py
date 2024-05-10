@@ -412,14 +412,19 @@ class LargeQDF:
 
 
 if __name__ == "__main__":
-    lqdf = LargeQDF.load_from_pickle("./data/jpmaqs_snap*.pkl")
-    lqdf.info()
-    start = "2024-01-01"
-    end = "2014-01-31"
+    start = "2014-01-31"
+    end = "2024-01-01"
     import time
 
+    st = time.time()
+    lqdf = LargeQDF.load_from_pickle("./data/jpmaqs_snap*.pkl")
     print("--" * 20)
-    print(f"Using LargeQDF object: {lqdf}")
+    print(f"Time taken to load LargeQDF: {time.time() - st:.2f} seconds")
+
+    lqdf.info()
+
+    print("--" * 20)
+    print(f"Using LargeQDF object: \n\t{lqdf}")
     print("--" * 20)
     print("lQDF.info():")
     print(lqdf.info())
@@ -427,7 +432,8 @@ if __name__ == "__main__":
     print("--" * 20)
 
     print(
-        "Looking up CID=[USD, GBP] and XCAT=[CPI*SJA*] for the period 2014-01-01 to 2014-01-31."
+        "Looking up CID=[USD, GBP] and XCAT=[CPI*SJA*] for"
+        f" the period {start} to {end}."
     )
     print("--" * 20)
     st = time.time()
