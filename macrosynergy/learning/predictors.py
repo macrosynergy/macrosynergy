@@ -766,6 +766,114 @@ class LADRegressor(BaseEstimator, RegressorMixin):
 
         return np.mean(weighted_abs_residuals)
 
+class SURollingLinearRegression(BaseEstimator, RegressorMixin):
+    """
+    Custom scikit-learn predictor class to create a rolling linear OLS seemingly unrelated
+    regression model. This means that separate rolling regressions are estimated for each 
+    cross-section, but evaluation is performed over the panel. Consequently, the results of
+    a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
+    but the model parameters themselves may differ across cross-sections. 
+    """
+    def __init__(
+        self,
+        roll: int = None,
+        fit_intercept: bool = True,
+        positive: bool = False,
+        min_xs_samples: int = 2,
+    ):
+        """
+        Initializes a rolling seemingly unrelated OLS linear regression model. Since 
+        separate models are estimated for each cross-section, a minimum constraint on the 
+        number of samples per cross-section, called min_xs_samples, is required for
+        sensible inference.
+
+        :param <int> roll: The lookback of the rolling window for the regression. If None, 
+            the entire cross-sectional history is used for each regression.
+        :param <bool> fit_intercept: Boolean indicating whether or not to fit intercepts 
+            for each regression.
+        :param <bool> positive: Boolean indicating whether or not to enforce positive
+            coefficients for each regression.
+        :param <int> min_xs_samples: The minimum number of samples required in each 
+            cross-section training set for a regression model to be fitted. 
+        """
+        self.roll = roll
+        self.fit_intercept = fit_intercept
+        self.positive = positive
+        self.min_xs_samples = min_xs_samples
+
+        # Create data structures to store model information for each cross-section
+        self.models = {}
+        self.coefs = {}
+        self.intercepts = {}
+
+    def fit(
+        self,
+        X: pd.DataFrame,
+        y: Union[pd.DataFrame, pd.Series],
+    ):
+        """
+        Fit method to fit a rolling linear regression on each cross-section, subject to 
+        cross-sectional data availability. 
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+        """
+        # TODO: requirement checks
+        cross_sections = X.index.get_level_values(0).unique()
+        for section in cross_sections:
+            X_section = X.xs(section, level=0)
+            y_section = y.xs(section, level=0)
+            # Check if there are enough samples to fit a model
+            unique_dates = sorted(X_section.index.unique())
+            num_dates = len(unique_dates)
+            if num_dates < self.min_xs_samples:
+                # Skip to the next cross-section
+                continue
+            # If a roll is specified, then adjust the dates accordingly
+            if self.roll:
+                right_dates = unique_dates[-self.roll:]
+                mask = X_section.index.isin(right_dates)
+                X_section = X_section[mask]
+                y_section = y_section[mask]
+            # Fit the model
+            lr_cid = LinearRegression(fit_intercept=self.fit_intercept, positive=self.positive)
+            lr_cid.fit(X_section, y_section)
+            # Store model and coefficients 
+            self.models[section] = lr_cid
+            self.coefs[section] = lr_cid.coef_[0]
+            self.intercepts[section] = lr_cid.intercept_
+
+        return self
+
+    def predict(
+        self,
+        X: pd.DataFrame,
+    ):
+        """
+        Predict method to make model predictions over a panel based on the fitted 
+        seemingly unrelated regression.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+
+        :return <pd.Series>: Pandas series of predictions, multi-indexed by cross-section
+            and date.
+        """
+        # TODO: implement checks 
+        predictions = pd.Series(index=X.index, data=np.nan)
+
+        # Check whether each test cross-section has an associated model 
+        cross_sections = predictions.index.get_level_values(0).unique()
+        for idx, section in enumerate(cross_sections):
+            if section in self.models.keys():
+                # If a model exists, return the estimated OOS contract return. 
+                predictions[predictions.index.get_level_values(0) == section] = (
+                    self.models[section].predict(X.xs(section, level=0)).flatten()
+                )
+
+        return predictions
+
+
 
 if __name__ == "__main__":
     from macrosynergy.management import make_qdf
