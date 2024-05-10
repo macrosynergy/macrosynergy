@@ -7,6 +7,8 @@ from macrosynergy.learning.panel_time_series_split import (
     BasePanelSplit,
 )
 
+from macrosynergy.learning.metrics import neg_mean_abs_market_corr
+
 from macrosynergy.management.utils.df_utils import (
     reduce_df,
     categories_df,
@@ -151,6 +153,7 @@ class MarketBetaEstimator:
             X_train_i = pd.DataFrame(self.X.iloc[train_idx])
             y_train_i = self.y.iloc[train_idx]
             X_test_i = pd.DataFrame(self.X.iloc[test_idx])
+            y_test_i = self.y.iloc[test_idx]
 
             # (2b) Run grid search
             optim_name = None
@@ -200,9 +203,19 @@ class MarketBetaEstimator:
             
             # Get beta estimates for each cross-section
             # These are stored in estimator.coefs_ as a dictionary {cross-section: beta}
-            # We need to extract these and store them in beta_df
 
             betas = optim_model.coefs_
+
+            # Get OOS hedged returns
+            hedged_returns: pd.Series = self.get_hedged_returns(betas, X_test_i, y_test_i)
+            # Evaluate hedged returns
+            pearson_h, spearman_h, kendall_h = self.get_absolute_correlations(hedged_returns, X_test_i)
+            pearson_c, spearman_c, kendall_c = self.get_absolute_correlations(y_test_i, X_test_i)
+            pearsons, spearmans, kendalls = [pearson_h, pearson_c], [spearman_h, spearman_c], [kendall_h, kendall_c]
+            # TODO: work towards getting a table with columns [real_date, xcat, correlation_type, is_hedged, value]
+
+
+            # Compute 
             training_time = X_train_i.index.get_level_values(1).max()
             for cross_section, beta in betas.items():
                 # Strip the contract cross section from the pseudo cross section names
