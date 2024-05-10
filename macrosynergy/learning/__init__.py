@@ -54,6 +54,7 @@ __all__ = [
     "PanelStandardScaler",
     "ZnScoreAverager",
     # metrics
+    "neg_mean_abs_market_corr",
     "panel_significance_probability",
     "sharpe_ratio",
     "sortino_ratio",
