@@ -103,6 +103,7 @@ class MarketBetaEstimator:
         # Create dataframes to store the estimated betas, selected models and chosen 
         # hyperparameters
         self.beta_df = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
+        self.hedged_returns = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
         self.chosen_models = pd.DataFrame(
             columns=["real_date", "xcat", "model_type", "hparams", "n_splits_used"]
         )
@@ -122,17 +123,18 @@ class MarketBetaEstimator:
         self,
         beta_xcat: str,
         hedged_return_xcat: str,
-        min_cids: int,
-        min_periods: int,
-        oos_period: int,
         inner_splitter: BasePanelSplit,
+        scorer: Callable, # Possibly find a better type hint for a scikit-learn scorer
         models: Dict[str, Union[BaseEstimator, Pipeline]],
-        scorer: Callable, # Scikit-learn scorer. Might be a better existing type for this
         hparam_grid: Dict[str, Dict[str, List]],
-        hparam_type: str = "grid",
-        n_iter: Optional[int] = 10,
+        min_cids: int = 1,
+        min_periods: int = 252,
+        oos_period: int = 21,
         initial_nsplits: Optional[Union[int, np.int_]] = None,
         threshold_ndates: Optional[Union[int, np.int_]] = None,
+        hparam_type: str = "grid",
+        data_freqs: List[str] = ["D"],
+        n_iter: Optional[int] = 10,
         n_jobs_outer: Optional[int] = -1,
         n_jobs_inner: Optional[int] = 1,
     ):
@@ -184,23 +186,41 @@ class MarketBetaEstimator:
             a single core. 
         """
         
-        # (1) Create a dataframe to store the estimated betas at business-daily frequency
+        # (1) Create daily multi-indexed dataframes to store estimated betas and hedged returns
+        # This makes indexing easy and the resulting dataframes can be melted to long format later
+
         min_date = self.X.index.get_level_values(1).min()
         max_date = self.X.index.get_level_values(1).max()
         date_range = pd.bdate_range(start=min_date, end=max_date, freq="B")
         idxs = pd.MultiIndex.from_product([sorted(self.contract_cids), date_range], names=["cid","real_date"])
         
-        stored_betas = pd.DataFrame(index=idxs, columns=[name], data=np.nan, dtype=np.float64)
+        stored_betas = pd.DataFrame(index=idxs, columns=[beta_xcat], data=np.nan, dtype=np.float64)
+        stored_hedged_returns = pd.DataFrame(index=idxs, columns=[hedged_return_xcat], data=np.nan, dtype=np.float64)
+
+        # (2) Set up outer splitter
+        outer_splitter = ExpandingIncrementPanelSplit(
+            train_intervals=oos_period,
+            min_cids=min_cids,
+            min_periods=min_periods,
+            test_size=oos_period,
+        )
+
+        # Create lists to store stored quantities in each iteration
+        # This is done to avoid appending to the dataframe in each iteration
         beta_list = []
+        hedged_return_list = []
         chosen_models = []
 
-        # (2) Loop through outer splitter
-        for idx, (train_idx, test_idx) in enumerate(tqdm(outer_splitter.split(self.X, self.y))):
-            # (2a) Get training and testing samples
+        # (3) Loop through outer splitter, run grid search for optimal model, extract beta 
+        # estimates, calculate OOS hedged returns and store results
+        train_test_splits = list(outer_splitter.split(X=self.X, y=self.y))
+        for idx, (train_idx, test_idx) in tqdm(enumerate(train_test_splits),total=len(train_test_splits)):
+            # Get training and testing samples
             X_train_i = pd.DataFrame(self.X.iloc[train_idx])
             y_train_i = self.y.iloc[train_idx]
             X_test_i = pd.DataFrame(self.X.iloc[test_idx])
             y_test_i = self.y.iloc[test_idx]
+            training_time = X_train_i.index.get_level_values(1).max()
 
             # (2b) Run grid search
             optim_name = None
@@ -215,9 +235,9 @@ class MarketBetaEstimator:
                         scoring=scorer,
                         refit=True,
                         cv=inner_splitter,
-                        n_jobs=-1,
+                        n_jobs=n_jobs_inner,
                     )
-                elif hparam_type == "random":
+                elif hparam_type == "prior":
                     search_object = RandomizedSearchCV(
                         estimator=model,
                         param_distributions=hparam_grid[model_name],
@@ -232,10 +252,9 @@ class MarketBetaEstimator:
                     search_object.fit(X_train_i, y_train_i)
                 except Exception as e:
                     warnings.warn(
-                    f"Error in the grid search for {model_name}: {e}", # Add correct date as well
+                    f"Error in the  search for {model_name} at {training_time}: {e}",
                     RuntimeWarning,
                 )
-                # 
                 score = search_object.best_score_
                 if score > optim_score:
                     optim_name = model_name
@@ -250,24 +269,17 @@ class MarketBetaEstimator:
             
             # Get beta estimates for each cross-section
             # These are stored in estimator.coefs_ as a dictionary {cross-section: beta}
-
             betas = optim_model.coefs_
 
             # Get OOS hedged returns
             hedged_returns: pd.Series = self.get_hedged_returns(betas, X_test_i, y_test_i)
-            # Evaluate hedged returns
-            pearson_h, spearman_h, kendall_h = self.get_absolute_correlations(hedged_returns, X_test_i)
-            pearson_c, spearman_c, kendall_c = self.get_absolute_correlations(y_test_i, X_test_i)
-            pearsons, spearmans, kendalls = [pearson_h, pearson_c], [spearman_h, spearman_c], [kendall_h, kendall_c]
-            # TODO: work towards getting a table with columns [real_date, xcat, correlation_type, is_hedged, value]
-
-
+            
             # Compute 
             training_time = X_train_i.index.get_level_values(1).max()
             for cross_section, beta in betas.items():
                 # Strip the contract cross section from the pseudo cross section names
                 cid = cross_section.split("v")[0]
-                beta_list.append([cid, training_time, name, beta])
+                beta_list.append([cid, training_time, beta_xcat, beta])
 
             # Store chosen models and hyperparameters
             chosen_models.append([training_time, name, optim_name, optim_params, inner_splitter.n_splits])
