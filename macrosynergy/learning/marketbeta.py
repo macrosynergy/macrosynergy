@@ -120,9 +120,12 @@ class MarketBetaEstimator:
 
     def estimate_beta(
         self,
-        name: str, # category name for the panel of estimated contract betas
-        outer_splitter: ExpandingIncrementPanelSplit, # outer splitter for expanding window
-        inner_splitter: BasePanelSplit, # inner splitter for cross-validation
+        beta_xcat: str,
+        hedged_return_xcat: str,
+        min_cids: int,
+        min_periods: int,
+        oos_period: int,
+        inner_splitter: BasePanelSplit,
         models: Dict[str, Union[BaseEstimator, Pipeline]],
         scorer: Callable, # Scikit-learn scorer. Might be a better existing type for this
         hparam_grid: Dict[str, Dict[str, List]],
@@ -134,7 +137,51 @@ class MarketBetaEstimator:
         n_jobs_inner: Optional[int] = 1,
     ):
         """
-        Method to estimate and store the beta coefficients for each cross-section in the panel. 
+        Method to estimate and store the beta coefficients for each cross-section in the panel.
+
+        At a given estimation date, a search for optimal linear model hyperparameters and underlying
+        dataset frequency is performed. The optimal model is fit to the training set, betas for each 
+        cross-section are extracted and hedged returns over a subsequent out-of-sample period are
+        derived. The hyperparameter search is based on maximization of a cross-validation score from
+        a scikit-learn 'scorer' function. 
+
+        :param <str> beta_xcat: Category name for the panel of estimated contract betas.
+        :param <str> hedged_return_xcat: Category name for the panel of derived hedged returns.
+        :param <BasePanelSplit> inner_splitter: Panel cross-validation splitter for
+            the hyperparameter search. It is recommended to set this to an ExpandingKFoldPanelSplit
+            splitter.
+        :param <Callable> scorer: Scikit-learn scorer function used in both model and 
+            hyperparameter selection for optimization. For beta estimation, it is recommended
+            to use `neg_mean_abs_market_corr` within the `macrosynergy.learning` submodule. 
+        :param <dict> models: Dictionary of scikit-learn compatible linear regression models. For beta
+            estimation, these models should be seemingly unrelated regressions with a 'coefs_' attribute
+            storing estimated betas for each cross-section.
+        :param <dict> hparam_grid: Nested dictionary defining the hyperparameters to consider
+            for each model.
+        :param <int> min_cids: smallest number of cross-sections to be in the initial training set.
+            Since market betas are estimated for each cross-section, it is recommended to set this to 
+            one. This parameter should be used in conjunction with min_periods. Default is 1. 
+        :param <int> min_periods: smallest number of business days to comprise the initial training 
+            set. This parameter should be used in conjunction with min_cids.
+            Default is 1 year (252 days).
+        :param <int> oos_period: Number of out-of-sample business days for which hedged returns
+            are derived. After the hedged returns are determined in each iteration, the training
+            panel expands to encapsulate these samples, meaning that this parameter also determines
+            re-estimation frequency. Default is 1 month (21 days).
+        :param <int> initial_nsplits: Number of splits to be used in cross-validation for the initial
+            training set. If None, the number of splits is defined by the inner_splitter. Default is None.
+        :param <int> threshold_ndates: Number of business days to pass before the number of cross-validation
+            splits increases by one. Default is None.
+        :param <str> hparam_type: String indicating the type of hyperparameter search. This can be 
+            `grid`, `prior` or `bayes`. Currently the `bayes` option produces a NotImplementedError. 
+            Default is "grid".
+        :param <List[str]> data_freqs: List of possible underlying data frequencies on which beta estimates
+            are produced. Default is ["D"].
+        :param <int> n_iter: Number of iterations to run for random search. Default is 10.
+        :param <int> outer_n_jobs: Number of jobs to run the outer splitter in parallel. Default is -1, which uses
+            all available cores.
+        :param <int> inner_n_jobs: Number of jobs to run the inner splitter in parallel. Default is 1, which uses
+            a single core. 
         """
         
         # (1) Create a dataframe to store the estimated betas at business-daily frequency
