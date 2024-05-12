@@ -211,7 +211,12 @@ class MarketBetaEstimator:
         hedged_return_list = []
         chosen_models = []
 
-        # (3) Loop through outer splitter, run grid search for optimal model, extract beta 
+        # (3) Adjust the models and hyperparameter grids to account for frequencies 
+        # If only the default frequency list is passed, do nothing
+        adj_models = self._adjust_models_dict(models, data_freqs)
+        adj_hparam_grid = self._adjust_hparam_dict(hparam_grid, data_freqs)
+
+        # (4) Loop through outer splitter, run grid search for optimal model, extract beta 
         # estimates, calculate OOS hedged returns and store results
         train_test_splits = list(outer_splitter.split(X=self.X, y=self.y))
         for idx, (train_idx, test_idx) in tqdm(enumerate(train_test_splits),total=len(train_test_splits)):
@@ -222,16 +227,16 @@ class MarketBetaEstimator:
             y_test_i = self.y.iloc[test_idx]
             training_time = X_train_i.index.get_level_values(1).max()
 
-            # (2b) Run grid search
+            # Run grid search
             optim_name = None
             optim_model = None 
             optim_score = -np.inf 
 
-            for model_name, model in models.items():
+            for model_name, model in adj_models.items():
                 if hparam_type == "grid":
                     search_object = GridSearchCV(
                         estimator=model,
-                        param_grid=hparam_grid[model_name],
+                        param_grid=adj_hparam_grid[model_name],
                         scoring=scorer,
                         refit=True,
                         cv=inner_splitter,
@@ -247,49 +252,58 @@ class MarketBetaEstimator:
                         cv=inner_splitter,
                         n_jobs=n_jobs_inner,
                     )
-                # Run the grid search
+
                 try:
                     search_object.fit(X_train_i, y_train_i)
                 except Exception as e:
                     warnings.warn(
-                    f"Error in the  search for {model_name} at {training_time}: {e}",
+                    f"Error running a hyperparameter search for {model_name} at {training_time}: {e}",
                     RuntimeWarning,
                 )
+                if not hasattr(search_object, "best_score_"):
+                    # Then the grid search failed completely
+                    warnings.warn(
+                        f"No model was selected at time {training_time}. Hence, no beta can be estimated."
+                    )
+                    continue
+
+                # If a model was selected, extract the score, name, estimator and optimal hyperparameters
                 score = search_object.best_score_
                 if score > optim_score:
                     optim_name = model_name
                     optim_model = search_object.best_estimator_
                     optim_score = score
                     optim_params = search_object.best_params_
-
-            # Handle case where no model was chosen 
-            if optim_model is None:
-                # TODO add warning 
-                continue
             
             # Get beta estimates for each cross-section
             # These are stored in estimator.coefs_ as a dictionary {cross-section: beta}
             betas = optim_model.coefs_
 
             # Get OOS hedged returns
-            hedged_returns: pd.Series = self.get_hedged_returns(betas, X_test_i, y_test_i)
-            
-            # Compute 
-            training_time = X_train_i.index.get_level_values(1).max()
+            # This will be a List of lists, with inner lists recording the hedged return
+            # for a given cross-section and a given OOS timestamp.
+            hedged_returns: List[List[str, pd.Timestamp, str, float]] = self._get_hedged_returns(betas, X_test_i, y_test_i)
+            hedged_return_list.extend(hedged_returns)
+
+            # Also update the list of betas 
             for cross_section, beta in betas.items():
                 # Strip the contract cross section from the pseudo cross section names
                 cid = cross_section.split("v")[0]
                 beta_list.append([cid, training_time, beta_xcat, beta])
 
             # Store chosen models and hyperparameters
-            chosen_models.append([training_time, name, optim_name, optim_params, inner_splitter.n_splits])
+            chosen_models.append([training_time, beta_xcat, optim_name, optim_params, inner_splitter.n_splits])
 
-        # (3) Convert beta_list to a dataframe and upsample to business-daily frequency
+        # (5) Convert beta_list and hedged_return_list to dataframes and upsample to business-daily frequency
         for cid, real_date, xcat, value in beta_list:
             stored_betas.loc[(cid, real_date), xcat] = value
+        for cid, real_date, xcat, value in hedged_return_list:
+            hedged_returns.loc[(cid, real_date), xcat] = value
 
         stored_betas = stored_betas.groupby(level=0).ffill()
+        hedged_returns = hedged_returns.groupby(level=0).ffill()
         stored_betas_long = pd.melt(frame=stored_betas.reset_index(),id_vars=["cid", "real_date"], var_name="xcat", value_name="value")
+        stored_hrets_long = pd.melt(frame=hedged_returns.reset_index(),id_vars=["cid", "real_date"], var_name="xcat", value_name="value")
         
         self.beta_df = pd.concat((self.beta_df, stored_betas_long), axis=0).astype(
             {
@@ -299,9 +313,16 @@ class MarketBetaEstimator:
                 "value": np.float64,
             }
         )
-        self.chosen_models = pd.concat((self.chosen_models, pd.DataFrame(chosen_models, columns=["real_date", "xcat", "model_type", "hparams", "n_splits_used"])))
+        self.hedged_returns = pd.concat((self.hedged_returns, stored_hrets_long), axis=0).astype(
+            {
+                "cid": "object",
+                "real_date": "datetime64[ns]",
+                "xcat": "object",
+                "value": np.float64,
+            }
+        )
 
-        pass
+        self.chosen_models = pd.concat((self.chosen_models, pd.DataFrame(chosen_models, columns=["real_date", "xcat", "model_type", "hparams", "n_splits_used"])))
 
     def _checks_estimate_beta(
         self,
