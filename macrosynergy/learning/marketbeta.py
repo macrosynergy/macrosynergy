@@ -133,7 +133,7 @@ class MarketBetaEstimator:
         initial_nsplits: Optional[Union[int, np.int_]] = None,
         threshold_ndates: Optional[Union[int, np.int_]] = None,
         hparam_type: str = "grid",
-        data_freqs: List[str] = ["D"],
+        #data_freqs: List[str] = ["D"],
         n_iter: Optional[int] = 10,
         n_jobs_outer: Optional[int] = -1,
         n_jobs_inner: Optional[int] = 1,
@@ -177,8 +177,6 @@ class MarketBetaEstimator:
         :param <str> hparam_type: String indicating the type of hyperparameter search. This can be 
             `grid`, `prior` or `bayes`. Currently the `bayes` option produces a NotImplementedError. 
             Default is "grid".
-        :param <List[str]> data_freqs: List of possible underlying data frequencies on which beta estimates
-            are produced. Default is ["D"].
         :param <int> n_iter: Number of iterations to run for random search. Default is 10.
         :param <int> outer_n_jobs: Number of jobs to run the outer splitter in parallel. Default is -1, which uses
             all available cores.
@@ -211,12 +209,7 @@ class MarketBetaEstimator:
         hedged_return_list = []
         chosen_models = []
 
-        # (3) Adjust the models and hyperparameter grids to account for frequencies 
-        # If only the default frequency list is passed, do nothing
-        adj_models = self._adjust_models_dict(models, data_freqs)
-        adj_hparam_grid = self._adjust_hparam_dict(hparam_grid, data_freqs)
-
-        # (4) Loop through outer splitter, run grid search for optimal model, extract beta 
+        # (3) Loop through outer splitter, run grid search for optimal model, extract beta 
         # estimates, calculate OOS hedged returns and store results
         train_test_splits = list(outer_splitter.split(X=self.X, y=self.y))
         for idx, (train_idx, test_idx) in tqdm(enumerate(train_test_splits),total=len(train_test_splits)):
@@ -232,11 +225,11 @@ class MarketBetaEstimator:
             optim_model = None 
             optim_score = -np.inf 
 
-            for model_name, model in adj_models.items():
+            for model_name, model in models.items():
                 if hparam_type == "grid":
                     search_object = GridSearchCV(
                         estimator=model,
-                        param_grid=adj_hparam_grid[model_name],
+                        param_grid=hparam_grid[model_name],
                         scoring=scorer,
                         refit=True,
                         cv=inner_splitter,
@@ -324,16 +317,15 @@ class MarketBetaEstimator:
 
         self.chosen_models = pd.concat((self.chosen_models, pd.DataFrame(chosen_models, columns=["real_date", "xcat", "model_type", "hparams", "n_splits_used"])))
 
-    def _checks_estimate_beta(
-        self,
+    def _get_hedged_returns(
+        betas,
+        X_test_i,
+        y_test_i
     ):
         pass
 
-    def get_hedged_returns(
+    def _checks_estimate_beta(
         self,
-        name: str,
-        start_date: pd.Timestamp,
-        end_date: pd.Timestamp,
     ):
         pass
 

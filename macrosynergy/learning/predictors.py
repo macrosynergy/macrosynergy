@@ -11,7 +11,7 @@ import datetime
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import LinearRegression
 
-from typing import Union
+from typing import Union, List
 
 import numbers
 
@@ -779,6 +779,7 @@ class SURollingLinearRegression(BaseEstimator, RegressorMixin):
         roll: int = None,
         fit_intercept: bool = True,
         positive: bool = False,
+        data_freq: str = "D",
         min_xs_samples: int = 2,
     ):
         """
@@ -793,12 +794,19 @@ class SURollingLinearRegression(BaseEstimator, RegressorMixin):
             for each regression.
         :param <bool> positive: Boolean indicating whether or not to enforce positive
             coefficients for each regression.
+        :param <str> data_freq: Training set data frequency. This is primarily 
+            to be used within the context of market beta estimation in the 
+            MarketBetaEstimator class in `macrosynergy.learning`. Accpeted strings
+            are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
+            Default is 'D'.
         :param <int> min_xs_samples: The minimum number of samples required in each 
             cross-section training set for a regression model to be fitted. 
         """
+        # TODO: requirement checks
         self.roll = roll
         self.fit_intercept = fit_intercept
         self.positive = positive
+        self.data_freq = data_freq
         self.min_xs_samples = min_xs_samples
 
         # Create data structures to store model information for each cross-section
@@ -820,14 +828,40 @@ class SURollingLinearRegression(BaseEstimator, RegressorMixin):
             associated with each sample in X.
         """
         # TODO: requirement checks
+        # Adjust min_xs_samples based on the frequency of the data
+        if self.data_freq == "D":
+            min_xs_samples = self.min_xs_samples
+        elif self.data_freq == "W":
+            min_xs_samples = self.min_xs_samples // 5
+        elif self.data_freq == "M":
+            min_xs_samples = self.min_xs_samples // 21
+        elif self.data_freq == "Q":
+            min_xs_samples = self.min_xs_samples // 63
+
         cross_sections = X.index.get_level_values(0).unique()
+
+        X = (
+            X.groupby(
+                [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=self.data_freq)]
+            )
+            .sum()
+            .copy()
+        )
+        y = (
+            y.groupby(
+                [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=self.data_freq)]
+            )
+            .sum()
+            .copy()
+        )
+
         for section in cross_sections:
             X_section = X.xs(section, level=0)
             y_section = y.xs(section, level=0)
             # Check if there are enough samples to fit a model
             unique_dates = sorted(X_section.index.unique())
             num_dates = len(unique_dates)
-            if num_dates < self.min_xs_samples:
+            if num_dates < min_xs_samples:
                 # Skip to the next cross-section
                 continue
             # If a roll is specified, then adjust the dates accordingly
