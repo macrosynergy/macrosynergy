@@ -1562,7 +1562,7 @@ if __name__ == "__main__":
     print(mrt)
     print(sst)
 
-    Basic Signal Returns showing for multiple input values
+    # Basic Signal Returns showing for multiple input values
 
     sr = SignalReturnRelations(
         dfd,
