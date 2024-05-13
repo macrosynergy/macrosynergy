@@ -27,16 +27,13 @@ import warnings
 
 class MarketBetaEstimator:
     """
-    Class for market beta estimation of a panel of contract returns with respect to 
-    a time series of general market returns.
+    Beta estimation of a panel of contract returns based on regression.
     
-    Estimation is performed using seemingly unrelated linear regression models within
-    an expanding window learning process. At a given estimation date, a hyperparameter
-    search is run to determine the optimal model and hyperparameter configuration
-    with respect to a given performance metric. After the model is selected, the betas 
-    are extracted from each cross-section and stored in a quantamental dataframe. Lastly,
-    the out of sample hedged returns are calculated and stored in a quantamental dataframe
-    for analysis.  
+    Estimation is performed using seemingly unrelated linear regression models for
+    an expanding window learning process. Statistical learning determines the model and 
+    hyperparameter choices sequentially using a given performance metric. 
+    Cross-section betas and out-of-sample "hedged" returns are stored in a quantamental 
+    dataframe.  
     """
     def __init__ (
         self,
@@ -138,7 +135,7 @@ class MarketBetaEstimator:
         n_jobs_inner: Optional[int] = 1,
     ):
         """
-        Method to estimate and store the beta coefficients for each cross-section in the panel.
+        Estimate and store the beta coefficients for each cross-section.
 
         At a given estimation date, a search for optimal linear model hyperparameters and underlying
         dataset frequency is performed. The optimal model is fit to the training set, betas for each 
@@ -153,7 +150,7 @@ class MarketBetaEstimator:
             splitter.
         :param <Callable> scorer: Scikit-learn scorer function used in both model and 
             hyperparameter selection for optimization. For beta estimation, it is recommended
-            to use `neg_mean_abs_market_corr` within the `macrosynergy.learning` submodule. 
+            to use `neg_mean_abs_market_corr` from the `macrosynergy.learning` submodule. 
         :param <dict> models: Dictionary of scikit-learn compatible linear regression models. For beta
             estimation, these models should be seemingly unrelated regressions with a 'coefs_' attribute
             storing estimated betas for each cross-section.
@@ -162,8 +159,8 @@ class MarketBetaEstimator:
         :param <int> min_cids: smallest number of cross-sections to be in the initial training set.
             Since market betas are estimated for each cross-section, it is recommended to set this to 
             one. This parameter should be used in conjunction with min_periods. Default is 1. 
-        :param <int> min_periods: smallest number of business days to comprise the initial training 
-            set. This parameter should be used in conjunction with min_cids.
+        :param <int> min_periods: minimum requirement for the initial training set in business days. 
+            This parameter is applied in conjunction with min_cids.
             Default is 1 year (252 days).
         :param <int> oos_period: Number of out-of-sample business days for which hedged returns
             are derived. After the hedged returns are determined in each iteration, the training
