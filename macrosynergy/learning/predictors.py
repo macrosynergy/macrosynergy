@@ -874,7 +874,7 @@ class SURollingLinearRegression(BaseEstimator, RegressorMixin):
                 continue
             # If a roll is specified, then adjust the dates accordingly
             if self.roll:
-                right_dates = unique_dates[-self.roll:]
+                right_dates = unique_dates[-roll:]
                 mask = X_section.index.isin(right_dates)
                 X_section = X_section[mask]
                 y_section = y_section[mask]
