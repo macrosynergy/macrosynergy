@@ -9,7 +9,7 @@ import warnings
 import datetime
 
 from sklearn.base import BaseEstimator, RegressorMixin
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Ridge
 
 from typing import Union, List
 
@@ -914,9 +914,742 @@ class SURollingLinearRegression(BaseEstimator, RegressorMixin):
                 )
 
         return predictions
+    
+class SULinearRegression(BaseEstimator, RegressorMixin):
+    """
+    Custom scikit-learn predictor class to create a linear OLS seemingly unrelated
+    regression model. This means that separate regressions are estimated for each 
+    cross-section, but evaluation is performed over the panel. Consequently, the results of
+    a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
+    but the model parameters themselves may differ across cross-sections. 
+    """
+    def __init__(
+        self,
+        fit_intercept: bool = True,
+        positive: bool = False,
+        data_freq: str = "D",
+        min_xs_samples: int = 2,
+    ):
+        """
+        Initializes a seemingly unrelated OLS linear regression model. Since 
+        separate models are estimated for each cross-section, a minimum constraint on the 
+        number of samples per cross-section, called min_xs_samples, is required for
+        sensible inference.
 
+        :param <bool> fit_intercept: Boolean indicating whether or not to fit intercepts 
+            for each regression.
+        :param <bool> positive: Boolean indicating whether or not to enforce positive
+            coefficients for each regression.
+        :param <str> data_freq: Training set data frequency. This is primarily 
+            to be used within the context of market beta estimation in the 
+            MarketBetaEstimator class in `macrosynergy.learning`. Accpeted strings
+            are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
+            Default is 'D'.
+        :param <int> min_xs_samples: The minimum number of samples required in each 
+            cross-section training set for a regression model to be fitted. 
+        """
+        # TODO: requirement checks
+        self.fit_intercept = fit_intercept
+        self.positive = positive
+        self.data_freq = data_freq
+        self.min_xs_samples = min_xs_samples
 
+        # Create data structures to store model information for each cross-section
+        self.models = {}
+        self.coefs_ = {}
+        self.intercepts_ = {}
 
+    def fit(
+        self,
+        X: pd.DataFrame,
+        y: Union[pd.DataFrame, pd.Series],
+    ):
+        """
+        Fit method to fit a linear regression on each cross-section, subject to 
+        cross-sectional data availability. 
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+        """
+        # TODO: requirement checks
+        # Adjust min_xs_samples based on the frequency of the data
+        if self.data_freq == "D":
+            min_xs_samples = self.min_xs_samples
+        elif self.data_freq == "W":
+            min_xs_samples = self.min_xs_samples // 5
+        elif self.data_freq == "M":
+            min_xs_samples = self.min_xs_samples // 21
+        elif self.data_freq == "Q":
+            min_xs_samples = self.min_xs_samples // 63
+
+        cross_sections = X.index.get_level_values(0).unique()
+
+        X = (
+            X.groupby(
+                [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=self.data_freq)]
+            )
+            .sum()
+            .copy()
+        )
+        y = (
+            y.groupby(
+                [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=self.data_freq)]
+            )
+            .sum()
+            .copy()
+        )
+
+        for section in cross_sections:
+            X_section = X.xs(section, level=0)
+            y_section = y.xs(section, level=0)
+            # Check if there are enough samples to fit a model
+            unique_dates = sorted(X_section.index.unique())
+            num_dates = len(unique_dates)
+            if num_dates < min_xs_samples:
+                # Skip to the next cross-section
+                continue
+            # Fit the model
+            lr_cid = LinearRegression(fit_intercept=self.fit_intercept, positive=self.positive)
+            lr_cid.fit(pd.DataFrame(X_section), y_section)
+            # Store model and coefficients 
+            self.models[section] = lr_cid
+            self.coefs_[section] = lr_cid.coef_[0]
+            self.intercepts_[section] = lr_cid.intercept_
+
+        return self
+
+    def predict(
+        self,
+        X: pd.DataFrame,
+    ):
+        """
+        Predict method to make model predictions over a panel based on the fitted 
+        seemingly unrelated regression.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+
+        :return <pd.Series>: Pandas series of predictions, multi-indexed by cross-section
+            and date.
+        """
+        # TODO: implement checks 
+        predictions = pd.Series(index=X.index, data=np.nan)
+
+        # Check whether each test cross-section has an associated model 
+        cross_sections = predictions.index.get_level_values(0).unique()
+        for idx, section in enumerate(cross_sections):
+            if section in self.models.keys():
+                # If a model exists, return the estimated OOS contract return. 
+                predictions[predictions.index.get_level_values(0) == section] = (
+                    self.models[section].predict(X.xs(section, level=0)).flatten()
+                )
+
+        return predictions
+    
+class SURollingLADRegression(BaseEstimator, RegressorMixin):
+    """
+    Custom scikit-learn predictor class to create a rolling linear LAD seemingly unrelated
+    regression model. This means that separate rolling regressions are estimated for each 
+    cross-section, but evaluation is performed over the panel. Consequently, the results of
+    a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
+    but the model parameters themselves may differ across cross-sections. 
+    """
+    def __init__(
+        self,
+        roll: int = None,
+        fit_intercept: bool = True,
+        positive: bool = False,
+        data_freq: str = "D",
+        min_xs_samples: int = 2,
+    ):
+        """
+        Initializes a rolling seemingly unrelated LAD linear regression model. Since 
+        separate models are estimated for each cross-section, a minimum constraint on the 
+        number of samples per cross-section, called min_xs_samples, is required for
+        sensible inference.
+
+        :param <int> roll: The lookback of the rolling window for the regression. If None, 
+            the entire cross-sectional history is used for each regression.
+        :param <bool> fit_intercept: Boolean indicating whether or not to fit intercepts 
+            for each regression.
+        :param <bool> positive: Boolean indicating whether or not to enforce positive
+            coefficients for each regression.
+        :param <str> data_freq: Training set data frequency. This is primarily 
+            to be used within the context of market beta estimation in the 
+            MarketBetaEstimator class in `macrosynergy.learning`. Accpeted strings
+            are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
+            Default is 'D'.
+        :param <int> min_xs_samples: The minimum number of samples required in each 
+            cross-section training set for a regression model to be fitted. 
+        """
+        # TODO: requirement checks
+        self.roll = roll
+        self.fit_intercept = fit_intercept
+        self.positive = positive
+        self.data_freq = data_freq
+        self.min_xs_samples = min_xs_samples
+
+        # Create data structures to store model information for each cross-section
+        self.models = {}
+        self.coefs_ = {}
+        self.intercepts_ = {}
+
+    def fit(
+        self,
+        X: pd.DataFrame,
+        y: Union[pd.DataFrame, pd.Series],
+    ):
+        """
+        Fit method to fit a rolling linear regression on each cross-section, subject to 
+        cross-sectional data availability. 
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+        """
+        # TODO: requirement checks
+        # Adjust min_xs_samples based on the frequency of the data
+        if self.data_freq == "D":
+            min_xs_samples = self.min_xs_samples
+            if self.roll:
+                roll = self.roll
+        elif self.data_freq == "W":
+            min_xs_samples = self.min_xs_samples // 5
+            if self.roll:
+                roll = self.roll // 5
+        elif self.data_freq == "M":
+            min_xs_samples = self.min_xs_samples // 21
+            if self.roll:
+                roll = self.roll // 21
+        elif self.data_freq == "Q":
+            min_xs_samples = self.min_xs_samples // 63
+            if self.roll:
+                roll = self.roll // 63
+
+        cross_sections = X.index.get_level_values(0).unique()
+
+        X = (
+            X.groupby(
+                [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=self.data_freq)]
+            )
+            .sum()
+            .copy()
+        )
+        y = (
+            y.groupby(
+                [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=self.data_freq)]
+            )
+            .sum()
+            .copy()
+        )
+
+        for section in cross_sections:
+            X_section = X.xs(section, level=0)
+            y_section = y.xs(section, level=0)
+            # Check if there are enough samples to fit a model
+            unique_dates = sorted(X_section.index.unique())
+            num_dates = len(unique_dates)
+            if num_dates < min_xs_samples:
+                # Skip to the next cross-section
+                continue
+            # If a roll is specified, then adjust the dates accordingly
+            if self.roll:
+                right_dates = unique_dates[-roll:]
+                mask = X_section.index.isin(right_dates)
+                X_section = X_section[mask]
+                y_section = y_section[mask]
+            # Fit the model
+            lr_cid = LADRegressor(fit_intercept=self.fit_intercept, positive=self.positive)
+            lr_cid.fit(pd.DataFrame(X_section), y_section)
+            # Store model and coefficients 
+            self.models[section] = lr_cid
+            self.coefs_[section] = lr_cid.coef_[0]
+            self.intercepts_[section] = lr_cid.intercept_
+
+        return self
+
+    def predict(
+        self,
+        X: pd.DataFrame,
+    ):
+        """
+        Predict method to make model predictions over a panel based on the fitted 
+        seemingly unrelated regression.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+
+        :return <pd.Series>: Pandas series of predictions, multi-indexed by cross-section
+            and date.
+        """
+        # TODO: implement checks 
+        predictions = pd.Series(index=X.index, data=np.nan)
+
+        # Check whether each test cross-section has an associated model 
+        cross_sections = predictions.index.get_level_values(0).unique()
+        for idx, section in enumerate(cross_sections):
+            if section in self.models.keys():
+                # If a model exists, return the estimated OOS contract return. 
+                predictions[predictions.index.get_level_values(0) == section] = (
+                    self.models[section].predict(X.xs(section, level=0)).flatten()
+                )
+
+        return predictions
+
+class SULADRegression(BaseEstimator, RegressorMixin):
+    """
+    Custom scikit-learn predictor class to create a linear LAD seemingly unrelated
+    regression model. This means that separate regressions are estimated for each 
+    cross-section, but evaluation is performed over the panel. Consequently, the results of
+    a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
+    but the model parameters themselves may differ across cross-sections. 
+    """
+    def __init__(
+        self,
+        fit_intercept: bool = True,
+        positive: bool = False,
+        data_freq: str = "D",
+        min_xs_samples: int = 2,
+    ):
+        """
+        Initializes a seemingly unrelated LAD linear regression model. Since 
+        separate models are estimated for each cross-section, a minimum constraint on the 
+        number of samples per cross-section, called min_xs_samples, is required for
+        sensible inference.
+
+        :param <bool> fit_intercept: Boolean indicating whether or not to fit intercepts 
+            for each regression.
+        :param <bool> positive: Boolean indicating whether or not to enforce positive
+            coefficients for each regression.
+        :param <str> data_freq: Training set data frequency. This is primarily 
+            to be used within the context of market beta estimation in the 
+            MarketBetaEstimator class in `macrosynergy.learning`. Accpeted strings
+            are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
+            Default is 'D'.
+        :param <int> min_xs_samples: The minimum number of samples required in each 
+            cross-section training set for a regression model to be fitted. 
+        """
+        # TODO: requirement checks
+        self.fit_intercept = fit_intercept
+        self.positive = positive
+        self.data_freq = data_freq
+        self.min_xs_samples = min_xs_samples
+
+        # Create data structures to store model information for each cross-section
+        self.models = {}
+        self.coefs_ = {}
+        self.intercepts_ = {}
+
+    def fit(
+        self,
+        X: pd.DataFrame,
+        y: Union[pd.DataFrame, pd.Series],
+    ):
+        """
+        Fit method to fit a rolling linear regression on each cross-section, subject to 
+        cross-sectional data availability. 
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+        """
+        # TODO: requirement checks
+        # Adjust min_xs_samples based on the frequency of the data
+        if self.data_freq == "D":
+            min_xs_samples = self.min_xs_samples
+        elif self.data_freq == "W":
+            min_xs_samples = self.min_xs_samples // 5
+        elif self.data_freq == "M":
+            min_xs_samples = self.min_xs_samples // 21
+        elif self.data_freq == "Q":
+            min_xs_samples = self.min_xs_samples // 63
+
+        cross_sections = X.index.get_level_values(0).unique()
+
+        X = (
+            X.groupby(
+                [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=self.data_freq)]
+            )
+            .sum()
+            .copy()
+        )
+        y = (
+            y.groupby(
+                [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=self.data_freq)]
+            )
+            .sum()
+            .copy()
+        )
+
+        for section in cross_sections:
+            X_section = X.xs(section, level=0)
+            y_section = y.xs(section, level=0)
+            # Check if there are enough samples to fit a model
+            unique_dates = sorted(X_section.index.unique())
+            num_dates = len(unique_dates)
+            if num_dates < min_xs_samples:
+                # Skip to the next cross-section
+                continue
+            # Fit the model
+            lr_cid = LADRegressor(fit_intercept=self.fit_intercept, positive=self.positive)
+            lr_cid.fit(pd.DataFrame(X_section), y_section)
+            # Store model and coefficients 
+            self.models[section] = lr_cid
+            self.coefs_[section] = lr_cid.coef_[0]
+            self.intercepts_[section] = lr_cid.intercept_
+
+        return self
+
+    def predict(
+        self,
+        X: pd.DataFrame,
+    ):
+        """
+        Predict method to make model predictions over a panel based on the fitted 
+        seemingly unrelated regression.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+
+        :return <pd.Series>: Pandas series of predictions, multi-indexed by cross-section
+            and date.
+        """
+        # TODO: implement checks 
+        predictions = pd.Series(index=X.index, data=np.nan)
+
+        # Check whether each test cross-section has an associated model 
+        cross_sections = predictions.index.get_level_values(0).unique()
+        for idx, section in enumerate(cross_sections):
+            if section in self.models.keys():
+                # If a model exists, return the estimated OOS contract return. 
+                predictions[predictions.index.get_level_values(0) == section] = (
+                    self.models[section].predict(X.xs(section, level=0)).flatten()
+                )
+
+        return predictions
+    
+class SURollingRidgeRegression(BaseEstimator, RegressorMixin):
+    """
+    Custom scikit-learn predictor class to create a rolling seemingly unrelated ridge
+    regression model. This means that separate rolling regressions are estimated for each 
+    cross-section, but evaluation is performed over the panel. Consequently, the results of
+    a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
+    but the model parameters themselves may differ across cross-sections. 
+    """
+    def __init__(
+        self,
+        roll: int = None,
+        alpha: float = 1.0,
+        fit_intercept: bool = True,
+        positive: bool = False,
+        data_freq: str = "D",
+        min_xs_samples: int = 2,
+        tol: float = 1e-4,
+        solver: str = "cholesky",
+    ):
+        """
+        Initializes a rolling seemingly unrelated ridge regression model. Since 
+        separate models are estimated for each cross-section, a minimum constraint on the 
+        number of samples per cross-section, called min_xs_samples, is required for
+        sensible inference.
+
+        :param <int> roll: The lookback of the rolling window for the regression. If None, 
+            the entire cross-sectional history is used for each regression.
+        :param <float> alpha: Regularization hyperparameter. Greater values specify stronger
+            regularization. This must be a value in $[0, np.inf]$. Default is 1.0.
+        :param <bool> fit_intercept: Boolean indicating whether or not to fit intercepts 
+            for each regression.
+        :param <bool> positive: Boolean indicating whether or not to enforce positive
+            coefficients for each regression.
+        :param <str> data_freq: Training set data frequency. This is primarily 
+            to be used within the context of market beta estimation in the 
+            MarketBetaEstimator class in `macrosynergy.learning`. Accpeted strings
+            are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
+            Default is 'D'.
+        :param <int> min_xs_samples: The minimum number of samples required in each 
+            cross-section training set for a regression model to be fitted.
+        :param <float> tol: The tolerance for termination. Default is 1e-4.
+        :param <str> solver: Solver to use in the computational routines. Options are
+            'auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga' and 'lbfgs'.
+            Default is 'cholesky'.
+        """
+        # TODO: requirement checks
+        self.roll = roll
+        self.alpha = alpha
+        self.fit_intercept = fit_intercept
+        self.positive = positive
+        self.data_freq = data_freq
+        self.min_xs_samples = min_xs_samples
+        self.tol = tol
+        self.solver = solver
+
+        # Create data structures to store model information for each cross-section
+        self.models = {}
+        self.coefs_ = {}
+        self.intercepts_ = {}
+
+    def fit(
+        self,
+        X: pd.DataFrame,
+        y: Union[pd.DataFrame, pd.Series],
+    ):
+        """
+        Fit method to fit a rolling linear regression on each cross-section, subject to 
+        cross-sectional data availability. 
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+        """
+        # TODO: requirement checks
+        # Adjust min_xs_samples based on the frequency of the data
+        if self.data_freq == "D":
+            min_xs_samples = self.min_xs_samples
+            if self.roll:
+                roll = self.roll
+        elif self.data_freq == "W":
+            min_xs_samples = self.min_xs_samples // 5
+            if self.roll:
+                roll = self.roll // 5
+        elif self.data_freq == "M":
+            min_xs_samples = self.min_xs_samples // 21
+            if self.roll:
+                roll = self.roll // 21
+        elif self.data_freq == "Q":
+            min_xs_samples = self.min_xs_samples // 63
+            if self.roll:
+                roll = self.roll // 63
+
+        cross_sections = X.index.get_level_values(0).unique()
+
+        X = (
+            X.groupby(
+                [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=self.data_freq)]
+            )
+            .sum()
+            .copy()
+        )
+        y = (
+            y.groupby(
+                [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=self.data_freq)]
+            )
+            .sum()
+            .copy()
+        )
+
+        for section in cross_sections:
+            X_section = X.xs(section, level=0)
+            y_section = y.xs(section, level=0)
+            # Check if there are enough samples to fit a model
+            unique_dates = sorted(X_section.index.unique())
+            num_dates = len(unique_dates)
+            if num_dates < min_xs_samples:
+                # Skip to the next cross-section
+                continue
+            # If a roll is specified, then adjust the dates accordingly
+            if self.roll:
+                right_dates = unique_dates[-roll:]
+                mask = X_section.index.isin(right_dates)
+                X_section = X_section[mask]
+                y_section = y_section[mask]
+            # Fit the model
+            ridge_cid = Ridge(
+                fit_intercept=self.fit_intercept,
+                positive=self.positive,
+                alpha=self.alpha,
+                tol=self.tol,
+                solver=self.solver,
+            )
+            ridge_cid.fit(pd.DataFrame(X_section), y_section)
+            # Store model and coefficients 
+            self.models[section] = ridge_cid
+            self.coefs_[section] = ridge_cid.coef_[0]
+            self.intercepts_[section] = ridge_cid.intercept_
+
+        return self
+
+    def predict(
+        self,
+        X: pd.DataFrame,
+    ):
+        """
+        Predict method to make model predictions over a panel based on the fitted 
+        seemingly unrelated regression.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+
+        :return <pd.Series>: Pandas series of predictions, multi-indexed by cross-section
+            and date.
+        """
+        # TODO: implement checks 
+        predictions = pd.Series(index=X.index, data=np.nan)
+
+        # Check whether each test cross-section has an associated model 
+        cross_sections = predictions.index.get_level_values(0).unique()
+        for idx, section in enumerate(cross_sections):
+            if section in self.models.keys():
+                # If a model exists, return the estimated OOS contract return. 
+                predictions[predictions.index.get_level_values(0) == section] = (
+                    self.models[section].predict(X.xs(section, level=0)).flatten()
+                )
+
+        return predictions
+
+class SURidgeRegression(BaseEstimator, RegressorMixin):
+    """
+    Custom scikit-learn predictor class to create a seemingly unrelated ridge
+    regression model. This means that separate rolling regressions are estimated for each 
+    cross-section, but evaluation is performed over the panel. Consequently, the results of
+    a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
+    but the model parameters themselves may differ across cross-sections. 
+    """
+    def __init__(
+        self,
+        alpha: float = 1.0,
+        fit_intercept: bool = True,
+        positive: bool = False,
+        data_freq: str = "D",
+        min_xs_samples: int = 2,
+        tol: float = 1e-4,
+        solver: str = "cholesky",
+    ):
+        """
+        Initializes a seemingly unrelated ridge regression model. Since 
+        separate models are estimated for each cross-section, a minimum constraint on the 
+        number of samples per cross-section, called min_xs_samples, is required for
+        sensible inference.
+
+        :param <float> alpha: Regularization hyperparameter. Greater values specify stronger
+            regularization. This must be a value in $[0, np.inf)$. Default is 1.0.
+        :param <bool> fit_intercept: Boolean indicating whether or not to fit intercepts 
+            for each regression.
+        :param <bool> positive: Boolean indicating whether or not to enforce positive
+            coefficients for each regression.
+        :param <str> data_freq: Training set data frequency. This is primarily 
+            to be used within the context of market beta estimation in the 
+            MarketBetaEstimator class in `macrosynergy.learning`. Accpeted strings
+            are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
+            Default is 'D'.
+        :param <int> min_xs_samples: The minimum number of samples required in each 
+            cross-section training set for a regression model to be fitted.
+        :param <float> tol: The tolerance for termination. Default is 1e-4.
+        :param <str> solver: Solver to use in the computational routines. Options are
+            'auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga' and 'lbfgs'.
+            Default is 'cholesky'.
+        """
+        # TODO: requirement checks
+        self.alpha = alpha
+        self.fit_intercept = fit_intercept
+        self.positive = positive
+        self.data_freq = data_freq
+        self.min_xs_samples = min_xs_samples
+        self.tol = tol
+        self.solver = solver
+
+        # Create data structures to store model information for each cross-section
+        self.models = {}
+        self.coefs_ = {}
+        self.intercepts_ = {}
+
+    def fit(
+        self,
+        X: pd.DataFrame,
+        y: Union[pd.DataFrame, pd.Series],
+    ):
+        """
+        Fit method to fit a rolling ridge regression on each cross-section, subject to 
+        cross-sectional data availability. 
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+        """
+        # TODO: requirement checks
+        # Adjust min_xs_samples based on the frequency of the data
+        if self.data_freq == "D":
+            min_xs_samples = self.min_xs_samples
+            if self.roll:
+                roll = self.roll
+        elif self.data_freq == "W":
+            min_xs_samples = self.min_xs_samples // 5
+            if self.roll:
+                roll = self.roll // 5
+        elif self.data_freq == "M":
+            min_xs_samples = self.min_xs_samples // 21
+            if self.roll:
+                roll = self.roll // 21
+        elif self.data_freq == "Q":
+            min_xs_samples = self.min_xs_samples // 63
+            if self.roll:
+                roll = self.roll // 63
+
+        cross_sections = X.index.get_level_values(0).unique()
+
+        X = (
+            X.groupby(
+                [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=self.data_freq)]
+            )
+            .sum()
+            .copy()
+        )
+        y = (
+            y.groupby(
+                [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=self.data_freq)]
+            )
+            .sum()
+            .copy()
+        )
+
+        for section in cross_sections:
+            X_section = X.xs(section, level=0)
+            y_section = y.xs(section, level=0)
+            # Check if there are enough samples to fit a model
+            unique_dates = sorted(X_section.index.unique())
+            num_dates = len(unique_dates)
+            if num_dates < min_xs_samples:
+                # Skip to the next cross-section
+                continue
+            # Fit the model
+            ridge_cid = Ridge(
+                fit_intercept=self.fit_intercept,
+                positive=self.positive,
+                alpha=self.alpha,
+                tol=self.tol,
+                solver=self.solver,
+            )
+            ridge_cid.fit(pd.DataFrame(X_section), y_section)
+            # Store model and coefficients 
+            self.models[section] = ridge_cid
+            self.coefs_[section] = ridge_cid.coef_[0]
+            self.intercepts_[section] = ridge_cid.intercept_
+
+        return self
+
+    def predict(
+        self,
+        X: pd.DataFrame,
+    ):
+        """
+        Predict method to make model predictions over a panel based on the fitted 
+        seemingly unrelated regression.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+
+        :return <pd.Series>: Pandas series of predictions, multi-indexed by cross-section
+            and date.
+        """
+        # TODO: implement checks 
+        predictions = pd.Series(index=X.index, data=np.nan)
+
+        # Check whether each test cross-section has an associated model 
+        cross_sections = predictions.index.get_level_values(0).unique()
+        for idx, section in enumerate(cross_sections):
+            if section in self.models.keys():
+                # If a model exists, return the estimated OOS contract return. 
+                predictions[predictions.index.get_level_values(0) == section] = (
+                    self.models[section].predict(X.xs(section, level=0)).flatten()
+                )
+
+        return predictions
+    
 if __name__ == "__main__":
     from macrosynergy.management import make_qdf
     import macrosynergy.management as msm
