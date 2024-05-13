@@ -1108,6 +1108,12 @@ class SignalReturnRelations:
         df_result.rename(index={"Panel": index}, inplace=True)
 
         return df_result.round(5)
+    
+    def reindex_multindex_df(self, df: pd.DataFrame, desired_order: List[str], var_type: str):
+        df['Signal_Order'] = pd.Categorical(df.index.get_level_values(var_type), categories=desired_order, ordered=True)
+        df_sorted = df.sort_values('Signal_Order')
+        df_sorted.drop('Signal_Order', axis=1, inplace=True)
+        return df_sorted
 
     def multiple_relations_table(
         self,
@@ -1115,6 +1121,8 @@ class SignalReturnRelations:
         xcats: Union[str, List[str]] = None,
         freqs: Union[str, List[str]] = None,
         agg_sigs: Union[str, List[str]] = None,
+        signal_name_dict: Optional[Dict[str, str]] = None,
+        return_name_dict: Optional[Dict[str, str]] = None,
     ):
         """
         Calculates all the statistics for each return and signal category specified with
@@ -1191,6 +1199,14 @@ class SignalReturnRelations:
 
         df_result.index = multiindex
 
+        if signal_name_dict is not None:
+            df_result.rename(index=signal_name_dict, inplace=True)
+            df_result = self.reindex_multindex_df(df_result, signal_name_dict.values(), "Signal")
+
+        if return_name_dict is not None:
+            df_result.rename(index=return_name_dict, inplace=True)
+            df_result = self.reindex_multindex_df(df_result, return_name_dict.values(), "Return")
+
         self.df = self.original_df
 
         return df_result
@@ -1206,6 +1222,8 @@ class SignalReturnRelations:
         title_fontsize: int = 16,
         row_names: Optional[List[str]] = None,
         column_names: Optional[List[str]] = None,
+        signal_name_dict: Optional[Dict[str, str]] = None,
+        return_name_dict: Optional[Dict[str, str]] = None,
         min_color: Optional[float] = None,
         max_color: Optional[float] = None,
         figsize: Tuple[float] = (14, 8),
@@ -1299,6 +1317,8 @@ class SignalReturnRelations:
             for agg_sig in self.agg_sigs
         ]
 
+        # Reorder tuples 
+
         for ret, sig, freq, agg_sig in loop_tuples:
             # Prepare xcat and manipulate DataFrame
             xcat = [sig, ret]
@@ -1315,6 +1335,24 @@ class SignalReturnRelations:
             # Reset self.df and sig to original values
             self.df = self.original_df
 
+        if signal_name_dict is not None:
+            # Reorder the index according to the signal_name_dict
+            if "xcat" in rows:
+                df_result.rename(index=signal_name_dict, inplace=True)
+                df_result = self.reindex_multindex_df(df_result, signal_name_dict.values(), "Signal")
+            else:
+                df_result.rename(columns=signal_name_dict, inplace=True)
+                df_result = df_result[signal_name_dict.values()]
+        
+        if return_name_dict is not None:
+            # Reorder the index according to the return_name_dict
+            if "ret" in rows:
+                df_result.rename(index=return_name_dict, inplace=True)
+                df_result = self.reindex_multindex_df(df_result, return_name_dict.values(), "Return")
+            else:
+                df_result.rename(columns=return_name_dict, inplace=True)
+                df_result = df_result[return_name_dict.values()]
+
         if show_heatmap:
             if not title:
                 title = f"{stat}"
@@ -1323,6 +1361,8 @@ class SignalReturnRelations:
                 min_color = df_result.values.min()
             if max_color is None:
                 max_color = df_result.values.max()
+
+            
 
             msv.view_table(
                 df_result,
@@ -1507,8 +1547,8 @@ if __name__ == "__main__":
 
     sr = SignalReturnRelations(
         dfd,
-        rets="XR",
-        sigs="CRY",
+        rets=["XR", "XRH"],
+        sigs=["CRY", "INFL", "GROWTH"],
         freqs="M",
         start="2002-01-01",
         agg_sigs="last",
@@ -1516,7 +1556,7 @@ if __name__ == "__main__":
 
     srt = sr.single_relation_table()
     mrt = sr.multiple_relations_table()
-    sst = sr.single_statistic_table(stat="accuracy", type="mean_years")
+    sst = sr.single_statistic_table(stat="accuracy", type="mean_years", rows=["ret", "agg_sigs"], columns=["xcat", "freq"])
 
     print(srt)
     print(mrt)

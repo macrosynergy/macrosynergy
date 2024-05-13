@@ -308,7 +308,8 @@ def return_beta(
     xcat_hedge = "_".join(post_fix[1:])
     cid_hedge = post_fix[0]
     if xcat_hedge == xcat:
-        cids.remove(cid_hedge)
+        if cid_hedge in cids:
+            cids.remove(cid_hedge)
         warnings.warn(
             f"Return to be hedged for cross section {cid_hedge} is the hedge "
             f"return and has been removed from the panel."
@@ -438,7 +439,7 @@ if __name__ == "__main__":
     df_hedge = return_beta(
         df=dfd,
         xcat=xcat_hedge,
-        cids=cids,
+        cids=["IDR", "INR", "KRW", "MYR", "PHP"],
         benchmark_return=benchmark_return,
         start="2010-01-01",
         end="2020-10-30",
