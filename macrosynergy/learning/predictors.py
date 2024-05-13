@@ -831,12 +831,20 @@ class SURollingLinearRegression(BaseEstimator, RegressorMixin):
         # Adjust min_xs_samples based on the frequency of the data
         if self.data_freq == "D":
             min_xs_samples = self.min_xs_samples
+            if self.roll:
+                roll = self.roll
         elif self.data_freq == "W":
             min_xs_samples = self.min_xs_samples // 5
+            if self.roll:
+                roll = self.roll // 5
         elif self.data_freq == "M":
             min_xs_samples = self.min_xs_samples // 21
+            if self.roll:
+                roll = self.roll // 21
         elif self.data_freq == "Q":
             min_xs_samples = self.min_xs_samples // 63
+            if self.roll:
+                roll = self.roll // 63
 
         cross_sections = X.index.get_level_values(0).unique()
 
