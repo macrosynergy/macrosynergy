@@ -1206,6 +1206,8 @@ class SignalReturnRelations:
         title_fontsize: int = 16,
         row_names: Optional[List[str]] = None,
         column_names: Optional[List[str]] = None,
+        signal_name_dict: Optional[Dict[str, str]] = None,
+        return_name_dict: Optional[Dict[str, str]] = None,
         min_color: Optional[float] = None,
         max_color: Optional[float] = None,
         figsize: Tuple[float] = (14, 8),
@@ -1299,6 +1301,8 @@ class SignalReturnRelations:
             for agg_sig in self.agg_sigs
         ]
 
+        # Reorder tuples 
+
         for ret, sig, freq, agg_sig in loop_tuples:
             # Prepare xcat and manipulate DataFrame
             xcat = [sig, ret]
@@ -1315,6 +1319,30 @@ class SignalReturnRelations:
             # Reset self.df and sig to original values
             self.df = self.original_df
 
+        def reindex_multindex_df(df: pd.DataFrame, desired_order: List[str]):
+            df['Signal_Order'] = pd.Categorical(df.index.get_level_values('Signal'), categories=desired_order, ordered=True)
+            df_sorted = df.sort_values('Signal_Order')
+            df_sorted.drop('Signal_Order', axis=1, inplace=True)
+            return df_sorted
+
+        if signal_name_dict is not None:
+            # Reorder the index according to the signal_name_dict
+            if "xcat" in rows:
+                df_result.rename(index=signal_name_dict, inplace=True)
+                df_result = reindex_multindex_df(df_result, signal_name_dict.values())
+            else:
+                df_result.rename(columns=signal_name_dict, inplace=True)
+                df_result = df_result[signal_name_dict.values()]
+        
+        if return_name_dict is not None:
+            # Reorder the index according to the return_name_dict
+            if "ret" in rows:
+                df_result.rename(index=return_name_dict, inplace=True)
+                df_result = reindex_multindex_df(df_result, return_name_dict.values())
+            else:
+                df_result.rename(columns=return_name_dict, inplace=True)
+                df_result = df_result[return_name_dict.values()]
+
         if show_heatmap:
             if not title:
                 title = f"{stat}"
@@ -1323,6 +1351,8 @@ class SignalReturnRelations:
                 min_color = df_result.values.min()
             if max_color is None:
                 max_color = df_result.values.max()
+
+            
 
             msv.view_table(
                 df_result,
@@ -1445,82 +1475,82 @@ if __name__ == "__main__":
 
     cidx = ["AUD", "CAD", "GBP", "USD"]
 
-    def spearman(x, y):
-        return stats.spearmanr(x, y)[0]
+    # def spearman(x, y):
+    #     return stats.spearmanr(x, y)[0]
 
-    from statsmodels.tsa.stattools import grangercausalitytests
+    # from statsmodels.tsa.stattools import grangercausalitytests
 
-    def granger(x, y):
-        return grangercausalitytests(np.array([x, y]).T, maxlag=3, addconst=True, verbose=False)[1][0][
-            "ssr_ftest"
-        ][0]
+    # def granger(x, y):
+    #     return grangercausalitytests(np.array([x, y]).T, maxlag=3, addconst=True, verbose=False)[1][0][
+    #         "ssr_ftest"
+    #     ][0]
 
-    def granger_pval(x, y):
-        return grangercausalitytests(np.array([x, y]).T, maxlag=3, addconst=True, verbose=False)[1][0][
-            "ssr_ftest"
-        ][1]
+    # def granger_pval(x, y):
+    #     return grangercausalitytests(np.array([x, y]).T, maxlag=3, addconst=True, verbose=False)[1][0][
+    #         "ssr_ftest"
+    #     ][1]
 
-    # Additional signals.
-    srn = SignalReturnRelations(
-        dfd,
-        rets="XR",
-        sigs="CRY",
-        sig_neg=True,
-        cosp=True,
-        freqs="Q",
-        start="2002-01-01",
-        ms_panel_test=True,
-        additional_metrics=[spearman, granger, granger_pval],
-    )
+    # # Additional signals.
+    # srn = SignalReturnRelations(
+    #     dfd,
+    #     rets="XR",
+    #     sigs="CRY",
+    #     sig_neg=True,
+    #     cosp=True,
+    #     freqs="Q",
+    #     start="2002-01-01",
+    #     ms_panel_test=True,
+    #     additional_metrics=[spearman, granger, granger_pval],
+    # )
 
-    df_dep = srn.summary_table()
-    print(df_dep)
+    # df_dep = srn.summary_table()
+    # print(df_dep)
 
-    dfsum = srn.single_relation_table(table_type="summary")
-    print(dfsum)
+    # dfsum = srn.single_relation_table(table_type="summary")
+    # print(dfsum)
 
-    srn = SignalReturnRelations(
-        dfd,
-        rets="XR",
-        sigs=["CRY", "INFL", "GROWTH"],
-        sig_neg=[True, True, True],
-        cosp=True,
-        freqs="M",
-        start="2002-01-01",
-        additional_metrics=[spearman, granger, granger_pval],
-    )
+    # srn = SignalReturnRelations(
+    #     dfd,
+    #     rets="XR",
+    #     sigs=["CRY", "INFL", "GROWTH"],
+    #     sig_neg=[True, True, True],
+    #     cosp=True,
+    #     freqs="M",
+    #     start="2002-01-01",
+    #     additional_metrics=[spearman, granger, granger_pval],
+    # )
 
-    df_sigs = srn.multiple_relations_table()
-    print(df_sigs)
+    # df_sigs = srn.multiple_relations_table()
+    # print(df_sigs)
     
-    dfsum = srn.single_relation_table(table_type="cross_section")
-    print(dfsum)
+    # dfsum = srn.single_relation_table(table_type="cross_section")
+    # print(dfsum)
 
-    srn.accuracy_bars(
-        type="signals",
-        title="Accuracy",
-    )
+    # srn.accuracy_bars(
+    #     type="signals",
+    #     title="Accuracy",
+    # )
 
-    sst = srn.single_statistic_table(stat="granger_pval")
+    # sst = srn.single_statistic_table(stat="granger_pval")
 
-    print(sst)
+    # print(sst)
 
-    sr = SignalReturnRelations(
-        dfd,
-        rets="XR",
-        sigs="CRY",
-        freqs="M",
-        start="2002-01-01",
-        agg_sigs="last",
-    )
+    # sr = SignalReturnRelations(
+    #     dfd,
+    #     rets="XR",
+    #     sigs="CRY",
+    #     freqs="M",
+    #     start="2002-01-01",
+    #     agg_sigs="last",
+    # )
 
-    srt = sr.single_relation_table()
-    mrt = sr.multiple_relations_table()
-    sst = sr.single_statistic_table(stat="accuracy", type="mean_years")
+    # srt = sr.single_relation_table()
+    # mrt = sr.multiple_relations_table()
+    # sst = sr.single_statistic_table(stat="accuracy", type="mean_years")
 
-    print(srt)
-    print(mrt)
-    print(sst)
+    # print(srt)
+    # print(mrt)
+    # print(sst)
 
     # Basic Signal Returns showing for multiple input values
 
@@ -1535,31 +1565,31 @@ if __name__ == "__main__":
         blacklist=black,
     )
 
-    sr.accuracy_bars(sigs=["CRY", "INFL"], type="signals", title="Accuracy")
-    sr.correlation_bars(type="signals", title="Correlation")
+    # sr.accuracy_bars(sigs=["CRY", "INFL"], type="signals", title="Accuracy")
+    # sr.correlation_bars(type="signals", title="Correlation")
 
-    srt = sr.single_relation_table(ret="XRH", xcat="INFL", freq="Q", agg_sigs="last")
-    mrt = sr.multiple_relations_table()
+    # srt = sr.single_relation_table(ret="XRH", xcat="INFL", freq="Q", agg_sigs="last")
+    # mrt = sr.multiple_relations_table()
     sst = sr.single_statistic_table(stat="pearson", show_heatmap=True)
 
-    print(srt)
-    print(mrt)
+    # print(srt)
+    # print(mrt)
     print(sst)
 
-    # Specifying specific arguments for each of the Signal Return Functions
+    # # Specifying specific arguments for each of the Signal Return Functions
 
-    srt = sr.single_relation_table(ret="XR", xcat="CRY", freq="Q", agg_sigs="last")
-    print(srt)
+    # srt = sr.single_relation_table(ret="XR", xcat="CRY", freq="Q", agg_sigs="last")
+    # print(srt)
 
-    mrt = sr.multiple_relations_table(
-        rets=["XR", "GROWTH"], xcats="INFL", freqs=["M", "Q"], agg_sigs=["last", "mean"]
-    )
-    print(mrt)
+    # mrt = sr.multiple_relations_table(
+    #     rets=["XR", "GROWTH"], xcats="INFL", freqs=["M", "Q"], agg_sigs=["last", "mean"]
+    # )
+    # print(mrt)
 
-    sst = sr.single_statistic_table(
-        stat="auc",
-        rows=["ret", "xcat", "freq"],
-        columns=["agg_sigs"],
-        type="mean_cids",
-    )
-    print(sst)
+    # sst = sr.single_statistic_table(
+    #     stat="auc",
+    #     rows=["ret", "xcat", "freq"],
+    #     columns=["agg_sigs"],
+    #     type="mean_cids",
+    # )
+    # print(sst)
