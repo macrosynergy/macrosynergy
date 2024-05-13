@@ -130,10 +130,9 @@ class MarketBetaEstimator:
         min_cids: int = 1,
         min_periods: int = 252,
         oos_period: int = 21,
-        initial_nsplits: Optional[Union[int, np.int_]] = None,
-        threshold_ndates: Optional[Union[int, np.int_]] = None,
+        initial_nsplits: Optional[Union[int, np.int_]] = None, # TODO incorporate this logic later
+        threshold_ndates: Optional[Union[int, np.int_]] = None, # TODO incorporate this logic later
         hparam_type: str = "grid",
-        #data_freqs: List[str] = ["D"],
         n_iter: Optional[int] = 10,
         n_jobs_outer: Optional[int] = -1,
         n_jobs_inner: Optional[int] = 1,
@@ -275,7 +274,7 @@ class MarketBetaEstimator:
             # Get OOS hedged returns
             # This will be a List of lists, with inner lists recording the hedged return
             # for a given cross-section and a given OOS timestamp.
-            hedged_returns: List[List[str, pd.Timestamp, str, float]] = self._get_hedged_returns(betas, X_test_i, y_test_i)
+            hedged_returns: List = self._get_hedged_returns(betas, X_test_i, y_test_i, hedged_return_xcat)
             hedged_return_list.extend(hedged_returns)
 
             # Also update the list of betas 
@@ -291,12 +290,12 @@ class MarketBetaEstimator:
         for cid, real_date, xcat, value in beta_list:
             stored_betas.loc[(cid, real_date), xcat] = value
         for cid, real_date, xcat, value in hedged_return_list:
-            hedged_returns.loc[(cid, real_date), xcat] = value
+            stored_hedged_returns.loc[(cid, real_date), xcat] = value
 
-        stored_betas = stored_betas.groupby(level=0).ffill()
-        hedged_returns = hedged_returns.groupby(level=0).ffill()
+        stored_betas = stored_betas.groupby(level=0).ffill().dropna()
+        stored_hedged_returns = stored_hedged_returns.dropna()
         stored_betas_long = pd.melt(frame=stored_betas.reset_index(),id_vars=["cid", "real_date"], var_name="xcat", value_name="value")
-        stored_hrets_long = pd.melt(frame=hedged_returns.reset_index(),id_vars=["cid", "real_date"], var_name="xcat", value_name="value")
+        stored_hrets_long = pd.melt(frame=stored_hedged_returns.reset_index(),id_vars=["cid", "real_date"], var_name="xcat", value_name="value")
         
         self.beta_df = pd.concat((self.beta_df, stored_betas_long), axis=0).astype(
             {
@@ -318,11 +317,19 @@ class MarketBetaEstimator:
         self.chosen_models = pd.concat((self.chosen_models, pd.DataFrame(chosen_models, columns=["real_date", "xcat", "model_type", "hparams", "n_splits_used"])))
 
     def _get_hedged_returns(
+        self,
         betas,
         X_test_i,
-        y_test_i
+        y_test_i,
+        hedged_return_xcat,
     ):
-        pass
+        # TODO: input checks
+        betas_series = pd.Series(betas)
+        XB = X_test_i.mul(betas_series, level=0, axis=0)
+        hedged_returns = y_test_i - XB[self.market_return]
+        list_hedged_returns = [[idx[0].replace("vGLB", ""), idx[1]] + [hedged_return_xcat] + [value] for idx, value in hedged_returns.items()]
+        return list_hedged_returns
+
 
     def _checks_estimate_beta(
         self,
@@ -344,6 +351,7 @@ if __name__ == "__main__":
 
     from macrosynergy.learning.metrics import neg_mean_abs_market_corr
     from macrosynergy.learning.predictors import SURollingLinearRegression
+    
     # Cross-sections of interest
 
     cids_dmca = [
@@ -436,19 +444,19 @@ if __name__ == "__main__":
         market_cid="GLB",
     )
     object.estimate_beta(
-        name="TEST",
-        outer_splitter=ExpandingIncrementPanelSplit(
-            train_intervals = 21*12, # Re-estimate beta every year
-            min_cids=4,
-            min_periods = 21*12*2, # first split has 2 years worth of data for 4 cross sections
-            test_size=21 * 3, # evaluate OOS hedged returns over subsequent quarter 
-        ),
+        beta_xcat="BETA_NSA",
+        hedged_return_xcat="HEDGED_RETURN_NSA",
         inner_splitter=ExpandingKFoldPanelSplit(n_splits = 5),
+        scorer=neg_mean_abs_market_corr,
         models = {
             "LR_ROLL": SURollingLinearRegression(min_xs_samples=21),
         },
         hparam_grid = {
-            "LR_ROLL": {"roll": [21, 21 * 3, 21 * 6]},
+            "LR_ROLL": {"roll": [21, 21 * 3, 21 * 6, 21 * 12, 21 * 24],"data_freq" : ["M", "W", "D"]},
         },
-        scorer=neg_mean_abs_market_corr,
+        min_cids=4,
+        min_periods=21*12*2,
+        oos_period=21 * 3, # Compute hedged returns every quarter
+        n_jobs_outer=1,
+        n_jobs_inner=-1,
     )
