@@ -7,7 +7,7 @@ from macrosynergy.learning.panel_time_series_split import (
     BasePanelSplit,
 )
 
-from macrosynergy.learning.metrics import neg_mean_abs_market_corr
+from macrosynergy.learning.metrics import neg_mean_abs_corr
 
 from macrosynergy.management.utils.df_utils import (
     reduce_df,
@@ -25,61 +25,57 @@ from tqdm import tqdm
 
 import warnings 
 
-class MarketBetaEstimator:
+class BetaEstimator:
     """
     Beta estimation of a panel of contract returns based on regression.
     
-    Estimation is performed using seemingly unrelated linear regression models for
+    Estimation is performed using seemingly unrelated linear regression models within
     an expanding window learning process. Statistical learning determines the model and 
     hyperparameter choices sequentially using a given performance metric. 
-    Cross-section betas and out-of-sample "hedged" returns are stored in a quantamental 
-    dataframe.  
+    Cross-section betas and out-of-sample "hedged" returns are stored in quantamental 
+    dataframes.  
     """
     def __init__ (
         self,
         df: pd.DataFrame,
-        contract_return: str,
-        market_return: str,
-        market_cid: str,
-        contract_cids: List[str] = None,
+        xcat: str,
+        cids: List[str],
+        benchmark_return: str,
         blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]] = None, # ignore for now
     ):
         """
-        Initializes MarketBetaEstimator. Takes a quantamental dataframe and creates long
+        Initializes BetaEstimator. Takes a quantamental dataframe and creates long
         format dataframes for the contract and market returns. 
 
         :param <pd.DataFrame> df: Daily quantamental dataframe with the following necessary
             columns: 'cid', 'xcat', 'real_date' and 'value'.
-        :param <str> contract_return: Extended category name for the category returns.
-        :param <str> market_return: Extended category name for the market returns.
-        :param <str> market_cid: Cross-section identifier for the market returns. 
-        :param <Optional[List[str]> contract_cids: List of cross-section identifiers for
-            the contract returns. Default is all in the dataframe. 
+        :param <str> xcat: Extended category name for the financial returns to be hedged.
+        :param <List[str]> cids: Cross-section identifiers for the financial returns to be hedged.
+        :param <str> benchmark_return: Ticker name for the benchmark return to be used in
+            the hedging process and beta estimation.  
         :param <Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]> blacklist: Cross-sections
             with date ranges to be excluded from the dataframe. Default is None. 
         """
         # Checks
-        self._checks_init_params(df, contract_return, market_return, market_cid, contract_cids, blacklist)
+        self._checks_init_params(df, xcat, cids, benchmark_return, blacklist)
 
         # Assign class variables
-        self.contract_return = contract_return
-        self.market_return = market_return
-        self.market_cid = market_cid
-        self.contract_cids = sorted(contract_cids)
+        self.xcat = xcat
+        self.cids = sorted(cids)
+        self.benchmark_return = benchmark_return
+        self.benchmark_cid, self.benchmark_xcat = self.benchmark_return.split("_",1)
         self.blacklist = blacklist
 
         # Create pseudo-panel
         dfx = pd.DataFrame(columns=["real_date", "cid", "xcat", "value"])
 
-        # TODO: if contract_cids is None, then set it to all cids in the dataframe associated with contract_return
-        # Probably sort them too
-        for cid in contract_cids:
+        for cid in self.cids:
             dfa = reduce_df(
                 df=df,
-                xcats=[self.market_return, self.contract_return],
-                cids=[self.market_cid, cid],
+                xcats=[self.benchmark_xcat, self.xcat],
+                cids=[self.benchmark_cid, cid],
             )
-            dfa["cid"] = f"{cid}v{self.market_cid}"
+            dfa["cid"] = f"{cid}v{self.benchmark_cid}"
 
             dfx = update_df(dfx, dfa)
 
@@ -87,15 +83,15 @@ class MarketBetaEstimator:
 
         Xy_long = categories_df(
             df = dfx,
-            xcats = [self.market_return, self.contract_return],
+            xcats = [self.benchmark_xcat, xcat],
             freq="D",
             xcat_aggs=["sum", "sum"],
             lag = 0,
             # blacklist=self.blacklist, comment out for now
         ).dropna()
 
-        self.X = Xy_long[self.market_return]
-        self.y = Xy_long[self.contract_return]
+        self.X = Xy_long[self.benchmark_xcat]
+        self.y = Xy_long[xcat]
 
         # Create dataframes to store the estimated betas, selected models and chosen 
         # hyperparameters
@@ -108,10 +104,9 @@ class MarketBetaEstimator:
     def _checks_init_params(
         self,
         df: pd.DataFrame,
-        contract_return: str,
-        market_return: str,
-        market_cid: str,
-        contract_cids: List[str],
+        xcat: str,
+        cids: List[str],
+        benchmark_return: str,
         blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]],
     ):
         pass
@@ -346,7 +341,7 @@ if __name__ == "__main__":
     from collections import defaultdict
     import scipy.stats as stats
 
-    from macrosynergy.learning.metrics import neg_mean_abs_market_corr
+    from macrosynergy.learning.metrics import neg_mean_abs_corr
     from macrosynergy.learning.predictors import SURollingLinearRegression
     
     # Cross-sections of interest
@@ -433,18 +428,17 @@ if __name__ == "__main__":
     print("Download time from DQ: " + str(timedelta(seconds=end - start)))
         
         
-    object = MarketBetaEstimator(
+    object = BetaEstimator(
         df=dfd,
-        contract_return="FXXR_NSA",
-        market_return="DRBXR_NSA",
-        contract_cids=list(set(cids) - set(["USD"])),
-        market_cid="GLB",
+        xcat="FXXR_NSA",
+        benchmark_return="GLB_DRBXR_NSA",
+        cids=list(set(cids) - set(["USD"])),
     )
     object.estimate_beta(
         beta_xcat="BETA_NSA",
         hedged_return_xcat="HEDGED_RETURN_NSA",
         inner_splitter=ExpandingKFoldPanelSplit(n_splits = 5),
-        scorer=neg_mean_abs_market_corr,
+        scorer=neg_mean_abs_corr,
         models = {
             "LR_ROLL": SURollingLinearRegression(min_xs_samples=21),
         },

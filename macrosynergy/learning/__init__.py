@@ -29,7 +29,6 @@ from .predictors import (
     BaseWeightedRegressor,
     WeightedLinearRegression,
     SignWeightedLinearRegression,
-    SURollingLinearRegression,
     TimeWeightedLinearRegression,
     WeightedLADRegressor,
     SignWeightedLADRegressor,
