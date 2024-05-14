@@ -181,7 +181,7 @@ class BetaEstimator:
         min_date = self.X.index.get_level_values(1).min()
         max_date = self.X.index.get_level_values(1).max()
         date_range = pd.bdate_range(start=min_date, end=max_date, freq="B")
-        idxs = pd.MultiIndex.from_product([sorted(self.contract_cids), date_range], names=["cid","real_date"])
+        idxs = pd.MultiIndex.from_product([self.cids, date_range], names=["cid","real_date"])
         
         stored_betas = pd.DataFrame(index=idxs, columns=[beta_xcat], data=np.nan, dtype=np.float64)
         stored_hedged_returns = pd.DataFrame(index=idxs, columns=[hedged_return_xcat], data=np.nan, dtype=np.float64)
@@ -318,8 +318,8 @@ class BetaEstimator:
         # TODO: input checks
         betas_series = pd.Series(betas)
         XB = X_test_i.mul(betas_series, level=0, axis=0)
-        hedged_returns = y_test_i - XB[self.market_return]
-        list_hedged_returns = [[idx[0].replace("vGLB", ""), idx[1]] + [hedged_return_xcat] + [value] for idx, value in hedged_returns.items()]
+        hedged_returns = y_test_i - XB[self.benchmark_xcat]
+        list_hedged_returns = [[idx[0].split("v")[0], idx[1]] + [hedged_return_xcat] + [value] for idx, value in hedged_returns.items()]
         return list_hedged_returns
 
 
