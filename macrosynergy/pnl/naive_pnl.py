@@ -978,7 +978,7 @@ class NaivePnL:
         if top_5_percent_cutoff == 0:
             top_5_percent_cutoff = 1  
 
-        top_months = monthly_pnl['PNL_GROWTH_NEG'].nlargest(top_5_percent_cutoff)
+        top_months = monthly_pnl.nlargest(top_5_percent_cutoff, columns=monthly_pnl.columns)
 
         df.iloc[6, :] = top_months.sum() / total_pnl
 
