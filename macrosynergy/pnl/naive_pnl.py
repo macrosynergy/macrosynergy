@@ -980,7 +980,7 @@ class NaivePnL:
 
         top_months = monthly_pnl.nlargest(top_5_percent_cutoff, columns=monthly_pnl.columns)
 
-        df.iloc[6, :] = top_months.sum() / total_pnl
+        df.iloc[6, :] = str(top_months.sum() / total_pnl * 100) + " %"
 
         cum_pnl = dfw.cumsum()
         high_watermark = cum_pnl.cummax()
