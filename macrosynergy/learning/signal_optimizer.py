@@ -416,7 +416,7 @@ class SignalOptimizer:
         #     optimization algorithm over the trading history.
         train_test_splits = list(outer_splitter.split(X=X, y=y))
 
-        results = Parallel(n_jobs=n_jobs)(
+        results = Parallel(n_jobs=n_jobs, return_as="generator")(
             delayed(self._worker)(
                 train_idx=train_idx,
                 test_idx=test_idx,
