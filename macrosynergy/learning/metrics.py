@@ -216,15 +216,15 @@ def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> fl
     return sortino_ratio
 
 
-def neg_mean_abs_market_corr(
+def neg_mean_abs_corr(
     estimator: RegressorMixin,
     X_test: pd.DataFrame,
     y_test: Union[pd.DataFrame, pd.Series],
     correlation: str = "pearson",
 ):
     """
-    Custom sklearn scorer for market beta estimation to return the negative mean
-    absolute correlation between market returns and computed hedged returns over a panel,
+    Custom sklearn scorer for beta estimation to return the negative mean
+    absolute correlation between benchmark returns and computed hedged returns over a panel,
     based on estimated beta for each cross-section, with mean taken over the cross-sections.
     X_test is an out-of-sample panel with a single column comprising market returns, whilst
     y_test is an out-of-sample panel with a single column comprising financial contract returns.
@@ -236,14 +236,14 @@ def neg_mean_abs_market_corr(
 
     Specifically, for each cross-section c in X_test, we compute hedged returns,
     denoted hedged_returns_{c}. Then, we calculate the absolute correlation between each
-    hedged_returns_{c} and the market returns.
+    hedged_returns_{c} and the benchmark returns.
     Finally, we return:
-    $\\text{neg_mean_abs_market_corr} = - (1/C)\\sum_{c=1}^{C} \\left [ abs_market_corr_{c} \\right ]$,
+    $\\text{neg_mean_abs_corr} = - (1/C)\\sum_{c=1}^{C} \\left [ abs_corr_{c} \\right ]$,
     where $C$ is the number of available cross-sections in the panel.
 
     For calculation of hedged returns for cross-section $c$,
     let $\\hat{\\beta}_{c}$ denote the estimated beta for cross-section c.
-    Then $hedged_returns_{c} = contract_returns_{c} - \\hat{\\beta}_{c} * market_returns$.
+    Then $hedged_returns_{c} = contract_returns_{c} - \\hat{\\beta}_{c} * benchmark_returns$.
 
     :param <RegressorMixin> estimator: A fitted seemingly unrelated scikit-learn regressor
         with a coefs_ dictionary of type Dict[str, float] containing estimated betas
@@ -254,11 +254,11 @@ def neg_mean_abs_market_corr(
     :param <str> correlation: The type of correlation to compute. Can be 'pearson',
         'spearman' or 'kendall'. Default is 'pearson'.
     
-    :return <float> neg_mean_abs_market_corr: The negative mean absolute correlation between
-        out-of-sample market returns and computed out-of-sample hedged returns
+    :return <float> neg_mean_abs_corr: The negative mean absolute correlation between
+        out-of-sample benchmark returns and computed out-of-sample hedged returns
         over the cross-sections in the panel.
         
-    NB: this scorer is a specialized function for use in market beta estimation.
+    NB: this scorer is a specialized function for use in beta estimation.
     """
     market_returns = X_test.iloc[:, 0].copy()
     contract_returns = y_test.copy()
