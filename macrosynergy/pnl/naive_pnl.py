@@ -985,9 +985,8 @@ class NaivePnL:
         cum_pnl = dfw.cumsum()
         high_watermark = cum_pnl.cummax()
         drawdown = high_watermark - cum_pnl
-        drawdown_pct = drawdown / high_watermark * 100
 
-        df.iloc[7, :] = str(drawdown_pct.max()) + ' %'
+        df.iloc[7, :] = str(drawdown.max()) + ' %'
 
         if len(list_for_dfbm) > 0:
             bm_df = pd.concat(list(self._bm_dict.values()), axis=1)
