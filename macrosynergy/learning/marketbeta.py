@@ -342,7 +342,7 @@ if __name__ == "__main__":
     import scipy.stats as stats
 
     from macrosynergy.learning.metrics import neg_mean_abs_corr
-    from macrosynergy.learning.predictors import SURollingLinearRegression
+    from macrosynergy.learning.predictors import SULinearRegression
     
     # Cross-sections of interest
 
@@ -440,7 +440,7 @@ if __name__ == "__main__":
         inner_splitter=ExpandingKFoldPanelSplit(n_splits = 5),
         scorer=neg_mean_abs_corr,
         models = {
-            "LR_ROLL": SURollingLinearRegression(min_xs_samples=21),
+            "LR_ROLL": SULinearRegression(min_xs_samples=21),
         },
         hparam_grid = {
             "LR_ROLL": {"roll": [21, 21 * 3, 21 * 6, 21 * 12, 21 * 24],"data_freq" : ["M", "W", "D"]},
