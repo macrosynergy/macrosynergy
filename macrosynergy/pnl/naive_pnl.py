@@ -886,6 +886,7 @@ class NaivePnL:
         pnl_cids: List[str] = ["ALL"],
         start: str = None,
         end: str = None,
+        label_dict: dict[str, str] = None,
     ):
         """
         Table of key PnL statistics.
@@ -899,6 +900,8 @@ class NaivePnL:
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
+        :param <dict[str, str]> label_dict: dictionary with keys as pnl_cats and values
+            as new labels for the PnLs.
 
         :return <pd.DataFrame>: standardized DataFrame with key PnL performance
             statistics.
@@ -942,6 +945,8 @@ class NaivePnL:
             "Sortino Ratio",
             "Max 21-day draw",
             "Max 6-month draw",
+            "Top 5% PnL Share Monthly",
+            "Peak to Trough draw",
             "Traded Months",
         ]
 
@@ -966,6 +971,25 @@ class NaivePnL:
         df.iloc[3, :] = df.iloc[0, :] / dsd
         df.iloc[4, :] = dfw.rolling(21).sum().min()
         df.iloc[5, :] = dfw.rolling(6 * 21).sum().min()
+
+        monthly_pnl = dfw.resample("M").sum()
+        total_pnl = monthly_pnl.sum(axis=0)
+        top_5_percent_cutoff = int(len(monthly_pnl) * 0.05)  
+        if top_5_percent_cutoff == 0:
+            top_5_percent_cutoff = 1  
+
+        top_months = monthly_pnl['PNL_GROWTH_NEG'].nlargest(top_5_percent_cutoff)
+
+        df.iloc[6, :] = top_months.sum() / total_pnl
+
+        peak2trough = pd.DataFrame()
+        peak2trough['cum_pnl'] = dfw.cumsum()
+        peak2trough['high_watermark'] = peak2trough['cum_pnl'].cummax()
+        peak2trough['drawdown'] = peak2trough['high_watermark'] - peak2trough['cum_pnl']
+        peak2trough['drawdown_pct'] = peak2trough['drawdown'] / peak2trough['high_watermark'] * 100
+
+        df.iloc[7, :] = str(peak2trough['drawdown_pct'].max()) + ' %'
+
         if len(list_for_dfbm) > 0:
             bm_df = pd.concat(list(self._bm_dict.values()), axis=1)
             for i, bm in enumerate(list_for_dfbm):
@@ -973,9 +997,24 @@ class NaivePnL:
                 correlation = dfw.loc[index].corrwith(
                     bm_df.loc[index].iloc[:, i], axis=0, method="pearson", drop=True
                 )
-                df.iloc[6 + i, :] = correlation
+                df.iloc[8 + i, :] = correlation
 
-        df.iloc[6 + len(list_for_dfbm), :] = dfw.resample("M").sum().count()
+        df.iloc[8 + len(list_for_dfbm), :] = dfw.resample("M").sum().count()
+
+        if label_dict is not None:
+            if not isinstance(label_dict, dict):
+                raise TypeError("label_dict must be a dictionary.")
+            if not all([isinstance(k, str) for k in label_dict.keys()]):
+                raise TypeError("Keys in label_dict must be strings.")
+            if not all([isinstance(v, str) for v in label_dict.values()]):
+                raise TypeError("Values in label_dict must be strings.")
+            if len(label_dict) != len(df.columns):
+                raise ValueError(
+                    "label_dict must have the same number of keys as columns in the "
+                    "DataFrame."
+                )
+            df.rename(index=label_dict, inplace=True)
+            df = df[label_dict.values()]
 
         return df
 
@@ -1260,67 +1299,69 @@ if __name__ == "__main__":
         pnl_cats=["PNL_GROWTH_NEG"], start="2015-01-01", end="2020-12-31"
     )
 
-    pnl.agg_signal_bars(
-        pnl_name="PNL_GROWTH_NEG",
-        freq="m",
-        metric="direction",
-        title=None,
-    )
+    print(df_eval)
+
+    # pnl.agg_signal_bars(
+    #     pnl_name="PNL_GROWTH_NEG",
+    #     freq="m",
+    #     metric="direction",
+    #     title=None,
+    # )
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"],
         title_fontsize=60,
         xlab="date",
         ylab="%",
     )
-    pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "Long"],
-        facet=False,
-        xcat_labels=["S_1", "S_2"],
-        xlab="date",
-        ylab="%",
-    )
-    pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True, xcat_labels=["S_1", "S_2"]
-    )
-    pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "Long"],
-        facet=True,
-    )
+    # pnl.plot_pnls(
+    #     pnl_cats=["PNL_GROWTH_NEG", "Long"],
+    #     facet=False,
+    #     xcat_labels=["S_1", "S_2"],
+    #     xlab="date",
+    #     ylab="%",
+    # )
+    # pnl.plot_pnls(
+    #     pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True, xcat_labels=["S_1", "S_2"]
+    # )
+    # pnl.plot_pnls(
+    #     pnl_cats=["PNL_GROWTH_NEG", "Long"],
+    #     facet=True,
+    # )
 
-    pnl.plot_pnls(pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, xcat_labels=None)
+    # pnl.plot_pnls(pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, xcat_labels=None)
 
-    pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, facet=True, xcat_labels=None
-    )
+    # pnl.plot_pnls(
+    #     pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, facet=True, xcat_labels=None
+    # )
 
-    pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG"],
-        pnl_cids=cids,
-        same_y=True,
-        facet=True,
-        xcat_labels=None,
-        share_axis_labels=False,
-        xlab="Date",
-        ylab="PnL",
-        y_label_adj=0.1,
-    )
+    # pnl.plot_pnls(
+    #     pnl_cats=["PNL_GROWTH_NEG"],
+    #     pnl_cids=cids,
+    #     same_y=True,
+    #     facet=True,
+    #     xcat_labels=None,
+    #     share_axis_labels=False,
+    #     xlab="Date",
+    #     ylab="PnL",
+    #     y_label_adj=0.1,
+    # )
 
-    results_eq_ols = create_results_dataframe(
-        title="Performance metrics, PARITY vs OLS, equity",
-        df=dfd,
-        ret="EQXR_NSA",
-        sigs=["GROWTH", "INFL", "CRY", "DUXR"],
-        cids=cids,
-        sig_ops="zn_score_pan",
-        sig_adds=0,
-        neutrals="zero",
-        threshs=2,
-        sig_negs=[True, False, False, True],
-        bm="USD_EQXR_NSA",
-        cosp=True,
-        start="2004-01-01",
-        freqs="M",
-        agg_sigs="last",
-        slip=1,
-    )
-    print(results_eq_ols.data)
+    # results_eq_ols = create_results_dataframe(
+    #     title="Performance metrics, PARITY vs OLS, equity",
+    #     df=dfd,
+    #     ret="EQXR_NSA",
+    #     sigs=["GROWTH", "INFL", "CRY", "DUXR"],
+    #     cids=cids,
+    #     sig_ops="zn_score_pan",
+    #     sig_adds=0,
+    #     neutrals="zero",
+    #     threshs=2,
+    #     sig_negs=[True, False, False, True],
+    #     bm="USD_EQXR_NSA",
+    #     cosp=True,
+    #     start="2004-01-01",
+    #     freqs="M",
+    #     agg_sigs="last",
+    #     slip=1,
+    # )
+    # print(results_eq_ols.data)
