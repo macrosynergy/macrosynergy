@@ -983,8 +983,8 @@ class NaivePnL:
         df.iloc[6, :] = top_months.sum() / total_pnl
 
         peak2trough = pd.DataFrame()
-        peak2trough['cum_pnl'] = dfw.cumsum()
-        peak2trough['high_watermark'] = peak2trough['cum_pnl'].cummax()
+        peak2trough['cum_pnl'] = dfw.cumsum(axis=0)
+        peak2trough['high_watermark'] = peak2trough['cum_pnl'].cummax(axis=0)
         peak2trough['drawdown'] = peak2trough['high_watermark'] - peak2trough['cum_pnl']
         peak2trough['drawdown_pct'] = peak2trough['drawdown'] / peak2trough['high_watermark'] * 100
 
