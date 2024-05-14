@@ -15,7 +15,7 @@ from .transformers import (
     FeatureAverager,
 )
 from .metrics import (
-    neg_mean_abs_market_corr,
+    neg_mean_abs_corr,
     panel_significance_probability,
     sharpe_ratio,
     sortino_ratio,
@@ -54,7 +54,7 @@ __all__ = [
     "PanelStandardScaler",
     "ZnScoreAverager",
     # metrics
-    "neg_mean_abs_market_corr",
+    "neg_mean_abs_corr",
     "panel_significance_probability",
     "sharpe_ratio",
     "sortino_ratio",
