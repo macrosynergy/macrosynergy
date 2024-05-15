@@ -320,6 +320,7 @@ class BetaEstimator:
         XB = X_test_i.mul(betas_series, level=0, axis=0)
         hedged_returns = y_test_i - XB[self.benchmark_xcat]
         list_hedged_returns = [[idx[0].split("v")[0], idx[1]] + [hedged_return_xcat] + [value] for idx, value in hedged_returns.items()]
+
         return list_hedged_returns
 
 

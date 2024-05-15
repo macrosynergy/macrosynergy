@@ -419,25 +419,43 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
     def __init__(
         self,
         train_intervals: Optional[int] = 21,
+        train_intervals_freq: Optional[str] = None,
         min_cids: Optional[int] = 4,
         min_periods: Optional[int] = 500,
         test_size: int = 21,
+        test_size_freq: Optional[str] = None,
         max_periods: Optional[int] = None,
     ):
         if type(train_intervals) != int:
             raise TypeError(
                 f"train_intervals must be an integer. Got {type(train_intervals)}."
             )
+        if train_intervals_freq is not None:
+            if type(train_intervals_freq) != str:
+                raise TypeError(
+                    f"train_interval_freq must be a string. Got {type(train_intervals_freq)}."
+                )
         if type(min_cids) != int:
             raise TypeError(f"min_cids must be an integer. Got {type(min_cids)}.")
         if type(min_periods) != int:
             raise TypeError(f"min_periods must be an integer. Got {type(min_periods)}.")
         if type(test_size) != int:
             raise TypeError(f"test_size must be an integer. Got {type(test_size)}.")
+        if test_size_freq is not None:
+            if not isinstance(test_size_freq, str):
+                raise TypeError(
+                    f"test_size_freq must be a string. Got {type(test_size_freq)}."
+                )
         if max_periods is not None:
             if type(max_periods) != int:
                 raise TypeError(
                     f"max_periods must be an integer. Got {type(max_periods)}."
+                )
+        
+        if train_intervals_freq is not None:
+            if train_intervals_freq not in ["D", "W", "M", "Q", "Y"]:
+                raise ValueError(
+                    f"train_intervals_freq must be one of 'D', 'W', 'M', 'Q', 'Y'. Got {train_intervals_freq}."
                 )
         if min_cids < 1:
             raise ValueError(
@@ -451,6 +469,11 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
             raise ValueError(
                 f"test_size must be an integer greater than 0. Got {test_size}."
             )
+        if test_size_freq is not None:
+            if test_size_freq not in ["D", "W", "M", "Q", "Y"]:
+                raise ValueError(
+                    f"train_interval_freq must be one of 'D', 'W', 'M', 'Q', 'Y'. Got {test_size_freq}."
+                )
         if max_periods is not None:
             if max_periods < 1:
                 raise ValueError(
@@ -458,6 +481,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
                 )
 
         self.train_intervals: int = train_intervals
+        self.train_intervals_freq = train_intervals_freq
         self.min_cids: int = min_cids
         self.min_periods: int = min_periods
         self.test_size: int = test_size
@@ -514,9 +538,26 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         unique_dates_train: pd.arrays.DatetimeArray = self.unique_dates[
             self.unique_dates.get_loc(date_last_train) + 1 : -self.test_size
         ]
-        self.n_splits: int = int(
-            np.ceil(len(unique_dates_train) / self.train_intervals)
-        )
+
+        if self.train_intervals_freq:
+            # Create splits by looping 
+            current_date = unique_dates_train[0]
+            end_date = unique_dates_train[-1]
+            offset = pd.tseries.frequencies.to_offset("B" + self.train_intervals_freq)
+            splits = []
+
+            while current_date < end_date:
+                next_date = current_date + pd.tseries.frequencies.to_offset(self.train_intervals_freq)
+                mask = (unique_dates_train >= current_date) & (unique_dates_train < next_date)
+                split_dates = unique_dates_train[mask]
+                if not split_dates.empty:
+                    splits.append(split_dates)
+                current_date = next_date
+
+        else:
+            self.n_splits: int = int(
+                np.ceil(len(unique_dates_train) / self.train_intervals)
+            )
         splits: List = np.array_split(unique_dates_train, self.n_splits)
         # (e) add the first training set to the list of training splits, so that the dates
         # that constitute each training split are together.
