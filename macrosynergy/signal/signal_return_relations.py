@@ -308,7 +308,6 @@ class SignalReturnRelations:
 
         """
         assert type in ["cross_section", "years", "signals"]
-        # self.sigs = [self.revert_negation(s) for s in self.sigs]
 
         if sigs is None:
             sigs = self.sigs
@@ -416,7 +415,6 @@ class SignalReturnRelations:
 
         """
         assert type in ["cross_section", "years", "signals"]
-        # self.sigs = [self.revert_negation(s) for s in self.sigs]
 
         if freq is None:
             freq = self.freqs[0]
@@ -572,7 +570,6 @@ class SignalReturnRelations:
             statistic table. `None` by default, and when using with `sst` set to `False`.
         """
         self.df = self.original_df.copy()
-        # self.sigs = [self.revert_negation(sig) for sig in self.sigs]
 
         cids = None if self.cids is None else self.cids
         dfd = reduce_df(
@@ -614,12 +611,6 @@ class SignalReturnRelations:
         )
         self.df = df
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
-
-        # for sig in xcat[:-1]:
-        #     if self.signs[self.sigs.index(sig)]:
-        #         self.df.loc[:, sig] *= -1
-        #         self.df.rename(columns={sig: f"{sig}_NEG"}, inplace=True)
-        #         self.sigs[self.sigs.index(sig)] = f"{sig}_NEG"
 
     def __communal_sample__(self, df: pd.DataFrame, signal: str, ret: str):
         """
@@ -962,12 +953,6 @@ class SignalReturnRelations:
             elif stat in self.metrics[7:10:2]:
                 return np.mean(np.array(list_of_results) < 0.5)
 
-    # def revert_negation(self, sig: str):
-    #     if sig[-4:] == "_NEG":
-    #         sig = sig[:-4]
-    #     return sig
-
-
     def summary_table(self, cross_section: bool = False, years: bool = False):
         warnings.warn(
             "summary_table() has been deprecated will be removed in a subsequent "
@@ -988,7 +973,6 @@ class SignalReturnRelations:
             FutureWarning
         )
         if sigs is None:
-            # self.sigs = [self.revert_negation(sig) for sig in self.sigs]
             sigs = self.sigs
         return self.multiple_relations_table(rets=self.rets[0], xcats=sigs, freqs=self.freqs[0], agg_sigs=self.agg_sigs[0])
     
@@ -1032,7 +1016,6 @@ class SignalReturnRelations:
         :param <str> table_type: type of table to be returned. Either "summary", "years", 
             "cross_section".
         """
-        # self.sigs = [self.revert_negation(sig) for sig in self.sigs]
         self.df = self.original_df
         if ret is None:
             ret = self.rets if not isinstance(self.rets, list) else self.rets[0]
@@ -1393,34 +1376,12 @@ class SignalReturnRelations:
         if len(rows) == 2:
             rows_names = pd.MultiIndex.from_tuples([(a, b) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]], names=[label_dict[rows[0]], label_dict[rows[1]]])
             columns_names = pd.MultiIndex.from_tuples([(a, b) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]]], names=[label_dict[columns[0]], label_dict[columns[1]]])
-            # rows_names = [
-            #     a + "/" + b for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]
-            # ]
-            # columns_names = [
-            #     a + "/" + b
-            #     for a in rows_dict[columns[0]]
-            #     for b in rows_dict[columns[1]]
-            # ]
         elif len(rows) == 1:
             rows_names = rows_dict[rows[0]]
             columns_names = pd.MultiIndex.from_tuples([(a, b, c) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]] for c in rows_dict[columns[2]]], names=[label_dict[columns[0]], label_dict[columns[1]], label_dict[columns[2]]])
-            # rows_names = rows_dict[rows[0]]
-            # columns_names = [
-            #     a + "/" + b + "/" + c
-            #     for a in rows_dict[columns[0]]
-            #     for b in rows_dict[columns[1]]
-            #     for c in rows_dict[columns[2]]
-            # ]
         elif len(columns) == 1:
             rows_names = pd.MultiIndex.from_tuples([(a, b, c) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]] for c in rows_dict[rows[2]]], names=[label_dict[rows[0]], label_dict[rows[1]], label_dict[rows[2]]])
             columns_names = rows_dict[columns[0]]
-            # rows_names = [
-            #     a + "/" + b + "/" + c
-            #     for a in rows_dict[rows[0]]
-            #     for b in rows_dict[rows[1]]
-            #     for c in rows_dict[rows[2]]
-            # ]
-            # columns_names = rows_dict[columns[0]]
 
         return rows_names, columns_names
 
