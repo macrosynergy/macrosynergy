@@ -1046,11 +1046,11 @@ class SignalReturnRelations:
         if xcat is None:
             sig = self.sigs if not isinstance(self.sigs, list) else self.sigs[0]
             xcat = [sig, ret]
-        elif isinstance(xcat, list):
-            sig = xcat[0]
         elif not isinstance(xcat, str):
             raise TypeError("xcat must be a string")
-        else:
+        else: # If xcat is a string
+            if xcat not in self.sigs and xcat + "_NEG" in self.sigs:
+                xcat = xcat + "_NEG"
             sig = xcat
             xcat = [sig, ret]
 
@@ -1575,7 +1575,7 @@ if __name__ == "__main__":
     sr.accuracy_bars(sigs=["CRY_NEG", "INFL_NEG"], type="signals", title="Accuracy")
     sr.correlation_bars(type="signals", title="Correlation")
 
-    srt = sr.single_relation_table(ret="XRH", xcat="INFL_NEG", freq="Q", agg_sigs="last")
+    srt = sr.single_relation_table(ret="XRH", xcat="INFL", freq="Q", agg_sigs="last")
     mrt = sr.multiple_relations_table()
     sst = sr.single_statistic_table(stat="pearson", show_heatmap=True)
 
