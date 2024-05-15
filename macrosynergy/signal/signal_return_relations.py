@@ -181,12 +181,10 @@ class SignalReturnRelations:
             self.cids = cids
 
         self.rets = rets
-        self.sigs = sigs
         self.slip = slip
         self.agg_sigs = agg_sigs
         self.xcats = list(df["xcat"].unique())
         self.df = df
-        self.original_df = df.copy()
         self.cosp = cosp
         self.start = start
         self.end = end
@@ -198,6 +196,8 @@ class SignalReturnRelations:
 
         if not self.is_list_of_strings(sigs):
             self.sigs = [sigs]
+        else:
+            self.sigs = sigs.copy()
 
         if not self.is_list_of_strings(agg_sigs):
             self.agg_sigs = [agg_sigs]
@@ -235,6 +235,14 @@ class SignalReturnRelations:
             end=self.end,
             blacklist=self.blacklist,
         )
+
+        for sig in self.sigs:
+            if self.signs[self.sigs.index(sig)]:
+                self.df.loc[self.df["xcat"] == sig, "value"] *= -1
+                self.df.loc[self.df["xcat"] == sig, "xcat"] = self.df.loc[self.df["xcat"] == sig, "xcat"] + "_NEG"
+                self.sigs[self.sigs.index(sig)] = f"{sig}_NEG"
+
+        self.original_df = self.df.copy()
 
     def __rival_sigs__(self, ret, sigs=None):
         """
@@ -300,7 +308,6 @@ class SignalReturnRelations:
 
         """
         assert type in ["cross_section", "years", "signals"]
-        self.sigs = [self.revert_negation(s) for s in self.sigs]
 
         if sigs is None:
             sigs = self.sigs
@@ -408,7 +415,6 @@ class SignalReturnRelations:
 
         """
         assert type in ["cross_section", "years", "signals"]
-        self.sigs = [self.revert_negation(s) for s in self.sigs]
 
         if freq is None:
             freq = self.freqs[0]
@@ -564,7 +570,6 @@ class SignalReturnRelations:
             statistic table. `None` by default, and when using with `sst` set to `False`.
         """
         self.df = self.original_df.copy()
-        self.sigs = [self.revert_negation(sig) for sig in self.sigs]
 
         cids = None if self.cids is None else self.cids
         dfd = reduce_df(
@@ -606,12 +611,6 @@ class SignalReturnRelations:
         )
         self.df = df
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
-
-        for sig in xcat[:-1]:
-            if self.signs[self.sigs.index(sig)]:
-                self.df.loc[:, sig] *= -1
-                self.df.rename(columns={sig: f"{sig}_NEG"}, inplace=True)
-                self.sigs[self.sigs.index(sig)] = f"{sig}_NEG"
 
     def __communal_sample__(self, df: pd.DataFrame, signal: str, ret: str):
         """
@@ -954,12 +953,6 @@ class SignalReturnRelations:
             elif stat in self.metrics[7:10:2]:
                 return np.mean(np.array(list_of_results) < 0.5)
 
-    def revert_negation(self, sig: str):
-        if sig[-4:] == "_NEG":
-            sig = sig[:-4]
-        return sig
-
-
     def summary_table(self, cross_section: bool = False, years: bool = False):
         warnings.warn(
             "summary_table() has been deprecated will be removed in a subsequent "
@@ -980,7 +973,6 @@ class SignalReturnRelations:
             FutureWarning
         )
         if sigs is None:
-            self.sigs = [self.revert_negation(sig) for sig in self.sigs]
             sigs = self.sigs
         return self.multiple_relations_table(rets=self.rets[0], xcats=sigs, freqs=self.freqs[0], agg_sigs=self.agg_sigs[0])
     
@@ -1024,7 +1016,6 @@ class SignalReturnRelations:
         :param <str> table_type: type of table to be returned. Either "summary", "years", 
             "cross_section".
         """
-        self.sigs = [self.revert_negation(sig) for sig in self.sigs]
         self.df = self.original_df
         if ret is None:
             ret = self.rets if not isinstance(self.rets, list) else self.rets[0]
@@ -1037,21 +1028,13 @@ class SignalReturnRelations:
                 else self.agg_sigs[0]
             )
         if xcat is None:
-            sig = (
-                self.revert_negation(self.sigs)
-                if not isinstance(self.sigs, list)
-                else self.revert_negation(self.sigs[0])
-            )
-            if isinstance(self.sigs, list):
-                self.sigs[0] = self.revert_negation(self.sigs[0])
-            else:
-                self.sigs = self.revert_negation(self.sigs)
+            sig = self.sigs if not isinstance(self.sigs, list) else self.sigs[0]
             xcat = [sig, ret]
-        elif isinstance(xcat, list):
-            sig = xcat[0]
         elif not isinstance(xcat, str):
             raise TypeError("xcat must be a string")
-        else:
+        else: # If xcat is a string
+            if xcat not in self.sigs and xcat + "_NEG" in self.sigs:
+                xcat = xcat + "_NEG"
             sig = xcat
             xcat = [sig, ret]
 
@@ -1139,7 +1122,6 @@ class SignalReturnRelations:
         :param <str, List[str]> agg_sigs: aggregation methods applied to the signal
             values in down-sampling.
         """
-        self.sigs = [self.revert_negation(sig) for sig in self.sigs]
         self.df = self.original_df
         self.xcats = list(self.df["xcat"].unique())
         if rets is None:
@@ -1152,6 +1134,14 @@ class SignalReturnRelations:
             agg_sigs = [agg_sigs]
         if xcats is None:
             xcats = self.xcats
+        else:
+            if isinstance(xcats, str):
+                if xcats not in self.sigs and xcats + "_NEG" in self.sigs:
+                    xcats = xcats + "_NEG"
+            if isinstance(xcats, list):
+                for xcat in xcats:
+                    if xcat not in self.sigs and xcat + "_NEG" in self.sigs:
+                        xcats[xcats.index(xcat)] = xcat + "_NEG"
         if not isinstance(xcats, list):
             xcats = [xcats]
         if not isinstance(rets, list):
@@ -1178,7 +1168,7 @@ class SignalReturnRelations:
         xcats = [x for x in xcats if x in self.sigs]
 
         multiindex = pd.MultiIndex.from_tuples([
-            (ret, xcat + "_NEG" if self.signs[self.sigs.index(xcat)] else xcat, freq, agg_sig)
+            (ret, xcat, freq, agg_sig)
             for freq in freqs
             for agg_sig in agg_sigs
             for ret in rets
@@ -1191,8 +1181,6 @@ class SignalReturnRelations:
                 for ret in rets:
                     self.manipulate_df(xcat=xcats+[ret], freq=freq, agg_sig=agg_sig)
                     for xcat in xcats:
-                        if not xcat in self.sigs:
-                            xcat = xcat + "_NEG"
                         df_rows.append(self.__output_table__(cs_type="cids", ret=ret, sig=xcat, srt=True))
 
         df_result = pd.concat(df_rows, axis=0)
@@ -1271,7 +1259,6 @@ class SignalReturnRelations:
         :return: DataFrame with the specified statistic for each row and column
         """
         self.df = self.original_df.copy()
-        self.sigs = [self.revert_negation(sig) for sig in self.sigs]
 
         if not stat in self.metrics:
             raise ValueError(f"Stat must be one of {self.metrics}")
@@ -1294,10 +1281,7 @@ class SignalReturnRelations:
             raise ValueError(f"Columns must only contain {rows_values}")
 
         rows_dict = {
-            "xcat": [
-                sig + "_NEG" if self.signs[self.sigs.index(sig)] else sig
-                for sig in self.sigs
-            ],
+            "xcat": self.sigs,
             "ret": self.rets,
             "freq": self.freqs,
             "agg_sigs": self.agg_sigs,
@@ -1323,9 +1307,6 @@ class SignalReturnRelations:
             # Prepare xcat and manipulate DataFrame
             xcat = [sig, ret]
             self.manipulate_df(xcat=xcat, freq=freq, agg_sig=agg_sig)
-            if sig not in self.sigs:
-                df_result.rename(columns={sig: f"{sig}_NEG"}, inplace=True)
-                sig = sig + "_NEG"
             hash = f"{ret}/{sig}/{freq}/{agg_sig}"
 
             row = self.get_rowcol(hash, rows)
@@ -1395,34 +1376,12 @@ class SignalReturnRelations:
         if len(rows) == 2:
             rows_names = pd.MultiIndex.from_tuples([(a, b) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]], names=[label_dict[rows[0]], label_dict[rows[1]]])
             columns_names = pd.MultiIndex.from_tuples([(a, b) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]]], names=[label_dict[columns[0]], label_dict[columns[1]]])
-            # rows_names = [
-            #     a + "/" + b for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]
-            # ]
-            # columns_names = [
-            #     a + "/" + b
-            #     for a in rows_dict[columns[0]]
-            #     for b in rows_dict[columns[1]]
-            # ]
         elif len(rows) == 1:
             rows_names = rows_dict[rows[0]]
             columns_names = pd.MultiIndex.from_tuples([(a, b, c) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]] for c in rows_dict[columns[2]]], names=[label_dict[columns[0]], label_dict[columns[1]], label_dict[columns[2]]])
-            # rows_names = rows_dict[rows[0]]
-            # columns_names = [
-            #     a + "/" + b + "/" + c
-            #     for a in rows_dict[columns[0]]
-            #     for b in rows_dict[columns[1]]
-            #     for c in rows_dict[columns[2]]
-            # ]
         elif len(columns) == 1:
             rows_names = pd.MultiIndex.from_tuples([(a, b, c) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]] for c in rows_dict[rows[2]]], names=[label_dict[rows[0]], label_dict[rows[1]], label_dict[rows[2]]])
             columns_names = rows_dict[columns[0]]
-            # rows_names = [
-            #     a + "/" + b + "/" + c
-            #     for a in rows_dict[rows[0]]
-            #     for b in rows_dict[rows[1]]
-            #     for c in rows_dict[rows[2]]
-            # ]
-            # columns_names = rows_dict[columns[0]]
 
         return rows_names, columns_names
 
@@ -1499,12 +1458,13 @@ if __name__ == "__main__":
         return grangercausalitytests(np.array([x, y]).T, maxlag=3, addconst=True, verbose=False)[1][0][
             "ssr_ftest"
         ][1]
-
+    
+    sigs = ["CRY"]
     # Additional signals.
     srn = SignalReturnRelations(
         dfd,
         rets="XR",
-        sigs="CRY",
+        sigs=sigs,
         sig_neg=True,
         cosp=True,
         freqs="Q",
@@ -1512,6 +1472,8 @@ if __name__ == "__main__":
         ms_panel_test=True,
         additional_metrics=[spearman, granger, granger_pval],
     )
+
+    print(sigs)
 
     df_dep = srn.summary_table()
     print(df_dep)
@@ -1575,10 +1537,10 @@ if __name__ == "__main__":
         blacklist=black,
     )
 
-    sr.accuracy_bars(sigs=["CRY", "INFL"], type="signals", title="Accuracy")
+    sr.accuracy_bars(sigs=["CRY_NEG", "INFL_NEG"], type="signals", title="Accuracy")
     sr.correlation_bars(type="signals", title="Correlation")
 
-    srt = sr.single_relation_table(ret="XRH", xcat="INFL", freq="Q", agg_sigs="last")
+    srt = sr.single_relation_table(ret="XRH", xcat="INFL_NEG", freq="Q", agg_sigs="last")
     mrt = sr.multiple_relations_table()
     sst = sr.single_statistic_table(stat="pearson", show_heatmap=True)
 
@@ -1588,7 +1550,7 @@ if __name__ == "__main__":
 
     # Specifying specific arguments for each of the Signal Return Functions
 
-    srt = sr.single_relation_table(ret="XR", xcat="CRY", freq="Q", agg_sigs="last")
+    srt = sr.single_relation_table(ret="XR", xcat="CRY_NEG", freq="Q", agg_sigs="last")
     print(srt)
 
     mrt = sr.multiple_relations_table(
