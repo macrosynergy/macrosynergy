@@ -974,12 +974,8 @@ class NaivePnL:
 
         monthly_pnl = dfw.resample("M").sum()
         total_pnl = monthly_pnl.sum(axis=0)
-        top_5_percent_cutoff = int(len(monthly_pnl) * 0.05)  
-        if top_5_percent_cutoff == 0:
-            top_5_percent_cutoff = 1  
-
+        top_5_percent_cutoff = int(np.ceil(len(monthly_pnl) * 0.05))
         top_months = monthly_pnl.nlargest(top_5_percent_cutoff, columns=monthly_pnl.columns)
-
         df.iloc[6, :] = (top_months.sum() / total_pnl) * 100
 
         cum_pnl = dfw.cumsum()
