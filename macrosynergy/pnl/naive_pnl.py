@@ -975,7 +975,9 @@ class NaivePnL:
         monthly_pnl = dfw.resample("M").sum()
         total_pnl = monthly_pnl.sum(axis=0)
         top_5_percent_cutoff = int(np.ceil(len(monthly_pnl) * 0.05))
-        top_months = monthly_pnl.nlargest(top_5_percent_cutoff, columns=monthly_pnl.columns)
+        top_months = pd.DataFrame(columns=monthly_pnl.columns)
+        for column in monthly_pnl.columns:
+            top_months[column] = monthly_pnl[column].nlargest(top_5_percent_cutoff).reset_index(drop=True)
 
         df.iloc[6, :] = top_months.sum() / total_pnl
 
@@ -983,7 +985,7 @@ class NaivePnL:
         high_watermark = cum_pnl.cummax()
         drawdown = high_watermark - cum_pnl
 
-        df.iloc[7, :] = drawdown.max()
+        df.iloc[7, :] = - drawdown.max()
 
         if len(list_for_dfbm) > 0:
             bm_df = pd.concat(list(self._bm_dict.values()), axis=1)
@@ -1288,10 +1290,22 @@ if __name__ == "__main__":
         thresh=2,
     )
 
+    pnl.make_pnl(
+        sig="INFL",
+        sig_op="zn_score_pan",
+        sig_neg=True,
+        sig_add=0.5,
+        rebal_freq="monthly",
+        vol_scale=5,
+        rebal_slip=1,
+        min_obs=250,
+        thresh=2,
+    )
+
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
     df_eval = pnl.evaluate_pnls(
-        pnl_cats=["PNL_GROWTH_NEG"], start="2015-01-01", end="2020-12-31"
+        pnl_cats=["PNL_GROWTH_NEG", "PNL_INFL_NEG"], start="2015-01-01", end="2020-12-31"
     )
 
     print(df_eval)
