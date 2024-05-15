@@ -945,8 +945,8 @@ class NaivePnL:
             "Sortino Ratio",
             "Max 21-Day Draw",
             "Max 6-Month Draw",
-            "Top 5% Monthly PnL Share %",
-            "Peak to Trough Draw",
+            "Top 5% Monthly PnL Share",
+            "Peak to Trough Draw %",
             "Traded Months",
         ]
 
@@ -980,7 +980,7 @@ class NaivePnL:
 
         top_months = monthly_pnl.nlargest(top_5_percent_cutoff, columns=monthly_pnl.columns)
 
-        df.iloc[6, :] = (top_months.sum() / total_pnl) * 100
+        df.iloc[6, :] = top_months.sum() / total_pnl
 
         cum_pnl = dfw.cumsum()
         high_watermark = cum_pnl.cummax()
