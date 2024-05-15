@@ -29,11 +29,10 @@ class BetaEstimator:
     """
     Beta estimation of a panel of contract returns based on regression.
     
-    Estimation is performed using seemingly unrelated linear regression models within
-    an expanding window learning process. Statistical learning determines the model and 
-    hyperparameter choices sequentially using a given performance metric. 
-    Cross-section betas and out-of-sample "hedged" returns are stored in quantamental 
-    dataframes.  
+    Estimates betas with seemingly unrelated linear regression (SUR) sequentially with 
+    expanding panel data windows. Statistical learning determines the model and 
+    hyperparameter choices sequentially using a given performance metric. Cross-sectional 
+    betas and out-of-sample "hedged" returns are stored in quantamental dataframes. 
     """
     def __init__ (
         self,
@@ -45,7 +44,7 @@ class BetaEstimator:
     ):
         """
         Initializes BetaEstimator. Takes a quantamental dataframe and creates long
-        format dataframes for the contract and market returns. 
+        format dataframes for the contract and benchmark returns. 
 
         :param <pd.DataFrame> df: Daily quantamental dataframe with the following necessary
             columns: 'cid', 'xcat', 'real_date' and 'value'.
@@ -130,13 +129,14 @@ class BetaEstimator:
         n_jobs_inner: Optional[int] = 1,
     ):
         """
-        Estimate and store the beta coefficients for each cross-section.
+        Estimates and stores beta coefficients for each cross-section.
 
-        At a given estimation date, a search for optimal linear model hyperparameters and underlying
-        dataset frequency is performed. The optimal model is fit to the training set, betas for each 
-        cross-section are extracted and hedged returns over a subsequent out-of-sample period are
-        derived. The hyperparameter search is based on maximization of a cross-validation score from
-        a scikit-learn 'scorer' function. 
+        Optimal models and hyperparameters are selected at the end of re-estimation date.
+        This includes the frequency of the training dataset. The optimal model is then fit 
+        to the training set, betas for each cross-section are extracted.  Based in these 
+        betas hedged returns are calculated up to the next re-estimation date.
+        Model and hyperparameter search is based on maximization of a cross-validation 
+        score from a scikit-learn 'scorer' function.
 
         :param <str> beta_xcat: Category name for the panel of estimated contract betas.
         :param <str> hedged_return_xcat: Category name for the panel of derived hedged returns.
@@ -452,3 +452,9 @@ if __name__ == "__main__":
         n_jobs_outer=1,
         n_jobs_inner=-1,
     )
+
+    df_betas = object.beta_df
+    df_hrs = object.hedged_returns
+
+    print(df_betas)
+    print(df_hrs)
