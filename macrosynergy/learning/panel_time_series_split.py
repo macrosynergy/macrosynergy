@@ -485,13 +485,117 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         self.min_cids: int = min_cids
         self.min_periods: int = min_periods
         self.test_size: int = test_size
+        self.test_size_freq = test_size_freq
         self.max_periods: int = max_periods
 
-    def _determine_unique_time_splits(
+        self.freq_dict = {"W" : "W-FRI", "M" : "BM", "Q" : "BQ", "Y" : "BY"}
+        self.freq_checks = {
+            "W-FRI": lambda timestamp: timestamp.weekday() == 4,
+            "BM": lambda timestamp: timestamp.is_month_end,
+            "BQ": lambda timestamp: timestamp.is_quarter_end,
+            "BY": lambda timestamp: timestamp.is_year_end,
+        }
+
+    def _determine_unique_freq_time_splits(
         self, X: pd.DataFrame, y: pd.DataFrame
     ) -> Tuple[List[pd.DatetimeIndex], pd.DataFrame, int]:
         """
-        Private helper method to determine the unique dates in each training split. This
+        Private helper method to determine the unique dates in each training split 
+        when the frequency at which the training sets expand is specified instead of the
+        number of forward intervals. This method is called by self.split(). It further
+        returns other variables needed for ensuing components of the split method.
+
+        :param <pd.DataFrame> X: Pandas dataframe of features,
+            multi-indexed by (cross-section, date). The dates must be in datetime format.
+            Otherwise the dataframe must be in wide format: each feature is a column.
+        :param <pd.DataFrame> y: Pandas dataframe of the target variable, multi-indexed
+            by (cross-section, date). The dates must be in datetime format.
+
+        :return <Tuple[List[pd.DatetimeIndex],pd.DataFrame,int]>
+            (train_splits_basic, Xy, n_splits):
+            Tuple comprising the unique dates in each training split, the concatenated
+            dataframe of X and y, and the number of splits.
+        """
+
+        self._validate_Xy(X, y)
+
+        Xy: pd.DataFrame = pd.concat([X, y], axis=1)
+        Xy = Xy.dropna()
+        self.unique_dates: pd.DatetimeIndex = (
+            Xy.index.get_level_values(1).unique().sort_values()
+        )
+        # First determine the dates for the first training set, determined by 'min_cids'
+        # and 'min_periods'. (a) obtain a boolean mask of dates for which at least
+        # 'min_cids' cross-sections are available over the panel
+        init_mask: pd.Series = Xy.groupby(level=1).size().sort_index() >= self.min_cids
+        # (b) obtain the earliest date for which the mask is true i.e. the earliest date
+        # with 'min_cids' cross-sections available
+        date_first_min_cids: pd.Timestamp = (
+            init_mask[init_mask == True].reset_index().real_date.min()
+        )
+        # (c) find the last valid date in the first training set, which is the date
+        # 'min_periods' - 1 after date_first_min_cids
+        date_last_train: pd.Timestamp = self.unique_dates[
+            self.unique_dates.get_loc(date_first_min_cids) + self.min_periods - 1
+        ]
+        # Adjust this date to the end of the business frequency period if it isn't already
+        if not self.freq_checks[self.freq_dict[self.train_intervals_freq]](date_last_train):
+            date_last_train = date_last_train + pd.tseries.frequencies.to_offset(self.freq_dict[self.train_intervals_freq])
+        
+        # (d) determine the unique dates in the training sets after the first. To do this, 
+        # we need to get all dates in the panel after the last date in the first training set
+        # and before the last business frequency period for the test set, determined by 
+        # self.test_size_freq. e.g. if this is "Q" and the last date in panel is 2021-01-07,
+        # then the first date in the last test set will be after 2021-09-30. We then calculate
+        # loop through the dates in the panel after the last date in the first training set
+        # and before the first date in the last test set, incrementing by the training frequency
+        # to create distinct splits.
+        unique_dates_train: pd.arrays.DatetimeArray = self.unique_dates[
+            self.unique_dates.get_loc(date_last_train) + 1 :
+        ]
+        # Everything after end_date is in the final test set
+        if self.freq_checks[self.freq_dict[self.test_size_freq]](date_last_train):
+            end_date = unique_dates_train[-1] - pd.tseries.frequencies.to_offset(self.freq_dict[self.test_size_freq])
+        else:
+            end_date = unique_dates_train[-1] - pd.tseries.frequencies.to_offset(self.freq_dict[self.test_size_freq]) - pd.tseries.frequencies.to_offset(self.freq_dict[self.test_size_freq])
+
+        current_date = unique_dates_train[0]
+        offset = pd.tseries.frequencies.to_offset(self.freq_dict[self.train_intervals_freq])
+        splits = []
+
+        while current_date < end_date:
+            next_date = current_date + offset
+            if next_date > end_date:
+                mask = (unique_dates_train > current_date) & (unique_dates_train <= end_date)
+            else:
+                mask = (unique_dates_train > current_date) & (unique_dates_train <= next_date)
+            split_dates = unique_dates_train[mask]
+            if not split_dates.empty:
+                splits.append(split_dates)
+            current_date = next_date
+
+        self.n_splits = len(splits) + 1
+
+        # (e) add the first training set to the list of training splits, so that the dates
+        # that constitute each training split are together.
+        splits.insert(
+            0,
+            Xy.index.get_level_values(1)[
+                Xy.index.get_level_values(1) <= date_last_train
+            ]
+            .unique()
+            .sort_values(),
+        )
+
+        return splits, Xy
+
+
+    def _determine_unique_interval_time_splits(
+        self, X: pd.DataFrame, y: pd.DataFrame
+    ) -> Tuple[List[pd.DatetimeIndex], pd.DataFrame, int]:
+        """
+        Private helper method to determine the unique dates in each training split 
+        when the number of forward intervals are specified instead of a frequency. This
         method is called by self.split(). It further returns other variables needed for
         ensuing components of the split method.
 
@@ -538,26 +642,9 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         unique_dates_train: pd.arrays.DatetimeArray = self.unique_dates[
             self.unique_dates.get_loc(date_last_train) + 1 : -self.test_size
         ]
-
-        if self.train_intervals_freq:
-            # Create splits by looping 
-            current_date = unique_dates_train[0]
-            end_date = unique_dates_train[-1]
-            offset = pd.tseries.frequencies.to_offset("B" + self.train_intervals_freq)
-            splits = []
-
-            while current_date < end_date:
-                next_date = current_date + pd.tseries.frequencies.to_offset(self.train_intervals_freq)
-                mask = (unique_dates_train >= current_date) & (unique_dates_train < next_date)
-                split_dates = unique_dates_train[mask]
-                if not split_dates.empty:
-                    splits.append(split_dates)
-                current_date = next_date
-
-        else:
-            self.n_splits: int = int(
-                np.ceil(len(unique_dates_train) / self.train_intervals)
-            )
+        self.n_splits: int = int(
+            np.ceil(len(unique_dates_train) / self.train_intervals)
+        )
         splits: List = np.array_split(unique_dates_train, self.n_splits)
         # (e) add the first training set to the list of training splits, so that the dates
         # that constitute each training split are together.
@@ -596,7 +683,10 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         train_indices: List[int] = []
         test_indices: List[int] = []
 
-        splits, Xy = self._determine_unique_time_splits(X, y)
+        if self.train_intervals_freq is None:
+            splits, Xy = self._determine_unique_interval_time_splits(X, y)
+        else:
+            splits, Xy = self._determine_unique_freq_time_splits(X, y)
 
         train_splits: List[np.ndarray] = [
             splits[0] if not self.max_periods else splits[0][-self.max_periods :]
@@ -608,16 +698,31 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
             if self.max_periods:
                 train_splits[i] = train_splits[i][-self.max_periods :]
 
+        test_offset = pd.tseries.frequencies.to_offset(self.freq_dict[self.test_size_freq])
         for split in train_splits:
             train_indices: List[int] = np.where(
                 Xy.index.get_level_values(1).isin(split)
             )[0]
             test_start: int = self.unique_dates.get_loc(split.max()) + 1
-            test_indices: List[int] = np.where(
-                Xy.index.get_level_values(1).isin(
-                    self.unique_dates[test_start : test_start + self.test_size]
-                )
-            )[0]
+            if self.test_size_freq is not None:
+                if self.freq_checks[self.freq_dict[self.test_size_freq]](self.unique_dates[test_start]):
+                    # Then add two offsets to get to the end of the next quarter
+                    test_end_date = self.unique_dates[test_start] + test_offset + test_offset
+                else:
+                    test_end_date = self.unique_dates[test_start] + test_offset
+
+                test_end = self.unique_dates.get_loc(test_end_date) + 1
+                test_indices: List[int] = np.where(
+                    Xy.index.get_level_values(1).isin(
+                        self.unique_dates[test_start : test_end]
+                    )
+                )[0]
+            else:
+                test_indices: List[int] = np.where(
+                    Xy.index.get_level_values(1).isin(
+                        self.unique_dates[test_start : test_start + self.test_size]
+                    )
+                )[0]
 
             yield train_indices, test_indices
 
@@ -634,7 +739,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
 
         :return <int> n_splits: Returns the number of splits.
         """
-        self._determine_unique_time_splits(X, y)
+        self._determine_unique_interval_time_splits(X, y)
 
         return self.n_splits
 
@@ -710,7 +815,7 @@ if __name__ == "__main__":
     splitter = ExpandingIncrementPanelSplit(
         train_intervals=21 * 12, test_size=1, min_periods=21 * 12, min_cids=1
     )
-    splitter.visualise_splits(X2[X2.index.get_level_values(0)=="GBP"], y2[y2.index.get_level_values(0)=="GBP"])
+    splitter.visualise_splits(X2, y2)
 
     # g) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, max_periods=12*21
     splitter = ExpandingIncrementPanelSplit(
