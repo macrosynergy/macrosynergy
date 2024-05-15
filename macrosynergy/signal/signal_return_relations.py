@@ -181,7 +181,6 @@ class SignalReturnRelations:
             self.cids = cids
 
         self.rets = rets
-        self.sigs = sigs.copy()
         self.slip = slip
         self.agg_sigs = agg_sigs
         self.xcats = list(df["xcat"].unique())
@@ -197,6 +196,8 @@ class SignalReturnRelations:
 
         if not self.is_list_of_strings(sigs):
             self.sigs = [sigs]
+        else:
+            self.sigs = sigs.copy()
 
         if not self.is_list_of_strings(agg_sigs):
             self.agg_sigs = [agg_sigs]
