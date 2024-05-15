@@ -939,14 +939,14 @@ class NaivePnL:
 
         groups = "xcat" if len(pnl_cids) == 1 else "cid"
         stats = [
-            "Return (pct ar)",
-            "St. Dev. (pct ar)",
+            "Return %",
+            "St. Dev. %",
             "Sharpe Ratio",
             "Sortino Ratio",
-            "Max 21-day draw",
-            "Max 6-month draw",
-            "Top 5% PnL Share Monthly",
-            "Peak to Trough draw",
+            "Max 21-Day Draw",
+            "Max 6-Month Draw",
+            "Top 5% Monthly PnL Share %",
+            "Peak to Trough Draw",
             "Traded Months",
         ]
 
@@ -980,7 +980,7 @@ class NaivePnL:
 
         top_months = monthly_pnl.nlargest(top_5_percent_cutoff, columns=monthly_pnl.columns)
 
-        df.iloc[6, :] = top_months.sum() / total_pnl
+        df.iloc[6, :] = (top_months.sum() / total_pnl) * 100
 
         cum_pnl = dfw.cumsum()
         high_watermark = cum_pnl.cummax()
