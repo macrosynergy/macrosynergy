@@ -554,9 +554,8 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
             self.unique_dates.get_loc(date_last_train) + 1 :
         ]
         # Everything after end_date is in the final test set
-        if self.freq_checks[self.freq_dict[self.test_size_freq]](date_last_train):
-            end_date = unique_dates_train[-1] - pd.tseries.frequencies.to_offset(self.freq_dict[self.test_size_freq])
-        else:
+        end_date = unique_dates_train[-1] - pd.tseries.frequencies.to_offset(self.freq_dict[self.test_size_freq])
+        if not self.freq_checks[self.freq_dict[self.test_size_freq]](end_date):
             end_date = unique_dates_train[-1] - pd.tseries.frequencies.to_offset(self.freq_dict[self.test_size_freq]) - pd.tseries.frequencies.to_offset(self.freq_dict[self.test_size_freq])
 
         current_date = unique_dates_train[0]
@@ -810,6 +809,11 @@ if __name__ == "__main__":
         LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
     )
     splitter.visualise_splits(X2, y2)"""
+
+    splitter = ExpandingIncrementPanelSplit(
+        train_intervals_freq="M", test_size_freq="Q", min_periods=21 * 12, min_cids=2
+    )
+    splitter.visualise_splits(X2, y2)
 
     # f) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, Britain only visualisation
     splitter = ExpandingIncrementPanelSplit(
