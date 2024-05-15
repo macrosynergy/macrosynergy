@@ -181,7 +181,7 @@ class SignalReturnRelations:
             self.cids = cids
 
         self.rets = rets
-        self.sigs = sigs
+        self.sigs = sigs.copy()
         self.slip = slip
         self.agg_sigs = agg_sigs
         self.xcats = list(df["xcat"].unique())
@@ -1496,12 +1496,13 @@ if __name__ == "__main__":
         return grangercausalitytests(np.array([x, y]).T, maxlag=3, addconst=True, verbose=False)[1][0][
             "ssr_ftest"
         ][1]
-
+    
+    sigs = ["CRY"]
     # Additional signals.
     srn = SignalReturnRelations(
         dfd,
         rets="XR",
-        sigs="CRY",
+        sigs=sigs,
         sig_neg=True,
         cosp=True,
         freqs="Q",
@@ -1509,6 +1510,8 @@ if __name__ == "__main__":
         ms_panel_test=True,
         additional_metrics=[spearman, granger, granger_pval],
     )
+
+    print(sigs)
 
     df_dep = srn.summary_table()
     print(df_dep)
@@ -1575,7 +1578,7 @@ if __name__ == "__main__":
     sr.accuracy_bars(sigs=["CRY_NEG", "INFL_NEG"], type="signals", title="Accuracy")
     sr.correlation_bars(type="signals", title="Correlation")
 
-    srt = sr.single_relation_table(ret="XRH", xcat="INFL", freq="Q", agg_sigs="last")
+    srt = sr.single_relation_table(ret="XRH", xcat="INFL_NEG", freq="Q", agg_sigs="last")
     mrt = sr.multiple_relations_table()
     sst = sr.single_statistic_table(stat="pearson", show_heatmap=True)
 
