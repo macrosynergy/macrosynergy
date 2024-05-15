@@ -1299,67 +1299,67 @@ if __name__ == "__main__":
 
     print(df_eval)
 
-    # pnl.agg_signal_bars(
-    #     pnl_name="PNL_GROWTH_NEG",
-    #     freq="m",
-    #     metric="direction",
-    #     title=None,
-    # )
+    pnl.agg_signal_bars(
+        pnl_name="PNL_GROWTH_NEG",
+        freq="m",
+        metric="direction",
+        title=None,
+    )
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"],
         title_fontsize=60,
         xlab="date",
         ylab="%",
     )
-    # pnl.plot_pnls(
-    #     pnl_cats=["PNL_GROWTH_NEG", "Long"],
-    #     facet=False,
-    #     xcat_labels=["S_1", "S_2"],
-    #     xlab="date",
-    #     ylab="%",
-    # )
-    # pnl.plot_pnls(
-    #     pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True, xcat_labels=["S_1", "S_2"]
-    # )
-    # pnl.plot_pnls(
-    #     pnl_cats=["PNL_GROWTH_NEG", "Long"],
-    #     facet=True,
-    # )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"],
+        facet=False,
+        xcat_labels=["S_1", "S_2"],
+        xlab="date",
+        ylab="%",
+    )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True, xcat_labels=["S_1", "S_2"]
+    )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"],
+        facet=True,
+    )
 
-    # pnl.plot_pnls(pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, xcat_labels=None)
+    pnl.plot_pnls(pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, xcat_labels=None)
 
-    # pnl.plot_pnls(
-    #     pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, facet=True, xcat_labels=None
-    # )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, facet=True, xcat_labels=None
+    )
 
-    # pnl.plot_pnls(
-    #     pnl_cats=["PNL_GROWTH_NEG"],
-    #     pnl_cids=cids,
-    #     same_y=True,
-    #     facet=True,
-    #     xcat_labels=None,
-    #     share_axis_labels=False,
-    #     xlab="Date",
-    #     ylab="PnL",
-    #     y_label_adj=0.1,
-    # )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG"],
+        pnl_cids=cids,
+        same_y=True,
+        facet=True,
+        xcat_labels=None,
+        share_axis_labels=False,
+        xlab="Date",
+        ylab="PnL",
+        y_label_adj=0.1,
+    )
 
-    # results_eq_ols = create_results_dataframe(
-    #     title="Performance metrics, PARITY vs OLS, equity",
-    #     df=dfd,
-    #     ret="EQXR_NSA",
-    #     sigs=["GROWTH", "INFL", "CRY", "DUXR"],
-    #     cids=cids,
-    #     sig_ops="zn_score_pan",
-    #     sig_adds=0,
-    #     neutrals="zero",
-    #     threshs=2,
-    #     sig_negs=[True, False, False, True],
-    #     bm="USD_EQXR_NSA",
-    #     cosp=True,
-    #     start="2004-01-01",
-    #     freqs="M",
-    #     agg_sigs="last",
-    #     slip=1,
-    # )
-    # print(results_eq_ols.data)
+    results_eq_ols = create_results_dataframe(
+        title="Performance metrics, PARITY vs OLS, equity",
+        df=dfd,
+        ret="EQXR_NSA",
+        sigs=["GROWTH", "INFL", "CRY", "DUXR"],
+        cids=cids,
+        sig_ops="zn_score_pan",
+        sig_adds=0,
+        neutrals="zero",
+        threshs=2,
+        sig_negs=[True, False, False, True],
+        bm="USD_EQXR_NSA",
+        cosp=True,
+        start="2004-01-01",
+        freqs="M",
+        agg_sigs="last",
+        slip=1,
+    )
+    print(results_eq_ols.data)
