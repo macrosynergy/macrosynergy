@@ -1,0 +1,25 @@
+# `macrosynergy.signal`
+
+## Description
+
+This subpackage contains various functionalities for analyzing, visualizing, and comparing the relationships between panels of trading signals and panels of subsequent returns.
+
+The statistics used in the signal sub-package generally have the following interpretations:
+
+* **accuracy** is the ratio of correct predictions of the sign of returns to all predictions. It measures the overall accuracy of the signal's predictions, regardless of the class imbalance between positive and negative returns.
+* **bal_accuracy** is the balanced accuracy, which takes into account the class imbalance of the dataset. It is the average of the ratios of correctly detected positive returns and correctly detected negative returns. The best value is 1 and the worst value is 0. This measure avoids inflated performance estimates on imbalanced datasets and is calculated as the average of sensitivity (true positive rate) and specificity (true negative rate). The formula with references is described [here](https://scikit-learn.org/stable/modules/model_evaluation.html#balanced-accuracy-score)
+* **pos_sigr** is the ratio of positive signals to all predictions. It indicates the long bias of the signal, or the percentage of time the signal is predicting a positive return. The value is between 0 (no positive signals) and 1 (all signals are positive).
+* **pos_retr** is the ratio of positive returns to all observed returns. It indicates the positive bias of the returns, or the percentage of time the returns are positive. The value is between 0 (no positive returns) and 1 (all returns are positive).
+* **pos_prec** is the positive precision, which measures the ratio of correct positive return predictions to all positive predictions. It indicates how well the positive predictions of the signal have fared. The best value is 1 and the worst value is 0. A high positive precision can be easily achieved if the ratio of positive returns is high, so it is important to consider this measure in conjunction with other measures such as bal_accuracy. See more info [here](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.precision_score.html)
+* **neg_prec** is the negative precision, which measures the ratio of correct negative return predictions to all negative predictions. It indicates how well the negative predictions of the signal have fared. Generally, good positive precision is hard to accomplish if the ratio of negative returns has been high. The best value is 1 and the worst value is 0. See more info [here](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.precision_score.html)
+* **pearson** is the Pearson correlation coefficient between signal and subsequent return. Like other correlation coefficients, Pearson varies between -1 and +1 with 0 implying no correlation. Correlations of -1 or +1 imply an exact linear relationship.
+* **pearson_pval** is the probability that the (positive) correlation has been accidental, assuming that returns are independently distributed. Strictly speaking, this value returns a 2-tailed p-value for the null hypothesis that the correlation is 0. The p-value roughly indicates the probability of an uncorrelated system producing datasets that have a Pearson correlation at least as extreme as the one computed from these datasets. The p-values are not entirely reliable but are reasonable for large datasets. This statistic would be invalid for forward-moving averages.
+* **kendall** is the Kendall rank correlation coefficient between signal and subsequent return. It is a non-parametric hypothesis test for statistical dependence. For those, who want to refresh their statistical knowledge, please read [here](https://en.wikipedia.org/wiki/Kendall_rank_correlation_coefficient)
+* **kendall_pval** is the probability that the (positive) correlation has been accidental, assuming that returns are independently distributed. As before, the test is a two-sided p-value for the null hypothesis that the correlation is 0. P-value below chosen threshold (usually 0.01 or 0.05) will allow us to reject the null hypothesis. This statistic would be invalid for forward-moving averages and for autocorrelated data.
+
+The rows have the following meaning:
+
+* **Mean years** is the mean of the statistic across all years.
+* **Mean cids** is the mean of the statistic across all sections.
+* **Positive ratio** represents the ratio of years, if following "Mean years" (or cross-sections - if following "Mean cids") for which the corresponding statistic was above its neutral level. The neutral level is defined as 0.5 for classification ratios (such as accuracy and balanced accuracy) and positive correlation probabilities, and 0 for correlation coefficients (such as Pearson and Kendall). For example, if the Positive ratio for accuracy is 0.7, it means that out of all the years (or cross-sections) analyzed, the correct sign of returns was predicted for 70% of them. If the Positive ratio for Pearson is 0.6, it indicates a strong positive correlation between the signal and returns.
+
