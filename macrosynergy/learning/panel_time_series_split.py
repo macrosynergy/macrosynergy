@@ -378,6 +378,195 @@ class RollingKFoldPanelSplit(BasePanelSplit):
 
             yield train_indices, test_indices
 
+class ExpandingFrequencyPanelSplit(BasePanelSplit):
+    """
+    Class for the production of paired training and test splits, created over a panel 
+    of countries. ExpandingFrequencyPanelSplit differs from ExpandingIncrementPanelSplit by
+    specifying the frequency of training set expansion as well as the test set forward
+    frequency. 
+
+    As with ExpandingIncrementPanelSplit, the first training set is determined by the parameters
+    'min_cids' and 'min_periods', defined below. This set comprises at least 'min_periods' time
+    periods for at least 'min_cids' cross-sections. However, this set is subsequently adjusted 
+    depending on the training interval frequency. The associated test set immediately follows the
+    adjusted initial training set and is determined by grouping all dates within the specified
+    test set frequency. For instance, if the test frequency is "Q", the available dates that 
+    cover the subsequent quarter are grouped together to form the test set. 
+
+    Subsequent training sets are created by expanding the previous training set by the 
+    smallest number of dates to cover the training frequency. As before, each test set immediately
+    follows its associated training set and is determined in the same manner as the initial test set.
+
+    We also provide a parameter 'max_periods',
+    which allows the user to roll the training set forward as opposed to expanding it.
+    If the number of time periods in the training set exceeds 'max_periods', the earliest
+    time periods are truncated.
+
+    This splitter can be employed, in addition to standard use, to reflect a pipeline
+    through time in a real-world setting. This is especially the case when
+    the test set frequency matches the native data set frequencies. 
+
+    :param <str> expansion_freq: frequency of training set expansion. For a given native
+        dataset frequency, the training sets expand by the smallest number of dates to cover
+        this frequency. Default is "D".
+    :param <str> test_freq: frequency forward of each training set for the unique dates in
+        each test set to cover. Default is "D".
+    :param <int> min_cids: minimum number of cross-sections required for the initial
+        training set. Default is 4.
+    :param <int> min_periods: minimum number of time periods required for the initial
+        training set. Default is 500.
+    :param <int> max_periods: maximum length of each training set in interval training.
+        If the maximum is exceeded, the earliest periods are cut off.
+        Default is None.
+
+    TODO: check over the implementation of this class.
+    """
+
+    def __init__(
+        self,
+        expansion_freq: Optional[str] = "D",
+        test_freq: Optional[str] = "D",
+        min_cids: Optional[int] = 4,
+        min_periods: Optional[int] = 500,
+        max_periods: Optional[int] = None,
+    ):
+        # Input checks
+        self._check_init_params(expansion_freq, test_freq, min_cids, min_periods, max_periods)
+
+        self.expansion_freq: str = expansion_freq
+        self.test_freq: str = test_freq
+        self.min_cids: int = min_cids
+        self.min_periods: int = min_periods
+        self.max_periods: int = max_periods
+
+        self.freq_offsets = {
+            "D" : pd.DateOffset(days = 1),
+            "W" : pd.DateOffset(weeks = 1),
+            "M" : pd.DateOffset(months = 1),
+            "Q" : pd.DateOffset(months = 3),
+            "Y" : pd.DateOffset(years = 1),
+        }
+
+    def split(
+        self, X: pd.DataFrame, y: pd.DataFrame, groups=None
+    ) -> Iterable[Tuple[np.ndarray, np.ndarray]]:
+        """
+        Method that produces pairs of training and test indices as intended by the 
+        ExpandingFrequencyPanelSplit class. Wide format Pandas (panel) dataframes are
+        expected, multi-indexed by cross-section and date. It is recommended for the
+        features to lag behind the associated targets by a single native frequency unit.
+
+        :param <pd.DataFrame> X: Pandas dataframe of features,
+            multi-indexed by (cross-section, date). The dates must be in datetime format.
+            Otherwise the dataframe must be in wide format: each feature is a column.
+        :param <pd.DataFrame> y: Pandas dataframe of the target variable, multi-indexed
+            by (cross-section, date). The dates must be in datetime format.
+        :param <int> groups: Always ignored, exists for compatibility with scikit-learn.
+
+        :return <Iterable[Tuple[np.ndarray[int],np.ndarray[int]]]> splits: Iterable of
+            (train,test) indices.
+        """
+        self._check_split_params(X, y)
+
+        train_indices: List[int] = []
+        test_indices: List[int] = []
+
+        splits, Xy = self._determine_unique_time_splits(X, y)
+
+        train_splits: List[np.ndarray] = [
+            splits[0] if not self.max_periods else splits[0][-self.max_periods :]
+        ]
+        for i in range(1, self.n_splits):
+            train_splits.append(np.concatenate([train_splits[i - 1], splits[i]]))
+
+            # Drop beginning of training set if it exceeds max_periods.
+            if self.max_periods:
+                train_splits[i] = train_splits[i][-self.max_periods :]
+
+        test_offset = self.freq_offsets[self.test_freq]
+        for split in train_splits:
+            train_indices = np.where(Xy.index.get_level_values(1).isin(split))[0]
+            test_start: pd.Timestamp = self.unique_dates[self.unique_dates.get_loc(split.max()) + 1]
+            test_dates = sorted(self.unique_dates[(self.unique_dates >= test_start) & (self.unique_dates <= test_start + test_offset)])
+            test_indices = np.where(Xy.index.get_level_values(1).isin(test_dates))[0]
+
+            yield train_indices, test_indices
+
+    def get_n_splits(self, X=None, y=None, groups=None) -> int:
+        """
+        Calculates and returns the number of splits.
+
+        :param <pd.DataFrame> X: Pandas dataframe of features,
+            multi-indexed by (cross-section, date). The dates must be in datetime format.
+            Otherwise the dataframe must be in wide format: each feature is a column.
+        :param <pd.DataFrame> y: Pandas dataframe of the target variable, multi-indexed by
+            (cross-section, date). The dates must be in datetime format.
+        :param <pd.DataFrame> groups: Always ignored, exists for compatibility.
+
+        :return <int> n_splits: Returns the number of splits.
+        """
+        self._determine_unique_time_splits(X, y)
+
+        return self.n_splits
+    
+    def _determine_unique_time_splits(
+        self, X: pd.DataFrame, y: pd.DataFrame
+    ) -> Tuple[List[pd.DatetimeIndex], pd.DataFrame]:
+    
+        self._validate_Xy(X, y)
+
+        Xy: pd.DataFrame = pd.concat([X, y], axis=1)
+        Xy = Xy.dropna()
+        self.unique_dates: pd.DatetimeIndex = (
+            Xy.index.get_level_values(1).unique().sort_values()
+        )
+
+        # (1) First determine the initial training set
+        # This is fully defined by finding the last training date in the initial training set
+        init_mask: pd.Series = Xy.groupby(level=1).size().sort_index() >= self.min_cids
+        date_first_min_cids: pd.Timestamp = (
+            init_mask[init_mask == True].reset_index().real_date.min()
+        )
+        date_last_train: pd.Timestamp = self.unique_dates[
+            self.unique_dates.get_loc(date_first_min_cids) + self.min_periods - 1
+        ]
+
+        # (2) Loop through the unique dates in the panel to create the training and test sets
+        # We can loop until before the last "test_freq" dates in the panel
+        end_date = unique_dates_train[-1] - self.freq_offsets[self.test_freq]
+        unique_dates_train: pd.arrays.DatetimeArray = sorted(self.unique_dates[
+            (self.unique_dates > date_last_train) & (self.unique_dates <= end_date)
+        ])
+        current_date = unique_dates_train[0]
+        splits = []
+
+        while current_date < end_date:
+            next_date = current_date + self.freq_offsets[self.expansion_freq]
+            if next_date > end_date:
+                mask = (unique_dates_train > current_date) & (unique_dates_train <= end_date)
+            else:
+                mask = (unique_dates_train > current_date) & (unique_dates_train <= next_date)
+            split_dates = unique_dates_train[mask]
+            if not split_dates.empty:
+                splits.append(split_dates)
+            current_date = next_date
+
+        self.n_splits = len(splits) + 1
+
+        # (e) add the first training set to the list of training splits, so that the dates
+        # that constitute each training split are together.
+        splits.insert(
+            0,
+            Xy.index.get_level_values(1)[
+                Xy.index.get_level_values(1) <= date_last_train
+            ]
+            .unique()
+            .sort_values(),
+        )
+
+        return splits, Xy
+
+    
 
 class ExpandingIncrementPanelSplit(BasePanelSplit):
     """
@@ -385,12 +574,17 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
     of countries. ExpandingIncrementPanelSplit differs from ExpandingKFoldPanelSplit by
     specifying the structure of an initial training and test set, as well as the number
     of time periods to expand both the initial and subsequent training and test sets by.
-    This is a flexible alternative to defining the number of splits to make.
+    We also provide an option to expand the training set by a particular frequency, as well
+    as specifying the frequency of the test set.
+
+    These are flexible alternatives to defining the number of splits to make.
 
     The first training set is determined by the parameters 'min_cids' and 'min_periods',
     defined below. This set comprises at least 'min_periods' time periods for at least
-    'min_cids' cross-sections. Its associated test set immediately follows the training
-    set, and is of length 'test_size'. Subsequent training sets are created by expanding
+    'min_cids' cross-sections. If a training frequency is specified, this initial set will 
+    be adjusted to the end of a frequency period (week for weekly frequency and month for
+    monthly, quarterly and annual frequency). Its associated test set immediately follows the training
+    set, and is either of length 'test_size' or at a specified . Subsequent training sets are created by expanding
     the previous training set by 'train_intervals' time periods, in the native frequency
     of the concerned datasets. As before, each test set immediately follows its associated
     training set, and is of length 'test_size'. We also provide a parameter 'max_periods',
@@ -811,7 +1005,7 @@ if __name__ == "__main__":
     splitter.visualise_splits(X2, y2)"""
 
     splitter = ExpandingIncrementPanelSplit(
-        train_intervals_freq="M", test_size_freq="Q", min_periods=21 * 12, min_cids=2
+        train_intervals_freq="M", test_size_freq="M", min_periods=21 * 12, min_cids=2
     )
     splitter.visualise_splits(X2, y2)
 
