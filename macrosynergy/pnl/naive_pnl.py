@@ -943,10 +943,10 @@ class NaivePnL:
             "St. Dev. %",
             "Sharpe Ratio",
             "Sortino Ratio",
-            "Max 21-Day Draw",
-            "Max 6-Month Draw",
-            "Top 5% Monthly PnL Share",
+            "Max 21-Day Draw %",
+            "Max 6-Month Draw %",
             "Peak to Trough Draw %",
+            "Top 5% Monthly PnL Share",
             "Traded Months",
         ]
 
@@ -972,6 +972,12 @@ class NaivePnL:
         df.iloc[4, :] = dfw.rolling(21).sum().min()
         df.iloc[5, :] = dfw.rolling(6 * 21).sum().min()
 
+        cum_pnl = dfw.cumsum()
+        high_watermark = cum_pnl.cummax()
+        drawdown = high_watermark - cum_pnl
+
+        df.iloc[6, :] = - drawdown.max()
+
         monthly_pnl = dfw.resample("M").sum()
         total_pnl = monthly_pnl.sum(axis=0)
         top_5_percent_cutoff = int(np.ceil(len(monthly_pnl) * 0.05))
@@ -979,13 +985,7 @@ class NaivePnL:
         for column in monthly_pnl.columns:
             top_months[column] = monthly_pnl[column].nlargest(top_5_percent_cutoff).reset_index(drop=True)
 
-        df.iloc[6, :] = top_months.sum() / total_pnl
-
-        cum_pnl = dfw.cumsum()
-        high_watermark = cum_pnl.cummax()
-        drawdown = high_watermark - cum_pnl
-
-        df.iloc[7, :] = - drawdown.max()
+        df.iloc[7, :] = top_months.sum() / total_pnl
 
         if len(list_for_dfbm) > 0:
             bm_df = pd.concat(list(self._bm_dict.values()), axis=1)
