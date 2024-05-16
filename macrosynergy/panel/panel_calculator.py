@@ -4,6 +4,7 @@ The functionality allows applying mathematical operations on time-series data.
 
 """
 
+import numpy as np
 import pandas as pd
 from typing import List, Tuple
 from macrosynergy.management.simulate import make_qdf
