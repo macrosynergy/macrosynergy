@@ -11,3 +11,4 @@ FREQUENCY_MAP = {
     "Q": "BQ",
     "A": "BA",
 }
+JPMAQS_METRICS: list[str] = ["value", "grading", "eop_lag", "mop_lag"]

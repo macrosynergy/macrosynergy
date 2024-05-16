@@ -10,7 +10,6 @@ import os
 import glob
 import shutil
 import json
-import traceback as tb
 import warnings
 from timeit import default_timer as timer
 from typing import Dict, List, Optional, Tuple, Union, Any, Generator
@@ -20,8 +19,9 @@ import itertools
 import pandas as pd
 
 from macrosynergy.download.dataquery import DataQueryInterface, API_DELAY_PARAM
-from macrosynergy.download.exceptions import HeartbeatError, InvalidDataframeError
+from macrosynergy.download.exceptions import InvalidDataframeError
 from macrosynergy.management.utils import is_valid_iso_date, standardise_dataframe
+from macrosynergy.management.constants import JPMAQS_METRICS
 from macrosynergy.management.types import QuantamentalDataFrame
 
 logger = logging.getLogger(__name__)
@@ -558,7 +558,7 @@ class JPMaQSDownload(DataQueryInterface):
                 "`crt`, `key`, `username`, and `password` for certificate based authentication."
             )
 
-        self.valid_metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+        self.valid_metrics: List[str] = JPMAQS_METRICS
         self.msg_errors: List[str] = []
         self.msg_warnings: List[str] = []
         self.unavailable_expressions: List[str] = []
@@ -1190,6 +1190,7 @@ if __name__ == "__main__":
         data = jpmaqs.download(
             cids=cids,
             xcats=xcats,
+            metrics="all",
             start_date=start_date,
             end_date=end_date,
             show_progress=True,

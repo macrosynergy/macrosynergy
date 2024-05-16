@@ -4,7 +4,7 @@ designed to plot time series data as a heatmap.
 """
 
 import pandas as pd
-from typing import List, Dict, Tuple, Optional
+from typing import List, Tuple, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 from seaborn.utils import relative_luminance

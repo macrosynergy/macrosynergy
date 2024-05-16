@@ -661,6 +661,110 @@ class TestAll(unittest.TestCase):
 
         warnings.resetwarnings()
 
+    def test_reg_scatter(self):
+        sel_xcats: List[str] = ["XR", "CRY"]
+        sel_cids: List[str] = ["AUD", "CAD", "GBP"]
+        cr = CategoryRelations(
+            self.dfd,
+            xcats=sel_xcats,
+            cids=sel_cids,
+            freq="M",
+            xcat_aggs=["mean", "mean"],
+            lag=1,
+            start="2000-01-01",
+            years=None,
+            blacklist=self.black,
+        )
+
+        with self.assertRaises(AssertionError):
+            cr.reg_scatter(
+                labels=False,
+                separator=2010,
+                title="Carry and Return",
+                xlab="Carry",
+                ylab="Return",
+                coef_box=2,
+                ncol=5,
+            )
+
+        with self.assertRaises(AssertionError):
+            cr.reg_scatter(
+                labels=True,
+                separator=2010,
+                title="Carry and Return",
+                xlab="Carry",
+                ylab="Return",
+                coef_box=2,
+                ncol=5,
+                prob_est="WRONG"
+            )
+        
+        with self.assertRaises(TypeError):
+            cr.reg_scatter(
+                labels=True,
+                separator=2010,
+                title="Carry and Return",
+                xlab="Carry",
+                ylab="Return",
+                ncol=5,
+                ax=1
+            )
+
+        with self.assertRaises(ValueError):
+            cr.reg_scatter(
+                labels=True,
+                separator=2010,
+                title="Carry and Return",
+                xlab="Carry",
+                ylab="Return",
+                ncol=5,
+                coef_box_font_size="WRONG"
+            )
+
+        with self.assertRaises(ValueError):
+            cr.reg_scatter(
+                labels=True,
+                separator=2010,
+                title="Carry and Return",
+                xlab="Carry",
+                ylab="Return",
+                ncol=5,
+                coef_box_font_size=-1
+            )
+
+        with self.assertRaises(TypeError):
+            cr.reg_scatter(
+                labels=True,
+                separator=2010,
+                title="Carry and Return",
+                xlab="Carry",
+                ylab="Return",
+                ncol=5,
+                size=("1", 7)
+            )
+        
+        with self.assertRaises(TypeError):
+            cr.reg_scatter(
+                labels=True,
+                separator=2010,
+                title="Carry and Return",
+                xlab="Carry",
+                ylab="Return",
+                ncol=5,
+                size=8
+            )
+
+        with self.assertRaises(TypeError):
+            cr.reg_scatter(
+                labels=True,
+                separator=2010,
+                title="Carry and Return",
+                xlab="Carry",
+                ylab="Return",
+                ncol=5,
+                size=(1, 7, 33)
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

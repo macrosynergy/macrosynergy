@@ -18,6 +18,7 @@ from macrosynergy.signal import SignalReturnRelations
 
 import warnings
 
+
 class NaivePnL:
     """
     Computes and collects illustrative PnLs with limited signal options and
@@ -885,6 +886,7 @@ class NaivePnL:
         pnl_cids: List[str] = ["ALL"],
         start: str = None,
         end: str = None,
+        label_dict: dict[str, str] = None,
     ):
         """
         Table of key PnL statistics.
@@ -898,6 +900,8 @@ class NaivePnL:
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
+        :param <dict[str, str]> label_dict: dictionary with keys as pnl_cats and values
+            as new labels for the PnLs.
 
         :return <pd.DataFrame>: standardized DataFrame with key PnL performance
             statistics.
@@ -935,12 +939,14 @@ class NaivePnL:
 
         groups = "xcat" if len(pnl_cids) == 1 else "cid"
         stats = [
-            "Return (pct ar)",
-            "St. Dev. (pct ar)",
+            "Return %",
+            "St. Dev. %",
             "Sharpe Ratio",
             "Sortino Ratio",
-            "Max 21-day draw",
-            "Max 6-month draw",
+            "Max 21-Day Draw %",
+            "Max 6-Month Draw %",
+            "Peak to Trough Draw %",
+            "Top 5% Monthly PnL Share",
             "Traded Months",
         ]
 
@@ -965,6 +971,22 @@ class NaivePnL:
         df.iloc[3, :] = df.iloc[0, :] / dsd
         df.iloc[4, :] = dfw.rolling(21).sum().min()
         df.iloc[5, :] = dfw.rolling(6 * 21).sum().min()
+
+        cum_pnl = dfw.cumsum()
+        high_watermark = cum_pnl.cummax()
+        drawdown = high_watermark - cum_pnl
+
+        df.iloc[6, :] = - drawdown.max()
+
+        monthly_pnl = dfw.resample("M").sum()
+        total_pnl = monthly_pnl.sum(axis=0)
+        top_5_percent_cutoff = int(np.ceil(len(monthly_pnl) * 0.05))
+        top_months = pd.DataFrame(columns=monthly_pnl.columns)
+        for column in monthly_pnl.columns:
+            top_months[column] = monthly_pnl[column].nlargest(top_5_percent_cutoff).reset_index(drop=True)
+
+        df.iloc[7, :] = top_months.sum() / total_pnl
+
         if len(list_for_dfbm) > 0:
             bm_df = pd.concat(list(self._bm_dict.values()), axis=1)
             for i, bm in enumerate(list_for_dfbm):
@@ -972,9 +994,24 @@ class NaivePnL:
                 correlation = dfw.loc[index].corrwith(
                     bm_df.loc[index].iloc[:, i], axis=0, method="pearson", drop=True
                 )
-                df.iloc[6 + i, :] = correlation
+                df.iloc[8 + i, :] = correlation
 
-        df.iloc[6 + len(list_for_dfbm), :] = dfw.resample("M").sum().count()
+        df.iloc[8 + len(list_for_dfbm), :] = dfw.resample("M").sum().count()
+
+        if label_dict is not None:
+            if not isinstance(label_dict, dict):
+                raise TypeError("label_dict must be a dictionary.")
+            if not all([isinstance(k, str) for k in label_dict.keys()]):
+                raise TypeError("Keys in label_dict must be strings.")
+            if not all([isinstance(v, str) for v in label_dict.values()]):
+                raise TypeError("Values in label_dict must be strings.")
+            if len(label_dict) != len(df.columns):
+                raise ValueError(
+                    "label_dict must have the same number of keys as columns in the "
+                    "DataFrame."
+                )
+            df.rename(index=label_dict, inplace=True)
+            df = df[label_dict.values()]
 
         return df
 
@@ -1029,11 +1066,60 @@ def create_results_dataframe(
     fwin: int = 1,
     slip: int = 0,
 ):
+    """
+    Create a DataFrame with key performance metrics for the signals and PnLs.
+
+    :param <str> title: title of the DataFrame.
+    :param <pd.DataFrame> df: DataFrame with the data.
+    :param <str> ret: name of the return signal.
+    :param <Union[str, List[str] sigs: name of the comparative signal(s).
+    :param <Union[str, List[str] cids: name of the cross-section(s).
+    :param <Union[str, List[str] sig_ops: operation(s) to be applied to the signal(s).
+    :param <Union[float, List[float] sig_adds: value(s) to be added to the signal(s).
+    :param <Union[str, List[str] neutrals: neutralization method(s) to be applied.
+    :param <Union[float, List[float] threshs: threshold(s) to be applied to the signal(s).
+    :param <str> bm: name of the benchmark signal.
+    :param <Union[bool, List[bool] sig_negs: whether the signal(s) should be negated.
+    :param <bool> cosp: whether the signals should be cross-sectionally standardized.
+    :param <str> start: start date of the analysis.
+    :param <str> end: end date of the analysis.
+    :param <dict> blacklist: dictionary with the blacklisted dates.
+    :param <Union[str, List[str] freqs: frequency of the rebalancing.
+    :param <Union[str, List[str] agg_sigs: aggregation method(s) for the signal(s).
+    :param <dict> sigs_renamed: dictionary with the renamed signals.
+    :param <int> fwin: frequency of the rolling window.
+    :param <int> slip: slippage to be applied to the PnLs.
+
+    :return <pd.DataFrame>: DataFrame with the performance metrics.
+    """
     # Get the signals table and isolate relevant performance metrics
+
+    def check_list_type(type, var):
+        return isinstance(var, list) and all(isinstance(item, type) for item in var)
+
+    if not isinstance(ret, str):
+        raise TypeError("The return signal must be a string.")
+    if not isinstance(sigs, str) and not check_list_type(str, sigs):
+        raise TypeError("The signals must be a string or a list of strings.")
+    if not isinstance(cids, str) and not check_list_type(str, cids):
+        raise TypeError("The cids must be a string or a list of strings.")
+    if not isinstance(sig_ops, str) and not check_list_type(str, sig_ops):
+        raise TypeError("The signal operations must be a string or a list of strings.")
+    if not isinstance(sig_adds, (float, int)) and not check_list_type(
+        (float, int), sig_adds
+    ):
+        raise TypeError("The signal additions must be a float or a list of floats.")
+    if not isinstance(neutrals, str) and not check_list_type(str, neutrals):
+        raise TypeError("The neutralizations must be a string or a list of strings.")
+    if not isinstance(threshs, (float, int)) and not check_list_type(
+        (float, int), threshs
+    ):
+        raise TypeError("The thresholds must be a float or a list of floats.")
+
     srr = SignalReturnRelations(
         df=df,
         rets=ret,
-        sigs=sorted(sigs),
+        sigs=sigs,
         cids=cids,
         sig_neg=sig_negs,
         cosp=cosp,
@@ -1046,7 +1132,7 @@ def create_results_dataframe(
         slip=slip,
     )
     sigs_df = (
-        srr.signals_table()
+        srr.multiple_relations_table()
         .astype("float")[["accuracy", "bal_accuracy", "pearson", "kendall"]]
         .round(3)
     )
@@ -1065,7 +1151,7 @@ def create_results_dataframe(
     pnl = NaivePnL(
         df=df,
         ret=ret,
-        sigs=sorted(sigs),
+        sigs=sigs,
         cids=cids,
         bms=bm,
         start=start,
@@ -1102,6 +1188,23 @@ def create_results_dataframe(
             .astype("float")
             .round(3)
         )
+
+    # Sort pnl_df so that it matches the order of sigs
+    pnl_df = pnl_df.reindex(sigs)
+
+    sigs_df = sigs_df.reset_index(
+        level=["Return", "Frequency", "Aggregation"], drop=True
+    )
+
+    if True in sig_negs:
+        for sig in pnl_df.index:
+            sig_neg = sig_negs[pnl_df.index.get_loc(sig)]
+            if sig_neg:
+                # Ensure each index is renamed only once
+                pnl_df.rename(
+                    index={sig: f"{sig}_NEG"},
+                    inplace=True,
+                )
 
     # Concatenate them and clean them
     res_df = pd.concat([sigs_df, pnl_df], axis=1)
@@ -1187,11 +1290,25 @@ if __name__ == "__main__":
         thresh=2,
     )
 
+    pnl.make_pnl(
+        sig="INFL",
+        sig_op="zn_score_pan",
+        sig_neg=True,
+        sig_add=0.5,
+        rebal_freq="monthly",
+        vol_scale=5,
+        rebal_slip=1,
+        min_obs=250,
+        thresh=2,
+    )
+
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
     df_eval = pnl.evaluate_pnls(
-        pnl_cats=["PNL_GROWTH_NEG"], start="2015-01-01", end="2020-12-31"
+        pnl_cats=["PNL_GROWTH_NEG", "PNL_INFL_NEG"], start="2015-01-01", end="2020-12-31"
     )
+
+    print(df_eval)
 
     pnl.agg_signal_bars(
         pnl_name="PNL_GROWTH_NEG",
@@ -1237,3 +1354,23 @@ if __name__ == "__main__":
         ylab="PnL",
         y_label_adj=0.1,
     )
+
+    results_eq_ols = create_results_dataframe(
+        title="Performance metrics, PARITY vs OLS, equity",
+        df=dfd,
+        ret="EQXR_NSA",
+        sigs=["GROWTH", "INFL", "CRY", "DUXR"],
+        cids=cids,
+        sig_ops="zn_score_pan",
+        sig_adds=0,
+        neutrals="zero",
+        threshs=2,
+        sig_negs=[True, False, False, True],
+        bm="USD_EQXR_NSA",
+        cosp=True,
+        start="2004-01-01",
+        freqs="M",
+        agg_sigs="last",
+        slip=1,
+    )
+    print(results_eq_ols.data)

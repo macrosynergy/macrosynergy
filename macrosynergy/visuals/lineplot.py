@@ -4,9 +4,9 @@ designed to plot time series data on a line plot.
 """
 
 import pandas as pd
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Union
 import matplotlib.pyplot as plt
-
+from macrosynergy.management.utils import is_valid_iso_date
 from macrosynergy.visuals.plotter import Plotter
 from numbers import Number
 from macrosynergy.management.simulate import make_test_df
@@ -76,6 +76,8 @@ class LinePlot(Plotter):
         x_axis_label: Optional[str] = None,
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 12,
+        ax_hline: Optional[Union[Number, List[Number]]] = None,
+        ax_vline: Optional[Union[str, List[str]]] = None,
         # title args
         title: Optional[str] = None,
         title_fontsize: int = 16,
@@ -109,6 +111,27 @@ class LinePlot(Plotter):
             fig, ax = plt.subplots(figsize=figsize)
 
         dfx: pd.DataFrame = self.df.copy()
+
+        if ax_vline is not None:
+            # check it's all valid iso-8601 dates
+            if isinstance(ax_vline, str):
+                ax_vline = [ax_vline]
+            for vline in ax_vline:
+                if not is_valid_iso_date(vline):
+                    raise ValueError(
+                        f"Invalid date format for `ax_vline`: {vline}. "
+                        "Please use ISO-8601 formatted dates."
+                    )
+
+        if ax_hline is not None:
+            if isinstance(ax_hline, Number):
+                ax_hline = [ax_hline]
+            for hline in ax_hline:
+                if not isinstance(hline, Number):
+                    raise ValueError(
+                        f"Invalid value for `ax_hline`: {hline}. "
+                        "Please use a number."
+                    )
 
         if title is not None:
             title_newline_adjust: float = 0.2
@@ -163,6 +186,14 @@ class LinePlot(Plotter):
                 label=compare_series,
             )
 
+        if ax_vline is not None:
+            for vline in ax_vline:
+                ax.axvline(x=pd.to_datetime(vline), color="black", linestyle="--")
+
+        if ax_hline is not None:
+            for hline in ax_hline:
+                ax.axhline(y=hline, color="black", linestyle="--")
+
         if grid:
             ax.grid(axis="both", linestyle="--", alpha=0.5)
 
@@ -204,69 +235,24 @@ class LinePlot(Plotter):
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_test_df
-    from macrosynergy.download import LocalCache as JPMaQSDownload
 
-    cids: List[str] = [
-        "USD",
-        "EUR",
-        "GBP",
-        "AUD",
-        "CAD",
-        "JPY",
-        "CHF",
-        "NZD",
-        "SEK",
-        "INR",
-    ]
-    # Quantamental categories of interest
+    cids = ["USD", "EUR", "GBP", "JPY"]
+    xcats = ["RIR_NSA", "FXXR_NSA", "EQXR_NSA"]
+    df = make_test_df(cids=cids, xcats=xcats)
 
-    xcats = [
-        "NIR_NSA",
-        "RIR_NSA",
-        "DU05YXR_NSA",
-        "DU05YXR_VT10",
-        "FXXR_NSA",
-        "EQXR_NSA",
-        "DU05YXR_NSA",
-    ]  # market links
-
-    sel_cids: List[str] = ["USD", "EUR", "GBP"]
-    sel_xcats: List[str] = ["NIR_NSA", "RIR_NSA", "FXXR_NSA", "EQXR_NSA"]
-
-    with JPMaQSDownload(
-        local_path=r"~\Macrosynergy\Macrosynergy - Documents\SharedData\JPMaQSTickers"
-    ) as jpmaqs:
-        df: pd.DataFrame = jpmaqs.download(
-            cids=cids,
-            xcats=xcats,
-            start_date="2016-01-01",
-        )
-
-    from random import SystemRandom
-
-    random = SystemRandom()
-
-    # random.seed(42)
-
-    # for cidx, xcatx in df[["cid", "xcat"]].drop_duplicates().values.tolist():
-    #     # if random() > 0.5 multiply by random.random()*10
-    #     _bools = (df["cid"] == cidx) & (df["xcat"] == xcatx)
-    #     r = max(random.random(), 0.1)
-    #     df.loc[_bools, "value"] = df.loc[_bools, "value"] * r
-
-    # FacetPlot(df).lineplot()
     import time
 
-    print("From same object:")
     timer_start: float = time.time()
 
-    LinePlot(df, cids=cids, xcats=xcats).plot(
+    LinePlot(df).plot(
         title=(
             "Test Title with a very long title to see how it looks, \n and a new "
             "line - why not?"
         ),
         legend_fontsize=8,
         compare_series="USD_RIR_NSA",
+        ax_hline=[45, 55],
+        ax_vline=["2015-4-01", "2015-09-01"],
     )
 
     # facet_size=(5, 4),
