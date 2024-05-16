@@ -10,9 +10,7 @@ import seaborn as sns
 from sklearn import metrics as skm
 from scipy import stats
 from typing import List, Union, Tuple, Dict, Any, Optional, Callable
-from sklearn.exceptions import UndefinedMetricWarning
 import statsmodels.api as sm
-from statsmodels.tools.sm_exceptions import ConvergenceWarning
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import (

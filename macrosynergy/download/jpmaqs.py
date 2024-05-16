@@ -10,7 +10,6 @@ import os
 import glob
 import shutil
 import json
-import traceback as tb
 import warnings
 from timeit import default_timer as timer
 from typing import Dict, List, Optional, Tuple, Union, Any, Generator
@@ -20,7 +19,7 @@ import itertools
 import pandas as pd
 
 from macrosynergy.download.dataquery import DataQueryInterface, API_DELAY_PARAM
-from macrosynergy.download.exceptions import HeartbeatError, InvalidDataframeError
+from macrosynergy.download.exceptions import InvalidDataframeError
 from macrosynergy.management.utils import is_valid_iso_date, standardise_dataframe
 from macrosynergy.management.constants import JPMAQS_METRICS
 from macrosynergy.management.types import QuantamentalDataFrame

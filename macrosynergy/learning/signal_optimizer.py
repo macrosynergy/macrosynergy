@@ -25,7 +25,6 @@ from macrosynergy.learning.panel_time_series_split import (
     BasePanelSplit,
     ExpandingIncrementPanelSplit,
     RollingKFoldPanelSplit,
-    ExpandingKFoldPanelSplit,
 )
 
 from macrosynergy.management.validation import _validate_Xy_learning

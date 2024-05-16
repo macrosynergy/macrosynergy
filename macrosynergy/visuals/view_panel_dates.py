@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import List, Tuple
+from typing import Tuple
 from macrosynergy.management import business_day_dif
 
 

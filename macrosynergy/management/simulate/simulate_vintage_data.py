@@ -5,8 +5,6 @@ quantamental data vintages for testing purposes.
 
 import numpy as np
 import pandas as pd
-from typing import List, Union, Tuple
-import matplotlib.pyplot as plt
 import math
 import datetime as dt
 
