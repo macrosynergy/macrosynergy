@@ -18,7 +18,7 @@ from statsmodels.tools.tools import add_constant
 
 from linearmodels.panel import RandomEffects
 
-from typing import Union, Any, List, Optional
+from typing import Union, Any, Optional
 
 import warnings
 

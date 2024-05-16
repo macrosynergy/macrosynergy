@@ -18,10 +18,9 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
-from macrosynergy.management.utils import standardise_dataframe, reduce_df
+from macrosynergy.management.utils import reduce_df
 from macrosynergy.visuals import FacetPlot, LinePlot
 from numbers import Number
-import time
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
 
