@@ -2,14 +2,16 @@
 Module with functionality for generating mock 
 quantamental data for testing purposes.
 """
+
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.arima_process import ArmaProcess
-from typing import List, Tuple, Dict, Union
+from typing import List, Dict, Union, Optional
 from collections import defaultdict
 import datetime
 import warnings
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.utils import is_valid_iso_date
 
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
@@ -224,6 +226,212 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
     return pd.concat(df_list).reset_index(drop=True)
 
 
+def _mock_qdf_lag_gen(
+    mode: str,
+    start: str,
+    end: str,
+    freq: str,
+) -> pd.DataFrame:
+    assert mode in ["eop", "mop"], "`mode` must be either 'eop' or 'mop'"
+
+    col_name: str = f"{mode}_lag"
+    df: pd.DataFrame = pd.DataFrame(columns=["real_date", col_name])
+    df["real_date"] = pd.bdate_range(start, end)
+    df[col_name] = 0
+    df.set_index("real_date", inplace=True)
+
+    if freq == "D":
+        df[col_name] = 0
+    elif freq == "W":
+        df[col_name] = df.index.weekday
+        if mode == "mop":
+            df[col_name] = df[col_name] - 2
+            df[col_name] = np.where(df[col_name] < 0, df[col_name] + 4, df[col_name])
+    elif freq in ["M", "Q", "A"]:
+        if mode == "eop":
+            for date in df.index:
+                prev_period_end = (
+                    (date - pd.DateOffset(days=1)).to_period(freq).end_time
+                )
+                df.at[date, col_name] = np.busday_count(
+                    prev_period_end.date().strftime("%Y-%m-%d"),
+                    date.date().strftime("%Y-%m-%d"),
+                )
+        elif mode == "mop":
+            for date in df.index:
+                period_start = date.to_period(freq).start_time
+                period_end = date.to_period(freq).end_time
+                median_date = period_start + pd.DateOffset(
+                    days=(period_end - period_start).days // 2
+                )
+                df.at[date, col_name] = np.busday_count(
+                    median_date.date().strftime("%Y-%m-%d"),
+                    date.date().strftime("%Y-%m-%d"),
+                )
+
+    return df
+
+
+def _mock_qdf_eop_mop(
+    mqdf: pd.DataFrame,
+) -> pd.DataFrame:
+    FREQS_LIST: List[str] = ["D", "W", "M", "Q", "A"]
+
+    cids: List[str] = mqdf["cid"].unique().tolist()
+    xcats: List[str] = mqdf["xcat"].unique().tolist()
+    tickers: List[str] = (mqdf["cid"] + "_" + mqdf["xcat"]).unique().tolist()
+
+    freqs: Dict[str, str] = {tx: np.random.choice(FREQS_LIST) for tx in tickers}
+    mqdf.set_index("real_date", inplace=True)
+
+    mqdf["eop_lag"] = 0
+    mqdf["mop_lag"] = 0
+    start: str = pd.Timestamp(mqdf.index.min()).strftime("%Y-%m-%d")
+    end: str = pd.Timestamp(mqdf.index.max()).strftime("%Y-%m-%d")
+    bdrage: pd.DatetimeIndex = pd.DatetimeIndex(pd.bdate_range(start, end))
+
+    for cid in cids:
+        for xcat in xcats:
+            ticker: str = cid + "_" + xcat
+            freq: str = freqs[ticker]
+            for modex in ["eop", "mop"]:
+                _mock_vals: pd.DataFrame = _mock_qdf_lag_gen(
+                    start=start, end=end, freq=freq, mode=modex
+                )
+                sel_bool: pd.Series = (mqdf["cid"] == cid) & (mqdf["xcat"] == xcat)
+                col_str: str = f"{modex}_lag"
+                mqdf.loc[sel_bool, col_str] = _mock_vals[col_str].loc[bdrage].values
+
+    mqdf.reset_index(inplace=True)
+
+    return mqdf
+
+
+def _mock_qdf_grading(
+    mqdf: pd.DataFrame,
+) -> pd.DataFrame:
+    MIN_SECTIONS: int = 2
+    MAX_SECTIONS: int = 10
+
+    def rand_dates(
+        partitions: int, start: pd.Timestamp, end: pd.Timestamp
+    ) -> List[str]:
+        return [
+            pd.Timestamp(x)
+            for x in sorted(
+                np.random.choice(
+                    pd.bdate_range(start, end), size=partitions, replace=False
+                ).tolist()
+            )
+        ]
+
+    mqdf["grading"] = 1
+
+    cids: List[str] = mqdf["cid"].unique().tolist()
+    xcats: List[str] = mqdf["xcat"].unique().tolist()
+
+    for cid in cids:
+        for xcat in xcats:
+            rand_partitions: int = np.random.randint(MIN_SECTIONS, MAX_SECTIONS)
+            rdts = rand_dates(
+                partitions=rand_partitions,
+                start=mqdf["real_date"].min(),
+                end=mqdf["real_date"].max(),
+            )
+            for irdts in range(len(rdts) - 1):
+                mqdf.loc[
+                    (mqdf["cid"] == cid)
+                    & (mqdf["xcat"] == xcat)
+                    & (mqdf["real_date"] >= rdts[irdts])
+                    & (mqdf["real_date"] < rdts[irdts + 1]),
+                    "grading",
+                ] = np.random.randint(2, 4)
+
+    return mqdf
+
+
+def mock_qdf(
+    cids: Optional[List[str]] = None,
+    xcats: Optional[List[str]] = None,
+    start: str = "1990-01-01",
+    end: str = "2020-12-31",
+    np_seed: int = 42,
+) -> pd.DataFrame:
+    """
+    Generate a mock Quantamental DataFrame. The function internally calls `make_qdf()`
+    to generate the DataFrame, but randomizes the `back_ar` parameter as well as the
+    `mean_add` and `sd_mult` parameters for each cross-section and category.
+    By default, the
+
+    :param <List[str]> cids: A list of strings for cids.
+    :param <List[str]> xcats: A list of strings for xcats.
+    :param <str> start_date: An ISO-formatted date string.
+    :param <str> end_date: An ISO-formatted date string.
+    :return <pd.DataFrame>: A mock Quantamental DataFrame.
+    """
+    if isinstance(cids, str):
+        cids = [cids]
+    if isinstance(xcats, str):
+        xcats = [xcats]
+
+    for vx, nx in [(cids, "cids"), (xcats, "xcats")]:
+        if not isinstance(vx, list):
+            raise TypeError(f"`{nx}` must be a list.")
+        elif not all(isinstance(x, str) for x in vx):
+            raise TypeError(f"All elements in `{nx}` must be strings.")
+        else:
+            if len(vx) == 0:
+                raise ValueError(f"`{nx}` cannot be empty.")
+
+    for dx, nx in [(start, "start"), (end, "end")]:
+        if not is_valid_iso_date(dx):
+            raise ValueError(f"`{nx}` must be a valid ISO date string.")
+
+    if not isinstance(np_seed, int):
+        raise TypeError("`np_seed` must be an integer.")
+
+    OLD_NP_SEED = np.random.get_state()
+    np.random.seed(np_seed)
+
+    def randx(low: float, high: float) -> float:
+        return np.random.uniform(low, high)
+
+    MEAN_ADD_RANGE = (-0.5, 5)
+    SD_MULT_RANGE = (0.5, 2)
+
+    AR_COEF_RANGE = (0.1, 1)
+    BACK_COEF_RANGE = (0.1, 1)
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+
+    for cidx in cids:
+        df_cids.loc[cidx] = [start, end, randx(*MEAN_ADD_RANGE), randx(*SD_MULT_RANGE)]
+
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+
+    for xcatx in xcats:
+        df_xcats.loc[xcatx] = [
+            start,
+            end,
+            randx(*MEAN_ADD_RANGE),
+            randx(*SD_MULT_RANGE),
+            randx(*AR_COEF_RANGE),
+            randx(*BACK_COEF_RANGE),
+        ]
+
+    rDF: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=randx(0.1, 1))
+
+    # add grading
+    rDF = _mock_qdf_grading(rDF)
+    rDF = _mock_qdf_eop_mop(rDF)
+
+    np.random.set_state(OLD_NP_SEED)  # reset the seed
+    return rDF
+
+
 def generate_lines(sig_len: int, style: str = "linear") -> Union[np.ndarray, List[str]]:
     """
     Returns a numpy array of a line with a given length.
@@ -386,3 +594,5 @@ if __name__ == "__main__":
     df_xcats.loc["CRY",] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+
+    dfm = mock_qdf(cids[:2], xcats[:2], start="2010-01-01", end="2010-01-31")
