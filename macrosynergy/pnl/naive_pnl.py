@@ -2,21 +2,20 @@
 "Naive" PnLs with limited signal options and disregarding transaction costs.
 """
 
+import warnings
+from itertools import product
+from typing import Dict, List, Optional, Tuple, Union
+
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 
-from typing import List, Union, Tuple, Optional
-from itertools import product
 from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import reduce_df, update_df
 from macrosynergy.panel.make_zn_scores import make_zn_scores
-from macrosynergy.management.utils import update_df, reduce_df
-
 from macrosynergy.signal import SignalReturnRelations
-
-import warnings
 
 
 class NaivePnL:
@@ -886,7 +885,7 @@ class NaivePnL:
         pnl_cids: List[str] = ["ALL"],
         start: str = None,
         end: str = None,
-        label_dict: dict[str, str] = None,
+        label_dict: Dict[str, str] = None,
     ):
         """
         Table of key PnL statistics.
