@@ -2,6 +2,7 @@ from .panel_time_series_split import (
     ExpandingKFoldPanelSplit,
     RollingKFoldPanelSplit,
     ExpandingIncrementPanelSplit,
+    ExpandingFrequencyPanelSplit,
     BasePanelSplit,
 )
 from .cv_tools import panel_cv_scores
@@ -44,6 +45,7 @@ __all__ = [
     "ExpandingKFoldPanelSplit",
     "RollingKFoldPanelSplit",
     "ExpandingIncrementPanelSplit",
+    "ExpandingFrequencyPanelSplit",
     "BasePanelSplit",
     # cv_tools
     "panel_cv_scores",
