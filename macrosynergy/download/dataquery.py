@@ -18,7 +18,6 @@ import warnings
 import requests
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Union, Tuple, Any
-from timeit import default_timer as timer
 from tqdm import tqdm
 
 from macrosynergy import __version__ as ms_version_info
