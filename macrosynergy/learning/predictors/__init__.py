@@ -15,7 +15,7 @@ from .weighted_regressors import (
 from .naive_predictor import (
     NaivePredictor,
 )
-from .cross_sectional_regressors import (
+from .regressor_systems import (
     BaseRegressionSystem,
     LADRegressionSystem,
     RidgeRegressionSystem,
