@@ -37,9 +37,10 @@ from .predictors import (
     SignWeightedLADRegressor,
     TimeWeightedLADRegressor,
     LADRegressor,
-    SURidgeRegression,
-    SULADRegression,
-    SULinearRegression,
+    BaseRegressionSystem,
+    LADRegressionSystem,
+    RidgeRegressionSystem,
+    LinearRegressionSystem,
 )
 
 from .marketbeta import BetaEstimator

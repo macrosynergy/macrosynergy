@@ -28,6 +28,7 @@ from macrosynergy.learning.panel_time_series_split import (
     ExpandingKFoldPanelSplit,
 )
 
+from macrosynergy.learning.predictors import LADRegressionSystem
 from macrosynergy.management.validation import _validate_Xy_learning
 
 
@@ -1805,7 +1806,7 @@ if __name__ == "__main__":
         "OLS": Pipeline(
             [
                 # ("selector", MapSelector(threshold=0.2)),
-                ("model", LinearRegression(fit_intercept=True)),
+                ("model", LADRegressionSystem(fit_intercept=True)),
             ]
         ),
     }
