@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from macrosynergy.learning.panel_time_series_split import (
-    ExpandingIncrementPanelSplit,
+    ExpandingFrequencyPanelSplit,
     ExpandingKFoldPanelSplit,
     BasePanelSplit,
 )
@@ -18,6 +18,8 @@ from macrosynergy.management.utils.df_utils import (
 from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+
+from joblib import Parallel, delayed
 
 from typing import Union, Optional, Dict, Tuple, List, Callable
 
@@ -40,7 +42,6 @@ class BetaEstimator:
         xcat: str,
         cids: List[str],
         benchmark_return: str,
-        blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]] = None, # ignore for now
     ):
         """
         Initializes BetaEstimator. Takes a quantamental dataframe and creates long
@@ -51,19 +52,16 @@ class BetaEstimator:
         :param <str> xcat: Extended category name for the financial returns to be hedged.
         :param <List[str]> cids: Cross-section identifiers for the financial returns to be hedged.
         :param <str> benchmark_return: Ticker name for the benchmark return to be used in
-            the hedging process and beta estimation.  
-        :param <Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]> blacklist: Cross-sections
-            with date ranges to be excluded from the dataframe. Default is None. 
+            the hedging process and beta estimation.
         """
         # Checks
-        self._checks_init_params(df, xcat, cids, benchmark_return, blacklist)
+        self._checks_init_params(df, xcat, cids, benchmark_return)
 
         # Assign class variables
         self.xcat = xcat
         self.cids = sorted(cids)
         self.benchmark_return = benchmark_return
         self.benchmark_cid, self.benchmark_xcat = self.benchmark_return.split("_",1)
-        self.blacklist = blacklist
 
         # Create pseudo-panel
         dfx = pd.DataFrame(columns=["real_date", "cid", "xcat", "value"])
@@ -86,7 +84,6 @@ class BetaEstimator:
             freq="D",
             xcat_aggs=["sum", "sum"],
             lag = 0,
-            # blacklist=self.blacklist, comment out for now
         ).dropna()
 
         self.X = Xy_long[self.benchmark_xcat]
@@ -106,9 +103,189 @@ class BetaEstimator:
         xcat: str,
         cids: List[str],
         benchmark_return: str,
-        blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]],
     ):
-        pass
+        # Dataframe checks
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("df must be a pandas DataFrame.")
+        if not set(["cid", "xcat", "real_date", "value"]).issubset(df.columns):
+            raise ValueError("df must contain columns 'cid', 'xcat', 'real_date' and 'value'.")
+        if not df["xcat"].nunique() > 1:
+            raise ValueError("df must contain at least two xcats. One is required for the contract return panel and another for the benchmark returns.")
+        
+        # xcat checks
+        if not isinstance(xcat, str):
+            raise TypeError("xcat must be a string.")
+        if xcat not in df["xcat"].unique():
+            raise ValueError("xcat must be a valid category in the dataframe.")
+        
+        # cids checks
+        if not isinstance(cids, list):
+            raise TypeError("cids must be a list.")
+        if not all(isinstance(cid, str) for cid in cids):
+            raise TypeError("All elements in cids must be strings.")
+        if not all(cid in df["cid"].unique() for cid in cids):
+            raise ValueError("All cids must be valid cross-section identifiers in the dataframe.")
+        
+        # benchmark return checks
+        if not isinstance(benchmark_return, str):
+            raise TypeError("benchmark_return must be a string.")
+        ticker_list = df["cid"] + "_" + df["xcat"]
+        if benchmark_return not in ticker_list.unique():
+            raise ValueError("benchmark_return must be a valid ticker in the dataframe.")
+
+    def _checks_estimate_beta(
+        self,
+        beta_xcat,
+        hedged_return_xcat,
+        inner_splitter,
+        scorer,
+        models,
+        hparam_grid,
+        min_cids,
+        min_periods,
+        est_freq,
+        initial_nsplits,
+        threshold_ndates,
+        hparam_type,
+        n_iter,
+        n_jobs_outer,
+        n_jobs_inner,   
+    ):
+        # beta_xcat checks
+        if not isinstance(beta_xcat, str):
+            raise TypeError("beta_xcat must be a string.")
+        if beta_xcat in self.beta_df["xcat"].unique():
+            raise ValueError(
+                "beta_xcat already exists in the stored quantamental dataframe for beta "
+                "estimates. Please choose a different category name."
+            )
+        
+        # hedged_return_xcat checks
+        if not isinstance(hedged_return_xcat, str):
+            raise TypeError("hedged_return_xcat must be a string.")
+        if hedged_return_xcat in self.hedged_returns["xcat"].unique():
+            raise ValueError(
+                "hedged_return_xcat already exists in the stored quantamental dataframe "
+                "for hedged returns. Please choose a different category name."
+            )
+        
+        # inner_splitter checks
+        if not isinstance(inner_splitter, BasePanelSplit):
+            raise TypeError("inner_splitter must be an instance of BasePanelSplit.")
+        
+        # scorer
+        # TODO: add to these checks
+        if not callable(scorer):
+            raise TypeError("scorer must be a callable function.")
+        
+        # models grid checks
+        if not isinstance(models, dict):
+            raise TypeError("models must be a dictionary.")
+        if not all(isinstance(model, (BaseEstimator, Pipeline)) for model in models.values()):
+            raise TypeError("All values in the models dictionary must be scikit-learn compatible models.")
+        if not all(isinstance(model_name, str) for model_name in models.keys()):
+            raise TypeError("All keys in the models dictionary must be strings.")
+        if not all(hasattr(model, "coefs_") for model in models.values()):
+            raise ValueError(
+                "All models must be seemingly unrelated linear regressors consistent with"
+                "the scikit-learn API. This means that they must be scikit-learn compatible"
+                "regressors that have a 'coefs_' attribute storing the estimated betas for each"
+                "cross-section, as per the standard imposed by the macrosynergy package."
+            )
+        
+        # hparam_grid checks
+        if not isinstance(hparam_grid, dict):
+            raise TypeError("hparam_grid must be a dictionary.")
+        if not all(isinstance(model_name, str) for model_name in hparam_grid.keys()):
+            raise TypeError("All keys in the hparam_grid dictionary must be strings.")
+        if not set(models.keys()) == set(hparam_grid.keys()):
+            raise ValueError("The keys in the models and hparam_grid dictionaries must match.")
+        if not all(isinstance(grid, (dict, list)) for grid in hparam_grid.values()):
+            raise TypeError("All values in the hparam_grid dictionary must be dictionaries or lists of dictionaries.")
+        for grid in hparam_grid.values():
+            if isinstance(grid, dict):
+                if not all(isinstance(key, str) for key in grid.keys()):
+                    raise TypeError("All keys in the nested dictionaries of hparam_grid must be strings.")
+                if not all(isinstance(value, list) for value in grid.values()):
+                    raise TypeError("All values in the nested dictionaries of hparam_grid must be lists.")
+            if isinstance(grid, list):
+                if not all(isinstance(sub_grid, dict) for sub_grid in grid):
+                    raise TypeError("All elements in the list of hparam_grid must be dictionaries.")
+                for sub_grid in grid:
+                    if not all(isinstance(key, str) for key in sub_grid.keys()):
+                        raise TypeError("All keys in the nested dictionaries of hparam_grid must be strings.")
+                    if not all(isinstance(value, list) for value in sub_grid.values()):
+                        raise TypeError("All values in the nested dictionaries of hparam_grid must be lists.")
+                    
+        # min_cids checks
+        if not isinstance(min_cids, int):
+            raise TypeError("min_cids must be an integer.")
+        if min_cids < 1:
+            raise ValueError("min_cids must be greater than 0.")
+        
+        # min_periods checks
+        if not isinstance(min_periods, int):
+            raise TypeError("min_periods must be an integer.")
+        if min_periods < 1:
+            raise ValueError("min_periods must be greater than 0.")
+        
+        # est_freq checks
+        if not isinstance(est_freq, str):
+            raise TypeError("est_freq must be a string.")
+        if est_freq not in ["D", "W", "M", "Q"]:
+            raise ValueError("est_freq must be one of 'D', 'W', 'M' or 'Q'.")
+        
+        # initial_nsplits checks
+        if initial_nsplits is not None:
+            if not isinstance(initial_nsplits, int):
+                raise TypeError("initial_nsplits must be an integer.")
+            if initial_nsplits < 2:
+                raise ValueError("initial_nsplits must be greater than 1.")
+            
+        # threshold_ndates checks
+        if threshold_ndates is not None:
+            if not isinstance(threshold_ndates, int):
+                raise TypeError("threshold_ndates must be an integer.")
+            if threshold_ndates < 1:
+                raise ValueError("threshold_ndates must be greater than 0.")
+            
+        # hparam_type checks
+        if not isinstance(hparam_type, str):
+            raise TypeError("hparam_type must be a string.")
+        if hparam_type not in ["grid", "prior", "bayes"]:
+            raise ValueError("hparam_type must be one of 'grid', 'prior' or 'bayes'.")
+        if hparam_type == "bayes":
+            raise NotImplementedError("Bayesian hyperparameter search is not yet implemented.")
+        
+        # n_iter checks
+        if n_iter is not None:
+            if not isinstance(n_iter, int):
+                raise TypeError("n_iter must be an integer.")
+            if n_iter < 1:
+                raise ValueError("n_iter must be greater than 0.")
+            
+        # n_jobs_outer checks
+        if not isinstance(n_jobs_outer, int):
+            raise TypeError("n_jobs_outer must be an integer.")
+        if (n_jobs_outer < -1) or (n_jobs_outer == 0):
+            raise ValueError("n_jobs_outer must be greater than zero or equal to -1.")
+        
+        # n_jobs_inner checks
+        # TODO: raise warning if the product of n_jobs_outer and n_jobs_inner is greater than the number of available cores
+        if not isinstance(n_jobs_inner, int):
+            raise TypeError("n_jobs_inner must be an integer.")
+        if (n_jobs_inner < -1) or (n_jobs_inner == 0):
+            raise ValueError("n_jobs_inner must be greater than zero or equal to -1.")
+        
+        # Check that the number of jobs isn't excessive
+        n_jobs_outer_adjusted = n_jobs_outer if n_jobs_outer != -1 else os.cpu_count()
+        n_jobs_inner_adjusted = n_jobs_inner if n_jobs_inner != -1 else os.cpu_count()
+
+        if n_jobs_outer_adjusted * n_jobs_inner_adjusted > os.cpu_count():
+            warnings.warn(
+                f"n_jobs_outer * n_jobs_inner is greater than the number of available cores. "
+                f"Consider reducing the number of jobs to avoid excessive resource usage."
+            )
 
     def estimate_beta(
         self,
@@ -120,7 +297,7 @@ class BetaEstimator:
         hparam_grid: Dict[str, Dict[str, List]],
         min_cids: int = 1,
         min_periods: int = 252,
-        oos_period: int = 21,
+        est_freq: str = "D",
         initial_nsplits: Optional[Union[int, np.int_]] = None, # TODO incorporate this logic later
         threshold_ndates: Optional[Union[int, np.int_]] = None, # TODO incorporate this logic later
         hparam_type: str = "grid",
@@ -157,10 +334,11 @@ class BetaEstimator:
         :param <int> min_periods: minimum requirement for the initial training set in business days. 
             This parameter is applied in conjunction with min_cids.
             Default is 1 year (252 days).
-        :param <int> oos_period: Number of out-of-sample business days for which hedged returns
+        :param <str> est_freq: Frequency forward of each training set for which hedged returns
             are derived. After the hedged returns are determined in each iteration, the training
             panel expands to encapsulate these samples, meaning that this parameter also determines
-            re-estimation frequency. Default is 1 month (21 days).
+            re-estimation frequency. This parameter can accept any of the strings "D" (daily), 
+            "W" (weekly), "M" (monthly) or "Q" (quarterly). Default is "M".
         :param <int> initial_nsplits: Number of splits to be used in cross-validation for the initial
             training set. If None, the number of splits is defined by the inner_splitter. Default is None.
         :param <int> threshold_ndates: Number of business days to pass before the number of cross-validation
@@ -174,7 +352,25 @@ class BetaEstimator:
         :param <int> inner_n_jobs: Number of jobs to run the inner splitter in parallel. Default is 1, which uses
             a single core. 
         """
-        
+        # Checks 
+        self._checks_estimate_beta(
+            beta_xcat=beta_xcat,
+            hedged_return_xcat=hedged_return_xcat,
+            inner_splitter=inner_splitter,
+            scorer=scorer,
+            models=models,
+            hparam_grid=hparam_grid,
+            min_cids=min_cids,
+            min_periods=min_periods,
+            est_freq=est_freq,
+            initial_nsplits=initial_nsplits,
+            threshold_ndates=threshold_ndates,
+            hparam_type=hparam_type,
+            n_iter=n_iter,
+            n_jobs_outer=n_jobs_outer,
+            n_jobs_inner=n_jobs_inner,
+        )
+
         # (1) Create daily multi-indexed dataframes to store estimated betas and hedged returns
         # This makes indexing easy and the resulting dataframes can be melted to long format later
 
@@ -187,11 +383,11 @@ class BetaEstimator:
         stored_hedged_returns = pd.DataFrame(index=idxs, columns=[hedged_return_xcat], data=np.nan, dtype=np.float64)
 
         # (2) Set up outer splitter
-        outer_splitter = ExpandingIncrementPanelSplit(
-            train_intervals=oos_period,
+        outer_splitter = ExpandingFrequencyPanelSplit(
+            expansion_freq=est_freq,
+            test_freq=est_freq,
             min_cids=min_cids,
             min_periods=min_periods,
-            test_size=oos_period,
         )
 
         # Create lists to store stored quantities in each iteration
@@ -203,82 +399,38 @@ class BetaEstimator:
         # (3) Loop through outer splitter, run grid search for optimal model, extract beta 
         # estimates, calculate OOS hedged returns and store results
         train_test_splits = list(outer_splitter.split(X=self.X, y=self.y))
-        for idx, (train_idx, test_idx) in tqdm(enumerate(train_test_splits),total=len(train_test_splits)):
-            # Get training and testing samples
-            X_train_i = pd.DataFrame(self.X.iloc[train_idx])
-            y_train_i = self.y.iloc[train_idx]
-            X_test_i = pd.DataFrame(self.X.iloc[test_idx])
-            y_test_i = self.y.iloc[test_idx]
-            training_time = X_train_i.index.get_level_values(1).max()
 
-            # Run grid search
-            optim_name = None
-            optim_model = None 
-            optim_score = -np.inf 
+        results = Parallel(n_jobs=n_jobs_outer)(
+            delayed(self._worker)(
+                train_idx=train_idx,
+                test_idx=test_idx,
+                beta_xcat=beta_xcat,
+                hedged_return_xcat=hedged_return_xcat,
+                inner_splitter=inner_splitter,
+                models=models,
+                scorer=scorer,
+                hparam_grid=hparam_grid,
+                hparam_type=hparam_type,
+                n_iter=n_iter,
+                initial_nsplits=initial_nsplits,
+                nsplits_add=(
+                    np.floor(idx / threshold_ndates)
+                    if initial_nsplits
+                    else None
+                ),
+                n_jobs_inner=n_jobs_inner,
+            )
+            for idx, (train_idx, test_idx) in tqdm(
+                enumerate(train_test_splits),
+                total=len(train_test_splits),
+            )
+        )
 
-            for model_name, model in models.items():
-                if hparam_type == "grid":
-                    search_object = GridSearchCV(
-                        estimator=model,
-                        param_grid=hparam_grid[model_name],
-                        scoring=scorer,
-                        refit=True,
-                        cv=inner_splitter,
-                        n_jobs=n_jobs_inner,
-                    )
-                elif hparam_type == "prior":
-                    search_object = RandomizedSearchCV(
-                        estimator=model,
-                        param_distributions=hparam_grid[model_name],
-                        n_iter=n_iter,
-                        scoring=scorer,
-                        refit=True,
-                        cv=inner_splitter,
-                        n_jobs=n_jobs_inner,
-                    )
+        for beta_data, hedged_data, model_data in results:
+            beta_list.extend(beta_data)
+            hedged_return_list.extend(hedged_data)
+            chosen_models.append(model_data)
 
-                try:
-                    search_object.fit(X_train_i, y_train_i)
-                except Exception as e:
-                    warnings.warn(
-                    f"Error running a hyperparameter search for {model_name} at {training_time}: {e}",
-                    RuntimeWarning,
-                )
-                if not hasattr(search_object, "best_score_"):
-                    # Then the grid search failed completely
-                    warnings.warn(
-                        f"No model was selected at time {training_time}. Hence, no beta can be estimated."
-                    )
-                    continue
-
-                # If a model was selected, extract the score, name, estimator and optimal hyperparameters
-                score = search_object.best_score_
-                if score > optim_score:
-                    optim_name = model_name
-                    optim_model = search_object.best_estimator_
-                    optim_score = score
-                    optim_params = search_object.best_params_
-            
-            # Get beta estimates for each cross-section
-            # These are stored in estimator.coefs_ as a dictionary {cross-section: beta}
-            betas = optim_model.coefs_
-
-            # Get OOS hedged returns
-            # This will be a List of lists, with inner lists recording the hedged return
-            # for a given cross-section and a given OOS timestamp.
-            hedged_returns: List = self._get_hedged_returns(betas, X_test_i, y_test_i, hedged_return_xcat)
-            hedged_return_list.extend(hedged_returns)
-
-            # Also update the list of betas 
-            for cross_section, beta in betas.items():
-                # Strip the contract cross section from the pseudo cross section names
-                cid = cross_section.split("v")[0]
-                beta_list.append([cid, training_time, beta_xcat, beta])
-
-            # Store chosen models and hyperparameters
-            chosen_models.append([training_time, beta_xcat, optim_name, optim_params, inner_splitter.n_splits])
-
-        # (5) Convert beta_list and hedged_return_list to dataframes and upsample to business-daily frequency
         for cid, real_date, xcat, value in beta_list:
             stored_betas.loc[(cid, real_date), xcat] = value
         for cid, real_date, xcat, value in hedged_return_list:
@@ -308,6 +460,102 @@ class BetaEstimator:
 
         self.chosen_models = pd.concat((self.chosen_models, pd.DataFrame(chosen_models, columns=["real_date", "xcat", "model_type", "hparams", "n_splits_used"])))
 
+    def _worker(
+        self,
+        train_idx: np.ndarray,
+        test_idx: np.ndarray,
+        beta_xcat: str,
+        hedged_return_xcat: str,
+        inner_splitter: BasePanelSplit,
+        models: Dict[str, Union[BaseEstimator, Pipeline]],
+        scorer: Callable,
+        hparam_grid: Dict[str, Dict[str, List]],
+        hparam_type: str = "grid",
+        n_iter: int = 10,
+        initial_nsplits: Optional[Union[int, np.int_]] = None,
+        nsplits_add: Optional[Union[int, np.int_]] = None,
+        n_jobs_inner: int = 1,
+    ):
+        # Get training and testing samples
+        X_train_i = pd.DataFrame(self.X.iloc[train_idx])
+        y_train_i = self.y.iloc[train_idx]
+        X_test_i = pd.DataFrame(self.X.iloc[test_idx])
+        y_test_i = self.y.iloc[test_idx]
+        training_time = X_train_i.index.get_level_values(1).max()
+
+        # Run grid search
+        optim_name = None
+        optim_model = None
+        optim_score = -np.inf
+
+        # If nsplits_add is provided, add it to the number of splits
+        if initial_nsplits:
+            n_splits = initial_nsplits + nsplits_add
+            inner_splitter.n_splits = int(n_splits)
+        else:
+            n_splits = inner_splitter.n_splits
+
+        for model_name, model in models.items():
+            if hparam_type == "grid":
+                search_object = GridSearchCV(
+                    estimator=model,
+                    param_grid=hparam_grid[model_name],
+                    scoring=scorer,
+                    refit=True,
+                    cv=inner_splitter,
+                    n_jobs=n_jobs_inner,
+                )
+            elif hparam_type == "prior":
+                search_object = RandomizedSearchCV(
+                    estimator=model,
+                    param_distributions=hparam_grid[model_name],
+                    n_iter=n_iter,
+                    scoring=scorer,
+                    refit=True,
+                    cv=inner_splitter,
+                    n_jobs=n_jobs_inner,
+                )
+
+            try:
+                search_object.fit(X_train_i, y_train_i)
+            except Exception as e:
+                warnings.warn(
+                f"Error running a hyperparameter search for {model_name} at {training_time}: {e}",
+                RuntimeWarning,
+            )
+            if not hasattr(search_object, "best_score_"):
+                # Then the grid search failed completely
+                warnings.warn(
+                    f"No model was selected at time {training_time}. Hence, no beta can be estimated."
+                )
+                # TODO: handle this case properly
+                continue
+
+            # If a model was selected, extract the score, name, estimator and optimal hyperparameters
+            score = search_object.best_score_
+            if score > optim_score:
+                optim_name = model_name
+                optim_model = search_object.best_estimator_
+                optim_score = score
+                optim_params = search_object.best_params_
+
+        # Get beta estimates for each cross-section
+        # These are stored in estimator.coefs_ as a dictionary {cross-section: beta}
+        betas = optim_model.coefs_
+
+        # Get OOS hedged returns
+        # This will be a List of lists, with inner lists recording the hedged return
+        # for a given cross-section and a given OOS timestamp.
+        hedged_returns: List = self._get_hedged_returns(betas, X_test_i, y_test_i, hedged_return_xcat)
+
+        # Compute betas 
+        beta_list = [[cid.split("v")[0], training_time, beta_xcat, beta] for cid, beta in betas.items()]
+
+        # Store chosen models and hyperparameters
+        models_list = [training_time, beta_xcat, optim_name, optim_params, inner_splitter.n_splits]
+
+        return beta_list, hedged_returns, models_list
+
     def _get_hedged_returns(
         self,
         betas,
@@ -322,12 +570,6 @@ class BetaEstimator:
         list_hedged_returns = [[idx[0].split("v")[0], idx[1]] + [hedged_return_xcat] + [value] for idx, value in hedged_returns.items()]
 
         return list_hedged_returns
-
-
-    def _checks_estimate_beta(
-        self,
-    ):
-        pass
 
 if __name__ == "__main__":
     import os 
@@ -448,9 +690,9 @@ if __name__ == "__main__":
         },
         min_cids=4,
         min_periods=21*12*2,
-        oos_period=21 * 3, # Compute hedged returns every quarter
-        n_jobs_outer=1,
-        n_jobs_inner=-1,
+        est_freq="Q",
+        n_jobs_outer=-1,
+        n_jobs_inner=1,
     )
 
     df_betas = object.beta_df
