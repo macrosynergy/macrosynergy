@@ -19,6 +19,9 @@ from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 from joblib import Parallel, delayed
 
 from typing import Union, Optional, Dict, Tuple, List, Callable
@@ -570,6 +573,80 @@ class BetaEstimator:
         list_hedged_returns = [[idx[0].split("v")[0], idx[1]] + [hedged_return_xcat] + [value] for idx, value in hedged_returns.items()]
 
         return list_hedged_returns
+    
+    def models_heatmap(
+        self,
+        beta_xcat: str,
+        title: Optional[str] = None,
+        cap: Optional[int] = 5,
+        figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
+    ):
+        """
+        Visualizing optimal models used for beta estimation.
+
+        :param <str> beta_xcat: Category name for the panel of estimated contract betas.
+        :param <Optional[str]> title: Title of the heatmap. Default is None. This creates
+            a figure title of the form "Model Selection Heatmap for {name}".
+        :param <Optional[int]> cap: Maximum number of models to display. Default
+            (and limit) is 5. The chosen models are the 'cap' most frequently occurring
+            in the pipeline.
+        :param <Optional[Tuple[Union[int, float], Union[int, float]]]> figsize: Tuple of
+            floats or ints denoting the figure size. Default is (12, 8).
+
+        Note:
+        This method displays the times at which each model in a learning process
+        has been optimal and used for beta estimation, as a binary heatmap.
+        """
+        # Checks
+        self._checks_models_heatmap(beta_xcat=beta_xcat, title=title, cap=cap, figsize=figsize)
+
+        # Get the chosen models for the specified pipeline to visualise selection.
+        chosen_models = self.chosen_models # TODO: implement self.get_optimal_models()
+        chosen_models = chosen_models[chosen_models.xcat == beta_xcat].sort_values(
+            by="real_date"
+        )
+        chosen_models["model_hparam_id"] = chosen_models.apply(
+            lambda row: (
+                row["model_type"]
+                if row["hparams"] == {}
+                else f"{row['model_type']}_"
+                + "_".join([f"{key}={value}" for key, value in row["hparams"].items()])
+            ),
+            axis=1,
+        )
+        chosen_models["real_date"] = chosen_models["real_date"].dt.date
+        model_counts = chosen_models.model_hparam_id.value_counts()
+        chosen_models = chosen_models[
+            chosen_models.model_hparam_id.isin(model_counts.index[:cap])
+        ]
+
+        unique_models = chosen_models.model_hparam_id.unique()
+        unique_dates = chosen_models.real_date.unique()
+
+        # Fill in binary matrix denoting the selected model at each time
+        binary_matrix = pd.DataFrame(0, index=unique_models, columns=unique_dates)
+        for _, row in chosen_models.iterrows():
+            model_id = row["model_hparam_id"]
+            date = row["real_date"]
+            binary_matrix.at[model_id, date] = 1
+
+        # Display the heatmap.
+        plt.figure(figsize=figsize)
+        if binary_matrix.shape[0] == 1:
+            sns.heatmap(binary_matrix, cmap="binary_r", cbar=False)
+        else:
+            sns.heatmap(binary_matrix, cmap="binary", cbar=False)
+        plt.title(title)
+        plt.show()
+
+    def _checks_models_heatmap(
+        self,
+        beta_xcat: str,
+        title: Optional[str] = None,
+        cap: Optional[int] = 5,
+        figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
+    ):
+        pass
 
 if __name__ == "__main__":
     import os 
@@ -700,3 +777,5 @@ if __name__ == "__main__":
 
     print(df_betas)
     print(df_hrs)
+
+    object.models_heatmap(beta_xcat="BETA_NSA")
