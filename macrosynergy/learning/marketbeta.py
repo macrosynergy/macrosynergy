@@ -781,10 +781,7 @@ class BetaEstimator:
                 raise TypeError("All elements in beta_xcat, when a list, must be strings.")
 
 if __name__ == "__main__":
-    import os 
-    from macrosynergy.download import JPMaQSDownload
-    from timeit import default_timer as timer
-    from datetime import timedelta, date, datetime
+    from macrosynergy.management.simulate import make_qdf
     
     from sklearn.base import RegressorMixin
     from sklearn.ensemble import VotingRegressor
@@ -796,118 +793,64 @@ if __name__ == "__main__":
     from macrosynergy.learning.metrics import neg_mean_abs_corr
     from macrosynergy.learning.predictors import SULinearRegression
     
-    # Cross-sections of interest
+    # Simulate a panel dataset of benchmark and contract returns
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["BENCH_XR", "CONTRACT_XR"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
 
-    cids_dmca = [
-        "AUD",
-        "CAD",
-        "CHF",
-        "EUR",
-        "GBP",
-        "JPY",
-        "NOK",
-        "NZD",
-        "SEK",
-        "USD",
-    ]  # DM currency areas
-    cids_dmec = ["DEM", "ESP", "FRF", "ITL", "NLG"]  # DM euro area countries
-    cids_latm = ["BRL", "COP", "CLP", "MXN", "PEN"]  # Latam countries
-    cids_emea = ["CZK", "HUF", "ILS", "PLN", "RON", "RUB", "TRY", "ZAR"]  # EMEA countries
-    cids_emas = [
-        "CNY",
-        # "HKD",
-        "IDR",
-        "INR",
-        "KRW",
-        "MYR",
-        "PHP",
-        "SGD",
-        "THB",
-        "TWD",
-    ]  # EM Asia countries
-
-    cids_dm = cids_dmca + cids_dmec
-    cids_em = cids_latm + cids_emea + cids_emas
-
-    cids = sorted(cids_dm + cids_em)
-
-    # Categories
-
-    main = ["FXXR_NSA", "FXXR_VT10", "FXXRHvGDRB_NSA"]
-
-    econ = []
-
-    mark = [
-        "EQXR_NSA",
-        "FXXRBETAvGDRB_NSA",
-        "FXTARGETED_NSA",
-        "FXUNTRADABLE_NSA",
-    ]  # related market categories
-
-    xcats = main + econ + mark
-
-    xtix = ["GLB_DRBXR_NSA", "GEQ_DRBXR_NSA"]
-
-    # Download
-
-    # Download series from J.P. Morgan DataQuery by tickers
-
-    start_date = "1990-01-01"
-    tickers = [cid + "_" + xcat for cid in cids for xcat in xcats] + xtix
-    print(f"Maximum number of tickers is {len(tickers)}")
-
-    # Retrieve credentials
-
-    client_id: str = os.getenv("DQ_CLIENT_ID")
-    client_secret: str = os.getenv("DQ_CLIENT_SECRET")
-
-    # Download from DataQuery
-
-    with JPMaQSDownload(client_id=client_id, client_secret=client_secret) as downloader:
-        start = timer()
-        assert downloader.check_connection()
-        df = downloader.download(
-            tickers=tickers,
-            start_date=start_date,
-            metrics=["value", "eop_lag", "mop_lag", "grading"],
-            suppress_warning=True,
-            show_progress=True,
-        )
-        end = timer()
-
-    dfd = df.copy()
-
-    print("Download time from DQ: " + str(timedelta(seconds=end - start)))
-        
-        
-    object = BetaEstimator(
-        df=dfd,
-        xcat="FXXR_NSA",
-        benchmark_return="GLB_DRBXR_NSA",
-        cids=list(set(cids) - set(["USD"])),
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
     )
-    object.estimate_beta(
+    df_cids.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["BENCH_XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CONTRACT_XR"] = ["2001-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+
+    # Initialize the BetaEstimator object
+    # Use for the benchmark return: USD_BENCH_XR.
+    be = BetaEstimator(
+        df=dfd,
+        xcat="CONTRACT_XR",
+        benchmark_return="USD_BENCH_XR",
+        cids=cids,
+    )
+
+    # Define the models and grids to search over
+    models = {
+        "LR_ROLL": SULinearRegression(min_xs_samples=21*3),
+    }
+    hparam_grid = {
+        "LR_ROLL": [
+            {"roll": [21, 21 * 3, 21 * 6, 21 * 12], "data_freq" : ["D"]},
+            {"roll": [3, 6, 9, 12], "data_freq" : ["M"]},
+        ]
+    }
+    scorer = neg_mean_abs_corr
+
+    # Now estimate the betas
+    be.estimate_beta(
         beta_xcat="BETA_NSA",
         hedged_return_xcat="HEDGED_RETURN_NSA",
         inner_splitter=ExpandingKFoldPanelSplit(n_splits = 5),
         scorer=neg_mean_abs_corr,
-        models = {
-            "LR_ROLL": SULinearRegression(min_xs_samples=21),
-        },
-        hparam_grid = {
-            "LR_ROLL": {"roll": [21, 21 * 3, 21 * 6, 21 * 12, 21 * 24],"data_freq" : ["M", "W", "D"]},
-        },
+        models = models,
+        hparam_grid = hparam_grid,
         min_cids=4,
-        min_periods=21*12*2,
+        min_periods=21 * 3,
         est_freq="Q",
         n_jobs_outer=-1,
         n_jobs_inner=1,
     )
 
-    df_betas = object.beta_df
-    df_hrs = object.hedged_returns
+    # Get the results
+    print(be.get_optimal_models())
+    print(be.get_betas())
+    print(be.get_hedged_returns())
 
-    print(df_betas)
-    print(df_hrs)
-
-    object.models_heatmap(beta_xcat="BETA_NSA")
+    be.models_heatmap(beta_xcat="BETA_NSA")
