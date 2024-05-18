@@ -325,7 +325,7 @@ class BetaEstimator:
             splitter.
         :param <Callable> scorer: Scikit-learn scorer function used in both model and 
             hyperparameter selection for optimization. For beta estimation, it is recommended
-            to use `neg_mean_abs_market_corr` from the `macrosynergy.learning` submodule. 
+            to use `neg_mean_abs_corr` from the `macrosynergy.learning` submodule. 
         :param <dict> models: Dictionary of scikit-learn compatible linear regression models. For beta
             estimation, these models should be seemingly unrelated regressions with a 'coefs_' attribute
             storing estimated betas for each cross-section.
@@ -646,7 +646,34 @@ class BetaEstimator:
         cap: Optional[int] = 5,
         figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
     ):
-        pass
+        if not isinstance(beta_xcat, str):
+            raise TypeError("beta_xcat must be a string.")
+        if beta_xcat not in self.beta_df["xcat"].unique():
+            raise ValueError(
+                "beta_xcat must be a valid category in the stored beta dataframe."
+                "Check that estimate_beta has been run with the specified beta_xcat."
+            )
+        if title is None:
+            title = f"Model Selection Heatmap for {beta_xcat}"
+        if not isinstance(title, str):
+            raise TypeError("title must be a string.")
+        if not isinstance(cap, int):
+            raise TypeError("cap must be an integer.")
+        if cap < 1:
+            raise ValueError("cap must be greater than 0.")
+        if cap > 20:
+            warnings.warn(
+                f"The maximum number of models to display is 20. The cap has been set to "
+                "20.",
+                RuntimeWarning,
+            )
+            cap = 20
+        if not isinstance(figsize, tuple):
+            raise TypeError("figsize must be a tuple.")
+        if not all(isinstance(value, (int, float)) for value in figsize):
+            raise TypeError("All elements in figsize must be integers or floats.")
+        if len(figsize) != 2:
+            raise ValueError("figsize must be a tuple of length 2.")
 
 if __name__ == "__main__":
     import os 
