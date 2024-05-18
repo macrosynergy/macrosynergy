@@ -40,6 +40,8 @@ from .predictors import (
     SULinearRegression,
 )
 
+from .marketbeta import BetaEstimator
+
 __all__ = [
     # panel_time_series_split
     "ExpandingKFoldPanelSplit",
@@ -76,5 +78,7 @@ __all__ = [
     "TimeWeightedLADRegressor",
     "SignWeightedLinearRegression",
     "TimeWeightedLinearRegression",
+    # market beta estimation
+    "BetaEstimator",
 ]
  
