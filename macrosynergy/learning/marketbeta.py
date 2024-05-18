@@ -549,7 +549,7 @@ class BetaEstimator:
         # Get OOS hedged returns
         # This will be a List of lists, with inner lists recording the hedged return
         # for a given cross-section and a given OOS timestamp.
-        hedged_returns: List = self._get_hedged_returns(betas, X_test_i, y_test_i, hedged_return_xcat)
+        hedged_returns: List = self._calculate_hedged_returns(betas, X_test_i, y_test_i, hedged_return_xcat)
 
         # Compute betas 
         beta_list = [[cid.split("v")[0], training_time, beta_xcat, beta] for cid, beta in betas.items()]
@@ -559,7 +559,7 @@ class BetaEstimator:
 
         return beta_list, hedged_returns, models_list
 
-    def _get_hedged_returns(
+    def _calculate_hedged_returns(
         self,
         betas,
         X_test_i,
@@ -674,6 +674,111 @@ class BetaEstimator:
             raise TypeError("All elements in figsize must be integers or floats.")
         if len(figsize) != 2:
             raise ValueError("figsize must be a tuple of length 2.")
+        
+    def get_optimal_models(
+        self,
+        beta_xcat: Optional[Union[str, List]] = None,
+    ) -> pd.DataFrame:
+        """
+        Returns a dataframe of optimal models selected for one or more beta estimation 
+        processes.
+
+        :param <Optional[Union[str, List]]> beta_xcat: Category name or list of category names
+            for the panel of estimated contract betas. If None, information from all 
+            beta estimation processes held within the class instance is returned. Default is None.
+
+        :return: <pd.DataFrame> A dataframe of optimal models selected for given
+            beta estimation processes.
+        """
+        # Checks 
+        self._checks_get_optimal_models(beta_xcat=beta_xcat)
+
+        if beta_xcat is None:
+            return self.chosen_models
+        else:
+            return self.chosen_models[self.chosen_models.xcat.isin(beta_xcat)]
+
+    def _checks_get_optimal_models(
+        self,
+        beta_xcat: Optional[Union[str, List]],
+    ):
+        if beta_xcat is not None:
+            if isinstance(beta_xcat, str):
+                beta_xcat = [beta_xcat]
+            if not isinstance(beta_xcat, list):
+                raise TypeError("beta_xcat must be a string or a list")
+            if not all(isinstance(xcat, str) for xcat in beta_xcat):
+                raise TypeError("All elements in beta_xcat, when a list, must be strings.")
+
+    def get_hedged_returns(
+        self,
+        hedged_return_xcat: Optional[Union[str, List]],
+    ):
+        """
+        Returns a dataframe of out-of-sample hedged returns derived from beta estimation processes
+        held within the class instance.
+
+        :param <Optional[Union[str, List]]> hedged_return_xcat: Category name or list of category names
+            for the panel of derived hedged returns. If None, information from all 
+            beta estimation processes held within the class instance is returned. Default is None.
+
+        :return: <pd.DataFrame> A dataframe of out-of-sample hedged returns derived from beta estimation
+            processes.
+        """
+        # Checks
+        self._checks_get_hedged_returns(hedged_return_xcat=hedged_return_xcat)
+
+        if hedged_return_xcat is None:
+            return self.hedged_returns
+        else:
+            return self.hedged_returns[self.hedged_returns.xcat.isin(hedged_return_xcat)]
+
+    def _checks_get_hedged_returns(
+        self,
+        hedged_return_xcat: Optional[str],
+    ):
+        if hedged_return_xcat is not None:
+            if isinstance(hedged_return_xcat, str):
+                hedged_return_xcat = [hedged_return_xcat]
+            if not isinstance(hedged_return_xcat, list):
+                raise TypeError("hedged_return_xcat must be a string or a list")
+            if not all(isinstance(xcat, str) for xcat in hedged_return_xcat):
+                raise TypeError("All elements in hedged_return_xcat, when a list, must be strings.")
+            
+    def get_betas(
+        self,
+        beta_xcat: Optional[Union[str, List]] = None,
+    ):
+        """
+        Returns a dataframe of estimated betas derived from beta estimation processes
+        held within the class instance.
+
+        :param <Optional[Union[str, List]]> beta_xcat: Category name or list of category names
+            for the panel of estimated contract betas. If None, information from all 
+            beta estimation processes held within the class instance is returned. Default is None.
+
+        :return: <pd.DataFrame> A dataframe of estimated betas derived from beta estimation
+            processes.
+        """
+        # Checks
+        self._checks_get_betas(beta_xcat=beta_xcat)
+
+        if beta_xcat is None:
+            return self.beta_df
+        else:
+            return self.beta_df[self.beta_df.xcat.isin(beta_xcat)]
+        
+    def _checks_get_betas(
+        self,
+        beta_xcat: Optional[Union[str, List]],
+    ):
+        if beta_xcat is not None:
+            if isinstance(beta_xcat, str):
+                beta_xcat = [beta_xcat]
+            if not isinstance(beta_xcat, list):
+                raise TypeError("beta_xcat must be a string or a list")
+            if not all(isinstance(xcat, str) for xcat in beta_xcat):
+                raise TypeError("All elements in beta_xcat, when a list, must be strings.")
 
 if __name__ == "__main__":
     import os 
