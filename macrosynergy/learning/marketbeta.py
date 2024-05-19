@@ -548,27 +548,12 @@ class BetaEstimator:
                 continue
 
             # If a model was selected, extract the score, name, estimator and optimal hyperparameters
-            if use_variance_correction:
-                cv_results = search_object.cv_results_
-                mean_scores = cv_results["mean_test_score"]
-                std_scores = cv_results["std_test_score"]
-                normalized_means = (mean_scores - np.min(mean_scores)) / (np.max(mean_scores) - np.min(mean_scores))
-                normalized_stds = (std_scores - np.min(std_scores)) / (np.max(std_scores) - np.min(std_scores))
-                adjusted_scores = (normalized_means - normalized_stds) / 2
-                
-                if np.isnan(adjusted_scores).all():
-                    continue
-                else:
-                    best_index = np.argmax(adjusted_scores)
-                    best_params = cv_results["params"][best_index]
-
-            else:
-                score = search_object.best_score_
-                if score > optim_score:
-                    optim_name = model_name
-                    optim_model = search_object.best_estimator_
-                    optim_score = score
-                    optim_params = search_object.best_params_
+            score = search_object.best_score_
+            if score > optim_score:
+                optim_name = model_name
+                optim_model = search_object.best_estimator_
+                optim_score = score
+                optim_params = search_object.best_params_
 
         # Get beta estimates for each cross-section
         # These are stored in estimator.coefs_ as a dictionary {cross-section: beta}
