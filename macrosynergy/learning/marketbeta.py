@@ -148,6 +148,7 @@ class BetaEstimator:
         min_cids,
         min_periods,
         est_freq,
+        use_variance_correction,
         initial_nsplits,
         threshold_ndates,
         hparam_type,
@@ -239,6 +240,10 @@ class BetaEstimator:
         if est_freq not in ["D", "W", "M", "Q"]:
             raise ValueError("est_freq must be one of 'D', 'W', 'M' or 'Q'.")
         
+        # use_variance_correction checks
+        if not isinstance(use_variance_correction, bool):
+            raise TypeError("use_variance_correction must be a boolean.")
+
         # initial_nsplits checks
         if initial_nsplits is not None:
             if not isinstance(initial_nsplits, int):
@@ -302,6 +307,7 @@ class BetaEstimator:
         min_cids: int = 1,
         min_periods: int = 252,
         est_freq: str = "D",
+        use_variance_correction: bool = False,
         initial_nsplits: Optional[Union[int, np.int_]] = None, # TODO incorporate this logic later
         threshold_ndates: Optional[Union[int, np.int_]] = None, # TODO incorporate this logic later
         hparam_type: str = "grid",
@@ -343,6 +349,9 @@ class BetaEstimator:
             panel expands to encapsulate these samples, meaning that this parameter also determines
             re-estimation frequency. This parameter can accept any of the strings "D" (daily), 
             "W" (weekly), "M" (monthly) or "Q" (quarterly). Default is "M".
+        :param <bool> use_variance_correction: Boolean indicating whether or not to apply a
+            correction to cross-validation scores to account for the variation in scores across 
+            splits. Default is False.
         :param <int> initial_nsplits: Number of splits to be used in cross-validation for the initial
             training set. If None, the number of splits is defined by the inner_splitter. Default is None.
         :param <int> threshold_ndates: Number of business days to pass before the number of cross-validation
@@ -367,6 +376,7 @@ class BetaEstimator:
             min_cids=min_cids,
             min_periods=min_periods,
             est_freq=est_freq,
+            use_variance_correction=use_variance_correction,
             initial_nsplits=initial_nsplits,
             threshold_ndates=threshold_ndates,
             hparam_type=hparam_type,
@@ -416,6 +426,7 @@ class BetaEstimator:
                 hparam_grid=hparam_grid,
                 hparam_type=hparam_type,
                 n_iter=n_iter,
+                use_variance_correction=use_variance_correction,
                 initial_nsplits=initial_nsplits,
                 nsplits_add=(
                     np.floor(idx / threshold_ndates)
@@ -476,6 +487,7 @@ class BetaEstimator:
         hparam_grid: Dict[str, Dict[str, List]],
         hparam_type: str = "grid",
         n_iter: int = 10,
+        use_variance_correction: bool = False,
         initial_nsplits: Optional[Union[int, np.int_]] = None,
         nsplits_add: Optional[Union[int, np.int_]] = None,
         n_jobs_inner: int = 1,
@@ -536,12 +548,27 @@ class BetaEstimator:
                 continue
 
             # If a model was selected, extract the score, name, estimator and optimal hyperparameters
-            score = search_object.best_score_
-            if score > optim_score:
-                optim_name = model_name
-                optim_model = search_object.best_estimator_
-                optim_score = score
-                optim_params = search_object.best_params_
+            if use_variance_correction:
+                cv_results = search_object.cv_results_
+                mean_scores = cv_results["mean_test_score"]
+                std_scores = cv_results["std_test_score"]
+                normalized_means = (mean_scores - np.min(mean_scores)) / (np.max(mean_scores) - np.min(mean_scores))
+                normalized_stds = (std_scores - np.min(std_scores)) / (np.max(std_scores) - np.min(std_scores))
+                adjusted_scores = (normalized_means - normalized_stds) / 2
+                
+                if np.isnan(adjusted_scores).all():
+                    continue
+                else:
+                    best_index = np.argmax(adjusted_scores)
+                    best_params = cv_results["params"][best_index]
+
+            else:
+                score = search_object.best_score_
+                if score > optim_score:
+                    optim_name = model_name
+                    optim_model = search_object.best_estimator_
+                    optim_score = score
+                    optim_params = search_object.best_params_
 
         # Get beta estimates for each cross-section
         # These are stored in estimator.coefs_ as a dictionary {cross-section: beta}
@@ -845,7 +872,7 @@ if __name__ == "__main__":
         min_cids=4,
         min_periods=21 * 3,
         est_freq="Q",
-        n_jobs_outer=-1,
+        n_jobs_outer=1,
         n_jobs_inner=1,
     )
 
