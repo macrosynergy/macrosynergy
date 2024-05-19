@@ -1014,8 +1014,8 @@ class SULADRegression(BaseEstimator, RegressorMixin):
         )
 
         for section in cross_sections:
-            X_section = X.xs(section, level=0)
-            y_section = y.xs(section, level=0)
+            X_section = X_section[X_section.index.get_level_values(0) == section]
+            y_section = y_section[y_section.index.get_level_values(0) == section]
             # Check if there are enough samples to fit a model
             unique_dates = sorted(X_section.index.unique())
             num_dates = len(unique_dates)
