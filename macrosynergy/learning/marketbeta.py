@@ -583,22 +583,31 @@ class BetaEstimator:
                     optim_score = score
                     optim_params = search_object.best_params_
 
-        # Get beta estimates for each cross-section
-        # These are stored in estimator.coefs_ as a dictionary {cross-section: beta}
-        betas = optim_model.coefs_
+        # Handle case where no model was chosen
+        if optim_model is None:
+            warnings.warn(
+                f"No model was selected at time {training_time}. Hence, no beta can be estimated."
+            )
+            models_list = [training_time, beta_xcat, "None", {}, inner_splitter.n_splits]
+            beta_list = []
+            hedged_returns = []
+        else:
+            # Get beta estimates for each cross-section
+            # These are stored in estimator.coefs_ as a dictionary {cross-section: beta}
+            betas = optim_model.coefs_
 
-        # Get OOS hedged returns
-        # This will be a List of lists, with inner lists recording the hedged return
-        # for a given cross-section and a given OOS timestamp.
-        hedged_returns: List = self._calculate_hedged_returns(betas, X_test_i, y_test_i, hedged_return_xcat)
+            # Get OOS hedged returns
+            # This will be a List of lists, with inner lists recording the hedged return
+            # for a given cross-section and a given OOS timestamp.
+            hedged_returns: List = self._calculate_hedged_returns(betas, X_test_i, y_test_i, hedged_return_xcat)
 
-        # Compute betas 
-        beta_list = [[cid.split("v")[0], training_time, beta_xcat, beta] for cid, beta in betas.items()]
+            # Compute betas 
+            beta_list = [[cid.split("v")[0], training_time, beta_xcat, beta] for cid, beta in betas.items()]
 
-        # Store chosen models and hyperparameters
-        models_list = [training_time, beta_xcat, optim_name, optim_params, inner_splitter.n_splits]
+            # Store chosen models and hyperparameters
+            models_list = [training_time, beta_xcat, optim_name, optim_params, inner_splitter.n_splits]
 
-        return beta_list, hedged_returns, models_list
+            return beta_list, hedged_returns, models_list
 
     def _calculate_hedged_returns(
         self,
