@@ -312,7 +312,7 @@ class SignalReturnRelations:
         elif isinstance(sigs, str):
                 if sigs not in self.sigs and sigs + "_NEG" in self.sigs:
                     sigs = sigs + "_NEG"
-        if isinstance(xcats, list):
+        if isinstance(sigs, list):
             for sig in sigs:
                 if sig not in self.sigs and sig + "_NEG" in self.sigs:
                     sigs[sigs.index(sig)] = sig + "_NEG"
@@ -435,7 +435,7 @@ class SignalReturnRelations:
             elif isinstance(sigs, str):
                 if sigs not in self.sigs and sigs + "_NEG" in self.sigs:
                     sigs = sigs + "_NEG"
-            if isinstance(xcats, list):
+            if isinstance(sigs, list):
                 for sig in sigs:
                     if sig not in self.sigs and sig + "_NEG" in self.sigs:
                         sigs[sigs.index(sig)] = sig + "_NEG"
