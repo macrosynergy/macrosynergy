@@ -454,8 +454,10 @@ class BetaEstimator:
         )
 
         for beta_data, hedged_data, model_data in results:
-            beta_list.extend(beta_data)
-            hedged_return_list.extend(hedged_data)
+            if beta_list != []:
+                beta_list.extend(beta_data)
+            if hedged_return_list != []:
+                hedged_return_list.extend(hedged_data)
             chosen_models.append(model_data)
 
         for cid, real_date, xcat, value in beta_list:
