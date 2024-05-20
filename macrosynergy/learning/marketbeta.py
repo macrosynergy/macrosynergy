@@ -71,14 +71,26 @@ class BetaEstimator:
         dfx = pd.DataFrame(columns=["real_date", "cid", "xcat", "value"])
 
         for cid in self.cids:
+            # Extract cross-section contract returns
             dfa = reduce_df(
                 df=df,
-                xcats=[self.benchmark_xcat, self.xcat],
-                cids=[self.benchmark_cid, cid],
+                xcats=[self.xcat],
+                cids=[cid],
             )
-            dfa["cid"] = f"{cid}v{self.benchmark_cid}"
+            # Extract benchmark returns
+            dfb = reduce_df(
+                df=df,
+                xcats=[self.benchmark_xcat],
+                cids=[self.benchmark_cid],
+            )
 
-            dfx = update_df(dfx, dfa)
+            # Combine contract and benchmark returns and rename cross-section identifier
+            # in order to match the benchmark return with each cross section in a pseudo
+            # panel
+            df_cid = pd.concat([dfa, dfb], axis=0)
+            df_cid["cid"] = f"{cid}v{self.benchmark_cid}"
+
+            dfx = update_df(dfx, df_cid)
 
         # Create long format dataframes
 
@@ -725,7 +737,7 @@ class BetaEstimator:
 
     def get_hedged_returns(
         self,
-        hedged_return_xcat: Optional[Union[str, List]],
+        hedged_return_xcat: Optional[Union[str, List]] = None,
     ):
         """
         Returns a dataframe of out-of-sample hedged returns derived from beta estimation processes
@@ -795,16 +807,9 @@ class BetaEstimator:
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
-    
-    from sklearn.base import RegressorMixin
-    from sklearn.ensemble import VotingRegressor
-    from sklearn.linear_model import LinearRegression 
 
-    from collections import defaultdict
-    import scipy.stats as stats
-
-    from macrosynergy.learning.metrics import neg_mean_abs_corr
-    from macrosynergy.learning.predictors import SULinearRegression
+    from metrics import neg_mean_abs_corr
+    from predictors import LinearRegressionSystem
     
     # Simulate a panel dataset of benchmark and contract returns
     cids = ["AUD", "CAD", "GBP", "USD"]
@@ -836,7 +841,7 @@ if __name__ == "__main__":
 
     # Define the models and grids to search over
     models = {
-        "LR_ROLL": SULinearRegression(min_xs_samples=21*3),
+        "LR_ROLL": LinearRegressionSystem(min_xs_samples=21*3),
     }
     hparam_grid = {
         "LR_ROLL": [
