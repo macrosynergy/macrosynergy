@@ -591,8 +591,8 @@ class BetaEstimator:
                 f"No model was selected at time {training_time}. Hence, no beta can be estimated."
             )
             models_list = [training_time, beta_xcat, "None", {}, inner_splitter.n_splits]
-            beta_list = []
-            hedged_returns = []
+            beta_list = [[cid.split("v")[0], training_time, beta_xcat, np.nan] for cid in self.cids]
+            hedged_returns = [[cid.split("v")[0], training_time] + [hedged_return_xcat] + [np.nan] for cid in self.cids]
         else:
             # Get beta estimates for each cross-section
             # These are stored in estimator.coefs_ as a dictionary {cross-section: beta}
