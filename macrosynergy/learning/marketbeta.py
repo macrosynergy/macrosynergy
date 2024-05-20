@@ -609,7 +609,7 @@ class BetaEstimator:
             # Store chosen models and hyperparameters
             models_list = [training_time, beta_xcat, optim_name, optim_params, inner_splitter.n_splits]
 
-            return beta_list, hedged_returns, models_list
+        return beta_list, hedged_returns, models_list
 
     def _calculate_hedged_returns(
         self,
