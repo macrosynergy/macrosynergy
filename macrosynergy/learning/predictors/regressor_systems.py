@@ -44,7 +44,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         """
         # TODO: requirement checks
         # Adjust min_xs_samples based on the frequency of the data
-        min_xs_samples, roll = self.select_data_freq()
+        min_xs_samples = self.select_data_freq()
 
         cross_sections = X.index.get_level_values(0).unique()
 
@@ -52,8 +52,8 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         y = self._downsample_by_data_freq(y)
 
         for section in cross_sections:
-            X_section = X.xs(section, level=0)
-            y_section = y.xs(section, level=0)
+            X_section = X[X.index.get_level_values(0) == section]
+            y_section = y[y.index.get_level_values(0) == section]
             # Check if there are enough samples to fit a model
             unique_dates = sorted(X_section.index.unique())
             num_dates = len(unique_dates)
@@ -63,7 +63,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             # If a roll is specified, then adjust the dates accordingly
             if self.roll:
                 X_section, y_section = self.roll_dates(
-                    roll, X_section, y_section, unique_dates
+                    self.roll, X_section, y_section, unique_dates
                 )
             # Fit the model
             model = self.model_partial()
@@ -121,26 +121,17 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         return X_section, y_section
 
     def select_data_freq(self):
-        roll = None
         if self.data_freq == "D":
             min_xs_samples = self.min_xs_samples
-            if self.roll:
-                roll = self.roll
         elif self.data_freq == "W":
             min_xs_samples = self.min_xs_samples // 5
-            if self.roll:
-                roll = self.roll // 5
         elif self.data_freq == "M":
             min_xs_samples = self.min_xs_samples // 21
-            if self.roll:
-                roll = self.roll // 21
         elif self.data_freq == "Q":
             min_xs_samples = self.min_xs_samples // 63
-            if self.roll:
-                roll = self.roll // 63
         else:
             raise ValueError("Invalid data frequency. Accepted values are 'D', 'W', 'M' and 'Q'.")
-        return min_xs_samples, roll
+        return min_xs_samples
 
     @abstractmethod
     def store_model_info(self, section, model):
@@ -171,7 +162,9 @@ class LinearRegressionSystem(BaseRegressionSystem):
         sensible inference.
 
         :param <int> roll: The lookback of the rolling window for the regression. If None,
-            the entire cross-sectional history is used for each regression.
+            the entire cross-sectional history is used for each regression. This should 
+            be specified in units of the data frequency, possibly adjusted by the
+            data_freq attribute.
         :param <bool> fit_intercept: Boolean indicating whether or not to fit intercepts
             for each regression.
         :param <bool> positive: Boolean indicating whether or not to enforce positive
@@ -200,7 +193,7 @@ class LinearRegressionSystem(BaseRegressionSystem):
         )
         super().__init__(
             model_partial=model,
-            roll=roll,
+            roll=self.roll,
             data_freq=data_freq,
             min_xs_samples=min_xs_samples,
         )
