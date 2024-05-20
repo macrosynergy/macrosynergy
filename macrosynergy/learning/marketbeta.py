@@ -16,7 +16,7 @@ from macrosynergy.management.utils.df_utils import (
     update_df,
 )
 
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, clone
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 
@@ -162,7 +162,7 @@ class BetaEstimator:
         est_freq,
         use_variance_correction,
         initial_nsplits,
-        threshold_ndates,
+        threshold_nperiods,
         hparam_type,
         n_iter,
         n_jobs_outer,
@@ -263,12 +263,12 @@ class BetaEstimator:
             if initial_nsplits < 2:
                 raise ValueError("initial_nsplits must be greater than 1.")
             
-        # threshold_ndates checks
-        if threshold_ndates is not None:
-            if not isinstance(threshold_ndates, int):
-                raise TypeError("threshold_ndates must be an integer.")
-            if threshold_ndates < 1:
-                raise ValueError("threshold_ndates must be greater than 0.")
+        # threshold_nperiods checks
+        if threshold_nperiods is not None:
+            if not isinstance(threshold_nperiods, int):
+                raise TypeError("threshold_nperiods must be an integer.")
+            if threshold_nperiods < 1:
+                raise ValueError("threshold_nperiods must be greater than 0.")
             
         # hparam_type checks
         if not isinstance(hparam_type, str):
@@ -321,7 +321,7 @@ class BetaEstimator:
         est_freq: str = "D",
         use_variance_correction: bool = False,
         initial_nsplits: Optional[Union[int, np.int_]] = None, # TODO incorporate this logic later
-        threshold_ndates: Optional[Union[int, np.int_]] = None, # TODO incorporate this logic later
+        threshold_nperiods: Optional[Union[int, np.int_]] = None, # TODO incorporate this logic later
         hparam_type: str = "grid",
         n_iter: Optional[int] = 10,
         n_jobs_outer: Optional[int] = -1,
@@ -366,8 +366,8 @@ class BetaEstimator:
             splits. Default is False.
         :param <int> initial_nsplits: Number of splits to be used in cross-validation for the initial
             training set. If None, the number of splits is defined by the inner_splitter. Default is None.
-        :param <int> threshold_ndates: Number of business days to pass before the number of cross-validation
-            splits increases by one. Default is None.
+        :param <int> threshold_nperiods: Number of periods, in units of the specified "est_freq"
+            to pass before the number of cross-validation splits increases by one. Default is None.
         :param <str> hparam_type: String indicating the type of hyperparameter search. This can be 
             `grid`, `prior` or `bayes`. Currently the `bayes` option produces a NotImplementedError. 
             Default is "grid".
@@ -390,7 +390,7 @@ class BetaEstimator:
             est_freq=est_freq,
             use_variance_correction=use_variance_correction,
             initial_nsplits=initial_nsplits,
-            threshold_ndates=threshold_ndates,
+            threshold_nperiods=threshold_nperiods,
             hparam_type=hparam_type,
             n_iter=n_iter,
             n_jobs_outer=n_jobs_outer,
@@ -441,7 +441,7 @@ class BetaEstimator:
                 use_variance_correction=use_variance_correction,
                 initial_nsplits=initial_nsplits,
                 nsplits_add=(
-                    np.floor(idx / threshold_ndates)
+                    np.floor(idx / threshold_nperiods)
                     if initial_nsplits
                     else None
                 ),
@@ -560,12 +560,28 @@ class BetaEstimator:
                 continue
 
             # If a model was selected, extract the score, name, estimator and optimal hyperparameters
-            score = search_object.best_score_
-            if score > optim_score:
-                optim_name = model_name
-                optim_model = search_object.best_estimator_
-                optim_score = score
-                optim_params = search_object.best_params_
+            if use_variance_correction:
+                # Minimise scaled mean and standard deviation scores jointly
+                cv_scores = search_object.cv_results_
+                mean_scores = cv_scores["mean_test_score"]
+                std_scores = cv_scores["std_test_score"]
+                scaled_mean_scores = (mean_scores - np.nanmin(mean_scores)) / (np.nanmax(mean_scores) - np.nanmin(mean_scores))
+                scaled_std_scores = (std_scores - np.nanmin(std_scores)) / (np.nanmax(std_scores) - np.nanmin(std_scores))
+                equalized_scores = (scaled_mean_scores - scaled_std_scores) / 2
+                best_index = np.nanargmax(equalized_scores)
+                score = mean_scores[best_index]
+                if score > optim_score:
+                    optim_name = model_name
+                    optim_score = score
+                    optim_params = cv_scores["params"][best_index]
+                    optim_model = clone(model).set_params(**clone(optim_params, safe=False))
+            else:
+                score = search_object.best_score_
+                if score > optim_score:
+                    optim_name = model_name
+                    optim_model = search_object.best_estimator_
+                    optim_score = score
+                    optim_params = search_object.best_params_
 
         # Get beta estimates for each cross-section
         # These are stored in estimator.coefs_ as a dictionary {cross-section: beta}
@@ -862,6 +878,8 @@ if __name__ == "__main__":
         min_cids=4,
         min_periods=21 * 3,
         est_freq="Q",
+        initial_nsplits=5,
+        threshold_nperiods=4,
         n_jobs_outer=1,
         n_jobs_inner=1,
     )
