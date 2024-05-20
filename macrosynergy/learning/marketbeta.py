@@ -454,9 +454,9 @@ class BetaEstimator:
         )
 
         for beta_data, hedged_data, model_data in results:
-            if beta_list != []:
+            if beta_data != []:
                 beta_list.extend(beta_data)
-            if hedged_return_list != []:
+            if hedged_data != []:
                 hedged_return_list.extend(hedged_data)
             chosen_models.append(model_data)
 
