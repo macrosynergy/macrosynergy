@@ -1,3 +1,5 @@
+from . import predictors
+
 from .panel_time_series_split import (
     ExpandingKFoldPanelSplit,
     RollingKFoldPanelSplit,
@@ -35,9 +37,10 @@ from .predictors import (
     SignWeightedLADRegressor,
     TimeWeightedLADRegressor,
     LADRegressor,
-    SURidgeRegression,
-    SULADRegression,
-    SULinearRegression,
+    BaseRegressionSystem,
+    LADRegressionSystem,
+    RidgeRegressionSystem,
+    LinearRegressionSystem,
 )
 
 from .marketbeta import BetaEstimator
@@ -51,8 +54,8 @@ __all__ = [
     "BasePanelSplit",
     # cv_tools
     "panel_cv_scores",
-    # transformers   
-    "FeatureAverager",     
+    # transformers
+    "FeatureAverager",
     "LassoSelector",
     "MapSelector",
     "ENetSelector",
@@ -72,13 +75,17 @@ __all__ = [
     "LADRegressor",
     "NaivePredictor",
     "SignWeightedLADRegressor",
-    "SULADRegression",
-    "SULinearRegression",
-    "SURidgeRegression",
+    "BaseWeightedRegressor",
     "TimeWeightedLADRegressor",
     "SignWeightedLinearRegression",
     "TimeWeightedLinearRegression",
     # market beta estimation
     "BetaEstimator",
+    "WeightedLinearRegression",
+    "WeightedLADRegressor",
+    # regression system
+    "BaseRegressionSystem",
+    "LADRegressionSystem",
+    "RidgeRegressionSystem",
+    "LinearRegressionSystem",
 ]
- 

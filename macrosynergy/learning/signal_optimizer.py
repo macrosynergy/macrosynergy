@@ -28,6 +28,7 @@ from macrosynergy.learning.panel_time_series_split import (
     ExpandingKFoldPanelSplit,
 )
 
+from macrosynergy.learning.predictors import LADRegressionSystem
 from macrosynergy.management.validation import _validate_Xy_learning
 
 
@@ -416,7 +417,7 @@ class SignalOptimizer:
         #     optimization algorithm over the trading history.
         train_test_splits = list(outer_splitter.split(X=X, y=y))
 
-        results = Parallel(n_jobs=n_jobs)(
+        results = Parallel(n_jobs=n_jobs, return_as="generator")(
             delayed(self._worker)(
                 train_idx=train_idx,
                 test_idx=test_idx,
@@ -1805,7 +1806,7 @@ if __name__ == "__main__":
         "OLS": Pipeline(
             [
                 # ("selector", MapSelector(threshold=0.2)),
-                ("model", LinearRegression(fit_intercept=True)),
+                ("model", LADRegressionSystem(fit_intercept=True)),
             ]
         ),
     }
