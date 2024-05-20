@@ -178,7 +178,7 @@ class LinearRegressionSystem(BaseRegressionSystem):
             coefficients for each regression.
         :param <str> data_freq: Training set data frequency. This is primarily
             to be used within the context of market beta estimation in the
-            MarketBetaEstimator class in `macrosynergy.learning`. Accpeted strings
+            MarketBetaEstimator class in `macrosynergy.learning`. Accepted strings
             are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
             Default is 'D'.
         :param <int> min_xs_samples: The minimum number of samples required in each
@@ -198,7 +198,6 @@ class LinearRegressionSystem(BaseRegressionSystem):
         model = partial(
             LinearRegression, fit_intercept=self.fit_intercept, positive=self.positive
         )
-        LinearRegression(fit_intercept=self.fit_intercept, positive=self.positive)
         super().__init__(
             model_partial=model,
             roll=roll,

@@ -80,5 +80,5 @@ class TestBetaEstimator(unittest.TestCase):
         X = dfx_long[self.benchmark_return.split("_", maxsplit=1)[1]]
         y = dfx_long[self.xcat]
 
-        #assert_series_equal(be.X, dfx_long[self.benchmark_return.split("_", maxsplit=1)[1]])
-        #assert_series_equal(be.y, dfx_long[self.xcat])
+        assert_series_equal(be.X, dfx_long[self.benchmark_return.split("_", maxsplit=1)[1]])
+        assert_series_equal(be.y, dfx_long[self.xcat])
