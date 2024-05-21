@@ -432,11 +432,13 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         Initialize CorrelationVolatilitySystem class. 
 
         :param <int> correlation_lookback: The lookback period for the correlation
-            calculation. Default is 252.
+            calculation. This should be in units of the dataset frequency, possibly
+            relating to data_freq. Default is 252.
         :param <str> correlation_type: The type of correlation to be calculated.
             Accepted values are 'pearson', 'kendall' and 'spearman'. Default is 'pearson'.
         :param <int> volatility_lookback: The lookback period for the volatility
-            calculation. Default is 21.
+            calculation. This should be in units of the dataset frequency,
+            possibly relating to data_freq. Default is 21.
         :param <str> volatility_window_type: The type of window to use for the volatility
             calculation. Accepted values are 'rolling' and 'exponential'. Default is 'rolling'.
         :param <str> data_freq: Training set data frequency for downsampling. Default is 'D'.
@@ -486,21 +488,24 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
 
             # Estimate local standard deviations of the benchmark and contract return
             if self.volatility_window_type == "rolling":
-                X_section_std = X_section.rolling(window=self.volatility_lookback).std()
-                y_section_std = y_section.rolling(window=self.volatility_lookback).std()
+                X_section_std = X_section.rolling(window=self.volatility_lookback).std().iloc[-1,0]
+                y_section_std = y_section.rolling(window=self.volatility_lookback).std().iloc[-1]
             elif self.volatility_window_type == "exponential":
-                X_section_std = X_section.ewm(span=self.volatility_lookback).std()
-                y_section_std = y_section.ewm(span=self.volatility_lookback).std()
+                X_section_std = X_section.ewm(span=self.volatility_lookback).std().iloc[-1,0]
+                y_section_std = y_section.ewm(span=self.volatility_lookback).std().iloc[-1]
             
             # Estimate local correlation between the benchmark and contract return
-            corr = X_section.corrwith(y_section,method=self.correlation_type)
+            corr = X_section.corrwith(y_section,method=self.correlation_type).iloc[-1]
 
             # Get beta estimate and store it
             beta = corr * (y_section_std / X_section_std)
-            self.coefs_[section] = beta
+            self.store_model_info(section, beta)
 
         return self
     
+    def store_model_info(self, section, beta):
+        self.coefs_[section] = beta
+
     def predict(
         self,
         X: pd.DataFrame,
@@ -530,7 +535,7 @@ if __name__ == "__main__":
     np.random.seed(1)
 
     cids = ["AUD", "CAD", "GBP", "USD"]
-    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    xcats = ["XR", "BENCH_XR", "CRY", "GROWTH", "INFL"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
 
     """Example: Unbalanced panel """
@@ -545,6 +550,7 @@ if __name__ == "__main__":
 
     df_xcats = pd.DataFrame(index=xcats, columns=cols)
     df_xcats.loc["XR"] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["BENCH_XR"] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
     df_xcats.loc["CRY"] = ["2010-01-01", "2020-12-31", 1, 2, 0.95, 1]
     df_xcats.loc["GROWTH"] = ["2010-01-01", "2020-12-31", 1, 2, 0.9, 1]
     df_xcats.loc["INFL"] = ["2010-01-01", "2020-12-31", 1, 2, 0.8, 0.5]
@@ -555,7 +561,11 @@ if __name__ == "__main__":
     dfd = msm.reduce_df(df=dfd, cids=cids, xcats=xcats, blacklist=black)
 
     dfd = dfd.pivot(index=["cid", "real_date"], columns="xcat", values="value")
-    X = dfd.drop(columns=["XR"])
-    y = dfd["XR"]
+    X1 = dfd.drop(columns=["XR", "BENCH_XR"])
+    y1 = dfd["XR"]
     
-    LinearRegressionSystem(data_freq="W").fit(X, y)
+    X2 = pd.DataFrame(dfd["BENCH_XR"])
+    y2 = dfd["XR"]
+
+    cv = CorrelationVolatilitySystem().fit(X2, y2)
+    lr = LinearRegressionSystem(data_freq="W").fit(X1, y1)
