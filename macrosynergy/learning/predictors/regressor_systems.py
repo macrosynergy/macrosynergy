@@ -284,7 +284,7 @@ class RidgeRegressionSystem(BaseRegressionSystem):
         data_freq: str = "D",
         min_xs_samples: int = 2,
         tol: float = 1e-4,
-        solver: str = "cholesky",
+        solver: str = "lsqr",
     ):
         """
         Initializes a rolling seemingly unrelated ridge regression model. Since
@@ -411,7 +411,115 @@ class RidgeRegressionSystem(BaseRegressionSystem):
             self.coefs_[section] = model.coef_[0]
             self.intercepts_[section] = model.intercept_
 
+class CorrelationVolatilitySystem(BaseRegressionSystem):
+    """
+    Custom scikit-learn predictor class written specifically to estimate betas for 
+    financial contracts with respect to a benchmark return series. Since an estimated beta
+    can be decomposed into correlation and volatility components, this class aims to estimate
+    these separately, allowing for different lookbacks and weighting schemes for both
+    components. 
+    """
+    def __init__(
+        self,
+        correlation_lookback: int = 252,
+        correlation_type: str = "pearson",
+        volatility_lookback: int = 21,
+        volatility_window_type: str = "rolling",
+        data_freq: str = "D",
+        min_xs_samples: int = 2,
+    ):
+        """
+        Initialize CorrelationVolatilitySystem class. 
 
+        :param <int> correlation_lookback: The lookback period for the correlation
+            calculation. Default is 252.
+        :param <str> correlation_type: The type of correlation to be calculated.
+            Accepted values are 'pearson', 'kendall' and 'spearman'. Default is 'pearson'.
+        :param <int> volatility_lookback: The lookback period for the volatility
+            calculation. Default is 21.
+        :param <str> volatility_window_type: The type of window to use for the volatility
+            calculation. Accepted values are 'rolling' and 'exponential'. Default is 'rolling'.
+        :param <str> data_freq: Training set data frequency for downsampling. Default is 'D'.
+        :param <int> min_xs_samples: The minimum number of samples required in each
+            cross-section training set for a regression model to be fitted.
+        """
+        # TODO: requirement checks
+        self.correlation_lookback = correlation_lookback
+        self.correlation_type = correlation_type
+        self.volatility_lookback = volatility_lookback
+        self.volatility_window_type = volatility_window_type
+        self.data_freq = data_freq
+        self.min_xs_samples = min_xs_samples
+
+        # Create data structures to store the estimated betas for each cross-section
+        self.coefs_ = {}
+
+    def fit(
+        self,
+        X: pd.DataFrame,
+        y: Union[pd.DataFrame, pd.Series],
+    ):
+        """
+        Fit method to determine a beta for each available cross-section, by separation of 
+        correlations and variances, subject to cross-sectional data availability. 
+        
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+        """
+        min_xs_samples = self.select_data_freq()
+
+        cross_sections = X.index.get_level_values(0).unique()
+
+        X = self._downsample_by_data_freq(X)
+        y = self._downsample_by_data_freq(y)
+
+        for section in cross_sections:
+            X_section = X[X.index.get_level_values(0) == section]
+            y_section = y[y.index.get_level_values(0) == section]
+            # Check if there are enough samples to fit a model
+            unique_dates = sorted(X_section.index.unique())
+            num_dates = len(unique_dates)
+            if num_dates < min_xs_samples:
+                # Skip to the next cross-section
+                continue
+
+            # Estimate local standard deviations of the benchmark and contract return
+            if self.volatility_window_type == "rolling":
+                X_section_std = X_section.rolling(window=self.volatility_lookback).std()
+                y_section_std = y_section.rolling(window=self.volatility_lookback).std()
+            elif self.volatility_window_type == "exponential":
+                X_section_std = X_section.ewm(span=self.volatility_lookback).std()
+                y_section_std = y_section.ewm(span=self.volatility_lookback).std()
+            
+            # Estimate local correlation between the benchmark and contract return
+            corr = X_section.corrwith(y_section,method=self.correlation_type)
+
+            # Get beta estimate and store it
+            beta = corr * (y_section_std / X_section_std)
+            self.coefs_[section] = beta
+
+        return self
+    
+    def predict(
+        self,
+        X: pd.DataFrame,
+    ):
+        """
+        Predict method to make a naive zero prediction for each cross-section. This is
+        because the only use of this class is to estimate betas, which were computed 
+        during the fit method, whose quality can be assessed by a custom scikit-learn metric
+        without the need for a predict method.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+
+        :return <pd.Series>: Pandas series of zero predictions, multi-indexed by cross-section
+            and date.
+        """
+        predictions = pd.Series(index=X.index, data=0)
+
+        return predictions
+    
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from sklearn.linear_model import LinearRegression
