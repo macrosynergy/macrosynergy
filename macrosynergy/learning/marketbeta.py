@@ -2,15 +2,15 @@ import os
 import numpy as np
 import pandas as pd
 
-from macrosynergy.learning.panel_time_series_split import (
+from macrosynergy.learning import (
     ExpandingFrequencyPanelSplit,
     ExpandingKFoldPanelSplit,
     BasePanelSplit,
+    neg_mean_abs_corr
 )
 
-from macrosynergy.learning.metrics import neg_mean_abs_corr
 
-from macrosynergy.management.utils.df_utils import (
+from macrosynergy.management import (
     reduce_df,
     categories_df,
     update_df,
@@ -562,28 +562,15 @@ class BetaEstimator:
                 continue
 
             # If a model was selected, extract the score, name, estimator and optimal hyperparameters
-            if use_variance_correction:
-                # Minimise scaled mean and standard deviation scores jointly
-                cv_scores = search_object.cv_results_
-                mean_scores = cv_scores["mean_test_score"]
-                std_scores = cv_scores["std_test_score"]
-                scaled_mean_scores = (mean_scores - np.nanmin(mean_scores)) / (np.nanmax(mean_scores) - np.nanmin(mean_scores))
-                scaled_std_scores = (std_scores - np.nanmin(std_scores)) / (np.nanmax(std_scores) - np.nanmin(std_scores))
-                equalized_scores = (scaled_mean_scores - scaled_std_scores) / 2
-                best_index = np.nanargmax(equalized_scores)
-                score = mean_scores[best_index]
-                if score > optim_score:
-                    optim_name = model_name
-                    optim_score = score
-                    optim_params = cv_scores["params"][best_index]
-                    optim_model = clone(model).set_params(**clone(optim_params, safe=False))
-            else:
-                score = search_object.best_score_
-                if score > optim_score:
-                    optim_name = model_name
-                    optim_model = search_object.best_estimator_
-                    optim_score = score
-                    optim_params = search_object.best_params_
+            optim_name, optim_model, optim_score, optim_params = self._determine_optimal_model(
+                model_name=model_name,
+                model=model,
+                search_object=search_object,
+                optim_score = optim_score,
+                optim_name=optim_name,
+                optim_model=optim_model,
+                use_variance_correction=use_variance_correction,
+            )
 
         # Handle case where no model was chosen
         if optim_model is None:
@@ -596,6 +583,7 @@ class BetaEstimator:
         else:
             # Get beta estimates for each cross-section
             # These are stored in estimator.coefs_ as a dictionary {cross-section: beta}
+            optim_model.fit(X_train_i, y_train_i)
             betas = optim_model.coefs_
 
             # Get OOS hedged returns
@@ -690,6 +678,65 @@ class BetaEstimator:
             sns.heatmap(binary_matrix, cmap="binary", cbar=False)
         plt.title(title)
         plt.show()
+
+    def _determine_optimal_model(
+        self,
+        model_name: str,
+        model: Union[BaseEstimator, Pipeline],
+        search_object: Union[GridSearchCV, RandomizedSearchCV],
+        optim_score: float,
+        optim_name: str,
+        optim_model: Union[BaseEstimator, Pipeline],
+        use_variance_correction: bool,
+    ):
+        """
+        Private method to determine an optimal model based on cross-validation scores
+        at any given estimation time. A given model, with associated model_name, is 
+        compared to the current optimal model. If the current model has a higher score
+        than the optimal model, the current model becomes the optimal model. The new
+        optimal score, model name, model and hyperparameters are returned.
+
+        :param <str> model_name: Name of the model being considered.
+        :param <Union[BaseEstimator, Pipeline]> model: Model being considered.
+        :param <Union[GridSearchCV, RandomizedSearchCV]> search_object: Search object
+            containing the results of the hyperparameter search.
+        :param <float> optim_score: Current optimal score.
+        :param <str> optim_name: Current optimal model name.
+        :param <Union[BaseEstimator, Pipeline]> optim_model: Current optimal model.
+        :param <bool> use_variance_correction: Boolean indicating whether or not to apply a
+            correction to cross-validation scores to account for the variation in scores across 
+            splits.
+
+        
+        """
+        cv_scores = pd.DataFrame(search_object.cv_results_)
+        splitscorecols = [col for col in cv_scores.columns if (("split" in col) and ("_test_score" in col))]
+        cv_scores = cv_scores[splitscorecols + ["params"]]
+        mean_scores = np.nanmean(cv_scores.iloc[:,:-1], axis=1)
+        std_scores = np.nanstd(cv_scores.iloc[:,:-1], axis=1)
+
+        if use_variance_correction:
+            # Select model that aims to jointly maximize the mean metric and minimize the
+            # standard deviation across splits. Equal weighting is placed on both.
+            scaled_mean_scores = (mean_scores - np.nanmin(mean_scores)) / (np.nanmax(mean_scores) - np.nanmin(mean_scores))
+            scaled_std_scores = (std_scores - np.nanmin(std_scores)) / (np.nanmax(std_scores) - np.nanmin(std_scores))
+            equalized_scores = (scaled_mean_scores - scaled_std_scores) / 2
+            best_index = np.nanargmax(equalized_scores)
+            score = equalized_scores[best_index]
+        else:
+            best_index = np.nanargmax(mean_scores)
+            score = mean_scores[best_index]
+
+        if score > optim_score:
+            optim_name = model_name
+            optim_score = score
+            optim_params = cv_scores["params"].values[best_index]
+            optim_model = clone(model).set_params(**clone(optim_params, safe=False))
+
+            return optim_name, optim_model, optim_score, optim_params
+        
+        else:
+            return optim_name, None, optim_score, None
 
     def _checks_models_heatmap(
         self,
@@ -889,9 +936,10 @@ if __name__ == "__main__":
         min_cids=4,
         min_periods=21 * 3,
         est_freq="Q",
+        use_variance_correction=True,
         initial_nsplits=5,
         threshold_nperiods=4,
-        n_jobs_outer=1,
+        n_jobs_outer=-1,
         n_jobs_inner=1,
     )
 
