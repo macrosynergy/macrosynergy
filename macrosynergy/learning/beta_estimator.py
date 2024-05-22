@@ -10,6 +10,9 @@ from joblib import Parallel, delayed
 from sklearn.base import BaseEstimator, clone
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
+from sklearn.ensemble import VotingRegressor
+
+from collections import defaultdict
 from tqdm.auto import tqdm
 #from tqdm import tqdm
 
@@ -208,13 +211,25 @@ class BetaEstimator:
             )
         if not all(isinstance(model_name, str) for model_name in models.keys()):
             raise TypeError("All keys in the models dictionary must be strings.")
-        if not all(hasattr(model, "coefs_") for model in models.values()):
-            raise ValueError(
-                "All models must be seemingly unrelated linear regressors consistent with"
-                "the scikit-learn API. This means that they must be scikit-learn compatible"
-                "regressors that have a 'coefs_' attribute storing the estimated betas for each"
-                "cross-section, as per the standard imposed by the macrosynergy package."
-            )
+        for model in models.values():
+            if isinstance(model, VotingRegressor):
+                for estimator in model.estimators:
+                    if not hasattr(estimator[1], "coefs_"):
+                        raise ValueError(
+                            "All models must be seemingly unrelated linear regressors consistent with "
+                            "the scikit-learn API. This means that they must be scikit-learn compatible "
+                            "regressors that have a 'coefs_' attribute storing the estimated betas for each "
+                            "cross-section, as per the standard imposed by the macrosynergy package. "
+                            "Please check that the voting regressor estimators have this attribute."
+                        )
+            else:
+                if not hasattr(model, "coefs_"):
+                    raise ValueError(
+                        "All models must be seemingly unrelated linear regressors consistent with "
+                        "the scikit-learn API. This means that they must be scikit-learn compatible "
+                        "regressors that have a 'coefs_' attribute storing the estimated betas for each "
+                        "cross-section, as per the standard imposed by the macrosynergy package."
+                    )
 
         # hparam_grid checks
         if not isinstance(hparam_grid, dict):
@@ -652,9 +667,20 @@ class BetaEstimator:
             ]
         else:
             # Get beta estimates for each cross-section
-            # These are stored in estimator.coefs_ as a dictionary {cross-section: beta}
             optim_model.fit(X_train_i, y_train_i)
-            betas = optim_model.coefs_
+            if isinstance(optim_model, VotingRegressor):
+                estimators = optim_model.estimators_
+                coefs_list = [est.coefs_ for est in estimators]
+                sum_dict = defaultdict(lambda: [0, 0])
+
+                for coefs in coefs_list:
+                    for key, value in coefs.items():
+                        sum_dict[key][0] += value
+                        sum_dict[key][1] += 1
+
+                betas = {key: sum / count for key, (sum, count) in sum_dict.items()}
+            else:
+                betas = optim_model.coefs_
 
             # Get OOS hedged returns
             # This will be a List of lists, with inner lists recording the hedged return
@@ -991,7 +1017,7 @@ class BetaEstimator:
 if __name__ == "__main__":
     from metrics import neg_mean_abs_corr
     from predictors import LinearRegressionSystem, CorrelationVolatilitySystem
-
+    from sklearn.ensemble import VotingRegressor
     from macrosynergy.management.simulate import make_qdf
 
     # Simulate a panel dataset of benchmark and contract returns
@@ -1023,6 +1049,44 @@ if __name__ == "__main__":
     )
 
     models = {
+        "VOTE": VotingRegressor(
+            [
+                ("LR1", LinearRegressionSystem(min_xs_samples=21, data_freq="D")),
+                ("LR2", LinearRegressionSystem(min_xs_samples=21, data_freq="W")),
+            ]
+        )
+    }
+
+    hparam_grid = {
+        "VOTE" : {
+            "LR1__roll": [21, 21 * 3, 21 * 6, 21 * 12],
+            "LR2__roll": [3, 6, 9, 12],
+        },
+    }
+
+    scorer = neg_mean_abs_corr
+
+    be.estimate_beta(
+        beta_xcat="BETA_NSA",
+        hedged_return_xcat="HEDGED_RETURN_NSA",
+        inner_splitter=ExpandingKFoldPanelSplit(n_splits = 5),
+        scorer=neg_mean_abs_corr,
+        models = models,
+        hparam_grid = hparam_grid,
+        min_cids=1,
+        min_periods=21 * 12,
+        est_freq="Q",
+        use_variance_correction=False,
+        n_jobs_outer=-1,
+        n_jobs_inner=1,
+    )
+
+    print(be.get_optimal_models())
+    print(be.get_betas())
+    print(be.get_hedged_returns())
+    be.models_heatmap(beta_xcat="BETA_NSA")
+
+    """models = {
         "CORRVOL": CorrelationVolatilitySystem(
             min_xs_samples=21 * 3,
         ),
@@ -1068,7 +1132,7 @@ if __name__ == "__main__":
 
     be.models_heatmap(beta_xcat="BETA_NSA")
     # Define the models and grids to search over
-    """models = {
+    models = {
         "LR_ROLL": LinearRegressionSystem(min_xs_samples=21 * 3),
     }
     hparam_grid = {

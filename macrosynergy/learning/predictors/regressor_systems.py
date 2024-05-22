@@ -40,6 +40,12 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             associated with each sample in X.
         """
         # Fit checks
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError("The X argument must be a pandas DataFrame.")
+        if isinstance(y, np.ndarray):
+            # This can happen during sklearn's GridSearch when a voting regressor is used
+            y = pd.Series(y, index=X.index)
+            
         _validate_Xy_learning(X, y)
 
         # Adjust min_xs_samples based on the frequency of the data

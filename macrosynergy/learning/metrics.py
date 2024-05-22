@@ -8,12 +8,15 @@ import pandas as pd
 import scipy.stats as stats
 import datetime
 
+from collections import defaultdict
+
 from statsmodels.regression.mixed_linear_model import MixedLM
 from statsmodels.tools.tools import add_constant
 
 from sklearn.metrics import make_scorer, accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import VotingRegressor
 from sklearn.base import RegressorMixin
 
 from macrosynergy.learning.panel_time_series_split import ExpandingKFoldPanelSplit
@@ -267,7 +270,19 @@ def neg_mean_abs_corr(
     ).unique()  # Need the test cids to know which models to evaluate
 
     # Handle voting regressor case later
-    estimated_coefs = estimator.coefs_
+    if isinstance(estimator, VotingRegressor):
+        estimators = estimator.estimators_
+        coefs_list = [est.coefs_ for est in estimators]
+        sum_dict = defaultdict(lambda: [0, 0])
+
+        for coefs in coefs_list:
+            for key, value in coefs.items():
+                sum_dict[key][0] += value
+                sum_dict[key][1] += 1
+
+        estimated_coefs = {key: sum / count for key, (sum, count) in sum_dict.items()}
+    else:
+        estimated_coefs = estimator.coefs_
 
     running_sum = 0
     xs_count = 0
