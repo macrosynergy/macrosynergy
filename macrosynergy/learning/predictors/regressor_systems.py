@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Union, Optional
+import datetime
 
 import numpy as np
 import pandas as pd
@@ -384,7 +385,7 @@ class RidgeRegressionSystem(BaseRegressionSystem):
         :param <float> tol: The tolerance for termination. Default is 1e-4.
         :param <str> solver: Solver to use in the computational routines. Options are
             'auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga' and 'lbfgs'.
-            Default is 'cholesky'.
+            Default is 'lsqr'.
         """
         # Checks
         self._check_init_params(
