@@ -219,9 +219,9 @@ class LinearRegressionSystem(BaseRegressionSystem):
         self.intercepts_[section] = model.intercept_
 
     def _check_init_params(self, roll, fit_intercept, positive, data_freq, min_xs_samples):
-        if not isinstance(roll, int) and roll is not None:
+        if (roll is not None) and (not isinstance(roll, int)):
             raise TypeError("roll must be an integer or None.")
-        if roll <= 0:
+        if (roll is not None) and (roll <= 0):
             raise ValueError("roll must be a positive integer.")
         if not isinstance(fit_intercept, bool):
             raise TypeError("fit_intercept must be a boolean.")
@@ -530,9 +530,12 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
                 y_section_std = y_section.ewm(span=self.volatility_lookback).std().iloc[-1]
             
             # Estimate local correlation between the benchmark and contract return
-            X_section_corr = X_section.tail(self.correlation_lookback)
-            y_section_corr = y_section.tail(self.correlation_lookback)
-            corr = X_section_corr.corrwith(y_section_corr,method=self.correlation_type).iloc[-1]
+            if self.correlation_lookback is not None:
+                X_section_corr = X_section.tail(self.correlation_lookback)
+                y_section_corr = y_section.tail(self.correlation_lookback)
+                corr = X_section_corr.corrwith(y_section_corr,method=self.correlation_type).iloc[-1]
+            else:
+                corr = X_section.corrwith(y_section,method=self.correlation_type).iloc[-1]
 
             # Get beta estimate and store it
             beta = corr * (y_section_std / X_section_std)
@@ -632,11 +635,15 @@ if __name__ == "__main__":
     dfd = msm.reduce_df(df=dfd, cids=cids, xcats=xcats, blacklist=black)
 
     dfd = dfd.pivot(index=["cid", "real_date"], columns="xcat", values="value")
+
+    # Demonstration of LinearRegressionSystem usage
     X1 = dfd.drop(columns=["XR", "BENCH_XR"])
     y1 = dfd["XR"]
-    
+    lr = LinearRegressionSystem(data_freq="W").fit(X1, y1)
+    print(lr.coefs_)
+
+    # Demonstration of CorrelationVolatilitySystem usage
     X2 = pd.DataFrame(dfd["BENCH_XR"])
     y2 = dfd["XR"]
-
     cv = CorrelationVolatilitySystem().fit(X2, y2)
-    lr = LinearRegressionSystem(data_freq="W").fit(X1, y1)
+    print(cv.coefs_)
