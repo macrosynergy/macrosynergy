@@ -103,7 +103,7 @@ class BetaEstimator:
             columns=["cid", "real_date", "xcat", "value"]
         )
         self.chosen_models = pd.DataFrame(
-            columns=["real_date", "xcat", "model_type", "hparams", "n_splits_used"]
+            columns=["real_date", "xcat", "model_type", "hparams", "n_splits"]
         )
 
     def _checks_init_params(
@@ -540,7 +540,7 @@ class BetaEstimator:
                         "xcat",
                         "model_type",
                         "hparams",
-                        "n_splits_used",
+                        "n_splits",
                     ],
                 ),
             )
