@@ -587,7 +587,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
 
     def create_model(self):
         raise NotImplementedError("This method is not implemented for this class.")
-    
+
     def _check_xs_dates(self, min_xs_samples, num_dates):
         if num_dates < min_xs_samples:
             return False
@@ -603,7 +603,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         if num_dates < self.volatility_lookback:
             return False
         return True
-    
+
     def _check_init_params(
         self,
         correlation_lookback,
@@ -613,10 +613,11 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         data_freq,
         min_xs_samples,
     ):
-        if not isinstance(correlation_lookback, int):
-            raise TypeError("correlation_lookback must be an integer.")
-        if correlation_lookback <= 0:
-            raise ValueError("correlation_lookback must be a positive integer.")
+        if correlation_lookback is not None:
+            if not isinstance(correlation_lookback, int):
+                raise TypeError("correlation_lookback must be an integer.")
+            if correlation_lookback <= 0:
+                raise ValueError("correlation_lookback must be a positive integer.")
         if not isinstance(correlation_type, str):
             raise TypeError("correlation_type must be a string.")
         if correlation_type not in ["pearson", "kendall", "spearman"]:

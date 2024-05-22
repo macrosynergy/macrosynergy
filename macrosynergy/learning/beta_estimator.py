@@ -1,35 +1,24 @@
 import os
-import numpy as np
-import pandas as pd
-
-from macrosynergy.learning import (
-    ExpandingFrequencyPanelSplit,
-    ExpandingKFoldPanelSplit,
-    BasePanelSplit,
-    neg_mean_abs_corr,
-)
-
-
-from macrosynergy.management import (
-    reduce_df,
-    categories_df,
-    update_df,
-)
-
-from sklearn.base import BaseEstimator, clone
-from sklearn.pipeline import Pipeline
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+import warnings
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
-
 from joblib import Parallel, delayed
+from sklearn.base import BaseEstimator, clone
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+from sklearn.pipeline import Pipeline
+from tqdm.auto import tqdm
 
-from typing import Union, Optional, Dict, Tuple, List, Callable
-
-from tqdm import tqdm
-
-import warnings
+from macrosynergy.learning import (
+    BasePanelSplit,
+    ExpandingFrequencyPanelSplit,
+    ExpandingKFoldPanelSplit,
+    neg_mean_abs_corr,
+)
+from macrosynergy.management import categories_df, reduce_df, update_df
 
 
 class BetaEstimator:
@@ -468,29 +457,31 @@ class BetaEstimator:
         # estimates, calculate OOS hedged returns and store results
         train_test_splits = list(outer_splitter.split(X=self.X, y=self.y))
 
-        results = Parallel(n_jobs=n_jobs_outer)(
-            delayed(self._worker)(
-                train_idx=train_idx,
-                test_idx=test_idx,
-                beta_xcat=beta_xcat,
-                hedged_return_xcat=hedged_return_xcat,
-                inner_splitter=inner_splitter,
-                models=models,
-                scorer=scorer,
-                hparam_grid=hparam_grid,
-                hparam_type=hparam_type,
-                n_iter=n_iter,
-                use_variance_correction=use_variance_correction,
-                initial_n_splits=initial_n_splits,
-                nsplits_add=(
-                    np.floor(idx / threshold_n_periods) if initial_n_splits else None
-                ),
-                n_jobs_inner=n_jobs_inner,
-            )
-            for idx, (train_idx, test_idx) in tqdm(
-                enumerate(train_test_splits),
-                total=len(train_test_splits),
-            )
+        results = tqdm(
+            Parallel(n_jobs=n_jobs_outer)(
+                delayed(self._worker)(
+                    train_idx=train_idx,
+                    test_idx=test_idx,
+                    beta_xcat=beta_xcat,
+                    hedged_return_xcat=hedged_return_xcat,
+                    inner_splitter=inner_splitter,
+                    models=models,
+                    scorer=scorer,
+                    hparam_grid=hparam_grid,
+                    hparam_type=hparam_type,
+                    n_iter=n_iter,
+                    use_variance_correction=use_variance_correction,
+                    initial_n_splits=initial_n_splits,
+                    nsplits_add=(
+                        np.floor(idx / threshold_n_periods)
+                        if initial_n_splits
+                        else None
+                    ),
+                    n_jobs_inner=n_jobs_inner,
+                )
+                for idx, (train_idx, test_idx) in enumerate(train_test_splits)
+            ),
+            total=len(train_test_splits),
         )
 
         for beta_data, hedged_data, model_data in results:
@@ -993,10 +984,10 @@ class BetaEstimator:
 
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate import make_qdf
-
     from metrics import neg_mean_abs_corr
     from predictors import LinearRegressionSystem
+
+    from macrosynergy.management.simulate import make_qdf
 
     # Simulate a panel dataset of benchmark and contract returns
     cids = ["AUD", "CAD", "GBP", "USD"]

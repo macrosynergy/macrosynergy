@@ -43,7 +43,7 @@ from .predictors import (
     LinearRegressionSystem,
 )
 
-from .marketbeta import BetaEstimator
+from .beta_estimator import BetaEstimator
 
 __all__ = [
     # panel_time_series_split
