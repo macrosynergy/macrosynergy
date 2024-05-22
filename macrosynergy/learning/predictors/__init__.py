@@ -39,4 +39,5 @@ __all__ = [
     "LADRegressionSystem",
     "RidgeRegressionSystem",
     "LinearRegressionSystem",
+    "CorrelationVolatilitySystem",
 ]
