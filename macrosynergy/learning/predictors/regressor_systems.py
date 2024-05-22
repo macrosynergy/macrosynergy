@@ -495,7 +495,9 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
                 y_section_std = y_section.ewm(span=self.volatility_lookback).std().iloc[-1]
             
             # Estimate local correlation between the benchmark and contract return
-            corr = X_section.corrwith(y_section,method=self.correlation_type).iloc[-1]
+            X_section_corr = X_section.tail(self.correlation_lookback)
+            y_section_corr = y_section.tail(self.correlation_lookback)
+            corr = X_section_corr.corrwith(y_section_corr,method=self.correlation_type).iloc[-1]
 
             # Get beta estimate and store it
             beta = corr * (y_section_std / X_section_std)
@@ -514,7 +516,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         Predict method to make a naive zero prediction for each cross-section. This is
         because the only use of this class is to estimate betas, which were computed 
         during the fit method, whose quality can be assessed by a custom scikit-learn metric
-        without the need for a predict method.
+        that directly access the betas without the need for a predict method.
 
         :param <pd.DataFrame> X: Pandas dataframe of input features.
 
