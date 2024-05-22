@@ -20,6 +20,7 @@ from .regressor_systems import (
     LADRegressionSystem,
     RidgeRegressionSystem,
     LinearRegressionSystem,
+    CorrelationVolatilitySystem,
 )
 
 __all__ = [
