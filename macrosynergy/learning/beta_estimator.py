@@ -11,6 +11,7 @@ from sklearn.base import BaseEstimator, clone
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from tqdm.auto import tqdm
+#from tqdm import tqdm
 
 from macrosynergy.learning import (
     BasePanelSplit,
@@ -343,10 +344,10 @@ class BetaEstimator:
         use_variance_correction: bool = False,
         initial_n_splits: Optional[
             Union[int, np.int_]
-        ] = None,  # TODO incorporate this logic later
+        ] = None,
         threshold_n_periods: Optional[
             Union[int, np.int_]
-        ] = None,  # TODO incorporate this logic later
+        ] = None,
         hparam_type: str = "grid",
         n_iter: Optional[int] = 10,
         n_jobs_outer: Optional[int] = -1,
@@ -457,8 +458,7 @@ class BetaEstimator:
         # estimates, calculate OOS hedged returns and store results
         train_test_splits = list(outer_splitter.split(X=self.X, y=self.y))
 
-        results = tqdm(
-            Parallel(n_jobs=n_jobs_outer)(
+        results = Parallel(n_jobs=n_jobs_outer)(
                 delayed(self._worker)(
                     train_idx=train_idx,
                     test_idx=test_idx,
@@ -479,10 +479,8 @@ class BetaEstimator:
                     ),
                     n_jobs_inner=n_jobs_inner,
                 )
-                for idx, (train_idx, test_idx) in enumerate(train_test_splits)
-            ),
-            total=len(train_test_splits),
-        )
+                for idx, (train_idx, test_idx) in tqdm(enumerate(train_test_splits),total=len(train_test_splits),)
+            )
 
         for beta_data, hedged_data, model_data in results:
             if beta_data != []:
@@ -610,13 +608,14 @@ class BetaEstimator:
                     f"Error running a hyperparameter search for {model_name} at {training_time}: {e}",
                     RuntimeWarning,
                 )
-            if not hasattr(search_object, "best_score_"):
-                # Then the grid search failed completely
-                warnings.warn(
-                    f"No model was selected at time {training_time}. Hence, no beta can be estimated."
-                )
-                # TODO: handle this case properly
                 continue
+            #if not hasattr(search_object, "best_score_"):
+            #    # Then the grid search failed completely
+            #    warnings.warn(
+            #        f"No model was selected at time {training_time}. Hence, no beta can be estimated."
+            #    )
+            #    # TODO: handle this case properly
+            #    continue
 
             # If a model was selected, extract the score, name, estimator and optimal hyperparameters
             optim_name, optim_model, optim_score, optim_params = (
@@ -796,6 +795,8 @@ class BetaEstimator:
 
 
         """
+        if not hasattr(search_object, "cv_results_"):
+            return optim_name, optim_model, optim_score, None
         cv_scores = pd.DataFrame(search_object.cv_results_)
         splitscorecols = [
             col
@@ -803,8 +804,12 @@ class BetaEstimator:
             if (("split" in col) and ("_test_score" in col))
         ]
         cv_scores = cv_scores[splitscorecols + ["params"]]
+
         mean_scores = np.nanmean(cv_scores.iloc[:, :-1], axis=1)
         std_scores = np.nanstd(cv_scores.iloc[:, :-1], axis=1)
+
+        if all(np.isnan(mean_scores)):
+            return optim_name, optim_model, optim_score, None
 
         if use_variance_correction:
             # Select model that aims to jointly maximize the mean metric and minimize the
@@ -831,7 +836,7 @@ class BetaEstimator:
             return optim_name, optim_model, optim_score, optim_params
 
         else:
-            return optim_name, None, optim_score, None
+            return optim_name, optim_model, optim_score, None
 
     def _checks_models_heatmap(
         self,
@@ -985,7 +990,7 @@ class BetaEstimator:
 
 if __name__ == "__main__":
     from metrics import neg_mean_abs_corr
-    from predictors import LinearRegressionSystem
+    from predictors import LinearRegressionSystem, CorrelationVolatilitySystem
 
     from macrosynergy.management.simulate import make_qdf
 
@@ -1019,18 +1024,18 @@ if __name__ == "__main__":
 
     models = {
         "CORRVOL": CorrelationVolatilitySystem(
-            min_xs_samples=21*3,
+            min_xs_samples=21 * 3,
         ),
     }
     hparam_grid = {
         "CORRVOL": [
-            {
-                "correlation_lookback": [21*12, 21 * 12 * 2, 21 * 12 * 5, 21 * 12 * 10, None],
-                "correlation_type": ["pearson", "kendall", "spearman"],
-                "volatility_lookback": [5, 10, 21, 21 * 3, 21 * 6, 21 * 12],
-                "volatility_window_type": ["exponential", "rolling"],
-                "data_freq" : ["D"]
-            },
+            #{
+            #    "correlation_lookback": [21*12, 21 * 12 * 2, 21 * 12 * 5, 21 * 12 * 10, None],
+            #    "correlation_type": ["pearson", "kendall", "spearman"],
+            #    "volatility_lookback": [5, 10, 21, 21 * 3, 21 * 6, 21 * 12],
+            #    "volatility_window_type": ["exponential", "rolling"],
+            #    "data_freq" : ["D"]
+            #},
             {
                 "correlation_lookback": [4*12, 4 * 12 * 2, 4 * 12 * 5, 4 * 12 * 10, None],
                 "correlation_type": ["pearson", "kendall", "spearman"],
@@ -1053,14 +1058,17 @@ if __name__ == "__main__":
         min_periods=21 * 3,
         est_freq="Q",
         use_variance_correction=False,
-        initial_nsplits=5,
-        threshold_nperiods=4,
-        n_jobs_outer=1,
+        n_jobs_outer=-1,
         n_jobs_inner=1,
     )
 
+    print(be.get_optimal_models())
+    print(be.get_betas())
+    print(be.get_hedged_returns())
+
+    be.models_heatmap(beta_xcat="BETA_NSA")
     # Define the models and grids to search over
-    models = {
+    """models = {
         "LR_ROLL": LinearRegressionSystem(min_xs_samples=21 * 3),
     }
     hparam_grid = {
@@ -1094,4 +1102,4 @@ if __name__ == "__main__":
     print(be.get_betas())
     print(be.get_hedged_returns())
 
-    be.models_heatmap(beta_xcat="BETA_NSA")
+    be.models_heatmap(beta_xcat="BETA_NSA")"""
