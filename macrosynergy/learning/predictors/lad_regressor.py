@@ -2,13 +2,12 @@ import datetime
 import numbers
 import warnings
 from functools import partial
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 from sklearn.base import BaseEstimator, RegressorMixin
-from sklearn.linear_model import LinearRegression, Ridge
 
 
 class LADRegressor(BaseEstimator, RegressorMixin):

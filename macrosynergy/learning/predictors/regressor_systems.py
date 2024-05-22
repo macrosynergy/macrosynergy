@@ -1,9 +1,5 @@
-import datetime
-import numbers
-import warnings
 from abc import ABC, abstractmethod
-from functools import partial
-from typing import Callable, List, Union, Optional
+from typing import Union, Optional
 
 import numpy as np
 import pandas as pd
@@ -14,16 +10,15 @@ from macrosynergy.learning.predictors import LADRegressor
 
 from macrosynergy.management.validation import _validate_Xy_learning
 
+
 class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
 
     def __init__(
         self,
-        model_partial: Callable[[], BaseEstimator],
         roll: int = None,
         data_freq: str = "D",
         min_xs_samples: int = 2,
     ):
-        self.model_partial = model_partial
         self.roll = roll
         self.data_freq = data_freq
         self.min_xs_samples = min_xs_samples
@@ -57,29 +52,31 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         for section in cross_sections:
             X_section = X[X.index.get_level_values(0) == section]
             y_section = y[y.index.get_level_values(0) == section]
-            # Check if there are enough samples to fit a model
             unique_dates = sorted(X_section.index.unique())
             num_dates = len(unique_dates)
-            if num_dates < min_xs_samples:
-                # Skip to the next cross-section
+            # Check if there are enough samples to fit a model
+            if not self._check_xs_dates(min_xs_samples, num_dates):
                 continue
             # If a roll is specified, then adjust the dates accordingly
             # Only do this if the number of dates is greater than the roll
             if self.roll:
                 if num_dates < self.roll:
-                    continue 
+                    continue
                 else:
                     X_section, y_section = self.roll_dates(
                         self.roll, X_section, y_section, unique_dates
                     )
             # Fit the model
-            model = self.model_partial()
-            model.fit(pd.DataFrame(X_section), y_section)
-            # Store model and coefficients
-            self.models[section] = model
-            self.store_model_info(section, model)
+            self._fit_cross_section(section, X_section, y_section)
 
         return self
+
+    def _fit_cross_section(self, section, X_section, y_section):
+        model = self.create_model()
+        model.fit(pd.DataFrame(X_section), y_section)
+        # Store model and coefficients
+        self.models[section] = model
+        self.store_model_info(section, model)
 
     def predict(
         self,
@@ -94,7 +91,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         :return <pd.Series>: Pandas series of predictions, multi-indexed by cross-section
             and date.
         """
-        # Checks 
+        # Checks
         if not isinstance(X, pd.DataFrame):
             raise TypeError("The X argument must be a pandas DataFrame.")
         if not isinstance(X.index, pd.MultiIndex):
@@ -132,8 +129,15 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         elif self.data_freq == "Q":
             min_xs_samples = self.min_xs_samples // 63
         else:
-            raise ValueError("Invalid data frequency. Accepted values are 'D', 'W', 'M' and 'Q'.")
+            raise ValueError(
+                "Invalid data frequency. Accepted values are 'D', 'W', 'M' and 'Q'."
+            )
         return min_xs_samples
+
+    def _check_xs_dates(self, min_xs_samples, num_dates):
+        if num_dates < min_xs_samples:
+            return False
+        return True
 
     @abstractmethod
     def store_model_info(self, section, model):
@@ -150,6 +154,10 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             .sum()
             .copy()
         )
+
+    @abstractmethod
+    def create_model(self):
+        pass
 
 
 class LinearRegressionSystem(BaseRegressionSystem):
@@ -176,7 +184,7 @@ class LinearRegressionSystem(BaseRegressionSystem):
         sensible inference.
 
         :param <int> roll: The lookback of the rolling window for the regression. If None,
-            the entire cross-sectional history is used for each regression. This should 
+            the entire cross-sectional history is used for each regression. This should
             be specified in units of the data frequency, possibly adjusted by the
             data_freq attribute.
         :param <bool> fit_intercept: Boolean indicating whether or not to fit intercepts
@@ -192,7 +200,9 @@ class LinearRegressionSystem(BaseRegressionSystem):
             cross-section training set for a regression model to be fitted.
         """
         # Checks
-        self._check_init_params(roll, fit_intercept, positive, data_freq, min_xs_samples)
+        self._check_init_params(
+            roll, fit_intercept, positive, data_freq, min_xs_samples
+        )
 
         self.roll = roll
         self.fit_intercept = fit_intercept
@@ -204,21 +214,25 @@ class LinearRegressionSystem(BaseRegressionSystem):
         self.coefs_ = {}
         self.intercepts_ = {}
 
-        model = partial(
-            LinearRegression, fit_intercept=self.fit_intercept, positive=self.positive
-        )
         super().__init__(
-            model_partial=model,
             roll=self.roll,
             data_freq=data_freq,
             min_xs_samples=min_xs_samples,
+        )
+
+    def create_model(self):
+        return LinearRegression(
+            fit_intercept=self.fit_intercept,
+            positive=self.positive,
         )
 
     def store_model_info(self, section, model):
         self.coefs_[section] = model.coef_[0]
         self.intercepts_[section] = model.intercept_
 
-    def _check_init_params(self, roll, fit_intercept, positive, data_freq, min_xs_samples):
+    def _check_init_params(
+        self, roll, fit_intercept, positive, data_freq, min_xs_samples
+    ):
         if (roll is not None) and (not isinstance(roll, int)):
             raise TypeError("roll must be an integer or None.")
         if (roll is not None) and (roll <= 0):
@@ -235,6 +249,8 @@ class LinearRegressionSystem(BaseRegressionSystem):
             raise TypeError("min_xs_samples must be an integer.")
         if min_xs_samples <= 0:
             raise ValueError("min_xs_samples must be a positive integer.")
+
+
 class LADRegressionSystem(BaseRegressionSystem):
     """
     Custom scikit-learn predictor class to create a linear LAD seemingly unrelated
@@ -273,7 +289,9 @@ class LADRegressionSystem(BaseRegressionSystem):
             cross-section training set for a regression model to be fitted.
         """
         # Checks
-        self._check_init_params(roll, fit_intercept, positive, data_freq, min_xs_samples)
+        self._check_init_params(
+            roll, fit_intercept, positive, data_freq, min_xs_samples
+        )
 
         self.roll = roll
         self.fit_intercept = fit_intercept
@@ -285,21 +303,25 @@ class LADRegressionSystem(BaseRegressionSystem):
         self.coefs_ = {}
         self.intercepts_ = {}
 
-        model = partial(
-            LADRegressor, fit_intercept=self.fit_intercept, positive=self.positive
-        )
         super().__init__(
-            model_partial=model,
             roll=roll,
             data_freq=data_freq,
             min_xs_samples=min_xs_samples,
+        )
+
+    def create_model(self):
+        return LADRegressor(
+            fit_intercept=self.fit_intercept,
+            positive=self.positive,
         )
 
     def store_model_info(self, section, model):
         self.coefs_[section] = model.coef_[0]
         self.intercepts_[section] = model.intercept_
 
-    def _check_init_params(self, roll, fit_intercept, positive, data_freq, min_xs_samples):
+    def _check_init_params(
+        self, roll, fit_intercept, positive, data_freq, min_xs_samples
+    ):
         if not isinstance(roll, int) and roll is not None:
             raise TypeError("roll must be an integer or None.")
         if roll <= 0:
@@ -316,6 +338,7 @@ class LADRegressionSystem(BaseRegressionSystem):
             raise TypeError("min_xs_samples must be an integer.")
         if min_xs_samples <= 0:
             raise ValueError("min_xs_samples must be a positive integer.")
+
 
 class RidgeRegressionSystem(BaseRegressionSystem):
     """
@@ -364,7 +387,9 @@ class RidgeRegressionSystem(BaseRegressionSystem):
             Default is 'cholesky'.
         """
         # Checks
-        self._check_init_params(roll, alpha, fit_intercept, positive, data_freq, min_xs_samples, tol, solver)
+        self._check_init_params(
+            roll, alpha, fit_intercept, positive, data_freq, min_xs_samples, tol, solver
+        )
 
         self.roll = roll
         self.alpha = alpha
@@ -379,8 +404,14 @@ class RidgeRegressionSystem(BaseRegressionSystem):
         self.coefs_ = {}
         self.intercepts_ = {}
 
-        model = partial(
-            Ridge,
+        super().__init__(
+            roll=roll,
+            data_freq=data_freq,
+            min_xs_samples=min_xs_samples,
+        )
+
+    def create_model(self):
+        return Ridge(
             fit_intercept=self.fit_intercept,
             positive=self.positive,
             alpha=self.alpha,
@@ -388,18 +419,21 @@ class RidgeRegressionSystem(BaseRegressionSystem):
             solver=self.solver,
         )
 
-        super().__init__(
-            model_partial=model,
-            roll=roll,
-            data_freq=data_freq,
-            min_xs_samples=min_xs_samples,
-        )
-
     def store_model_info(self, section, model):
         self.coefs_[section] = model.coef_[0]
         self.intercepts_[section] = model.intercept_
 
-    def _check_init_params(self, roll, alpha, fit_intercept, positive, data_freq, min_xs_samples, tol, solver):
+    def _check_init_params(
+        self,
+        roll,
+        alpha,
+        fit_intercept,
+        positive,
+        data_freq,
+        min_xs_samples,
+        tol,
+        solver,
+    ):
         if not isinstance(roll, int) and roll is not None:
             raise TypeError("roll must be an integer or None.")
         if roll is not None and roll <= 0:
@@ -424,17 +458,30 @@ class RidgeRegressionSystem(BaseRegressionSystem):
             raise TypeError("tol must be either an integer or a float.")
         if tol <= 0:
             raise ValueError("tol must be a positive number.")
-        if solver not in ["auto", "svd", "cholesky", "lsqr", "sparse_cg", "sag", "saga", "lbfgs"]:
-            raise ValueError("solver must be one of 'auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga' or 'lbfgs'.")
+        if solver not in [
+            "auto",
+            "svd",
+            "cholesky",
+            "lsqr",
+            "sparse_cg",
+            "sag",
+            "saga",
+            "lbfgs",
+        ]:
+            raise ValueError(
+                "solver must be one of 'auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga' or 'lbfgs'."
+            )
+
 
 class CorrelationVolatilitySystem(BaseRegressionSystem):
     """
-    Custom scikit-learn predictor class written specifically to estimate betas for 
+    Custom scikit-learn predictor class written specifically to estimate betas for
     financial contracts with respect to a benchmark return series. Since an estimated beta
     can be decomposed into correlation and volatility components, this class aims to estimate
     these separately, allowing for different lookbacks and weighting schemes for both
-    components. 
+    components.
     """
+
     def __init__(
         self,
         correlation_lookback: Optional[int] = None,
@@ -445,7 +492,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         min_xs_samples: int = 2,
     ):
         """
-        Initialize CorrelationVolatilitySystem class. 
+        Initialize CorrelationVolatilitySystem class.
 
         :param <Optional[int]> correlation_lookback: The lookback period for the correlation
             calculation. This should be in units of the dataset frequency, possibly
@@ -478,73 +525,43 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         self.data_freq = data_freq
         self.min_xs_samples = min_xs_samples
 
+        super().__init__(
+            roll=None,
+            data_freq=data_freq,
+            min_xs_samples=min_xs_samples,
+        )
+
         # Create data structures to store the estimated betas for each cross-section
         self.coefs_ = {}
 
-    def fit(
-        self,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
-    ):
-        """
-        Fit method to determine a beta for each available cross-section, by separation of 
-        correlations and variances, subject to cross-sectional data availability. 
-        
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
-            associated with each sample in X.
-        """
-        # Checks
-        _validate_Xy_learning(X, y)
+    def _fit_cross_section(self, section, X_section, y_section):
+        # Estimate local standard deviations of the benchmark and contract return
+        if self.volatility_window_type == "rolling":
+            X_section_std = (
+                X_section.rolling(window=self.volatility_lookback).std().iloc[-1, 0]
+            )
+            y_section_std = (
+                y_section.rolling(window=self.volatility_lookback).std().iloc[-1]
+            )
+        elif self.volatility_window_type == "exponential":
+            X_section_std = (
+                X_section.ewm(span=self.volatility_lookback).std().iloc[-1, 0]
+            )
+            y_section_std = y_section.ewm(span=self.volatility_lookback).std().iloc[-1]
 
-        # Determine beta for each available cross-section
-        min_xs_samples = self.select_data_freq()
-        cross_sections = X.index.get_level_values(0).unique()
+        # Estimate local correlation between the benchmark and contract return
+        if self.correlation_lookback is not None:
+            X_section_corr = X_section.tail(self.correlation_lookback)
+            y_section_corr = y_section.tail(self.correlation_lookback)
+            corr = X_section_corr.corrwith(
+                y_section_corr, method=self.correlation_type
+            ).iloc[-1]
+        else:
+            corr = X_section.corrwith(y_section, method=self.correlation_type).iloc[-1]
 
-        X = self._downsample_by_data_freq(X)
-        y = self._downsample_by_data_freq(y)
-
-        for section in cross_sections:
-            X_section = X[X.index.get_level_values(0) == section]
-            y_section = y[y.index.get_level_values(0) == section]
-            # Check if there are enough samples to fit a model
-            unique_dates = sorted(X_section.index.unique())
-            num_dates = len(unique_dates)
-            if num_dates < min_xs_samples:
-                # Skip to the next cross-section
-                continue
-            # If the correlation lookback is greater than the number of available dates, skip
-            # to the next cross-section
-            if (self.correlation_lookback is not None and num_dates < self.correlation_lookback):
-                continue
-            # If the volatility lookback is greater than the number of available dates, skip
-            # to the next cross-section
-            if num_dates < self.volatility_lookback:
-                continue
-            # Estimate local standard deviations of the benchmark and contract return
-            if self.volatility_window_type == "rolling":
-                X_section_std = X_section.rolling(window=self.volatility_lookback).std().iloc[-1,0]
-                y_section_std = y_section.rolling(window=self.volatility_lookback).std().iloc[-1]
-            elif self.volatility_window_type == "exponential":
-                X_section_std = X_section.ewm(span=self.volatility_lookback).std().iloc[-1,0]
-                y_section_std = y_section.ewm(span=self.volatility_lookback).std().iloc[-1]
-            
-            # Estimate local correlation between the benchmark and contract return
-            if self.correlation_lookback is not None:
-                X_section_corr = X_section.tail(self.correlation_lookback)
-                y_section_corr = y_section.tail(self.correlation_lookback)
-                corr = X_section_corr.corrwith(y_section_corr,method=self.correlation_type).iloc[-1]
-            else:
-                corr = X_section.corrwith(y_section,method=self.correlation_type).iloc[-1]
-
-            # Get beta estimate and store it
-            beta = corr * (y_section_std / X_section_std)
-            self.store_model_info(section, beta)
-
-        return self
-    
-    def store_model_info(self, section, beta):
-        self.coefs_[section] = beta
+        # Get beta estimate and store it
+        beta = corr * (y_section_std / X_section_std)
+        self.store_model_info(section, beta)
 
     def predict(
         self,
@@ -552,7 +569,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
     ):
         """
         Predict method to make a naive zero prediction for each cross-section. This is
-        because the only use of this class is to estimate betas, which were computed 
+        because the only use of this class is to estimate betas, which were computed
         during the fit method, whose quality can be assessed by a custom scikit-learn metric
         that directly access the betas without the need for a predict method.
 
@@ -564,7 +581,29 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         predictions = pd.Series(index=X.index, data=0)
 
         return predictions
-    
+
+    def store_model_info(self, section, beta):
+        self.coefs_[section] = beta
+
+    def create_model(self):
+        raise NotImplementedError("This method is not implemented for this class.")
+
+    def _check_xs_dates(self, min_xs_samples, num_dates):
+        if num_dates < min_xs_samples:
+            return False
+        # If the correlation lookback is greater than the number of available dates, skip
+        # to the next cross-section
+        if (
+            self.correlation_lookback is not None
+            and num_dates < self.correlation_lookback
+        ):
+            return False
+        # If the volatility lookback is greater than the number of available dates, skip
+        # to the next cross-section
+        if num_dates < self.volatility_lookback:
+            return False
+        return True
+
     def _check_init_params(
         self,
         correlation_lookback,
@@ -574,14 +613,17 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         data_freq,
         min_xs_samples,
     ):
-        if (correlation_lookback is not None) and (not isinstance(correlation_lookback, int)):
-            raise TypeError("correlation_lookback must be an integer.")
-        if (correlation_lookback is not None) and (correlation_lookback <= 0):
-            raise ValueError("correlation_lookback must be a positive integer.")
+        if correlation_lookback is not None:
+            if not isinstance(correlation_lookback, int):
+                raise TypeError("correlation_lookback must be an integer.")
+            if correlation_lookback <= 0:
+                raise ValueError("correlation_lookback must be a positive integer.")
         if not isinstance(correlation_type, str):
             raise TypeError("correlation_type must be a string.")
         if correlation_type not in ["pearson", "kendall", "spearman"]:
-            raise ValueError("correlation_type must be one of 'pearson', 'kendall' or 'spearman'.")
+            raise ValueError(
+                "correlation_type must be one of 'pearson', 'kendall' or 'spearman'."
+            )
         if not isinstance(volatility_lookback, int):
             raise TypeError("volatility_lookback must be an integer.")
         if volatility_lookback <= 0:
@@ -589,7 +631,9 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         if not isinstance(volatility_window_type, str):
             raise TypeError("volatility_window_type must be a string.")
         if volatility_window_type not in ["rolling", "exponential"]:
-            raise ValueError("volatility_window_type must be one of 'rolling' or 'exponential'.")
+            raise ValueError(
+                "volatility_window_type must be one of 'rolling' or 'exponential'."
+            )
         if not isinstance(data_freq, str):
             raise TypeError("data_freq must be a string.")
         if data_freq not in ["D", "W", "M", "Q"]:
@@ -598,6 +642,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             raise TypeError("min_xs_samples must be an integer.")
         if min_xs_samples <= 0:
             raise ValueError("min_xs_samples must be a positive integer.")
+
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
@@ -643,6 +688,7 @@ if __name__ == "__main__":
     print(lr.coefs_)
 
     # Demonstration of CorrelationVolatilitySystem usage
+
     X2 = pd.DataFrame(dfd["BENCH_XR"])
     y2 = dfd["XR"]
     cv = CorrelationVolatilitySystem().fit(X2, y2)
