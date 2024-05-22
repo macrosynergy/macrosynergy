@@ -1017,6 +1017,48 @@ if __name__ == "__main__":
         cids=cids,
     )
 
+    models = {
+        "CORRVOL": CorrelationVolatilitySystem(
+            min_xs_samples=21*3,
+        ),
+    }
+    hparam_grid = {
+        "CORRVOL": [
+            {
+                "correlation_lookback": [21*12, 21 * 12 * 2, 21 * 12 * 5, 21 * 12 * 10, None],
+                "correlation_type": ["pearson", "kendall", "spearman"],
+                "volatility_lookback": [5, 10, 21, 21 * 3, 21 * 6, 21 * 12],
+                "volatility_window_type": ["exponential", "rolling"],
+                "data_freq" : ["D"]
+            },
+            {
+                "correlation_lookback": [4*12, 4 * 12 * 2, 4 * 12 * 5, 4 * 12 * 10, None],
+                "correlation_type": ["pearson", "kendall", "spearman"],
+                "volatility_lookback": [2, 4, 4 * 3, 4 * 6, 4 * 12],
+                "volatility_window_type": ["exponential", "rolling"],
+                "data_freq" : ["W"]
+            },
+        ]
+    }
+    scorer = neg_mean_abs_corr
+
+    be.estimate_beta(
+        beta_xcat="BETA_NSA",
+        hedged_return_xcat="HEDGED_RETURN_NSA",
+        inner_splitter=ExpandingKFoldPanelSplit(n_splits = 5),
+        scorer=neg_mean_abs_corr,
+        models = models,
+        hparam_grid = hparam_grid,
+        min_cids=1,
+        min_periods=21 * 3,
+        est_freq="Q",
+        use_variance_correction=False,
+        initial_nsplits=5,
+        threshold_nperiods=4,
+        n_jobs_outer=1,
+        n_jobs_inner=1,
+    )
+
     # Define the models and grids to search over
     models = {
         "LR_ROLL": LinearRegressionSystem(min_xs_samples=21 * 3),
