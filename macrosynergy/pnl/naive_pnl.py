@@ -2,6 +2,7 @@
 "Naive" PnLs with limited signal options and disregarding transaction costs.
 """
 
+from dataclasses import dataclass
 import warnings
 from itertools import product
 from typing import Dict, List, Optional, Tuple, Union
@@ -91,6 +92,8 @@ class NaivePnL:
             bm_dict = self.add_bm(df=self.dfd, bms=bms, tickers=self.tickers)
 
             self._bm_dict = bm_dict
+            
+        self.pnl_params = {}
 
     def add_bm(self, df: pd.DataFrame, bms: List[str], tickers: List[str]):
         """
@@ -425,6 +428,19 @@ class NaivePnL:
 
         agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
         self.df = agg_df.reset_index(drop=True)
+        
+        self.pnl_params[pnn] = PnLParams(
+            pnl_name=pnn,
+            signal=sig,
+            sig_op=sig_op,
+            sig_add=sig_add,
+            sig_neg=sig_neg,
+            rebal_freq=rebal_freq,
+            rebal_slip=rebal_slip,
+            vol_scale=vol_scale,
+            neutral=neutral,
+            thresh=thresh,
+        )
 
     def make_long_pnl(
         self, vol_scale: Optional[float] = None, label: Optional[str] = None
@@ -1238,6 +1254,23 @@ def create_results_dataframe(
     )
 
     return res_df
+
+@dataclass
+class PnLParams:
+    """
+    Dataclass to store the parameters for the PnL creation.
+    """
+
+    signal: str
+    sig_op: str
+    sig_neg: bool
+    sig_add: float
+    pnl_name: str
+    rebal_freq: str
+    rebal_slip: int
+    vol_scale: int
+    neutral: str
+    thresh: float
 
 
 if __name__ == "__main__":
