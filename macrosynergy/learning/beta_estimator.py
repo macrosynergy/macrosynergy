@@ -57,6 +57,7 @@ class BetaEstimator:
         self._checks_init_params(df, xcat, cids, benchmark_return)
 
         # Assign class variables
+        self.df = df
         self.xcat = xcat
         self.cids = sorted(cids)
         self.benchmark_return = benchmark_return
@@ -68,13 +69,13 @@ class BetaEstimator:
         for cid in self.cids:
             # Extract cross-section contract returns
             dfa = reduce_df(
-                df=df,
+                df=self.df,
                 xcats=[self.xcat],
                 cids=[cid],
             )
             # Extract benchmark returns
             dfb = reduce_df(
-                df=df,
+                df=self.df,
                 xcats=[self.benchmark_xcat],
                 cids=[self.benchmark_cid],
             )
@@ -559,6 +560,100 @@ class BetaEstimator:
             )
         )
 
+    def evaluate_hedged_returns(
+        self,
+        hedged_rets: Optional[Union[str, List[str]]] = None,
+        cids: Optional[Union[str, List[str]]] = None,
+        correlation_types: Union[str, List[str]] = "pearson",
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]] = None,
+        freqs: Optional[Union[str, List[str]]] = "M",
+    ):
+        """
+        Method to determine and display a table of absolute correlations between 
+        the benchmark return and the computed hedged returns within the class instance.
+        This dataframe will be multi-indexed by (benchmark return, hedged return, frequency)
+        and will contain the absolute correlation coefficients on each column.
+
+        :param <Optional[Union[str, List[str]]> hedged_rets: String or list of strings denoting the hedged returns to be
+            evaluated. Default is None, which evaluates all hedged returns within the class instance.
+        :param <Optional[Union[str, List[str]]> cids: String or list of strings denoting the cross-sections to evaluate.
+            Default is None, which evaluates all cross-sections within the class instance.
+        :param <Union[str, List[str] correlation_types: String or list of strings denoting the types of correlations
+            to calculate. Options are "pearson", "spearman" and "kendall". If None, all three
+            are calculated. Default is "pearson".
+        :param <Optional[str]> start: String in ISO format. Default is None.
+        :param <Optional[str]> end: String in ISO format. Default is None.
+        :param <Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]> blacklist: Dictionary of tuples of start and end
+            dates to exclude from the evaluation. Default is None.
+        :param <Optional[Union[str, List[str]]> freqs: Letters denoting all frequencies 
+            at which the series may be sampled. This must be a selection of "D", "W", "M", "Q"
+            and "A". Default is "M". Each return series will always be summed over the sample
+            period.
+        """
+        # Checks 
+        self._checks_evaluate_hedged_returns(
+            correlation_types=correlation_types,
+            hedged_rets=hedged_rets,
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            freqs=freqs,
+        )
+
+        # Parameter handling
+        if correlation_types is None:
+            correlation_types = ["pearson", "spearman", "kendall"]
+        elif isinstance(correlation_types, str):
+            correlation_types = [correlation_types]
+        if hedged_rets is None:
+            hedged_rets = self.hedged_returns["xcat"].unique()
+        elif isinstance(hedged_rets, str):
+            hedged_rets = [hedged_rets]
+        if cids is None:
+            cids = self.hedged_returns["cid"].unique()
+        elif isinstance(cids, str):
+            cids = [cids]
+        if isinstance(freqs, str):
+            freqs = [freqs]
+
+        ret = self.benchmark_return
+
+        # Get the quantamental dataframe comprising the benchmark return
+        # and each of the hedged returns
+        hedged_df = self.hedged_returns[
+            (self.hedged_returns["xcat"].isin(hedged_rets))
+            & (self.hedged_returns["cid"].isin(cids))
+        ]
+        benchmark_df = self.df[
+            (self.df["xcat"] == self.benchmark_xcat) & (self.df["cid"] == self.benchmark_cid)
+        ]
+        # Create underlying dataframe to store the results
+        multiindex = pd.MultiIndex.from_product([[ret], hedged_rets, freqs])
+        df_rows = []
+
+        for hedged_ret in hedged_rets:
+            for freq in freqs:
+                df_rows.append(
+                    self._get_mean_abs_corrs(
+                        hedged_ret,
+                        hedged_df,
+                        benchmark_df,
+                        freq,
+                        correlation_types,
+                        cids,
+                        start,
+                        end,
+                        blacklist
+                    )
+                )
+        
+        corr_df = pd.DataFrame(columns=["absolute" + correlation for correlation in correlation_types], index=multiindex, data=df_rows)
+        
+        return corr_df
+
     def _worker(
         self,
         train_idx: np.ndarray,
@@ -723,6 +818,160 @@ class BetaEstimator:
         ]
 
         return list_hedged_returns
+    
+    def _get_mean_abs_corrs(
+        self,
+        hedged_ret: str,
+        hedged_df: pd.DataFrame,
+        benchmark_df: pd.DataFrame,
+        freq: str,
+        correlation_types: List[str],
+        cids: List[str],
+        start: Optional[str],
+        end: Optional[str],
+        blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]],
+    ):
+        """
+        Private helper method to calculate the mean absolute correlations between a benchmark return
+        and a hedged return for a given frequency.
+        """
+        # Get the quantamental dataframe for the hedged return and the benchmark return, for the given cids
+        sum_abs_correlations = [0 for i in correlation_types]
+        for cid in cids:
+            hedged_df_cid = hedged_df[
+                (hedged_df["cid"] == cid) & (hedged_df["xcat"] == hedged_ret)
+            ]
+            filtered_df = pd.concat([hedged_df_cid, benchmark_df], axis=0)
+            filtered_df["cid"] = f"{cid}v{self.benchmark_cid}"
+
+            filtered_df_long = categories_df(
+                df=filtered_df,
+                xcats=[hedged_ret, self.benchmark_xcat],
+                cids=[f"{cid}v{self.benchmark_cid}"],
+                start=start,
+                end=end,
+                blacklist=blacklist,
+                freq=freq,
+                xcat_aggs=["sum","sum"],
+            ).dropna()
+
+            # Calculate the correlations
+            for i, correlation_type in enumerate(correlation_types):
+                sum_abs_correlations[i] += filtered_df_long.iloc[:,0].corrwith(filtered_df_long.iloc[:,1], method=correlation_type).iloc[-1]
+
+        mean_abs_correlations = [abs_corr / len(cids) for abs_corr in sum_abs_correlations]
+
+        return mean_abs_correlations
+
+
+
+
+
+        
+    
+    def _checks_evaluate_hedged_returns(
+        self,
+        correlation_types: Union[str, List[str]],
+        hedged_rets: Optional[Union[str, List[str]]],
+        cids: Optional[Union[str, List[str]]],
+        start: Optional[str],
+        end: Optional[str],
+        blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]],
+        freqs: Optional[Union[str, List[str]]],
+    ):
+        # correlation_types checks
+        if (correlation_types is not None) and (not isinstance(correlation_types, (str, list))):
+            raise TypeError("correlation_types must be a string or a list of strings.")
+        if isinstance(correlation_types, list):
+            if not all(isinstance(correlation_type, str) for correlation_type in correlation_types):
+                raise TypeError("All elements in correlation_types must be strings.")
+            if not all(correlation_type in ["pearson", "spearman", "kendall"] for correlation_type in correlation_types):
+                raise ValueError("All elements in correlation_types must be one of 'pearson', 'spearman' or 'kendall'.")
+        else:
+            if correlation_types not in ["pearson", "spearman", "kendall"]:
+                raise ValueError("correlation_types must be one of 'pearson', 'spearman' or 'kendall'.")
+
+        # hedged_rets checks
+        if hedged_rets is not None:
+            if not isinstance(hedged_rets, (str, list)):
+                raise TypeError("hedged_rets must be a string or a list of strings.")
+            if isinstance(hedged_rets, list):
+                if not all(isinstance(hedged_ret, str) for hedged_ret in hedged_rets):
+                    raise TypeError("All elements in hedged_rets must be strings.")
+                if not all(hedged_ret in self.hedged_returns["xcat"].unique() for hedged_ret in hedged_rets):
+                    raise ValueError(
+                        "All hedged_rets must be valid hedged return categories within the class instance."
+                    )
+            else:
+                if hedged_rets not in self.hedged_returns["xcat"].unique():
+                    raise ValueError(
+                        "hedged_rets must be a valid hedged return category within the class instance."
+                    )
+
+        # cids checks
+        if cids is not None:
+            if not isinstance(cids, (str, list)):
+                raise TypeError("cids must be a string or a list of strings.")
+            if isinstance(cids, list):
+                if not all(isinstance(cid, str) for cid in cids):
+                    raise TypeError("All elements in cids must be strings.")
+                if not all(cid in self.cids for cid in cids):
+                    raise ValueError("All cids must be valid cross-section identifiers within the class instance.")
+            else:
+                if cids not in self.cids:
+                    raise ValueError("cids must be a valid cross-section identifier within the class instance.")
+
+        # start checks
+        if start is not None:
+            if not isinstance(start, str):
+                raise TypeError("start must be a string.")
+
+        # end checks
+        if end is not None:
+            if not isinstance(end, str):
+                raise TypeError("end must be a string.")
+
+        # blacklist checks
+        if blacklist is not None:
+            if not isinstance(blacklist, dict):
+                raise TypeError("The blacklist argument must be a dictionary.")
+            for key, value in blacklist.items():
+                # check keys are strings
+                if not isinstance(key, str):
+                    raise TypeError(
+                        "The keys of the blacklist argument must be strings."
+                    )
+                # check values of tuples of length two
+                if not isinstance(value, tuple):
+                    raise TypeError(
+                        "The values of the blacklist argument must be tuples."
+                    )
+                if len(value) != 2:
+                    raise ValueError(
+                        "The values of the blacklist argument must be tuples of length "
+                        "two."
+                    )
+                # ensure each of the dates in the dictionary are timestamps
+                for date in value:
+                    if not isinstance(date, pd.Timestamp):
+                        raise TypeError(
+                            "The values of the blacklist argument must be tuples of "
+                            "pandas Timestamps."
+                        )
+
+        # freqs checks
+        if freqs is not None:
+            if not isinstance(freqs, (str, list)):
+                raise TypeError("freqs must be a string or a list of strings.")
+            if isinstance(freqs, list):
+                if not all(isinstance(freq, str) for freq in freqs):
+                    raise TypeError("All elements in freqs must be strings.")
+                if not all(freq in ["D", "W", "M", "Q"] for freq in freqs):
+                    raise ValueError("All elements in freqs must be one of 'D', 'W', 'M' or 'Q'.")
+            else:
+                if freqs not in ["D", "W", "M", "Q"]:
+                    raise ValueError("freqs must be one of 'D', 'W', 'M' or 'Q'.")
+                
 
     def models_heatmap(
         self,
