@@ -565,6 +565,7 @@ class BetaEstimator:
         hedged_rets: Optional[Union[str, List[str]]] = None,
         cids: Optional[Union[str, List[str]]] = None,
         correlation_types: Union[str, List[str]] = "pearson",
+        title: Optional[str] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
         blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]] = None,
@@ -587,6 +588,8 @@ class BetaEstimator:
         :param <Union[str, List[str] correlation_types: String or list of strings denoting the types of correlations
             to calculate. Options are "pearson", "spearman" and "kendall". If None, all three
             are calculated. Default is "pearson".
+        :param <Optional[str]> title: Title for the correlation table. If None, the default
+            title is "Average absolute correlations between each return and the chosen benchmark". Default is None.
         :param <Optional[str]> start: String in ISO format. Default is None.
         :param <Optional[str]> end: String in ISO format. Default is None.
         :param <Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]> blacklist: Dictionary of tuples of start and end
@@ -693,7 +696,7 @@ class BetaEstimator:
                     )
                 df_rows.append(calculated_correlations)
         # Create underlying dataframe to store the results
-        multiindex = pd.MultiIndex.from_product([[self.benchmark_return], hedged_rets + [self.xcat], freqs])
+        multiindex = pd.MultiIndex.from_product([[self.benchmark_return], hedged_rets + [self.xcat], freqs], names=["benchmark return", "return category", "frequency"])
         corr_df = pd.DataFrame(columns=["|" + correlation + "|" for correlation in correlation_types], index=multiindex, data=df_rows)
         
         return corr_df
