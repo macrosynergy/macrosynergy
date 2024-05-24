@@ -1049,6 +1049,7 @@ class BetaEstimator:
         ]
 
         unique_models = chosen_models.model_hparam_id.unique()
+        unique_models = sorted(unique_models, key=lambda x: -model_counts[x])
         unique_dates = chosen_models.real_date.unique()
 
         # Fill in binary matrix denoting the selected model at each time
@@ -1327,7 +1328,7 @@ if __name__ == "__main__":
         "LR": LADRegressionSystem(min_xs_samples=21 * 3),
     }
     hparam_grid = {
-        "LR": {}
+        "LR": {"fit_intercept": [True, False], "positive": [True, False]}
     }
 
     scorer = neg_mean_abs_corr
@@ -1346,6 +1347,8 @@ if __name__ == "__main__":
         n_jobs_outer=-1,
         n_jobs_inner=1,
     )
+
+    be.models_heatmap(beta_xcat="BETA_NSA")
 
     evaluation_df = be.evaluate_hedged_returns(
         correlation_types=["pearson", "spearman", "kendall"],
