@@ -127,9 +127,8 @@ class NaivePnL:
 
         return bm_dict
 
-    @classmethod
-    def __make_signal__(
-        cls,
+    @staticmethod
+    def _make_signal(
         dfx: pd.DataFrame,
         sig: str,
         sig_op: str = "zn_score_pan",
@@ -197,8 +196,8 @@ class NaivePnL:
 
         return pd.concat(dfw_list)
 
-    @classmethod
-    def rebalancing(cls, dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0):
+    @staticmethod
+    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0):
         """
         The signals are calculated daily and for each individual cross-section defined in
         the panel. However, re-balancing a position can occur more infrequently than
@@ -359,7 +358,7 @@ class NaivePnL:
         # format.
         dfx = self.df[self.df["xcat"].isin([self.ret, sig])]
 
-        dfw = self.__make_signal__(
+        dfw = self._make_signal(
             dfx=dfx,
             sig=sig,
             sig_op=sig_op,

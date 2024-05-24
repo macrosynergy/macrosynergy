@@ -21,9 +21,9 @@ from macrosynergy.pnl import NaivePnL
 
 class MultiAssetPNL:
 
-    def __init__(self, pnls: dict, names: dict = None, weights: dict = None):
+    def __init__(self, pnls: dict, pnl_xcats: dict = None):
         self.pnls = pnls
-        self.names = names
+        self.pnl_xcats = pnl_xcats
         self._validate_pnls()
 
         self.multi_asset_pnl = None
@@ -37,13 +37,11 @@ class MultiAssetPNL:
 
         multiasset_df = []
         for asset_name, asset_pnl in self.pnls.items():
-            asset_pnl_name = asset_pnl.pnl_names[0]
+            asset_pnl_xcat = self.pnl_xcats[asset_name]
             asset_data = asset_pnl.df
-            asset_signal = asset_pnl.pnl_params[asset_pnl_name].signal
+            # asset_signal = asset_pnl.pnl_params[asset_pnl_xcat].signal
 
-            single_asset_df = asset_data.loc[
-                (asset_data["xcat"] == asset_pnl_name) & (asset_data["cid"] == "ALL")
-            ].assign(asset=asset_name)
+            single_asset_df = asset_pnl.pnl_df([asset_pnl_xcat]).assign(asset=asset_name)
 
             multiasset_df.append(single_asset_df)
 
@@ -78,7 +76,7 @@ class MultiAssetPNL:
         multiasset_rets = (final_weights * raw_pnls).sum(axis=1)
         multiasset_rets = pd.concat(
             [raw_pnls, multiasset_rets], axis=1, ignore_index=False
-        ).rename(columns={0: "NaivePnLCombo"})
+        ).rename(columns={0: "Combined PnL"})
 
         out = {
             "pnls": multiasset_rets,
@@ -92,15 +90,15 @@ class MultiAssetPNL:
         for name, pnl in self.pnls.items():
             if not isinstance(pnl, NaivePnL):
                 raise ValueError("All elements in the list must be NaivePnL objects.")
-            if len(pnl.pnl_names) > 1:
-                raise ValueError("The NaivePnL object must have only one signal.")
-            if name not in self.names:
+            # if len(pnl.pnl_names) > 1:
+            #     raise ValueError("The NaivePnL object must have only one signal.")
+            if name not in self.pnl_xcats:
                 raise ValueError(
-                    "The name of the NaivePnL object must be in the names list."
+                    "The name of the NaivePnL object must be in the pnl_xcats dictionary."
                 )
 
-        if len(self.pnls) != len(self.names):
-            raise ValueError("The number of PnLs and names must be the same.")
+        if len(self.pnls) != len(self.pnl_xcats):
+            raise ValueError("The number of PnLs and pnl_xcats must be the same.")
         return True
 
 
@@ -183,8 +181,9 @@ if __name__ == "__main__":
     #     pnl_cats=["PNL_GROWTH_NEG", "PNL_INFL_NEG"], start="2015-01-01", end="2020-12-31"
     # )
     pnl_dict = {"FX": pnl_fx, "EQ": pnl_eq}
-    mapnl = MultiAssetPNL(pnl_dict, names={"FX": "FX", "EQ": "EQ"})
-    multiasset_analysis = mapnl.combine_pnls(weights={"FX": 1, "EQ": 1})
+    pnl_xcat = {"FX": "PNL_INFL_NEG", "EQ": "PNL_GROWTH"}
+    mapnl = MultiAssetPNL(pnl_dict, pnl_xcats=pnl_xcat)
+    multiasset_analysis = mapnl.combine_pnls(weights={"FX": 0.75, "EQ": 0.25})
     multiasset_analysis["pnls"].cumsum().plot()
     plt.show()
     pass
