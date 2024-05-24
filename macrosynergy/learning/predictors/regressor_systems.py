@@ -544,12 +544,8 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
     def _fit_cross_section(self, section, X_section, y_section):
         # Estimate local standard deviations of the benchmark and contract return
         if self.volatility_window_type == "rolling":
-            X_section_std = (
-                X_section.rolling(window=self.volatility_lookback).std().iloc[-1, 0]
-            )
-            y_section_std = (
-                y_section.rolling(window=self.volatility_lookback).std().iloc[-1]
-            )
+            X_section_std = X_section[-self.volatility_lookback:].std()
+            y_section_std = y_section[-self.volatility_lookback:].std()
         elif self.volatility_window_type == "exponential":
             X_section_std = (
                 X_section.ewm(span=self.volatility_lookback).std().iloc[-1, 0]
@@ -688,15 +684,15 @@ if __name__ == "__main__":
 
     dfd = dfd.pivot(index=["cid", "real_date"], columns="xcat", values="value")
 
-    # Demonstration of LinearRegressionSystem usage
-    X1 = dfd.drop(columns=["XR", "BENCH_XR"])
-    y1 = dfd["XR"]
-    lr = LinearRegressionSystem(data_freq="W").fit(X1, y1)
-    print(lr.coefs_)
-
     # Demonstration of CorrelationVolatilitySystem usage
 
     X2 = pd.DataFrame(dfd["BENCH_XR"])
     y2 = dfd["XR"]
     cv = CorrelationVolatilitySystem().fit(X2, y2)
     print(cv.coefs_)
+
+    # Demonstration of LinearRegressionSystem usage
+    X1 = dfd.drop(columns=["XR", "BENCH_XR"])
+    y1 = dfd["XR"]
+    lr = LinearRegressionSystem(data_freq="W").fit(X1, y1)
+    print(lr.coefs_)
