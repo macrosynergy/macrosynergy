@@ -571,10 +571,14 @@ class BetaEstimator:
         freqs: Optional[Union[str, List[str]]] = "M",
     ):
         """
-        Method to determine and display a table of absolute correlations between 
-        the benchmark return and the computed hedged returns within the class instance.
-        This dataframe will be multi-indexed by (benchmark return, hedged return, frequency)
-        and will contain the absolute correlation coefficients on each column.
+        Method to determine and display a table of average absolute correlations between 
+        the benchmark return and the computed hedged returns within the class instance, over
+        all cross-sections in the panel. Additionally, the correlation table displays the
+        same results for the unhedged return specified in the class instance for comparison
+        purposes.
+
+        The returned dataframe will be multi-indexed by (benchmark return, return, frequency)
+        and will contain each computed absolute correlation coefficient on each column.
 
         :param <Optional[Union[str, List[str]]> hedged_rets: String or list of strings denoting the hedged returns to be
             evaluated. Default is None, which evaluates all hedged returns within the class instance.
@@ -619,37 +623,77 @@ class BetaEstimator:
         if isinstance(freqs, str):
             freqs = [freqs]
 
-        ret = self.benchmark_return
-
-        # Get the quantamental dataframe comprising the benchmark return
-        # and each of the hedged returns
+        # Construct a quantamental dataframe comprising specified hedged returns as well
+        # as the unhedged returns and the benchmark return specified in the class instance 
         hedged_df = self.hedged_returns[
             (self.hedged_returns["xcat"].isin(hedged_rets))
             & (self.hedged_returns["cid"].isin(cids))
         ]
+        unhedged_df = self.df[
+            (self.df["xcat"] == self.xcat) & (self.df["cid"].isin(cids))
+        ]
         benchmark_df = self.df[
             (self.df["xcat"] == self.benchmark_xcat) & (self.df["cid"] == self.benchmark_cid)
         ]
-        # Create underlying dataframe to store the results
-        multiindex = pd.MultiIndex.from_product([[ret], hedged_rets, freqs])
-        df_rows = []
+        combined_df = pd.concat([hedged_df, unhedged_df], axis=0)
 
-        for hedged_ret in hedged_rets:
-            for freq in freqs:
-                df_rows.append(
-                    self._get_mean_abs_corrs(
-                        hedged_ret,
-                        hedged_df,
-                        benchmark_df,
-                        freq,
-                        correlation_types,
-                        cids,
-                        start,
-                        end,
-                        blacklist
+        # Create a pseudo-panel to match contract return cross-sections with a replicated
+        # benchmark return. This is multi-indexed by (new cid, real_date). The columns
+        # are the named hedged returns, with the final column being the benchmark category.
+        dfx = pd.DataFrame(columns=["real_date", "cid", "xcat", "value"])
+
+        for cid in cids:
+            # Extract unhedged and hedged returns
+            dfa = reduce_df(
+                df=combined_df,
+                xcats=hedged_rets + [self.xcat],
+                cids=[cid],
+            )
+            # Extract benchmark returns
+            dfb = reduce_df(
+                df=benchmark_df,
+                xcats=[self.benchmark_xcat],
+                cids=[self.benchmark_cid],
+            )
+            # Combine and rename cross-section
+            df_cid = pd.concat([dfa, dfb], axis=0)
+            df_cid["cid"] = f"{cid}v{self.benchmark_cid}"
+
+            dfx = update_df(dfx, df_cid)
+
+        # Create long format dataframes for each specified frequency
+        Xy_long_freq = []
+        for freq in freqs:
+            Xy_long = categories_df(
+                df=dfx, 
+                xcats=hedged_rets + [self.xcat, self.benchmark_xcat],
+                cids=[f"{cid}v{self.benchmark_cid}" for cid in cids],
+                start=start,
+                end=end,
+                blacklist=blacklist,
+                freq=freq,
+                xcat_aggs=["sum", "sum"],
+            )
+            Xy_long_freq.append(Xy_long)
+
+        # For each xcat and frequency, calculate the mean absolute correlations
+        # between the benchmark return and the (hedged and unhedged) market returns
+        df_rows = []
+        for xcat in hedged_rets + [self.xcat]:
+            for freq, Xy_long in zip(freqs, Xy_long_freq):
+                calculated_correlations = []
+                for correlation in correlation_types:
+                    calculated_correlations.append(
+                        self._get_mean_abs_corrs(
+                            xcat=xcat,
+                            df=Xy_long,
+                            correlation=correlation,
+                            cids=cids,
+                        )
                     )
-                )
-        
+                df_rows.append(calculated_correlations)
+        # Create underlying dataframe to store the results
+        multiindex = pd.MultiIndex.from_product([[self.benchmark_return], hedged_rets, freqs])
         corr_df = pd.DataFrame(columns=["absolute" + correlation for correlation in correlation_types], index=multiindex, data=df_rows)
         
         return corr_df
@@ -821,53 +865,31 @@ class BetaEstimator:
     
     def _get_mean_abs_corrs(
         self,
-        hedged_ret: str,
-        hedged_df: pd.DataFrame,
-        benchmark_df: pd.DataFrame,
-        freq: str,
-        correlation_types: List[str],
-        cids: List[str],
-        start: Optional[str],
-        end: Optional[str],
-        blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]],
+        xcat: str,
+        cids: str,
+        df: pd.DataFrame,
+        correlation: pd.DataFrame,
+
     ):
         """
-        Private helper method to calculate the mean absolute correlations between a benchmark return
-        and a hedged return for a given frequency.
+        Private helper method to calculate the mean absolute correlation between a column
+        'xcat' in a dataframe 'df' and the benchmark return (the last column) across all
+        cross-sections in 'cids'. The correlation is calculated using the method specified
+        in 'correlation'.
         """
-        # Get the quantamental dataframe for the hedged return and the benchmark return, for the given cids
-        sum_abs_correlations = [0 for i in correlation_types]
-        for cid in cids:
-            hedged_df_cid = hedged_df[
-                (hedged_df["cid"] == cid) & (hedged_df["xcat"] == hedged_ret)
-            ]
-            filtered_df = pd.concat([hedged_df_cid, benchmark_df], axis=0)
-            filtered_df["cid"] = f"{cid}v{self.benchmark_cid}"
+        # Get relevant columns
+        df_subset = df[[xcat, self.benchmark_xcat]].dropna()
 
-            filtered_df_long = categories_df(
-                df=filtered_df,
-                xcats=[hedged_ret, self.benchmark_xcat],
-                cids=[f"{cid}v{self.benchmark_cid}"],
-                start=start,
-                end=end,
-                blacklist=blacklist,
-                freq=freq,
-                xcat_aggs=["sum","sum"],
-            ).dropna()
+        # Create inner function to calculate the correlation for a given cross-section
+        # This is done so that one can groupby cross-section and apply this function directly
 
-            # Calculate the correlations
-            for i, correlation_type in enumerate(correlation_types):
-                sum_abs_correlations[i] += filtered_df_long.iloc[:,0].corrwith(filtered_df_long.iloc[:,1], method=correlation_type).iloc[-1]
+        def calculate_correlation(group):
+            return group[xcat].corrwith(group[self.benchmark_xcat], method=correlation).abs()
+       
+        # Calculate the mean absolute correlation over all cross sections
+        mean_abs_corr = df_subset.groupby("cid").apply(calculate_correlation).mean()
 
-        mean_abs_correlations = [abs_corr / len(cids) for abs_corr in sum_abs_correlations]
-
-        return mean_abs_correlations
-
-
-
-
-
-        
+        return mean_abs_corr
     
     def _checks_evaluate_hedged_returns(
         self,
