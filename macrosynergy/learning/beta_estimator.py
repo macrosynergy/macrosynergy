@@ -613,11 +613,11 @@ class BetaEstimator:
         elif isinstance(correlation_types, str):
             correlation_types = [correlation_types]
         if hedged_rets is None:
-            hedged_rets = self.hedged_returns["xcat"].unique()
+            hedged_rets = list(self.hedged_returns["xcat"].unique())
         elif isinstance(hedged_rets, str):
             hedged_rets = [hedged_rets]
         if cids is None:
-            cids = self.hedged_returns["cid"].unique()
+            cids = list(self.hedged_returns["cid"].unique())
         elif isinstance(cids, str):
             cids = [cids]
         if isinstance(freqs, str):
@@ -693,8 +693,8 @@ class BetaEstimator:
                     )
                 df_rows.append(calculated_correlations)
         # Create underlying dataframe to store the results
-        multiindex = pd.MultiIndex.from_product([[self.benchmark_return], hedged_rets, freqs])
-        corr_df = pd.DataFrame(columns=["absolute" + correlation for correlation in correlation_types], index=multiindex, data=df_rows)
+        multiindex = pd.MultiIndex.from_product([[self.benchmark_return], hedged_rets + [self.xcat], freqs])
+        corr_df = pd.DataFrame(columns=["|" + correlation + "|" for correlation in correlation_types], index=multiindex, data=df_rows)
         
         return corr_df
 
@@ -884,7 +884,7 @@ class BetaEstimator:
         # This is done so that one can groupby cross-section and apply this function directly
 
         def calculate_correlation(group):
-            return group[xcat].corrwith(group[self.benchmark_xcat], method=correlation).abs()
+            return abs(group[xcat].corr(group[self.benchmark_xcat], method=correlation))
        
         # Calculate the mean absolute correlation over all cross sections
         mean_abs_corr = df_subset.groupby("cid").apply(calculate_correlation).mean()
@@ -1318,6 +1318,37 @@ if __name__ == "__main__":
         benchmark_return="USD_BENCH_XR",
         cids=cids,
     )
+
+    models = {
+        "LR": LinearRegressionSystem(min_xs_samples=21 * 3),
+    }
+    hparam_grid = {
+        "LR": {}
+    }
+
+    scorer = neg_mean_abs_corr
+
+    be.estimate_beta(
+        beta_xcat="BETA_NSA",
+        hedged_return_xcat="HEDGED_RETURN_NSA",
+        inner_splitter=ExpandingKFoldPanelSplit(n_splits = 5),
+        scorer=scorer,
+        models = models,
+        hparam_grid = hparam_grid,
+        min_cids=1,
+        min_periods=21 * 12,
+        est_freq="Q",
+        use_variance_correction=False,
+        n_jobs_outer=-1,
+        n_jobs_inner=1,
+    )
+
+    evaluation_df = be.evaluate_hedged_returns(
+        correlation_types=["pearson", "spearman", "kendall"],
+        freqs=["W", "M", "Q"],
+    )
+
+    print(evaluation_df)
 
     models = {
         "VOTE": VotingRegressor(
