@@ -728,6 +728,7 @@ class BetaEstimator:
         # Run grid search
         optim_name = None
         optim_model = None
+        optim_params = None
         optim_score = -np.inf
 
         # If nsplits_add is provided, add it to the number of splits
@@ -783,6 +784,7 @@ class BetaEstimator:
                     optim_score=optim_score,
                     optim_name=optim_name,
                     optim_model=optim_model,
+                    optim_params=optim_params,
                     use_variance_correction=use_variance_correction,
                 )
             )
@@ -1073,6 +1075,7 @@ class BetaEstimator:
         optim_score: float,
         optim_name: str,
         optim_model: Union[BaseEstimator, Pipeline],
+        optim_params: Dict,
         use_variance_correction: bool,
     ):
         """
@@ -1089,6 +1092,7 @@ class BetaEstimator:
         :param <float> optim_score: Current optimal score.
         :param <str> optim_name: Current optimal model name.
         :param <Union[BaseEstimator, Pipeline]> optim_model: Current optimal model.
+        :param <Dict> optim_params: Current optimal hyperparameters.
         :param <bool> use_variance_correction: Boolean indicating whether or not to apply a
             correction to cross-validation scores to account for the variation in scores across
             splits.
@@ -1096,7 +1100,7 @@ class BetaEstimator:
 
         """
         if not hasattr(search_object, "cv_results_"):
-            return optim_name, optim_model, optim_score, None
+            return optim_name, optim_model, optim_score, optim_params
         cv_scores = pd.DataFrame(search_object.cv_results_)
         splitscorecols = [
             col
@@ -1109,7 +1113,7 @@ class BetaEstimator:
         std_scores = np.nanstd(cv_scores.iloc[:, :-1], axis=1)
 
         if all(np.isnan(mean_scores)):
-            return optim_name, optim_model, optim_score, None
+            return optim_name, optim_model, optim_score, optim_params
 
         if use_variance_correction:
             # Select model that aims to jointly maximize the mean metric and minimize the
@@ -1133,10 +1137,7 @@ class BetaEstimator:
             optim_params = cv_scores["params"].values[best_index]
             optim_model = clone(model).set_params(**clone(optim_params, safe=False))
 
-            return optim_name, optim_model, optim_score, optim_params
-
-        else:
-            return optim_name, optim_model, optim_score, None
+        return optim_name, optim_model, optim_score, optim_params
 
     def _checks_models_heatmap(
         self,
