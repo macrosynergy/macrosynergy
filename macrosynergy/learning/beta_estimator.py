@@ -1290,7 +1290,7 @@ class BetaEstimator:
 
 if __name__ == "__main__":
     from metrics import neg_mean_abs_corr
-    from predictors import LinearRegressionSystem, CorrelationVolatilitySystem
+    from predictors import LADRegressionSystem, LinearRegressionSystem, CorrelationVolatilitySystem
     from sklearn.ensemble import VotingRegressor
     from macrosynergy.management.simulate import make_qdf
 
@@ -1323,7 +1323,7 @@ if __name__ == "__main__":
     )
 
     models = {
-        "LR": LinearRegressionSystem(min_xs_samples=21 * 3),
+        "LR": LADRegressionSystem(min_xs_samples=21 * 3),
     }
     hparam_grid = {
         "LR": {}

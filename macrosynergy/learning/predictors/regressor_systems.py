@@ -331,7 +331,7 @@ class LADRegressionSystem(BaseRegressionSystem):
     ):
         if not isinstance(roll, int) and roll is not None:
             raise TypeError("roll must be an integer or None.")
-        if (roll <= 0) and (roll is not None):
+        if (roll is not None) and (roll <= 0):
             raise ValueError("roll must be a positive integer.")
         if not isinstance(fit_intercept, bool):
             raise TypeError("fit_intercept must be a boolean.")
