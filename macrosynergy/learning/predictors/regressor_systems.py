@@ -544,7 +544,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
     def _fit_cross_section(self, section, X_section, y_section):
         # Estimate local standard deviations of the benchmark and contract return
         if self.volatility_window_type == "rolling":
-            X_section_std = X_section[-self.volatility_lookback:].std()
+            X_section_std = X_section[-self.volatility_lookback:].std().iloc[-1]
             y_section_std = y_section[-self.volatility_lookback:].std()
         elif self.volatility_window_type == "exponential":
             X_section_std = (
