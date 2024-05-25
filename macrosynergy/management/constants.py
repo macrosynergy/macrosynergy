@@ -31,6 +31,8 @@ Cross-sections of interest
 
 """
 
+from typing import List
+
 FREQUENCY_MAP = {
     "D": "B",
     "W": "W-FRI",

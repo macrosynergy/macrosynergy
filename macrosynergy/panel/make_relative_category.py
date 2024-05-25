@@ -7,7 +7,6 @@ It is the twin sister of make_relative_value() as we are aggregating categories 
 given XCAT.
 """
 
-import numpy as np
 import pandas as pd
 from typing import List, Set
 

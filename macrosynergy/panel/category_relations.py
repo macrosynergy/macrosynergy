@@ -17,8 +17,8 @@ from macrosynergy.management.utils import apply_slip as apply_slip_util
 
 
 class CategoryRelations(object):
-    """
-    Class for analyzing and visualizing the relations of two panel categories.
+    """W
+    Class for analyzing and visualizing the relations of multiple panel categories.
 
     :param <pd.DataFrame> df: standardized DataFrame with the necessary columns:
         'cid', 'xcat', 'real_date' and at least one column with values of interest.
@@ -452,7 +452,7 @@ class CategoryRelations(object):
         self,
         title: str = None,
         labels: bool = False,
-        size: Tuple[float] = (12, 8),
+        size: Tuple[float] = None,
         xlab: str = None,
         ylab: str = None,
         coef_box: str = None,
@@ -560,6 +560,12 @@ class CategoryRelations(object):
 
         # If "separator" is type Integer, the scatter plot is split across two
         # time-periods where the divisor is the received year.
+        if size is None:
+            size = (3, 3) if separator == "cids" else (12, 8) 
+        else:
+            if not isinstance(size, tuple) or len(size) != 2 or not all(isinstance(i, (int, float)) for i in size):
+                raise TypeError("size must be a tuple of ints/floats.")
+
         if isinstance(separator, int):
             year_error = "Separation by years does not work with year groups."
             assert self.years is None, year_error

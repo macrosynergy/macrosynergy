@@ -6,7 +6,7 @@ quantamental data for testing purposes.
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.arima_process import ArmaProcess
-from typing import List, Tuple, Dict, Union
+from typing import List, Dict, Union
 from collections import defaultdict
 import datetime
 import warnings
