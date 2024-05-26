@@ -14,6 +14,8 @@ from macrosynergy.learning.beta_estimator import BetaEstimator
 
 import unittest
 
+from parameterized import parameterized
+
 class TestBetaEstimator(unittest.TestCase):
     @classmethod
     def setUpClass(self):
@@ -36,42 +38,60 @@ class TestBetaEstimator(unittest.TestCase):
 
         self.dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.xcat = "CONTRACT_XR"
-        self.cids = cids
+        self.cids = sorted(cids)
         self.benchmark_return = "USD_BENCH_XR"
 
-    def test_valid_init(self):
-        be = BetaEstimator(
+        self.be = BetaEstimator(
             df = self.dfd,
             xcat=self.xcat,
             cids=self.cids,
             benchmark_return=self.benchmark_return,
         )
 
-        # Check class attributes are correctly initialised
-        self.assertIsInstance(be, BetaEstimator)
-        self.assertEqual(be.xcat, self.xcat)
-        self.assertEqual(be.cids, self.cids)
-        self.assertEqual(be.benchmark_return, self.benchmark_return)
+        # Create some general betas and hedged returns
+        self.be.estimate_beta(
+            beta_xcat="BETA_NSA",
+            hedged_return_xcat="HEDGED_RETURN_NSA",
+            inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+            scorer=neg_mean_abs_corr,
+            models={
+                "OLS": LinearRegressionSystem(),
+            },
+            hparam_grid={
+                "OLS": {"fit_intercept": [True, False]},
+            },
+            min_cids = 1,
+            min_periods = 21 * 12,
+            est_freq="M",
+            use_variance_correction=False,
+        )
 
-        assert_frame_equal(be.betas, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]))
-        assert_frame_equal(be.hedged_returns, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]))
+    def test_valid_init(self):
+        # Check class attributes are correctly initialised
+        self.assertIsInstance(self.be, BetaEstimator)
+        self.assertEqual(self.be.xcat, self.xcat)
+        self.assertEqual(self.be.cids, self.cids)
+        self.assertEqual(self.be.benchmark_return, self.benchmark_return)
+
+        assert_frame_equal(self.be.betas, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]))
+        assert_frame_equal(self.be.hedged_returns, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]))
         assert_frame_equal(
-            be.chosen_models,
+            self.be.chosen_models,
             pd.DataFrame(
                 columns=["real_date", "xcat", "model_type", "hparams", "n_splits"],
             ),
         )
 
         # Check the format of final long format dataframes
-        self.assertIsInstance(be.X, pd.Series)
-        self.assertTrue(be.X.name == self.benchmark_return.split("_",maxsplit=1)[1])
-        self.assertTrue(be.X.index.names == ["cid", "real_date"])
-        self.assertIsInstance(be.X.index, pd.MultiIndex)
+        self.assertIsInstance(self.be.X, pd.Series)
+        self.assertTrue(self.be.X.name == self.benchmark_return.split("_",maxsplit=1)[1])
+        self.assertTrue(self.be.X.index.names == ["cid", "real_date"])
+        self.assertIsInstance(self.be.X.index, pd.MultiIndex)
 
-        self.assertIsInstance(be.y, pd.Series)
-        self.assertTrue(be.y.name == self.xcat)
-        self.assertTrue(be.y.index.names == ["cid", "real_date"])
-        self.assertIsInstance(be.y.index, pd.MultiIndex)
+        self.assertIsInstance(self.be.y, pd.Series)
+        self.assertTrue(self.be.y.name == self.xcat)
+        self.assertTrue(self.be.y.index.names == ["cid", "real_date"])
+        self.assertIsInstance(self.be.y.index, pd.MultiIndex)
 
         # Check that the long format dataframes are correctly calculated
         dfd = self.dfd
@@ -86,8 +106,8 @@ class TestBetaEstimator(unittest.TestCase):
         X = dfx_long[self.benchmark_return.split("_", maxsplit=1)[1]]
         y = dfx_long[self.xcat]
 
-        assert_series_equal(be.X, dfx_long[self.benchmark_return.split("_", maxsplit=1)[1]])
-        assert_series_equal(be.y, dfx_long[self.xcat])
+        assert_series_equal(self.be.X, dfx_long[self.benchmark_return.split("_", maxsplit=1)[1]])
+        assert_series_equal(self.be.y, dfx_long[self.xcat])
 
     def test_types_init(self):
         # dataframe df
@@ -178,3 +198,18 @@ class TestBetaEstimator(unittest.TestCase):
                 cids=self.cids,
                 benchmark_return="GLB_DRBXR_NSA",
             )
+
+    def test_valid_estimate_beta(self):
+        # Test the broad method
+        # Betas dataframe
+        self.assertIsInstance(self.be.betas, pd.DataFrame)
+        self.assertTrue(self.be.betas.columns.tolist() == ["cid", "real_date", "xcat", "value"])
+        self.assertTrue("BETA_NSA" in self.be.betas.xcat.unique())
+        self.assertTrue(sorted(self.be.betas[self.be.betas.xcat == "BETA_NSA"].cid.unique()) == self.cids)
+        self.assertTrue(all(~self.be.betas[self.be.betas.xcat == "BETA_NSA"].value.isna()))
+        # Hedged returns dataframe
+        self.assertIsInstance(self.be.hedged_returns, pd.DataFrame)
+        self.assertTrue(self.be.hedged_returns.columns.tolist() == ["cid", "real_date", "xcat", "value"])
+        self.assertTrue("HEDGED_RETURN_NSA" in self.be.hedged_returns.xcat.unique())
+        self.assertTrue(sorted(self.be.hedged_returns[self.be.hedged_returns.xcat == "HEDGED_RETURN_NSA"].cid.unique()) == self.cids)
+        self.assertTrue(all(~self.be.hedged_returns[self.be.hedged_returns.xcat == "HEDGED_RETURN_NSA"].value.isna()))
