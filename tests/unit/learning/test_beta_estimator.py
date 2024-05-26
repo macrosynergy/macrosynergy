@@ -82,3 +82,93 @@ class TestBetaEstimator(unittest.TestCase):
 
         assert_series_equal(be.X, dfx_long[self.benchmark_return.split("_", maxsplit=1)[1]])
         assert_series_equal(be.y, dfx_long[self.xcat])
+
+    def test_types_init(self):
+        # dataframe df
+        with self.assertRaises(TypeError):
+            be = BetaEstimator(
+                df = "not a dataframe",
+                xcat=self.xcat,
+                cids=self.cids,
+                benchmark_return=self.benchmark_return,
+            )
+        with self.assertRaises(ValueError):
+            be = BetaEstimator(
+                df = self.dfd.iloc[:,:-1],
+                xcat=self.xcat,
+                cids=self.cids,
+                benchmark_return=self.benchmark_return,
+            )
+        with self.assertRaises(ValueError):
+            be = BetaEstimator(
+                df = self.dfd[self.dfd.xcat != self.xcat],
+                xcat=self.xcat,
+                cids=self.cids,
+                benchmark_return=self.benchmark_return,
+            )
+        # xcat
+        with self.assertRaises(TypeError):
+            be = BetaEstimator(
+                df = self.dfd,
+                xcat=1,
+                cids=self.cids,
+                benchmark_return=self.benchmark_return,
+            )
+        with self.assertRaises(ValueError):
+            be = BetaEstimator(
+                df = self.dfd,
+                xcat="not a valid xcat",
+                cids=self.cids,
+                benchmark_return=self.benchmark_return,
+            )
+        # cids
+        with self.assertRaises(TypeError):
+            be = BetaEstimator(
+                df = self.dfd,
+                xcat=self.xcat,
+                cids="not a list",
+                benchmark_return=self.benchmark_return,
+            )
+        with self.assertRaises(TypeError):
+            be = BetaEstimator(
+                df = self.dfd,
+                xcat=self.xcat,
+                cids=self.cids + ["not a valid cid"],
+                benchmark_return=self.benchmark_return,
+            )
+        with self.assertRaises(ValueError):
+            be = BetaEstimator(
+                df = self.dfd,
+                xcat=self.xcat,
+                cids=["not a valid cid"],
+                benchmark_return=self.benchmark_return,
+            )
+        with self.assertRaises(ValueError):
+            be = BetaEstimator(
+                df = self.dfd,
+                xcat=self.xcat,
+                cids=self.cids + ["not a valid cid"],
+                benchmark_return=self.benchmark_return,
+            )
+        # benchmark_return
+        with self.assertRaises(TypeError):
+            be = BetaEstimator(
+                df = self.dfd,
+                xcat=self.xcat,
+                cids=self.cids,
+                benchmark_return=1,
+            )
+        with self.assertRaises(ValueError):
+            be = BetaEstimator(
+                df = self.dfd,
+                xcat=self.xcat,
+                cids=self.cids,
+                benchmark_return="not a valid benchmark_return",
+            )
+        with self.assertRaises(ValueError):
+            be = BetaEstimator(
+                df = self.dfd,
+                xcat=self.xcat,
+                cids=self.cids,
+                benchmark_return="GLB_DRBXR_NSA",
+            )
