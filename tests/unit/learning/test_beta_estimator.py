@@ -135,7 +135,7 @@ class TestBetaEstimator(unittest.TestCase):
                 cids="not a list",
                 benchmark_return=self.benchmark_return,
             )
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             be = BetaEstimator(
                 df = self.dfd,
                 xcat=self.xcat,
