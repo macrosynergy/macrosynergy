@@ -129,7 +129,6 @@ class BetaEstimator:
             raise ValueError(
                 "df must contain at least two xcats. One is required for the contract return panel and another for the benchmark returns."
             )
-
         # xcat checks
         if not isinstance(xcat, str):
             raise TypeError("xcat must be a string.")

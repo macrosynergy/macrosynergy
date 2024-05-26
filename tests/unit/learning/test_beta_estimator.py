@@ -4,6 +4,12 @@ import pandas as pd
 from pandas.testing import assert_frame_equal, assert_series_equal
 
 from macrosynergy.management.simulate import make_qdf
+from macrosynergy.learning import (
+    BetaEstimator,
+    ExpandingKFoldPanelSplit,
+    neg_mean_abs_corr,
+    LinearRegressionSystem,
+)
 from macrosynergy.learning.beta_estimator import BetaEstimator
 
 import unittest
@@ -19,14 +25,14 @@ class TestBetaEstimator(unittest.TestCase):
         df_cids = pd.DataFrame(
             index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
         )
-        df_cids.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
-        df_cids.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
-        df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
-        df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
+        df_cids.loc["AUD"] = ["2017-01-01", "2020-12-31", 0, 1]
+        df_cids.loc["CAD"] = ["2019-01-01", "2020-12-31", 0, 1]
+        df_cids.loc["GBP"] = ["2017-01-01", "2020-12-31", 0, 1]
+        df_cids.loc["USD"] = ["2017-01-01", "2020-12-31", 0, 1]
 
         df_xcats = pd.DataFrame(index=xcats, columns=cols)
-        df_xcats.loc["BENCH_XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-        df_xcats.loc["CONTRACT_XR"] = ["2001-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+        df_xcats.loc["BENCH_XR"] = ["2017-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+        df_xcats.loc["CONTRACT_XR"] = ["2018-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
 
         self.dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.xcat = "CONTRACT_XR"
