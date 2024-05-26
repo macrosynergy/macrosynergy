@@ -2,21 +2,20 @@
 "Naive" PnLs with limited signal options and disregarding transaction costs.
 """
 
+import warnings
+from itertools import product
+from typing import Dict, List, Optional, Tuple, Union
+
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 
-from typing import List, Union, Tuple, Optional
-from itertools import product
 from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import reduce_df, update_df
 from macrosynergy.panel.make_zn_scores import make_zn_scores
-from macrosynergy.management.utils import update_df, reduce_df
-
 from macrosynergy.signal import SignalReturnRelations
-
-import warnings
 
 
 class NaivePnL:
@@ -886,7 +885,7 @@ class NaivePnL:
         pnl_cids: List[str] = ["ALL"],
         start: str = None,
         end: str = None,
-        label_dict: dict[str, str] = None,
+        label_dict: Dict[str, str] = None,
     ):
         """
         Table of key PnL statistics.
@@ -943,10 +942,10 @@ class NaivePnL:
             "St. Dev. %",
             "Sharpe Ratio",
             "Sortino Ratio",
-            "Max 21-Day Draw",
-            "Max 6-Month Draw",
-            "Top 5% Monthly PnL Share %",
-            "Peak to Trough Draw",
+            "Max 21-Day Draw %",
+            "Max 6-Month Draw %",
+            "Peak to Trough Draw %",
+            "Top 5% Monthly PnL Share",
             "Traded Months",
         ]
 
@@ -972,21 +971,20 @@ class NaivePnL:
         df.iloc[4, :] = dfw.rolling(21).sum().min()
         df.iloc[5, :] = dfw.rolling(6 * 21).sum().min()
 
-        monthly_pnl = dfw.resample("M").sum()
-        total_pnl = monthly_pnl.sum(axis=0)
-        top_5_percent_cutoff = int(len(monthly_pnl) * 0.05)  
-        if top_5_percent_cutoff == 0:
-            top_5_percent_cutoff = 1  
-
-        top_months = monthly_pnl.nlargest(top_5_percent_cutoff, columns=monthly_pnl.columns)
-
-        df.iloc[6, :] = (top_months.sum() / total_pnl) * 100
-
         cum_pnl = dfw.cumsum()
         high_watermark = cum_pnl.cummax()
         drawdown = high_watermark - cum_pnl
 
-        df.iloc[7, :] = drawdown.max()
+        df.iloc[6, :] = - drawdown.max()
+
+        monthly_pnl = dfw.resample("M").sum()
+        total_pnl = monthly_pnl.sum(axis=0)
+        top_5_percent_cutoff = int(np.ceil(len(monthly_pnl) * 0.05))
+        top_months = pd.DataFrame(columns=monthly_pnl.columns)
+        for column in monthly_pnl.columns:
+            top_months[column] = monthly_pnl[column].nlargest(top_5_percent_cutoff).reset_index(drop=True)
+
+        df.iloc[7, :] = top_months.sum() / total_pnl
 
         if len(list_for_dfbm) > 0:
             bm_df = pd.concat(list(self._bm_dict.values()), axis=1)
@@ -1291,10 +1289,22 @@ if __name__ == "__main__":
         thresh=2,
     )
 
+    pnl.make_pnl(
+        sig="INFL",
+        sig_op="zn_score_pan",
+        sig_neg=True,
+        sig_add=0.5,
+        rebal_freq="monthly",
+        vol_scale=5,
+        rebal_slip=1,
+        min_obs=250,
+        thresh=2,
+    )
+
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
     df_eval = pnl.evaluate_pnls(
-        pnl_cats=["PNL_GROWTH_NEG"], start="2015-01-01", end="2020-12-31"
+        pnl_cats=["PNL_GROWTH_NEG", "PNL_INFL_NEG"], start="2015-01-01", end="2020-12-31"
     )
 
     print(df_eval)

@@ -3,23 +3,20 @@ Class to handle the calculation of quantamental predictions based on adaptive
 hyperparameter and model selection.
 """
 
+import warnings
+from typing import Callable, Dict, List, Optional, Tuple, Union
+
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import seaborn as sns
-
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+from joblib import Parallel, delayed
 from sklearn.base import BaseEstimator
 from sklearn.feature_selection import SelectorMixin
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
-
-from typing import List, Union, Dict, Optional, Callable, Tuple
-from tqdm import tqdm
-
-import warnings
-
-from joblib import Parallel, delayed
+from tqdm.auto import tqdm
 
 from macrosynergy.learning.panel_time_series_split import (
     BasePanelSplit,
@@ -417,27 +414,27 @@ class SignalOptimizer:
         #     optimization algorithm over the trading history.
         train_test_splits = list(outer_splitter.split(X=X, y=y))
 
-        results = Parallel(n_jobs=n_jobs, return_as="generator")(
-            delayed(self._worker)(
-                train_idx=train_idx,
-                test_idx=test_idx,
-                name=name,
-                models=models,
-                metric=metric,
-                original_date_levels=original_date_levels,
-                hparam_type=hparam_type,
-                hparam_grid=hparam_grid,
-                n_iter=n_iter,
-                nsplits_add=(
-                    np.floor(idx * test_size / self.threshold_ndates)
-                    if self.initial_nsplits
-                    else None
-                ),
-            )
-            for idx, (train_idx, test_idx) in tqdm(
-                enumerate(train_test_splits),
-                total=len(train_test_splits),
-            )
+        results = tqdm(
+            Parallel(n_jobs=n_jobs, return_as="generator")(
+                delayed(self._worker)(
+                    train_idx=train_idx,
+                    test_idx=test_idx,
+                    name=name,
+                    models=models,
+                    metric=metric,
+                    original_date_levels=original_date_levels,
+                    hparam_type=hparam_type,
+                    hparam_grid=hparam_grid,
+                    n_iter=n_iter,
+                    nsplits_add=(
+                        np.floor(idx * test_size / self.threshold_ndates)
+                        if self.initial_nsplits
+                        else None
+                    ),
+                )
+                for idx, (train_idx, test_idx) in enumerate(train_test_splits)
+            ),
+            total=len(train_test_splits),
         )
 
         # (4) Collect the results from the parallelised worker function and store them
@@ -1688,15 +1685,13 @@ class SignalOptimizer:
 
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate import make_qdf
-    import macrosynergy.management as msm
     from sklearn.linear_model import LinearRegression
-    from sklearn.neighbors import KNeighborsRegressor
     from sklearn.metrics import make_scorer
-    from macrosynergy.learning import (
-        regression_balanced_accuracy,
-        MapSelector,
-    )
+    from sklearn.neighbors import KNeighborsRegressor
+
+    import macrosynergy.management as msm
+    from macrosynergy.learning import MapSelector, regression_balanced_accuracy
+    from macrosynergy.management.simulate import make_qdf
 
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]

@@ -4,7 +4,7 @@ panels.
 """
 import pandas as pd
 import numpy as np
-from typing import List, Union, Tuple, Dict, Optional, Any
+from typing import List, Union, Tuple, Optional, Any
 from macrosynergy.management.simulate import make_qdf
 
 import macrosynergy.visuals as msv

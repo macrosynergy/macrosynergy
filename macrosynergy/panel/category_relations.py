@@ -17,8 +17,8 @@ from macrosynergy.management.utils import apply_slip as apply_slip_util
 
 
 class CategoryRelations(object):
-    """
-    Class for analyzing and visualizing the relations of two panel categories.
+    """W
+    Class for analyzing and visualizing the relations of multiple panel categories.
 
     :param <pd.DataFrame> df: standardized DataFrame with the necessary columns:
         'cid', 'xcat', 'real_date' and at least one column with values of interest.

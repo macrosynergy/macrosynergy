@@ -2,7 +2,7 @@
 Contains mathematical utility functions used across the package.
 """
 
-from typing import List, Union, Tuple
+from typing import List
 
 import pandas as pd
 import numpy as np
