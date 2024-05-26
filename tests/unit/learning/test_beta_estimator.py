@@ -68,30 +68,36 @@ class TestBetaEstimator(unittest.TestCase):
 
     def test_valid_init(self):
         # Check class attributes are correctly initialised
-        self.assertIsInstance(self.be, BetaEstimator)
-        self.assertEqual(self.be.xcat, self.xcat)
-        self.assertEqual(self.be.cids, self.cids)
-        self.assertEqual(self.be.benchmark_return, self.benchmark_return)
+        be = BetaEstimator(
+            df = self.dfd,
+            xcat=self.xcat,
+            cids=self.cids,
+            benchmark_return=self.benchmark_return,
+        )
+        self.assertIsInstance(be, BetaEstimator)
+        self.assertEqual(be.xcat, self.xcat)
+        self.assertEqual(be.cids, self.cids)
+        self.assertEqual(be.benchmark_return, self.benchmark_return)
 
-        assert_frame_equal(self.be.betas, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]))
-        assert_frame_equal(self.be.hedged_returns, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]))
+        assert_frame_equal(be.betas, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]))
+        assert_frame_equal(be.hedged_returns, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]))
         assert_frame_equal(
-            self.be.chosen_models,
+            be.chosen_models,
             pd.DataFrame(
                 columns=["real_date", "xcat", "model_type", "hparams", "n_splits"],
             ),
         )
 
         # Check the format of final long format dataframes
-        self.assertIsInstance(self.be.X, pd.Series)
-        self.assertTrue(self.be.X.name == self.benchmark_return.split("_",maxsplit=1)[1])
-        self.assertTrue(self.be.X.index.names == ["cid", "real_date"])
-        self.assertIsInstance(self.be.X.index, pd.MultiIndex)
+        self.assertIsInstance(be.X, pd.Series)
+        self.assertTrue(be.X.name == self.benchmark_return.split("_",maxsplit=1)[1])
+        self.assertTrue(be.X.index.names == ["cid", "real_date"])
+        self.assertIsInstance(be.X.index, pd.MultiIndex)
 
-        self.assertIsInstance(self.be.y, pd.Series)
-        self.assertTrue(self.be.y.name == self.xcat)
-        self.assertTrue(self.be.y.index.names == ["cid", "real_date"])
-        self.assertIsInstance(self.be.y.index, pd.MultiIndex)
+        self.assertIsInstance(be.y, pd.Series)
+        self.assertTrue(be.y.name == self.xcat)
+        self.assertTrue(be.y.index.names == ["cid", "real_date"])
+        self.assertIsInstance(be.y.index, pd.MultiIndex)
 
         # Check that the long format dataframes are correctly calculated
         dfd = self.dfd
@@ -106,8 +112,8 @@ class TestBetaEstimator(unittest.TestCase):
         X = dfx_long[self.benchmark_return.split("_", maxsplit=1)[1]]
         y = dfx_long[self.xcat]
 
-        assert_series_equal(self.be.X, dfx_long[self.benchmark_return.split("_", maxsplit=1)[1]])
-        assert_series_equal(self.be.y, dfx_long[self.xcat])
+        assert_series_equal(be.X, dfx_long[self.benchmark_return.split("_", maxsplit=1)[1]])
+        assert_series_equal(be.y, dfx_long[self.xcat])
 
     def test_types_init(self):
         # dataframe df
