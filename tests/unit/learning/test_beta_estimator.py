@@ -4,7 +4,7 @@ import pandas as pd
 from pandas.testing import assert_frame_equal, assert_series_equal
 
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.learning.marketbeta import BetaEstimator
+from macrosynergy.learning.beta_estimator import BetaEstimator
 
 import unittest
 
@@ -47,12 +47,12 @@ class TestBetaEstimator(unittest.TestCase):
         self.assertEqual(be.cids, self.cids)
         self.assertEqual(be.benchmark_return, self.benchmark_return)
 
-        assert_frame_equal(be.beta_df, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]))
+        assert_frame_equal(be.betas, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]))
         assert_frame_equal(be.hedged_returns, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]))
         assert_frame_equal(
             be.chosen_models,
             pd.DataFrame(
-                columns=["real_date", "xcat", "model_type", "hparams", "n_splits_used"],
+                columns=["real_date", "xcat", "model_type", "hparams", "n_splits"],
             ),
         )
 
