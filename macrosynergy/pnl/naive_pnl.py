@@ -193,7 +193,6 @@ class NaivePnL:
             first_date = cid_df.loc[:, "psig"].first_valid_index()
             cid_df = cid_df.loc[first_date:, :]
             dfw_list.append(cid_df)
-
         return pd.concat(dfw_list)
 
     @staticmethod

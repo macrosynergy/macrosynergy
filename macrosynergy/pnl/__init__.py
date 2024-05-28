@@ -1,4 +1,4 @@
 from macrosynergy.pnl.naive_pnl import NaivePnL, create_results_dataframe
-from macrosynergy.pnl.multi_asset_pnl import MultiAssetPNL
+from macrosynergy.pnl.multi_asset_pnl import MultiAssetPnL
 
-__all__ = ["create_results_dataframe", "NaivePnL", "MultiAssetPNL"]
+__all__ = ["create_results_dataframe", "NaivePnL", "MultiAssetPnL"]
