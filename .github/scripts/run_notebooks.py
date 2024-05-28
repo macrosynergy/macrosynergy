@@ -3,7 +3,6 @@ import os
 import re
 import time
 from botocore.exceptions import ClientError
-import pandas as pd
 
 AWS_BUCKET_NAME = os.getenv('AWS_BUCKET_NAME', None)
 REGION_NAME = "eu-west-2"

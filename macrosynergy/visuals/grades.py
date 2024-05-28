@@ -4,9 +4,7 @@ DataFrame.
 """
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from typing import List, Union, Tuple
+from typing import List, Tuple
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.visuals import Heatmap

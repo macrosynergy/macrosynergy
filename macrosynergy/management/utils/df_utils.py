@@ -2,21 +2,17 @@
 Utility functions for working with DataFrames.
 """
 
-import itertools
-
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.constants import FREQUENCY_MAP, FFILL_LIMITS, DAYS_PER_FREQ
 
 import warnings
-from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
+from typing import Iterable, List, Optional, Union
 
 from numbers import Number
 
 import numpy as np
 import pandas as pd
 import datetime
-import requests
-import requests.compat
 import macrosynergy.management.constants as ms_constants
 from macrosynergy.management.utils.core import (
     get_cid,
@@ -831,7 +827,7 @@ def estimate_release_frequency(
     df_wide: Optional[pd.DataFrame] = None,
     atol: Optional[float] = None,
     rtol: Optional[float] = None,
-) -> Union[Optional[str], Dict[str, Optional[str]]]:
+) -> Union[Optional[str], dict[str, Optional[str]]]:
     """
     Estimates the release frequency of a timeseries, by inferring the frequency of the
     timeseries index. Before calling `pd.infer_freq`, the function drops NaNs, and rounds

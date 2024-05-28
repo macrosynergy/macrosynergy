@@ -2,21 +2,20 @@
 "Naive" PnLs with limited signal options and disregarding transaction costs.
 """
 
+import warnings
+from itertools import product
+from typing import Dict, List, Optional, Tuple, Union
+
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 
-from typing import List, Union, Tuple, Optional
-from itertools import product
 from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import reduce_df, update_df
 from macrosynergy.panel.make_zn_scores import make_zn_scores
-from macrosynergy.management.utils import update_df, reduce_df
-
 from macrosynergy.signal import SignalReturnRelations
-
-import warnings
 
 
 class NaivePnL:
@@ -886,6 +885,7 @@ class NaivePnL:
         pnl_cids: List[str] = ["ALL"],
         start: str = None,
         end: str = None,
+        label_dict: Dict[str, str] = None,
     ):
         """
         Table of key PnL statistics.
@@ -899,6 +899,8 @@ class NaivePnL:
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
+        :param <dict[str, str]> label_dict: dictionary with keys as pnl_cats and values
+            as new labels for the PnLs.
 
         :return <pd.DataFrame>: standardized DataFrame with key PnL performance
             statistics.
@@ -936,12 +938,14 @@ class NaivePnL:
 
         groups = "xcat" if len(pnl_cids) == 1 else "cid"
         stats = [
-            "Return (pct ar)",
-            "St. Dev. (pct ar)",
+            "Return %",
+            "St. Dev. %",
             "Sharpe Ratio",
             "Sortino Ratio",
-            "Max 21-day draw",
-            "Max 6-month draw",
+            "Max 21-Day Draw %",
+            "Max 6-Month Draw %",
+            "Peak to Trough Draw %",
+            "Top 5% Monthly PnL Share",
             "Traded Months",
         ]
 
@@ -966,6 +970,22 @@ class NaivePnL:
         df.iloc[3, :] = df.iloc[0, :] / dsd
         df.iloc[4, :] = dfw.rolling(21).sum().min()
         df.iloc[5, :] = dfw.rolling(6 * 21).sum().min()
+
+        cum_pnl = dfw.cumsum()
+        high_watermark = cum_pnl.cummax()
+        drawdown = high_watermark - cum_pnl
+
+        df.iloc[6, :] = - drawdown.max()
+
+        monthly_pnl = dfw.resample("M").sum()
+        total_pnl = monthly_pnl.sum(axis=0)
+        top_5_percent_cutoff = int(np.ceil(len(monthly_pnl) * 0.05))
+        top_months = pd.DataFrame(columns=monthly_pnl.columns)
+        for column in monthly_pnl.columns:
+            top_months[column] = monthly_pnl[column].nlargest(top_5_percent_cutoff).reset_index(drop=True)
+
+        df.iloc[7, :] = top_months.sum() / total_pnl
+
         if len(list_for_dfbm) > 0:
             bm_df = pd.concat(list(self._bm_dict.values()), axis=1)
             for i, bm in enumerate(list_for_dfbm):
@@ -973,9 +993,24 @@ class NaivePnL:
                 correlation = dfw.loc[index].corrwith(
                     bm_df.loc[index].iloc[:, i], axis=0, method="pearson", drop=True
                 )
-                df.iloc[6 + i, :] = correlation
+                df.iloc[8 + i, :] = correlation
 
-        df.iloc[6 + len(list_for_dfbm), :] = dfw.resample("M").sum().count()
+        df.iloc[8 + len(list_for_dfbm), :] = dfw.resample("M").sum().count()
+
+        if label_dict is not None:
+            if not isinstance(label_dict, dict):
+                raise TypeError("label_dict must be a dictionary.")
+            if not all([isinstance(k, str) for k in label_dict.keys()]):
+                raise TypeError("Keys in label_dict must be strings.")
+            if not all([isinstance(v, str) for v in label_dict.values()]):
+                raise TypeError("Values in label_dict must be strings.")
+            if len(label_dict) != len(df.columns):
+                raise ValueError(
+                    "label_dict must have the same number of keys as columns in the "
+                    "DataFrame."
+                )
+            df.rename(index=label_dict, inplace=True)
+            df = df[label_dict.values()]
 
         return df
 
@@ -1254,11 +1289,25 @@ if __name__ == "__main__":
         thresh=2,
     )
 
+    pnl.make_pnl(
+        sig="INFL",
+        sig_op="zn_score_pan",
+        sig_neg=True,
+        sig_add=0.5,
+        rebal_freq="monthly",
+        vol_scale=5,
+        rebal_slip=1,
+        min_obs=250,
+        thresh=2,
+    )
+
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
     df_eval = pnl.evaluate_pnls(
-        pnl_cats=["PNL_GROWTH_NEG"], start="2015-01-01", end="2020-12-31"
+        pnl_cats=["PNL_GROWTH_NEG", "PNL_INFL_NEG"], start="2015-01-01", end="2020-12-31"
     )
+
+    print(df_eval)
 
     pnl.agg_signal_bars(
         pnl_name="PNL_GROWTH_NEG",
