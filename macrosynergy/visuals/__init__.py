@@ -25,5 +25,6 @@ __all__ = [
     "view_table",
     "timelines",
     "view_panel_dates",
-    "multiple_reg_scatter"
+    "multiple_reg_scatter",
+    "ScoreVisualizer",
 ]
