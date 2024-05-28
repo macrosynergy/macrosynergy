@@ -1,8 +1,8 @@
 """Macrosynergy Quant Research Package"""
 
 try:
-    from .version import git_revision as __git_revision__
-    from .version import version as __version__
+    from .version import git_revision as __git_revision__  # type: ignore
+    from .version import version as __version__  # type: ignore
 except ModuleNotFoundError:
     from setup import get_version_info
 
