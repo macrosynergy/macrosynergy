@@ -174,6 +174,11 @@ class LinearRegressionSystem(BaseRegressionSystem):
     cross-section, but evaluation is performed over the panel. Consequently, the results of
     a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
     but the model parameters themselves may differ across cross-sections.
+
+    .. note::
+
+      This estimator is still **experimental** for now: the predictions
+      and the API might change without any deprecation cycle.
     """
 
     def __init__(
@@ -265,6 +270,11 @@ class LADRegressionSystem(BaseRegressionSystem):
     cross-section, but evaluation is performed over the panel. Consequently, the results of
     a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
     but the model parameters themselves may differ across cross-sections.
+
+    .. note::
+
+      This estimator is still **experimental** for now: the predictions
+      and the API might change without any deprecation cycle.
     """
 
     def __init__(
@@ -354,6 +364,11 @@ class RidgeRegressionSystem(BaseRegressionSystem):
     cross-section, but evaluation is performed over the panel. Consequently, the results of
     a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
     but the model parameters themselves may differ across cross-sections.
+
+    .. note::
+
+      This estimator is still **experimental** for now: the predictions
+      and the API might change without any deprecation cycle.
     """
 
     def __init__(
@@ -487,6 +502,11 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
     can be decomposed into correlation and volatility components, this class aims to estimate
     these separately, allowing for different lookbacks and weighting schemes for both
     components.
+
+    .. note::
+
+      This estimator is still **experimental** for now: the predictions
+      and the API might change without any deprecation cycle.
     """
 
     def __init__(

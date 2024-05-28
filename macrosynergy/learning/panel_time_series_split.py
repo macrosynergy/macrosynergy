@@ -406,6 +406,11 @@ class ExpandingFrequencyPanelSplit(BasePanelSplit):
     through time in a real-world setting. This is especially the case when
     the test set frequency matches the native data set frequencies. 
 
+    .. note::
+
+      This splitter is still **experimental** for now: the predictions
+      and the API might change without any deprecation cycle.
+
     :param <str> expansion_freq: frequency of training set expansion. For a given native
         dataset frequency, the training sets expand by the smallest number of dates to cover
         this frequency. Default is "D".

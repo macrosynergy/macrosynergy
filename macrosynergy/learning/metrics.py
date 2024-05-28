@@ -248,6 +248,11 @@ def neg_mean_abs_corr(
     let $\\hat{\\beta}_{c}$ denote the estimated beta for cross-section c.
     Then $hedged_returns_{c} = contract_returns_{c} - \\hat{\\beta}_{c} * benchmark_returns$.
 
+    .. note::
+
+      This scorer is still **experimental** for now: the predictions
+      and the API might change without any deprecation cycle.
+
     :param <RegressorMixin> estimator: A fitted seemingly unrelated scikit-learn regressor
         with a coefs_ dictionary of type Dict[str, float] containing estimated betas
         for each cross-section.

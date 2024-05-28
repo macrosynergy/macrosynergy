@@ -33,6 +33,11 @@ class BetaEstimator:
     expanding panel data windows. Statistical learning determines the model and
     hyperparameter choices sequentially using a given performance metric. Cross-sectional
     betas and out-of-sample "hedged" returns are stored in quantamental dataframes.
+
+    .. note::
+
+      This class is still **experimental** for now: the predictions
+      and the API might change without any deprecation cycle.
     """
 
     def __init__(
