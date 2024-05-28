@@ -2,11 +2,8 @@
 Module for plotting ranges of values across cross-sections for one or more categories.
 """
 
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from typing import List, Tuple, Callable, Optional
+from typing import List, Tuple, Optional
 
 from macrosynergy.management.simulate import make_qdf
 import macrosynergy.visuals as msv

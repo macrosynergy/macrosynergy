@@ -6,7 +6,7 @@ one can easily add any number of subplots, even the FacetPlot itself:
 effectively allowing for a recursive facet plot.
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np

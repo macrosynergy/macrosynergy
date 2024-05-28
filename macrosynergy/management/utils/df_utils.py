@@ -2,19 +2,14 @@
 Utility functions for working with DataFrames.
 """
 
-import itertools
-
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.constants import FREQUENCY_MAP
 
 import warnings
-from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
+from typing import Iterable, List, Optional, Union
 import functools
 import numpy as np
 import pandas as pd
 import datetime
-import requests
-import requests.compat
 import macrosynergy.management.constants as ms_constants
 from macrosynergy.management.utils.core import (
     get_cid,
