@@ -373,8 +373,8 @@ if __name__ == "__main__":
     # cids = ["AUD", "CAD", "GBP", "USD"]
 
     sv.view_snapshot(cids=cids, xcats=xcats, transpose=False)
-    sv.view_snapshot(cids=cids, xcats=xcats, transpose=True)
+    # sv.view_snapshot(cids=cids, xcats=xcats, transpose=True)
     sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=False)
-    sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=True)
+    # sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=True)
     sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="A", transpose=False, start="2010-01-01")
-    sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="A", transpose=True, start="2010-01-01")
+    # sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="A", transpose=True, start="2010-01-01")
