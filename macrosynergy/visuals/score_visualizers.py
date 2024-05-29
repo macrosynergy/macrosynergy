@@ -91,6 +91,8 @@ class ScoreVisualizers(object):
             postfix="_ZN",
         )
 
+        composite_df = None # Clear memory
+
         for xcat in self.xcats:
             dfzm = make_zn_scores(
                 df,
@@ -109,6 +111,18 @@ class ScoreVisualizers(object):
 
         self.xcats = [self.xcat_comp] + self.xcats
 
+    def _plot_heatmap(self, df: pd.DataFrame, title: str, annot: bool = False):
+        fig, ax = plt.subplots(figsize=(12, 10))
+        sns.heatmap(df, cmap="coolwarm", annot=annot, xticklabels=True, yticklabels=True, ax=ax)
+
+        ax.set_yticklabels(ax.get_yticklabels())
+        ax.set_xticklabels(ax.get_xticklabels())
+        ax.set_title(title, fontsize=14)
+
+        plt.tight_layout()
+        plt.show()
+
+
     def view_snapshot(
         self,
         cids: List[str],
@@ -119,15 +133,10 @@ class ScoreVisualizers(object):
         """
         Display a multiple scores for multiple countries for the latest available or any previous date
 
-        Parameters
-
         :param <List[str]> cids: A list of cids whose values are displayed. Default is all in the class
-
         :param <List[str]> xcats: A list of xcats to be displayed in the given order. Default is all in the class, including the composite, with the latter being the first row (or column).
-
         :param <bool> transpose: If False (default) rows are cids and columns are xcats. If True rows are xcats and columns are cids.
-
-        : param <str> start: ISO-8601 formatted date string giving the date (or nearest previous if not available). Default is latest day in the dataframe,
+        :param <str> start: ISO-8601 formatted date string giving the date (or nearest previous if not available). Default is latest day in the dataframe,
         """
         if cids is None:
             cids = self.cids
@@ -153,7 +162,7 @@ class ScoreVisualizers(object):
         if start is None:
             start = self.df["real_date"].max()
 
-        df = self.df[self.df["real_date"] == start].drop(columns=["real_date"])
+        df = self.df[self.df["real_date"] == start]
 
         # Filter dataframe to only contain xcats that end in _ZN
 
@@ -163,18 +172,10 @@ class ScoreVisualizers(object):
 
         dfw = df.pivot(index="cid", columns="xcat", values="value")
 
-        # figsize = (14, len(self.cids))
+        if transpose:
+            dfw = dfw.transpose()
 
-        fig, ax = plt.subplots()
-        # dfw = dfw.transpose()
-        sns.heatmap(dfw, cmap="coolwarm")
-
-        # ax.set(xlabel=x_label, ylabel=y_label)
-        # ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
-        ax.set_title(f"Snapshot for {start}", fontsize=14)
-
-        plt.tight_layout()
-        plt.show()
+        self._plot_heatmap(dfw, f"Snapshot for {start.strftime('%Y-%m-%d')}")
 
     def view_score_evolution(
         self,
@@ -188,18 +189,12 @@ class ScoreVisualizers(object):
     ):
         """
         :param <List[str]> cids: A list of cids whose values are displayed. Default is all in the class
-
         :param <str> xcat: Single xcat to be displayed. Default is xcat_comp.
-
         :param<str> freq: frequency to which values are aggregated, i.e. averaged. Default is annual (A). The alternative is quarterly (Q) or bi-annnual (BA)
-
         :param <bool> include_latest_period: include the latest period average as defined by freq, even if it is not complete. Default is True.
-
         :param <bool> include_latest_day: include the latest working day date as defined by freq, even if it is not complete. Default is True.
-
         :param <str> start: ISO-8601 formatted date string. Select data from
             this date onwards. If None, all dates are selected.
-
         :param <bool> transpose: If False (default) rows are cids and columns are time periods. If True rows are time periods and columns are cids.
         """
 
@@ -231,20 +226,21 @@ class ScoreVisualizers(object):
 
         dfw = df.pivot(index="real_date", columns="cid", values="value")
 
-        dfw = dfw.resample(freq).mean()
+        dfw_resampled = dfw.resample(freq).mean()
+        if not include_latest_period:
+            dfw_resampled = dfw_resampled.iloc[:-1]
 
-        # figsize = (14, len(self.cids))
+        if include_latest_day:
+            latest_day = dfw.loc[df["real_date"].max()]
+            dfw_resampled.loc[df["real_date"].max()] = latest_day
+            dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d")[:-1]) + ["Latest Day"]
+        else:
+            dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d"))
 
-        fig, ax = plt.subplots()
-        # dfw = dfw.transpose()
-        sns.heatmap(dfw, cmap="coolwarm")
+        if transpose:
+            dfw_resampled = dfw_resampled.transpose()
 
-        # ax.set(xlabel=x_label, ylabel=y_label)
-        # ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
-        ax.set_title(f"Score Evolution for {xcat}", fontsize=14)
-
-        plt.tight_layout()
-        plt.show()
+        self._plot_heatmap(dfw_resampled, f"Score Evolution for {xcat}")
 
     def view_cid_evolution(
         self,
@@ -258,18 +254,12 @@ class ScoreVisualizers(object):
     ):
         """
         :param <str> cid: Single cid to be displayed
-
         :param <List[str]> xcats: A list of xcats to be displayed in the given order. Default is all in the class, including the composite, with the latter being the first row (or column).
-
         :param<str> freq: frequency to which values are aggregated, i.e. averaged. Default is annual (A). The alternative is quarterly (Q) or bi-annnual (BA)
-
         :param <bool> include_latest_period: include the latest period average as defined by freq, even if it is not complete. Default is True.
-
         :param <bool> include_latest_day: include the latest working day date as defined by freq, even if it is not complete. Default is True.
-
         :param <str> start: ISO-8601 formatted date string. Select data from
             this date onwards. If None, all dates are selected.
-
         :param <bool> transpose: If False (default) rows are xcats and columns are time periods. If True rows are time periods and columns are xcats.
         """
 
@@ -278,43 +268,39 @@ class ScoreVisualizers(object):
 
         if xcats is None:
             xcats = self.xcats
-        elif not isinstance(xcats, list) or not all(
-            isinstance(xcat, str) for xcat in xcats
-        ):
+        elif not isinstance(xcats, list) or not all(isinstance(xcat, str) for xcat in xcats):
             raise TypeError("xcats must be a list of strings")
 
         if not isinstance(transpose, bool):
             raise TypeError("transpose must be a boolean")
 
-        if start is not None:
-            if not isinstance(start, str):
-                raise TypeError("start must be a string")
-            
+        if start is not None and not isinstance(start, str):
+            raise TypeError("start must be a string")
+
         df = self.df[self.df["cid"] == cid].drop(columns=["cid"])
 
-        if start is None:
-            start = df["real_date"].max()
-        else:
+        if start is not None:
             df = df[df["real_date"] >= start]
 
         df = df[df["xcat"].str.endswith("_ZN")]
 
         dfw = df.pivot(index="real_date", columns="xcat", values="value")
 
-        dfw = dfw.resample(freq).mean()
+        dfw_resampled = dfw.resample(freq).mean()
+        if not include_latest_period:
+            dfw_resampled = dfw_resampled.iloc[:-1]
 
-        # figsize = (14, len(self.cids))
+        if include_latest_day:
+            latest_day = dfw.loc[df["real_date"].max()]
+            dfw_resampled.loc[df["real_date"].max()] = latest_day
+            dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d")[:-1]) + ["Latest Day"]
+        else:
+            dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d"))
 
-        fig, ax = plt.subplots()
-        # dfw = dfw.transpose()
-        sns.heatmap(dfw, cmap="coolwarm")
+        if transpose:
+            dfw_resampled = dfw_resampled.transpose()
 
-        # ax.set(xlabel=x_label, ylabel=y_label)A
-        # ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
-        ax.set_title(f"CID Evolution for {cid}", fontsize=14)
-
-        plt.tight_layout()
-        plt.show()
+        self._plot_heatmap(dfw_resampled, f"CID Evolution for {cid}")
 
 
 if __name__ == "__main__":
@@ -384,8 +370,11 @@ if __name__ == "__main__":
     sv = ScoreVisualizers(df, cids=cids, xcats=xcats)
 
     xcats = ["DU05YXR_NSA", "DU05YXR_VT10", "EQXR_NSA"]
-    cids = ["AUD", "CAD", "GBP", "USD"]
+    # cids = ["AUD", "CAD", "GBP", "USD"]
 
     sv.view_snapshot(cids=cids, xcats=xcats, transpose=False)
-    sv.view_cid_evolution(cid="USD", xcats=xcats, freq="M", transpose=False)
-    sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="M", transpose=False, start="2010-01-01")
+    sv.view_snapshot(cids=cids, xcats=xcats, transpose=True)
+    sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=False)
+    sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=True)
+    sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="A", transpose=False, start="2010-01-01")
+    sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="A", transpose=True, start="2010-01-01")
