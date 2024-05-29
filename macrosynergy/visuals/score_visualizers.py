@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from matplotlib import pyplot as plt
 import pandas as pd
@@ -27,6 +27,7 @@ class ScoreVisualizers(object):
     :param <Dict[str, str]> weights: A list of weights as large as the xcats list for calculating the composite.
         Default is equal weights.
         [we need passthrough arguments for linear_composite and make_zn_scores]
+    :param bool sequential: If True, the function will calculate the composite score sequentially.
     """
 
     def __init__(
@@ -38,6 +39,17 @@ class ScoreVisualizers(object):
         xcat_comp: str = "Composite",
         weights: Dict[str, str] = None,
         blacklist: Dict[str, str] = None,
+        sequential: bool = True,
+        iis: bool = True,
+        neutral: str = "mean",
+        pan_weight: float = 0.75,
+        thresh: float = None,
+        min_obs: int = 261,
+        est_freq: str = "m",
+        postfix: str = "_ZN",
+        normalize_weights: bool = True,
+        signs: Optional[List[float]] = None,
+        complete_xcats: bool = False,
     ):
         if cids is None:
             cids = list(df["cid"].unique())
@@ -73,22 +85,26 @@ class ScoreVisualizers(object):
             xcats=self.xcats,
             cids=self.cids,
             weights=self.weights,
+            normalize_weights=normalize_weights,
+            signs=signs,
+            blacklist=blacklist,
+            complete_xcats=complete_xcats,
             new_xcat=self.xcat_comp,
-            complete_xcats=False
-        )  # Look at adding signs and blacklisting
+        ) 
 
         self.df = make_zn_scores(
             composite_df,
             xcat=xcat_comp,
-            sequential=True,
+            sequential=sequential,
             cids=cids,
             blacklist=blacklist,
-            iis=True,
-            neutral="mean",
-            pan_weight=0.75,
-            min_obs=261,
-            est_freq="m",
-            postfix="_ZN",
+            iis=iis,
+            neutral=neutral,
+            pan_weight=pan_weight,
+            thresh=thresh,
+            min_obs=min_obs,
+            est_freq=est_freq,
+            postfix=postfix,
         )
 
         composite_df = None # Clear memory
@@ -97,26 +113,26 @@ class ScoreVisualizers(object):
             dfzm = make_zn_scores(
                 df,
                 xcat=xcat,
-                sequential=True,
+                sequential=sequential,
                 cids=cids,
                 blacklist=blacklist,
-                iis=True,
-                neutral="mean",
-                pan_weight=0.75,
-                min_obs=261,
-                est_freq="m",
-                postfix="_ZN",
+                iis=iis,
+                neutral=neutral,
+                pan_weight=pan_weight,
+                thresh=thresh,
+                min_obs=min_obs,
+                est_freq=est_freq,
+                postfix=postfix,
             )
             self.df = update_df(self.df, dfzm)
 
-        self.xcats = [self.xcat_comp] + self.xcats
+        self.xcats = self.df["xcat"].unique().tolist()
+        self.postfix = postfix
 
     def _plot_heatmap(self, df: pd.DataFrame, title: str, annot: bool = False):
         fig, ax = plt.subplots(figsize=(12, 10))
-        sns.heatmap(df, cmap="coolwarm", annot=annot, xticklabels=True, yticklabels=True, ax=ax)
+        sns.heatmap(df, cmap="coolwarm", annot=annot, xticklabels="auto", yticklabels="auto", ax=ax)
 
-        ax.set_yticklabels(ax.get_yticklabels())
-        ax.set_xticklabels(ax.get_xticklabels())
         ax.set_title(title, fontsize=14)
 
         plt.tight_layout()
@@ -125,8 +141,8 @@ class ScoreVisualizers(object):
 
     def view_snapshot(
         self,
-        cids: List[str],
-        xcats: List[str],
+        cids: List[str] = None,
+        xcats: List[str] = None,
         transpose: bool = False,
         start: str = None,
     ):
@@ -151,6 +167,8 @@ class ScoreVisualizers(object):
             isinstance(xcat, str) for xcat in xcats
         ):
             raise TypeError("xcats must be a list of strings")
+        else: 
+            xcats = [xcat + self.postfix for xcat in xcats]
 
         if not isinstance(transpose, bool):
             raise TypeError("transpose must be a boolean")
@@ -158,19 +176,22 @@ class ScoreVisualizers(object):
         if start is not None:
             if not isinstance(start, str):
                 raise TypeError("start must be a string")
-
-        if start is None:
-            start = self.df["real_date"].max()
-
-        df = self.df[self.df["real_date"] == start]
-
-        # Filter dataframe to only contain xcats that end in _ZN
-
-        df = df[df["xcat"].str.endswith("_ZN")]
+            
+        df = self.df[self.df["xcat"].isin(xcats)]
 
         df = df[df["cid"].isin(cids)]
 
+        if start is None:
+            start = df["real_date"].max()
+
+        df = df[df["real_date"] == start]
+
         dfw = df.pivot(index="cid", columns="xcat", values="value")
+
+        # If xcats contains the composite, it is moved to the first column
+        composite_zscore = self.xcat_comp + self.postfix
+        if composite_zscore in xcats:
+            dfw = dfw[[composite_zscore] + [xcat for xcat in dfw.columns if xcat != composite_zscore]]
 
         if transpose:
             dfw = dfw.transpose()
@@ -190,7 +211,7 @@ class ScoreVisualizers(object):
         """
         :param <List[str]> cids: A list of cids whose values are displayed. Default is all in the class
         :param <str> xcat: Single xcat to be displayed. Default is xcat_comp.
-        :param<str> freq: frequency to which values are aggregated, i.e. averaged. Default is annual (A). The alternative is quarterly (Q) or bi-annnual (BA)
+        :param<str> freq: frequency to which values are aggregated, i.e. averaged. Default is annual (A). The alternative is quarterly (Q) or bi-annnual (6M)
         :param <bool> include_latest_period: include the latest period average as defined by freq, even if it is not complete. Default is True.
         :param <bool> include_latest_day: include the latest working day date as defined by freq, even if it is not complete. Default is True.
         :param <str> start: ISO-8601 formatted date string. Select data from
@@ -204,6 +225,12 @@ class ScoreVisualizers(object):
             isinstance(cid, str) for cid in cids
         ):
             raise TypeError("cids must be a list of strings")
+        
+        if freq not in ["Q", "A", "BA"]:
+            raise ValueError("freq must be 'Q', 'A', or 'BA'")
+        
+        if freq == "BA":
+            freq = "6MS"
 
         if not isinstance(xcat, str):
             raise TypeError("xcat must be a string")
@@ -215,7 +242,7 @@ class ScoreVisualizers(object):
             if not isinstance(start, str):
                 raise TypeError("start must be a string")
             
-        df = self.df[self.df["xcat"] == xcat + "_ZN"].drop(columns=["xcat"])
+        df = self.df[self.df["xcat"] == xcat + self.postfix].drop(columns=["xcat"])
 
         df = df[df["cid"].isin(cids)]
 
@@ -226,7 +253,7 @@ class ScoreVisualizers(object):
 
         dfw = df.pivot(index="real_date", columns="cid", values="value")
 
-        dfw_resampled = dfw.resample(freq).mean()
+        dfw_resampled = dfw.resample(freq, origin='start').mean()
         if not include_latest_period:
             dfw_resampled = dfw_resampled.iloc[:-1]
 
@@ -265,11 +292,19 @@ class ScoreVisualizers(object):
 
         if not isinstance(cid, str):
             raise TypeError("cid must be a string")
+        
+        if freq not in ["Q", "A", "BA"]:
+            raise ValueError("freq must be 'Q', 'A', or 'BA'")
+        
+        if freq == "BA":
+            freq = "6MS"
 
         if xcats is None:
             xcats = self.xcats
         elif not isinstance(xcats, list) or not all(isinstance(xcat, str) for xcat in xcats):
             raise TypeError("xcats must be a list of strings")
+        else:
+            xcats = [xcat + self.postfix for xcat in xcats]
 
         if not isinstance(transpose, bool):
             raise TypeError("transpose must be a boolean")
@@ -282,7 +317,7 @@ class ScoreVisualizers(object):
         if start is not None:
             df = df[df["real_date"] >= start]
 
-        df = df[df["xcat"].str.endswith("_ZN")]
+        df = df[df["xcat"].isin(xcats)]
 
         dfw = df.pivot(index="real_date", columns="xcat", values="value")
 
@@ -372,9 +407,9 @@ if __name__ == "__main__":
     xcats = ["DU05YXR_NSA", "DU05YXR_VT10", "EQXR_NSA"]
     # cids = ["AUD", "CAD", "GBP", "USD"]
 
-    sv.view_snapshot(cids=cids, xcats=xcats, transpose=False)
+    sv.view_snapshot(cids=cids, transpose=False)
     # sv.view_snapshot(cids=cids, xcats=xcats, transpose=True)
-    sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=False)
+    sv.view_cid_evolution(cid="USD", xcats=xcats, freq="Q", transpose=False)
     # sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=True)
-    sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="A", transpose=False, start="2010-01-01")
+    sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="BA", transpose=False, start="2010-01-01")
     # sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="A", transpose=True, start="2010-01-01")
