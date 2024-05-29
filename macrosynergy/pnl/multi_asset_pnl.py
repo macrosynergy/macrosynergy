@@ -2,6 +2,7 @@
 Multi Asset PnLs combine multiple "Naive" PnLs with limited signal options and disregarding transaction costs.
 """
 
+from functools import reduce
 import warnings
 from itertools import product
 from typing import Dict, List, Optional, Tuple, Union
@@ -21,38 +22,49 @@ from macrosynergy.pnl import NaivePnL
 
 class MultiAssetPnL:
 
-    def __init__(self, pnls: dict, pnl_xcats: dict = None):
-        self.pnls = pnls
-        self.pnl_xcats = pnl_xcats
-        self._validate_pnls()
+    def __init__(self):
+        # self.pnls = pnls
+        # self.pnl_xcats = pnl_xcats
+        # self._validate_pnls()
 
-        self.multi_asset_pnl = None
+        self.pnls_df = pd.DataFrame()
+        self.single_asset_pnls = {}
+        self._multi_asset_xcats = []
 
     def combine_pnls(
-        self, weights: dict = None, combined_name: str = None
+        self, pnls: dict[str, NaivePnL], weights: dict = None, combined_xcat: str = None
     ) -> pd.DataFrame:
         """
         Combine the PnLs in the list with the given weights.
         """
-        combined_name = (
-            "_".join(self.pnls.keys()) if combined_name is None else combined_name
+        # Todo: check if pnls already in self.single_asset_pnls
+        self.single_asset_pnls = {**self.single_asset_pnls, **pnls}
+        self._validate_pnls()
+        # Default combined_xcat
+        combined_xcat = (
+            "_".join(self.single_asset_pnls.values())
+            if combined_xcat is None
+            else combined_xcat
         )
-        # default weights
+        # Default weights
         if weights is None:
-            weights = {pnl_name: 1 for pnl_name in self.pnls.keys()}
+            weights = {pnl_name: 1 for pnl_name in pnls.keys()}
         weights = self._normalize_weights(weights)
 
         multiasset_df = []
-        for asset_name, asset_pnl in self.pnls.items():
-            asset_pnl_xcat = self.pnl_xcats[asset_name]
-            single_asset_df = asset_pnl.pnl_df([asset_pnl_xcat]).assign(
-                asset=asset_name
-            )
+        # for asset_name, asset_pnl in self.pnls.items():
+        #     asset_pnl_xcat = self.pnl_xcats[asset_name]
+        #     single_asset_df = asset_pnl.pnl_df([asset_pnl_xcat]).assign(
+        #         asset=asset_name
+        #     )
+        #     multiasset_df.append(single_asset_df)
+        for pnl_xcat, pnl in pnls.items():
+            single_asset_df = pnl.pnl_df([pnl_xcat]).assign(asset=pnl.ret)
             multiasset_df.append(single_asset_df)
 
         multiasset_df = pd.concat(multiasset_df, axis=0, ignore_index=True)
 
-        raw_pnls = multiasset_df.set_index(["real_date", "asset"])["value"].unstack()
+        raw_pnls = multiasset_df.set_index(["real_date", "xcat"])["value"].unstack()
 
         # Default weights for each strategy
         start_weights = pd.DataFrame(
@@ -78,79 +90,59 @@ class MultiAssetPnL:
         multiasset_rets = (final_weights * raw_pnls).sum(axis=1)
         multiasset_rets = pd.concat(
             [raw_pnls, multiasset_rets], axis=1, ignore_index=False
-        ).rename(columns={0: combined_name})
+        ).rename(columns={0: combined_xcat})
 
-        self.multi_asset_pnl = multiasset_rets.reset_index().melt(
+        multi_asset_pnl = multiasset_rets.reset_index().melt(
             id_vars=["real_date"], var_name="xcat", value_name="value"
         )
-        self.multi_asset_pnl = self.multi_asset_pnl.sort_values(
-            by=["xcat", "real_date"]
+        multi_asset_pnl = multi_asset_pnl.sort_values(by=["xcat", "real_date"])
+
+        self.pnls_df = pd.concat(
+            [self.pnls_df, multi_asset_pnl], axis=0, ignore_index=True
         )
+        self._multi_asset_xcats.append(combined_xcat)
 
-        # return out
-
-    def plot_pnls(self, weights: dict = None):
+    def plot_pnls(self, pnl_xcats: List[str] = None):
         """
         Plots the PnLs in
         """
-        if self.multi_asset_pnl is None:
-            self.combine_pnls(weights=weights)
-        self.multi_asset_pnl["cumulative pnl"] = self.multi_asset_pnl.groupby("xcat")[
-            "value"
-        ].cumsum()
+        if self.pnls_df is None:
+            raise ValueError("combine_pnls() must be run first.")
+        if pnl_xcats is None:
+            pnl_xcats = list(self.single_asset_pnls.keys()) + self._multi_asset_xcats
+
+        pnl_df = self.pnls_df[self.pnls_df["xcat"].isin(pnl_xcats)]
+        pnl_df["cumulative pnl"] = pnl_df.groupby("xcat")["value"].cumsum()
 
         plt.figure(figsize=(10, 6))
-        sns.lineplot(
-            data=self.multi_asset_pnl, x="real_date", y="cumulative pnl", hue=("xcat")
-        )
+        sns.lineplot(data=pnl_df, x="real_date", y="cumulative pnl", hue=("xcat"))
         plt.title("Line Plot of DataFrame Columns")
         plt.xlabel("Index")
         plt.ylabel("% risk capital, no compounding")
         plt.legend(title="Assets")
         plt.show()
 
-    def evaluate_pnls(self):
+    def evaluate_pnls(self, pnl_xcats: List[str] = None) -> pd.DataFrame:
         """
         Evaluate the combined PnLs.
         """
+        if pnl_xcats is None:
+            pnl_xcats = self._multi_asset_xcats + list(self.single_asset_pnls.keys())
         pnl_evals = []
-        for name, pnl in self.pnls.items():
-            pnl_xcat = self.pnl_xcats[name]
-            eval_df = pnl.evaluate_pnls([pnl_xcat])
-            # eval_df["asset"] = name
+        for pnl_xcat in pnl_xcats:
+            if pnl_xcat in self._multi_asset_xcats:
+                eval_df = self._evaluate_combined_pnls(pnl_xcat)
+            else:
+                eval_df = self.single_asset_pnls[pnl_xcat].evaluate_pnls([pnl_xcat])
             pnl_evals.append(eval_df)
 
-        return pd.concat(pnl_evals, axis=1, ignore_index=False)
+        return pd.concat(pnl_evals, axis=1, ignore_index=False, sort=False)
 
-    def _evaluate_combined_pnl(
-        self,
-        start: str = None,
-        end: str = None,
-    ):
+    def _evaluate_combined_pnls(self, pnl_xcat: str) -> pd.DataFrame:
         """
-        Table of key PnL statistics.
+        Evaluate the combined PnLs.
 
-        :param <List[str]> pnl_cats: list of PnL categories that should be plotted.
-        :param <List[str]> pnl_cids: list of cross-sections to be plotted; default is
-            'ALL' (global PnL).
-            Note: one can only have multiple PnL categories or multiple cross-sections,
-            not both.
-        :param <str> start: earliest date in ISO format. Default is None and earliest
-            date in df is used.
-        :param <str> end: latest date in ISO format. Default is None and latest date
-            in df is used.
-        :param <dict[str, str]> label_dict: dictionary with keys as pnl_cats and values
-            as new labels for the PnLs.
-
-        :return <pd.DataFrame>: standardized DataFrame with key PnL performance
-            statistics.
         """
-
-        dfx = reduce_df(
-            self.df, pnl_cats, pnl_cids, start, end, self.black, out_all=False
-        )
-
-        groups = "xcat" if len(pnl_cids) == 1 else "cid"
         stats = [
             "Return %",
             "St. Dev. %",
@@ -162,17 +154,8 @@ class MultiAssetPnL:
             "Top 5% Monthly PnL Share",
             "Traded Months",
         ]
-
-        # If benchmark tickers have been passed into the Class and if the tickers are
-        # present in self.dfd.
-        list_for_dfbm = []
-
-        if self.bm_bool and bool(self._bm_dict):
-            list_for_dfbm = list(self._bm_dict.keys())
-            for bm in list_for_dfbm:
-                stats.insert(len(stats) - 1, f"{bm} correl")
-
-        dfw = dfx.pivot(index="real_date", columns=groups, values="value")
+        pnl_df = self.get_pnls([pnl_xcat])
+        dfw = pnl_df.pivot(index="real_date", columns="xcat", values="value")
         df = pd.DataFrame(columns=dfw.columns, index=stats)
 
         df.iloc[0, :] = dfw.mean(axis=0) * 261
@@ -204,54 +187,30 @@ class MultiAssetPnL:
 
         df.iloc[7, :] = top_months.sum() / total_pnl
 
-        if len(list_for_dfbm) > 0:
-            bm_df = pd.concat(list(self._bm_dict.values()), axis=1)
-            for i, bm in enumerate(list_for_dfbm):
-                index = dfw.index.intersection(bm_df.index)
-                correlation = dfw.loc[index].corrwith(
-                    bm_df.loc[index].iloc[:, i], axis=0, method="pearson", drop=True
-                )
-                df.iloc[8 + i, :] = correlation
-
-        df.iloc[8 + len(list_for_dfbm), :] = dfw.resample("M").sum().count()
-
-        if label_dict is not None:
-            if not isinstance(label_dict, dict):
-                raise TypeError("label_dict must be a dictionary.")
-            if not all([isinstance(k, str) for k in label_dict.keys()]):
-                raise TypeError("Keys in label_dict must be strings.")
-            if not all([isinstance(v, str) for v in label_dict.values()]):
-                raise TypeError("Values in label_dict must be strings.")
-            if len(label_dict) != len(df.columns):
-                raise ValueError(
-                    "label_dict must have the same number of keys as columns in the "
-                    "DataFrame."
-                )
-            df.rename(index=label_dict, inplace=True)
-            df = df[label_dict.values()]
+        df.iloc[8, :] = dfw.resample("M").sum().count()
 
         return df
 
-    def get_pnls(self) -> pd.DataFrame:
+    def get_pnls(self, pnl_xcats: list[str] = None) -> pd.DataFrame:
         """
         Returns the combined PnLs.
         """
-        if self.multi_asset_pnl is None:
-            raise ValueError("The PnLs have not been combined yet.")
-        return self.multi_asset_pnl
+        if self.pnls_df is None:
+            raise ValueError(
+                "The PnLs have not been combined yet. combine_pnls() must be run first."
+            )
+        if pnl_xcats is None:
+            return self.pnls_df
+
+        return self.pnls_df[self.pnls_df["xcat"].isin(pnl_xcats)]
 
     def _validate_pnls(self):
 
-        for name, pnl in self.pnls.items():
+        for name, pnl in self.single_asset_pnls.items():
             if not isinstance(pnl, NaivePnL):
                 raise ValueError("All elements in the list must be NaivePnL objects.")
-            if name not in self.pnl_xcats:
-                raise ValueError(
-                    "The name of the NaivePnL object must be in the pnl_xcats dictionary."
-                )
-
-        if len(self.pnls) != len(self.pnl_xcats):
-            raise ValueError("The number of PnLs and pnl_xcats must be the same.")
+            if name not in pnl.pnl_names:
+                raise ValueError("The pnl_xcat must be in the NaivePnL object.")
         return True
 
     def _normalize_weights(self, weights: dict) -> dict:
@@ -260,6 +219,9 @@ class MultiAssetPnL:
         """
         weights_sum = sum(weights.values())
         return {k: v / weights_sum for k, v in weights.items()}
+
+    def get_pnl_xcats(self):
+        return self.pnl_xcats
 
 
 if __name__ == "__main__":
@@ -299,7 +261,7 @@ if __name__ == "__main__":
         cids=cids,
         start="2000-01-01",
         blacklist=black,
-        bms=["EUR_EQXR_NSA", "USD_EQXR_NSA"],
+        # bms=["EUR_EQXR_NSA", "USD_EQXR_NSA"],
     )
 
     pnl_eq.make_pnl(
@@ -312,10 +274,10 @@ if __name__ == "__main__":
         rebal_slip=1,
         min_obs=250,
         thresh=2,
-        pnl_name="PNL_GROWTH",
+        pnl_name="PNL_EQ",
     )
 
-    # pnl_eq.make_long_pnl(vol_scale=10, label="Long")
+    pnl_eq.make_long_pnl(vol_scale=10, label="Long_EQ")
 
     pnl_fx = NaivePnL(
         dfd,
@@ -337,20 +299,32 @@ if __name__ == "__main__":
         rebal_slip=1,
         min_obs=250,
         thresh=2,
+        pnl_name="PNL_FX",
     )
 
-    # pnl_fx.make_long_pnl(vol_scale=10, label="Long")
-    print(pnl_fx.pnl_names)
-    # df_eval = pnl_fx.evaluate_pnls(
-    #     pnl_cats=["PNL_GROWTH_NEG", "PNL_INFL_NEG"], start="2015-01-01", end="2020-12-31"
-    # )
-    pnl_dict = {"FX": pnl_fx, "EQ": pnl_eq}
-    pnl_xcat = {"FX": "PNL_INFL_NEG", "EQ": "PNL_GROWTH"}
-    mapnl = MultiAssetPnL(pnl_dict, pnl_xcats=pnl_xcat)
-    multiasset_analysis = mapnl.combine_pnls(weights={"FX": 1, "EQ": 1})
-    # mapnl.plot_pnls()
-    # # multiasset_analysis["pnls"].cumsum().plot()
-    # plt.show()
-    # pass
+    pnl_fx.make_long_pnl(vol_scale=10, label="Long_FX")
 
-    print(mapnl.evaluate_pnls())
+    # pnl_fx.make_long_pnl(vol_scale=10, label="Long")
+    print(pnl_eq.pnl_names)
+
+    mapnl = MultiAssetPnL()
+    mapnl.combine_pnls(
+        pnls={"PNL_FX": pnl_fx, "PNL_EQ": pnl_eq},
+        weights={"PNL_FX": 1, "PNL_EQ": 1},
+        combined_xcat="FX_EQ",
+    )
+    # mapnl.combine_pnls(
+    #     pnls={"Long_FX": pnl_fx, "Long_EQ": pnl_eq},
+    #     weights={"Long_FX": 1, "Long_EQ": 1},
+    #     combined_xcat="Long_FX_EQ",
+    # )
+    mapnl.plot_pnls()
+    # print(mapnl.evaluate_pnls(['FX_EQ', 'Long_FX_EQ']))
+
+    # multiasset_analysis = mapnl.combine_pnls(pnls={pnl_fx: "LONG_PNL", pnl_eq: "LONG_PNL"}, weights={pnl_fx: 1, pnl_eq: 1}, combined_name="LONG_FX_EQ")
+
+    # # # multiasset_analysis["pnls"].cumsum().plot()
+    # # plt.show()
+    # # pass
+
+    # print(pnl_fx.df)

@@ -897,9 +897,9 @@ class NaivePnL:
         self,
         pnl_cats: List[str],
         pnl_cids: List[str] = ["ALL"],
-        start: str = None,
-        end: str = None,
-        label_dict: Dict[str, str] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        label_dict: Optional[dict[str, str]] = None,
     ):
         """
         Table of key PnL statistics.
@@ -965,11 +965,11 @@ class NaivePnL:
 
         # If benchmark tickers have been passed into the Class and if the tickers are
         # present in self.dfd.
-        list_for_dfbm = []
+        benchmark_tickers = []
 
         if self.bm_bool and bool(self._bm_dict):
-            list_for_dfbm = list(self._bm_dict.keys())
-            for bm in list_for_dfbm:
+            benchmark_tickers = list(self._bm_dict.keys())
+            for bm in benchmark_tickers:
                 stats.insert(len(stats) - 1, f"{bm} correl")
 
         dfw = dfx.pivot(index="real_date", columns=groups, values="value")
@@ -1000,16 +1000,16 @@ class NaivePnL:
 
         df.iloc[7, :] = top_months.sum() / total_pnl
 
-        if len(list_for_dfbm) > 0:
+        if len(benchmark_tickers) > 0:
             bm_df = pd.concat(list(self._bm_dict.values()), axis=1)
-            for i, bm in enumerate(list_for_dfbm):
+            for i, bm in enumerate(benchmark_tickers):
                 index = dfw.index.intersection(bm_df.index)
                 correlation = dfw.loc[index].corrwith(
                     bm_df.loc[index].iloc[:, i], axis=0, method="pearson", drop=True
                 )
                 df.iloc[8 + i, :] = correlation
 
-        df.iloc[8 + len(list_for_dfbm), :] = dfw.resample("M").sum().count()
+        df.iloc[8 + len(benchmark_tickers), :] = dfw.resample("M").sum().count()
 
         if label_dict is not None:
             if not isinstance(label_dict, dict):
