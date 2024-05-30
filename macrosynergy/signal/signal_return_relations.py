@@ -309,6 +309,13 @@ class SignalReturnRelations:
 
         if sigs is None:
             sigs = self.sigs
+        elif isinstance(sigs, str):
+                if sigs not in self.sigs and sigs + "_NEG" in self.sigs:
+                    sigs = sigs + "_NEG"
+        if isinstance(sigs, list):
+            for sig in sigs:
+                if sig not in self.sigs and sig + "_NEG" in self.sigs:
+                    sigs[sigs.index(sig)] = sig + "_NEG"
 
         if isinstance(sigs, str):
             sigs = [sigs]
@@ -425,6 +432,13 @@ class SignalReturnRelations:
                 ret = self.rets[0]
             if sigs is None:
                 sigs = self.sigs
+            elif isinstance(sigs, str):
+                if sigs not in self.sigs and sigs + "_NEG" in self.sigs:
+                    sigs = sigs + "_NEG"
+            if isinstance(sigs, list):
+                for sig in sigs:
+                    if sig not in self.sigs and sig + "_NEG" in self.sigs:
+                        sigs[sigs.index(sig)] = sig + "_NEG"
             self.df = self.original_df.copy()
 
         if isinstance(sigs, str):
@@ -1535,8 +1549,8 @@ if __name__ == "__main__":
         blacklist=black,
     )
 
-    sr.accuracy_bars(sigs=["CRY_NEG", "INFL_NEG"], type="signals", title="Accuracy")
-    sr.correlation_bars(type="signals", title="Correlation")
+    sr.accuracy_bars(sigs=["CRY", "INFL_NEG"], type="signals", title="Accuracy")
+    sr.correlation_bars(sigs=["CRY", "INFL_NEG"], type="signals", title="Correlation")
 
     srt = sr.single_relation_table(ret="XRH", xcat="INFL_NEG", freq="Q", agg_sigs="last")
     mrt = sr.multiple_relations_table()
