@@ -1,7 +1,11 @@
 from typing import Dict, List, Optional
 
-from matplotlib import pyplot as plt
+from matplotlib import cm, pyplot as plt
+import matplotlib.dates as mdates
+
+import numpy as np
 import pandas as pd
+from pandas.tseries.offsets import BDay
 
 import seaborn as sns
 
@@ -9,7 +13,7 @@ from macrosynergy.management.utils.df_utils import reduce_df, update_df
 from macrosynergy.panel import linear_composite, make_zn_scores
 
 
-class ScoreVisualizers(object):
+class ScoreVisualisers(object):
     """
     Class for displaying heatmaps of normalized quantamental categories, including a weighted composite
 
@@ -42,7 +46,7 @@ class ScoreVisualizers(object):
         sequential: bool = True,
         iis: bool = True,
         neutral: str = "mean",
-        pan_weight: float = 0.75,
+        pan_weight: float = 1,
         thresh: float = None,
         min_obs: int = 261,
         est_freq: str = "m",
@@ -77,37 +81,9 @@ class ScoreVisualizers(object):
         self.cids = cids
         self.xcats = xcats
         self.xcat_labels = xcat_labels
-        self.xcat_comp = xcat_comp
+        self.xcat_comp = xcat_comp + postfix
         self.weights = weights
-
-        composite_df = linear_composite(
-            df,
-            xcats=self.xcats,
-            cids=self.cids,
-            weights=self.weights,
-            normalize_weights=normalize_weights,
-            signs=signs,
-            blacklist=blacklist,
-            complete_xcats=complete_xcats,
-            new_xcat=self.xcat_comp,
-        ) 
-
-        self.df = make_zn_scores(
-            composite_df,
-            xcat=xcat_comp,
-            sequential=sequential,
-            cids=cids,
-            blacklist=blacklist,
-            iis=iis,
-            neutral=neutral,
-            pan_weight=pan_weight,
-            thresh=thresh,
-            min_obs=min_obs,
-            est_freq=est_freq,
-            postfix=postfix,
-        )
-
-        composite_df = None # Clear memory
+        self.df = None
 
         for xcat in self.xcats:
             dfzm = make_zn_scores(
@@ -124,12 +100,29 @@ class ScoreVisualizers(object):
                 est_freq=est_freq,
                 postfix=postfix,
             )
-            self.df = update_df(self.df, dfzm)
+            if self.df is None:
+                self.df = dfzm
+            else:
+                self.df = update_df(self.df, dfzm)
 
         self.xcats = self.df["xcat"].unique().tolist()
+
+        composite_df = linear_composite(
+            self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+            weights=self.weights,
+            normalize_weights=normalize_weights,
+            signs=signs,
+            blacklist=blacklist,
+            complete_xcats=complete_xcats,
+            new_xcat=self.xcat_comp,
+        ) 
+
+        self.df = update_df(self.df, composite_df)
         self.postfix = postfix
 
-    def _plot_heatmap(self, df: pd.DataFrame, title: str, annot: bool = False):
+    def _plot_heatmap(self, df: pd.DataFrame, title: str, annot: bool = True):
         fig, ax = plt.subplots(figsize=(12, 10))
         sns.heatmap(df, cmap="coolwarm", annot=annot, xticklabels="auto", yticklabels="auto", ax=ax)
 
@@ -144,7 +137,9 @@ class ScoreVisualizers(object):
         cids: List[str] = None,
         xcats: List[str] = None,
         transpose: bool = False,
-        start: str = None,
+        date: str = None,
+        annot: bool = True,
+        title: str = None,
     ):
         """
         Display a multiple scores for multiple countries for the latest available or any previous date
@@ -152,7 +147,7 @@ class ScoreVisualizers(object):
         :param <List[str]> cids: A list of cids whose values are displayed. Default is all in the class
         :param <List[str]> xcats: A list of xcats to be displayed in the given order. Default is all in the class, including the composite, with the latter being the first row (or column).
         :param <bool> transpose: If False (default) rows are cids and columns are xcats. If True rows are xcats and columns are cids.
-        :param <str> start: ISO-8601 formatted date string giving the date (or nearest previous if not available). Default is latest day in the dataframe,
+        :param <str> date: ISO-8601 formatted date string giving the date (or nearest previous if not available). Default is latest business day in the dataframe -1 business day,
         """
         if cids is None:
             cids = self.cids
@@ -173,30 +168,35 @@ class ScoreVisualizers(object):
         if not isinstance(transpose, bool):
             raise TypeError("transpose must be a boolean")
 
-        if start is not None:
-            if not isinstance(start, str):
+        if date is not None:
+            if not isinstance(date, str):
                 raise TypeError("start must be a string")
+            date = pd.to_datetime(date)
             
         df = self.df[self.df["xcat"].isin(xcats)]
 
         df = df[df["cid"].isin(cids)]
 
-        if start is None:
-            start = df["real_date"].max()
+        if date is None:
+            max_date = df["real_date"].max()
+            date = max_date - BDay(1)
 
-        df = df[df["real_date"] == start]
+        df = df[df["real_date"] == date]
 
         dfw = df.pivot(index="cid", columns="xcat", values="value")
 
         # If xcats contains the composite, it is moved to the first column
-        composite_zscore = self.xcat_comp + self.postfix
+        composite_zscore = self.xcat_comp
         if composite_zscore in xcats:
             dfw = dfw[[composite_zscore] + [xcat for xcat in dfw.columns if xcat != composite_zscore]]
 
         if transpose:
             dfw = dfw.transpose()
 
-        self._plot_heatmap(dfw, f"Snapshot for {start.strftime('%Y-%m-%d')}")
+        if title is None:
+            title = f"Snapshot for {date.strftime('%Y-%m-%d')}"
+
+        self._plot_heatmap(dfw, title=title, annot=annot)
 
     def view_score_evolution(
         self,
@@ -207,6 +207,8 @@ class ScoreVisualizers(object):
         include_latest_day: bool = True,
         start: str = None,
         transpose: bool = False,
+        annot: bool = True,
+        title: str = None,
     ):
         """
         :param <List[str]> cids: A list of cids whose values are displayed. Default is all in the class
@@ -216,7 +218,7 @@ class ScoreVisualizers(object):
         :param <bool> include_latest_day: include the latest working day date as defined by freq, even if it is not complete. Default is True.
         :param <str> start: ISO-8601 formatted date string. Select data from
             this date onwards. If None, all dates are selected.
-        :param <bool> transpose: If False (default) rows are cids and columns are time periods. If True rows are time periods and columns are cids.
+        :param <bool> transpose: If False (default) rows are time periods and columns are cids. If True rows are cids and columns are time periods.
         """
 
         if cids is None:
@@ -264,10 +266,15 @@ class ScoreVisualizers(object):
         else:
             dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d"))
 
+        dfw_resampled = dfw_resampled.transpose()
+
         if transpose:
             dfw_resampled = dfw_resampled.transpose()
 
-        self._plot_heatmap(dfw_resampled, f"Score Evolution for {xcat}")
+        if title is None:
+            title = f"Score Evolution for {xcat}"
+
+        self._plot_heatmap(dfw_resampled, title=title, annot=annot)
 
     def view_cid_evolution(
         self,
@@ -278,6 +285,8 @@ class ScoreVisualizers(object):
         include_latest_day: bool = True,
         start: str = None,
         transpose: bool = False,
+        annot: bool = True,
+        title: str = None,
     ):
         """
         :param <str> cid: Single cid to be displayed
@@ -332,11 +341,49 @@ class ScoreVisualizers(object):
         else:
             dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d"))
 
+        dfw_resampled = dfw_resampled.transpose()
+
         if transpose:
             dfw_resampled = dfw_resampled.transpose()
 
-        self._plot_heatmap(dfw_resampled, f"CID Evolution for {cid}")
+        if title is None:
+            title = f"CID Evolution for {cid}"
 
+        self._plot_heatmap(dfw_resampled, title=title, annot=annot)
+
+    def view_3d_surface(self, xcat: str, cids: List[str] = None):
+        if cids is None:
+            cids = self.cids
+        
+        df = self.df[(self.df["xcat"] == xcat + self.postfix) & (self.df["cid"].isin(cids))]
+        df['cid_num'] = df['cid'].astype('category').cat.codes
+        
+        # Pivot the DataFrame to create a 2D matrix for Z values
+        pivot_table = df.pivot(index='cid_num', columns='real_date', values='value')
+        
+        X = mdates.date2num(pivot_table.columns)
+        Y = pivot_table.index
+        X, Y = np.meshgrid(X, Y)
+        Z = pivot_table.values
+
+        fig = plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(111, projection='3d')
+        surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm)
+
+        ax.set_xlabel('Date')
+        ax.set_zlabel('Value')
+
+        cid_labels = df[['cid', 'cid_num']].drop_duplicates().sort_values('cid_num')
+        ax.set_yticks(cid_labels['cid_num'])
+        ax.set_yticklabels(cid_labels['cid'], rotation=90, ha='right')
+
+        ax.xaxis_date()
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        fig.autofmt_xdate()
+
+        plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+
+        plt.show()
 
 if __name__ == "__main__":
     cids_dm = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
@@ -402,14 +449,16 @@ if __name__ == "__main__":
             show_progress=True,
         )
 
-    sv = ScoreVisualizers(df, cids=cids, xcats=xcats)
+    sv = ScoreVisualisers(df, cids=cids, xcats=xcats)
 
     xcats = ["DU05YXR_NSA", "DU05YXR_VT10", "EQXR_NSA"]
-    # cids = ["AUD", "CAD", "GBP", "USD"]
+    cids = ["AUD", "CAD", "GBP", "USD"]
 
     sv.view_snapshot(cids=cids, transpose=False)
     # sv.view_snapshot(cids=cids, xcats=xcats, transpose=True)
-    sv.view_cid_evolution(cid="USD", xcats=xcats, freq="Q", transpose=False)
+    sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=False)
     # sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=True)
     sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="BA", transpose=False, start="2010-01-01")
     # sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="A", transpose=True, start="2010-01-01")
+
+    sv.view_3d_surface("CRESFXGDP_NSA_D1M1ML6")
