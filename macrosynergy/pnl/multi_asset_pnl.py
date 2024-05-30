@@ -157,6 +157,7 @@ class MultiAssetPnL:
         :param pnl_xcats: List of PnLs to evaluate. If None, all PnLs are evaluated.
             Must be in the format 'asset::xcat', or 'xcat' for multi-asset PnLs.
         """
+        self._check_pnls_added()
         if pnl_xcats is None:
             pnl_xcats = self.multi_asset_xcats + list(self.single_asset_pnls.keys())
         pnl_evals = []
@@ -268,7 +269,7 @@ class MultiAssetPnL:
 
     def _check_pnls_added(self, min_pnls: int = 1):
         if len(self.pnls_df) < min_pnls:
-            raise ValueError(f"At least {min_pnls} must be added with add_pnl() first.")
+            raise ValueError(f"At least {min_pnls} PnL must be added with add_pnl() first.")
 
 
 if __name__ == "__main__":
