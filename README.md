@@ -10,11 +10,13 @@
 
 The Macrosynergy package supports financial market research and the development of trading strategies based on formats and conventions of the J.P. Morgan Macrosynergy  Quantamental System (JPMaQS). JPMaQS provides quantitative-fundamental (quantamental) and market data in simple daily formats in accordance with the information state of markets. The Macrosynergy package consists of five sub-packages:
 
-1. [management](./macrosynergy/management): simulates, analyses and reshapes standard quantamental dataframes.
-2. [panel](./macrosynergy/panel): analyses and visualizes panels of quantamental data.
-3. [signal](./macrosynergy/signal): transforms quantamental indicators into trading signals and does naive analysis.
-4. [pnl](./macrosynergy/pnl): constructs portfolios based on signals, applies risk management and analyses realistic PnLs.
-5. [download](./macrosynergy/download): interface for downloading data from JP Morgan DataQuery, with main module [jpmaqs.py](./macrosynergy/download/jpmaqs.py). 
+1. [download](./macrosynergy/download): interface for downloading data from JP Morgan DataQuery, with main module [jpmaqs.py](./macrosynergy/download/jpmaqs.py).
+2. [management](./macrosynergy/management): simulates, analyses and reshapes standard quantamental dataframes.
+3. [learning](./macrosynergy/learning): implements advanced machine learning techniques to analyze and derive insights from quantamental data.
+4. [panel](./macrosynergy/panel): analyses and visualizes panels of quantamental data.
+5. [pnl](./macrosynergy/pnl): constructs portfolios based on signals, applies risk management and analyses realistic PnLs.
+6. [signal](./macrosynergy/signal): transforms quantamental indicators into trading signals and does naive analysis.
+7. [visuals](./macrosynergy/visuals): sophisticated tools for the visualization of quantamental data and related analyses, enabling the creation of high-quality, publication-ready plots and graphs.
 
 ## Installation
 The easiest method for installing the package is to use the [PyPI](https://pypi.org/project/macrosynergy/) installation method:
