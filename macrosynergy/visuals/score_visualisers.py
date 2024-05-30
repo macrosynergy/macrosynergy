@@ -117,21 +117,32 @@ class ScoreVisualisers(object):
             blacklist=blacklist,
             complete_xcats=complete_xcats,
             new_xcat=self.xcat_comp,
-        ) 
+        )
 
         self.df = update_df(self.df, composite_df)
         self.xcats = self.df["xcat"].unique().tolist()
         self.postfix = postfix
 
-    def _plot_heatmap(self, df: pd.DataFrame, title: str, annot: bool = True):
+    def _plot_heatmap(self, df: pd.DataFrame, title: str, annot: bool = True, xticks=None):
         fig, ax = plt.subplots(figsize=(12, 10))
-        sns.heatmap(df, cmap="coolwarm", annot=annot, xticklabels="auto", yticklabels="auto", ax=ax)
+        
+        sns.heatmap(
+            df,
+            cmap="coolwarm",
+            annot=annot,
+            xticklabels="auto",
+            yticklabels="auto",
+            ax=ax,
+        )
 
         ax.set_title(title, fontsize=14)
+        
+        if xticks is None:
+            xticks = {"rotation": 45, "ha": "right"}
+        plt.xticks(**xticks)
 
         plt.tight_layout()
         plt.show()
-
 
     def view_snapshot(
         self,
@@ -141,6 +152,7 @@ class ScoreVisualisers(object):
         date: str = None,
         annot: bool = True,
         title: str = None,
+        xticks: dict = None
     ):
         """
         Display a multiple scores for multiple countries for the latest available or any previous date
@@ -163,7 +175,7 @@ class ScoreVisualisers(object):
             isinstance(xcat, str) for xcat in xcats
         ):
             raise TypeError("xcats must be a list of strings")
-        else: 
+        else:
             xcats = [xcat + self.postfix for xcat in xcats]
 
         if not isinstance(transpose, bool):
@@ -173,7 +185,7 @@ class ScoreVisualisers(object):
             if not isinstance(date, str):
                 raise TypeError("start must be a string")
             date = pd.to_datetime(date)
-            
+
         df = self.df[self.df["xcat"].isin(xcats)]
 
         df = df[df["cid"].isin(cids)]
@@ -189,7 +201,10 @@ class ScoreVisualisers(object):
         # If xcats contains the composite, it is moved to the first column
         composite_zscore = self.xcat_comp
         if composite_zscore in xcats:
-            dfw = dfw[[composite_zscore] + [xcat for xcat in dfw.columns if xcat != composite_zscore]]
+            dfw = dfw[
+                [composite_zscore]
+                + [xcat for xcat in dfw.columns if xcat != composite_zscore]
+            ]
 
         if transpose:
             dfw = dfw.transpose()
@@ -197,7 +212,7 @@ class ScoreVisualisers(object):
         if title is None:
             title = f"Snapshot for {date.strftime('%Y-%m-%d')}"
 
-        self._plot_heatmap(dfw, title=title, annot=annot)
+        self._plot_heatmap(dfw, title=title, annot=annot, xticks=xticks)
 
     def view_score_evolution(
         self,
@@ -210,6 +225,7 @@ class ScoreVisualisers(object):
         transpose: bool = False,
         annot: bool = True,
         title: str = None,
+        xticks: dict = None
     ):
         """
         :param <List[str]> cids: A list of cids whose values are displayed. Default is all in the class
@@ -228,10 +244,10 @@ class ScoreVisualisers(object):
             isinstance(cid, str) for cid in cids
         ):
             raise TypeError("cids must be a list of strings")
-        
+
         if freq not in ["Q", "A", "BA"]:
             raise ValueError("freq must be 'Q', 'A', or 'BA'")
-        
+
         if freq == "BA":
             freq = "6MS"
 
@@ -244,7 +260,7 @@ class ScoreVisualisers(object):
         if start is not None:
             if not isinstance(start, str):
                 raise TypeError("start must be a string")
-            
+
         df = self.df[self.df["xcat"] == xcat + self.postfix].drop(columns=["xcat"])
 
         df = df[df["cid"].isin(cids)]
@@ -256,14 +272,16 @@ class ScoreVisualisers(object):
 
         dfw = df.pivot(index="real_date", columns="cid", values="value")
 
-        dfw_resampled = dfw.resample(freq, origin='start').mean()
+        dfw_resampled = dfw.resample(freq, origin="start").mean()
         if not include_latest_period:
             dfw_resampled = dfw_resampled.iloc[:-1]
 
         if include_latest_day:
             latest_day = dfw.loc[df["real_date"].max()]
             dfw_resampled.loc[df["real_date"].max()] = latest_day
-            dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d")[:-1]) + ["Latest Day"]
+            dfw_resampled.index = list(
+                dfw_resampled.index.strftime("%Y-%m-%d")[:-1]
+            ) + ["Latest Day"]
         else:
             dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d"))
 
@@ -275,7 +293,7 @@ class ScoreVisualisers(object):
         if title is None:
             title = f"Score Evolution for {xcat}"
 
-        self._plot_heatmap(dfw_resampled, title=title, annot=annot)
+        self._plot_heatmap(dfw_resampled, title=title, annot=annot, xticks=xticks)
 
     def view_cid_evolution(
         self,
@@ -288,6 +306,7 @@ class ScoreVisualisers(object):
         transpose: bool = False,
         annot: bool = True,
         title: str = None,
+        xticks: dict = None
     ):
         """
         :param <str> cid: Single cid to be displayed
@@ -302,16 +321,18 @@ class ScoreVisualisers(object):
 
         if not isinstance(cid, str):
             raise TypeError("cid must be a string")
-        
+
         if freq not in ["Q", "A", "BA"]:
             raise ValueError("freq must be 'Q', 'A', or 'BA'")
-        
+
         if freq == "BA":
             freq = "6MS"
 
         if xcats is None:
             xcats = self.xcats
-        elif not isinstance(xcats, list) or not all(isinstance(xcat, str) for xcat in xcats):
+        elif not isinstance(xcats, list) or not all(
+            isinstance(xcat, str) for xcat in xcats
+        ):
             raise TypeError("xcats must be a list of strings")
         else:
             xcats = [xcat + self.postfix for xcat in xcats]
@@ -338,7 +359,9 @@ class ScoreVisualisers(object):
         if include_latest_day:
             latest_day = dfw.loc[df["real_date"].max()]
             dfw_resampled.loc[df["real_date"].max()] = latest_day
-            dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d")[:-1]) + ["Latest Day"]
+            dfw_resampled.index = list(
+                dfw_resampled.index.strftime("%Y-%m-%d")[:-1]
+            ) + ["Latest Day"]
         else:
             dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d"))
 
@@ -350,82 +373,93 @@ class ScoreVisualisers(object):
         if title is None:
             title = f"CID Evolution for {cid}"
 
-        self._plot_heatmap(dfw_resampled, title=title, annot=annot)
+        self._plot_heatmap(dfw_resampled, title=title, annot=annot, xticks=xticks)
 
     def view_3d_surface(self, xcat: str, cids: List[str] = None):
         if cids is None:
             cids = self.cids
-        
-        df = self.df[(self.df["xcat"] == xcat + self.postfix) & (self.df["cid"].isin(cids))]
-        df['cid_num'] = df['cid'].astype('category').cat.codes
-        
+
+        df = self.df[
+            (self.df["xcat"] == xcat + self.postfix) & (self.df["cid"].isin(cids))
+        ]
+        df["cid_num"] = df["cid"].astype("category").cat.codes
+
         # Pivot the DataFrame to create a 2D matrix for Z values
-        pivot_table = df.pivot(index='cid_num', columns='real_date', values='value')
-        
+        pivot_table = df.pivot(index="cid_num", columns="real_date", values="value")
+
         X = mdates.date2num(pivot_table.columns)
         Y = pivot_table.index
         X, Y = np.meshgrid(X, Y)
         Z = pivot_table.values
 
         fig = plt.figure(figsize=(12, 8))
-        ax = fig.add_subplot(111, projection='3d')
+        ax = fig.add_subplot(111, projection="3d")
         surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm)
 
-        ax.set_xlabel('Date')
-        ax.set_zlabel('Value')
+        ax.set_xlabel("Date")
+        ax.set_zlabel("Value")
 
-        cid_labels = df[['cid', 'cid_num']].drop_duplicates().sort_values('cid_num')
-        ax.set_yticks(cid_labels['cid_num'])
-        ax.set_yticklabels(cid_labels['cid'], rotation=90, ha='right')
+        cid_labels = df[["cid", "cid_num"]].drop_duplicates().sort_values("cid_num")
+        ax.set_yticks(cid_labels["cid_num"])
+        ax.set_yticklabels(cid_labels["cid"], rotation=90, ha="right")
 
         ax.xaxis_date()
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
         fig.autofmt_xdate()
 
         plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
 
         plt.show()
 
+
 if __name__ == "__main__":
-    cids_dm = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
-    cids_em = [
-        "CLP",
-        "CNY",
-        "COP",
+    cids_dmea = ["FRF", "DEM", "ITL", "ESP", "EUR"]
+    cids_dmxe = ["CHF", "GBP", "JPY", "SEK", "USD"]
+    cids_dm = cids_dmea + cids_dmxe
+    cids_g10 = ["AUD", "DEM", "FRF", "ESP", "ITL", "JPY", "NZD", "GBP", "USD"]
+    cids_latm = ["BRL", "CLP", "COP", "MXN", "PEN"]  # Latam sovereigns
+    cids_emea = [
         "CZK",
-        "HKD",
         "HUF",
-        "IDR",
         "ILS",
-        "INR",
-        "KRW",
-        "MXN",
         "PLN",
         "RON",
-        "RUB",
-        "SGD",
-        "THB",
-        "TRY",
-        "TWD",
         "ZAR",
-    ]
+        "TRY",
+    ]  # EMEA sovereigns
+    cids_emas = [
+        "CNY",
+        "IDR",
+        "KRW",
+        "MYR",
+        "PHP",
+        "THB",
+    ]  # EM Asia sovereigns
+    cids_ea = ["DEM", "FRF", "ESP", "ITL"]  # major Euro currencies before EUR
+    cids_em = cids_emea + cids_latm + cids_emas
     cids = cids_dm + cids_em
     main = [
-        "CRESFXGDP_NSA_D1M1ML6",  # Currency reserve expansion as % of GDP
-        "MBASEGDP_SA_D1M1ML6",  # Monetary base expansion as % of GDP
-        "INTLIQGDP_NSA_D1M1ML3",  # Intervention-driven liquidity expansion as % of GDP, diff over 3 months
-        "INTLIQGDP_NSA_D1M1ML6",  # Intervention-driven liquidity expansion as % of GDP, diff over 6 months
+        "GGIEDGDP_NSA",
+        # Currency reserve expansion as % of GDP
+        "NIIPGDP_NSA",
+        # Monetary base expansion as % of GDP
+        "CABGDPRATIO_NSA_12MMA",
+        # Intervention-driven liquidity expansion as % of GDP, diff over 3 months
+        "GGOBGDPRATIO_NSA",
+        # Intervention-driven liquidity expansion as % of GDP, diff over 6 months
     ]
 
-    rets = [
-        "DU05YXR_NSA",
-        "DU05YXR_VT10",
-        "EQXR_NSA",
-        "EQXR_VT10",
-        "FXTARGETED_NSA",
-        "FXUNTRADABLE_NSA",
-        "FXXR_VT10",
-    ]
+    rets = []
+
+    # rets = [
+    #     "DU05YXR_NSA",
+    #     "DU05YXR_VT10",
+    #     "EQXR_NSA",
+    #     "EQXR_VT10",
+    #     "FXTARGETED_NSA",
+    #     "FXUNTRADABLE_NSA",
+    #     "FXXR_VT10",
+    # ]
 
     xcats = main + rets
 
@@ -452,14 +486,17 @@ if __name__ == "__main__":
 
     sv = ScoreVisualisers(df, cids=cids, xcats=xcats)
 
-    xcats = ["DU05YXR_NSA", "DU05YXR_VT10", "EQXR_NSA"]
-    cids = ["AUD", "CAD", "GBP", "USD"]
-
-    sv.view_snapshot(cids=cids, transpose=False)
+    sv.view_snapshot(cids=cids, transpose=True)
     # sv.view_snapshot(cids=cids, xcats=xcats, transpose=True)
     sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=False)
     # sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=True)
-    sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="BA", transpose=False, start="2010-01-01")
+    sv.view_score_evolution(
+        xcat="GGIEDGDP_NSA",
+        cids=cids,
+        freq="BA",
+        transpose=False,
+        start="2010-01-01",
+    )
     # sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="A", transpose=True, start="2010-01-01")
 
-    sv.view_3d_surface("CRESFXGDP_NSA_D1M1ML6")
+    sv.view_3d_surface("GGIEDGDP_NSA")
