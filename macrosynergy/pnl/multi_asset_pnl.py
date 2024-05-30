@@ -217,7 +217,10 @@ class MultiAssetPnL:
 
     def get_pnls(self, pnl_xcats: list[str] = None) -> pd.DataFrame:
         """
-        Returns the combined PnLs.
+        Returns a DataFrame with PnLs.
+
+        :param pnl_xcats: List of PnLs to return. If None, all PnLs are returned.
+            Must be in the format 'asset::xcat', or 'xcat' for multi-asset PnLs.
         """
         if self.pnls_df is None:
             raise ValueError(
@@ -248,21 +251,14 @@ class MultiAssetPnL:
                 raise ValueError(f"{asset_xcat} has already been added.")
         return True
 
-    def _validate_pnls(self):
-
-        for name, pnl in self.single_asset_pnls.items():
-            if not isinstance(pnl, NaivePnL):
-                raise ValueError("All elements in the list must be NaivePnL objects.")
-            if name not in pnl.pnl_names:
-                raise ValueError("The pnl_xcat must be in the NaivePnL object.")
-        return True
-
     def pnl_xcats(self):
         return self.multi_asset_xcats + list(self.single_asset_pnls.keys())
 
     def _check_pnls_added(self, min_pnls: int = 1):
         if len(self.pnls_df) < min_pnls:
-            raise ValueError(f"At least {min_pnls} PnL must be added with add_pnl() first.")
+            raise ValueError(
+                f"At least {min_pnls} PnL must be added with add_pnl() first."
+            )
 
 
 if __name__ == "__main__":
