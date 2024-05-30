@@ -20,6 +20,21 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         data_freq: str = "D",
         min_xs_samples: int = 2,
     ):
+        """
+        Base class for systems of regressors.
+
+        :param <int> roll: The lookback of the rolling window for the regression. If None,
+            the entire cross-sectional history is used for each regression. This should
+            be specified in units of the data frequency, possibly adjusted by the
+            data_freq attribute.
+        :param <str> data_freq: Training set data frequency. This is primarily
+            to be used within the context of market beta estimation in the
+            MarketBetaEstimator class in `macrosynergy.learning`. Accepted strings
+            are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
+            Default is 'D'.
+        :param <int> min_xs_samples: The minimum number of samples required in each
+            cross-section training set for a regression model to be fitted.
+        """
         self.roll = roll
         self.data_freq = data_freq
         self.min_xs_samples = min_xs_samples
@@ -32,7 +47,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         y: Union[pd.DataFrame, pd.Series],
     ):
         """
-        Fit method to fit a rolling linear regression on each cross-section, subject to
+        Fit method to fit a regression on each cross-section, subject to
         cross-sectional data availability.
 
         :param <pd.DataFrame> X: Pandas dataframe of input features.
@@ -45,7 +60,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         if isinstance(y, np.ndarray):
             # This can happen during sklearn's GridSearch when a voting regressor is used
             y = pd.Series(y, index=X.index)
-            
+
         _validate_Xy_learning(X, y)
 
         # Adjust min_xs_samples based on the frequency of the data
@@ -79,6 +94,9 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         return self
 
     def _fit_cross_section(self, section, X_section, y_section):
+        """
+        Fit a regression model on a single cross-section.
+        """
         model = self.create_model()
         model.fit(pd.DataFrame(X_section), y_section)
         # Store model and coefficients
@@ -141,14 +159,23 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             )
         return min_xs_samples
 
+    @abstractmethod
+    def store_model_info(self, section, model):
+        pass
+
+    @abstractmethod
+    def create_model(self):
+        """
+        Method use to instantiate a regression model for a given cross-section.
+
+        Must be overridden.
+        """
+        pass
+
     def _check_xs_dates(self, min_xs_samples, num_dates):
         if num_dates < min_xs_samples:
             return False
         return True
-
-    @abstractmethod
-    def store_model_info(self, section, model):
-        pass
 
     def _downsample_by_data_freq(self, df):
         return (
@@ -161,10 +188,6 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             .sum()
             .copy()
         )
-
-    @abstractmethod
-    def create_model(self):
-        pass
 
 
 class LinearRegressionSystem(BaseRegressionSystem):
@@ -564,8 +587,8 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
     def _fit_cross_section(self, section, X_section, y_section):
         # Estimate local standard deviations of the benchmark and contract return
         if self.volatility_window_type == "rolling":
-            X_section_std = X_section[-self.volatility_lookback:].std().iloc[-1]
-            y_section_std = y_section[-self.volatility_lookback:].std()
+            X_section_std = X_section[-self.volatility_lookback :].std().iloc[-1]
+            y_section_std = y_section[-self.volatility_lookback :].std()
         elif self.volatility_window_type == "exponential":
             X_section_std = (
                 X_section.ewm(span=self.volatility_lookback).std().iloc[-1, 0]
