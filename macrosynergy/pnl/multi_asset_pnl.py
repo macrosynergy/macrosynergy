@@ -135,14 +135,14 @@ class MultiAssetPnL:
         else:
             pnl_df = self.pnls_df[self.pnls_df["xcat"].isin(pnl_xcats)].copy()
         pnl_df.loc[:, "cumulative pnl"] = pnl_df.groupby("xcat")["value"].cumsum()
-
         sns.lineplot(data=pnl_df, x="real_date", y="cumulative pnl", hue=("xcat"))
         plt.title(title)
         plt.xlabel(None)
         plt.ylabel("% risk capital, no compounding")
         plt.legend(title="PnLs")
         plt.show()
-
+        pnl_df.drop(columns="cumulative pnl", inplace=True)
+        
     def evaluate_pnls(self, pnl_xcats: List[str] = None) -> pd.DataFrame:
         """
         Evaluate single and multi-asset PnLs.
