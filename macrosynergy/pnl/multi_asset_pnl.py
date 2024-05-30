@@ -157,7 +157,7 @@ class MultiAssetPnL:
         """
         self._check_pnls_added()
         if pnl_xcats is None:
-            pnl_xcats = self.composite_pnl_xcats + list(self.single_asset_pnls.keys())
+            pnl_xcats = self.pnl_xcats()
         else:
             for i, pnl_xcat in enumerate(pnl_xcats):
                 pnl_xcats[i] = self._infer_return_by_xcat(pnl_xcat)
