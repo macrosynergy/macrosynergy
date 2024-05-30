@@ -357,11 +357,3 @@ if __name__ == "__main__":
 
     mapnl.plot_pnls()
     print(mapnl.evaluate_pnls())
-
-    # multiasset_analysis = mapnl.combine_pnls(pnls={pnl_fx: "LONG_PNL", pnl_eq: "LONG_PNL"}, weights={pnl_fx: 1, pnl_eq: 1}, combined_name="LONG_FX_EQ")
-
-    # # # multiasset_analysis["pnls"].cumsum().plot()
-    # plt.show()
-    # # pass
-
-    # print(pnl_fx.df)
