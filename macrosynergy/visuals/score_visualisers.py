@@ -120,6 +120,7 @@ class ScoreVisualisers(object):
         ) 
 
         self.df = update_df(self.df, composite_df)
+        self.xcats = self.df["xcat"].unique().tolist()
         self.postfix = postfix
 
     def _plot_heatmap(self, df: pd.DataFrame, title: str, annot: bool = True):
