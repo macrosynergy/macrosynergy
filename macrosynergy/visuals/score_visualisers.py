@@ -123,8 +123,8 @@ class ScoreVisualisers(object):
         self.xcats = self.df["xcat"].unique().tolist()
         self.postfix = postfix
 
-    def _plot_heatmap(self, df: pd.DataFrame, title: str, annot: bool = True, xticks=None):
-        fig, ax = plt.subplots(figsize=(12, 10))
+    def _plot_heatmap(self, df: pd.DataFrame, title: str, annot: bool = True, xticks=None, figsize=(12, 10)):
+        fig, ax = plt.subplots(figsize=figsize)
         
         sns.heatmap(
             df,
@@ -136,7 +136,7 @@ class ScoreVisualisers(object):
         )
 
         ax.set_title(title, fontsize=14)
-        
+
         if xticks is None:
             xticks = {"rotation": 45, "ha": "right"}
         plt.xticks(**xticks)
@@ -152,7 +152,8 @@ class ScoreVisualisers(object):
         date: str = None,
         annot: bool = True,
         title: str = None,
-        xticks: dict = None
+        xticks: dict = None,
+        figsize: tuple = (12, 10)
     ):
         """
         Display a multiple scores for multiple countries for the latest available or any previous date
@@ -212,7 +213,7 @@ class ScoreVisualisers(object):
         if title is None:
             title = f"Snapshot for {date.strftime('%Y-%m-%d')}"
 
-        self._plot_heatmap(dfw, title=title, annot=annot, xticks=xticks)
+        self._plot_heatmap(dfw, title=title, annot=annot, xticks=xticks, figsize=figsize)
 
     def view_score_evolution(
         self,
@@ -225,7 +226,8 @@ class ScoreVisualisers(object):
         transpose: bool = False,
         annot: bool = True,
         title: str = None,
-        xticks: dict = None
+        xticks: dict = None,
+        figsize: tuple = (12, 10)
     ):
         """
         :param <List[str]> cids: A list of cids whose values are displayed. Default is all in the class
@@ -293,7 +295,7 @@ class ScoreVisualisers(object):
         if title is None:
             title = f"Score Evolution for {xcat}"
 
-        self._plot_heatmap(dfw_resampled, title=title, annot=annot, xticks=xticks)
+        self._plot_heatmap(dfw_resampled, title=title, annot=annot, xticks=xticks, figsize=figsize)
 
     def view_cid_evolution(
         self,
@@ -306,7 +308,8 @@ class ScoreVisualisers(object):
         transpose: bool = False,
         annot: bool = True,
         title: str = None,
-        xticks: dict = None
+        xticks: dict = None,
+        figsize: tuple = (12, 10)
     ):
         """
         :param <str> cid: Single cid to be displayed
@@ -373,7 +376,7 @@ class ScoreVisualisers(object):
         if title is None:
             title = f"CID Evolution for {cid}"
 
-        self._plot_heatmap(dfw_resampled, title=title, annot=annot, xticks=xticks)
+        self._plot_heatmap(dfw_resampled, title=title, annot=annot, xticks=xticks, figsize=figsize)
 
     def view_3d_surface(self, xcat: str, cids: List[str] = None):
         if cids is None:
@@ -486,7 +489,7 @@ if __name__ == "__main__":
 
     sv = ScoreVisualisers(df, cids=cids, xcats=xcats)
 
-    sv.view_snapshot(cids=cids, transpose=True)
+    sv.view_snapshot(cids=cids, transpose=True, figsize=(14,12))
     # sv.view_snapshot(cids=cids, xcats=xcats, transpose=True)
     sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=False)
     # sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=True)

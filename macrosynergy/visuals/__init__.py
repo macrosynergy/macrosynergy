@@ -11,6 +11,7 @@ from .correlation import view_correlation
 from .ranges import view_ranges
 from .table import view_table
 from .multiple_reg_scatter import multiple_reg_scatter
+from .score_visualisers import ScoreVisualisers
 
 
 __all__ = [
@@ -26,5 +27,5 @@ __all__ = [
     "timelines",
     "view_panel_dates",
     "multiple_reg_scatter",
-    "ScoreVisualizer",
+    "ScoreVisualisers",
 ]
