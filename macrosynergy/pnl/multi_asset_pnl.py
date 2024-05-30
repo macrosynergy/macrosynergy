@@ -2,21 +2,14 @@
 Multi Asset PnLs combine multiple "Naive" PnLs with limited signal options and disregarding transaction costs.
 """
 
-from functools import reduce
-import warnings
-from itertools import product
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional
 
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 import seaborn as sns
 
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df, update_df
-from macrosynergy.panel.make_zn_scores import make_zn_scores
-from macrosynergy.signal import SignalReturnRelations
 from macrosynergy.pnl import NaivePnL
 
 
