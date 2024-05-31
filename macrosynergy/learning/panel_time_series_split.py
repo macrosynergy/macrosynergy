@@ -512,8 +512,6 @@ class ExpandingFrequencyPanelSplit(BasePanelSplit):
 
             yield train_indices, test_indices
 
-        pass
-
     def get_n_splits(self, X=None, y=None, groups=None) -> int:
         """
         Calculates and returns the number of splits.
