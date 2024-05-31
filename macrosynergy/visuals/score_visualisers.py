@@ -123,7 +123,7 @@ class ScoreVisualisers(object):
         self.xcats = self.df["xcat"].unique().tolist()
         self.postfix = postfix
 
-    def _plot_heatmap(self, df: pd.DataFrame, title: str, annot: bool = True, xticks=None, figsize=(12, 10)):
+    def _plot_heatmap(self, df: pd.DataFrame, title: str, annot: bool = True, xticks=None, figsize=(20, 10)):
         fig, ax = plt.subplots(figsize=figsize)
         
         sns.heatmap(
@@ -153,7 +153,7 @@ class ScoreVisualisers(object):
         annot: bool = True,
         title: str = None,
         xticks: dict = None,
-        figsize: tuple = (12, 10)
+        figsize: tuple = (20, 10)
     ):
         """
         Display a multiple scores for multiple countries for the latest available or any previous date
@@ -227,7 +227,7 @@ class ScoreVisualisers(object):
         annot: bool = True,
         title: str = None,
         xticks: dict = None,
-        figsize: tuple = (12, 10)
+        figsize: tuple = (20, 10)
     ):
         """
         :param <List[str]> cids: A list of cids whose values are displayed. Default is all in the class
@@ -309,7 +309,7 @@ class ScoreVisualisers(object):
         annot: bool = True,
         title: str = None,
         xticks: dict = None,
-        figsize: tuple = (12, 10)
+        figsize: tuple = (20, 10)
     ):
         """
         :param <str> cid: Single cid to be displayed
