@@ -13,3 +13,4 @@ Submodules
    :maxdepth: 2
 
    macrosynergy.pnl.naive_pnl
+   macrosynergy.pnl.multi_pnl
