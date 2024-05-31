@@ -209,11 +209,14 @@ class ScoreVisualisers(object):
             ]
 
         if xcat_labels is not None:
-            if set(xcat_labels.keys()) != set(dfw.columns):
+            if set(xcat_labels.keys()) == set(dfw.columns):
+                dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
+            elif set(xcat_labels.keys()) == set(xcats):
+                dfw.columns = [xcat_labels[xcat] for xcat in xcats]
+            else:
                 raise ValueError(
                     "xcat_labels must contain the same keys as xcats in the DataFrame"
                 )
-            dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
 
         if transpose:
             dfw = dfw.transpose()
@@ -378,11 +381,14 @@ class ScoreVisualisers(object):
             dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d"))
 
         if xcat_labels is not None:
-            if set(xcat_labels.keys()) != set(dfw.columns):
+            if set(xcat_labels.keys()) == set(dfw.columns):
+                dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
+            elif set(xcat_labels.keys()) == set(xcats):
+                dfw.columns = [xcat_labels[xcat] for xcat in xcats]
+            else:
                 raise ValueError(
                     "xcat_labels must contain the same keys as xcats in the DataFrame"
                 )
-            dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
 
         dfw_resampled = dfw_resampled.transpose()
 
