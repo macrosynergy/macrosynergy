@@ -18,6 +18,7 @@ Submodules
    macrosynergy.visuals.heatmap
    macrosynergy.visuals.lineplot
    macrosynergy.visuals.metrics
+   macrosynergy.visuals.multiple_reg_scatter
    macrosynergy.visuals.plotter
    macrosynergy.visuals.ranges
    macrosynergy.visuals.table
