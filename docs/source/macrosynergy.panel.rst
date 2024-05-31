@@ -19,6 +19,7 @@ Submodules
    macrosynergy.panel.historic_vol
    macrosynergy.panel.linear_composite
    macrosynergy.panel.make_blacklist
+   macrosynergy.panel.make_relative_category
    macrosynergy.panel.make_relative_value
    macrosynergy.panel.make_zn_scores
    macrosynergy.panel.panel_calculator

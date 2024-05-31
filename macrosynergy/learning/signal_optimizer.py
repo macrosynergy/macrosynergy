@@ -19,7 +19,13 @@ from sklearn.pipeline import Pipeline
 from tqdm.auto import tqdm
 
 from macrosynergy.learning.panel_time_series_split import (
-    BasePanelSplit, ExpandingIncrementPanelSplit, RollingKFoldPanelSplit)
+    BasePanelSplit,
+    ExpandingIncrementPanelSplit,
+    RollingKFoldPanelSplit,
+    ExpandingKFoldPanelSplit,
+)
+
+from macrosynergy.learning.predictors import LADRegressionSystem
 from macrosynergy.management.validation import _validate_Xy_learning
 
 
@@ -32,7 +38,6 @@ class SignalOptimizer:
         blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]] = None,
         initial_nsplits: Optional[Union[int, np.int_]] = None,
         threshold_ndates: Optional[Union[int, np.int_]] = None,
-        lagged_features: bool = True,
     ):
         """
         Class for sequential optimization of raw signals based on quantamental features.
@@ -51,18 +56,11 @@ class SignalOptimizer:
         with the targets, in y, being the cumulative returns at the native frequency.
         The timestamps in the multi-indexes should refer to those of the unlagged
         returns/targets, as returned by `categories_df` within `macrosynergy.management`.
-        Under this methodology, the parameter 'lagged_features' is required to be True by
-        default, in order to cast these forecasts back by a frequency period, accounting
+        Ultimately, these forecasts are cast back by a frequency period, accounting
         for the lagged features, and hence creating point-in-time signals. In other words, 
         a prediction $\mathbb{E}[r_{t+1}|\Gamma_{t}]$ is recorded at time $t$, where 
         $r_{t+1}$ refers to the cumulative return at time $t+1$ and $\Gamma_{t}$ is the
         information set at time $t$.
-
-        The reason 'lagged_features' is provided as an argument is to allow for concurrent 
-        forecasts in special cases such as market beta estimation. When lagged_features is
-        False, it is expected that the timestamps in each row match for the features
-        and the target. In this case, no adjustment is made to the timestamps of the 
-        predictions. 
 
         By providing a blacklisting dictionary, preferably through
         macrosynergy.management.make_blacklist, the user can specify time periods to
@@ -98,12 +96,6 @@ class SignalOptimizer:
             in units of the native dataset frequency, to be made available for the currently-used
             number of cross-validation splits to increase by one. If not None, the "initial_nsplits"
             parameter must be set. Default is None.
-        :param <bool> lagged_features: Boolean indicating whether or not (feature, target)
-            tuples are lagged by a single frequency unit, or unlagged. It is recommended
-            to keep this attribute as True, as per the primary use case of this class. 
-            For certain problems, it may be valuable to predict concurrent returns, for
-            instance market beta estimation. Setting this parameter to False will allow
-            concurrent forecasts to be made. Default is True. 
 
         Note:
         Optimization is based on expanding/rolling time series panels and maximization of a defined
@@ -169,7 +161,7 @@ class SignalOptimizer:
         """
         # Checks
         self._checks_init_params(
-            inner_splitter, X, y, blacklist, initial_nsplits, threshold_ndates, lagged_features
+            inner_splitter, X, y, blacklist, initial_nsplits, threshold_ndates
         )
 
         # Set instance attributes
@@ -179,7 +171,6 @@ class SignalOptimizer:
         self.blacklist = blacklist
         self.initial_nsplits = initial_nsplits
         self.threshold_ndates = threshold_ndates
-        self.lagged_features = lagged_features
 
         if self.initial_nsplits:
             warnings.warn(
@@ -213,7 +204,6 @@ class SignalOptimizer:
         blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]],
         initial_nsplits: Optional[Union[int, np.int_]],
         threshold_ndates: Optional[Union[int, np.int_]],
-        lagged_features: bool,
     ):
         """
         Private method to check the initialisation parameters of the class.
@@ -276,10 +266,6 @@ class SignalOptimizer:
                     "The initial_nsplits argument must be set if the threshold_ndates "
                     "argument is set."
                 )
-            
-        # Check lagged_features
-        if not isinstance(lagged_features, (bool, np.bool_)):
-            raise TypeError("The lagged_features argument must be a boolean.")
 
     def calculate_predictions(
         self,
@@ -728,24 +714,23 @@ class SignalOptimizer:
         test_date_levels = test_index.get_level_values(1)
         sorted_date_levels = sorted(test_date_levels.unique())
 
-        if self.lagged_features:
-            # Since the features lag behind the targets, the dates need to be adjusted
-            # by a single frequency unit
-            locs: np.ndarray = (
-                np.searchsorted(original_date_levels, sorted_date_levels, side="left") - 1
-            )
-            adj_test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
-                [original_date_levels[i] if i >= 0 else pd.NaT for i in locs]
-            )
+        # Since the features lag behind the targets, the dates need to be adjusted
+        # by a single frequency unit
+        locs: np.ndarray = (
+            np.searchsorted(original_date_levels, sorted_date_levels, side="left") - 1
+        )
+        adj_test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
+            [original_date_levels[i] if i >= 0 else pd.NaT for i in locs]
+        )
 
-            # Adjust the test index based on adjusted dates
-            date_map = dict(zip(test_date_levels, adj_test_date_levels))
-            mapped_dates = test_date_levels.map(date_map)
-            test_index = pd.MultiIndex.from_arrays(
-                [test_xs_levels, mapped_dates], names=["cid", "real_date"]
-            )
-            test_date_levels = test_index.get_level_values(1)
-            sorted_date_levels = sorted(test_date_levels.unique())
+        # Adjust the test index based on adjusted dates
+        date_map = dict(zip(test_date_levels, adj_test_date_levels))
+        mapped_dates = test_date_levels.map(date_map)
+        test_index = pd.MultiIndex.from_arrays(
+            [test_xs_levels, mapped_dates], names=["cid", "real_date"]
+        )
+        test_date_levels = test_index.get_level_values(1)
+        sorted_date_levels = sorted(test_date_levels.unique())
 
         optim_name = None
         optim_model = None
@@ -1795,7 +1780,7 @@ if __name__ == "__main__":
         "OLS": Pipeline(
             [
                 # ("selector", MapSelector(threshold=0.2)),
-                ("model", LinearRegression(fit_intercept=True)),
+                ("model", LADRegressionSystem(fit_intercept=True)),
             ]
         ),
     }
