@@ -58,24 +58,21 @@ class MultiAssetPnL:
         :param pnl_xcats:
             List of PnLs to combine. Must be in the format 'xcat/return' and
             added using `add_pnl()`.
+        :param composite_pnl_xcat:
+            xcat for the combined PnL.
         :param weights:
             Weights for each PnL, by default None. Must be in the format
-            {'asset::xcat': weight}.
-        :param composite_pnl_xcat:
-            Name of the combined PnL, by default None.
+            {'xcat': weight} or {'xcat/return': weight}.
         """
         self._check_pnls_added(min_pnls=2)
         for i, pnl_xcat in enumerate(pnl_xcats):
             pnl_xcats[i] = self._infer_return_by_xcat(pnl_xcat)
 
-        # Default composite_pnl_xcat
-        # assets = [x.split("::")[0] for x in pnl_xcats]
-        # composite_pnl_xcat = (
-        #     f"{'_'.join(assets)}_PNL" if composite_pnl_xcat is None else composite_pnl_xcat
-        # )
         # Default weights
         if weights is None:
             weights = {pnl_name: 1 for pnl_name in pnl_xcats}
+        else:
+            weights = {self._infer_return_by_xcat(k): v for k, v in weights.items()}
         weights = self._normalize_weights(weights)
 
         multiasset_df = []
@@ -119,8 +116,9 @@ class MultiAssetPnL:
         )
         multi_asset_pnl = multi_asset_pnl.sort_values(by=["xcat", "real_date"])
         multi_asset_pnl["cid"] = "ALL"
-        self.pnls_df = pd.concat(
-            [self.pnls_df, multi_asset_pnl], axis=0, ignore_index=True
+
+        self.pnls_df = update_df(self.pnls_df, multi_asset_pnl).sort_values(
+            by=["xcat", "real_date"]
         )
         self.composite_pnl_xcats.append(composite_pnl_xcat)
 
@@ -276,7 +274,7 @@ class MultiAssetPnL:
                 raise ValueError(f"{pnl_xcat} has not been added with add_pnl() yet.")
             if len(self.xcat_to_ret[pnl_xcat]) > 1:
                 raise ValueError(
-                    f"{pnl_xcat} has multiple returns. Must specify return as 'xcat/return'."
+                    f"{pnl_xcat} has multiple returns. Must append return to xcat in the format 'xcat/return'."
                 )
             else:
                 return f"{pnl_xcat}/{list(self.xcat_to_ret[pnl_xcat])[0]}"
@@ -377,9 +375,9 @@ if __name__ == "__main__":
 
     mapnl.combine_pnls(
         ["PNL_FX", "PNL_EQ"],
-        # weights={"FX::LONG": 9, "EQ::LONG": 1},
+        # weights={"PNL_FX": 1, "PNL_EQ": 1},
         composite_pnl_xcat="EQ_FX_LONG",
     )
 
-    # mapnl.plot_pnls()
-    print(mapnl.evaluate_pnls(['PNL_EQ']))
+    mapnl.plot_pnls()
+    print(mapnl.evaluate_pnls(["PNL_EQ"]))
