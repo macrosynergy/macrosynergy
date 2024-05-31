@@ -79,13 +79,12 @@ class ScoreVisualisers(object):
             raise TypeError("xcat_comp must be a string")
 
         self.cids = cids
-        self.xcats = xcats
         self.xcat_labels = xcat_labels
         self.xcat_comp = xcat_comp + postfix
         self.weights = weights
         self.df = None
 
-        for xcat in self.xcats:
+        for xcat in xcats:
             dfzm = make_zn_scores(
                 df,
                 xcat=xcat,
@@ -105,6 +104,7 @@ class ScoreVisualisers(object):
             else:
                 self.df = update_df(self.df, dfzm)
 
+        self.old_xcats = [xcat_comp] + xcats
         self.xcats = self.df["xcat"].unique().tolist()
 
         composite_df = linear_composite(
@@ -153,7 +153,7 @@ class ScoreVisualisers(object):
         annot: bool = True,
         title: str = None,
         figsize: tuple = (20, 10),
-        xcat_labels: dict = None,
+        # xcat_labels: Dict[str, str] = None,
         xticks: dict = None,
     ):
         """
@@ -177,8 +177,12 @@ class ScoreVisualisers(object):
             isinstance(xcat, str) for xcat in xcats
         ):
             raise TypeError("xcats must be a list of strings")
-        else:
+        elif set(xcats).issubset(set(self.old_xcats)):
             xcats = [xcat + self.postfix for xcat in xcats]
+        elif not set(xcats).issubset(set(self.xcats)):
+            raise ValueError(
+                "xcats must be a subset of the xcats in ScoreVisualisers"
+            )
 
         if not isinstance(transpose, bool):
             raise TypeError("transpose must be a boolean")
@@ -208,15 +212,15 @@ class ScoreVisualisers(object):
                 + [xcat for xcat in dfw.columns if xcat != composite_zscore]
             ]
 
-        if xcat_labels is not None:
-            if set(xcat_labels.keys()) == set(dfw.columns):
-                dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
-            elif set(xcat_labels.keys()) == set(xcats):
-                dfw.columns = [xcat_labels[xcat] for xcat in xcats]
-            else:
-                raise ValueError(
-                    "xcat_labels must contain the same keys as xcats in the DataFrame"
-                )
+        # if xcat_labels is not None:
+        #     if set(xcat_labels.keys()) == set(dfw.columns):
+        #         dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
+        #     elif set(xcat_labels.keys()) == set(xcats):
+        #         dfw.columns = [xcat_labels[xcat] for xcat in xcats]
+        #     else:
+        #         raise ValueError(
+        #             "xcat_labels must contain the same keys as xcats in the DataFrame"
+        #         )
 
         if transpose:
             dfw = dfw.transpose()
@@ -321,7 +325,7 @@ class ScoreVisualisers(object):
         title: str = None,
         figsize: tuple = (20, 10),
         xticks: dict = None,
-        xcat_labels: Dict[str, str] = None,
+        # xcat_labels: Dict[str, str] = None,
     ):
         """
         :param <str> cid: Single cid to be displayed
@@ -380,15 +384,15 @@ class ScoreVisualisers(object):
         else:
             dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d"))
 
-        if xcat_labels is not None:
-            if set(xcat_labels.keys()) == set(dfw.columns):
-                dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
-            elif set(xcat_labels.keys()) == set(xcats):
-                dfw.columns = [xcat_labels[xcat] for xcat in xcats]
-            else:
-                raise ValueError(
-                    "xcat_labels must contain the same keys as xcats in the DataFrame"
-                )
+        # if xcat_labels is not None:
+        #     if set(xcat_labels.keys()) == set(dfw.columns):
+        #         dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
+        #     elif set(xcat_labels.keys()) == set(xcats):
+        #         dfw.columns = [xcat_labels[xcat] for xcat in xcats]
+        #     else:
+        #         raise ValueError(
+        #             "xcat_labels must contain the same keys as xcats in the DataFrame"
+        #         )
 
         dfw_resampled = dfw_resampled.transpose()
 
