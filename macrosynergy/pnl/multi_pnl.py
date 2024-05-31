@@ -1,5 +1,5 @@
 """
-Multi Asset PnLs combine multiple "Naive" PnLs with limited signal options and disregarding transaction costs.
+Multi PnLs combine multiple "Naive" PnLs with limited signal options and disregarding transaction costs.
 """
 
 from typing import Dict, List, Optional
@@ -14,11 +14,11 @@ from macrosynergy.management.utils.df_utils import update_df
 from macrosynergy.pnl import NaivePnL
 
 
-class MultiAssetPnL:
+class MultiPnL:
 
     def __init__(self):
         self.pnls_df = pd.DataFrame(columns=["real_date", "xcat", "value", "cid"])
-        self.single_asset_pnls = {}
+        self.single_return_pnls = {}
         self.composite_pnl_xcats = []
         self.xcat_to_ret = {}
 
@@ -27,7 +27,6 @@ class MultiAssetPnL:
         Add a NaivePnL object.
 
         :param pnl: NaivePnL object.
-        :param asset: Asset name.
         :param pnl_xcats: List of PnLs to add from the NaivePnL object.
         """
         self._validate_pnl(pnl, pnl_xcats)
@@ -37,7 +36,7 @@ class MultiAssetPnL:
         # self.pnls_df = pd.concat([self.pnls_df, pnl_df], axis=0, ignore_index=True)
         self.pnls_df = update_df(self.pnls_df, pnl_df)
         for xcat in pnl_df.xcat.unique():
-            self.single_asset_pnls[xcat] = pnl
+            self.single_return_pnls[xcat] = pnl
 
         for xcat in pnl_xcats:
             if xcat not in self.xcat_to_ret:
@@ -127,7 +126,7 @@ class MultiAssetPnL:
         Creates a plot of PnLs
 
         :param pnl_xcats: List of PnLs to plot. If None, all PnLs are plotted.
-            Must be in the format 'asset::xcat', or 'xcat' for multi-asset PnLs.
+            Must be in the format 'xcat', or 'xcat/return_xcat'.
         """
         self._check_pnls_added()
 
@@ -148,10 +147,10 @@ class MultiAssetPnL:
 
     def evaluate_pnls(self, pnl_xcats: List[str] = None) -> pd.DataFrame:
         """
-        Evaluate single and multi-asset PnLs.
+        Evaluate individual and composite PnLs.
 
         :param pnl_xcats: List of PnLs to evaluate. If None, all PnLs are evaluated.
-            Must be in the format 'asset::xcat', or 'xcat' for multi-asset PnLs.
+            Must be in the format 'xcat', or 'xcat/return_xcat'.
         """
         self._check_pnls_added()
         if pnl_xcats is None:
@@ -164,7 +163,7 @@ class MultiAssetPnL:
             if pnl_xcat in self.composite_pnl_xcats:
                 eval_df = self._evaluate_composite_pnl(pnl_xcat)
             else:
-                pnl = self.single_asset_pnls[pnl_xcat]
+                pnl = self.single_return_pnls[pnl_xcat]
                 eval_df = pnl.evaluate_pnls([pnl_xcat.split("/")[0]])
                 eval_df.columns = [pnl_xcat]
             pnl_evals.append(eval_df)
@@ -226,16 +225,19 @@ class MultiAssetPnL:
         Returns a DataFrame with PnLs.
 
         :param pnl_xcats: List of PnLs to return. If None, all PnLs are returned.
-            Must be in the format 'asset::xcat', or 'xcat' for multi-asset PnLs.
+            Must be in the format 'xcat', or 'xcat/return_xcat'.
         """
         if self.pnls_df is None:
-            raise ValueError(
-                "The PnLs have not been combined yet. combine_pnls() must be run first."
-            )
+            raise ValueError("The PnLs have been added. Use add_pnl() first.")
+
         if pnl_xcats is None:
             return self.pnls_df
 
-        return self.pnls_df[self.pnls_df["xcat"].isin(pnl_xcats)]
+        else:
+            for i, pnl_xcat in enumerate(pnl_xcats):
+                pnl_xcats[i] = self._infer_return_by_xcat(pnl_xcat)
+
+            return self.pnls_df[self.pnls_df["xcat"].isin(pnl_xcats)]
 
     def _normalize_weights(self, weights: dict) -> dict:
         """
@@ -254,7 +256,7 @@ class MultiAssetPnL:
         return True
 
     def pnl_xcats(self):
-        return self.composite_pnl_xcats + list(self.single_asset_pnls.keys())
+        return self.composite_pnl_xcats + list(self.single_return_pnls.keys())
 
     def return_xcats(self):
         return list(set(self.xcat_to_ret.values()))
@@ -368,7 +370,7 @@ if __name__ == "__main__":
     # pnl_fx.make_long_pnl(vol_scale=10, label="Long")
     print(pnl_eq.pnl_names)
 
-    mapnl = MultiAssetPnL()
+    mapnl = MultiPnL()
 
     mapnl.add_pnl(pnl_fx, ["PNL_FX", "LONG"])
     mapnl.add_pnl(pnl_eq, ["PNL_EQ", "LONG"])
