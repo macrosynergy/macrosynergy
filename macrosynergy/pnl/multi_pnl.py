@@ -127,6 +127,7 @@ class MultiPnL:
 
         :param pnl_xcats: List of PnLs to plot. If None, all PnLs are plotted.
             Must be in the format 'xcat', or 'xcat/return_xcat'.
+        :param title: Title of the plot.
         """
         self._check_pnls_added()
 
@@ -172,7 +173,7 @@ class MultiPnL:
 
     def _evaluate_composite_pnl(self, pnl_xcat: str) -> pd.DataFrame:
         """
-        Evaluate the combined PnLs.
+        Evaluate the combined PnLs in a manner similar to NaivePnL's `evaluate_pnls()`.
 
         """
         stats = [
@@ -247,6 +248,9 @@ class MultiPnL:
         return {k: v / weights_sum for k, v in weights.items()}
 
     def _validate_pnl(self, pnl: NaivePnL, pnl_xcats: List[str]):
+        """
+        Validate the PnL and PnL categories.
+        """
         if not isinstance(pnl, NaivePnL):
             raise ValueError("The pnl must be a NaivePnL object.")
         if not set(pnl_xcats).issubset(pnl.pnl_names):
@@ -256,18 +260,32 @@ class MultiPnL:
         return True
 
     def pnl_xcats(self):
+        """
+        Return all PnL categories.
+        """
         return self.composite_pnl_xcats + list(self.single_return_pnls.keys())
 
     def return_xcats(self):
+        """
+        Return all return categories associated with PnLs.
+        """
         return list(set(self.xcat_to_ret.values()))
 
     def _check_pnls_added(self, min_pnls: int = 1):
+        """
+        Check if at least `min_pnls` PnLs have been added.
+        """
         if len(self.pnl_xcats()) < min_pnls:
             raise ValueError(
                 f"At least {min_pnls} PnL must be added with add_pnl() first."
             )
 
     def _infer_return_by_xcat(self, pnl_xcat):
+        """
+        Infer the return category from the xcat if not provided.
+        
+        Throws an error is there are multiple return categories for the xcat.
+        """
         if pnl_xcat in self.composite_pnl_xcats:
             return pnl_xcat
 
@@ -276,7 +294,8 @@ class MultiPnL:
                 raise ValueError(f"{pnl_xcat} has not been added with add_pnl() yet.")
             if len(self.xcat_to_ret[pnl_xcat]) > 1:
                 raise ValueError(
-                    f"{pnl_xcat} has multiple returns. Must append return to xcat in the format 'xcat/return'."
+                    f"{pnl_xcat} corresponds to multiple return categories: {self.xcat_to_ret[pnl_xcat]}. "
+                    "Must append return to xcat in the format 'xcat/return'."
                 )
             else:
                 return f"{pnl_xcat}/{list(self.xcat_to_ret[pnl_xcat])[0]}"
@@ -377,7 +396,7 @@ if __name__ == "__main__":
 
     mapnl.combine_pnls(
         ["PNL_FX", "PNL_EQ"],
-        # weights={"PNL_FX": 1, "PNL_EQ": 1},
+        weights={"PNL_FX": 1, "LONG": 1},
         composite_pnl_xcat="EQ_FX_LONG",
     )
 
