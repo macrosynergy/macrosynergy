@@ -169,7 +169,7 @@ class TestAll(unittest.TestCase):
         )
 
         # Will return a DataFrame with the transformed signal.
-        dfw = pnl.__make_signal__(
+        dfw = pnl._make_signal(
             dfx=dfx,
             sig=sig,
             sig_op="zn_score_pan",
