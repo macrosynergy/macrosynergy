@@ -2,7 +2,7 @@
 Multi PnLs combine multiple "Naive" PnLs with limited signal options and disregarding transaction costs.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -121,7 +121,13 @@ class MultiPnL:
         )
         self.composite_pnl_xcats.append(composite_pnl_xcat)
 
-    def plot_pnls(self, pnl_xcats: List[str] = None, title: str = None):
+    def plot_pnls(
+        self,
+        pnl_xcats: List[str] = None,
+        title: str = None,
+        title_fontsize: int = 14,
+        xcat_labels: Union[List[str], dict] = None,
+    ):
         """
         Creates a plot of PnLs
 
@@ -133,16 +139,35 @@ class MultiPnL:
 
         if pnl_xcats is None:
             pnl_df = self.pnls_df
+            pnl_xcats = self.pnl_xcats()
         else:
             for i, pnl_xcat in enumerate(pnl_xcats):
                 pnl_xcats[i] = self._infer_return_by_xcat(pnl_xcat)
             pnl_df = self.pnls_df[self.pnls_df["xcat"].isin(pnl_xcats)].copy()
+
+        if xcat_labels is not None:
+
+            if isinstance(xcat_labels, dict):
+                xcat_labels = {
+                    self._infer_return_by_xcat(k): v for k, v in xcat_labels.items()
+                }
+            elif isinstance(xcat_labels, list):
+                if len(pnl_xcats) != len(xcat_labels):
+                    raise ValueError(
+                        "If using a list, the number of labels must match the number of PnLs."
+                    )
+                xcat_labels = dict(zip(pnl_xcats, xcat_labels))
+            else:
+                raise ValueError("xcat_labels must be a list or a dictionary.")
+            pnl_df["xcat"] = pnl_df["xcat"].map(xcat_labels)
+
         pnl_df.loc[:, "cumulative pnl"] = pnl_df.groupby("xcat")["value"].cumsum()
+
         sns.lineplot(data=pnl_df, x="real_date", y="cumulative pnl", hue=("xcat"))
-        plt.title(title)
+        plt.title(title, fontsize=title_fontsize)
         plt.xlabel(None)
         plt.ylabel("% risk capital, no compounding")
-        plt.legend(title="PnLs")
+        plt.legend(title="PnL Category(s)")
         plt.show()
         pnl_df.drop(columns="cumulative pnl", inplace=True)
 
@@ -263,7 +288,7 @@ class MultiPnL:
         """
         Return all PnL categories.
         """
-        return self.composite_pnl_xcats + list(self.single_return_pnls.keys())
+        return self.pnls_df["xcat"].unique().tolist()
 
     def return_xcats(self):
         """
@@ -283,7 +308,7 @@ class MultiPnL:
     def _infer_return_by_xcat(self, pnl_xcat):
         """
         Infer the return category from the xcat if not provided.
-        
+
         Throws an error is there are multiple return categories for the xcat.
         """
         if pnl_xcat in self.composite_pnl_xcats:
@@ -327,7 +352,7 @@ if __name__ == "__main__":
     df_xcats = pd.DataFrame(index=xcats, columns=cols_2)
     df_xcats.loc["EQXR_NSA"] = ["2000-01-03", "2020-12-31", 0.1, 1, 0, 0.3]
     df_xcats.loc["FXXR"] = ["2000-01-01", "2020-10-30", 1, 2, 0.95, 1]
-    df_xcats.loc["GROWTH"] = ["2010-01-03", "2020-10-30", 1, 2, 0.9, 1]
+    df_xcats.loc["GROWTH"] = ["2000-01-03", "2020-10-30", 1, 2, 0.9, 1]
     df_xcats.loc["INFL"] = ["2001-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
     df_xcats.loc["DUXR"] = ["2000-01-01", "2020-12-31", 0.1, 0.5, 0, 0.1]
 
@@ -395,10 +420,12 @@ if __name__ == "__main__":
     mapnl.add_pnl(pnl_eq, ["PNL_EQ", "LONG"])
 
     mapnl.combine_pnls(
-        ["PNL_FX", "PNL_EQ"],
-        weights={"PNL_FX": 1, "LONG": 1},
+        # ["PNL_FX", "PNL_EQ"],
+        ["PNL_EQ", "PNL_FX"],
+        # weights={"PNL_FX": 1, "LONG": 1},
         composite_pnl_xcat="EQ_FX_LONG",
     )
 
-    mapnl.plot_pnls()
-    print(mapnl.evaluate_pnls(["PNL_EQ"]))
+    mapnl.plot_pnls(["PNL_FX", "PNL_EQ"], xcat_labels=["z", "FX"], title="PnLs")
+    # print(mapnl.get_pnls(["PNL_FX"]))
+    # print(mapnl.evaluate_pnls(["PNL_EQ"]))
