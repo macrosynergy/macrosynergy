@@ -152,8 +152,9 @@ class ScoreVisualisers(object):
         date: str = None,
         annot: bool = True,
         title: str = None,
+        figsize: tuple = (20, 10),
+        xcat_labels: dict = None,
         xticks: dict = None,
-        figsize: tuple = (20, 10)
     ):
         """
         Display a multiple scores for multiple countries for the latest available or any previous date
@@ -206,6 +207,13 @@ class ScoreVisualisers(object):
                 [composite_zscore]
                 + [xcat for xcat in dfw.columns if xcat != composite_zscore]
             ]
+
+        if xcat_labels is not None:
+            if set(xcat_labels.keys()) != set(dfw.columns):
+                raise ValueError(
+                    "xcat_labels must contain the same keys as xcats in the DataFrame"
+                )
+            dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
 
         if transpose:
             dfw = dfw.transpose()
@@ -308,8 +316,9 @@ class ScoreVisualisers(object):
         transpose: bool = False,
         annot: bool = True,
         title: str = None,
+        figsize: tuple = (20, 10),
         xticks: dict = None,
-        figsize: tuple = (20, 10)
+        xcat_labels: Dict[str, str] = None,
     ):
         """
         :param <str> cid: Single cid to be displayed
@@ -367,6 +376,13 @@ class ScoreVisualisers(object):
             ) + ["Latest Day"]
         else:
             dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d"))
+
+        if xcat_labels is not None:
+            if set(xcat_labels.keys()) != set(dfw.columns):
+                raise ValueError(
+                    "xcat_labels must contain the same keys as xcats in the DataFrame"
+                )
+            dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
 
         dfw_resampled = dfw_resampled.transpose()
 
