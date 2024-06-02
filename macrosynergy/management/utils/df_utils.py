@@ -64,7 +64,11 @@ def standardise_dataframe(
             raise ValueError(fail_str)
 
     # Convert date and ensure specific columns are strings in one step
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    # 'datetime64[ns]' is the default dtype for datetime columns in pandas
+    df["real_date"] = pd.to_datetime(
+        df["real_date"],
+        format="%Y-%m-%d",
+    ).astype("datetime64[ns]")
     df["cid"] = df["cid"].astype(str)
     df["xcat"] = df["xcat"].astype(str)
     # sort by cid, xcat and real_date to allow viewing stacked timeseries easily
@@ -89,9 +93,7 @@ def standardise_dataframe(
         except:
             pass
 
-    assert isinstance(
-        df, QuantamentalDataFrame
-    ), "Failed to standardize DataFrame"
+    assert isinstance(df, QuantamentalDataFrame), "Failed to standardize DataFrame"
     return df
 
 
