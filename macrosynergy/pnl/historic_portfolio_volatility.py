@@ -592,6 +592,7 @@ def historic_portfolio_vol(
     ## Standardize and copy DF
     df: pd.DataFrame = standardise_dataframe(df.copy())
     rebal_freq = _map_to_business_day_frequency(rebal_freq)
+    est_freqs: List[str] = [_map_to_business_day_frequency(freq) for freq in est_freqs]
 
     ## Check the dates
     if start is None:

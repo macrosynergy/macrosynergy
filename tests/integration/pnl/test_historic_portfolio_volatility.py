@@ -125,7 +125,7 @@ class TestHistoricPortfolioVol(unittest.TestCase):
         good_args = dict(
             sname="STRAT",
             rstring="XR",
-            est_freq="m",
+            est_freqs=["m"],
             lback_periods=21,
             lback_meth="ma",
             half_life=11,
@@ -141,7 +141,8 @@ class TestHistoricPortfolioVol(unittest.TestCase):
         sig_df = self._gen_sig_df(dates=dates, sig_type=signal_types[1])
         df = pd.concat((rtn_df, sig_df), axis=0)
 
-        df_pvol = historic_portfolio_vol(df=df, **good_args)
+        pvol_vcv = historic_portfolio_vol(df=df, **good_args)
+        df_pvol, df_vcv = pvol_vcv
         self.assertIsInstance(df_pvol, QuantamentalDataFrame)
         self.assertTrue(all(df_pvol["value"] == 0))
 
@@ -153,16 +154,20 @@ class TestHistoricPortfolioVol(unittest.TestCase):
                 df=pd.concat((rtn_df, sig_df), axis=0), **good_args
             )
             results[i] = dict(df_pvol=df_pvol, rtn_df=rtn_df, sig_df=sig_df)
-            hvol = historic_vol(
-                df=rtn_df,
-                xcat="AAXR",
-                est_freq="m",
-                lback_periods=21,
-                lback_meth="ma",
-                cids=['XX' + str(list(signal_types[2 + i]).index(1))],
-                start=start.strftime("%Y-%m-%d"),
-                end=end.strftime("%Y-%m-%d"),
-            ).dropna().reset_index(drop=True)
+            hvol = (
+                historic_vol(
+                    df=rtn_df,
+                    xcat="AAXR",
+                    est_freq="m",
+                    lback_periods=21,
+                    lback_meth="ma",
+                    cids=["XX" + str(list(signal_types[2 + i]).index(1))],
+                    start=start.strftime("%Y-%m-%d"),
+                    end=end.strftime("%Y-%m-%d"),
+                )
+                .dropna()
+                .reset_index(drop=True)
+            )
             hvol, df_pvol
 
         results
