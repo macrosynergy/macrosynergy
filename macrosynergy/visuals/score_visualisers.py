@@ -47,7 +47,7 @@ class ScoreVisualisers(object):
         iis: bool = True,
         neutral: str = "mean",
         pan_weight: float = 1,
-        thresh: float = None,
+        thresh: float = 3,
         min_obs: int = 261,
         est_freq: str = "m",
         postfix: str = "_ZN",
@@ -540,6 +540,7 @@ if __name__ == "__main__":
         freq="BA",
         transpose=False,
         start="2010-01-01",
+        title="AHKSJDA"
     )
     # sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="A", transpose=True, start="2010-01-01")
 
