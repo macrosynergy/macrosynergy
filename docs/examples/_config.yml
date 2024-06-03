@@ -1,0 +1,32 @@
+title: Macrosynergy Package Documentation / User Guide
+author: "Macrosynergy Ltd."
+copyright: "2023"
+
+# Execution settings
+# Whether to execute notebooks at build time. Must be one of ("auto", "force", "cache", "off")
+execute:
+  execute_notebooks: "off"
+repository:
+  url: https://github.com/macrosynergy/macrosynergy
+
+# HTML-specific settings
+html:
+  favicon: "https://macrosynergy.com/wp-content/uploads/2022/10/macrosynergy-logo-favicon-300x300.png"
+  home_page_in_navbar: true # Whether to include your home page in the left Navigation Bar
+  use_repository_button: true
+  use_edit_page_button: false
+  use_issues_button: true
+  google_analytics_id: ""
+  baseurl: "https://docs.macrosynergy.com/"
+
+launch_buttons:
+  # binderhub_url: "https://mybinder.org/v2/gh/macrosynergy/macrosynergy/feature/docs_userguide"
+  # binderhub_url: "https://mybinder.org"
+  binderhub_url: ""
+  # thebe: true
+
+
+parse:
+  myst_enable_extensions:
+    - "amsmath"
+    - "dollarmath"

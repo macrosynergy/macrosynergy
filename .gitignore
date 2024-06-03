@@ -16,6 +16,10 @@ docs/_build/
 
 docs.build/
 
+# Examples
+
+examples.build/
+
 ####### Python template #######
 
 # Byte-compiled / optimized / DLL files

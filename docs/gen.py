@@ -17,6 +17,17 @@ PACKAGE_NAME = "macrosynergy"
 PACKAGE_DOCS_DIR = "./docs"
 
 
+def build_examples(markdown: bool = False):
+    os.system(f"python ./docs/build_examples.py" + (f" --markdown" if markdown else ""))
+    # copy contents of ./docs/examples.build to ./docs/source/examples
+    if OPx.exists(OPx.join(RST_OUTPUT_DIR, "examples")):
+        shutil.rmtree(OPx.join(RST_OUTPUT_DIR, "examples"))
+    shutil.copytree(
+        OPx.join(PACKAGE_DOCS_DIR, "examples.build"),
+        OPx.join(RST_OUTPUT_DIR, "examples"),
+    )
+
+
 def copy_subpackage_readmes(
     rst_output_dir: str = RST_OUTPUT_DIR,
     package: str = "macrosynergy",
@@ -230,10 +241,14 @@ def driver(
     rnl_abs_path = OPx.abspath(OPx.normpath(OPx.join(rst_output_dir, release_notes_md)))
     fetch_release_notes(release_notes_file=rnl_abs_path)
     format_docstrings(package_dir=f"./{package_name}")  # format the docstrings
+    build_examples(markdown=True)
     copy_subpackage_readmes(rst_output_dir=rst_output_dir, package=package_name)
     make_docs(docs_dir=PACKAGE_DOCS_DIR)
 
     temp_site_dir = OPx.normpath(OPx.join(temp_dir, PACKAGE_DOCS_DIR, "build"))
+
+    # copy examples
+    print("x")
 
     os.chdir(starting_dir)
 
