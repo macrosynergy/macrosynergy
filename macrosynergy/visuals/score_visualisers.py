@@ -1,4 +1,5 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+import warnings
 
 from matplotlib import cm, pyplot as plt
 import matplotlib.dates as mdates
@@ -127,22 +128,44 @@ class ScoreVisualisers(object):
         self,
         df: pd.DataFrame,
         title: str,
+        title_fontsize: int = 20,
         annot: bool = True,
         xticks=None,
         figsize=(20, 10),
+        round_decimals: int = 2,
+        cmap: str = None,
+        cmap_range: Tuple[float, float] = None,
+        horizontal_divider: bool = False,
+        vertical_divider: bool = False,
     ):
         fig, ax = plt.subplots(figsize=figsize)
 
+        if cmap is None:
+            cmap = "coolwarm"
+
+        if cmap_range is None:
+            vmax = np.nanmax(np.abs(df.values))
+            vmin = -vmax
+            cmap_range = (vmin, vmax)
+
         sns.heatmap(
             df,
-            cmap="coolwarm",
+            cmap=cmap,
             annot=annot,
             xticklabels="auto",
             yticklabels="auto",
+            fmt=f".{round_decimals}f",
             ax=ax,
+            vmin=cmap_range[0], 
+            vmax=cmap_range[1],
         )
 
-        ax.set_title(title, fontsize=14)
+        ax.set_title(title, fontsize=title_fontsize)
+
+        if horizontal_divider:
+            ax.hlines([1], *ax.get_xlim(), linewidth=2, color='black')
+        if vertical_divider:
+            ax.vlines([1], *ax.get_ylim(), linewidth=2, color='black')
 
         if xticks is None:
             xticks = {"rotation": 45, "ha": "right"}
@@ -159,9 +182,13 @@ class ScoreVisualisers(object):
         date: str = None,
         annot: bool = True,
         title: str = None,
+        title_fontsize: int = 20,
         figsize: tuple = (20, 10),
         xcat_labels: Dict[str, str] = None,
         xticks: dict = None,
+        round_decimals: int = 2,
+        cmap: str = None,
+        cmap_range: Tuple[float, float] = None,
     ):
         """
         Display a multiple scores for multiple countries for the latest available or any previous date
@@ -207,7 +234,13 @@ class ScoreVisualisers(object):
 
         df = df[df["real_date"] == date]
 
+        for cid in cids:
+            if cid not in df["cid"].unique():
+                warnings.warn(f"{cid} not available for {date.strftime('%Y-%m-%d')}")
+
         dfw = df.pivot(index="cid", columns="xcat", values="value")
+        dfw.index.name = None
+        dfw.columns.name = None
 
         # If xcats contains the composite, it is moved to the first column
         composite_zscore = self.xcat_comp
@@ -223,7 +256,9 @@ class ScoreVisualisers(object):
             else:
                 presence = [f"{key}{self.postfix}" in xcats for key in xcat_labels]
                 if all(presence):
-                    dfw.columns = [xcat_labels[xcat[: -len(self.postfix)]] for xcat in dfw.columns]
+                    dfw.columns = [
+                        xcat_labels[xcat[: -len(self.postfix)]] for xcat in dfw.columns
+                    ]
                 else:
                     raise ValueError(
                         "xcat_labels must contain the same keys as xcats in the DataFrame"
@@ -235,8 +270,26 @@ class ScoreVisualisers(object):
         if title is None:
             title = f"Snapshot for {date.strftime('%Y-%m-%d')}"
 
+        horizontal_divider = False
+        vertical_divider = False
+
+        if self.xcat_comp in xcats and transpose:
+            horizontal_divider = True
+        elif self.xcat_comp in xcats and not transpose:
+            vertical_divider = True
+
         self._plot_heatmap(
-            dfw, title=title, annot=annot, xticks=xticks, figsize=figsize
+            dfw,
+            title=title,
+            annot=annot,
+            xticks=xticks,
+            figsize=figsize,
+            title_fontsize=title_fontsize,
+            round_decimals=round_decimals,
+            cmap=cmap,
+            cmap_range=cmap_range,
+            horizontal_divider=horizontal_divider,
+            vertical_divider=vertical_divider,
         )
 
     def view_score_evolution(
@@ -250,8 +303,11 @@ class ScoreVisualisers(object):
         transpose: bool = False,
         annot: bool = True,
         title: str = None,
+        title_fontsize: int = 20,
         xticks: dict = None,
         figsize: tuple = (20, 10),
+        cmap: str = None,
+        cmap_range: Tuple[float, float] = None,
     ):
         """
         :param <List[str]> cids: A list of cids whose values are displayed. Default is all in the class
@@ -297,6 +353,8 @@ class ScoreVisualisers(object):
             df = df[df["real_date"] >= start]
 
         dfw = df.pivot(index="real_date", columns="cid", values="value")
+        dfw.index.name = None
+        dfw.columns.name = None
 
         dfw_resampled = dfw.resample(freq, origin="start").mean()
         if not include_latest_period:
@@ -320,7 +378,14 @@ class ScoreVisualisers(object):
             title = f"Score Evolution for {xcat}"
 
         self._plot_heatmap(
-            dfw_resampled, title=title, annot=annot, xticks=xticks, figsize=figsize
+            dfw_resampled,
+            title=title,
+            annot=annot,
+            xticks=xticks,
+            figsize=figsize,
+            title_fontsize=title_fontsize,
+            cmap=cmap,
+            cmap_range=cmap_range,
         )
 
     def view_cid_evolution(
@@ -334,9 +399,12 @@ class ScoreVisualisers(object):
         transpose: bool = False,
         annot: bool = True,
         title: str = None,
+        title_fontsize: int = 20,
         figsize: tuple = (20, 10),
         xticks: dict = None,
         xcat_labels: Dict[str, str] = None,
+        cmap: str = None,
+        cmap_range: Tuple[float, float] = None,
     ):
         """
         :param <str> cid: Single cid to be displayed
@@ -364,8 +432,10 @@ class ScoreVisualisers(object):
             isinstance(xcat, str) for xcat in xcats
         ):
             raise TypeError("xcats must be a list of strings")
-        else:
+        elif set(xcats).issubset(set(self.old_xcats)):
             xcats = [xcat + self.postfix for xcat in xcats]
+        elif not set(xcats).issubset(set(self.xcats)):
+            raise ValueError("xcats must be a subset of the xcats in ScoreVisualisers")
 
         if not isinstance(transpose, bool):
             raise TypeError("transpose must be a boolean")
@@ -381,6 +451,15 @@ class ScoreVisualisers(object):
         df = df[df["xcat"].isin(xcats)]
 
         dfw = df.pivot(index="real_date", columns="xcat", values="value")
+        dfw.index.name = None
+        dfw.columns.name = None
+
+        composite_zscore = self.xcat_comp
+        if composite_zscore in xcats:
+            dfw = dfw[
+                [composite_zscore]
+                + [xcat for xcat in dfw.columns if xcat != composite_zscore]
+            ]
 
         dfw_resampled = dfw.resample(freq).mean()
         if not include_latest_period:
@@ -401,7 +480,9 @@ class ScoreVisualisers(object):
             else:
                 presence = [f"{key}{self.postfix}" in xcats for key in xcat_labels]
                 if all(presence):
-                    dfw.columns = [xcat_labels[xcat[: -len(self.postfix)]] for xcat in dfw.columns]
+                    dfw.columns = [
+                        xcat_labels[xcat[: -len(self.postfix)]] for xcat in dfw.columns
+                    ]
                 else:
                     raise ValueError(
                         "xcat_labels must contain the same keys as xcats in the DataFrame"
@@ -415,8 +496,25 @@ class ScoreVisualisers(object):
         if title is None:
             title = f"CID Evolution for {cid}"
 
+        horizontal_divider = False
+        vertical_divider = False
+
+        if self.xcat_comp in xcats and not transpose:
+            horizontal_divider = True
+        elif self.xcat_comp in xcats and transpose:
+            vertical_divider = True
+
         self._plot_heatmap(
-            dfw_resampled, title=title, annot=annot, xticks=xticks, figsize=figsize
+            dfw_resampled,
+            title=title,
+            annot=annot,
+            xticks=xticks,
+            figsize=figsize,
+            title_fontsize=title_fontsize,
+            cmap=cmap,
+            cmap_range=cmap_range,
+            horizontal_divider=horizontal_divider,
+            vertical_divider=vertical_divider,
         )
 
     def view_3d_surface(self, xcat: str, cids: List[str] = None):
@@ -530,9 +628,13 @@ if __name__ == "__main__":
 
     sv = ScoreVisualisers(df, cids=cids, xcats=xcats)
 
-    sv.view_snapshot(xcats=["GGIEDGDP_NSA_ZN", "NIIPGDP_NSA_ZN"], cids=cids, transpose=True, figsize=(14, 12), xcat_labels={"GGIEDGDP_NSA": "Currency Reserve Expansion", "NIIPGDP_NSA": "Net International Investment Position"})
+    sv.view_snapshot(
+        cids=cids,
+        transpose=True,
+        figsize=(14, 12),
+    )
     # sv.view_snapshot(cids=cids, xcats=xcats, transpose=True)
-    sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=False)
+    sv.view_cid_evolution(cid="USD", xcats=xcats + ["Composite"], freq="A", transpose=False)
     # sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=True)
     sv.view_score_evolution(
         xcat="GGIEDGDP_NSA",
@@ -540,7 +642,7 @@ if __name__ == "__main__":
         freq="BA",
         transpose=False,
         start="2010-01-01",
-        title="AHKSJDA"
+        title="AHKSJDA",
     )
     # sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="A", transpose=True, start="2010-01-01")
 
