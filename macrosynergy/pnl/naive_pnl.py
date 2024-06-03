@@ -899,7 +899,7 @@ class NaivePnL:
         pnl_cids: List[str] = ["ALL"],
         start: Optional[str] = None,
         end: Optional[str] = None,
-        label_dict: Optional[dict[str, str]] = None,
+        label_dict: Optional[Dict[str, str]] = None,
     ):
         """
         Table of key PnL statistics.
