@@ -123,9 +123,16 @@ class ScoreVisualisers(object):
         self.xcats = self.df["xcat"].unique().tolist()
         self.postfix = postfix
 
-    def _plot_heatmap(self, df: pd.DataFrame, title: str, annot: bool = True, xticks=None, figsize=(20, 10)):
+    def _plot_heatmap(
+        self,
+        df: pd.DataFrame,
+        title: str,
+        annot: bool = True,
+        xticks=None,
+        figsize=(20, 10),
+    ):
         fig, ax = plt.subplots(figsize=figsize)
-        
+
         sns.heatmap(
             df,
             cmap="coolwarm",
@@ -153,7 +160,7 @@ class ScoreVisualisers(object):
         annot: bool = True,
         title: str = None,
         figsize: tuple = (20, 10),
-        # xcat_labels: Dict[str, str] = None,
+        xcat_labels: Dict[str, str] = None,
         xticks: dict = None,
     ):
         """
@@ -180,9 +187,7 @@ class ScoreVisualisers(object):
         elif set(xcats).issubset(set(self.old_xcats)):
             xcats = [xcat + self.postfix for xcat in xcats]
         elif not set(xcats).issubset(set(self.xcats)):
-            raise ValueError(
-                "xcats must be a subset of the xcats in ScoreVisualisers"
-            )
+            raise ValueError("xcats must be a subset of the xcats in ScoreVisualisers")
 
         if not isinstance(transpose, bool):
             raise TypeError("transpose must be a boolean")
@@ -212,15 +217,17 @@ class ScoreVisualisers(object):
                 + [xcat for xcat in dfw.columns if xcat != composite_zscore]
             ]
 
-        # if xcat_labels is not None:
-        #     if set(xcat_labels.keys()) == set(dfw.columns):
-        #         dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
-        #     elif set(xcat_labels.keys()) == set(xcats):
-        #         dfw.columns = [xcat_labels[xcat] for xcat in xcats]
-        #     else:
-        #         raise ValueError(
-        #             "xcat_labels must contain the same keys as xcats in the DataFrame"
-        #         )
+        if xcat_labels is not None:
+            if set(xcat_labels.keys()) == set(dfw.columns):
+                dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
+            else:
+                presence = [f"{key}{self.postfix}" in xcats for key in xcat_labels]
+                if all(presence):
+                    dfw.columns = [xcat_labels[xcat[: -len(self.postfix)]] for xcat in dfw.columns]
+                else:
+                    raise ValueError(
+                        "xcat_labels must contain the same keys as xcats in the DataFrame"
+                    )
 
         if transpose:
             dfw = dfw.transpose()
@@ -228,7 +235,9 @@ class ScoreVisualisers(object):
         if title is None:
             title = f"Snapshot for {date.strftime('%Y-%m-%d')}"
 
-        self._plot_heatmap(dfw, title=title, annot=annot, xticks=xticks, figsize=figsize)
+        self._plot_heatmap(
+            dfw, title=title, annot=annot, xticks=xticks, figsize=figsize
+        )
 
     def view_score_evolution(
         self,
@@ -242,7 +251,7 @@ class ScoreVisualisers(object):
         annot: bool = True,
         title: str = None,
         xticks: dict = None,
-        figsize: tuple = (20, 10)
+        figsize: tuple = (20, 10),
     ):
         """
         :param <List[str]> cids: A list of cids whose values are displayed. Default is all in the class
@@ -310,7 +319,9 @@ class ScoreVisualisers(object):
         if title is None:
             title = f"Score Evolution for {xcat}"
 
-        self._plot_heatmap(dfw_resampled, title=title, annot=annot, xticks=xticks, figsize=figsize)
+        self._plot_heatmap(
+            dfw_resampled, title=title, annot=annot, xticks=xticks, figsize=figsize
+        )
 
     def view_cid_evolution(
         self,
@@ -325,7 +336,7 @@ class ScoreVisualisers(object):
         title: str = None,
         figsize: tuple = (20, 10),
         xticks: dict = None,
-        # xcat_labels: Dict[str, str] = None,
+        xcat_labels: Dict[str, str] = None,
     ):
         """
         :param <str> cid: Single cid to be displayed
@@ -384,15 +395,17 @@ class ScoreVisualisers(object):
         else:
             dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d"))
 
-        # if xcat_labels is not None:
-        #     if set(xcat_labels.keys()) == set(dfw.columns):
-        #         dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
-        #     elif set(xcat_labels.keys()) == set(xcats):
-        #         dfw.columns = [xcat_labels[xcat] for xcat in xcats]
-        #     else:
-        #         raise ValueError(
-        #             "xcat_labels must contain the same keys as xcats in the DataFrame"
-        #         )
+        if xcat_labels is not None:
+            if set(xcat_labels.keys()) == set(dfw.columns):
+                dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
+            else:
+                presence = [f"{key}{self.postfix}" in xcats for key in xcat_labels]
+                if all(presence):
+                    dfw.columns = [xcat_labels[xcat[: -len(self.postfix)]] for xcat in dfw.columns]
+                else:
+                    raise ValueError(
+                        "xcat_labels must contain the same keys as xcats in the DataFrame"
+                    )
 
         dfw_resampled = dfw_resampled.transpose()
 
@@ -402,7 +415,9 @@ class ScoreVisualisers(object):
         if title is None:
             title = f"CID Evolution for {cid}"
 
-        self._plot_heatmap(dfw_resampled, title=title, annot=annot, xticks=xticks, figsize=figsize)
+        self._plot_heatmap(
+            dfw_resampled, title=title, annot=annot, xticks=xticks, figsize=figsize
+        )
 
     def view_3d_surface(self, xcat: str, cids: List[str] = None):
         if cids is None:
@@ -515,7 +530,7 @@ if __name__ == "__main__":
 
     sv = ScoreVisualisers(df, cids=cids, xcats=xcats)
 
-    sv.view_snapshot(cids=cids, transpose=True, figsize=(14,12))
+    sv.view_snapshot(xcats=["GGIEDGDP_NSA_ZN", "NIIPGDP_NSA_ZN"], cids=cids, transpose=True, figsize=(14, 12), xcat_labels={"GGIEDGDP_NSA": "Currency Reserve Expansion", "NIIPGDP_NSA": "Net International Investment Position"})
     # sv.view_snapshot(cids=cids, xcats=xcats, transpose=True)
     sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=False)
     # sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=True)
