@@ -58,8 +58,8 @@ class SignalOptimizer:
         returns/targets, as returned by `categories_df` within `macrosynergy.management`.
         Ultimately, these forecasts are cast back by a frequency period, accounting
         for the lagged features, and hence creating point-in-time signals. In other words, 
-        a prediction $\mathbb{E}[r_{t+1}|\Gamma_{t}]$ is recorded at time $t$, where 
-        $r_{t+1}$ refers to the cumulative return at time $t+1$ and $\Gamma_{t}$ is the
+        a prediction $\\mathbb{E}[r_{t+1}|\\Gamma_{t}]$ is recorded at time $t$, where 
+        $r_{t+1}$ refers to the cumulative return at time $t+1$ and $\\Gamma_{t}$ is the
         information set at time $t$.
 
         By providing a blacklisting dictionary, preferably through
