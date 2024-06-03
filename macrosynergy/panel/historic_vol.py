@@ -251,7 +251,7 @@ def historic_vol(
         )
 
         fills = {"d": 1, "w": 5, "m": 24, "q": 64}
-        dfwa = dfwa.reindex(dfw.index).ffill(limit=fills[est_freq])
+        dfwa = dfwa.astype(float).reindex(dfw.index).ffill(limit=fills[est_freq])
 
     df_out = dfwa.unstack().reset_index().rename({0: "value"}, axis=1)
     df_out["xcat"] = xcat + postfix
