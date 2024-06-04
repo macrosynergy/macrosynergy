@@ -8,6 +8,7 @@ import time
 from typing import Dict, Iterable, List, Optional, Union, overload, Tuple
 
 import numpy as np
+import warnings
 import pandas as pd
 import requests
 import requests.compat
@@ -85,6 +86,53 @@ def split_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, Lis
         )
 
     return rStr
+
+
+def deconstruct_expression(
+    expression: Union[str, Iterable[str]],
+    suppress_warnings: bool = False,
+) -> Union[List[str], List[List[str]]]:
+    """
+    Deconstruct an expression into a list of cid, xcat, and metric.
+    Achieves the inverse of construct_expressions(). For non-JPMaQS expressions,
+    the returned list will be [expression, expression, 'value']. The metric is set to
+    'value' to ensure the reported metric is consistent with the standard JPMaQS metrics
+    (JPMaQSDownload.valid_metrics).
+
+    :param <str> expression: expression to deconstruct. If a list is provided,
+        each element will be deconstructed and returned as a list of lists.
+
+    :return <list[str]>: list of cid, xcat, and metric.
+
+    :raises TypeError: if `expression` is not a string or a list of strings.
+    :raises ValueError: if `expression` is an empty list.
+    """
+    if not isinstance(expression, (str, list)):
+        raise TypeError("`expression` must be a string or a list of strings.")
+
+    if isinstance(expression, list):
+        if not all(isinstance(exprx, str) for exprx in expression):
+            raise TypeError("All elements of `expression` must be strings.")
+        elif len(expression) == 0:
+            raise ValueError("`expression` must be a non-empty list.")
+        return list(map(deconstruct_expression, expression))
+    else:
+        try:
+            exprx: str = expression.replace("DB(JPMAQS,", "").replace(")", "")
+            ticker, metric = exprx.split(",")
+            result: List[str] = ticker.split("_", 1) + [metric]
+            if len(result) != 3:
+                raise ValueError(f"{exprx} is not a valid JPMaQS expression.")
+            return ticker.split("_", 1) + [metric]
+        except Exception as e:
+            if not suppress_warnings:
+                warnings.warn(
+                    f"Failed to deconstruct expression `{expression}`: {e}",
+                    UserWarning,
+                )
+            # fail safely, return list where cid = xcat = expression,
+            #  and metric = 'value'
+            return [expression, expression, "value"]
 
 
 def get_cid(ticker: Union[str, Iterable[str]]) -> Union[str, List[str]]:
