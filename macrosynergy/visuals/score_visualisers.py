@@ -234,9 +234,10 @@ class ScoreVisualisers(object):
 
         df = df[df["real_date"] == date]
 
-        for cid in cids:
-            if cid not in df["cid"].unique():
-                warnings.warn(f"{cid} not available for {date.strftime('%Y-%m-%d')}")
+        for xcat in xcats:
+            diff_set = set(cids).difference(df[df["xcat"] == xcat]["cid"].unique())
+            if diff_set != set():
+                warnings.warn(f"{str(diff_set)} not available for {xcat} at {date.strftime('%Y-%m-%d')}")
 
         dfw = df.pivot(index="cid", columns="xcat", values="value")
         dfw.index.name = None
