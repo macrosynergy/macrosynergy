@@ -159,6 +159,19 @@ def get_xcat(ticker: Union[str, Iterable[str]]) -> str:
     return split_ticker(ticker, mode="xcat")
 
 
+def get_ticker(expression: Union[str, Iterable[str]]) -> Union[str, List[str]]:
+    """
+    Returns the ticker from an expression.
+
+    :param <str> expression: The expression to be converted.
+
+    Returns
+    :return <str>: The ticker.
+    """
+    d = deconstruct_expression(expression)
+    return f"{d[0]}_{d[1]}"
+
+
 def is_valid_iso_date(date: str) -> bool:
     if not isinstance(date, str):
         raise TypeError("Argument `date` must be a string.")

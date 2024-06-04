@@ -1,6 +1,7 @@
 from .core import (
     get_cid,
     get_xcat,
+    get_ticker,
     split_ticker,
     deconstruct_expression,
     is_valid_iso_date,
@@ -52,6 +53,7 @@ __all__ = [
     "math",
     "get_cid",
     "get_xcat",
+    "get_ticker",
     "split_ticker",
     "deconstruct_expression",
     "is_valid_iso_date",
