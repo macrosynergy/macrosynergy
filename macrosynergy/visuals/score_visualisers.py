@@ -141,7 +141,7 @@ class ScoreVisualisers(object):
         fig, ax = plt.subplots(figsize=figsize)
 
         if cmap is None:
-            cmap = "coolwarm"
+            cmap = "coolwarm_r"
 
         if cmap_range is None:
             vmax = np.nanmax(np.abs(df.values))
@@ -537,7 +537,7 @@ class ScoreVisualisers(object):
 
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111, projection="3d")
-        surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm)
+        surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm_r)
 
         ax.set_xlabel("Date")
         ax.set_zlabel("Value")
