@@ -47,8 +47,6 @@ from .math import (
     expanding_mean_with_nan,
 )
 
-from .qdfmanager import QDFManager
-
 
 __all__ = [
     "core",
@@ -94,5 +92,4 @@ __all__ = [
     "get_eops",
     "get_sops",
     "expanding_mean_with_nan",
-    "QDFManager",
 ]

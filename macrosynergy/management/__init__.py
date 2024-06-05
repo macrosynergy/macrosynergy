@@ -17,10 +17,11 @@ from .utils import (
     reduce_df,
     categories_df,
     reduce_df_by_ticker,
-    QDFManager,
 )
 from . import utils, types, decorators, simulate, constants
 from .validation import validate_and_reduce_qdf
+
+from .qdf import QDFManager
 
 __all__ = [
     # METHODS
@@ -49,4 +50,6 @@ __all__ = [
     "simulate_vintage_data",
     "simulate_quantamental_data",
     "validate_and_reduce_qdf",
+    # Classes
+    "QDFManager",
 ]
