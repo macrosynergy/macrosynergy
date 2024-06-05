@@ -85,6 +85,41 @@ def expression_df_to_df_dict(
     return df_dict
 
 
+def get_ticker_dict_from_df_dict(
+    df_dict: dict[str, pd.DataFrame]
+) -> dict[str, List[str]]:
+    """
+    Get a dictionary of tickers from a dictionary of `pd.DataFrame`s.
+    """
+    return {metric: df.columns.to_list() for metric, df in df_dict.items()}
+
+
+def get_tickers_from_df_dict(
+    df_dict: dict[str, pd.DataFrame], common_metrics: bool = True
+) -> List[str]:
+    """
+    Get the tickers from a dictionary of `pd.DataFrame`s.
+    """
+    ticker_dict: Dict[str, List[str]] = get_ticker_dict_from_df_dict(df_dict)
+
+    if common_metrics:
+        tickers: List[str] = list(set.intersection(*map(set, ticker_dict.values())))
+    else:
+        tickers: List[str] = list(
+            set(itertools.chain.from_iterable(ticker_dict.values()))
+        )
+
+    return sorted(tickers)
+
+
+def get_date_range_from_df_dict(df_dict: dict[str, pd.DataFrame]) -> pd.DatetimeIndex:
+    """
+    Get the date range from a dictionary of `pd.DataFrame`s.
+    """
+    dts = {metric: set(df.index) for metric, df in df_dict.items()}
+    return pd.DatetimeIndex(sorted(set.union(*dts.values())))
+
+
 class Loader:
     @staticmethod
     def load_single_csv_from_disk(csv_file: str) -> pd.DataFrame:
@@ -323,41 +358,6 @@ class Saver:
         """
         with open(path, "wb") as f:
             pickle.dump(obj, f)
-
-
-def get_ticker_dict_from_df_dict(
-    df_dict: dict[str, pd.DataFrame]
-) -> dict[str, List[str]]:
-    """
-    Get a dictionary of tickers from a dictionary of `pd.DataFrame`s.
-    """
-    return {metric: df.columns.to_list() for metric, df in df_dict.items()}
-
-
-def get_tickers_from_df_dict(
-    df_dict: dict[str, pd.DataFrame], common_metrics: bool = True
-) -> List[str]:
-    """
-    Get the tickers from a dictionary of `pd.DataFrame`s.
-    """
-    ticker_dict: Dict[str, List[str]] = get_ticker_dict_from_df_dict(df_dict)
-
-    if common_metrics:
-        tickers: List[str] = list(set.intersection(*map(set, ticker_dict.values())))
-    else:
-        tickers: List[str] = list(
-            set(itertools.chain.from_iterable(ticker_dict.values()))
-        )
-
-    return sorted(tickers)
-
-
-def get_date_range_from_df_dict(df_dict: dict[str, pd.DataFrame]) -> pd.DatetimeIndex:
-    """
-    Get the date range from a dictionary of `pd.DataFrame`s.
-    """
-    dts = {metric: set(df.index) for metric, df in df_dict.items()}
-    return pd.DatetimeIndex(sorted(set.union(*dts.values())))
 
 
 def _run_ticker_query(
