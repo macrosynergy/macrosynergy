@@ -156,16 +156,16 @@ class ScoreVisualisers(object):
             yticklabels="auto",
             fmt=f".{round_decimals}f",
             ax=ax,
-            vmin=cmap_range[0], 
+            vmin=cmap_range[0],
             vmax=cmap_range[1],
         )
 
         ax.set_title(title, fontsize=title_fontsize)
 
         if horizontal_divider:
-            ax.hlines([1], *ax.get_xlim(), linewidth=2, color='black')
+            ax.hlines([1], *ax.get_xlim(), linewidth=2, color="black")
         if vertical_divider:
-            ax.vlines([1], *ax.get_ylim(), linewidth=2, color='black')
+            ax.vlines([1], *ax.get_ylim(), linewidth=2, color="black")
 
         if xticks is None:
             xticks = {"rotation": 45, "ha": "right"}
@@ -237,7 +237,9 @@ class ScoreVisualisers(object):
         for xcat in xcats:
             diff_set = set(cids).difference(df[df["xcat"] == xcat]["cid"].unique())
             if diff_set != set():
-                warnings.warn(f"{str(diff_set)} not available for {xcat} at {date.strftime('%Y-%m-%d')}")
+                warnings.warn(
+                    f"{str(diff_set)} not available for {xcat} at {date.strftime('%Y-%m-%d')}"
+                )
 
         dfw = df.pivot(index="cid", columns="xcat", values="value")
         dfw.index.name = None
@@ -309,6 +311,7 @@ class ScoreVisualisers(object):
         figsize: tuple = (20, 10),
         cmap: str = None,
         cmap_range: Tuple[float, float] = None,
+        round_decimals: int = 2,
     ):
         """
         :param <List[str]> cids: A list of cids whose values are displayed. Default is all in the class
@@ -332,7 +335,7 @@ class ScoreVisualisers(object):
             raise ValueError("freq must be 'Q', 'A', or 'BA'")
 
         if freq == "BA":
-            freq = "6MS"
+            freq = "2AS"
 
         if not isinstance(xcat, str):
             raise TypeError("xcat must be a string")
@@ -362,13 +365,23 @@ class ScoreVisualisers(object):
             dfw_resampled = dfw_resampled.iloc[:-1]
 
         if include_latest_day:
-            latest_day = dfw.loc[df["real_date"].max()]
+            latest_day = dfw.ffill().iloc[-1]
             dfw_resampled.loc[df["real_date"].max()] = latest_day
-            dfw_resampled.index = list(
-                dfw_resampled.index.strftime("%Y-%m-%d")[:-1]
-            ) + ["Latest Day"]
+            if freq == "Q":
+                dfw_resampled.index = list(
+                    dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
+                ) + ["Latest"]
+            else:
+                dfw_resampled.index = list(dfw_resampled.index.strftime("%Y")[:-1]) + [
+                    "Latest"
+                ]
         else:
-            dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d"))
+            if freq == "Q":
+                dfw_resampled.index = list(
+                    dfw_resampled.index.to_period("Q").strftime("%YQ%q")
+                )
+            else:
+                dfw_resampled.index = list(dfw_resampled.index.strftime("%Y"))
 
         dfw_resampled = dfw_resampled.transpose()
 
@@ -376,12 +389,13 @@ class ScoreVisualisers(object):
             dfw_resampled = dfw_resampled.transpose()
 
         if title is None:
-            title = f"Score Evolution for {xcat}"
+            title = f"Evolution for {xcat}"
 
         self._plot_heatmap(
             dfw_resampled,
             title=title,
             annot=annot,
+            round_decimals=round_decimals,
             xticks=xticks,
             figsize=figsize,
             title_fontsize=title_fontsize,
@@ -406,6 +420,7 @@ class ScoreVisualisers(object):
         xcat_labels: Dict[str, str] = None,
         cmap: str = None,
         cmap_range: Tuple[float, float] = None,
+        round_decimals: int = 2,
     ):
         """
         :param <str> cid: Single cid to be displayed
@@ -425,7 +440,7 @@ class ScoreVisualisers(object):
             raise ValueError("freq must be 'Q', 'A', or 'BA'")
 
         if freq == "BA":
-            freq = "6MS"
+            freq = "2AS"
 
         if xcats is None:
             xcats = self.xcats
@@ -467,22 +482,35 @@ class ScoreVisualisers(object):
             dfw_resampled = dfw_resampled.iloc[:-1]
 
         if include_latest_day:
-            latest_day = dfw.loc[df["real_date"].max()]
+            latest_day = dfw.ffill().iloc[-1]
             dfw_resampled.loc[df["real_date"].max()] = latest_day
-            dfw_resampled.index = list(
-                dfw_resampled.index.strftime("%Y-%m-%d")[:-1]
-            ) + ["Latest Day"]
+            if freq == "Q":
+                dfw_resampled.index = list(
+                    dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
+                ) + ["Latest"]
+            else:
+                dfw_resampled.index = list(dfw_resampled.index.strftime("%Y")[:-1]) + [
+                    "Latest"
+                ]
         else:
-            dfw_resampled.index = list(dfw_resampled.index.strftime("%Y-%m-%d"))
+            if freq == "Q":
+                dfw_resampled.index = list(
+                    dfw_resampled.index.to_period("Q").strftime("%YQ%q")
+                )
+            else:
+                dfw_resampled.index = list(dfw_resampled.index.strftime("%Y"))
 
         if xcat_labels is not None:
-            if set(xcat_labels.keys()) == set(dfw.columns):
-                dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
+            if set(xcat_labels.keys()) == set(dfw_resampled.columns):
+                dfw_resampled.columns = [
+                    xcat_labels[xcat] for xcat in dfw_resampled.columns
+                ]
             else:
                 presence = [f"{key}{self.postfix}" in xcats for key in xcat_labels]
                 if all(presence):
-                    dfw.columns = [
-                        xcat_labels[xcat[: -len(self.postfix)]] for xcat in dfw.columns
+                    dfw_resampled.columns = [
+                        xcat_labels[xcat[: -len(self.postfix)]]
+                        for xcat in dfw_resampled.columns
                     ]
                 else:
                     raise ValueError(
@@ -495,7 +523,7 @@ class ScoreVisualisers(object):
             dfw_resampled = dfw_resampled.transpose()
 
         if title is None:
-            title = f"CID Evolution for {cid}"
+            title = f"Evolution for {cid}"
 
         horizontal_divider = False
         vertical_divider = False
@@ -509,6 +537,7 @@ class ScoreVisualisers(object):
             dfw_resampled,
             title=title,
             annot=annot,
+            round_decimals=round_decimals,
             xticks=xticks,
             figsize=figsize,
             title_fontsize=title_fontsize,
@@ -635,7 +664,13 @@ if __name__ == "__main__":
         figsize=(14, 12),
     )
     # sv.view_snapshot(cids=cids, xcats=xcats, transpose=True)
-    sv.view_cid_evolution(cid="USD", xcats=xcats + ["Composite"], freq="A", transpose=False)
+    sv.view_cid_evolution(
+        cid="USD",
+        xcats=xcats + ["Composite"],
+        xcat_labels={"GGIEDGDP_NSA": "Currency reserve expansion as % of GDP", "Composite": "Composite", "NIIPGDP_NSA": "Monetary base expansion as % of GDP", "CABGDPRATIO_NSA_12MMA": "Intervention-driven liquidity expansion as % of GDP, diff over 3 months", "GGOBGDPRATIO_NSA": "Intervention-driven liquidity expansion as % of GDP, diff over 6 months"},
+        freq="A",
+        transpose=False,
+    )
     # sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=True)
     sv.view_score_evolution(
         xcat="GGIEDGDP_NSA",
