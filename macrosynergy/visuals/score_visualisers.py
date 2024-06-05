@@ -3,38 +3,15 @@ import warnings
 
 from matplotlib import cm, pyplot as plt
 import matplotlib.dates as mdates
-
-import numpy as np
 import pandas as pd
-from pandas.tseries.offsets import BDay
-
+import numpy as np
 import seaborn as sns
 
 from macrosynergy.management.utils.df_utils import reduce_df, update_df
 from macrosynergy.panel import linear_composite, make_zn_scores
 
 
-class ScoreVisualisers(object):
-    """
-    Class for displaying heatmaps of normalized quantamental categories, including a weighted composite
-
-    :param <pd.DataFrame> df: A DataFrame with the following columns:
-        'cid', 'xcat', 'real_date', and at least one metric from -
-        'value', 'grading', 'eop_lag', or 'mop_lag'.
-    :param <List[str]> cids: A list of cids to select from the DataFrame.
-        If None, all cids are selected.
-    :param <List[str]> xcats: A list of xcats to select from the DataFrame.
-        These should be normalized indicators.
-    :param <Dict[str, str]> xcat_labels: Optional list of custom labels for xcats
-        Default is None.
-    :param <str> xcat_comp: Label for composite score, if one is to be calculated and used. Default is “Composite”/
-        Calculations are done based for the linear_composite function
-    :param <Dict[str, str]> weights: A list of weights as large as the xcats list for calculating the composite.
-        Default is equal weights.
-        [we need passthrough arguments for linear_composite and make_zn_scores]
-    :param bool sequential: If True, the function will calculate the composite score sequentially.
-    """
-
+class ScoreVisualisers:
     def __init__(
         self,
         df: pd.DataFrame,
@@ -56,55 +33,17 @@ class ScoreVisualisers(object):
         signs: Optional[List[float]] = None,
         complete_xcats: bool = False,
     ):
-        if cids is None:
-            cids = list(df["cid"].unique())
-        elif not isinstance(cids, list) or not all(
-            isinstance(cid, str) for cid in cids
-        ):
-            raise TypeError("cids must be a list of strings")
+        self._validate_params(cids, xcats, xcat_labels, xcat_comp)
 
-        if xcats is None:
-            xcats = list(df["xcat"].unique())
-        elif not isinstance(xcats, list) or not all(
-            isinstance(xcat, str) for xcat in xcats
-        ):
-            raise TypeError("xcats must be a list of strings")
-
-        if xcat_labels is not None:
-            if not isinstance(xcat_labels, list):
-                raise TypeError("xcat_labels must be a dictionary of strings")
-            if len(xcat_labels) != len(xcats):
-                raise ValueError("xcat_labels must be the same length as xcats")
-
-        if not isinstance(xcat_comp, str):
-            raise TypeError("xcat_comp must be a string")
-
-        self.cids = cids
+        self.cids = cids if cids else list(df["cid"].unique())
         self.xcat_labels = xcat_labels
         self.xcat_comp = xcat_comp + postfix
         self.weights = weights
-        self.df = None
+        self.postfix = postfix
 
-        for xcat in xcats:
-            dfzm = make_zn_scores(
-                df,
-                xcat=xcat,
-                sequential=sequential,
-                cids=cids,
-                blacklist=blacklist,
-                iis=iis,
-                neutral=neutral,
-                pan_weight=pan_weight,
-                thresh=thresh,
-                min_obs=min_obs,
-                est_freq=est_freq,
-                postfix=postfix,
-            )
-            if self.df is None:
-                self.df = dfzm
-            else:
-                self.df = update_df(self.df, dfzm)
-
+        self.df = self._create_df(
+            df, xcats, blacklist, sequential, iis, neutral, pan_weight, thresh, min_obs, est_freq, postfix
+        )
         self.old_xcats = [xcat_comp] + xcats
         self.xcats = self.df["xcat"].unique().tolist()
 
@@ -122,7 +61,35 @@ class ScoreVisualisers(object):
 
         self.df = update_df(self.df, composite_df)
         self.xcats = self.df["xcat"].unique().tolist()
-        self.postfix = postfix
+
+    def _validate_params(self, cids, xcats, xcat_labels, xcat_comp):
+        if cids and (not isinstance(cids, list) or not all(isinstance(cid, str) for cid in cids)):
+            raise TypeError("cids must be a list of strings")
+
+        if xcats and (not isinstance(xcats, list) or not all(isinstance(xcat, str) for xcat in xcats)):
+            raise TypeError("xcats must be a list of strings")
+
+        if xcat_labels:
+            if not isinstance(xcat_labels, dict):
+                raise TypeError("xcat_labels must be a dictionary of strings")
+            if len(xcat_labels) != len(xcats):
+                raise ValueError("xcat_labels must be the same length as xcats")
+
+        if not isinstance(xcat_comp, str):
+            raise TypeError("xcat_comp must be a string")
+
+    def _create_df(
+        self, df, xcats, blacklist, sequential, iis, neutral, pan_weight, thresh, min_obs, est_freq, postfix
+    ):
+        result_df = None
+        for xcat in xcats:
+            dfzm = make_zn_scores(
+                df, xcat=xcat, sequential=sequential, cids=self.cids,
+                blacklist=blacklist, iis=iis, neutral=neutral, pan_weight=pan_weight,
+                thresh=thresh, min_obs=min_obs, est_freq=est_freq, postfix=postfix
+            )
+            result_df = update_df(result_df, dfzm) if result_df is not None else dfzm
+        return result_df
 
     def _plot_heatmap(
         self,
@@ -140,13 +107,10 @@ class ScoreVisualisers(object):
     ):
         fig, ax = plt.subplots(figsize=figsize)
 
-        if cmap is None:
-            cmap = "coolwarm_r"
-
-        if cmap_range is None:
-            vmax = np.nanmax(np.abs(df.values))
-            vmin = -vmax
-            cmap_range = (vmin, vmax)
+        cmap = cmap or "coolwarm_r"
+        vmax = np.nanmax(np.abs(df.values))
+        vmin = -vmax
+        cmap_range = cmap_range or (vmin, vmax)
 
         sns.heatmap(
             df,
@@ -167,12 +131,15 @@ class ScoreVisualisers(object):
         if vertical_divider:
             ax.vlines([1], *ax.get_ylim(), linewidth=2, color="black")
 
-        if xticks is None:
-            xticks = {"rotation": 45, "ha": "right"}
-        plt.xticks(**xticks)
-
+        plt.xticks(**(xticks or {"rotation": 45, "ha": "right"}))
         plt.tight_layout()
         plt.show()
+
+    def _apply_postfix(self, items: List[str]) -> List[str]:
+        return [item + self.postfix if not item.endswith(self.postfix) else item for item in items]
+
+    def _strip_postfix(self, items: List[str]) -> List[str]:
+        return [item[:-len(self.postfix)] if item.endswith(self.postfix) else item for item in items]
 
     def view_snapshot(
         self,
@@ -190,109 +157,36 @@ class ScoreVisualisers(object):
         cmap: str = None,
         cmap_range: Tuple[float, float] = None,
     ):
-        """
-        Display a multiple scores for multiple countries for the latest available or any previous date
+        cids = cids or self.cids
+        xcats = xcats or self.xcats
+        xcats = self._apply_postfix(xcats)
 
-        :param <List[str]> cids: A list of cids whose values are displayed. Default is all in the class
-        :param <List[str]> xcats: A list of xcats to be displayed in the given order. Default is all in the class, including the composite, with the latter being the first row (or column).
-        :param <bool> transpose: If False (default) rows are cids and columns are xcats. If True rows are xcats and columns are cids.
-        :param <str> date: ISO-8601 formatted date string giving the date (or nearest previous if not available). Default is latest business day in the dataframe -1 business day,
-        """
-        if cids is None:
-            cids = self.cids
-        elif not isinstance(cids, list) or not all(
-            isinstance(cid, str) for cid in cids
-        ):
-            raise TypeError("cids must be a list of strings")
+        date = pd.to_datetime(date) if date else self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
 
-        if xcats is None:
-            xcats = self.xcats
-        elif not isinstance(xcats, list) or not all(
-            isinstance(xcat, str) for xcat in xcats
-        ):
-            raise TypeError("xcats must be a list of strings")
-        elif set(xcats).issubset(set(self.old_xcats)):
-            xcats = [xcat + self.postfix for xcat in xcats]
-        elif not set(xcats).issubset(set(self.xcats)):
-            raise ValueError("xcats must be a subset of the xcats in ScoreVisualisers")
-
-        if not isinstance(transpose, bool):
-            raise TypeError("transpose must be a boolean")
-
-        if date is not None:
-            if not isinstance(date, str):
-                raise TypeError("start must be a string")
-            date = pd.to_datetime(date)
-
-        df = self.df[self.df["xcat"].isin(xcats)]
-
-        df = df[df["cid"].isin(cids)]
-
-        if date is None:
-            max_date = df["real_date"].max()
-            date = max_date - BDay(1)
-
-        df = df[df["real_date"] == date]
-
-        for xcat in xcats:
-            diff_set = set(cids).difference(df[df["xcat"] == xcat]["cid"].unique())
-            if diff_set != set():
-                warnings.warn(
-                    f"{str(diff_set)} not available for {xcat} at {date.strftime('%Y-%m-%d')}"
-                )
-
+        df = self.df[(self.df["xcat"].isin(xcats)) & (self.df["cid"].isin(cids)) & (self.df["real_date"] == date)]
         dfw = df.pivot(index="cid", columns="xcat", values="value")
-        dfw.index.name = None
-        dfw.columns.name = None
 
-        # If xcats contains the composite, it is moved to the first column
         composite_zscore = self.xcat_comp
         if composite_zscore in xcats:
-            dfw = dfw[
-                [composite_zscore]
-                + [xcat for xcat in dfw.columns if xcat != composite_zscore]
-            ]
+            dfw = dfw[[composite_zscore] + [xcat for xcat in dfw.columns if xcat != composite_zscore]]
 
-        if xcat_labels is not None:
-            if set(xcat_labels.keys()) == set(dfw.columns):
-                dfw.columns = [xcat_labels[xcat] for xcat in dfw.columns]
-            else:
-                presence = [f"{key}{self.postfix}" in xcats for key in xcat_labels]
-                if all(presence):
-                    dfw.columns = [
-                        xcat_labels[xcat[: -len(self.postfix)]] for xcat in dfw.columns
-                    ]
-                else:
-                    raise ValueError(
-                        "xcat_labels must contain the same keys as xcats in the DataFrame"
-                    )
+        if xcat_labels:
+            if set(self._apply_postfix(list(xcat_labels.keys()))) == set(dfw.columns):
+                dfw.columns = [xcat_labels.get(self._strip_postfix([xcat])[0], xcat_labels.get(self._apply_postfix([xcat])[0], xcat)) for xcat in dfw.columns]
 
         if transpose:
             dfw = dfw.transpose()
 
-        if title is None:
-            title = f"Snapshot for {date.strftime('%Y-%m-%d')}"
+        title = title or f"Snapshot for {date.strftime('%Y-%m-%d')}"
 
-        horizontal_divider = False
-        vertical_divider = False
-
-        if self.xcat_comp in xcats and transpose:
-            horizontal_divider = True
-        elif self.xcat_comp in xcats and not transpose:
-            vertical_divider = True
+        horizontal_divider = transpose and composite_zscore in xcats
+        vertical_divider = not transpose and composite_zscore in xcats
 
         self._plot_heatmap(
-            dfw,
-            title=title,
-            annot=annot,
-            xticks=xticks,
-            figsize=figsize,
-            title_fontsize=title_fontsize,
-            round_decimals=round_decimals,
-            cmap=cmap,
-            cmap_range=cmap_range,
-            horizontal_divider=horizontal_divider,
-            vertical_divider=vertical_divider,
+            dfw, title=title, annot=annot, xticks=xticks, figsize=figsize,
+            title_fontsize=title_fontsize, round_decimals=round_decimals,
+            cmap=cmap, cmap_range=cmap_range, horizontal_divider=horizontal_divider,
+            vertical_divider=vertical_divider
         )
 
     def view_score_evolution(
@@ -313,54 +207,20 @@ class ScoreVisualisers(object):
         cmap_range: Tuple[float, float] = None,
         round_decimals: int = 2,
     ):
-        """
-        :param <List[str]> cids: A list of cids whose values are displayed. Default is all in the class
-        :param <str> xcat: Single xcat to be displayed. Default is xcat_comp.
-        :param<str> freq: frequency to which values are aggregated, i.e. averaged. Default is annual (A). The alternative is quarterly (Q) or bi-annnual (6M)
-        :param <bool> include_latest_period: include the latest period average as defined by freq, even if it is not complete. Default is True.
-        :param <bool> include_latest_day: include the latest working day date as defined by freq, even if it is not complete. Default is True.
-        :param <str> start: ISO-8601 formatted date string. Select data from
-            this date onwards. If None, all dates are selected.
-        :param <bool> transpose: If False (default) rows are time periods and columns are cids. If True rows are cids and columns are time periods.
-        """
-
-        if cids is None:
-            cids = self.cids
-        elif not isinstance(cids, list) or not all(
-            isinstance(cid, str) for cid in cids
-        ):
-            raise TypeError("cids must be a list of strings")
+        cids = cids or self.cids
+        xcat = xcat if xcat.endswith(self.postfix) else xcat + self.postfix
 
         if freq not in ["Q", "A", "BA"]:
             raise ValueError("freq must be 'Q', 'A', or 'BA'")
 
-        if freq == "BA":
-            freq = "2AS"
-
-        if not isinstance(xcat, str):
-            raise TypeError("xcat must be a string")
-
-        if not isinstance(transpose, bool):
-            raise TypeError("transpose must be a boolean")
-
-        if start is not None:
-            if not isinstance(start, str):
-                raise TypeError("start must be a string")
-
-        df = self.df[self.df["xcat"] == xcat + self.postfix].drop(columns=["xcat"])
-
+        freq = "2AS" if freq == "BA" else freq
+        df = self.df[self.df["xcat"] == xcat]
         df = df[df["cid"].isin(cids)]
-
-        if start is None:
-            start = df["real_date"].max()
-        else:
-            df = df[df["real_date"] >= start]
+        df = df if start is None else df[df["real_date"] >= start]
 
         dfw = df.pivot(index="real_date", columns="cid", values="value")
-        dfw.index.name = None
-        dfw.columns.name = None
-
         dfw_resampled = dfw.resample(freq, origin="start").mean()
+
         if not include_latest_period:
             dfw_resampled = dfw_resampled.iloc[:-1]
 
@@ -368,18 +228,12 @@ class ScoreVisualisers(object):
             latest_day = dfw.ffill().iloc[-1]
             dfw_resampled.loc[df["real_date"].max()] = latest_day
             if freq == "Q":
-                dfw_resampled.index = list(
-                    dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
-                ) + ["Latest"]
+                dfw_resampled.index = list(dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]) + ["Latest"]
             else:
-                dfw_resampled.index = list(dfw_resampled.index.strftime("%Y")[:-1]) + [
-                    "Latest"
-                ]
+                dfw_resampled.index = list(dfw_resampled.index.strftime("%Y")[:-1]) + ["Latest"]
         else:
             if freq == "Q":
-                dfw_resampled.index = list(
-                    dfw_resampled.index.to_period("Q").strftime("%YQ%q")
-                )
+                dfw_resampled.index = list(dfw_resampled.index.to_period("Q").strftime("%YQ%q"))
             else:
                 dfw_resampled.index = list(dfw_resampled.index.strftime("%Y"))
 
@@ -388,19 +242,12 @@ class ScoreVisualisers(object):
         if transpose:
             dfw_resampled = dfw_resampled.transpose()
 
-        if title is None:
-            title = f"Evolution for {xcat}"
+        title = title or f"Evolution for {xcat}"
 
         self._plot_heatmap(
-            dfw_resampled,
-            title=title,
-            annot=annot,
-            round_decimals=round_decimals,
-            xticks=xticks,
-            figsize=figsize,
-            title_fontsize=title_fontsize,
-            cmap=cmap,
-            cmap_range=cmap_range,
+            dfw_resampled, title=title, annot=annot, xticks=xticks,
+            figsize=figsize, title_fontsize=title_fontsize,
+            round_decimals=round_decimals, cmap=cmap, cmap_range=cmap_range
         )
 
     def view_cid_evolution(
@@ -422,62 +269,23 @@ class ScoreVisualisers(object):
         cmap_range: Tuple[float, float] = None,
         round_decimals: int = 2,
     ):
-        """
-        :param <str> cid: Single cid to be displayed
-        :param <List[str]> xcats: A list of xcats to be displayed in the given order. Default is all in the class, including the composite, with the latter being the first row (or column).
-        :param<str> freq: frequency to which values are aggregated, i.e. averaged. Default is annual (A). The alternative is quarterly (Q) or bi-annnual (BA)
-        :param <bool> include_latest_period: include the latest period average as defined by freq, even if it is not complete. Default is True.
-        :param <bool> include_latest_day: include the latest working day date as defined by freq, even if it is not complete. Default is True.
-        :param <str> start: ISO-8601 formatted date string. Select data from
-            this date onwards. If None, all dates are selected.
-        :param <bool> transpose: If False (default) rows are xcats and columns are time periods. If True rows are time periods and columns are xcats.
-        """
-
         if not isinstance(cid, str):
             raise TypeError("cid must be a string")
 
         if freq not in ["Q", "A", "BA"]:
             raise ValueError("freq must be 'Q', 'A', or 'BA'")
 
-        if freq == "BA":
-            freq = "2AS"
+        freq = "2AS" if freq == "BA" else freq
 
-        if xcats is None:
-            xcats = self.xcats
-        elif not isinstance(xcats, list) or not all(
-            isinstance(xcat, str) for xcat in xcats
-        ):
-            raise TypeError("xcats must be a list of strings")
-        elif set(xcats).issubset(set(self.old_xcats)):
-            xcats = [xcat + self.postfix for xcat in xcats]
-        elif not set(xcats).issubset(set(self.xcats)):
-            raise ValueError("xcats must be a subset of the xcats in ScoreVisualisers")
+        xcats = self._apply_postfix(xcats)
 
-        if not isinstance(transpose, bool):
-            raise TypeError("transpose must be a boolean")
-
-        if start is not None and not isinstance(start, str):
-            raise TypeError("start must be a string")
-
-        df = self.df[self.df["cid"] == cid].drop(columns=["cid"])
-
-        if start is not None:
-            df = df[df["real_date"] >= start]
-
+        df = self.df[self.df["cid"] == cid]
+        df = df if start is None else df[df["real_date"] >= start]
         df = df[df["xcat"].isin(xcats)]
 
         dfw = df.pivot(index="real_date", columns="xcat", values="value")
-        dfw.index.name = None
-        dfw.columns.name = None
-
-        composite_zscore = self.xcat_comp
-        if composite_zscore in xcats:
-            dfw = dfw[
-                [composite_zscore]
-                + [xcat for xcat in dfw.columns if xcat != composite_zscore]
-            ]
-
         dfw_resampled = dfw.resample(freq).mean()
+
         if not include_latest_period:
             dfw_resampled = dfw_resampled.iloc[:-1]
 
@@ -485,66 +293,34 @@ class ScoreVisualisers(object):
             latest_day = dfw.ffill().iloc[-1]
             dfw_resampled.loc[df["real_date"].max()] = latest_day
             if freq == "Q":
-                dfw_resampled.index = list(
-                    dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
-                ) + ["Latest"]
+                dfw_resampled.index = list(dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]) + ["Latest"]
             else:
-                dfw_resampled.index = list(dfw_resampled.index.strftime("%Y")[:-1]) + [
-                    "Latest"
-                ]
+                dfw_resampled.index = list(dfw_resampled.index.strftime("%Y")[:-1]) + ["Latest"]
         else:
             if freq == "Q":
-                dfw_resampled.index = list(
-                    dfw_resampled.index.to_period("Q").strftime("%YQ%q")
-                )
+                dfw_resampled.index = list(dfw_resampled.index.to_period("Q").strftime("%YQ%q"))
             else:
                 dfw_resampled.index = list(dfw_resampled.index.strftime("%Y"))
 
-        if xcat_labels is not None:
-            if set(xcat_labels.keys()) == set(dfw_resampled.columns):
-                dfw_resampled.columns = [
-                    xcat_labels[xcat] for xcat in dfw_resampled.columns
-                ]
-            else:
-                presence = [f"{key}{self.postfix}" in xcats for key in xcat_labels]
-                if all(presence):
-                    dfw_resampled.columns = [
-                        xcat_labels[xcat[: -len(self.postfix)]]
-                        for xcat in dfw_resampled.columns
-                    ]
-                else:
-                    raise ValueError(
-                        "xcat_labels must contain the same keys as xcats in the DataFrame"
-                    )
+        if xcat_labels:
+            if set(self._apply_postfix(list(xcat_labels.keys()))) == set(dfw_resampled.columns):
+                dfw_resampled.columns = [xcat_labels.get(self._strip_postfix([xcat])[0], xcat_labels.get(self._apply_postfix([xcat])[0], xcat)) for xcat in dfw_resampled.columns]
 
         dfw_resampled = dfw_resampled.transpose()
 
         if transpose:
             dfw_resampled = dfw_resampled.transpose()
 
-        if title is None:
-            title = f"Evolution for {cid}"
+        title = title or f"Evolution for {cid}"
 
-        horizontal_divider = False
-        vertical_divider = False
-
-        if self.xcat_comp in xcats and not transpose:
-            horizontal_divider = True
-        elif self.xcat_comp in xcats and transpose:
-            vertical_divider = True
+        horizontal_divider = not transpose and self.xcat_comp in xcats
+        vertical_divider = transpose and self.xcat_comp in xcats
 
         self._plot_heatmap(
-            dfw_resampled,
-            title=title,
-            annot=annot,
-            round_decimals=round_decimals,
-            xticks=xticks,
-            figsize=figsize,
-            title_fontsize=title_fontsize,
-            cmap=cmap,
-            cmap_range=cmap_range,
-            horizontal_divider=horizontal_divider,
-            vertical_divider=vertical_divider,
+            dfw_resampled, title=title, annot=annot, xticks=xticks,
+            figsize=figsize, title_fontsize=title_fontsize,
+            round_decimals=round_decimals, cmap=cmap, cmap_range=cmap_range,
+            horizontal_divider=horizontal_divider, vertical_divider=vertical_divider
         )
 
     def view_3d_surface(self, xcat: str, cids: List[str] = None):
@@ -667,7 +443,7 @@ if __name__ == "__main__":
     sv.view_cid_evolution(
         cid="USD",
         xcats=xcats + ["Composite"],
-        xcat_labels={"GGIEDGDP_NSA": "Currency reserve expansion as % of GDP", "Composite": "Composite", "NIIPGDP_NSA": "Monetary base expansion as % of GDP", "CABGDPRATIO_NSA_12MMA": "Intervention-driven liquidity expansion as % of GDP, diff over 3 months", "GGOBGDPRATIO_NSA": "Intervention-driven liquidity expansion as % of GDP, diff over 6 months"},
+        xcat_labels={"GGIEDGDP_NSA_ZN": "Currency reserve expansion as % of GDP", "Composite_ZN": "Composite", "NIIPGDP_NSA_ZN": "Monetary base expansion as % of GDP", "CABGDPRATIO_NSA_12MMA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 3 months", "GGOBGDPRATIO_NSA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 6 months"},
         freq="A",
         transpose=False,
     )
