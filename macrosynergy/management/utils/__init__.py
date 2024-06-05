@@ -4,6 +4,7 @@ from .core import (
     get_ticker,
     split_ticker,
     deconstruct_expression,
+    construct_expressions,
     is_valid_iso_date,
     convert_iso_to_dq,
     convert_dq_to_iso,
@@ -46,6 +47,8 @@ from .math import (
     expanding_mean_with_nan,
 )
 
+from .qdfmanager import QDFManager
+
 
 __all__ = [
     "core",
@@ -56,6 +59,7 @@ __all__ = [
     "get_ticker",
     "split_ticker",
     "deconstruct_expression",
+    "construct_expressions",
     "is_valid_iso_date",
     "convert_iso_to_dq",
     "convert_dq_to_iso",
@@ -90,4 +94,5 @@ __all__ = [
     "get_eops",
     "get_sops",
     "expanding_mean_with_nan",
+    "QDFManager",
 ]

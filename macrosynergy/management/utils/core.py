@@ -135,6 +135,30 @@ def deconstruct_expression(
             return [expression, expression, "value"]
 
 
+def construct_expressions(
+    tickers: Optional[List[str]] = None,
+    cids: Optional[List[str]] = None,
+    xcats: Optional[List[str]] = None,
+    metrics: Optional[List[str]] = None,
+) -> List[str]:
+    """Construct expressions from the provided arguments.
+
+    :param <list[str]> tickers: list of tickers.
+    :param <list[str]> cids: list of cids.
+    :param <list[str]> xcats: list of xcats.
+    :param <list[str]> metrics: list of metrics.
+
+    :return <list[str]>: list of expressions.
+    """
+
+    if tickers is None:
+        tickers = []
+    if cids is not None and xcats is not None:
+        tickers += [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+
+    return [f"DB(JPMAQS,{tick},{metric})" for tick in tickers for metric in metrics]
+
+
 def get_cid(ticker: Union[str, Iterable[str]]) -> Union[str, List[str]]:
     """
     Returns the cross-sectional identifier (cid) from a ticker.
