@@ -1,4 +1,4 @@
-from typing import List, Optional, Union, TypeVar, overload, Dict
+from typing import List, Optional, Union, TypeVar, overload, Dict, Any
 from collections.abc import Iterable, Callable
 import pandas as pd
 import numpy as np
@@ -11,12 +11,14 @@ import glob
 import fnmatch
 from macrosynergy.management.types import QuantamentalDataFrame
 from tqdm import tqdm
+import pickle
 from macrosynergy.management.utils import (
     ticker_df_to_qdf,
     qdf_to_ticker_df,
     standardise_dataframe,
     concat_qdfs,
     deconstruct_expression,
+    construct_expressions,
     get_cid,
     get_xcat,
     get_ticker,
@@ -45,7 +47,21 @@ def df_dict_to_qdf(df_dict: dict[str, pd.DataFrame]) -> QuantamentalDataFrame:
     """
     Convert a dictionary of `pd.DataFrame`s to a `QuantamentalDataFrame`.
     """
-    return concat_qdfs([ticker_df_to_qdf(df, metric) for metric, df in df_dict.items()])
+
+    def _is_empty(df: pd.DataFrame) -> bool:
+        return df is None or (df.empty)
+
+    r = concat_qdfs(
+        [
+            ticker_df_to_qdf(df, metric)
+            for metric, df in df_dict.items()
+            if not _is_empty(df)
+        ]
+    )
+    if r is None:
+        return pd.DataFrame()
+
+    return r
 
 
 def expression_df_to_df_dict(
@@ -92,7 +108,10 @@ class Loader:
         """
         Load all the csv files in the path recursively.
         """
-        return sorted(glob.glob(path + "/**/*.csv", recursive=True))
+        listx = sorted(glob.glob(path + "/**/*.csv", recursive=True))
+        if not listx:
+            raise FileNotFoundError(f"No CSV files found in {path}")
+        return listx
 
     @staticmethod
     def load_csv_batch_from_disk(
@@ -134,7 +153,7 @@ class Loader:
         """
         All the csv files in the path recursively and try to load them as time series data.
         """
-        csvs_list = Loader.get_csv_files(path)[:100]
+        csvs_list = Loader.get_csv_files(path)
         csv_batches = [
             csvs_list[i : i + batch_size] for i in range(0, len(csvs_list), batch_size)
         ]
@@ -174,7 +193,7 @@ class Loader:
         """
         Load all the qdf files in the path recursively.
         """
-        csvs_list = Loader.get_csv_files(path)[:1000]
+        csvs_list = Loader.get_csv_files(path)
         csv_batches = [
             csvs_list[i : i + batch_size] for i in range(0, len(csvs_list), batch_size)
         ]
@@ -200,6 +219,30 @@ class Loader:
         return df_dict
 
     @staticmethod
+    def load_pkl_from_disk(path: str) -> Any:
+        """
+        Load a pickle file from disk.
+        """
+        with open(path, "rb") as f:
+            return pickle.load(f)
+
+    @staticmethod
+    def load_pkl(path: str) -> Any:
+        """
+        Load a pickle file from disk.
+        """
+        obj = Loader.load_pkl_from_disk(path)
+        if isinstance(obj, pd.DataFrame):
+            return expression_df_to_df_dict(obj)
+        elif isinstance(obj, dict):
+            return obj
+        else:
+            raise NotImplementedError(
+                f"Invalid object type: {type(obj)}. Must be either `pd.DataFrame` or "
+                "`Dict[str, pd.DataFrame]`"
+            )
+
+    @staticmethod
     def load_from_disk(
         path: str,
         format: str = "csvs",
@@ -210,7 +253,7 @@ class Loader:
         Parameters
         :param <str> path: The path to the directory containing the data.
         :param <str> format: The format of the data. Options are "csvs", "csv",
-        "pkl", "pkls", or "qdfs".
+            "pkl", or "qdfs".
         """
 
         def load_single_csv_from_disk_as_df_dict(
@@ -220,6 +263,9 @@ class Loader:
             Load a single csv file from disk.
             """
             return expression_df_to_df_dict(Loader.load_single_csv_from_disk(csv_file))
+
+        if format == "pkl":
+            return Loader.load_pkl(path)
 
         fmt_dict = {
             "csv": load_single_csv_from_disk_as_df_dict,
@@ -231,6 +277,52 @@ class Loader:
                 f"Invalid format: {format}. Options are {fmt_dict.keys()}"
             )
         return fmt_dict[format](path)
+
+
+class Saver:
+    @staticmethod
+    def save_single_csv_to_disk(df: pd.DataFrame, path: str) -> None:
+        """
+        Save a single csv file to disk.
+        """
+        # reset index, and ensure the real_date is a column
+        if not "real_date" in df.columns:
+            df = df.reset_index()
+
+        assert "real_date" in df.columns, "real_date column not found in the dataframe"
+        assert len(df.columns) >= 2, "At least one ticker column is required"
+        df.to_csv(path, index=False)
+
+    @staticmethod
+    def save_single_qdf_to_disk(
+        df: QuantamentalDataFrame, path: str, infer_filename: bool = True
+    ) -> None:
+        """
+        Save a single qdf file to disk.
+        """
+        # reset index, and ensure the real_date is a column
+        if not "real_date" in df.columns:
+            df = df.reset_index()
+
+        assert "real_date" in df.columns, "real_date column not found in the dataframe"
+        cidx = df["cid"].unique()
+        xcatx = df["xcat"].unique()
+        assert len(cidx) == 1, f"Multiple cids found: {cidx}"
+        assert len(xcatx) == 1, f"Multiple xcats found: {xcatx}"
+        if infer_filename:
+            # check if the base path is a directory
+            path = path if os.path.isdir(path) else os.path.dirname(path)
+            path = os.path.join(path, f"{cidx[0]}_{xcatx[0]}.csv")
+
+        df.to_csv(path, index=False)
+
+    @staticmethod
+    def save_pkl_to_disk(obj: Any, path: str) -> None:
+        """
+        Save an object to disk.
+        """
+        with open(path, "wb") as f:
+            pickle.dump(obj, f)
 
 
 def get_ticker_dict_from_df_dict(
@@ -282,7 +374,8 @@ def _run_ticker_query(
     Get the tickers from the query parameters.
     """
     all_available_tickers = qdf_manager.tickers
-
+    cids = [cids] if isinstance(cids, str) else cids
+    xcats = [xcats] if isinstance(xcats, str) else xcats
     if isinstance(cid, str):
         cids = [cid] + (cids or [])
     if isinstance(xcat, str):
@@ -290,9 +383,9 @@ def _run_ticker_query(
     if isinstance(ticker, str):
         tickers = [ticker] + (tickers or [])
     if tickers is None:
-        if cids is None:
+        if cids is None or cids == []:
             cids = qdf_manager.cids
-        if xcats is None:
+        if xcats is None or xcats == []:
             xcats = qdf_manager.xcats
         tickers = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
 
@@ -314,11 +407,12 @@ def _run_ticker_query(
         tickers: List[str] = []
 
     tickers += [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
-    tickers = sorted(set(tickers))
+    tickers = set(tickers)
 
-    q_tickers = [f"{ticker},{metric}" for ticker in tickers for metric in metrics]
-
-    return {m: q_tickers for m in metrics}
+    return {
+        m: sorted(set(qdf_manager.df_dict[m].columns).intersection(tickers))
+        for m in metrics
+    }
 
 
 def query_df_dict(
@@ -367,11 +461,15 @@ def query_df_dict(
     if start > end:
         start, end = end, start
 
+    if isinstance(cross_section_groups, str):
+        cross_section_groups = [cross_section_groups]
+    cross_section_groups = cross_section_groups or []
     if cids is None:
         cids = []
     for cxg in cross_section_groups or []:
-        if cxg in msy_constants.cross_section_groups:
-            cids = list(set(cids + msy_constants.cross_section_groups[cxg]))
+        _cx = cxg.lower()
+        if _cx in msy_constants.cross_section_groups:
+            cids = list(set(cids + msy_constants.cross_section_groups[_cx]))
 
     ticker_query: Dict[str, List[str]] = _run_ticker_query(
         qdf_manager,
@@ -436,9 +534,8 @@ class QDFManager:
 
     def __exit__(self, exc_type, exc_value, traceback): ...
 
-    @classmethod
+    @staticmethod
     def load_from_disk(
-        cls: "QDFManager",
         path: str,
         format: str = "csvs",
     ) -> "QDFManager":
@@ -449,7 +546,25 @@ class QDFManager:
         :param <str> path: The path to the directory containing the data.
         :param <str> format: The format of the data. Options are "csvs",
         """
-        return cls(df_dict=Loader.load_from_disk(path, format=format))
+        return QDFManager(df_dict=Loader.load_from_disk(path, format=format))
+
+    def save_to_disk(
+        self,
+        path: str,
+        format: str = "pkl",
+    ) -> None:
+        """
+        Save the `QuantamentalDataFrame` to disk.
+
+        Parameters
+        :param <str> path: The path to the directory to save the data.
+        :param <str> format: The format of the data. Options are "csvs",
+        """
+        if format == "pkl":
+            Saver.save_pkl_to_disk(self.df_dict, path)
+        else:
+            for metric, df in self.df_dict.items():
+                Saver.save_single_csv_to_disk(df, os.path.join(path, f"{metric}.csv"))
 
     def _get_dict(
         self,
@@ -482,7 +597,7 @@ class QDFManager:
         tickers: Optional[List[str]] = None,
         start: Optional[DateLike] = None,
         end: Optional[DateLike] = None,
-        metrics: Optional[str] = None,
+        metrics: Optional[str] = "value",
         cross_section_groups: Optional[List[str]] = None,
     ) -> QuantamentalDataFrame:
         """
@@ -535,9 +650,9 @@ class QDFManager:
         )[metric]
 
 
-qdfman: QDFManager = QDFManager.load_from_disk(
-    path=r"E:\datasets\jpmaqs\QDFs",
-    format="qdfs",
-)
+# qdfman: QDFManager = QDFManager.load_from_disk(
+#     path=r"E:\datasets\jpmaqs\QDFs",
+#     format="qdfs",
+# )
 
-qdfman.qdf(cid="USD*")
+# qdfman.qdf(cid="USD*")
