@@ -86,3 +86,13 @@ cids_dm = cids_dmca + cids_dmec
 cids_em = cids_latm + cids_emea + cids_emas
 
 all_cids = sorted(cids_dm + cids_em)
+
+cross_section_groups = {
+    "dmca": cids_dmca,
+    "dmec": cids_dmec,
+    "latm": cids_latm,
+    "emea": cids_emea,
+    "emas": cids_emas,
+    "dm": cids_dm,
+    "em": cids_em,
+}
