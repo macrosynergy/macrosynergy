@@ -1,4 +1,4 @@
-from typing import List, TypeVar
+from typing import List, TypeVar, Dict
 import datetime
 import pandas as pd
 import numpy as np
@@ -13,14 +13,15 @@ class QDFManagerBase:
     """
 
     def __init__(self):
-        self._tickers: List[str] = None
+        self.tickers: List[str] = None
         self.cids: List[str] = None
         self.xcats: List[str] = None
         self.metrics: List[str] = None
         self.date_range: pd.DatetimeIndex = None
         self.start_date: pd.Timestamp = None
         self.end_date: pd.Timestamp = None
-        self.df_dict: dict[str, pd.DataFrame] = None
+        self.df_dict: Dict[str, pd.DataFrame] = None
+        self.ticker_dict: Dict[str, List[str]] = None
 
     @property
     def tickers(self):

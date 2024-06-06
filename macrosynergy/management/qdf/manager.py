@@ -1,4 +1,4 @@
-from typing import List, Optional, TypeVar
+from typing import List, Optional, TypeVar, Union, Dict, Any
 import os
 import datetime
 import pandas as pd
@@ -12,13 +12,22 @@ from macrosynergy.management.qdf.methods import (
     qdf_to_df_dict,
     df_dict_to_qdf,
     ticker_df_to_df_dict,
+    update_df_dict,
     expression_df_to_df_dict,
     get_tickers_from_df_dict,
+    get_ticker_dict_from_df_dict,
     get_date_range_from_df_dict,
 )
 
-from macrosynergy.management.qdf.query import query_df_dict
 
+from macrosynergy.management.qdf.query import (
+    query_df_dict,
+    get_query_dict,
+    get_query_dict_from_args,
+    get_tickers_from_query_dict,
+    get_ticker_dict_from_query_dict,
+    get_query_df_dict,
+)
 from macrosynergy.management.utils import get_cid, get_xcat
 
 
@@ -31,7 +40,7 @@ class QDFManager(QDFManagerBase):
         self,
         qdf: Optional[QuantamentalDataFrame] = None,
         expression_df: Optional[pd.DataFrame] = None,
-        df_dict: Optional[dict[str, pd.DataFrame]] = None,
+        df_dict: Optional[Dict[str, pd.DataFrame]] = None,
         ticker_df: Optional[pd.DataFrame] = None,
         metric: Optional[str] = None,
     ) -> None:
@@ -58,13 +67,31 @@ class QDFManager(QDFManagerBase):
                 "Either `qdf`, `expression_df`, or `df_dict` must be provided."
             )
 
-        self._tickers = get_tickers_from_df_dict(self.df_dict, common_metrics=True)
-        self.cids = sorted(set(get_cid(self._tickers)))
-        self.xcats = sorted(set(get_xcat(self._tickers)))
-        self.metrics = sorted(self.df_dict.keys())
+        self.__init_properties__()
+
+    def __init_properties__(self):
+        """
+        Initialise the properties of the `QDFManager` object.
+        """
+
+        self.tickers = get_tickers_from_df_dict(self.df_dict, common_metrics=False)
+        self.ticker_dict = get_ticker_dict_from_df_dict(self.df_dict)
+
         self.date_range = get_date_range_from_df_dict(self.df_dict)
         self.start_date: pd.Timestamp = self.date_range.min()
         self.end_date: pd.Timestamp = self.date_range.max()
+        dict_keys = list(self.df_dict.keys())
+        for ki, kx in enumerate(dict_keys):
+            if self.df_dict[kx].empty:
+                del self.df_dict[kx]
+        if self.tickers != []:
+            self.cids = sorted(set(get_cid(self.tickers)))
+            self.xcats = sorted(set(get_xcat(self.tickers)))
+            self.metrics = sorted(self.df_dict.keys())
+        else:
+            self.cids = []
+            self.xcats = []
+            self.metrics = []
 
     def __enter__(self):
         return self
@@ -118,7 +145,7 @@ class QDFManager(QDFManagerBase):
         # metric: Optional[str] = None,
         # metrics: Optional[List[str]] = None,
         # cross_section_groups: Optional[List[str]] = None,
-    ) -> dict[str, pd.DataFrame]:
+    ) -> Dict[str, pd.DataFrame]:
         """
         Query the `QuantamentalDataFrame`.
         """
@@ -155,43 +182,59 @@ class QDFManager(QDFManagerBase):
             )
         )
 
-    def obj_query(
+    def update(
         self,
-        query: str,
-        *args,
-        **kwargs,
-    ) -> QuantamentalDataFrame:
+        qdfm: Optional["QDFManager"] = None,
+        qdf: Optional[QuantamentalDataFrame] = None,
+        expression_df: Optional[pd.DataFrame] = None,
+        df_dict: Optional[Dict[str, pd.DataFrame]] = None,
+        ticker_df: Optional[pd.DataFrame] = None,
+        metric: Optional[str] = None,
+    ) -> None:
         """
-        Query the `QuantamentalDataFrame`.
+        Update the `QuantamentalDataFrame`.
         """
-        tx = kwargs.get("tickers", [])
-        txnew = tx + [f"*{query}*".upper()]
-        kwargs["tickers"] = txnew
+        # only one of qdfm, qdf, expression_df, df_dict, or ticker_df should be provided. only one
+        if (
+            sum([x is not None for x in [qdfm, qdf, expression_df, df_dict, ticker_df]])
+            != 1
+        ):
+            raise ValueError(
+                "Exactly one of `qdfm`, `qdf`, `expression_df`, `df_dict`, or `ticker_df` must be provided."
+            )
 
-        return self.qdf(*args, **kwargs)
+        if qdfm is not None:
+            self.df_dict = update_df_dict(self.df_dict, qdfm.df_dict)
 
-    def query(
-        self,
-        query: str,
-        *args,
-        **kwargs,
-    ):
-        """
-        Query the `QuantamentalDataFrame`.
-        """
-        tx = kwargs.get("tickers", [])
-        txnew = tx + [f"*{query}*".upper()]
-        kwargs["tickers"] = txnew
+        elif qdf is not None:
+            self.df_dict = update_df_dict(self.df_dict, qdf_to_df_dict(qdf))
 
-        return self._get_dict(*args, **kwargs)
+        elif expression_df is not None:
+            self.df_dict = update_df_dict(
+                self.df_dict, expression_df_to_df_dict(expression_df)
+            )
+
+        elif df_dict is not None:
+            self.df_dict = update_df_dict(self.df_dict, df_dict)
+
+        elif ticker_df is not None:
+            if metric is None:
+                warnings.warn("No metric provided. Defaulting to 'value'.")
+                metric = "value"
+            self.df_dict = update_df_dict(
+                self.df_dict, ticker_df_to_df_dict(ticker_df, metric)
+            )
+
+        # reinstiate with df dict
+        self.__init_properties__()
 
     def ticker_df(
         self,
+        ticker: Optional[str] = None,
         cid: Optional[str] = None,
         cids: Optional[List[str]] = None,
         xcat: Optional[str] = None,
         xcats: Optional[List[str]] = None,
-        ticker: Optional[str] = None,
         tickers: Optional[List[str]] = None,
         start: Optional[DateLike] = None,
         end: Optional[DateLike] = None,
@@ -202,6 +245,8 @@ class QDFManager(QDFManagerBase):
         Query the `QuantamentalDataFrame`.
         """
         if metric not in self.metrics:
+            if self.metrics == []:
+                return pd.DataFrame(index=self.date_range)
             raise ValueError(f"Invalid metric: {metric}. Options are {self.metrics}")
 
         # shortcut if no query
@@ -235,3 +280,91 @@ class QDFManager(QDFManagerBase):
             metric=metric,
             cross_section_groups=cross_section_groups,
         )[metric]
+
+    def query(
+        self,
+        query: str,
+        *args,
+        **kwargs,
+    ):
+        """
+        Query the `QuantamentalDataFrame`.
+        """
+        tx = kwargs.get("tickers", [])
+        txnew = tx + [f"*{query}*".upper()]
+        kwargs["tickers"] = txnew
+
+        return self._get_dict(*args, **kwargs)
+
+    def iquery(
+        self,
+        *args,
+        **kwargs,
+    ) -> "QDFQueryView":
+        return QDFQueryView(manager=self).iquery(*args, **kwargs)
+
+
+class QDFQueryView(QDFManagerBase):
+    """
+    Query the `QuantamentalDataFrame`.
+    """
+
+    def __init__(
+        self,
+        manager: "QDFManagerBase",
+        view: Optional[Dict[str, Dict[str, Union[List[str], pd.Timestamp]]]] = None,
+    ):
+        """
+        Initialise the `QDFQueryView` object.
+        """
+        self.manager = manager
+        if view is None:
+            view = get_query_dict(qdf_manager=self.manager)
+        self.view = view
+
+        # set the properties
+        self.tickers = get_tickers_from_query_dict(self.view, common_metrics=False)
+        self.ticker_dict = get_ticker_dict_from_query_dict(self.view)
+        self.metrics = list(self.view.keys())
+        self.date_range = pd.bdate_range(
+            min([d["start"] for d in self.view.values()]),
+            max([d["end"] for d in self.view.values()]),
+        )
+        self.start_date = self.date_range.min()
+        self.end_date = self.date_range.max()
+
+    @property
+    def df_dict(self):
+        return self.manager.df_dict
+
+    def iquery(
+        self,
+        query: str = None,
+        *args,
+        **kwargs,
+    ) -> "QDFQueryView":
+        """
+        Return a new `QDFQueryView` object with the query applied.
+        """
+        assert (
+            "ticker_dict" not in kwargs
+        ), "ticker_dict is not a valid argument for `oquery`."
+        if query is not None:
+            kwargs["tickers"] = [f"*{query.upper()}*"] + kwargs.get("tickers", [])
+
+        qdict: Dict[str, Dict[str, Union[List[str], pd.Timestamp]]] = (
+            get_query_dict_from_args(ticker_dict=self.ticker_dict, *args, **kwargs)
+        )
+
+        return QDFQueryView(manager=self.manager, view=qdict)
+
+    def compile(self) -> QDFManager:
+        """
+        Compile the `QDFQueryView` into a `QuantamentalDataFrame`.
+        """
+        return QDFManager(
+            df_dict=get_query_df_dict(
+                query_dict=self.view,
+                qdf_manager=self.manager,
+            )
+        )
