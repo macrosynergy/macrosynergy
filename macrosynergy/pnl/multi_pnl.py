@@ -49,7 +49,7 @@ class MultiPnL:
         self,
         pnl_xcats: List[str],
         composite_pnl_xcat: str,
-        weights: Optional[dict[str, float]] = None,
+        weights: Optional[Dict[str, float]] = None,
     ) -> pd.DataFrame:
         """
         Combine PnLs with optional weighting.
