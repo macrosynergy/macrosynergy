@@ -34,15 +34,14 @@ class ScoreVisualisers:
         complete_xcats: bool = False,
         no_zn_scores: bool = False,
     ):
-        self._validate_params(cids, xcats, xcat_labels, xcat_comp)
+        self._validate_params(cids, xcats, xcat_comp)
 
         self.cids = cids if cids else list(df["cid"].unique())
-        self.xcat_labels = xcat_labels
-        self.xcat_comp = xcat_comp + postfix
         self.weights = weights
         self.postfix = postfix
         if no_zn_scores:
             self.postfix = ""
+        self.xcat_comp = xcat_comp + self.postfix
 
         self.df = self._create_df(
             df,
@@ -76,7 +75,7 @@ class ScoreVisualisers:
         self.df = update_df(self.df, composite_df)
         self.xcats = self.df["xcat"].unique().tolist()
 
-    def _validate_params(self, cids, xcats, xcat_labels, xcat_comp):
+    def _validate_params(self, cids, xcats, xcat_comp):
         if cids and (
             not isinstance(cids, list) or not all(isinstance(cid, str) for cid in cids)
         ):
@@ -87,12 +86,6 @@ class ScoreVisualisers:
             or not all(isinstance(xcat, str) for xcat in xcats)
         ):
             raise TypeError("xcats must be a list of strings")
-
-        if xcat_labels:
-            if not isinstance(xcat_labels, dict):
-                raise TypeError("xcat_labels must be a dictionary of strings")
-            if len(xcat_labels) != len(xcats):
-                raise ValueError("xcat_labels must be the same length as xcats")
 
         if not isinstance(xcat_comp, str):
             raise TypeError("xcat_comp must be a string")
@@ -222,6 +215,8 @@ class ScoreVisualisers:
             & (self.df["real_date"] == date)
         ]
         dfw = df.pivot(index="cid", columns="xcat", values="value")
+        dfw.columns.name = None
+        dfw.index.name = None
 
         composite_zscore = self.xcat_comp
         if composite_zscore in xcats:
@@ -264,9 +259,9 @@ class ScoreVisualisers:
 
     def view_score_evolution(
         self,
-        cids: List[str],
         xcat: str,
-        freq: str,
+        freq: str = 'A',
+        cids: List[str] = None,
         include_latest_period: bool = True,
         include_latest_day: bool = True,
         start: str = None,
@@ -292,6 +287,8 @@ class ScoreVisualisers:
         df = df if start is None else df[df["real_date"] >= start]
 
         dfw = df.pivot(index="real_date", columns="cid", values="value")
+        dfw.columns.name = None
+        dfw.index.name = None
         dfw_resampled = dfw.resample(freq, origin="start").mean()
 
         if not include_latest_period:
@@ -369,6 +366,8 @@ class ScoreVisualisers:
         df = df[df["xcat"].isin(xcats)]
 
         dfw = df.pivot(index="real_date", columns="xcat", values="value")
+        dfw.columns.name = None
+        dfw.index.name = None
         dfw_resampled = dfw.resample(freq).mean()
 
         if not include_latest_period:
@@ -392,6 +391,13 @@ class ScoreVisualisers:
                 )
             else:
                 dfw_resampled.index = list(dfw_resampled.index.strftime("%Y"))
+
+        composite_zscore = self.xcat_comp
+        if composite_zscore in xcats:
+            dfw_resampled = dfw_resampled[
+                [composite_zscore]
+                + [xcat for xcat in dfw_resampled.columns if xcat != composite_zscore]
+            ]
 
         if xcat_labels:
             if set(self._apply_postfix(list(xcat_labels.keys()))) == set(
