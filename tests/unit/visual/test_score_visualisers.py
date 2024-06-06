@@ -1,22 +1,15 @@
+from typing import List
 import unittest
-from matplotlib import pyplot as plt
 import pandas as pd
-from typing import List, Dict, Any
-from macrosynergy.management.simulate import make_test_df
-from macrosynergy.panel.category_relations import CategoryRelations
-from macrosynergy.visuals.score_visualisers import ScoreVisualizers
-import matplotlib
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
+from macrosynergy.management.simulate.simulate_quantamental_data import make_test_df
+from macrosynergy.management.utils.df_utils import reduce_df
+from macrosynergy.visuals import ScoreVisualisers  # Adjust the import according to your module's name
 
+class TestScoreVisualisers(unittest.TestCase):
 
-class TestAll(unittest.TestCase):
-    @classmethod
-    def setUpClass(self):
-        # Prevents plots from being displayed during tests.
-        plt.close("all")
-        self.mpl_backend: str = matplotlib.get_backend()
-        matplotlib.use("Agg")
-        self.mock_show = patch("matplotlib.pyplot.show").start()
+    def setUp(self):
+        # Sample DataFrame to use in tests
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD"]
         self.xcats: List[str] = ["XR", "CRY", "INFL"]
         self.metric = "value"
@@ -28,28 +21,68 @@ class TestAll(unittest.TestCase):
             self.cids, self.xcats, self.start, self.end
         )
 
-    @classmethod
-    def tearDownClass(self) -> None:
-        patch.stopall()
-        plt.close("all")
-        patch.stopall()
-        matplotlib.use(self.mpl_backend)
+    def test_initialization(self):
+        sv = ScoreVisualisers(df=self.df, cids=["AUD", "CAD", "GBP"], xcats=['XR', 'CRY'])
+        self.assertEqual(sv.cids, ["AUD", "CAD", "GBP"])
+        self.assertEqual(set(sv.xcats), set(['Composite_ZN', 'XR_ZN', 'CRY_ZN']))
 
-    def tearDown(self) -> None:
-        plt.close("all")
+    def test_initialization_no_zn(self):
+        sv = ScoreVisualisers(df=self.df, cids=["AUD", "CAD", "GBP"], xcats=['XR', 'CRY'], no_zn_scores=True)
+        
 
-    def setUp(self):
-        self.args = {
-            "df": self.df,
-        }
+    def test_invalid_cids_type(self):
+        with self.assertRaises(TypeError):
+            ScoreVisualisers(df=self.df, cids='invalid_cid')
 
-    def test_multiple_reg_scatter(self):
-        try:
-            sv = ScoreVisualizers(**self.args)
-        except Exception as e:
-            self.fail(f"multiple_reg_scatter raised {e} unexpectedly")
-    
+    def test_invalid_xcats_type(self):
+        with self.assertRaises(TypeError):
+            ScoreVisualisers(df=self.df, xcats='invalid_xcat')
 
+    def test_invalid_xcat_comp_type(self):
+        with self.assertRaises(TypeError):
+            ScoreVisualisers(df=self.df, xcat_comp=123)
 
-if __name__ == "__main__":
+    def test_create_df_no_zn_scores(self):
+        sv = ScoreVisualisers(df=self.df, xcats=['XR', 'CRY'], no_zn_scores=True)
+        self.assertTrue(set(sv.xcats) == set(['Composite', 'XR', 'CRY']))
+
+    def test_create_df_with_zn_scores(self):
+        sv = ScoreVisualisers(df=self.df, xcats=['XR', 'CRY'], no_zn_scores=False)
+        self.assertTrue(set(sv.xcats) == set(['Composite_ZN', 'XR_ZN', 'CRY_ZN']))
+
+    def test_apply_postfix(self):
+        sv = ScoreVisualisers(df=self.df, cids=["AUD", "CAD", "GBP"], xcats=['XR', 'CRY'])
+        items = ['item1', 'item2']
+        self.assertEqual(sv._apply_postfix(items), ['item1_ZN', 'item2_ZN'])
+
+    def test_strip_postfix(self):
+        sv = ScoreVisualisers(df=self.df, cids=["AUD", "CAD", "GBP"], xcats=['XR', 'CRY'])
+        items = ['item1_ZN', 'item2_ZN']
+        self.assertEqual(sv._strip_postfix(items), ['item1', 'item2'])
+
+    @patch('matplotlib.pyplot.show')
+    def test_view_snapshot(self, mock_plt_show):
+        sv = ScoreVisualisers(df=self.df, cids=["AUD", "CAD", "GBP"], xcats=['XR', 'CRY'])
+        sv.view_snapshot()
+        self.assertTrue(mock_plt_show.called)
+
+    @patch('matplotlib.pyplot.show')
+    def test_view_score_evolution(self, mock_plt_show):
+        sv = ScoreVisualisers(df=self.df, cids=["AUD", "CAD", "GBP"], xcats=['XR', 'CRY'])
+        sv.view_score_evolution(xcat='XR', freq='Q')
+        self.assertTrue(mock_plt_show.called)
+
+    @patch('matplotlib.pyplot.show')
+    def test_view_cid_evolution(self, mock_plt_show):
+        sv = ScoreVisualisers(df=self.df, cids=["AUD", "CAD", "GBP"], xcats=['XR', 'CRY'])
+        sv.view_cid_evolution(cid='AUD', xcats=['XR'], freq='Q')
+        self.assertTrue(mock_plt_show.called)
+
+    @patch('matplotlib.pyplot.show')
+    def test_view_3d_surface(self, mock_plt_show):
+        sv = ScoreVisualisers(df=self.df, cids=["AUD", "CAD", "GBP"], xcats=['XR', 'CRY'])
+        sv.view_3d_surface(xcat='CRY')
+        self.assertTrue(mock_plt_show.called)
+
+if __name__ == '__main__':
     unittest.main()
