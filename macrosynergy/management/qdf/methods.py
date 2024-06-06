@@ -47,6 +47,15 @@ def df_dict_to_qdf(df_dict: dict[str, pd.DataFrame]) -> QuantamentalDataFrame:
     return r
 
 
+def ticker_df_to_df_dict(
+    ticker_df: pd.DataFrame, metric: str
+) -> dict[str, pd.DataFrame]:
+    """
+    Convert a dictionary of tickers to a dictionary of `pd.DataFrame`s.
+    """
+    return {metric: ticker_df}
+
+
 def expression_df_to_df_dict(
     expression_df: pd.DataFrame,
 ) -> dict[str, pd.DataFrame]:

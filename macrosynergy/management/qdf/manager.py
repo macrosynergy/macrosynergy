@@ -3,6 +3,7 @@ import os
 import datetime
 import pandas as pd
 import numpy as np
+import warnings
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.qdf.classes import QDFManagerBase, DateLike
 from macrosynergy.management.qdf.load import Loader
@@ -10,6 +11,7 @@ from macrosynergy.management.qdf.save import Saver
 from macrosynergy.management.qdf.methods import (
     qdf_to_df_dict,
     df_dict_to_qdf,
+    ticker_df_to_df_dict,
     expression_df_to_df_dict,
     get_tickers_from_df_dict,
     get_date_range_from_df_dict,
@@ -30,16 +32,27 @@ class QDFManager(QDFManagerBase):
         qdf: Optional[QuantamentalDataFrame] = None,
         expression_df: Optional[pd.DataFrame] = None,
         df_dict: Optional[dict[str, pd.DataFrame]] = None,
+        ticker_df: Optional[pd.DataFrame] = None,
+        metric: Optional[str] = None,
     ) -> None:
         """
         Initialise the `QDFManager` object.
         """
+        if not any([qdf, expression_df, df_dict, ticker_df]):
+            raise ValueError(
+                "Either `qdf`, `expression_df`, `df_dict`, or `ticker_df` must be provided."
+            )
         if expression_df is not None:
             self.df_dict = expression_df_to_df_dict(expression_df)
         elif qdf is not None:
             self.df_dict = qdf_to_df_dict(qdf)
         elif df_dict is not None:
             self.df_dict = df_dict
+        elif ticker_df is not None:
+            if metric is None:
+                warnings.warn("No metric provided. Defaulting to 'value'.")
+                metric = "value"
+            self.df_dict = ticker_df_to_df_dict(ticker_df, metric)
         else:
             raise ValueError(
                 "Either `qdf`, `expression_df`, or `df_dict` must be provided."
@@ -141,6 +154,21 @@ class QDFManager(QDFManagerBase):
                 cross_section_groups=cross_section_groups,
             )
         )
+
+    def obj_query(
+        self,
+        query: str,
+        *args,
+        **kwargs,
+    ) -> QuantamentalDataFrame:
+        """
+        Query the `QuantamentalDataFrame`.
+        """
+        tx = kwargs.get("tickers", [])
+        txnew = tx + [f"*{query}*".upper()]
+        kwargs["tickers"] = txnew
+
+        return self.qdf(*args, **kwargs)
 
     def query(
         self,
