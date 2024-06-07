@@ -286,7 +286,7 @@ class QDFManager(QDFManagerBase):
         query: str,
         *args,
         **kwargs,
-    ):
+    ) -> "QDFManager":
         """
         Query the `QuantamentalDataFrame`.
         """
@@ -294,7 +294,7 @@ class QDFManager(QDFManagerBase):
         txnew = tx + [f"*{query}*".upper()]
         kwargs["tickers"] = txnew
 
-        return self._get_dict(*args, **kwargs)
+        return QDFManager(df_dict=self._get_dict(*args, **kwargs))
 
     def iquery(
         self,
@@ -304,14 +304,14 @@ class QDFManager(QDFManagerBase):
         return QDFQueryView(manager=self).iquery(*args, **kwargs)
 
 
-class QDFQueryView(QDFManagerBase):
+class QDFQueryView(QDFManager):
     """
     Query the `QuantamentalDataFrame`.
     """
 
     def __init__(
         self,
-        manager: "QDFManagerBase",
+        manager: "QDFManager",
         view: Optional[Dict[str, Dict[str, Union[List[str], pd.Timestamp]]]] = None,
     ):
         """
@@ -357,6 +357,36 @@ class QDFQueryView(QDFManagerBase):
         )
 
         return QDFQueryView(manager=self.manager, view=qdict)
+
+    def qdf(
+        self,
+        *args,
+        **kwargs,
+    ) -> QuantamentalDataFrame:
+        """
+        Query the `QuantamentalDataFrame`.
+        """
+        return self.compile().qdf(*args, **kwargs)
+
+    def ticker_df(
+        self,
+        *args,
+        **kwargs,
+    ) -> pd.DataFrame:
+        """
+        Query the `QuantamentalDataFrame`.
+        """
+        return self.compile().ticker_df(*args, **kwargs)
+
+    def query(
+        self,
+        *args,
+        **kwargs,
+    ) -> "QDFQueryView":
+        """
+        Query the `QuantamentalDataFrame`.
+        """
+        return self.compile().query(*args, **kwargs)
 
     def compile(self) -> QDFManager:
         """
