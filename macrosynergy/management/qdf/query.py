@@ -4,6 +4,7 @@ from .classes import QDFManagerBase, DateLike
 
 from .methods import get_ticker_dict_from_df_dict
 import macrosynergy.management.constants as msy_constants
+from macrosynergy.management.utils import get_cid, get_xcat
 import pandas as pd
 import fnmatch
 import itertools
@@ -136,8 +137,8 @@ def get_query_dict_from_args(
     all_available_tickers = list(
         set(itertools.chain.from_iterable(ticker_dict.values()))
     )
-    all_cids = list(set(map(lambda x: x.split("_")[0], all_available_tickers)))
-    all_xcats = list(set(map(lambda x: x.split("_")[1], all_available_tickers)))
+    all_cids: List[str] = list(set(get_cid(all_available_tickers)))
+    all_xcats: List[str] = list(set(get_xcat(all_available_tickers)))
 
     if isinstance(cross_section_groups, str):
         cross_section_groups = [cross_section_groups]
