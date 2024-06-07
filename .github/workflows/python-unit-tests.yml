@@ -81,17 +81,7 @@ jobs:
 
       - name: Move Files
         run: |
-          cd coverage-reports
-          # make folders numbered 1 to N 
-          i=1
-          for file in $(ls -d coverage-report-*); do
-            mv $file $i
-            cd $i
-            filex=$(ls)
-            mv $filex .coverage
-            cd ..
-            i=$((i+1))
-          done
+          python -c "import os; [os.rename(f, os.path.join(str(i), '.coverage')) for i, f in enumerate(os.listdir('.'), 1) if os.path.isfile(f) and os.makedirs(str(i), exist_ok=True)]"
 
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v4
