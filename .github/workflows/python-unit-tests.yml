@@ -81,9 +81,12 @@ jobs:
 
       - name: Move Files
         run: |
-          for file in ./coverage-reports/*; do
-            mkdir -p ./coverage-reports/report/${basename $file}
-            mv $file ./coverage-reports/report/${basename $file}
+          cd coverage-reports
+          # make folders numbered 1 to N 
+          i=1
+          for file in $(ls -d coverage-report-*); do
+            mv $file $i/.coverage
+            i=$((i+1))
           done
 
       - name: Upload coverage report to Codecov
