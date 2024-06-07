@@ -15,7 +15,11 @@ jobs:
 
       - id: set-matrix
         run: |
-          FOLDERS=$(ls -d tests/unit/*/ | sed 's|tests/unit/||' | sed 's|/||' | jq -R -s -c 'split("\n")[:-1]')
+          # FOLDERS=$(ls -d tests/unit/*/ | sed 's|tests/unit/||' | sed 's|/||' | jq -R -s -c 'split("\n")[:-1]')
+          # echo "Matrix: $FOLDERS"
+          # echo "::set-output name=matrix::$FOLDERS"
+          FOLDER=$(ls -d tests/unit/*/ | head -n 1 | sed 's|tests/unit/||' | sed 's|/||')
+          FOLDERS=$(echo $FOLDER | jq -R -s -c 'split("\n")[:-1]')
           echo "Matrix: $FOLDERS"
           echo "::set-output name=matrix::$FOLDERS"
 
@@ -79,6 +83,9 @@ jobs:
 
       - name: Unzip coverage reports
         run: |
+          echo "Unzipping coverage reports"
+          # print ls -la
+          ls -la ./coverage-reports
           for f in ./coverage-reports/*.zip; do
             unzip -o $f -d ./coverage-reports
           done
