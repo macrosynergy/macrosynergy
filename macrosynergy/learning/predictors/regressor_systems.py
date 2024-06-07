@@ -178,6 +178,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         return True
 
     def _downsample_by_data_freq(self, df):
+        # Look into whether it is fine to remove the copy
         return (
             df.groupby(
                 [
@@ -696,7 +697,7 @@ if __name__ == "__main__":
 
     import macrosynergy.management as msm
     from macrosynergy.management import make_qdf
-
+    from pyinstrument import Profiler
     np.random.seed(1)
 
     cids = ["AUD", "CAD", "GBP", "USD"]
@@ -726,6 +727,20 @@ if __name__ == "__main__":
     dfd = msm.reduce_df(df=dfd, cids=cids, xcats=xcats, blacklist=black)
 
     dfd = dfd.pivot(index=["cid", "real_date"], columns="xcat", values="value")
+
+    # Demonstration of LADRegressionSystem usage
+    X1 = dfd.drop(columns=["XR", "BENCH_XR"])
+    y1 = dfd["XR"]
+    def profile_model_fitting(model):
+        model.fit(X1, y1)
+
+    profiler = Profiler()
+    profiler.start()
+    profile_model_fitting(LADRegressionSystem(data_freq="W"))
+    profiler.stop()
+    with open('profile_report.html', 'w') as f:
+        f.write(profiler.output_html())
+    #print(profiler.output_text(unicode=True, color=True))
 
     # Demonstration of CorrelationVolatilitySystem usage
 

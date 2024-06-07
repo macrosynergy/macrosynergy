@@ -232,42 +232,6 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         :return <float>: Training loss induced by 'weights'.
         """
         # Checks
-        if not isinstance(weights, np.ndarray):
-            raise TypeError("The weights must be contained within a numpy array.")
-
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError(
-                "Input feature matrix for the LADRegressor must be a pandas dataframe. "
-                "If used as part of an sklearn pipeline, ensure that previous steps "
-                "return a pandas dataframe."
-            )
-        if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
-            raise TypeError(
-                "Target vector for the LADRegressor must be a pandas series or dataframe. "
-                "If used as part of an sklearn pipeline, ensure that previous steps "
-                "return a pandas series or dataframe."
-            )
-        if isinstance(y, pd.DataFrame):
-            if y.shape[1] != 1:
-                raise ValueError(
-                    "The target dataframe must have only one column. If used as part of "
-                    "an sklearn pipeline, ensure that previous steps return a pandas "
-                    "series or dataframe."
-                )
-
-        if not isinstance(X.index, pd.MultiIndex):
-            raise ValueError("X must be multi-indexed.")
-        if not isinstance(y.index, pd.MultiIndex):
-            raise ValueError("y must be multi-indexed.")
-        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
-            raise TypeError("The inner index of X must be datetime.date.")
-        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
-            raise TypeError("The inner index of y must be datetime.date.")
-        if not X.index.equals(y.index):
-            raise ValueError(
-                "The indices of the input dataframe X and the output dataframe y don't "
-                "match."
-            )
 
         if sample_weight is None:
             sample_weight = np.ones(X.shape[0])
@@ -284,10 +248,80 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             )
 
         if isinstance(y, pd.DataFrame):
-            raw_residuals = y.iloc[:, 0] - X.dot(weights)
+            raw_residuals = y.values[:,0] - X.dot(weights).values
         else:  # y is a series
-            raw_residuals = y - X.dot(weights)
+            raw_residuals = y.values - np.dot(X.values,weights)
         abs_residuals = np.abs(raw_residuals)
         weighted_abs_residuals = abs_residuals * sample_weight
 
         return np.mean(weighted_abs_residuals)
+        
+if __name__ == "__main__":
+    from sklearn.metrics import make_scorer
+
+    import macrosynergy.management as msm
+    from macrosynergy.management.simulate import make_qdf
+    import timeit
+
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+
+    """Example: Unbalanced panel """
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd["grading"] = np.ones(dfd.shape[0])
+    black = {
+        "GBP": (
+            pd.Timestamp(year=2009, month=1, day=1),
+            pd.Timestamp(year=2012, month=6, day=30),
+        ),
+        "CAD": (
+            pd.Timestamp(year=2015, month=1, day=1),
+            pd.Timestamp(year=2100, month=1, day=1),
+        ),
+    }
+
+    train = msm.categories_df(
+        df=dfd, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
+    ).dropna()
+
+    X_train = train.drop(columns=["XR"])
+    y_train = train["XR"]
+
+    # Fit LAD regression 1 
+    lad = LADRegressor()
+    start_time = timeit.default_timer()
+    lad.fit(X_train, y_train)
+    elapsed = timeit.default_timer() - start_time
+    print("Elapsed time for LAD regressor V1: ", elapsed)
+    print("LAD regressor V1 coefficients: ", lad.coef_)
+
+
+    # Profiling
+    from pyinstrument import Profiler
+    from macrosynergy.learning import LADRegressionSystem
+
+    def profile_model_fitting(X, y):
+        model = LADRegressionSystem(fit_intercept=True, positive=False)
+        model.fit(X, y)
+
+    profiler = Profiler()
+    profiler.start()
+    profile_model_fitting(X_train, y_train)
+    profiler.stop()
+    print(profiler.output_text(unicode=True, color=True))
