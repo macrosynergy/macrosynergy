@@ -77,10 +77,17 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: coverage-report-${{ github.sha }}-*
-          path: ./
+          path: ./coverage-reports
+
+      - name: Move Files
+        run: |
+          for file in ./coverage-reports/*; do
+            mkdir -p ./coverage-reports/$(basename $file)
+            mv $file ./coverage-reports/$(basename $file)/.coverage
+          done
 
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./
+          directory: ./coverage-reports
