@@ -79,17 +79,8 @@ jobs:
           pattern: coverage-report-${{ github.sha }}-*
           path: ./coverage-reports
 
-      - name: Unzip coverage reports
-        run: |
-          echo "Unzipping coverage reports"
-          # print ls -la
-          ls -la ./coverage-reports
-          for f in ./coverage-reports/*.zip; do
-            unzip -o $f -d ./coverage-reports
-          done
-
       - name: Upload coverage report to Codecov
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./coverage-reports
+          directory: ./coverage-reports/
