@@ -18,9 +18,8 @@ jobs:
           # FOLDERS=$(ls -d tests/unit/*/ | sed 's|tests/unit/||' | sed 's|/||' | jq -R -s -c 'split("\n")[:-1]')
           # echo "Matrix: $FOLDERS"
           # echo "::set-output name=matrix::$FOLDERS"
-          FOLDERS=$(ls -d tests/unit/*/ | sed 's|tests/unit/||' | sed 's|/||' | head -n 2 | jq -R -s -c 'split("\n")[:-1]')
-          echo "Matrix: $FOLDERS"
-          echo "::set-output name=matrix::$FOLDERS"
+          # set matrix to ["download","pnl"]
+          echo "::set-output name=matrix::[\"download\",\"pnl\"]"
 
   run-unit-tests:
     needs: prepare-matrix
