@@ -78,11 +78,5 @@ class TestScoreVisualisers(unittest.TestCase):
         sv.view_cid_evolution(cid='AUD', xcats=['XR'], freq='Q')
         self.assertTrue(mock_plt_show.called)
 
-    @patch('matplotlib.pyplot.show')
-    def test_view_3d_surface(self, mock_plt_show):
-        sv = ScoreVisualisers(df=self.df, cids=["AUD", "CAD", "GBP"], xcats=['XR', 'CRY'])
-        sv.view_3d_surface(xcat='CRY')
-        self.assertTrue(mock_plt_show.called)
-
 if __name__ == '__main__':
     unittest.main()

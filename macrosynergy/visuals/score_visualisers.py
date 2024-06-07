@@ -435,42 +435,6 @@ class ScoreVisualisers:
             vertical_divider=vertical_divider,
         )
 
-    def view_3d_surface(self, xcat: str, cids: List[str] = None):
-        if cids is None:
-            cids = self.cids
-
-        df = self.df[
-            (self.df["xcat"] == xcat + self.postfix) & (self.df["cid"].isin(cids))
-        ]
-        df["cid_num"] = df["cid"].astype("category").cat.codes
-
-        # Pivot the DataFrame to create a 2D matrix for Z values
-        pivot_table = df.pivot(index="cid_num", columns="real_date", values="value")
-
-        X = mdates.date2num(pivot_table.columns)
-        Y = pivot_table.index
-        X, Y = np.meshgrid(X, Y)
-        Z = pivot_table.values
-
-        fig = plt.figure(figsize=(12, 8))
-        ax = fig.add_subplot(111, projection="3d")
-        surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm_r)
-
-        ax.set_xlabel("Date")
-        ax.set_zlabel("Value")
-
-        cid_labels = df[["cid", "cid_num"]].drop_duplicates().sort_values("cid_num")
-        ax.set_yticks(cid_labels["cid_num"])
-        ax.set_yticklabels(cid_labels["cid"], rotation=90, ha="right")
-
-        ax.xaxis_date()
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
-        fig.autofmt_xdate()
-
-        plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
-
-        plt.show()
-
 
 if __name__ == "__main__":
     cids_dmea = ["FRF", "DEM", "ITL", "ESP", "EUR"]
@@ -551,7 +515,6 @@ if __name__ == "__main__":
         transpose=True,
         figsize=(14, 12),
     )
-    # sv.view_snapshot(cids=cids, xcats=xcats, transpose=True)
     sv.view_cid_evolution(
         cid="USD",
         xcats=xcats + ["Composite"],
@@ -565,7 +528,6 @@ if __name__ == "__main__":
         freq="A",
         transpose=False,
     )
-    # sv.view_cid_evolution(cid="USD", xcats=xcats, freq="A", transpose=True)
     sv.view_score_evolution(
         xcat="GGIEDGDP_NSA",
         cids=cids,
@@ -574,6 +536,3 @@ if __name__ == "__main__":
         start="2010-01-01",
         title="AHKSJDA",
     )
-    # sv.view_score_evolution(xcat="CRESFXGDP_NSA_D1M1ML6", cids=cids, freq="A", transpose=True, start="2010-01-01")
-
-    sv.view_3d_surface("GGIEDGDP_NSA")
