@@ -82,7 +82,6 @@ jobs:
       - name: Move Files
         run: |
           for file in ./coverage-reports/*; do
-            mkdir -p ./coverage-reports/$(basename $file)
             mv $file ./coverage-reports/$(basename $file)/.coverage
           done
 
