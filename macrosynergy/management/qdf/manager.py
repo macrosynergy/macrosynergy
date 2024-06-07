@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import warnings
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.qdf.classes import QDFManagerBase, DateLike
+from macrosynergy.management.qdf.base import QDFManagerBase, DateLike
 from macrosynergy.management.qdf.load import Loader
 from macrosynergy.management.qdf.save import Saver
 from macrosynergy.management.qdf.methods import (
