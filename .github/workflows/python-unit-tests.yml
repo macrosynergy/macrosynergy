@@ -18,7 +18,7 @@ jobs:
           # FOLDERS=$(ls -d tests/unit/*/ | sed 's|tests/unit/||' | sed 's|/||' | jq -R -s -c 'split("\n")[:-1]')
           # echo "Matrix: $FOLDERS"
           # echo "::set-output name=matrix::$FOLDERS"
-          FOLDER=$(ls -d tests/unit/*/ | head -n 1 | sed 's|tests/unit/||' | sed 's|/||')
+          FOLDER=$(ls -d tests/unit/*/ | head -n 2 | sed 's|tests/unit/||' | sed 's|/||')
           FOLDERS=$(echo $FOLDER | jq -R -s -c 'split("\n")[:-1]')
           echo "Matrix: $FOLDERS"
           echo "::set-output name=matrix::$FOLDERS"
