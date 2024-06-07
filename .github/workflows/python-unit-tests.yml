@@ -85,7 +85,11 @@ jobs:
           # make folders numbered 1 to N 
           i=1
           for file in $(ls -d coverage-report-*); do
-            mv $file $i/.coverage
+            mv $file $i
+            cd $i
+            filex=$(ls)
+            mv $filex .coverage
+            cd ..
             i=$((i+1))
           done
 
