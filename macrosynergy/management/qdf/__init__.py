@@ -1,6 +1,3 @@
-# from .query import query_df_dict
-from .manager import QDFManager
+from .manager import QDFManager, QDFQueryView
 
-__all__ = [
-    "QDFManager",
-]
+__all__ = ["QDFManager", "QDFQueryView"]

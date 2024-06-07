@@ -1,6 +1,6 @@
 from typing import Dict, Iterable, List, Optional, Union
 from collections.abc import Mapping, Iterable
-from .base import QDFManagerBase, DateLike
+from macrosynergy.management.qdf.base import QDFManagerBase, DateLike
 
 from .methods import get_ticker_dict_from_df_dict
 import macrosynergy.management.constants as msy_constants
