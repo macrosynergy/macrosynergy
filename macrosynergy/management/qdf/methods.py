@@ -131,6 +131,15 @@ def update_ticker_df(
     return pd.concat([left, right[new_cols]], axis=1)
 
 
+def drop_tickers_from_ticker_df(
+    ticker_df: pd.DataFrame, tickers: List[str]
+) -> pd.DataFrame:
+    """
+    Drop tickers from a ticker dataframe.
+    """
+    return ticker_df.drop(columns=tickers, errors="ignore")
+
+
 def update_df_dict(
     df_dict: Dict[str, pd.DataFrame],
     new_df_dict: Dict[str, pd.DataFrame],
@@ -148,3 +157,15 @@ def update_df_dict(
             df_dict[metric] = df
 
     return df_dict
+
+
+def drop_tickers_from_df_dict(
+    df_dict: Dict[str, pd.DataFrame], tickers: List[str]
+) -> Dict[str, pd.DataFrame]:
+    """
+    Drop tickers from a dictionary of `pd.DataFrame`s.
+    """
+    return {
+        metric: drop_tickers_from_ticker_df(df, tickers)
+        for metric, df in df_dict.items()
+    }
