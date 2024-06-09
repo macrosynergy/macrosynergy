@@ -4,6 +4,7 @@ import datetime
 
 import numpy as np
 import pandas as pd
+import scipy.stats as stats
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import LinearRegression, Ridge
 
@@ -591,8 +592,8 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
     def _fit_cross_section(self, section, X_section, y_section):
         # Estimate local standard deviations of the benchmark and contract return
         if self.volatility_window_type == "rolling":
-            X_section_std = X_section[-self.volatility_lookback :].std().iloc[-1]
-            y_section_std = y_section[-self.volatility_lookback :].std()
+            X_section_std = X_section.values[-self.volatility_lookback :, 0].std(ddof=1)
+            y_section_std = y_section.values[-self.volatility_lookback:].std(ddof=1)
         elif self.volatility_window_type == "exponential":
             X_section_std = (
                 X_section.ewm(span=self.volatility_lookback).std().values[-1][0]
@@ -607,7 +608,12 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
                 y_section_corr, method=self.correlation_type
             ).values[-1]
         else:
-            corr = X_section.corrwith(y_section, method=self.correlation_type).values[-1]
+            if self.correlation_type == "pearson":
+                corr = stats.pearsonr(X_section.values[:,0],y_section.values).statistic
+            elif self.correlation_type == "spearman":
+                corr = stats.spearmanr(X_section.values[:,0],y_section.values).statistic
+            elif self.correlation_type == "kendall":
+                corr = stats.kendalltau(X_section.values[:,0],y_section.values).statistic
 
         # Get beta estimate and store it
         beta = corr * (y_section_std / X_section_std)
@@ -749,7 +755,7 @@ if __name__ == "__main__":
 
     X2 = pd.DataFrame(dfd["BENCH_XR"])
     y2 = dfd["XR"]
-    cv = CorrelationVolatilitySystem(volatility_window_type="exponential").fit(X2, y2)
+    cv = CorrelationVolatilitySystem().fit(X2, y2)
     print(cv.coefs_)
 
     # Demonstration of LinearRegressionSystem usage
