@@ -595,9 +595,9 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             y_section_std = y_section[-self.volatility_lookback :].std()
         elif self.volatility_window_type == "exponential":
             X_section_std = (
-                X_section.ewm(span=self.volatility_lookback).std().iloc[-1, 0]
+                X_section.ewm(span=self.volatility_lookback).std().values[-1][0]
             )
-            y_section_std = y_section.ewm(span=self.volatility_lookback).std().iloc[-1]
+            y_section_std = y_section.ewm(span=self.volatility_lookback).std().values[-1][0]
 
         # Estimate local correlation between the benchmark and contract return
         if self.correlation_lookback is not None:
@@ -732,24 +732,24 @@ if __name__ == "__main__":
     dfd = dfd.pivot(index=["cid", "real_date"], columns="xcat", values="value")
 
     # Demonstration of LADRegressionSystem usage
-    X1 = dfd.drop(columns=["XR", "BENCH_XR"])
-    y1 = dfd["XR"]
-    def profile_model_fitting(model):
-        model.fit(X1, y1)
+    #X1 = dfd.drop(columns=["XR", "BENCH_XR"])
+    #y1 = dfd["XR"]
+    #def profile_model_fitting(model):
+    #    model.fit(X1, y1)
 
-    profiler = Profiler()
-    profiler.start()
-    profile_model_fitting(LADRegressionSystem(data_freq="W"))
-    profiler.stop()
-    with open('profile_report.html', 'w') as f:
-        f.write(profiler.output_html())
+    #profiler = Profiler()
+    #profiler.start()
+    #profile_model_fitting(LADRegressionSystem(data_freq="W"))
+    #profiler.stop()
+    #with open('profile_report.html', 'w') as f:
+    #    f.write(profiler.output_html())
     #print(profiler.output_text(unicode=True, color=True))
 
     # Demonstration of CorrelationVolatilitySystem usage
 
     X2 = pd.DataFrame(dfd["BENCH_XR"])
     y2 = dfd["XR"]
-    cv = CorrelationVolatilitySystem().fit(X2, y2)
+    cv = CorrelationVolatilitySystem(volatility_window_type="exponential").fit(X2, y2)
     print(cv.coefs_)
 
     # Demonstration of LinearRegressionSystem usage
