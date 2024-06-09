@@ -282,8 +282,8 @@ class LinearRegressionSystem(BaseRegressionSystem):
             raise TypeError("positive must be a boolean.")
         if not isinstance(data_freq, str):
             raise TypeError("data_freq must be a string.")
-        if data_freq not in ["D", "W", "M", "Q"]:
-            raise ValueError("data_freq must be one of 'D', 'W', 'M' or 'Q'.")
+        if data_freq not in ["unadjusted", "D", "W", "M", "Q"]:
+            raise ValueError("data_freq must be one of 'unadjusted', 'D', 'W', 'M' or 'Q'.")
         if not isinstance(min_xs_samples, int):
             raise TypeError("min_xs_samples must be an integer.")
         if min_xs_samples <= 0:
@@ -376,8 +376,8 @@ class LADRegressionSystem(BaseRegressionSystem):
             raise TypeError("positive must be a boolean.")
         if not isinstance(data_freq, str):
             raise TypeError("data_freq must be a string.")
-        if data_freq not in ["D", "W", "M", "Q"]:
-            raise ValueError("data_freq must be one of 'D', 'W', 'M' or 'Q'.")
+        if data_freq not in ["unadjusted", "D", "W", "M", "Q"]:
+            raise ValueError("data_freq must be one of 'unadjusted', 'D', 'W', 'M' or 'Q'.")
         if not isinstance(min_xs_samples, int):
             raise TypeError("min_xs_samples must be an integer.")
         if min_xs_samples <= 0:
@@ -497,8 +497,8 @@ class RidgeRegressionSystem(BaseRegressionSystem):
             raise TypeError("positive must be a boolean.")
         if not isinstance(data_freq, str):
             raise TypeError("data_freq must be a string.")
-        if data_freq not in ["D", "W", "M", "Q"]:
-            raise ValueError("data_freq must be one of 'D', 'W', 'M' or 'Q'.")
+        if data_freq not in ["unadjusted", "D", "W", "M", "Q"]:
+            raise ValueError("data_freq must be one of 'unadjusted', 'D', 'W', 'M' or 'Q'.")
         if not isinstance(min_xs_samples, int):
             raise TypeError("min_xs_samples must be an integer.")
         if min_xs_samples <= 0:
@@ -686,8 +686,8 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             )
         if not isinstance(data_freq, str):
             raise TypeError("data_freq must be a string.")
-        if data_freq not in ["D", "W", "M", "Q"]:
-            raise ValueError("data_freq must be one of 'D', 'W', 'M' or 'Q.")
+        if data_freq not in ["unadjusted", "D", "W", "M", "Q"]:
+            raise ValueError("data_freq must be one of 'unadjusted', 'D', 'W', 'M' or 'Q.")
         if not isinstance(min_xs_samples, int):
             raise TypeError("min_xs_samples must be an integer.")
         if min_xs_samples <= 0:
