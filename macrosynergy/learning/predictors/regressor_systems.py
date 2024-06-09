@@ -71,6 +71,8 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             min_xs_samples = self.select_data_freq()
             X = self._downsample_by_data_freq(X)
             y = self._downsample_by_data_freq(y)
+        else:
+            min_xs_samples = self.min_xs_samples
 
         for section in cross_sections:
             X_section = X[X.index.get_level_values(0) == section]
