@@ -597,7 +597,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             X_section_std = (
                 X_section.ewm(span=self.volatility_lookback).std().values[-1][0]
             )
-            y_section_std = y_section.ewm(span=self.volatility_lookback).std().values[-1][0]
+            y_section_std = y_section.ewm(span=self.volatility_lookback).std().values[-1]
 
         # Estimate local correlation between the benchmark and contract return
         if self.correlation_lookback is not None:
@@ -605,9 +605,9 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             y_section_corr = y_section.tail(self.correlation_lookback)
             corr = X_section_corr.corrwith(
                 y_section_corr, method=self.correlation_type
-            ).iloc[-1]
+            ).values[-1]
         else:
-            corr = X_section.corrwith(y_section, method=self.correlation_type).iloc[-1]
+            corr = X_section.corrwith(y_section, method=self.correlation_type).values[-1]
 
         # Get beta estimate and store it
         beta = corr * (y_section_std / X_section_std)
