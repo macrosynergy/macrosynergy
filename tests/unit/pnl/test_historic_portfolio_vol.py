@@ -13,7 +13,9 @@ from macrosynergy.pnl.historic_portfolio_volatility import (
     _weighted_covariance,
     estimate_variance_covariance,
 )
+from macrosynergy.management.utils import qdf_to_ticker_df, ticker_df_to_qdf
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.simulate import make_test_df
 
 
 class TestWeightedCovariance(unittest.TestCase):
@@ -64,6 +66,36 @@ class TestWeightedCovariance(unittest.TestCase):
             bad_args[argn[0]][argn[1]] = np.random.rand(2)
         res = _weighted_covariance(**bad_args)
         self.assertTrue(np.isnan(res))
+
+
+class TestEstimateVarianceCovariance(unittest.TestCase):
+    # testing `estimate_variance_covariance` function
+    def setUp(self):
+        piv_ret = qdf_to_ticker_df(
+            make_test_df(
+                cids=["A", "B", "C", "D"],
+                xcats=["Z", "Y", "X", "W"],
+                start="2020-01-01",
+                end="2021-01-01",
+            )
+        )
+        self.good_args: Dict[str, Any] = {
+            "piv_ret": piv_ret,
+            "remove_zeros": True,
+            "weights_func": expo_weights_arr,
+            "lback_periods": 100,
+            "half_life": 10,
+        }
+
+    def tearDown(self): ...
+
+    def test_estimate_variance_covariance(self):
+        # Test good args
+        res = estimate_variance_covariance(**self.good_args)
+        self.assertTrue(isinstance(res, pd.DataFrame))
+        self.assertEqual(res.shape[0], self.good_args["piv_ret"].shape[1])
+        self.assertEqual(res.shape[0], res.shape[1])
+        self.assertEqual(set(res.columns), set(self.good_args["piv_ret"].columns))
 
 
 if __name__ == "__main__":
