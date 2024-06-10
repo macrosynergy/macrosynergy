@@ -543,7 +543,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         correlation_type: str = "pearson",
         volatility_lookback: int = 21,
         volatility_window_type: str = "rolling",
-        data_freq: str = "D",
+        data_freq: str = "unadjusted",
         min_xs_samples: int = 2,
     ):
         """
@@ -755,7 +755,12 @@ if __name__ == "__main__":
 
     X2 = pd.DataFrame(dfd["BENCH_XR"])
     y2 = dfd["XR"]
+    profiler = Profiler()
+    profiler.start()
     cv = CorrelationVolatilitySystem(volatility_window_type="exponential").fit(X2, y2)
+    profiler.stop()
+    with open('corrvol_report.html', 'w') as f:
+        f.write(profiler.output_html())
     print(cv.coefs_)
 
     # Demonstration of LinearRegressionSystem usage
