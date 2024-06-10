@@ -92,7 +92,7 @@ def _weighted_covariance(
     # drop NaNs and only consider the most recent lback_periods
     x, y = x[~wmask][-weightslen:], y[~wmask][-weightslen:]
 
-    if len(x) < weightslen:
+    if len(x) < weightslen or weightslen == 0:
         return np.nan
 
     assert x.shape[0] == weightslen
