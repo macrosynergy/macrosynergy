@@ -77,15 +77,14 @@ jobs:
           pattern: coverage-report-${{ github.sha }}-*
           path: ./coverage-reports
 
-      - name: Set up Python 3.11
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: 3.12
 
-      - name: Install Codecov CLI
-        run: pip install codecov-cli
-
-      - name: Upload coverage to Codecov
-        run: codecov -f ./coverage-reports/**/*
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      - name: Install codecov-cli
+        run: |
+          python -m pip install codecov-cli
+      - name: Upload coverage reports to Codecov
+        run: |
+          codecovcli -t ${{ secrets.CODECOV_TOKEN }} -F ${{ github.sha }} -f ./coverage-reports
