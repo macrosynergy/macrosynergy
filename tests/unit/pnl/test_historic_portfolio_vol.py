@@ -58,6 +58,13 @@ class TestWeightedCovariance(unittest.TestCase):
             res = _weighted_covariance(**bad_args)
             self.assertTrue(np.isnan(res))
 
+        bad_args = self.good_args.copy()
+        for argn in [["x", [1, 11]], ["y", [7, 42]]]:
+            bad_args[argn[0]] = np.full(100, np.nan)
+            bad_args[argn[0]][argn[1]] = np.random.rand(2)
+        res = _weighted_covariance(**bad_args)
+        self.assertTrue(np.isnan(res))
+
 
 if __name__ == "__main__":
     unittest.main()
