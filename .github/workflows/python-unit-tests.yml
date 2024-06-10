@@ -82,10 +82,10 @@ jobs:
         with:
           python-version: 3.11
 
-      - name: Install coverage
-        run: |
-          pip install codecov-cli
+      - name: Install Codecov CLI
+        run: pip install codecov-cli
 
       - name: Upload coverage to Codecov
-        run: |
-          codecov --token=${{ secrets.CODECOV_TOKEN }} --root=./coverage-reports --flags=${{ github.sha }} --commit=${{ github.sha }} --branch=${{ github.ref }}
+        run: codecov -f ./coverage-reports/**/*
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
