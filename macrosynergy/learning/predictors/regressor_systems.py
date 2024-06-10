@@ -29,7 +29,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             be specified in units of the data frequency, possibly adjusted by the
             data_freq attribute.
         :param <str> data_freq: Training set data frequency. This is primarily
-            to be used within the context of market beta estimation in the
+            to be used within the context of market beta estimation in the-
             MarketBetaEstimator class in `macrosynergy.learning`. Accepted strings
             are 'unadjusted' to use the native data set frequency, 'D' for daily,
             'W' for weekly, 'M' for monthly and 'Q' for quarterly.
@@ -595,10 +595,10 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             X_section_std = X_section.values[-self.volatility_lookback :, 0].std(ddof=1)
             y_section_std = y_section.values[-self.volatility_lookback:].std(ddof=1)
         elif self.volatility_window_type == "exponential":
-            X_section_std = (
-                X_section.ewm(span=self.volatility_lookback).std().values[-1][0]
-            )
-            y_section_std = y_section.ewm(span=self.volatility_lookback).std().values[-1]
+            alpha = 2 / (self.volatility_lookback + 1)
+            weights = np.array([(1 - alpha) ** i for i in range(len(X_section))][::-1])
+            X_section_std = np.sqrt(np.cov(X_section.values.flatten(), aweights=weights))
+            y_section_std = np.sqrt(np.cov(y_section.values, aweights=weights))
 
         # Estimate local correlation between the benchmark and contract return
         if self.correlation_lookback is not None:
@@ -755,7 +755,7 @@ if __name__ == "__main__":
 
     X2 = pd.DataFrame(dfd["BENCH_XR"])
     y2 = dfd["XR"]
-    cv = CorrelationVolatilitySystem().fit(X2, y2)
+    cv = CorrelationVolatilitySystem(volatility_window_type="exponential").fit(X2, y2)
     print(cv.coefs_)
 
     # Demonstration of LinearRegressionSystem usage
