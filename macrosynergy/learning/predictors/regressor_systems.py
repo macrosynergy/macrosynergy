@@ -74,11 +74,10 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             y = self._downsample_by_data_freq(y)
         else:
             min_xs_samples = self.min_xs_samples
-
         for section in cross_sections:
-            X_section = X[X.index.get_level_values(0) == section]
-            y_section = y[y.index.get_level_values(0) == section]
-            unique_dates = sorted(X_section.index.unique())
+            X_section = X.xs(section, level=0, drop_level=False)
+            y_section = y.xs(section, level=0, drop_level=False)
+            unique_dates = X_section.index.unique()
             num_dates = len(unique_dates)
             # Check if there are enough samples to fit a model
             if not self._check_xs_dates(min_xs_samples, num_dates):
@@ -94,7 +93,6 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
                     )
             # Fit the model
             self._fit_cross_section(section, X_section, y_section)
-
         return self
 
     def _fit_cross_section(self, section, X_section, y_section):
@@ -602,11 +600,14 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
 
         # Estimate local correlation between the benchmark and contract return
         if self.correlation_lookback is not None:
-            X_section_corr = X_section.tail(self.correlation_lookback)
-            y_section_corr = y_section.tail(self.correlation_lookback)
-            corr = X_section_corr.corrwith(
-                y_section_corr, method=self.correlation_type
-            ).values[-1]
+            X_section_corr = X_section.values[-self.correlation_lookback:][:,0]
+            y_section_corr = y_section.values[-self.correlation_lookback:]
+            if self.correlation_type == "pearson":
+                corr = stats.pearsonr(X_section_corr,y_section_corr).statistic
+            elif self.correlation_type == "spearman":
+                corr = stats.spearmanr(X_section_corr,y_section_corr).statistic
+            elif self.correlation_type == "kendall":
+                corr = stats.kendalltau(X_section_corr,y_section_corr).statistic
         else:
             if self.correlation_type == "pearson":
                 corr = stats.pearsonr(X_section.values[:,0],y_section.values).statistic
@@ -757,7 +758,7 @@ if __name__ == "__main__":
     y2 = dfd["XR"]
     profiler = Profiler()
     profiler.start()
-    cv = CorrelationVolatilitySystem(volatility_window_type="exponential").fit(X2, y2)
+    cv = CorrelationVolatilitySystem(volatility_window_type="exponential",correlation_lookback=21).fit(X2, y2)
     profiler.stop()
     with open('corrvol_report.html', 'w') as f:
         f.write(profiler.output_html())
