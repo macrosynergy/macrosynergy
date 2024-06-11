@@ -346,7 +346,20 @@ class QDFManager(QDFManagerBase):
     ) -> "QDFQueryView":
         if query is not None:
             kwargs["tickers"] = [f"*{query.upper()}*"] + kwargs.get("tickers", [])
-        return QDFQueryView(manager=self).iquery(*args, **kwargs)
+        return QDFQueryView(manager=self).iquery(
+            cid=cid,
+            cids=cids,
+            xcat=xcat,
+            xcats=xcats,
+            ticker=ticker,
+            tickers=tickers,
+            start=start,
+            end=end,
+            metrics=metrics,
+            cross_section_groups=cross_section_groups,
+            *args,
+            **kwargs,
+        )
 
 
 class QDFQueryView(QDFManager):
