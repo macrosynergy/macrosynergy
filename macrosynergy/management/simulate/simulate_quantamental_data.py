@@ -401,18 +401,8 @@ def make_test_df(
         df_add["cid"] = get_cid(ticker)
         df_add["xcat"] = get_xcat(ticker)
         df_add["real_date"] = dates
-        try:
-            for metric in metrics:
-                df_add[metric] = generate_lines(len(dates), style=style)
-        except:
-            breakpoint()
-            for metric in metrics:
-                try:
-                    df_add[metric] = generate_lines(len(dates), style=style)
-                except:
-                    breakpoint()
-                    df_add[metric]
-                    generate_lines(len(dates), style=style)
+        for metric in metrics:
+            df_add[metric] = generate_lines(len(dates), style=style)
         df_list.append(df_add)
 
     return pd.concat(df_list).reset_index(drop=True)
