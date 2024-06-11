@@ -17,25 +17,27 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
 
     def __init__(
         self,
-        roll: int = None,
-        data_freq: str = "unadjusted",
+        roll: Union[int, str] = "full",
         min_xs_samples: int = 2,
+        data_freq: str = "unadjusted",
     ):
         """
-        Base class for systems of regressors.
+        Base class for cross-sectional systems of regressors.
 
-        :param <int> roll: The lookback of the rolling window for the regression. If None,
-            the entire cross-sectional history is used for each regression. This should
-            be specified in units of the data frequency, possibly adjusted by the
-            data_freq attribute.
-        :param <str> data_freq: Training set data frequency. This is primarily
-            to be used within the context of market beta estimation in the-
-            MarketBetaEstimator class in `macrosynergy.learning`. Accepted strings
-            are 'unadjusted' to use the native data set frequency, 'D' for daily,
-            'W' for weekly, 'M' for monthly and 'Q' for quarterly.
-            Default is 'unadjusted'.
+        :param <Union[int,str]> roll: The lookback of the rolling window for the regression.
+            If "full", the entire cross-sectional history is used for each regression.
+            Otherwise, this parameter should be an integer specified in units of the native
+            data frequency, possibly adjusted by the data_freq attribute. Default is "full".
         :param <int> min_xs_samples: The minimum number of samples required in each
             cross-section training set for a regression model to be fitted.
+        :param <str> data_freq: Training set data frequency. This is primarily
+            to be used within the context of market beta estimation in the
+            BetaEstimator class in `macrosynergy.learning`, allowing for cross-validation
+            of the underlying dataset frequency for good beta estimation. Accepted strings
+            are 'unadjusted' to use the native data set frequency, 'W' for weekly,
+            'M' for monthly and 'Q' for quarterly. If not 'unadjusted', it is assumed
+            the native dataset frequency is daily before downsampling by summation.
+            Default is 'unadjusted'.
         """
         self.roll = roll
         self.data_freq = data_freq
@@ -65,10 +67,10 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
 
         _validate_Xy_learning(X, y)
 
-        cross_sections = X.index.get_level_values(0).unique()
+        cross_sections = X.index.unique(level=0)
 
         if self.data_freq != "unadjusted":
-            # Adjust min_xs_samples based on the frequency of the data
+            # Downsample data frequency and adjust min_xs_samples correspondingly
             min_xs_samples = self.select_data_freq()
             X = self._downsample_by_data_freq(X)
             y = self._downsample_by_data_freq(y)
@@ -147,9 +149,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         return X_section, y_section
 
     def select_data_freq(self):
-        if self.data_freq == "D":
-            min_xs_samples = self.min_xs_samples
-        elif self.data_freq == "W":
+        if self.data_freq == "W":
             min_xs_samples = self.min_xs_samples // 5
         elif self.data_freq == "M":
             min_xs_samples = self.min_xs_samples // 21
@@ -157,7 +157,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             min_xs_samples = self.min_xs_samples // 63
         else:
             raise ValueError(
-                "Invalid data frequency. Accepted values are 'D', 'W', 'M' and 'Q'."
+                "Invalid data frequency. Accepted values are 'W', 'M' and 'Q'."
             )
         return min_xs_samples
 
@@ -603,16 +603,21 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             X_section_corr = X_section.values[-self.correlation_lookback:][:,0]
             y_section_corr = y_section.values[-self.correlation_lookback:]
             if self.correlation_type == "pearson":
-                corr = stats.pearsonr(X_section_corr,y_section_corr).statistic
+                corr = np.corrcoef(X_section_corr,y_section_corr)[0,1]
             elif self.correlation_type == "spearman":
-                corr = stats.spearmanr(X_section_corr,y_section_corr).statistic
+                X_section_ranks = np.argsort(np.argsort(X_section_corr))
+                y_section_ranks = np.argsort(np.argsort(y_section_corr))
+                corr = np.corrcoef(X_section_ranks,y_section_ranks)[0,1]
             elif self.correlation_type == "kendall":
                 corr = stats.kendalltau(X_section_corr,y_section_corr).statistic
         else:
             if self.correlation_type == "pearson":
-                corr = stats.pearsonr(X_section.values[:,0],y_section.values).statistic
+                corr = np.corrcoef(X_section.values[:,0],y_section.values)[0,1]
             elif self.correlation_type == "spearman":
                 corr = stats.spearmanr(X_section.values[:,0],y_section.values).statistic
+                X_section_ranks = np.argsort(np.argsort(X_section.values[:,0]))
+                y_section_ranks = np.argsort(np.argsort(y_section.values))
+                corr = np.corrcoef(X_section_ranks,y_section_ranks)[0,1]
             elif self.correlation_type == "kendall":
                 corr = stats.kendalltau(X_section.values[:,0],y_section.values).statistic
 
