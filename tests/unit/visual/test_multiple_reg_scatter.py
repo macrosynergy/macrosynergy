@@ -25,7 +25,11 @@ class TestAll(unittest.TestCase):
         self.end: str = "2020-12-31"
 
         self.df: pd.DataFrame = make_test_df(
-            self.cids, self.xcats, self.start, self.end
+            cids=self.cids,
+            xcats=self.xcats,
+            start=self.start,
+            end=self.end,
+            metrics=self.metrics,
         )
 
     @classmethod
@@ -96,7 +100,6 @@ class TestAll(unittest.TestCase):
             multiple_reg_scatter(**self.args)
         except Exception as e:
             self.fail(f"multiple_reg_scatter raised {e} unexpectedly")
-    
 
 
 if __name__ == "__main__":
