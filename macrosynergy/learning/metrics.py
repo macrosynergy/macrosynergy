@@ -306,9 +306,11 @@ def neg_mean_abs_corr(
             )
             # Compute negative absolute market correlation
             if correlation == "pearson":
-                abs_corr = abs(stats.pearsonr(hedged_returns_c, market_returns_c)[0])
+                abs_corr = abs(np.corrcoef(hedged_returns_c.values, market_returns_c.values)[0,1])
             elif correlation == "spearman":
-                abs_corr = abs(stats.spearmanr(hedged_returns_c, market_returns_c)[0])
+                hedged_returns_c_ranked = np.argsort(np.argsort(hedged_returns_c.values))
+                market_returns_c_ranked = np.argsort(np.argsort(market_returns_c.values))
+                abs_corr = abs(np.corrcoef(hedged_returns_c_ranked, market_returns_c_ranked)[0,1])
             else:
                 # kendall
                 abs_corr = abs(stats.kendalltau(hedged_returns_c, market_returns_c)[0])
