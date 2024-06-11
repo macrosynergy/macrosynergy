@@ -614,7 +614,6 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             if self.correlation_type == "pearson":
                 corr = np.corrcoef(X_section.values[:,0],y_section.values)[0,1]
             elif self.correlation_type == "spearman":
-                corr = stats.spearmanr(X_section.values[:,0],y_section.values).statistic
                 X_section_ranks = np.argsort(np.argsort(X_section.values[:,0]))
                 y_section_ranks = np.argsort(np.argsort(y_section.values))
                 corr = np.corrcoef(X_section_ranks,y_section_ranks)[0,1]
