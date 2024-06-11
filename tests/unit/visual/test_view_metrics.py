@@ -21,16 +21,19 @@ class TestAll(unittest.TestCase):
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD"]
         self.xcats: List[str] = ["XR", "CRY", "INFL"]
         self.metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+        idx_cols: List[str] = ["cid", "xcat", "real_date"]
         self.start: str = "2010-01-01"
         self.end: str = "2020-12-31"
 
-        self.df: pd.DataFrame = make_test_df(
-            cids=self.cids,
-            xcats=self.xcats,
-            start=self.start,
-            end=self.end,
-            metrics=self.metrics,
-        )
+        df: pd.DataFrame = make_test_df(self.cids, self.xcats, self.start, self.end)
+        for mtr in self.metrics:
+            df: pd.DataFrame = df.merge(
+                make_test_df(self.cids, self.xcats, self.start, self.end).rename(
+                    columns={"value": mtr}
+                ),
+                on=idx_cols,
+            )
+        self.df: pd.DataFrame = df
 
     @classmethod
     def tearDownClass(self) -> None:
