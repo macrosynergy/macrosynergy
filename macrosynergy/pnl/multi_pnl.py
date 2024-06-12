@@ -54,13 +54,10 @@ class MultiPnL:
         """
         Combine PnLs with optional weighting.
 
-        :param pnl_xcats:
-            List of PnLs to combine. Must be in the format 'xcat/return' and
+        :param pnl_xcats: List of PnLs to combine. Must be in the format 'xcat/return' and
             added using `add_pnl()`.
-        :param composite_pnl_xcat:
-            xcat for the combined PnL.
-        :param weights:
-            Weights for each PnL, by default None. Must be in the format
+        :param composite_pnl_xcat: xcat for the combined PnL.
+        :param weights: Weights for each PnL, by default None. Must be in the format
             {'xcat': weight} or {'xcat/return': weight}.
         """
         self._check_pnls_added(min_pnls=2)
