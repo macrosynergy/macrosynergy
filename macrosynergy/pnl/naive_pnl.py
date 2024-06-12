@@ -2,6 +2,7 @@
 "Naive" PnLs with limited signal options and disregarding transaction costs.
 """
 
+from dataclasses import dataclass
 import warnings
 from itertools import product
 from typing import Dict, List, Optional, Tuple, Union
@@ -91,6 +92,8 @@ class NaivePnL:
             bm_dict = self.add_bm(df=self.dfd, bms=bms, tickers=self.tickers)
 
             self._bm_dict = bm_dict
+            
+        self.pnl_params = {}
 
     def add_bm(self, df: pd.DataFrame, bms: List[str], tickers: List[str]):
         """
@@ -124,9 +127,8 @@ class NaivePnL:
 
         return bm_dict
 
-    @classmethod
-    def __make_signal__(
-        cls,
+    @staticmethod
+    def _make_signal(
         dfx: pd.DataFrame,
         sig: str,
         sig_op: str = "zn_score_pan",
@@ -191,11 +193,10 @@ class NaivePnL:
             first_date = cid_df.loc[:, "psig"].first_valid_index()
             cid_df = cid_df.loc[first_date:, :]
             dfw_list.append(cid_df)
-
         return pd.concat(dfw_list)
 
-    @classmethod
-    def rebalancing(cls, dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0):
+    @staticmethod
+    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0):
         """
         The signals are calculated daily and for each individual cross-section defined in
         the panel. However, re-balancing a position can occur more infrequently than
@@ -356,7 +357,7 @@ class NaivePnL:
         # format.
         dfx = self.df[self.df["xcat"].isin([self.ret, sig])]
 
-        dfw = self.__make_signal__(
+        dfw = self._make_signal(
             dfx=dfx,
             sig=sig,
             sig_op=sig_op,
@@ -425,6 +426,19 @@ class NaivePnL:
 
         agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
         self.df = agg_df.reset_index(drop=True)
+        
+        self.pnl_params[pnn] = PnLParams(
+            pnl_name=pnn,
+            signal=sig,
+            sig_op=sig_op,
+            sig_add=sig_add,
+            sig_neg=sig_neg,
+            rebal_freq=rebal_freq,
+            rebal_slip=rebal_slip,
+            vol_scale=vol_scale,
+            neutral=neutral,
+            thresh=thresh,
+        )
 
     def make_long_pnl(
         self, vol_scale: Optional[float] = None, label: Optional[str] = None
@@ -883,9 +897,9 @@ class NaivePnL:
         self,
         pnl_cats: List[str],
         pnl_cids: List[str] = ["ALL"],
-        start: str = None,
-        end: str = None,
-        label_dict: Dict[str, str] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        label_dict: Optional[Dict[str, str]] = None,
     ):
         """
         Table of key PnL statistics.
@@ -951,11 +965,11 @@ class NaivePnL:
 
         # If benchmark tickers have been passed into the Class and if the tickers are
         # present in self.dfd.
-        list_for_dfbm = []
+        benchmark_tickers = []
 
         if self.bm_bool and bool(self._bm_dict):
-            list_for_dfbm = list(self._bm_dict.keys())
-            for bm in list_for_dfbm:
+            benchmark_tickers = list(self._bm_dict.keys())
+            for bm in benchmark_tickers:
                 stats.insert(len(stats) - 1, f"{bm} correl")
 
         dfw = dfx.pivot(index="real_date", columns=groups, values="value")
@@ -986,16 +1000,16 @@ class NaivePnL:
 
         df.iloc[7, :] = top_months.sum() / total_pnl
 
-        if len(list_for_dfbm) > 0:
+        if len(benchmark_tickers) > 0:
             bm_df = pd.concat(list(self._bm_dict.values()), axis=1)
-            for i, bm in enumerate(list_for_dfbm):
+            for i, bm in enumerate(benchmark_tickers):
                 index = dfw.index.intersection(bm_df.index)
                 correlation = dfw.loc[index].corrwith(
                     bm_df.loc[index].iloc[:, i], axis=0, method="pearson", drop=True
                 )
                 df.iloc[8 + i, :] = correlation
 
-        df.iloc[8 + len(list_for_dfbm), :] = dfw.resample("M").sum().count()
+        df.iloc[8 + len(benchmark_tickers), :] = dfw.resample("M").sum().count()
 
         if label_dict is not None:
             if not isinstance(label_dict, dict):
@@ -1239,6 +1253,23 @@ def create_results_dataframe(
 
     return res_df
 
+@dataclass
+class PnLParams:
+    """
+    Dataclass to store the parameters for the PnL creation.
+    """
+
+    signal: str
+    sig_op: str
+    sig_neg: bool
+    sig_add: float
+    pnl_name: str
+    rebal_freq: str
+    rebal_slip: int
+    vol_scale: int
+    neutral: str
+    thresh: float
+
 
 if __name__ == "__main__":
     cids = ["AUD", "CAD", "GBP", "NZD", "USD", "EUR"]
@@ -1306,6 +1337,8 @@ if __name__ == "__main__":
     df_eval = pnl.evaluate_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "PNL_INFL_NEG"], start="2015-01-01", end="2020-12-31"
     )
+
+    pnl.signal_heatmap(pnl_name="PNL_GROWTH_NEG", pnl_cids=cids, freq="m")
 
     print(df_eval)
 
