@@ -520,14 +520,21 @@ def multi_signal_contract_signals(
                 )
 
     # Calculate the contract signals for each signal specification
-    dfs: List[QuantamentalDataFrame] = [
-        contract_signals(df=df, **{**common_args, **dict_args})
-        for dict_args in contract_dicts.values()
-    ]
+    # Keep updating the dataframe with the new signals to allow signals to be used to
+    # generate other signals
     # the awkward syntax **{**a, **b} is used to update left dict values with right dict values
     # to avoid conflicts in the keys of the two dictionaries
 
-    return standardise_dataframe(pd.concat(dfs, axis=0))
+    df = pd.DataFrame()
+    for dict_args in contract_dicts.values():
+        df = pd.concat(
+            [
+                df,
+                contract_signals(df=df, **{**common_args, **dict_args}),
+            ],
+            axis=0,
+        )
+    return standardise_dataframe(df)
 
 
 if __name__ == "__main__":
