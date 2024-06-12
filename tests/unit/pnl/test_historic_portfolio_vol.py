@@ -4,6 +4,7 @@ import unittest
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Union, Any, Optional
+from numbers import Number
 from unittest import mock
 import warnings
 from macrosynergy.pnl.historic_portfolio_volatility import (
@@ -219,6 +220,47 @@ class TestArgChecks(unittest.TestCase):
                         [(bad_args[argn], argn, argt) for argn, argt in arguments]
                     )
 
+    def test_check_est_args(self):
+        def __check_results(tpl: Tuple, good_args: Dict[str, Any], order: List[str]):
+            for i, argn in enumerate(order):
+                gargs = good_args[argn].copy()
+                if argn == "est_weights":
+                    gargs = list(np.array(gargs) / np.sum(gargs))
+                self.assertEqual(tpl[i], gargs)
+
+        good_args: Dict[str, list] = {
+            "est_freqs": ["D", "W", "M"],
+            "est_weights": [0.2, 0.3, 0.5],
+            "lback_periods": [15, 8, 5],
+            "half_life": [10, 5, 2],
+        }
+        good_args_order = ["est_freqs", "est_weights", "lback_periods", "half_life"]
+
+        # Test good args
+        __check_results(
+            good_args=good_args,
+            order=good_args_order,
+            tpl=_check_est_args(**good_args),
+        )
+
+        for argn in good_args.keys():
+            bad_args = good_args.copy()
+            bad_args[argn] = bad_args[argn][:-1]
+            with self.assertRaises(ValueError):
+                _check_est_args(**bad_args)
+
+        # check that it works works with a single value for the rest of the arguments
+        for argn in set(good_args_order) - {"est_freqs"}:
+            bad_args = good_args.copy()
+            test_args = bad_args.copy()
+            bad_args[argn] = [bad_args[argn][0]]
+            test_args[argn] = [bad_args[argn][0]] * len(test_args[argn])
+            __check_results(
+                good_args=test_args,
+                order=good_args_order,
+                tpl=_check_est_args(**bad_args),
+            )
+
 
 class TestMisc(unittest.TestCase):
     def setUp(self): ...
@@ -285,6 +327,42 @@ class TestMisc(unittest.TestCase):
             res_mock = _downsample_returns_mock(piv_df, freq)
             # sort the indexes and and see if they are equal
             self.assertTrue(res.equals(res_mock))
+
+
+class TestCalculatePortfolioVolatility(unittest.TestCase):
+    def setUp(self):
+        cids = ["USD", "EUR", "GBP", "JPY", "CHF"]
+        start = "2020-01-01"
+        end = "2021-01-01"
+        piv_ret = qdf_to_ticker_df(
+            make_test_df(
+                cids=cids,
+                xcats=["XR"],
+                start=start,
+                end=end,
+            )
+        )
+        piv_sig = qdf_to_ticker_df(
+            make_test_df(
+                cids=cids,
+                xcats=["SIG"],
+                start=start,
+                end=end,
+            )
+        )
+        self.good_args: Dict[str, Any] = {
+            "piv_ret": piv_ret,
+            "piv_sig": piv_sig,
+            "weights_func": flat_weights_arr,
+            "lback_periods": 100,
+            "half_life": 10,
+            "rebal_freq": "M",
+            "est_freqs": ["D", "W"],
+            "est_weights": [0.5, 0.5],
+            "nan_tolerance": 0.1,
+            "remove_zeros": True,
+            "portfolio_return_name": "PORTFOLIO",
+        }
 
 
 if __name__ == "__main__":
