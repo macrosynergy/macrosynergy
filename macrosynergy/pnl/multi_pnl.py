@@ -49,7 +49,7 @@ class MultiPnL:
         self,
         pnl_xcats: List[str],
         composite_pnl_xcat: str,
-        weights: Optional[dict[str, float]] = None,
+        weights: Optional[Dict[str, float]] = None,
     ) -> pd.DataFrame:
         """
         Combine PnLs with optional weighting.
@@ -235,7 +235,7 @@ class MultiPnL:
         df.iloc[8, :] = dfw.resample("M").sum().count()
         return df
 
-    def get_pnls(self, pnl_xcats: list[str] = None) -> pd.DataFrame:
+    def get_pnls(self, pnl_xcats: List[str] = None) -> pd.DataFrame:
         """
         Returns a DataFrame with PnLs.
 
