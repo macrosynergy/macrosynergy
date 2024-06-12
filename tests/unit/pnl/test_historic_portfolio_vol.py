@@ -5,19 +5,26 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Union, Any, Optional
 from unittest import mock
-
+import warnings
 from macrosynergy.pnl.historic_portfolio_volatility import (
     historic_portfolio_vol,
+    _calculate_portfolio_volatility,
     flat_weights_arr,
+    _downsample_returns,
     expo_weights_arr,
     _weighted_covariance,
     estimate_variance_covariance,
+    get_max_lookback,
     _check_est_args,
     _check_missing_data,
     _check_frequency,
     _check_input_arguments,
 )
-from macrosynergy.management.utils import qdf_to_ticker_df, ticker_df_to_qdf
+from macrosynergy.management.utils import (
+    qdf_to_ticker_df,
+    ticker_df_to_qdf,
+    _map_to_business_day_frequency,
+)
 from macrosynergy.management.types import QuantamentalDataFrame, NoneType
 from macrosynergy.management.simulate import make_test_df
 
@@ -102,32 +109,7 @@ class TestEstimateVarianceCovariance(unittest.TestCase):
         self.assertEqual(set(res.columns), set(self.good_args["piv_ret"].columns))
 
 
-class TestMisc(unittest.TestCase):
-    def setUp(self): ...
-
-    def tearDown(self): ...
-
-    def test_flat_weights_arr(self):
-        # Test good args
-        res = flat_weights_arr(10)
-        self.assertTrue(isinstance(res, np.ndarray))
-        self.assertEqual(res.shape[0], 10)
-        self.assertTrue(np.allclose(res, np.full(10, 1 / 10)))
-
-    def test_expo_weights_arr(self):
-        # Test good args
-        res = expo_weights_arr(10, 10)
-        self.assertTrue(isinstance(res, np.ndarray))
-        self.assertEqual(res.shape[0], 10)
-
-    def test_check_frequency(self):
-        # Test good args
-        for freq in ["D", "W", "M", "Q", "A"]:
-            _check_frequency(freq, "freq-type")
-        for freq in ["X", "Y", "Z"]:
-            with self.assertRaises(ValueError):
-                _check_frequency(freq, "freq-type")
-
+class TestArgChecks(unittest.TestCase):
     def test_check_missing_data(self):
         # Test good args
         sname = "SNAME"
@@ -236,6 +218,73 @@ class TestMisc(unittest.TestCase):
                     _check_input_arguments(
                         [(bad_args[argn], argn, argt) for argn, argt in arguments]
                     )
+
+
+class TestMisc(unittest.TestCase):
+    def setUp(self): ...
+
+    def tearDown(self): ...
+
+    def test_flat_weights_arr(self):
+        # Test good args
+        res = flat_weights_arr(10)
+        self.assertTrue(isinstance(res, np.ndarray))
+        self.assertEqual(res.shape[0], 10)
+        self.assertTrue(np.allclose(res, np.full(10, 1 / 10)))
+
+    def test_expo_weights_arr(self):
+        # Test good args
+        res = expo_weights_arr(10, 10)
+        self.assertTrue(isinstance(res, np.ndarray))
+        self.assertEqual(res.shape[0], 10)
+
+    def test_check_frequency(self):
+        # Test good args
+        for freq in ["D", "W", "M", "Q", "A"]:
+            _check_frequency(freq, "freq-type")
+        for freq in ["X", "Y", "Z"]:
+            with self.assertRaises(ValueError):
+                _check_frequency(freq, "freq-type")
+
+    def test_get_max_lookback(self):
+        def _get_max_lookback_mock(lb: int, nt: float) -> int:
+            return int(np.ceil(lb * (1 + nt))) if lb > 0 else 0
+
+        # nt between 0 and 1, lb > 0
+        for _ in range(1000):
+            lb = np.random.randint(1, 100)
+            nt = np.random.rand()
+            res = get_max_lookback(lb, nt)
+            self.assertEqual(res, _get_max_lookback_mock(lb, nt))
+
+    def test_downsample_returns(self):
+        def _downsample_returns_mock(piv_df: pd.DataFrame, freq: str) -> pd.DataFrame:
+            freq = _map_to_business_day_frequency(freq)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                piv_new_freq: pd.DataFrame = (
+                    (1 + piv_df / 100).resample(freq).prod() - 1
+                ) * 100
+
+                warnings.resetwarnings()
+
+            return piv_new_freq
+
+        cols = ["A", "B", "C", "D"]
+        idx = pd.bdate_range(start="2010-01-01", end="2015-01-01")
+        freqs = ["D", "W", "M", "Q", "A"]
+
+        def _gen_df(idx, cols):
+            return pd.DataFrame(
+                np.random.rand(len(idx), len(cols)), columns=cols, index=idx
+            )
+
+        for freq in freqs:
+            piv_df = _gen_df(idx, cols)
+            res = _downsample_returns(piv_df, freq)
+            res_mock = _downsample_returns_mock(piv_df, freq)
+            # sort the indexes and and see if they are equal
+            self.assertTrue(res.equals(res_mock))
 
 
 if __name__ == "__main__":
