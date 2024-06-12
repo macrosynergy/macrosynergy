@@ -426,16 +426,24 @@ def _check_est_args(
     lback_periods: List[int],
     half_life: List[int],
 ) -> Tuple[List[str], List[float], List[int], List[int]]:
-    ilen = max(map(len, [est_freqs, est_weights, lback_periods, half_life]))
+    # Calculate the maximum length of the provided lists
+    max_len = max(len(est_freqs), len(est_weights), len(lback_periods), len(half_life))
 
-    # if any of est_weights, lback_periods, and half_life are
-    if ilen != 1:
-        if len(est_weights) == 1:
-            est_weights = est_weights * ilen
-        if len(lback_periods) == 1:
-            lback_periods = lback_periods * ilen
-        if len(half_life) == 1:
-            half_life = half_life * ilen
+    def expand_list(lst, name):
+        if len(lst) == 1:
+            return lst * max_len
+        elif len(lst) != max_len:
+            raise ValueError(
+                "All lists must have length 1 or the same length as the longest "
+                f"list ({max_len}). '{name}' has length {len(lst)}."
+            )
+        return lst
+
+    # Expand lists to match the maximum length
+    est_freqs = expand_list(est_freqs, "est_freqs")
+    est_weights = expand_list(est_weights, "est_weights")
+    lback_periods = expand_list(lback_periods, "lback_periods")
+    half_life = expand_list(half_life, "half_life")
 
     inv_weights_msg = "Invalid weights in `est_weights` at index {ix:d}"
     inv_lback_msg = "Invalid lookback period in `lback_periods` at index {ix:d}: {lb:d}"
