@@ -380,7 +380,7 @@ def _check_input_arguments(
     # TODO move to general utils
     for varx, namex, typex in arguments:
         if not isinstance(varx, typex):
-            raise ValueError(f"`{namex}` must be {typex}.")
+            raise TypeError(f"`{namex}` must be {typex}.")
         if typex in [str, list, dict] and len(varx) == 0:
             raise ValueError(f"`{namex}` must not be an empty {str(typex)}.")
 
