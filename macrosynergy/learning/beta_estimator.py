@@ -14,7 +14,6 @@ from sklearn.ensemble import VotingRegressor
 
 from collections import defaultdict
 from tqdm.auto import tqdm
-#from tqdm import tqdm
 
 from macrosynergy.learning import (
     BasePanelSplit,
@@ -24,15 +23,16 @@ from macrosynergy.learning import (
 )
 from macrosynergy.management import categories_df, reduce_df, update_df
 
-
 class BetaEstimator:
     """
     Beta estimation of a panel of contract returns based on regression.
 
-    Estimates betas with seemingly unrelated linear regression (SUR) sequentially with
+    Estimates betas sequentially using systems of linear models for each cross-section with
     expanding panel data windows. Statistical learning determines the model and
-    hyperparameter choices sequentially using a given performance metric. Cross-sectional
-    betas and out-of-sample "hedged" returns are stored in quantamental dataframes.
+    hyperparameter choices at any given estimation time using a given performance metric.
+    It is recommended to use `neg_mean_abs_corr` from `macrosynergy.learning`.
+    Cross-sectional betas and out-of-sample "hedged" returns are stored in
+    quantamental dataframes.
 
     .. note::
 
@@ -48,7 +48,7 @@ class BetaEstimator:
         benchmark_return: str,
     ):
         """
-        Initializes BetaEstimator. Takes a quantamental dataframe and creates long
+        Initializes BetaEstimator. Takes a quantamental dataframe and creates wide
         format dataframes for the contract and benchmark returns.
 
         :param <pd.DataFrame> df: Daily quantamental dataframe with the following necessary
@@ -56,7 +56,8 @@ class BetaEstimator:
         :param <str> xcat: Extended category name for the financial returns to be hedged.
         :param <List[str]> cids: Cross-section identifiers for the financial returns to be hedged.
         :param <str> benchmark_return: Ticker name for the benchmark return to be used in
-            the hedging process and beta estimation.
+            the hedging process and beta estimation. The category name for the benchmark return 
+            must be different from the specified xcat. 
         """
         # Checks
         self._checks_init_params(df, xcat, cids, benchmark_return)
@@ -157,6 +158,10 @@ class BetaEstimator:
         if benchmark_return not in ticker_list.unique():
             raise ValueError(
                 "benchmark_return must be a valid ticker in the dataframe."
+            )
+        if benchmark_return.split("_", 1)[1] == xcat:
+            raise ValueError(
+                "benchmark_return must belong to a different category than the specified xcat."
             )
 
     def _checks_estimate_beta(
@@ -476,7 +481,7 @@ class BetaEstimator:
 
         # (3) Loop through outer splitter, run grid search for optimal model, extract beta
         # estimates, calculate OOS hedged returns and store results
-        train_test_splits = list(outer_splitter.split(X=self.X, y=self.y))
+        train_test_splits = [list(outer_splitter.split(X=self.X, y=self.y))[-1]]
 
         results = Parallel(n_jobs=n_jobs_outer)(
                 delayed(self._worker)(
@@ -499,7 +504,7 @@ class BetaEstimator:
                     ),
                     n_jobs_inner=n_jobs_inner,
                 )
-                for idx, (train_idx, test_idx) in tqdm(enumerate(train_test_splits),total=len(train_test_splits),)
+                for idx, (train_idx, test_idx) in tqdm(enumerate(train_test_splits),total=1,)
             )
 
         for beta_data, hedged_data, model_data in results:
