@@ -1338,6 +1338,8 @@ if __name__ == "__main__":
         pnl_cats=["PNL_GROWTH_NEG", "PNL_INFL_NEG"], start="2015-01-01", end="2020-12-31"
     )
 
+    pnl.signal_heatmap(pnl_name="PNL_GROWTH_NEG", pnl_cids=cids, freq="m")
+
     print(df_eval)
 
     pnl.agg_signal_bars(

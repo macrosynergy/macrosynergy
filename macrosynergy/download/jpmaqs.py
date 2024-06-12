@@ -318,7 +318,7 @@ def _save_qdf(data: List[dict], save_path: str) -> None:
         df: QuantamentalDataFrame = concat_single_metric_qdfs(
             [timeseries_to_qdf(_ts) for _ts in ts]
         ).drop(columns=["cid", "xcat"])
-        if os.path.exists(_ticker_filename(ticker)):
+        if os.path.exists(_ticker_filename(ticker, save_path)):
             edf = pd.read_csv(
                 ticker_filename, parse_dates=["real_date"], index_col="real_date"
             )

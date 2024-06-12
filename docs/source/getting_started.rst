@@ -3,10 +3,15 @@
 Getting Started
 ===============
 
-How to get started with the Macrosynergy package in 5-minutes.
+How to get started with the Macrosynergy package.
 
 Installation
 ------------
+
+Python version support
+~~~~~~~~~~~~~~~~~~~~
+
+This package requires Python 3.8 or higher. We support versions of Python still maintained for security or bugfixes, as seen here: https://devguide.python.org/versions/.
 
 The easiest method for installing the package is to use the PyPI installation method:
 
