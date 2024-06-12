@@ -206,7 +206,6 @@ class BetaEstimator:
             raise TypeError("inner_splitter must be an instance of BasePanelSplit.")
 
         # scorer
-        # TODO: add to these checks
         if not callable(scorer):
             raise TypeError("scorer must be a callable function.")
 
@@ -226,7 +225,7 @@ class BetaEstimator:
                 for estimator in model.estimators:
                     if not hasattr(estimator[1], "coefs_"):
                         raise ValueError(
-                            "All models must be seemingly unrelated linear regressors consistent with "
+                            "All models must be systems of linear regressors consistent with "
                             "the scikit-learn API. This means that they must be scikit-learn compatible "
                             "regressors that have a 'coefs_' attribute storing the estimated betas for each "
                             "cross-section, as per the standard imposed by the macrosynergy package. "
@@ -235,7 +234,7 @@ class BetaEstimator:
             else:
                 if not hasattr(model, "coefs_"):
                     raise ValueError(
-                        "All models must be seemingly unrelated linear regressors consistent with "
+                        "All models must be systems of linear regressors consistent with "
                         "the scikit-learn API. This means that they must be scikit-learn compatible "
                         "regressors that have a 'coefs_' attribute storing the estimated betas for each "
                         "cross-section, as per the standard imposed by the macrosynergy package."
@@ -379,14 +378,15 @@ class BetaEstimator:
         n_jobs_inner: Optional[int] = 1,
     ):
         """
-        Estimates and stores beta coefficients for each cross-section.
+        Estimates and stores both beta coefficients and out-of-sample hedged returns
+        for each cross-section.
 
-        Optimal models and hyperparameters are selected at the end of re-estimation date.
-        This includes the frequency of the training dataset. The optimal model is then fit
-        to the training set, betas for each cross-section are extracted.  Based in these
-        betas hedged returns are calculated up to the next re-estimation date.
-        Model and hyperparameter search is based on maximization of a cross-validation
-        score from a scikit-learn 'scorer' function.
+        Optimal models and associated hyperparameters are selected at a fixed frequency, 
+        with the optimal model then fit on each cross-section in the training set and 
+        corresponding betas extracted. Based on these betas, out-of-sample hedged returns
+        are calculated up to the next re-estimation date. The model and hyperparameter search
+        is based on maximization of a cross-validation score from a scikit-learn
+        'scorer' function.
 
         :param <str> beta_xcat: Category name for the panel of estimated contract betas.
         :param <str> hedged_return_xcat: Category name for the panel of derived hedged returns.
@@ -394,10 +394,10 @@ class BetaEstimator:
             the hyperparameter search. It is recommended to set this to an ExpandingKFoldPanelSplit
             splitter.
         :param <Callable> scorer: Scikit-learn scorer function used in both model and
-            hyperparameter selection for optimization. For beta estimation, it is recommended
-            to use `neg_mean_abs_corr` from the `macrosynergy.learning` submodule.
-        :param <dict> models: Dictionary of scikit-learn compatible linear regression models. For beta
-            estimation, these models should be seemingly unrelated regressions with a 'coefs_' attribute
+            hyperparameter selection for optimization. It is recommended to use
+            `neg_mean_abs_corr` from the `macrosynergy.learning` submodule.
+        :param <dict> models: Dictionary of scikit-learn compatible systems of
+            linear regression models. This means they require a 'coefs_' attribute
             storing estimated betas for each cross-section.
         :param <dict> hparam_grid: Nested dictionary defining the hyperparameters to consider
             for each model.
@@ -417,8 +417,12 @@ class BetaEstimator:
             splits. Default is False.
         :param <int> initial_n_splits: Number of splits to be used in cross-validation for the initial
             training set. If None, the number of splits is defined by the inner_splitter. Default is None.
+            Setting this parameter only has an effect if the inner splitter doesn't change the number of splits
+            on each iteration itself. 
         :param <int> threshold_n_periods: Number of periods, in units of the specified "est_freq"
             to pass before the number of cross-validation splits increases by one. Default is None.
+            Setting this parameter only has an effect if the inner splitter doesn't change the number of splits
+            on each iteration itself. 
         :param <str> hparam_type: String indicating the type of hyperparameter search. This can be
             `grid`, `prior` or `bayes`. Currently the `bayes` option produces a NotImplementedError.
             Default is "grid".
@@ -481,9 +485,10 @@ class BetaEstimator:
 
         # (3) Loop through outer splitter, run grid search for optimal model, extract beta
         # estimates, calculate OOS hedged returns and store results
-        train_test_splits = [list(outer_splitter.split(X=self.X, y=self.y))[-1]]
+        train_test_splits = list(outer_splitter.split(X=self.X, y=self.y))
 
-        results = Parallel(n_jobs=n_jobs_outer)(
+        results = tqdm(
+            Parallel(n_jobs=n_jobs_outer, return_as="generator")(
                 delayed(self._worker)(
                     train_idx=train_idx,
                     test_idx=test_idx,
@@ -492,8 +497,8 @@ class BetaEstimator:
                     inner_splitter=inner_splitter,
                     models=models,
                     scorer=scorer,
-                    hparam_grid=hparam_grid,
                     hparam_type=hparam_type,
+                    hparam_grid=hparam_grid,
                     n_iter=n_iter,
                     use_variance_correction=use_variance_correction,
                     initial_n_splits=initial_n_splits,
@@ -504,8 +509,10 @@ class BetaEstimator:
                     ),
                     n_jobs_inner=n_jobs_inner,
                 )
-                for idx, (train_idx, test_idx) in tqdm(enumerate(train_test_splits),total=1,)
-            )
+                for idx, (train_idx, test_idx) in enumerate(train_test_splits)
+            ),
+            total=len(train_test_splits),
+        )
 
         for beta_data, hedged_data, model_data in results:
             if beta_data != []:
