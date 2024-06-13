@@ -18,7 +18,11 @@ class TestScoreVisualisers(unittest.TestCase):
         self.end: str = "2020-12-31"
 
         self.df: pd.DataFrame = make_test_df(
-            self.cids, self.xcats, self.start, self.end
+            cids=self.cids,
+            xcats=self.xcats,
+            start=self.start,
+            end=self.end,
+            metrics=self.metrics,
         )
 
     def test_initialization(self):
