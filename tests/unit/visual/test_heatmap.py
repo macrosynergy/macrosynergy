@@ -24,7 +24,11 @@ class TestAll(unittest.TestCase):
         self.end: str = "2020-12-31"
 
         self.df: pd.DataFrame = make_test_df(
-            self.cids, self.xcats, self.start, self.end
+            cids=self.cids,
+            xcats=self.xcats,
+            start=self.start,
+            end=self.end,
+            metrics=self.metrics,
         )
 
     @classmethod
@@ -81,7 +85,7 @@ class TestAll(unittest.TestCase):
 
     def test_plot_heatmap_no_error(self):
         heatmap = Heatmap(**self.constructor_args)
-        heatmap.df: pd.DataFrame = heatmap.df.pivot_table(
+        heatmap.df = heatmap.df.pivot_table(
             index="cid", columns="real_date", values=self.metric
         )
         try:
