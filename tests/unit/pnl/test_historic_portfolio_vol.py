@@ -23,6 +23,7 @@ from macrosynergy.pnl.historic_portfolio_volatility import (
 )
 from macrosynergy.management.utils import (
     qdf_to_ticker_df,
+    get_sops,
     ticker_df_to_qdf,
     _map_to_business_day_frequency,
 )
@@ -346,44 +347,62 @@ class TestMisc(unittest.TestCase):
             piv_df = _gen_df(idx, cols)
             res = _downsample_returns(piv_df, freq)
             res_mock = _downsample_returns_mock(piv_df, freq)
-            # sort the indexes and and see if they are equal
             self.assertTrue(res.equals(res_mock))
 
 
 class TestCalculatePortfolioVolatility(unittest.TestCase):
     def setUp(self):
-        cids = ["USD", "EUR", "GBP", "JPY", "CHF"]
-        start = "2020-01-01"
-        end = "2021-01-01"
-        piv_ret = qdf_to_ticker_df(
-            make_test_df(
-                cids=cids,
-                xcats=["XR"],
-                start=start,
-                end=end,
-            )
+        mkdf_args = dict(
+            cids=["USD", "EUR", "GBP", "JPY", "CHF"],
+            xcats=["EQ"],
+            start="2020-01-01",
+            end="2021-01-01",
         )
-        piv_sig = qdf_to_ticker_df(
-            make_test_df(
-                cids=cids,
-                xcats=["SIG"],
-                start=start,
-                end=end,
-            )
-        )
+        _dft = make_test_df(**mkdf_args)
+        _dft["value"] = 1
+        _dft = qdf_to_ticker_df(_dft)
         self.good_args: Dict[str, Any] = {
-            "piv_ret": piv_ret,
-            "piv_sig": piv_sig,
+            "pivot_returns": _dft,
+            "pivot_signals": _dft,
             "weights_func": flat_weights_arr,
-            "lback_periods": 100,
-            "half_life": 10,
             "rebal_freq": "M",
             "est_freqs": ["D", "W"],
             "est_weights": [0.5, 0.5],
+            "half_life": [10, 2],
+            "lback_periods": [15, 5],
             "nan_tolerance": 0.1,
             "remove_zeros": True,
             "portfolio_return_name": "PORTFOLIO",
         }
+
+    @staticmethod
+    def expected_rebal_dates(dt_range: pd.DatetimeIndex, freq: str) -> pd.Series:
+        return get_sops(dates=dt_range, freq=freq)
+
+    def tearDown(self): ...
+
+    def test_calculate_portfolio_volatility(self):
+        # Test good args
+        res = _calculate_portfolio_volatility(**self.good_args)
+        # res must be a tuple of 2 elements
+        self.assertTrue(isinstance(res, tuple))
+        self.assertEqual(len(res), 2)
+        # both elements must be pandas dataframes
+        self.assertTrue(isinstance(res[0], pd.DataFrame))
+        # the first element must have 1 column and real_date as index
+        expc_rebal_dates = self.expected_rebal_dates(
+            res[0].index, self.good_args["rebal_freq"]
+        )
+        self.assertTrue(res[0].index.tolist() == expc_rebal_dates.tolist())
+        self.assertTrue(res[0].shape[1] == 1)
+        # column name must be the same as the portfolio_return_name
+        self.assertTrue(res[0].columns[0] == self.good_args["portfolio_return_name"])
+
+        # the second element must be a pandas dataframe
+        # must be a df with 'real_date', 'fid1', 'fid2', 'value' as columns
+        self.assertTrue(isinstance(res[1], pd.DataFrame))
+        self.assertTrue(res[1].shape[1] == 4)
+        self.assertTrue(set(res[1].columns) == {"real_date", "fid1", "fid2", "value"})
 
 
 if __name__ == "__main__":
