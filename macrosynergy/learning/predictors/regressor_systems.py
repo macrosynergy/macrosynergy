@@ -195,15 +195,14 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
 
 class LinearRegressionSystem(BaseRegressionSystem):
     """
-    Custom scikit-learn predictor class to create a linear OLS seemingly unrelated
-    regression model. This means that separate regressions are estimated for each
-    cross-section, but evaluation is performed over the panel. Consequently, the results of
+    Custom scikit-learn predictor class to create a system of OLS linear regression models
+    for each cross-section. Evaluation is performed over the panel, meaning the results of
     a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
     but the model parameters themselves may differ across cross-sections.
 
     .. note::
 
-      This estimator is still **experimental** for now: the predictions
+      This estimator is still **experimental**: the predictions
       and the API might change without any deprecation cycle.
     """
 
@@ -212,17 +211,17 @@ class LinearRegressionSystem(BaseRegressionSystem):
         roll: int = None,
         fit_intercept: bool = True,
         positive: bool = False,
-        data_freq: str = "D",
+        data_freq: str = "unadjusted",
         min_xs_samples: int = 2,
     ):
         """
-        Initializes a rolling seemingly unrelated OLS linear regression model. Since
-        separate models are estimated for each cross-section, a minimum constraint on the
-        number of samples per cross-section, called min_xs_samples, is required for
-        sensible inference.
+        Initializes a (optional) rolling system of OLS linear regression models for each 
+        cross-section. Since separate models are estimated for each cross-section,
+        a minimum constraint on the number of samples per cross-section,
+        called min_xs_samples, is required for sensible inference.
 
         :param <int> roll: The lookback of the rolling window for the regression. If None,
-            the entire cross-sectional history is used for each regression. This should
+            the entire cross-sectional history is used. This should
             be specified in units of the data frequency, possibly adjusted by the
             data_freq attribute.
         :param <bool> fit_intercept: Boolean indicating whether or not to fit intercepts
@@ -231,9 +230,12 @@ class LinearRegressionSystem(BaseRegressionSystem):
             coefficients for each regression.
         :param <str> data_freq: Training set data frequency. This is primarily
             to be used within the context of market beta estimation in the
-            MarketBetaEstimator class in `macrosynergy.learning`. Accepted strings
-            are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
-            Default is 'D'.
+            BetaEstimator class in `macrosynergy.learning`, allowing for cross-validation
+            of the underlying dataset frequency for good beta estimation. Accepted strings
+            are 'unadjusted' to use the native data set frequency, 'W' for weekly,
+            'M' for monthly and 'Q' for quarterly. If not 'unadjusted', it is assumed
+            the native dataset frequency is daily before downsampling by summation.
+            Default is 'unadjusted'.
         :param <int> min_xs_samples: The minimum number of samples required in each
             cross-section training set for a regression model to be fitted.
         """
@@ -281,8 +283,8 @@ class LinearRegressionSystem(BaseRegressionSystem):
             raise TypeError("positive must be a boolean.")
         if not isinstance(data_freq, str):
             raise TypeError("data_freq must be a string.")
-        if data_freq not in ["unadjusted", "D", "W", "M", "Q"]:
-            raise ValueError("data_freq must be one of 'unadjusted', 'D', 'W', 'M' or 'Q'.")
+        if data_freq not in ["unadjusted", "W", "M", "Q"]:
+            raise ValueError("data_freq must be one of 'unadjusted', 'W', 'M' or 'Q'.")
         if not isinstance(min_xs_samples, int):
             raise TypeError("min_xs_samples must be an integer.")
         if min_xs_samples <= 0:
@@ -291,15 +293,14 @@ class LinearRegressionSystem(BaseRegressionSystem):
 
 class LADRegressionSystem(BaseRegressionSystem):
     """
-    Custom scikit-learn predictor class to create a linear LAD seemingly unrelated
-    regression model. This means that separate regressions are estimated for each
-    cross-section, but evaluation is performed over the panel. Consequently, the results of
+    Custom scikit-learn predictor class to create a system of linear LAD regressions
+    for each cross section. Evaluation is performed over the panel, meaning the results of
     a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
     but the model parameters themselves may differ across cross-sections.
 
     .. note::
 
-      This estimator is still **experimental** for now: the predictions
+      This estimator is still **experimental**: the predictions
       and the API might change without any deprecation cycle.
     """
 
@@ -308,14 +309,14 @@ class LADRegressionSystem(BaseRegressionSystem):
         roll: int = None,
         fit_intercept: bool = True,
         positive: bool = False,
-        data_freq: str = "D",
+        data_freq: str = "unadjusted",
         min_xs_samples: int = 2,
     ):
         """
-        Initializes a rolling seemingly unrelated LAD linear regression model. Since
-        separate models are estimated for each cross-section, a minimum constraint on the
-        number of samples per cross-section, called min_xs_samples, is required for
-        sensible inference.
+        Initializes a (optional) rolling system of LAD linear regression models for each
+        cross-section. Since separate models are estimated for each cross-section,
+        a minimum constraint on the number of samples per cross-section, called
+        min_xs_samples, is required for sensible inference.
 
         :param <int> roll: The lookback of the rolling window for the regression. If None,
             the entire cross-sectional history is used for each regression.
@@ -325,9 +326,12 @@ class LADRegressionSystem(BaseRegressionSystem):
             coefficients for each regression.
         :param <str> data_freq: Training set data frequency. This is primarily
             to be used within the context of market beta estimation in the
-            MarketBetaEstimator class in `macrosynergy.learning`. Accpeted strings
-            are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
-            Default is 'D'.
+            BetaEstimator class in `macrosynergy.learning`, allowing for cross-validation
+            of the underlying dataset frequency for good beta estimation. Accepted strings
+            are 'unadjusted' to use the native data set frequency, 'W' for weekly,
+            'M' for monthly and 'Q' for quarterly. If not 'unadjusted', it is assumed
+            the native dataset frequency is daily before downsampling by summation.
+            Default is 'unadjusted'.
         :param <int> min_xs_samples: The minimum number of samples required in each
             cross-section training set for a regression model to be fitted.
         """
@@ -375,25 +379,23 @@ class LADRegressionSystem(BaseRegressionSystem):
             raise TypeError("positive must be a boolean.")
         if not isinstance(data_freq, str):
             raise TypeError("data_freq must be a string.")
-        if data_freq not in ["unadjusted", "D", "W", "M", "Q"]:
-            raise ValueError("data_freq must be one of 'unadjusted', 'D', 'W', 'M' or 'Q'.")
+        if data_freq not in ["unadjusted", "W", "M", "Q"]:
+            raise ValueError("data_freq must be one of 'unadjusted', 'W', 'M' or 'Q'.")
         if not isinstance(min_xs_samples, int):
             raise TypeError("min_xs_samples must be an integer.")
         if min_xs_samples <= 0:
             raise ValueError("min_xs_samples must be a positive integer.")
 
-
 class RidgeRegressionSystem(BaseRegressionSystem):
     """
-    Custom scikit-learn predictor class to create a seemingly unrelated ridge
-    regression model. This means that separate regressions, possibly rolling, are estimated for each
-    cross-section, but evaluation is performed over the panel. Consequently, the results of
+    Custom scikit-learn predictor class to create a system of ridge
+    regression models for each cross-section. Evaluation is performed over the panel, meaning the results of
     a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
     but the model parameters themselves may differ across cross-sections.
 
     .. note::
 
-      This estimator is still **experimental** for now: the predictions
+      This estimator is still **experimental**: the predictions
       and the API might change without any deprecation cycle.
     """
 
@@ -403,16 +405,16 @@ class RidgeRegressionSystem(BaseRegressionSystem):
         alpha: float = 1.0,
         fit_intercept: bool = True,
         positive: bool = False,
-        data_freq: str = "D",
+        data_freq: str = "unadjusted",
         min_xs_samples: int = 2,
         tol: float = 1e-4,
         solver: str = "lsqr",
     ):
         """
-        Initializes a rolling seemingly unrelated ridge regression model. Since
-        separate models are estimated for each cross-section, a minimum constraint on the
-        number of samples per cross-section, called min_xs_samples, is required for
-        sensible inference.
+        Initializes a (optional) rolling system of ridge regression models for each 
+        cross-section. Since separate models are estimated for each cross-section,
+        a minimum constraint on the number of samples per cross-section, called
+        min_xs_samples, is required for sensible inference.
 
         :param <int> roll: The lookback of the rolling window for the regression. If None,
             the entire cross-sectional history is used for each regression.
@@ -424,9 +426,12 @@ class RidgeRegressionSystem(BaseRegressionSystem):
             coefficients for each regression.
         :param <str> data_freq: Training set data frequency. This is primarily
             to be used within the context of market beta estimation in the
-            MarketBetaEstimator class in `macrosynergy.learning`. Accpeted strings
-            are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
-            Default is 'D'.
+            BetaEstimator class in `macrosynergy.learning`, allowing for cross-validation
+            of the underlying dataset frequency for good beta estimation. Accepted strings
+            are 'unadjusted' to use the native data set frequency, 'W' for weekly,
+            'M' for monthly and 'Q' for quarterly. If not 'unadjusted', it is assumed
+            the native dataset frequency is daily before downsampling by summation.
+            Default is 'unadjusted'.
         :param <int> min_xs_samples: The minimum number of samples required in each
             cross-section training set for a regression model to be fitted.
         :param <float> tol: The tolerance for termination. Default is 1e-4.
@@ -496,8 +501,8 @@ class RidgeRegressionSystem(BaseRegressionSystem):
             raise TypeError("positive must be a boolean.")
         if not isinstance(data_freq, str):
             raise TypeError("data_freq must be a string.")
-        if data_freq not in ["unadjusted", "D", "W", "M", "Q"]:
-            raise ValueError("data_freq must be one of 'unadjusted', 'D', 'W', 'M' or 'Q'.")
+        if data_freq not in ["unadjusted", "W", "M", "Q"]:
+            raise ValueError("data_freq must be one of 'unadjusted', 'W', 'M' or 'Q'.")
         if not isinstance(min_xs_samples, int):
             raise TypeError("min_xs_samples must be an integer.")
         if min_xs_samples <= 0:
@@ -531,7 +536,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
 
     .. note::
 
-      This estimator is still **experimental** for now: the predictions
+      This estimator is still **experimental**: the predictions
       and the API might change without any deprecation cycle.
     """
 
@@ -557,7 +562,14 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             possibly relating to data_freq. Default is 21.
         :param <str> volatility_window_type: The type of window to use for the volatility
             calculation. Accepted values are 'rolling' and 'exponential'. Default is 'rolling'.
-        :param <str> data_freq: Training set data frequency for downsampling. Default is 'D'.
+        :param <str> data_freq: Training set data frequency. This is primarily
+            to be used within the context of market beta estimation in the
+            BetaEstimator class in `macrosynergy.learning`, allowing for cross-validation
+            of the underlying dataset frequency for good beta estimation. Accepted strings
+            are 'unadjusted' to use the native data set frequency, 'W' for weekly,
+            'M' for monthly and 'Q' for quarterly. If not 'unadjusted', it is assumed
+            the native dataset frequency is daily before downsampling by summation.
+            Default is 'unadjusted'.
         :param <int> min_xs_samples: The minimum number of samples required in each
             cross-section training set for a regression model to be fitted.
         """
@@ -697,8 +709,8 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             )
         if not isinstance(data_freq, str):
             raise TypeError("data_freq must be a string.")
-        if data_freq not in ["unadjusted", "D", "W", "M", "Q"]:
-            raise ValueError("data_freq must be one of 'unadjusted', 'D', 'W', 'M' or 'Q.")
+        if data_freq not in ["unadjusted", "W", "M", "Q"]:
+            raise ValueError("data_freq must be one of 'unadjusted', 'W', 'M' or 'Q.")
         if not isinstance(min_xs_samples, int):
             raise TypeError("min_xs_samples must be an integer.")
         if min_xs_samples <= 0:
