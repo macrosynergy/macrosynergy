@@ -161,6 +161,13 @@ class TestBetaEstimator(unittest.TestCase):
                 cids="not a list",
                 benchmark_return=self.benchmark_return,
             )
+        with self.assertRaises(TypeError):
+            be = BetaEstimator(
+                df = self.dfd,
+                xcat=self.xcat,
+                cids=[1],
+                benchmark_return=self.benchmark_return,
+            )
         with self.assertRaises(ValueError):
             be = BetaEstimator(
                 df = self.dfd,
@@ -204,6 +211,14 @@ class TestBetaEstimator(unittest.TestCase):
                 cids=self.cids,
                 benchmark_return="GLB_DRBXR_NSA",
             )
+        with self.assertRaises(ValueError):
+            be = BetaEstimator(
+                df = self.dfd,
+                xcat=self.xcat,
+                cids=self.cids,
+                benchmark_return="USD_CONTRACT_XR",
+            )
+        
 
     def test_valid_estimate_beta(self):
         # Test the broad method
