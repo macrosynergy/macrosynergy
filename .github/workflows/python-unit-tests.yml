@@ -46,13 +46,11 @@ jobs:
         run: |
           python -m pytest ./tests/unit/${{ matrix.folder }}
 
-      - name: Upload coverage reports to GitHub Actions
-        uses: actions/upload-artifact@v4
+      - name: Upload reports to Codecov
+        uses: codecov/codecov-action@v4
         with:
-          # name coverage-report-(commit)-(folder)
-          name: coverage-report-${{ github.sha }}-${{ matrix.folder }}
-          # all .coverage files in the project
-          path: .coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: .coverage
 
   run-unit-tests-success:
     needs: run-unit-tests
@@ -66,19 +64,3 @@ jobs:
           else
             echo "Unit tests passed"
           fi
-
-  upload-coverage:
-    needs: run-unit-tests-success
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download coverage reports from GitHub Actions
-        uses: actions/download-artifact@v4
-        with:
-          pattern: coverage-report-${{ github.sha }}-*
-          path: ./coverage-reports
-
-      - name: Upload coverage report to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./coverage-reports
