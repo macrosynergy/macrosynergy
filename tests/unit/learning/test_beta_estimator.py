@@ -270,7 +270,8 @@ class TestBetaEstimator(unittest.TestCase):
         real_reest_dates = sorted(training_dates)
         self.assertTrue(np.all(determined_reest_dates == real_reest_dates))
         # check the betas themselves are as expected
-
+        for beta_xs, beta in correct_betas.items():
+            self.assertTrue(np.all(determined_betas[determined_betas.cid + "vUSD" == beta_xs].value == beta))
         # check basic hedged return dataframe properties
         self.assertIsInstance(self.be.hedged_returns, pd.DataFrame)
         self.assertTrue(self.be.hedged_returns.columns.tolist() == ["cid", "real_date", "xcat", "value"])
