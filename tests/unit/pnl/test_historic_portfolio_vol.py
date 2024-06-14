@@ -213,13 +213,13 @@ class TestArgChecks(unittest.TestCase):
                     [(bad_args[argn], argn, argt) for argn, argt in arguments]
                 )
 
-            if isinstance(argt, (list, dict, str)):
+            if argt in [list, dict, str]:
                 bad_args = good_args.copy()
-                if isinstance(argt, list):
+                if argt == list:
                     bad_args[argn] = []
-                elif isinstance(argt, dict):
+                elif argt == dict:
                     bad_args[argn] = {}
-                elif isinstance(argt, str):
+                elif argt == str:
                     bad_args[argn] = ""
                 with self.assertRaises(ValueError):
                     _check_input_arguments(
@@ -556,7 +556,7 @@ class TestHistVolEntrypoint(unittest.TestCase):
             years=5,
         )
         end = df["real_date"].max().strftime("%Y-%m-%d")
-        df_vol, vcv_df = historic_portfolio_vol(
+        all_args = dict(
             df=df,
             sname="STRAT",
             fids=fids,
@@ -572,6 +572,8 @@ class TestHistVolEntrypoint(unittest.TestCase):
             return_variance_covariance=True,
         )
 
+        df_vol, vcv_df = historic_portfolio_vol(**all_args)
+
         self.assertTrue(isinstance(df_vol, QuantamentalDataFrame))
         self.assertTrue(isinstance(vcv_df, pd.DataFrame))
         tdf = qdf_to_ticker_df(df_vol)
@@ -582,21 +584,26 @@ class TestHistVolEntrypoint(unittest.TestCase):
         )
 
         df_vol = historic_portfolio_vol(
-            df=df,
-            sname="STRAT",
-            fids=fids,
-            rebal_freq="m",
-            est_freqs=["D", "W", "M"],
-            est_weights=[0.1, 0.2, 0.7],
-            lback_periods=[30, 20, -1],
-            half_life=[10, 5, 2],
-            lback_meth="xma",
-            rstring="XR",
-            start=start,
-            end=end,
-            return_variance_covariance=False,
+            **{**all_args, "return_variance_covariance": False}
         )
         self.assertTrue(isinstance(df_vol, QuantamentalDataFrame))
+
+        # test with 'difficult' args
+        historic_portfolio_vol(
+            **{
+                **all_args,
+                "lback_periods": 30,
+                "half_life": 10,
+                "est_weights": 0.8,
+                "est_freqs": "D",
+                "start": None,
+                "end": None,
+            }
+        )
+
+        # test raises TypeError with start=123
+        with self.assertRaises(TypeError):
+            historic_portfolio_vol(**{**all_args, "start": 123})
 
 
 if __name__ == "__main__":
