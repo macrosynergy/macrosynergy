@@ -462,7 +462,7 @@ def simulate_returns_and_signals(
         end=pd.Timestamp.today() + pd.offsets.BDay(n=0), periods=periods
     )
     # Generate volatility
-    print("Generate volatility (shared???)")
+    # print("Generate volatility (shared???)")
     volatility = np.empty(shape=(periods, n_cids))
     for nn in range(n_cids):
         volatility[:, nn] = simulate_volatility(
@@ -501,8 +501,8 @@ def simulate_returns_and_signals(
     for ii in range(periods):
         beta[:, :, ii + 1] = beta[:, :, ii] + 0.005 * np.random.randn(1, n_cids)
     beta = beta[:, :, 1:]
-    print("Final values of beta")
-    print(pd.Series(beta[0, :, -1]).describe())
+    # print("Final values of beta")
+    # print(pd.Series(beta[0, :, -1]).describe())
 
     # TODO get with kron-product?
     rb_factor = np.array([rb[tt] * beta[0, :, tt] for tt in range(periods)])
