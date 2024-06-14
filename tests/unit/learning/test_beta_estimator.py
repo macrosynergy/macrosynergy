@@ -9,6 +9,7 @@ from macrosynergy.learning import (
     ExpandingKFoldPanelSplit,
     neg_mean_abs_corr,
     LinearRegressionSystem,
+    ExpandingFrequencyPanelSplit
 )
 from macrosynergy.learning.beta_estimator import BetaEstimator
 
@@ -24,16 +25,17 @@ class TestBetaEstimator(unittest.TestCase):
         xcats = ["BENCH_XR", "CONTRACT_XR"]
         cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
 
+        # Set up the dataset so that June 2019 is the earliest date in the dataset
         df_cids = pd.DataFrame(
             index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
         )
-        df_cids.loc["AUD"] = ["2017-01-01", "2020-12-31", 0, 1]
-        df_cids.loc["CAD"] = ["2019-01-01", "2020-12-31", 0, 1]
-        df_cids.loc["GBP"] = ["2017-01-01", "2020-12-31", 0, 1]
-        df_cids.loc["USD"] = ["2017-01-01", "2020-12-31", 0, 1]
+        df_cids.loc["AUD"] = ["2019-01-01", "2020-12-31", 0, 1]
+        df_cids.loc["CAD"] = ["2020-06-01", "2020-12-31", 0, 1]
+        df_cids.loc["GBP"] = ["2020-01-01", "2020-12-31", 0, 1]
+        df_cids.loc["USD"] = ["2019-01-01", "2020-12-31", 0, 1]
 
         df_xcats = pd.DataFrame(index=xcats, columns=cols)
-        df_xcats.loc["BENCH_XR"] = ["2017-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+        df_xcats.loc["BENCH_XR"] = ["2019-06-01", "2020-12-31", 0.1, 1, 0, 0.3]
         df_xcats.loc["CONTRACT_XR"] = ["2018-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
 
         self.dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
@@ -49,21 +51,24 @@ class TestBetaEstimator(unittest.TestCase):
         )
 
         # Create some general betas and hedged returns
+        # The last 6 months of 2019 should be the initial training set
+        # Then betas are estimated monthly for cross sections with at least 21 observations
         self.be.estimate_beta(
             beta_xcat="BETA_NSA",
             hedged_return_xcat="HEDGED_RETURN_NSA",
             inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
             scorer=neg_mean_abs_corr,
             models={
-                "OLS": LinearRegressionSystem(),
+                "OLS": LinearRegressionSystem(min_xs_samples=21),
             },
             hparam_grid={
                 "OLS": {"fit_intercept": [True, False]},
             },
             min_cids = 1,
-            min_periods = 21 * 12,
+            min_periods = 21 * 6,
             est_freq="M",
             use_variance_correction=False,
+            n_jobs_outer=1,
         )
 
     def test_valid_init(self):
@@ -221,14 +226,52 @@ class TestBetaEstimator(unittest.TestCase):
         
 
     def test_valid_estimate_beta(self):
-        # Test the broad method
-        # Betas dataframe
+        determined_betas = self.be.betas.sort_values(by=["cid","xcat","real_date"]).drop_duplicates(subset=["value","xcat","cid"])
+        determined_hedged_returns = self.be.hedged_returns.sort_values(by=["cid","xcat","real_date"]).drop_duplicates(subset=["value","xcat","cid"])
+        determined_optimal_models = self.be.get_optimal_models()
+
+        # Loop through training and test splits, and determine correct training times, betas and hedged returns
+        outer_splitter = ExpandingFrequencyPanelSplit(
+            expansion_freq="M",
+            test_freq="M",
+            min_cids = 1,
+            min_periods = 21 * 6,
+        )
+
+        training_dates = []
+        correct_betas = {"AUDvUSD": [], "CADvUSD": [], "GBPvUSD": [], "USDvUSD": []}   
+        for idx, (train_idx, test_idx) in enumerate(outer_splitter.split(self.be.X, self.be.y)):
+            # store the true re-estimation dates
+            real_reest_date = self.be.X.iloc[train_idx].index.get_level_values("real_date").max()
+            training_dates.append(real_reest_date)
+            # store the right betas based on the selected model
+            hparams = determined_optimal_models[determined_optimal_models.real_date == real_reest_date].hparams.iloc[0]
+            selected_model = LinearRegressionSystem(min_xs_samples=21).set_params(**hparams)
+            selected_model.fit(pd.DataFrame(self.be.X.iloc[train_idx]), self.be.y.iloc[train_idx])
+            betas = selected_model.coefs_
+            for beta_xs, beta in betas.items():
+                correct_betas[beta_xs].append(beta)
+            # store the right out-of-sample hedged returns based on the selected model
+            X_test = pd.DataFrame(self.be.X.iloc[test_idx])
+            y_test = self.be.y.iloc[test_idx]
+            oos_cross_sections = X_test.index.get_level_values("cid").unique()
+            for cid in oos_cross_sections:
+                # TODO: finish later
+                pass
+
+        # check basic beta dataframe properties
         self.assertIsInstance(self.be.betas, pd.DataFrame)
         self.assertTrue(self.be.betas.columns.tolist() == ["cid", "real_date", "xcat", "value"])
         self.assertTrue("BETA_NSA" in self.be.betas.xcat.unique())
         self.assertTrue(sorted(self.be.betas[self.be.betas.xcat == "BETA_NSA"].cid.unique()) == self.cids)
         self.assertTrue(all(~self.be.betas[self.be.betas.xcat == "BETA_NSA"].value.isna()))
-        # Hedged returns dataframe
+        # check the estimation dates are as expected 
+        determined_reest_dates = sorted(determined_betas.real_date.unique())
+        real_reest_dates = sorted(training_dates)
+        self.assertTrue(np.all(determined_reest_dates == real_reest_dates))
+        # check the betas themselves are as expected
+
+        # check basic hedged return dataframe properties
         self.assertIsInstance(self.be.hedged_returns, pd.DataFrame)
         self.assertTrue(self.be.hedged_returns.columns.tolist() == ["cid", "real_date", "xcat", "value"])
         self.assertTrue("HEDGED_RETURN_NSA" in self.be.hedged_returns.xcat.unique())
