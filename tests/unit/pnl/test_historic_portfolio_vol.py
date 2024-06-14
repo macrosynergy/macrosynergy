@@ -381,7 +381,7 @@ class TestCalculatePortfolioVolatility(unittest.TestCase):
 
     def tearDown(self): ...
 
-    def test_calculate_portfolio_volatility(self):
+    def test_basic(self):
         # Test good args
         res = _calculate_portfolio_volatility(**self.good_args)
         # res must be a tuple of 2 elements
@@ -403,6 +403,47 @@ class TestCalculatePortfolioVolatility(unittest.TestCase):
         self.assertTrue(isinstance(res[1], pd.DataFrame))
         self.assertTrue(res[1].shape[1] == 4)
         self.assertTrue(set(res[1].columns) == {"real_date", "fid1", "fid2", "value"})
+        self.assertTrue(set(res[1]["real_date"]) == set(expc_rebal_dates))
+
+        fid_tuples: List[Tuple[str, str]] = (
+            res[1][["fid1", "fid2"]].apply(tuple, axis=1).tolist()
+        )
+        found_finds = self.good_args["pivot_signals"].columns.tolist()
+
+        all_possible_fid_tuples = [
+            (found_finds[i], found_finds[j])
+            for i in range(len(found_finds))
+            for j in range(len(found_finds))
+        ]
+
+        not_found = set(all_possible_fid_tuples) - set(fid_tuples)
+        # now check that each tuple's inverted tuple is also in the fid_tuples - 2 way check
+        for fid_tuple in not_found:
+            self.assertTrue(fid_tuple[::-1] in fid_tuples)
+
+    def test_calls(self):
+        # test that estimate_variance_covariance is called N times
+        rebal_dates = self.expected_rebal_dates(
+            self.good_args["pivot_returns"].index, self.good_args["rebal_freq"]
+        )
+        _call_count = len(self.good_args["est_freqs"]) * len(rebal_dates)
+
+        with mock.patch(
+            "macrosynergy.pnl.historic_portfolio_volatility.estimate_variance_covariance",
+            side_effect=estimate_variance_covariance,
+        ) as mock_est_var_cov:
+            with mock.patch(
+                "macrosynergy.pnl.historic_portfolio_volatility._downsample_returns",
+                side_effect=_downsample_returns,
+            ) as mock_downsample_returns:
+                with mock.patch(
+                    "macrosynergy.pnl.historic_portfolio_volatility.get_max_lookback",
+                    side_effect=get_max_lookback,
+                ) as mock_get_max_lookback:
+                    _calculate_portfolio_volatility(**self.good_args)
+                    self.assertEqual(mock_est_var_cov.call_count, _call_count)
+                    self.assertEqual(mock_downsample_returns.call_count, _call_count)
+                    self.assertEqual(mock_get_max_lookback.call_count, _call_count)
 
 
 if __name__ == "__main__":
