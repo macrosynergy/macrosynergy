@@ -280,7 +280,7 @@ def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
 
         # validate the return value
         return_value: Any = func(*args, **kwargs)
-        if func_annotations is not inspect._empty:
+        if not isinstance(func_annotations, inspect._empty):
             origin = get_origin(func_annotations)
             if (
                 origin
