@@ -285,7 +285,7 @@ class TestBetaEstimator(unittest.TestCase):
         self.assertTrue("HEDGED_RETURN_NSA" in self.be.hedged_returns.xcat.unique())
         self.assertTrue(sorted(self.be.hedged_returns[self.be.hedged_returns.xcat == "HEDGED_RETURN_NSA"].cid.unique()) == self.cids)
         self.assertTrue(all(~self.be.hedged_returns[self.be.hedged_returns.xcat == "HEDGED_RETURN_NSA"].value.isna()))
-        # TODO: check the hedged returns themselves are as expected
+        # check the hedged returns themselves are as expected
         for idx in range(len(real_reest_dates)-1):
             # Get all cross-sections that should have hedged returns between this estimation date and the next
             relevant_xss = determined_betas[determined_betas.real_date == real_reest_dates[idx]].cid.values
