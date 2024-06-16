@@ -227,7 +227,7 @@ class TestBetaEstimator(unittest.TestCase):
 
     def test_valid_estimate_beta(self):
         determined_betas = self.be.betas.sort_values(by=["cid","xcat","real_date"]).drop_duplicates(subset=["value","xcat","cid"])
-        determined_hedged_returns = self.be.hedged_returns.sort_values(by=["cid","xcat","real_date"]).drop_duplicates(subset=["value","xcat","cid"])
+        determined_hedged_returns = self.be.hedged_returns.sort_values(by=["cid","xcat","real_date"])
         determined_optimal_models = self.be.get_optimal_models()
 
         # Loop through training and test splits, and determine correct training times, betas and hedged returns
@@ -238,7 +238,7 @@ class TestBetaEstimator(unittest.TestCase):
             min_periods = 21 * 6,
         )
 
-        training_dates = []
+        estimation_dates = []
         correct_betas = {"AUDvUSD": [], "CADvUSD": [], "GBPvUSD": [], "USDvUSD": []}
         correct_hedged_returns = {"AUDvUSD": {}, "CADvUSD": {}, "GBPvUSD": {}, "USDvUSD": {}}   
         for idx, (train_idx, test_idx) in enumerate(outer_splitter.split(self.be.X, self.be.y)):
@@ -247,7 +247,7 @@ class TestBetaEstimator(unittest.TestCase):
             X_test, y_test = self.be.X.iloc[test_idx], self.be.y.iloc[test_idx]
             # store the true re-estimation dates
             real_reest_date = X_train.index.get_level_values("real_date").max()
-            training_dates.append(real_reest_date)
+            estimation_dates.append(real_reest_date)
             # store the right betas based on the selected model
             hparams = determined_optimal_models[determined_optimal_models.real_date == real_reest_date].hparams.iloc[0]
             selected_model = LinearRegressionSystem(min_xs_samples=21).set_params(**hparams)
@@ -259,7 +259,7 @@ class TestBetaEstimator(unittest.TestCase):
             oos_cross_sections = X_test.index.get_level_values("cid").unique()
             for cid in oos_cross_sections:
                 if cid in X_train.index.get_level_values("cid"):
-                    if len(X_train.xs(cid)) >= 21:
+                    if len(X_train.xs(cid)) > 21:
                         # Get the beta for this cross-section
                         beta = betas[cid]
                         # Create hedged return series
@@ -274,7 +274,7 @@ class TestBetaEstimator(unittest.TestCase):
         self.assertTrue(all(~self.be.betas[self.be.betas.xcat == "BETA_NSA"].value.isna()))
         # check the estimation dates are as expected 
         determined_reest_dates = sorted(determined_betas.real_date.unique())
-        real_reest_dates = sorted(training_dates)
+        real_reest_dates = sorted(estimation_dates)
         self.assertTrue(np.all(determined_reest_dates == real_reest_dates))
         # check the betas themselves are as expected
         for beta_xs, beta in correct_betas.items():
@@ -286,3 +286,11 @@ class TestBetaEstimator(unittest.TestCase):
         self.assertTrue(sorted(self.be.hedged_returns[self.be.hedged_returns.xcat == "HEDGED_RETURN_NSA"].cid.unique()) == self.cids)
         self.assertTrue(all(~self.be.hedged_returns[self.be.hedged_returns.xcat == "HEDGED_RETURN_NSA"].value.isna()))
         # TODO: check the hedged returns themselves are as expected
+        for idx in range(len(real_reest_dates)-1):
+            # Get all cross-sections that should have hedged returns between this estimation date and the next
+            relevant_xss = determined_betas[determined_betas.real_date == real_reest_dates[idx]].cid.values
+            # Get all calculated hedged returns between re-estimation dates
+            for cid in relevant_xss:
+                subset_det_hedged_rets = determined_hedged_returns[(determined_hedged_returns.cid == cid) & (determined_hedged_returns.real_date > real_reest_dates[idx]) & (determined_hedged_returns.real_date <= real_reest_dates[idx+1])]
+                self.assertTrue(len(correct_hedged_returns[cid+"vUSD"][real_reest_dates[idx]]) == len(subset_det_hedged_rets.value.values))
+                self.assertTrue(np.all(correct_hedged_returns[cid+"vUSD"][real_reest_dates[idx]]==subset_det_hedged_rets.value.values))
