@@ -503,11 +503,11 @@ class ExpandingFrequencyPanelSplit(BasePanelSplit):
         for split_idx, split in enumerate(train_splits):
             train_indices = np.where(Xy.index.get_level_values(1).isin(split))[0]
             test_start: pd.Timestamp = self.unique_dates[self.unique_dates.get_loc(split.max()) + 1]
-            test_end: pd.Timestamp = test_start + test_offset
+            test_end: pd.Timestamp = split[-1] + test_offset
             if split_idx == len(train_splits) - 1:
                 test_dates = sorted(self.unique_dates[self.unique_dates >= test_start])
             else:
-                test_dates = sorted(self.unique_dates[(self.unique_dates >= test_start) & (self.unique_dates < test_end)])
+                test_dates = sorted(self.unique_dates[(self.unique_dates >= test_start) & (self.unique_dates <= test_end)])
             test_indices = np.where(Xy.index.get_level_values(1).isin(test_dates))[0]
 
             yield train_indices, test_indices
@@ -553,7 +553,7 @@ class ExpandingFrequencyPanelSplit(BasePanelSplit):
 
         # (2) Loop through the unique dates in the panel to create the training and test sets
         # We can loop until before the last "test_freq" dates in the panel
-        end_date = self.unique_dates[-1] - self.freq_offsets[self.test_freq]
+        end_date = self.unique_dates[-1]
         unique_dates_train: pd.arrays.DatetimeArray = self.unique_dates[
             (self.unique_dates > date_last_train) & (self.unique_dates <= end_date)
         ].sort_values()
@@ -562,8 +562,8 @@ class ExpandingFrequencyPanelSplit(BasePanelSplit):
 
         while current_date < end_date:
             next_date = current_date + self.freq_offsets[self.expansion_freq]
-            if next_date > end_date:
-                mask = (unique_dates_train >= current_date) & (unique_dates_train <= end_date)
+            if next_date >= end_date:
+                break
             else:
                 mask = (unique_dates_train >= current_date) & (unique_dates_train < next_date)
             split_dates = unique_dates_train[mask]
