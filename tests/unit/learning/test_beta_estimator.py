@@ -239,25 +239,32 @@ class TestBetaEstimator(unittest.TestCase):
         )
 
         training_dates = []
-        correct_betas = {"AUDvUSD": [], "CADvUSD": [], "GBPvUSD": [], "USDvUSD": []}   
+        correct_betas = {"AUDvUSD": [], "CADvUSD": [], "GBPvUSD": [], "USDvUSD": []}
+        correct_hedged_returns = {"AUDvUSD": {}, "CADvUSD": {}, "GBPvUSD": {}, "USDvUSD": {}}   
         for idx, (train_idx, test_idx) in enumerate(outer_splitter.split(self.be.X, self.be.y)):
+            # Get training and test sets
+            X_train, y_train = self.be.X.iloc[train_idx], self.be.y.iloc[train_idx]
+            X_test, y_test = self.be.X.iloc[test_idx], self.be.y.iloc[test_idx]
             # store the true re-estimation dates
-            real_reest_date = self.be.X.iloc[train_idx].index.get_level_values("real_date").max()
+            real_reest_date = X_train.index.get_level_values("real_date").max()
             training_dates.append(real_reest_date)
             # store the right betas based on the selected model
             hparams = determined_optimal_models[determined_optimal_models.real_date == real_reest_date].hparams.iloc[0]
             selected_model = LinearRegressionSystem(min_xs_samples=21).set_params(**hparams)
-            selected_model.fit(pd.DataFrame(self.be.X.iloc[train_idx]), self.be.y.iloc[train_idx])
+            selected_model.fit(pd.DataFrame(X_train), y_train)
             betas = selected_model.coefs_
             for beta_xs, beta in betas.items():
                 correct_betas[beta_xs].append(beta)
             # store the right out-of-sample hedged returns based on the selected model
-            X_test = pd.DataFrame(self.be.X.iloc[test_idx])
-            y_test = self.be.y.iloc[test_idx]
             oos_cross_sections = X_test.index.get_level_values("cid").unique()
             for cid in oos_cross_sections:
-                # TODO: finish later
-                pass
+                if cid in X_train.index.get_level_values("cid"):
+                    if len(X_train.xs(cid)) >= 21:
+                        # Get the beta for this cross-section
+                        beta = betas[cid]
+                        # Create hedged return series
+                        oos_hedged_returns = (y_test.xs(cid) - betas[cid] * X_test.xs(cid)).values
+                        correct_hedged_returns[cid][real_reest_date] = oos_hedged_returns
 
         # check basic beta dataframe properties
         self.assertIsInstance(self.be.betas, pd.DataFrame)
@@ -278,3 +285,4 @@ class TestBetaEstimator(unittest.TestCase):
         self.assertTrue("HEDGED_RETURN_NSA" in self.be.hedged_returns.xcat.unique())
         self.assertTrue(sorted(self.be.hedged_returns[self.be.hedged_returns.xcat == "HEDGED_RETURN_NSA"].cid.unique()) == self.cids)
         self.assertTrue(all(~self.be.hedged_returns[self.be.hedged_returns.xcat == "HEDGED_RETURN_NSA"].value.isna()))
+        # TODO: check the hedged returns themselves are as expected
