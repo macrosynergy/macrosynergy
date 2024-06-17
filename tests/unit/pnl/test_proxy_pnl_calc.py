@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union, Any, Set
 from numbers import Number
+import warnings
 from macrosynergy.pnl.proxy_pnl_calc import (
     _apply_trading_costs,
     _calculate_trading_costs,
@@ -46,7 +47,7 @@ def random_string(length: int = 10) -> str:
     return "".join(random.choices(string.ascii_uppercase, k=length))
 
 
-class TestFunctions(unittest.TestCase):
+class TestHelperFunctions(unittest.TestCase):
     def setUp(self):
         self.cids = ["USD", "EUR", "JPY", "GBP"]
         self.xcats = ["FX", "EQ", "IRS", "CDS"]
@@ -206,6 +207,88 @@ class TestFunctions(unittest.TestCase):
         tdfw.loc[tdfw.index[50], tdfw.columns[0]] = np.nan
         with self.assertWarns(UserWarning):
             _prep_dfs_for_pnl_calcs(df_wide=tdfw, rstring=self.rstring, spos=self.spos)
+
+
+def mock_pnl_excl_costs(
+    df_wide: pd.DataFrame, spos: str, rstring: str, pnl_name: str
+) -> pd.DataFrame:
+
+    pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
+        df_wide=df_wide, spos=spos, rstring=rstring
+    )
+    rebal_dates = sorted(
+        set(rebal_dates + [pd.Timestamp(pivot_pos.last_valid_index())])
+    )
+
+    prices_df: pd.DataFrame = pd.DataFrame(
+        data=1.0,
+        index=pivot_returns.index,
+        columns=pivot_returns.columns,
+    )
+    for dt1, dt2 in zip(rebal_dates[:-1], rebal_dates[1:]):
+        dt1x = dt1 + pd.offsets.BDay(1)
+        prices_df.loc[dt1x:dt2] = (1 + pivot_returns.loc[dt1x:dt2] / 100).cumprod()
+
+    pnl_df = (pivot_returns / 100) * pivot_pos.shift(1) * prices_df.shift(1)
+    pnl_df = pnl_df.loc[pnl_df.abs().sum(axis=1) > 0]
+    pnl_df.columns = [f"{col}_{spos}_{pnl_name}" for col in pnl_df.columns]
+    return pnl_df
+
+
+class TestCalculations(unittest.TestCase):
+    def setUp(self):
+        self.cids = ["USD", "EUR", "JPY", "GBP"]
+        self.xcats = ["FX", "EQ", "IRS", "CDS"]
+        _tickers = [f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats]
+        self.spos = "SNAME_POS"
+        self.rstring = "RETURNS"
+        self.tickers: List = [f"{tk}_{self.spos}" for tk in _tickers]
+        self.tickers += [f"{tk}{self.rstring}" for tk in _tickers]
+
+        self.rd_idx = pd.Series(
+            pd.bdate_range(start="2020-01-01", end="2020-12-31"), name="real_date"
+        )
+        self.df_wide = pd.DataFrame(
+            data=np.random.randn(len(self.rd_idx), len(self.tickers)),
+            index=self.rd_idx,
+            columns=self.tickers,
+        )
+
+        # self.qdf = ticker_df_to_qdf(df=self.df_wide)
+
+    def test_pnl_excl_costs(self):
+        def _test_eq(argsx: Dict[str, Any]):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                self.assertTrue(
+                    mock_pnl_excl_costs(**argsx).equals(_pnl_excl_costs(**argsx))
+                )
+
+        # test ideal case
+        argsx = {
+            "df_wide": self.df_wide.copy(),
+            "spos": self.spos,
+            "rstring": self.rstring,
+            "pnl_name": "pnl",
+        }
+        _test_eq(argsx)
+
+        # add nans in random places and check if it raises an error
+        for _ in range(10):
+            dfw = self.df_wide.copy()
+            date_factor = 0.1
+            col_factor = 0.1
+            tdates = np.random.choice(
+                dfw.index, int(date_factor * len(dfw.index)), replace=False
+            )
+            tcols = np.random.choice(
+                dfw.columns, int(col_factor * len(dfw.columns)), replace=False
+            )
+            for dt in tdates:
+                for col in tcols:
+                    dfw.loc[dt, col] = np.nan
+            argsx["df_wide"] = dfw
+            _test_eq(argsx)
 
 
 if __name__ == "__main__":
