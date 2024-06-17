@@ -578,7 +578,236 @@ class TestBetaEstimator(unittest.TestCase):
                     use_variance_correction=False,
                     n_jobs_outer=1,
                 ) 
-        # Should fail if the 
+        # Should fail if the values of the hyperparameter grid are neither dictionaries
+        # nor lists of dictionaries
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid={
+                        "OLS": 1,
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid={
+                        "OLS": [1],
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        # Should fail if, when a dictionary of hyperparameters is provided, not all keys
+        # in the inner dictionary are strings
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid={
+                        "OLS": {1: [True, False]},
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid={
+                        "OLS": {"fit_intercept": [True, False], 1: [True, False]},
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        # Should fail if, when a dictionary of hyperparameters is provided, not all values
+        # in the inner dictionary are lists
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid={
+                        "OLS": {"fit_intercept": 1},
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid={
+                        "OLS": {"fit_intercept": [True, False], "positive": 1},
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        # Should fail if, when a list of dictionaries of hyperparameters is provided, not all
+        # lists contain dictionaries
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid={
+                        "OLS": [1],
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid={
+                        "OLS": [{"fit_intercept": [True, False]}, 2],
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        # Should fail if, when a list of dictionaries of hyperparameters is provided, not all
+        # dictionaries contain strings as keys
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid={
+                        "OLS": [{1: [True, False]}],
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid={
+                        "OLS": [{"fit_intercept": [True, False], 1: [True, False]}],
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        # Should fail if, when a list of dictionaries of hyperparameters is provided, not all
+        # dictionaries contain lists as values
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid={
+                        "OLS": [{"fit_intercept": 1}],
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid={
+                        "OLS": [{"fit_intercept": [True, False], "positive": 1}],
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        
+        
 
 
         
