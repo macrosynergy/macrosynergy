@@ -960,8 +960,320 @@ class TestBetaEstimator(unittest.TestCase):
                 use_variance_correction=False,
                 n_jobs_outer=1,
             )
-            
+
         """ est_freq """
+        # Should fail if est_freq is not a string
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq=1,
+                use_variance_correction=False,
+                n_jobs_outer=1,
+            )
+        # Should fail if est_freq is not a valid frequency string
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="not a valid frequency string",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+            )
+
+        """ use_variance_correction """
+        # Should fail if use_variance_correction is not a boolean
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=1,
+                n_jobs_outer=1,
+            )
+
+        """ initial_n_splits """
+        # Should fail if, when specified, initial_n_splits is not an integer
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+                initial_n_splits="not an integer",
+            )
+        # Should fail if, when specified, initial_n_splits is less than 2
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+                initial_n_splits=1,
+            )
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+                initial_n_splits=-3,
+            )
+        
+        """ threshold_n_periods """
+        # Should fail if, when specified, threshold_n_periods is not an integer
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+                initial_n_splits = 5,
+                threshold_n_periods="not an integer",
+            )
+        # Should fail if, when specified, threshold_n_periods is less than 1
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+                initial_n_splits=5,
+                threshold_n_periods=0,
+            )
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+                initial_n_splits=5,
+                threshold_n_periods=-5,
+            )
+        
+        """ hparam_type """
+        # Should fail if hparam_type is not a string
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+                hparam_type=1,
+            )
+        # Should fail if hparam_type is not a valid string
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+                hparam_type="not a valid string",
+            )
+        # Should raise a NotImplementedError if hparam_type is "bayes"
+        with self.assertRaises(NotImplementedError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+                hparam_type="bayes",
+            )
+
+        """ n_iter """
+        # Should fail if n_iter is not an integer
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+                hparam_type="prior",
+                n_iter="not an integer",
+            )
+        # Should fail if n_iter is less than 1
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+                hparam_type="prior",
+                n_iter=0,
+            )
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+                hparam_type="prior",
+                n_iter=-5,
+            )
+
+
         
         
 
