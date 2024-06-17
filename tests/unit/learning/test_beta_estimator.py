@@ -7,8 +7,10 @@ from macrosynergy.management.simulate import make_qdf
 from macrosynergy.learning import (
     BetaEstimator,
     ExpandingKFoldPanelSplit,
+    RollingKFoldPanelSplit,
     neg_mean_abs_corr,
     LinearRegressionSystem,
+    RidgeRegressionSystem,
     ExpandingFrequencyPanelSplit
 )
 from macrosynergy.learning.beta_estimator import BetaEstimator
@@ -18,6 +20,7 @@ import unittest
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import VotingRegressor
+from sklearn.metrics import r2_score, make_scorer
 
 from parameterized import parameterized
 
@@ -74,6 +77,152 @@ class TestBetaEstimator(unittest.TestCase):
             use_variance_correction=False,
             n_jobs_outer=1,
         )
+
+        # Test that it works with the RollingKFoldPanelSplit
+        self.be.estimate_beta(
+            beta_xcat="BETA_ROLL_NSA",
+            hedged_return_xcat="HEDGED_RETURN_ROLL_NSA",
+            inner_splitter=RollingKFoldPanelSplit(n_splits=3),
+            scorer=neg_mean_abs_corr,
+            models={
+                "OLS": LinearRegressionSystem(min_xs_samples=21),
+            },
+            hparam_grid={
+                "OLS": {"fit_intercept": [True, False]},
+            },
+            min_cids = 1,
+            min_periods = 21 * 6,
+            est_freq="M",
+            use_variance_correction=False,
+            n_jobs_outer=1,
+        )
+
+        # Test that a different scorer works
+
+        self.be.estimate_beta(
+            beta_xcat="BETA_R2_NSA",
+            hedged_return_xcat="HEDGED_RETURN_R2_NSA",
+            inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+            scorer=make_scorer(r2_score, greater_is_better=True),
+            models={
+                "OLS": LinearRegressionSystem(min_xs_samples=21),
+            },
+            hparam_grid={
+                "OLS": {"fit_intercept": [True, False]},
+            },
+            min_cids = 1,
+            min_periods = 21 * 6,
+            est_freq="M",
+            use_variance_correction=False,
+            n_jobs_outer=1,
+        )
+
+        # Test that a different model works
+
+        self.be.estimate_beta(
+            beta_xcat="BETA_RIDGE_NSA",
+            hedged_return_xcat="HEDGED_RETURN_RIDGE_NSA",
+            inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+            scorer=neg_mean_abs_corr,
+            models={
+                "Ridge": RidgeRegressionSystem(min_xs_samples=21),
+            },
+            hparam_grid={
+                "Ridge": {"fit_intercept": [True, False], "alpha": [0.1, 1, 10]},
+            },
+            min_cids = 1,
+            min_periods = 21 * 6,
+            est_freq="M",
+            use_variance_correction=False,
+            n_jobs_outer=1,
+        )
+
+        # Test that using a VotingRegressor works
+
+        self.be.estimate_beta(
+            beta_xcat="BETA_VOTE_NSA",
+            hedged_return_xcat="HEDGED_RETURN_VOTE_NSA",
+            inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+            scorer=neg_mean_abs_corr,
+            models={
+                "Vote": VotingRegressor(
+                    [
+                        ("OLS1", LinearRegressionSystem(min_xs_samples=21, data_freq="unadjusted")),
+                        ("OLS2", LinearRegressionSystem(min_xs_samples=21, data_freq="W")),
+                    ],
+                ),
+            },
+            hparam_grid={
+                "Vote": {"OLS1__fit_intercept": [True, False], "OLS2__fit_intercept": [True, False]},
+            },
+            min_cids = 1,
+            min_periods = 21 * 6,
+            est_freq="M",
+            use_variance_correction=False,
+            n_jobs_outer=1,
+        )
+
+        # Test use_variance_correction works
+        self.be.estimate_beta(
+            beta_xcat="BETA_VC_NSA",
+            hedged_return_xcat="HEDGED_RETURN_VC_NSA",
+            inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+            scorer=neg_mean_abs_corr,
+            models={
+                "Ridge": RidgeRegressionSystem(min_xs_samples=21),
+            },
+            hparam_grid={
+                "Ridge": {"fit_intercept": [True, False], "alpha": [0.1, 1, 10]},
+            },
+            min_cids = 1,
+            min_periods = 21 * 6,
+            est_freq="M",
+            use_variance_correction=True,
+            n_jobs_outer=1,
+        )
+
+        # Test different estimation frequency works
+        self.be.estimate_beta(
+            beta_xcat="BETA_Q_NSA",
+            hedged_return_xcat="HEDGED_RETURN_Q_NSA",
+            inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+            scorer=neg_mean_abs_corr,
+            models={
+                "OLS": LinearRegressionSystem(min_xs_samples=21),
+            },
+            hparam_grid={
+                "OLS": {"fit_intercept": [True, False]},
+            },
+            min_cids = 1,
+            min_periods = 21 * 6,
+            est_freq="Q",
+            use_variance_correction=False,
+            n_jobs_outer=1,
+        )
+
+        # Test that it works with the ExpandingFrequencyPanelSplit
+        #self.be.estimate_beta(
+        #    beta_xcat="BETA_CHG_NSA",
+        #    hedged_return_xcat="HEDGED_RETURN_CHG_NSA",
+        #    inner_splitter=ExpandingFrequencyPanelSplit(
+        #        expansion_freq="Q",
+        #        test_freq="M",
+        #        min_cids = 1,
+        #        min_periods = 21 * 3,
+        #    ),
+        #    scorer=neg_mean_abs_corr,
+        #    models={
+        #        "OLS": LinearRegressionSystem(min_xs_samples=21),
+        #    },
+        #    hparam_grid={
+        #        "OLS": {"fit_intercept": [True, False]},
+        #    },
+        #    min_cids = 1,
+        #    min_periods = 21 * 6,
+        #    est_freq="M",
+        #    use_variance_correction=False,
+        #    n_jobs_outer=1,
+        #)
 
     def test_valid_init(self):
         # Check class attributes are correctly initialised
