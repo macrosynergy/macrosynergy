@@ -15,6 +15,10 @@ from macrosynergy.learning.beta_estimator import BetaEstimator
 
 import unittest
 
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import VotingRegressor
+
 from parameterized import parameterized
 
 class TestBetaEstimator(unittest.TestCase):
@@ -223,6 +227,360 @@ class TestBetaEstimator(unittest.TestCase):
                 cids=self.cids,
                 benchmark_return="USD_CONTRACT_XR",
             )
+        
+    def test_types_estimate_beta(self):
+        """ beta_xcat """
+        # Should fail if beta_xcat is not a string
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                beta_xcat = 1,
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+            )
+        # Should fail if beta_xcat is already in the class instance
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+            )
+        """ hedged_return_xcat """
+        # Should fail if hedged_return_xcat is not a string
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat=1,
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+            )
+        # Should fail if hedged_return_xcat is already in the class instance
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+            )
+        """ inner_splitter """
+        # Should fail if inner_splitter is not a splitter
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=1,
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+            )
+        # Should fail if inner_splitter doesn't subclass BasePanelSplit
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=TimeSeriesSplit(n_splits=3),
+                scorer=neg_mean_abs_corr,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+            )
+        """ scorer """
+        # Should fail if scorer is not a callable
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                beta_xcat = "BETA_NSA2",
+                hedged_return_xcat="HEDGED_RETURN_NSA2",
+                inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                scorer=1,
+                models={
+                    "OLS": LinearRegressionSystem(min_xs_samples=21),
+                },
+                hparam_grid={
+                    "OLS": {"fit_intercept": [True, False]},
+                },
+                min_cids = 1,
+                min_periods = 21 * 6,
+                est_freq="M",
+                use_variance_correction=False,
+                n_jobs_outer=1,
+            )
+        """ models """
+        # Should fail if models is not a dictionary
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models=1,
+                    hparam_grid={
+                        "OLS": {"fit_intercept": [True, False]},
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models=[LinearRegressionSystem(min_xs_samples=63)],
+                    hparam_grid={
+                        "OLS": {"fit_intercept": [True, False]},
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        # Should fail if models is an empty dictionary
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={},
+                    hparam_grid={
+                        "OLS": {"fit_intercept": [True, False]},
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        # Should fail if the keys in the models dictionary are not strings
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={1: LinearRegressionSystem(min_xs_samples=21)},
+                    hparam_grid={
+                        "OLS": {"fit_intercept": [True, False]},
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        # Should fail if the values in the models dictionary are general scikit-learn 
+        # regressors and aren't systems of linear models
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={"OLS": LinearRegression()},
+                    hparam_grid={
+                        "OLS": {"fit_intercept": [True, False]},
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        # should fail if the values in the models dictionary are not models at all
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={"OLS": 1},
+                    hparam_grid={
+                        "OLS": {"fit_intercept": [True, False]},
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        # should fail if the values in the models dictionary are VotingRegressors but 
+        # the regressors are not systems of linear models
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={"OLS": VotingRegressor(
+                        estimators=[("OLS1", LinearRegression()), ("OLS2", LinearRegression())]
+                    )},
+                    hparam_grid={
+                        "OLS": {"fit_intercept": [True, False]},
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={"OLS": VotingRegressor(
+                        estimators=[("OLS1", LinearRegressionSystem(min_xs_samples=21)), ("OLS2", LinearRegression())]
+                    )},
+                    hparam_grid={
+                        "OLS": {"fit_intercept": [True, False]},
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={"OLS": VotingRegressor(
+                        estimators=[("OLS1", LinearRegression()), ("OLS2", LinearRegressionSystem(min_xs_samples=21))]
+                    )},
+                    hparam_grid={
+                        "OLS": {"fit_intercept": [True, False]},
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        """ hparam_grid """
+        # Should fail if hparam_grid is not a dictionary
+        with self.assertRaises(TypeError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid=1,
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        # Should fail if hparam_grid is an empty dictionary
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid={},
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                )
+        # Should fail if the keys in the hparam_grid dictionary differ from the keys in the models dictionary
+        with self.assertRaises(ValueError):
+            self.be.estimate_beta(
+                    beta_xcat = "BETA_NSA2",
+                    hedged_return_xcat="HEDGED_RETURN_NSA2",
+                    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+                    scorer=neg_mean_abs_corr,
+                    models={
+                        "OLS": LinearRegressionSystem(min_xs_samples=21),
+                    },
+                    hparam_grid={
+                        "OLS2": {"fit_intercept": [True, False]},
+                    },
+                    min_cids = 1,
+                    min_periods = 21 * 6,
+                    est_freq="M",
+                    use_variance_correction=False,
+                    n_jobs_outer=1,
+                ) 
+        # Should fail if the 
+
+
         
 
     def test_valid_estimate_beta(self):
