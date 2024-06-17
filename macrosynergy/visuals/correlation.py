@@ -34,6 +34,8 @@ def view_correlation(
     size: Tuple[float] = (14, 8),
     max_color: float = None,
     show: bool = True,
+    xcat_labels: Optional[List[str]] = None,
+    xcat_secondary_labels: Optional[List[str]] = None,
     **kwargs: Any,
 ):
     """
@@ -82,6 +84,8 @@ def view_correlation(
         coefficients for color scale. Default is none. If a value is given it applies
         symmetrically to positive and negative values.
     :param <bool> show: if True the figure will be displayed. Default is True.
+    :param xcat_labels: optional list of labels for xcats.
+    :param xcat_secondary_labels: optional list of labels for xcats_secondary.
     :param **kwargs: Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
     N.B:. The function displays the heatmap of a correlation matrix across categories or
@@ -109,9 +113,14 @@ def view_correlation(
         "specified categories: {xcats}. Please check the data."
     )
 
+    xcat_labels = _parse_xcat_labels(xcats, xcat_labels)
+
     # If more than one set of xcats or cids have been supplied.
     if xcats_secondary or cids_secondary:
         if xcats_secondary:
+            xcat_secondary_labels = _parse_xcat_labels(
+                xcats_secondary, xcat_secondary_labels
+            )
             xcats_secondary = (
                 xcats_secondary
                 if isinstance(xcats_secondary, list)
@@ -153,8 +162,8 @@ def view_correlation(
                     f"from {s_date} to "
                     f"{e_date}"
                 )
-            xlabel = f"{xcats[0]} cross-sections"
-            ylabel = f"{xcats_secondary[0]} cross-sections"
+            xlabel = f"{xcat_labels[xcats[0]]} cross-sections"
+            ylabel = f"{xcat_secondary_labels[xcats_secondary[0]]} cross-sections"
 
         # If more than one xcat in at least one set, we will compute cross category
         # correlation.
@@ -165,7 +174,8 @@ def view_correlation(
             df_w2: pd.DataFrame = _transform_df_for_cross_category_corr(
                 df=df2, xcats=xcats_secondary, val=val, freq=freq, lags=lags_secondary
             )
-
+            df_w1 = df_w1.rename(columns=xcat_labels)
+            df_w2 = df_w2.rename(columns=xcat_secondary_labels)
             if title is None:
                 title = f"Cross-category correlation from {s_date} to " f"{e_date}"
         corr = (
@@ -208,7 +218,8 @@ def view_correlation(
 
             if title is None:
                 title = f"Cross-category correlation from {s_date} to {e_date}"
-
+                
+        df_w = df_w.rename(columns=xcat_labels)
         corr = df_w.corr(method="pearson")
 
         if cluster:
@@ -242,6 +253,25 @@ def view_correlation(
 
     if show:
         plt.show()
+
+
+def _parse_xcat_labels(xcats, xcat_labels):
+    labels_dict = {}
+    if xcat_labels is not None:
+        assert len(xcat_labels) == len(xcats), (
+            "The number of labels provided for the extended categories must match the "
+            "number of extended categories."
+        )
+        if isinstance(xcat_labels, list):
+            for xcat, xcat_label in zip(xcats, xcat_labels):
+                labels_dict[xcat] = xcat_label
+        elif isinstance(xcat_labels, dict):
+            labels_dict = xcat_labels
+        else:
+            raise ValueError("The xcats parameter must be a list or a dictionary.")
+    else:
+        labels_dict = {xcat: xcat for xcat in xcats}
+    return labels_dict
 
 
 def _transform_df_for_cross_sectional_corr(
@@ -450,8 +480,8 @@ if __name__ == "__main__":
     # Clustered correlation matrices. Test hierarchical clustering.
     view_correlation(
         df=dfd,
-        xcats=["XR"],
-        xcats_secondary=None,
+        xcats=["XR", "CRY"],
+        # xcats_secondary=["CRY", "XR"],
         cids=cids,
         cids_secondary=None,
         start=start,
@@ -466,4 +496,6 @@ if __name__ == "__main__":
         lags_secondary=None,
         annot=True,
         fmt=".2f",
+        xcat_labels=["Returns", "Carry"],
+        # xcat_secondary_labels={"XR": "Excess returns", "CRY": "Carry"},
     )

@@ -2,6 +2,7 @@
 Functions used to visualize correlations across categories or cross-sections of
 panels.
 """
+
 import pandas as pd
 import numpy as np
 from typing import List, Union, Tuple, Optional, Any
@@ -27,6 +28,8 @@ def correl_matrix(
     size: Tuple[float] = (14, 8),
     max_color: float = None,
     show: bool = True,
+    xcat_labels: Optional[List[str]] = None,
+    xcat_secondary_labels: Optional[List[str]] = None,
     **kwargs: Any,
 ):
     """
@@ -75,6 +78,8 @@ def correl_matrix(
         coefficients for color scale. Default is none. If a value is given it applies
         symmetrically to positive and negative values.
     :param <bool> show: if True the figure will be displayed. Default is True.
+    :param xcat_labels: optional list of labels for xcats.
+    :param xcat_secondary_labels: optional list of labels for xcats_secondary.
     :param **kwargs: Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
     N.B:. The function displays the heatmap of a correlation matrix across categories or
@@ -98,6 +103,8 @@ def correl_matrix(
         size=size,
         max_color=max_color,
         show=show,
+        xcat_labels=xcat_labels,
+        xcat_secondary_labels=xcat_secondary_labels,
         **kwargs,
     )
 
@@ -150,7 +157,7 @@ if __name__ == "__main__":
     # Clustered correlation matrices. Test hierarchical clustering.
     correl_matrix(
         df=dfd,
-        xcats=["XR"],
+        xcats=["XR", "CRY"],
         xcats_secondary=None,
         cids=cids,
         cids_secondary=None,
