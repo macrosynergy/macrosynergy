@@ -5,7 +5,7 @@ panels.
 
 import pandas as pd
 import numpy as np
-from typing import List, Union, Tuple, Optional, Any
+from typing import Dict, List, Union, Tuple, Optional, Any
 from macrosynergy.management.simulate import make_qdf
 
 import macrosynergy.visuals as msv
@@ -28,8 +28,8 @@ def correl_matrix(
     size: Tuple[float] = (14, 8),
     max_color: float = None,
     show: bool = True,
-    xcat_labels: Optional[List[str]] = None,
-    xcat_secondary_labels: Optional[List[str]] = None,
+    xcat_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    xcat_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     **kwargs: Any,
 ):
     """
@@ -78,8 +78,10 @@ def correl_matrix(
         coefficients for color scale. Default is none. If a value is given it applies
         symmetrically to positive and negative values.
     :param <bool> show: if True the figure will be displayed. Default is True.
-    :param xcat_labels: optional list of labels for xcats.
-    :param xcat_secondary_labels: optional list of labels for xcats_secondary.
+    :param xcat_labels: optional list or dictionary of labels for xcats.
+        A list should be in the same order as xcats, a dictionary should map
+        from each xcat to its label.
+    :param xcat_secondary_labels: optional list or dictionary of labels for xcats_secondary.
     :param **kwargs: Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
     N.B:. The function displays the heatmap of a correlation matrix across categories or

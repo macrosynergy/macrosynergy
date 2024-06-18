@@ -34,8 +34,8 @@ def view_correlation(
     size: Tuple[float] = (14, 8),
     max_color: float = None,
     show: bool = True,
-    xcat_labels: Optional[List[str]] = None,
-    xcat_secondary_labels: Optional[List[str]] = None,
+    xcat_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    xcat_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     **kwargs: Any,
 ):
     """
@@ -84,8 +84,10 @@ def view_correlation(
         coefficients for color scale. Default is none. If a value is given it applies
         symmetrically to positive and negative values.
     :param <bool> show: if True the figure will be displayed. Default is True.
-    :param xcat_labels: optional list of labels for xcats.
-    :param xcat_secondary_labels: optional list of labels for xcats_secondary.
+    :param xcat_labels: optional list or dictionary of labels for xcats.
+        A list should be in the same order as xcats, a dictionary should map
+        from each xcat to its label.
+    :param xcat_secondary_labels: optional list or dictionary of labels for xcats_secondary.
     :param **kwargs: Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
     N.B:. The function displays the heatmap of a correlation matrix across categories or
@@ -128,6 +130,7 @@ def view_correlation(
             )
         else:
             xcats_secondary = xcats
+            xcat_secondary_labels = xcat_labels
 
         if not cids_secondary:
             cids_secondary = cids
@@ -218,7 +221,7 @@ def view_correlation(
 
             if title is None:
                 title = f"Cross-category correlation from {s_date} to {e_date}"
-                
+
         df_w = df_w.rename(columns=xcat_labels)
         corr = df_w.corr(method="pearson")
 
@@ -255,7 +258,14 @@ def view_correlation(
         plt.show()
 
 
-def _parse_xcat_labels(xcats, xcat_labels):
+def _parse_xcat_labels(xcats: List[str], xcat_labels: Union[List[str], Dict[str, str]]):
+    """
+    Parse xcat labels for correlation plot.
+
+    :param xcats: extended categories to be correlated.
+    :param xcat_labels: optional list or dictionary of
+        labels for the extended categories.
+    """
     labels_dict = {}
     if xcat_labels is not None:
         assert len(xcat_labels) == len(xcats), (
