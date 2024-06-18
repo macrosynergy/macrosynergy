@@ -9,6 +9,7 @@ from unittest import mock
 import warnings
 from macrosynergy.pnl.historic_portfolio_volatility import (
     historic_portfolio_vol,
+    _hist_vol,
     _calculate_portfolio_volatility,
     flat_weights_arr,
     _downsample_returns,
@@ -20,20 +21,25 @@ from macrosynergy.pnl.historic_portfolio_volatility import (
     _check_missing_data,
     _check_frequency,
     _check_input_arguments,
+    RETURN_SERIES_XCAT,
 )
 from macrosynergy.management.utils import (
     qdf_to_ticker_df,
+    get_sops,
     ticker_df_to_qdf,
     _map_to_business_day_frequency,
 )
 from macrosynergy.management.types import QuantamentalDataFrame, NoneType
-from macrosynergy.management.simulate import make_test_df
+from macrosynergy.management.simulate import make_test_df, simulate_returns_and_signals
 
 
 class TestWeightedCovariance(unittest.TestCase):
     # testing `weighted_covariance` function
-    def setUp(self):
-        self.good_args: Dict[str, Any] = {
+    def setUp(self): ...
+
+    @property
+    def good_args(self):
+        return {
             "half_life": 10,
             "lback_periods": 100,
             "x": np.arange(100) / 100,
@@ -207,13 +213,13 @@ class TestArgChecks(unittest.TestCase):
                     [(bad_args[argn], argn, argt) for argn, argt in arguments]
                 )
 
-            if isinstance(argt, (list, dict, str)):
+            if argt in [list, dict, str]:
                 bad_args = good_args.copy()
-                if isinstance(argt, list):
+                if argt == list:
                     bad_args[argn] = []
-                elif isinstance(argt, dict):
+                elif argt == dict:
                     bad_args[argn] = {}
-                elif isinstance(argt, str):
+                elif argt == str:
                     bad_args[argn] = ""
                 with self.assertRaises(ValueError):
                     _check_input_arguments(
@@ -346,44 +352,258 @@ class TestMisc(unittest.TestCase):
             piv_df = _gen_df(idx, cols)
             res = _downsample_returns(piv_df, freq)
             res_mock = _downsample_returns_mock(piv_df, freq)
-            # sort the indexes and and see if they are equal
             self.assertTrue(res.equals(res_mock))
 
 
 class TestCalculatePortfolioVolatility(unittest.TestCase):
     def setUp(self):
-        cids = ["USD", "EUR", "GBP", "JPY", "CHF"]
-        start = "2020-01-01"
-        end = "2021-01-01"
-        piv_ret = qdf_to_ticker_df(
-            make_test_df(
-                cids=cids,
-                xcats=["XR"],
-                start=start,
-                end=end,
-            )
+        mkdf_args = dict(
+            cids=["USD", "EUR", "GBP", "JPY", "CHF"],
+            xcats=["EQ"],
+            start="2020-01-01",
+            end="2021-01-01",
         )
-        piv_sig = qdf_to_ticker_df(
-            make_test_df(
-                cids=cids,
-                xcats=["SIG"],
-                start=start,
-                end=end,
-            )
-        )
+        _dft = make_test_df(**mkdf_args)
+        _dft["value"] = 1
+        _dft = qdf_to_ticker_df(_dft)
         self.good_args: Dict[str, Any] = {
-            "piv_ret": piv_ret,
-            "piv_sig": piv_sig,
+            "pivot_returns": _dft,
+            "pivot_signals": _dft,
             "weights_func": flat_weights_arr,
-            "lback_periods": 100,
-            "half_life": 10,
             "rebal_freq": "M",
             "est_freqs": ["D", "W"],
             "est_weights": [0.5, 0.5],
+            "half_life": [10, 2],
+            "lback_periods": [15, 5],
             "nan_tolerance": 0.1,
             "remove_zeros": True,
             "portfolio_return_name": "PORTFOLIO",
         }
+
+    @staticmethod
+    def expected_rebal_dates(dt_range: pd.DatetimeIndex, freq: str) -> pd.Series:
+        return get_sops(dates=dt_range, freq=freq)
+
+    def tearDown(self): ...
+
+    def test_basic(self):
+        # Test good args
+        res = _calculate_portfolio_volatility(**self.good_args)
+        # res must be a tuple of 2 elements
+        self.assertTrue(isinstance(res, tuple))
+        self.assertEqual(len(res), 2)
+        # both elements must be pandas dataframes
+        self.assertTrue(isinstance(res[0], pd.DataFrame))
+        # the first element must have 1 column and real_date as index
+        expc_rebal_dates = self.expected_rebal_dates(
+            res[0].index, self.good_args["rebal_freq"]
+        )
+        self.assertTrue(res[0].index.tolist() == expc_rebal_dates.tolist())
+        self.assertTrue(res[0].shape[1] == 1)
+        # column name must be the same as the portfolio_return_name
+        self.assertTrue(res[0].columns[0] == self.good_args["portfolio_return_name"])
+
+        # the second element must be a pandas dataframe
+        # must be a df with 'real_date', 'fid1', 'fid2', 'value' as columns
+        self.assertTrue(isinstance(res[1], pd.DataFrame))
+        self.assertTrue(res[1].shape[1] == 4)
+        self.assertTrue(set(res[1].columns) == {"real_date", "fid1", "fid2", "value"})
+        self.assertTrue(set(res[1]["real_date"]) == set(expc_rebal_dates))
+
+        fid_tuples: List[Tuple[str, str]] = (
+            res[1][["fid1", "fid2"]].apply(tuple, axis=1).tolist()
+        )
+        found_finds = self.good_args["pivot_signals"].columns.tolist()
+
+        all_possible_fid_tuples = [
+            (found_finds[i], found_finds[j])
+            for i in range(len(found_finds))
+            for j in range(len(found_finds))
+        ]
+
+        not_found = set(all_possible_fid_tuples) - set(fid_tuples)
+        # now check that each tuple's inverted tuple is also in the fid_tuples - 2 way check
+        for fid_tuple in not_found:
+            self.assertTrue(fid_tuple[::-1] in fid_tuples)
+
+    def test_calls(self):
+        # test that estimate_variance_covariance is called N times
+        rebal_dates = self.expected_rebal_dates(
+            self.good_args["pivot_returns"].index, self.good_args["rebal_freq"]
+        )
+        _call_count = len(self.good_args["est_freqs"]) * len(rebal_dates)
+
+        with mock.patch(
+            "macrosynergy.pnl.historic_portfolio_volatility.estimate_variance_covariance",
+            side_effect=estimate_variance_covariance,
+        ) as mock_est_var_cov:
+            with mock.patch(
+                "macrosynergy.pnl.historic_portfolio_volatility._downsample_returns",
+                side_effect=_downsample_returns,
+            ) as mock_downsample_returns:
+                with mock.patch(
+                    "macrosynergy.pnl.historic_portfolio_volatility.get_max_lookback",
+                    side_effect=get_max_lookback,
+                ) as mock_get_max_lookback:
+                    _calculate_portfolio_volatility(**self.good_args)
+                    self.assertEqual(mock_est_var_cov.call_count, _call_count)
+                    self.assertEqual(mock_downsample_returns.call_count, _call_count)
+                    self.assertEqual(mock_get_max_lookback.call_count, _call_count)
+
+
+class TestHistVolFunc(unittest.TestCase):
+    def setUp(self):
+        mkdf_args = dict(
+            cids=["USD", "EUR", "GBP", "JPY", "CHF"],
+            xcats=["EQ"],
+            start="2020-01-01",
+            end="2021-01-01",
+        )
+        _dft = make_test_df(**mkdf_args)
+        _dft["value"] = 1
+        _dft = qdf_to_ticker_df(_dft)
+        self.portfolio_return_name = f"SNAME{RETURN_SERIES_XCAT}"
+        self._dft = _dft
+
+    @property
+    def good_args(self):
+        return {
+            "pivot_returns": self._dft,
+            "pivot_signals": self._dft,
+            "sname": "SNAME",
+            "rebal_freq": "M",
+            "lback_meth": "ma",
+            "lback_periods": [15, 5],
+            "half_life": [10, 2],
+            "est_freqs": ["D", "W"],
+            "est_weights": [0.5, 0.5],
+            "nan_tolerance": 0.1,
+            "remove_zeros": True,
+            "return_variance_covariance": True,
+        }
+
+    def tearDown(self): ...
+
+    def test_basic(self):
+        # Test good args
+        res = _hist_vol(**self.good_args)
+        self.assertTrue(isinstance(res, list))
+        self.assertEqual(len(res), 2)
+        self.assertTrue(isinstance(res[0], pd.DataFrame))
+        self.assertTrue(isinstance(res[1], pd.DataFrame))
+
+        # check that the first dataframe is indexed with real_date
+        self.assertTrue(isinstance(res[0].index, pd.DatetimeIndex))
+        self.assertTrue(res[0].index.name == "real_date")
+        # check that the first dataframe has 1 column called portfolio_return_name
+        self.assertTrue(res[0].columns.tolist() == [self.portfolio_return_name])
+
+        # test when called with return_variance_covariance=False
+        res = _hist_vol(**{**self.good_args, "return_variance_covariance": False})
+        self.assertTrue(isinstance(res, list))
+        self.assertEqual(len(res), 1)
+        self.assertTrue(isinstance(res[0], pd.DataFrame))
+        # same checks on res0
+        self.assertTrue(isinstance(res[0].index, pd.DatetimeIndex))
+        self.assertTrue(res[0].index.name == "real_date")
+        self.assertTrue(res[0].columns.tolist() == [self.portfolio_return_name])
+
+    def test_fails(self):
+        for lbmeth in ["ma", "xma"]:
+            _hist_vol(**{**self.good_args, "lback_meth": lbmeth})
+        for lbmeth in ["abc", "xyz"]:
+            with self.assertRaises(NotImplementedError):
+                _hist_vol(**{**self.good_args, "lback_meth": lbmeth})
+
+    def test_nan_warning(self):
+        def _mock_calc_vol(**kwargs):
+            return [
+                pd.DataFrame(
+                    index=self._dft.index,
+                    data=np.nan,
+                    columns=[self.portfolio_return_name],
+                ),
+                None,
+            ]
+
+        with mock.patch(
+            "macrosynergy.pnl.historic_portfolio_volatility._calculate_portfolio_volatility",
+            side_effect=_mock_calc_vol,
+        ) as mock_calc_vol:
+            with mock.patch(
+                "logging.Logger.warning",
+                side_effect=mock.MagicMock(),
+            ) as mock_warning:
+                _hist_vol(**self.good_args)
+                self.assertTrue(mock_warning.called)
+
+
+class TestHistVolEntrypoint(unittest.TestCase):
+    def test_main(self):
+        cids: List[str] = ["EUR", "GBP", "AUD", "CAD"]
+        xcats: List[str] = ["EQ"]
+        ctypes = xcats.copy()
+        start: str = "2000-01-01"
+        xr_tickers = [f"{cid}_{xcat}XR" for cid in cids for xcat in xcats]
+        cs_tickers = [f"{cid}_{xcat}_CSIG_STRAT" for cid in cids for xcat in xcats]
+        fids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
+        df = simulate_returns_and_signals(
+            cids=cids,
+            xcat=xcats[0],
+            return_suffix="XR",
+            signal_suffix="CSIG_STRAT",
+            start=start,
+            years=5,
+        )
+        end = df["real_date"].max().strftime("%Y-%m-%d")
+        all_args = dict(
+            df=df,
+            sname="STRAT",
+            fids=fids,
+            rebal_freq="m",
+            est_freqs=["D", "W", "M"],
+            est_weights=[0.1, 0.2, 0.7],
+            lback_periods=[30, 20, -1],
+            half_life=[10, 5, 2],
+            lback_meth="xma",
+            rstring="XR",
+            start=start,
+            end=end,
+            return_variance_covariance=True,
+        )
+
+        df_vol, vcv_df = historic_portfolio_vol(**all_args)
+
+        self.assertTrue(isinstance(df_vol, QuantamentalDataFrame))
+        self.assertTrue(isinstance(vcv_df, pd.DataFrame))
+        tdf = qdf_to_ticker_df(df_vol)
+        self.assertTrue(tdf.columns.tolist() == [f"STRAT{RETURN_SERIES_XCAT}"])
+
+        self.assertEqual(
+            set(vcv_df.columns.tolist()), set(["fid1", "fid2", "value", "real_date"])
+        )
+
+        df_vol = historic_portfolio_vol(
+            **{**all_args, "return_variance_covariance": False}
+        )
+        self.assertTrue(isinstance(df_vol, QuantamentalDataFrame))
+
+        # test with 'difficult' args
+        historic_portfolio_vol(
+            **{
+                **all_args,
+                "lback_periods": 30,
+                "half_life": 10,
+                "est_weights": 0.8,
+                "est_freqs": "D",
+                "start": None,
+                "end": None,
+            }
+        )
+
+        # test raises TypeError with start=123
+        with self.assertRaises(TypeError):
+            historic_portfolio_vol(**{**all_args, "start": 123})
 
 
 if __name__ == "__main__":

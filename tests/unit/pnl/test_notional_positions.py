@@ -16,6 +16,7 @@ from macrosynergy.pnl.historic_portfolio_volatility import (
     historic_portfolio_vol,
     RETURN_SERIES_XCAT,
 )
+from macrosynergy.pnl.contract_signals import contract_signals
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import (
@@ -259,6 +260,128 @@ class TestNotionalPositions(unittest.TestCase):
         )
 
         assert isinstance(result, Tuple)
+
+    def test_main(self):
+        cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
+        xcats: List[str] = ["SIG", "HR"]
+
+        start: str = "2000-01-01"
+        end: str = "2002-01-01"
+
+        df: pd.DataFrame = make_test_df(
+            cids=cids,
+            xcats=xcats,
+            start=start,
+            end=end,
+        )
+
+        df.loc[(df["cid"] == "USD") & (df["xcat"] == "SIG"), "value"] = 1.0
+        ctypes = ["FX", "IRS", "CDS"]
+        cscales = [1.0, 0.5, 0.1]
+        csigns = [1, -1, 1]
+
+        hbasket = ["USD_EQ", "EUR_EQ"]
+        hscales = [0.7, 0.3]
+
+        df_cs: pd.DataFrame = contract_signals(
+            df=df,
+            sig="SIG",
+            cids=cids,
+            ctypes=ctypes,
+            cscales=cscales,
+            csigns=csigns,
+            hbasket=hbasket,
+            hscales=hscales,
+            hratios="HR",
+        )
+
+        fids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
+
+        df_notional: pd.DataFrame = notional_positions(
+            df=df_cs,
+            fids=fids,
+            leverage=1.1,
+            sname="STRAT",
+        )
+        all_args = dict(
+            df=df_cs,
+            fids=fids,
+            leverage=1.1,
+            sname="STRAT",
+        )
+
+        self.assertIsInstance(df_notional, pd.DataFrame)
+        df_xr = make_test_df(
+            cids=cids,
+            xcats=[f"{_}XR" for _ in ctypes],
+            start=start,
+            end=end,
+        )
+        hv_args = dict(
+            df=pd.concat([df_cs, df_xr], axis=0),
+            fids=fids,
+            sname="STRAT",
+            vol_target=0.1,
+            lback_meth="xma",
+            lback_periods=-1,
+            half_life=20,
+            return_pvol=True,
+            return_vcv=True,
+        )
+        dft = notional_positions(**hv_args)
+        # this is a tuple of 3 dataframes
+        self.assertIsInstance(dft, tuple)
+        self.assertEqual(len(dft), 3)
+        self.assertIsInstance(dft[0], QuantamentalDataFrame)
+        self.assertIsInstance(dft[1], QuantamentalDataFrame)
+        self.assertIsInstance(dft[2], pd.DataFrame)
+        self.assertEqual(set(dft[2].columns), {"fid1", "fid2", "real_date", "value"})
+
+        # now check with return_pvol=False
+        hv_args["return_pvol"] = False
+        dft = notional_positions(**hv_args)
+        self.assertIsInstance(dft, tuple)
+        self.assertEqual(len(dft), 2)
+        self.assertIsInstance(dft[0], QuantamentalDataFrame)
+        self.assertIsInstance(dft[1], pd.DataFrame)
+        self.assertEqual(set(dft[1].columns), {"fid1", "fid2", "real_date", "value"})
+
+        # now check with return_vcv=False
+        hv_args["return_pvol"] = True
+        hv_args["return_vcv"] = False
+        dft = notional_positions(**hv_args)
+        self.assertIsInstance(dft, tuple)
+        self.assertEqual(len(dft), 2)
+        self.assertIsInstance(dft[0], QuantamentalDataFrame)
+        self.assertIsInstance(dft[1], QuantamentalDataFrame)
+
+        # for all args pass None and see fail
+        bad_args = all_args.copy().copy()
+        for key in bad_args:
+            bad_args[key] = None
+            with self.assertRaises(ValueError):
+                notional_positions(**bad_args)
+
+        # vol and lev both should raise ValueError
+        bad_args = all_args.copy()
+        bad_args["vol_target"] = 1.1
+        bad_args["leverage"] = 1.1
+        with self.assertRaises(ValueError):
+            notional_positions(**bad_args)
+
+        dfb = all_args["df"].copy()
+        dfb = dfb[~(dfb["xcat"].str.contains("_CSIG_"))]
+        bad_args = all_args.copy()
+        bad_args["df"] = dfb
+        with self.assertRaises(ValueError):
+            notional_positions(**bad_args)
+
+        dfb = all_args["df"].copy()
+        dfb = dfb[~(dfb["cid"] == "USD")]
+        bad_args = all_args.copy()
+        bad_args["df"] = dfb
+        with self.assertRaises(ValueError):
+            notional_positions(**bad_args)
 
 
 if __name__ == "__main__":

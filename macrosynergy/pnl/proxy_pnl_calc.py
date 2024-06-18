@@ -21,7 +21,7 @@ from macrosynergy.management.utils import (
     qdf_to_ticker_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.pnl.transaction_costs import TransactionCosts, get_fids
+from macrosynergy.pnl.transaction_costs import TransactionCosts
 
 
 def _replace_strs(
@@ -43,7 +43,7 @@ def _split_returns_positions_tickers(
 
     set_returns = set(_replace_strs(returns_tickers, rstring))
     set_positions = set(_replace_strs(positions_tickers, f"_{spos}"))
-    assert len(set_positions - set_returns) == 0
+    assert len(set_positions - set_returns) == len(set_returns - set_positions) == 0
     returns_tickers: List[str] = [
         ticker.replace(f"_{spos}", rstring) for ticker in positions_tickers
     ]
@@ -117,17 +117,14 @@ def _get_rebal_dates(df_wide: pd.DataFrame) -> List[pd.Timestamp]:
 def _warn_and_drop_nans(df_wide: pd.DataFrame) -> pd.DataFrame:
     # get rows that are all nans
     all_nan_rows = df_wide.loc[df_wide.isna().all(axis=1)]
+    wrn = "Warning: The following {idx} are all NaNs and have been dropped: {lst}"
     if not all_nan_rows.empty:
-        warnings.warn(
-            f"Warning: The following rows are all NaNs and have been dropped: {all_nan_rows.index}"
-        )
+        warnings.warn(wrn.format(idx="rows", lst=all_nan_rows.index))
         df_wide = df_wide.dropna(how="all")
 
     all_nan_cols = df_wide.loc[:, df_wide.isna().all(axis=0)]
     if not all_nan_cols.empty:
-        warnings.warn(
-            f"Warning: The following columns are all NaNs and have been dropped: {all_nan_cols.columns}"
-        )
+        warnings.warn(wrn.format(idx="columns", lst=all_nan_cols.columns))
         df_wide = df_wide.dropna(how="all", axis=1)
 
     return df_wide

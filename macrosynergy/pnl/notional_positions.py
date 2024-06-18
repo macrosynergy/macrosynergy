@@ -316,7 +316,7 @@ def notional_positions(
 
     """
     for varx, namex, typex in [
-        (df, "df", pd.DataFrame),
+        (df, "df", QuantamentalDataFrame),
         (sname, "sname", str),
         (fids, "fids", list),
         (aum, "aum", Number),
@@ -347,15 +347,6 @@ def notional_positions(
         raise ValueError(
             "Either `leverage` or `vol_target` must be specified, but not both."
         )
-
-    if not isinstance(df, QuantamentalDataFrame):
-        raise ValueError("`df` must be a QuantamentalDataFrame.")
-
-    if "value" not in df.columns:
-        raise ValueError("`df` must have a `value` column.")
-
-    # TODO why not already a QuantamentalDataFrame?
-    df: QuantamentalDataFrame = standardise_dataframe(df.copy())
 
     ## Check the dates
     if start is None:
