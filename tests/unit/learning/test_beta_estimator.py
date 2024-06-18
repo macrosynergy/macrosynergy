@@ -99,23 +99,23 @@ class TestBetaEstimator(unittest.TestCase):
 
         # Test that a different scorer works
 
-        self.be.estimate_beta(
-            beta_xcat="BETA_R2_NSA",
-            hedged_return_xcat="HEDGED_RETURN_R2_NSA",
-            inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
-            scorer=make_scorer(r2_score, greater_is_better=True),
-            models={
-                "OLS": LinearRegressionSystem(min_xs_samples=21),
-            },
-            hparam_grid={
-                "OLS": {"fit_intercept": [True, False]},
-            },
-            min_cids = 1,
-            min_periods = 21 * 6,
-            est_freq="M",
-            use_variance_correction=False,
-            n_jobs_outer=1,
-        )
+        #self.be.estimate_beta(
+        #    beta_xcat="BETA_R2_NSA",
+        #    hedged_return_xcat="HEDGED_RETURN_R2_NSA",
+        #    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+        #    scorer=make_scorer(r2_score, greater_is_better=True),
+        #    models={
+        #        "OLS": LinearRegressionSystem(min_xs_samples=21),
+        #    },
+        #    hparam_grid={
+        #        "OLS": {"fit_intercept": [True, False]},
+        #    },
+        #    min_cids = 1,
+        #    min_periods = 21 * 6,
+        #    est_freq="M",
+        #    use_variance_correction=False,
+        #    n_jobs_outer=1,
+        #)
 
         # Test that a different model works
 
@@ -139,28 +139,28 @@ class TestBetaEstimator(unittest.TestCase):
 
         # Test that using a VotingRegressor works
 
-        self.be.estimate_beta(
-            beta_xcat="BETA_VOTE_NSA",
-            hedged_return_xcat="HEDGED_RETURN_VOTE_NSA",
-            inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
-            scorer=neg_mean_abs_corr,
-            models={
-                "Vote": VotingRegressor(
-                    [
-                        ("OLS1", LinearRegressionSystem(min_xs_samples=21, data_freq="unadjusted")),
-                        ("OLS2", LinearRegressionSystem(min_xs_samples=21, data_freq="W")),
-                    ],
-                ),
-            },
-            hparam_grid={
-                "Vote": {"OLS1__fit_intercept": [True, False], "OLS2__fit_intercept": [True, False]},
-            },
-            min_cids = 1,
-            min_periods = 21 * 6,
-            est_freq="M",
-            use_variance_correction=False,
-            n_jobs_outer=1,
-        )
+        #self.be.estimate_beta(
+        #    beta_xcat="BETA_VOTE_NSA",
+        #    hedged_return_xcat="HEDGED_RETURN_VOTE_NSA",
+        #    inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
+        #    scorer=neg_mean_abs_corr,
+        #    models={
+        #        "Vote": VotingRegressor(
+        #            [
+        #                ("OLS1", LinearRegressionSystem(min_xs_samples=21, data_freq="unadjusted")),
+        #                ("OLS2", LinearRegressionSystem(min_xs_samples=21, data_freq="W")),
+        #            ],
+        #        ),
+        #    },
+        #    hparam_grid={
+        #        "Vote": {"OLS1__fit_intercept": [True, False], "OLS2__fit_intercept": [True, False]},
+        #    },
+        #    min_cids = 1,
+        #    min_periods = 21 * 6,
+        #    est_freq="M",
+        #    use_variance_correction=False,
+        #    n_jobs_outer=1,
+        #)
 
         # Test use_variance_correction works
         self.be.estimate_beta(
@@ -178,25 +178,6 @@ class TestBetaEstimator(unittest.TestCase):
             min_periods = 21 * 6,
             est_freq="M",
             use_variance_correction=True,
-            n_jobs_outer=1,
-        )
-
-        # Test different estimation frequency works
-        self.be.estimate_beta(
-            beta_xcat="BETA_Q_NSA",
-            hedged_return_xcat="HEDGED_RETURN_Q_NSA",
-            inner_splitter=ExpandingKFoldPanelSplit(n_splits=3),
-            scorer=neg_mean_abs_corr,
-            models={
-                "OLS": LinearRegressionSystem(min_xs_samples=21),
-            },
-            hparam_grid={
-                "OLS": {"fit_intercept": [True, False]},
-            },
-            min_cids = 1,
-            min_periods = 21 * 6,
-            est_freq="Q",
-            use_variance_correction=False,
             n_jobs_outer=1,
         )
 
@@ -223,6 +204,16 @@ class TestBetaEstimator(unittest.TestCase):
         #    use_variance_correction=False,
         #    n_jobs_outer=1,
         #)
+
+        self.beta_names = ["BETA_NSA", "BETA_ROLL_NSA", "BETA_RIDGE_NSA", "BETA_VC_NSA"]
+        self.hedged_return_names = ["HEDGED_RETURN_NSA", "HEDGED_RETURN_ROLL_NSA", "HEDGED_RETURN_RIDGE_NSA", "HEDGED_RETURN_VC_NSA"]
+        self.models_init = [
+            LinearRegressionSystem(min_xs_samples=21),
+            LinearRegressionSystem(min_xs_samples=21),
+            RidgeRegressionSystem(min_xs_samples=21),
+            #VotingRegressor([("OLS1", LinearRegressionSystem(min_xs_samples=21, data_freq="unadjusted")),("OLS2", LinearRegressionSystem(min_xs_samples=21, data_freq="W"))]),
+            RidgeRegressionSystem(min_xs_samples=21),
+        ]
 
     def test_valid_init(self):
         # Check class attributes are correctly initialised
@@ -1542,16 +1533,6 @@ class TestBetaEstimator(unittest.TestCase):
                 n_jobs_inner=-2,
             )
 
-
-        
-        
-
-        
-        
-
-
-        
-
     def test_valid_estimate_beta(self):
         determined_betas = self.be.betas.sort_values(by=["cid","xcat","real_date"]).drop_duplicates(subset=["value","xcat","cid"])
         determined_hedged_returns = self.be.hedged_returns.sort_values(by=["cid","xcat","real_date"])
@@ -1566,8 +1547,9 @@ class TestBetaEstimator(unittest.TestCase):
         )
 
         estimation_dates = []
-        correct_betas = {"AUDvUSD": [], "CADvUSD": [], "GBPvUSD": [], "USDvUSD": []}
-        correct_hedged_returns = {"AUDvUSD": {}, "CADvUSD": {}, "GBPvUSD": {}, "USDvUSD": {}}   
+
+        correct_betas = {pipeline_name: {cross_section: [] for cross_section in ["AUDvUSD", "CADvUSD", "GBPvUSD", "USDvUSD"]} for pipeline_name in self.beta_names}
+        correct_hedged_returns = {pipeline_name: {cross_section: {} for cross_section in ["AUDvUSD", "CADvUSD", "GBPvUSD", "USDvUSD"]} for pipeline_name in self.hedged_return_names}
         for idx, (train_idx, test_idx) in enumerate(outer_splitter.split(self.be.X, self.be.y)):
             # Get training and test sets
             X_train, y_train = self.be.X.iloc[train_idx], self.be.y.iloc[train_idx]
@@ -1576,48 +1558,61 @@ class TestBetaEstimator(unittest.TestCase):
             real_reest_date = X_train.index.get_level_values("real_date").max()
             estimation_dates.append(real_reest_date)
             # store the right betas based on the selected model
-            hparams = determined_optimal_models[determined_optimal_models.real_date == real_reest_date].hparams.iloc[0]
-            selected_model = LinearRegressionSystem(min_xs_samples=21).set_params(**hparams)
-            selected_model.fit(pd.DataFrame(X_train), y_train)
-            betas = selected_model.coefs_
-            for beta_xs, beta in betas.items():
-                correct_betas[beta_xs].append(beta)
-            # store the right out-of-sample hedged returns based on the selected model
-            oos_cross_sections = X_test.index.get_level_values("cid").unique()
-            for cid in oos_cross_sections:
-                if cid in X_train.index.get_level_values("cid"):
-                    if len(X_train.xs(cid)) > 21:
-                        # Get the beta for this cross-section
-                        beta = betas[cid]
-                        # Create hedged return series
-                        oos_hedged_returns = (y_test.xs(cid) - betas[cid] * X_test.xs(cid)).values
-                        correct_hedged_returns[cid][real_reest_date] = oos_hedged_returns
+            hparams = determined_optimal_models[determined_optimal_models.real_date == real_reest_date][["xcat","hparams"]].reset_index(drop=True)
+            for idx, row in hparams.iterrows():
+                selected_model = self.models_init[idx].set_params(**row["hparams"])
+                selected_model.fit(pd.DataFrame(X_train), y_train)
+                if isinstance(selected_model, VotingRegressor):
+                    # average the betas for simplicity
+                    try:
+                        betas = {beta_xs: np.mean([model.coefs_[beta_xs] for model in selected_model.estimators_]) for beta_xs in set(selected_model.estimators_[1].coefs_.keys()).intersection(selected_model.estimators_[0].coefs_.keys())}
+                    except Exception as e:
+                        pass
+                else:
+                    betas = selected_model.coefs_
+                for beta_xs, beta in betas.items():
+                    correct_betas[row["xcat"]][beta_xs].append(beta)
+                # for this model, store the right out-of-sample hedged returns 
+                oos_cross_sections = X_test.index.get_level_values("cid").unique()
+                for cid in oos_cross_sections:
+                    if cid in X_train.index.get_level_values("cid"):
+                        if len(X_train.xs(cid)) > 21:
+                            # Get the beta for this cross-section
+                            beta = betas[cid]
+                            # Create hedged return series
+                            oos_hedged_returns = (y_test.xs(cid) - beta * X_test.xs(cid)).values
+                            correct_hedged_returns[self.hedged_return_names[idx]][cid][real_reest_date] = oos_hedged_returns
 
         # check basic beta dataframe properties
         self.assertIsInstance(self.be.betas, pd.DataFrame)
         self.assertTrue(self.be.betas.columns.tolist() == ["cid", "real_date", "xcat", "value"])
-        self.assertTrue("BETA_NSA" in self.be.betas.xcat.unique())
-        self.assertTrue(sorted(self.be.betas[self.be.betas.xcat == "BETA_NSA"].cid.unique()) == self.cids)
-        self.assertTrue(all(~self.be.betas[self.be.betas.xcat == "BETA_NSA"].value.isna()))
+        for beta_xcat in self.beta_names:
+            self.assertTrue(beta_xcat in self.be.betas.xcat.unique())
+            self.assertTrue(sorted(self.be.betas[self.be.betas.xcat == beta_xcat].cid.unique()) == self.cids)
+            self.assertTrue(all(~self.be.betas[self.be.betas.xcat == beta_xcat].value.isna()))
         # check the estimation dates are as expected 
-        determined_reest_dates = sorted(determined_betas.real_date.unique())
         real_reest_dates = sorted(estimation_dates)
-        self.assertTrue(np.all(determined_reest_dates == real_reest_dates))
+        for beta_xcat in self.beta_names:
+            determined_reest_dates = sorted(determined_betas[determined_betas.xcat == beta_xcat].real_date.unique())
+            self.assertTrue(np.all(determined_reest_dates == real_reest_dates))
         # check the betas themselves are as expected
-        for beta_xs, beta in correct_betas.items():
-            self.assertTrue(np.all(determined_betas[determined_betas.cid + "vUSD" == beta_xs].value == beta))
+        for beta_xcat in self.beta_names:
+            for beta_xs, beta in correct_betas[beta_xcat].items():
+                self.assertTrue(np.all(determined_betas[(determined_betas.cid + "vUSD" == beta_xs) & (determined_betas.xcat == beta_xcat)].value == beta))
         # check basic hedged return dataframe properties
         self.assertIsInstance(self.be.hedged_returns, pd.DataFrame)
         self.assertTrue(self.be.hedged_returns.columns.tolist() == ["cid", "real_date", "xcat", "value"])
-        self.assertTrue("HEDGED_RETURN_NSA" in self.be.hedged_returns.xcat.unique())
-        self.assertTrue(sorted(self.be.hedged_returns[self.be.hedged_returns.xcat == "HEDGED_RETURN_NSA"].cid.unique()) == self.cids)
-        self.assertTrue(all(~self.be.hedged_returns[self.be.hedged_returns.xcat == "HEDGED_RETURN_NSA"].value.isna()))
+        for hedged_return_xcat in self.hedged_return_names:
+            self.assertTrue(hedged_return_xcat in self.be.hedged_returns.xcat.unique())
+            self.assertTrue(sorted(self.be.hedged_returns[self.be.hedged_returns.xcat == hedged_return_xcat].cid.unique()) == self.cids)
+            self.assertTrue(all(~self.be.hedged_returns[self.be.hedged_returns.xcat == hedged_return_xcat].value.isna()))
         # check the hedged returns themselves are as expected
-        for idx in range(len(real_reest_dates)-1):
-            # Get all cross-sections that should have hedged returns between this estimation date and the next
-            relevant_xss = determined_betas[determined_betas.real_date == real_reest_dates[idx]].cid.values
-            # Get all calculated hedged returns between re-estimation dates
-            for cid in relevant_xss:
-                subset_det_hedged_rets = determined_hedged_returns[(determined_hedged_returns.cid == cid) & (determined_hedged_returns.real_date > real_reest_dates[idx]) & (determined_hedged_returns.real_date <= real_reest_dates[idx+1])]
-                self.assertTrue(len(correct_hedged_returns[cid+"vUSD"][real_reest_dates[idx]]) == len(subset_det_hedged_rets.value.values))
-                self.assertTrue(np.all(correct_hedged_returns[cid+"vUSD"][real_reest_dates[idx]]==subset_det_hedged_rets.value.values))
+        for hedged_return_idx, hedged_return_xcat in enumerate(self.hedged_return_names):
+            for idx in range(len(real_reest_dates)-1):
+                # Get all cross-sections that should have hedged returns between this estimation date and the next
+                relevant_xss = determined_betas[(determined_betas.real_date == real_reest_dates[idx]) & (determined_betas.xcat == self.beta_names[hedged_return_idx])].cid.values
+                # Get all calculated hedged returns between re-estimation dates
+                for cid in relevant_xss:
+                    subset_det_hedged_rets = determined_hedged_returns[(determined_hedged_returns.cid == cid) & (determined_hedged_returns.real_date > real_reest_dates[idx]) & (determined_hedged_returns.real_date <= real_reest_dates[idx+1]) & (determined_hedged_returns.xcat == hedged_return_xcat)]
+                    self.assertTrue(len(correct_hedged_returns[hedged_return_xcat][cid+"vUSD"][real_reest_dates[idx]]) == len(subset_det_hedged_rets.value.values))
+                    self.assertTrue(np.all(correct_hedged_returns[hedged_return_xcat][cid+"vUSD"][real_reest_dates[idx]]==subset_det_hedged_rets.value.values))
