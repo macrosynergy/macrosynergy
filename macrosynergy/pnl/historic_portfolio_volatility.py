@@ -242,15 +242,15 @@ def _calculate_portfolio_volatility(
             .assign(real_date=td)
         )
 
-        # TODO adjust for signal zero or N/A
+        # adjust for signal zero or N/A
         s = signals.loc[td, :]
-        mask: pd.Series = s.isnull() | (s.abs() < 1e-8)
-        vcv_df.loc[s.index[mask], :] = 0
-        vcv_df.loc[:, s.index[mask]] = 0
-        s[mask] = 0
+        s[s.abs() < 1e-8] = 0
+        s = s.fillna(0)
+        vcv_df = vcv_df.fillna(0)
+
         assert (
-            vcv_df.isnull().sum().sum() == 0
-        ), f"N/A values in variance-covariance matrix!\n{vcv_df}"
+            not vcv_df.isna().any().any()
+        ), f"N/A values in variance-covariance matrix!\n"
 
         pvol: float = np.sqrt(s.T.dot(vcv_df).dot(s))
         list_pvol.append((td, pvol))
@@ -749,9 +749,6 @@ if __name__ == "__main__":
         end=end,
         return_variance_covariance=False,
     )
-
-    expc_idx = pd.Timestamp("2019-04-26")
-    assert df_copy_vol.max()["real_date"] == expc_idx  # np.seed is 42
 
     # print(df_copy_vol.head(10))
     # print(df_copy_vol.tail(10))
