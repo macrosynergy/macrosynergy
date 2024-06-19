@@ -1697,7 +1697,12 @@ class TestBetaEstimator(unittest.TestCase):
         # creates a dataframe as expected
         df = self.be.evaluate_hedged_returns()
         self.assertIsInstance(df, pd.DataFrame)
+        self.assertTrue(len(df) == len(self.hedged_return_names) + 1)
         self.assertTrue(np.all(df.index.names == ["benchmark return", "return category", "frequency"]))
+        self.assertTrue(len(df.index.get_level_values(0).unique()) == 1)
+        self.assertTrue(df.index.get_level_values(0)[0] == self.be.benchmark_return)
+        self.assertTrue(np.all(df.index.get_level_values(1) == self.hedged_return_names + [self.xcat]))
+        self.assertTrue(np.all(df.index.get_level_values(2) == "M"))
         self.assertTrue(len(df.columns) == 1)
         self.assertTrue("|pearson|" == df.columns[0])
         self.assertTrue(all(df.iloc[:,0].apply(lambda x: isinstance(x, float))))
