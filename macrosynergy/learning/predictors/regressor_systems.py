@@ -150,11 +150,11 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
 
     def select_data_freq(self):
         if self.data_freq == "W":
-            min_xs_samples = self.min_xs_samples // 5
+            min_xs_samples = self.min_xs_samples / 5
         elif self.data_freq == "M":
-            min_xs_samples = self.min_xs_samples // 21
+            min_xs_samples = self.min_xs_samples / 21
         elif self.data_freq == "Q":
-            min_xs_samples = self.min_xs_samples // 63
+            min_xs_samples = self.min_xs_samples / 63
         else:
             raise ValueError(
                 "Invalid data frequency. Accepted values are 'W', 'M' and 'Q'."
