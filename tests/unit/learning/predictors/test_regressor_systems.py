@@ -64,7 +64,7 @@ class TestLinearRegressionSystem(unittest.TestCase):
         self.assertEqual(model.roll, None)
         self.assertEqual(model.fit_intercept, True)
         self.assertEqual(model.positive, False)
-        self.assertEqual(model.data_freq, "D")
+        self.assertEqual(model.data_freq, "unadjusted")
         self.assertEqual(model.min_xs_samples, 2)
 
         # Test custom params
@@ -99,7 +99,7 @@ class TestLinearRegressionSystem(unittest.TestCase):
             LinearRegressionSystem(roll=-5)
 
     @parameterized.expand(
-        [(5, True, False, "D", 2), (5, False, True, "D", 2), (5, True, True, "M", 2)]
+        [(5, True, False, "unadjusted", 2), (5, False, True, "unadjusted", 2), (5, True, True, "M", 2)]
     )
     def test_valid_init(self, roll, fit_intercept, positive, data_freq, min_xs_samples):
 
@@ -171,7 +171,7 @@ class TestLADRegressionSystem(unittest.TestCase):
         self.assertEqual(model.roll, None)
         self.assertEqual(model.fit_intercept, True)
         self.assertEqual(model.positive, False)
-        self.assertEqual(model.data_freq, "D")
+        self.assertEqual(model.data_freq, "unadjusted")
         self.assertEqual(model.min_xs_samples, 2)
 
         # Test custom params
@@ -206,7 +206,7 @@ class TestLADRegressionSystem(unittest.TestCase):
             LADRegressionSystem(roll=-5)
 
     @parameterized.expand(
-        [(5, True, False, "D", 2), (5, False, True, "D", 2), (5, True, True, "M", 2)]
+        [(5, True, False, "unadjusted", 2), (5, False, True, "unadjusted", 2), (5, True, True, "M", 2)]
     )
     def test_valid_init(self, roll, fit_intercept, positive, data_freq, min_xs_samples):
 
@@ -278,7 +278,7 @@ class TestRidgeRegressionSystem(unittest.TestCase):
         self.assertEqual(model.roll, None)
         self.assertEqual(model.fit_intercept, True)
         self.assertEqual(model.positive, False)
-        self.assertEqual(model.data_freq, "D")
+        self.assertEqual(model.data_freq, "unadjusted")
         self.assertEqual(model.min_xs_samples, 2)
         self.assertEqual(model.alpha, 1.0)
         np.testing.assert_almost_equal(model.tol, 0.0001)
@@ -332,7 +332,7 @@ class TestRidgeRegressionSystem(unittest.TestCase):
             RidgeRegressionSystem(solver="unknown")
 
     @parameterized.expand(
-        [(5, True, False, "D", 2), (5, False, True, "D", 2), (5, True, True, "M", 2)]
+        [(5, True, False, "unadjusted", 2), (5, False, True, "unadjusted", 2), (5, True, True, "M", 2)]
     )
     def test_valid_init(self, roll, fit_intercept, positive, data_freq, min_xs_samples):
 
@@ -405,7 +405,7 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
         self.assertEqual(model.correlation_type, "pearson")
         self.assertEqual(model.volatility_lookback, 21)
         self.assertEqual(model.volatility_window_type, "rolling")
-        self.assertEqual(model.data_freq, "D")
+        self.assertEqual(model.data_freq, "unadjusted")
         self.assertEqual(model.min_xs_samples, 2)
 
         # Test custom params
