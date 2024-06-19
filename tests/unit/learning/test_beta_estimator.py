@@ -1676,7 +1676,8 @@ class TestBetaEstimator(unittest.TestCase):
             self.be.evaluate_hedged_returns(blacklist={"HEDGED_RETURN_NSA1": "AUD"})
         # Should fail if one of the elements in the tuple isn't a timestamp
         with self.assertRaises(TypeError):
-            self.be.evaluate_hedged_returns(blacklist={"AUD": (pd.Timestamp(year=1999,month=8,day=20), "not a valid timestamp")})
+            self.be.evaluate_hedged_returns(
+                blacklist={"AUD": (pd.Timestamp(year=1999,month=8,day=20), "not a valid timestamp")})
 
         """ freqs """
         # Should fail if freqs is not a string or a list of strings
@@ -1691,7 +1692,14 @@ class TestBetaEstimator(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.be.evaluate_hedged_returns(freqs="not a valid frequency string")
 
-    #def test_valid_evaluate_hedged_returns(self):
-        # Check that the function returns a dictionary
-    #    self.assertIsInstance(self.be.evaluate_hedged_returns(), dict)
+    def test_valid_evaluate_hedged_returns(self):
+        # Check that running evaluate_hedged_returns without any arguments
+        # creates a dataframe as expected
+        df = self.be.evaluate_hedged_returns()
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertTrue(np.all(df.index.names == ["benchmark return", "return category", "frequency"]))
+        self.assertTrue(len(df.columns) == 1)
+        self.assertTrue("|pearson|" == df.columns[0])
+        self.assertTrue(all(df.iloc[:,0].apply(lambda x: isinstance(x, float))))
+        self.assertTrue(all(df.iloc[:,0] >= 0))
         
