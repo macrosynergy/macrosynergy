@@ -1599,3 +1599,99 @@ class TestBetaEstimator(unittest.TestCase):
                     subset_det_hedged_rets = determined_hedged_returns[(determined_hedged_returns.cid == cid) & (determined_hedged_returns.real_date > real_reest_dates[idx]) & (determined_hedged_returns.real_date <= real_reest_dates[idx+1]) & (determined_hedged_returns.xcat == hedged_return_xcat)]
                     self.assertTrue(len(correct_hedged_returns[hedged_return_xcat][cid+"vUSD"][real_reest_dates[idx]]) == len(subset_det_hedged_rets.value.values))
                     self.assertTrue(np.all(correct_hedged_returns[hedged_return_xcat][cid+"vUSD"][real_reest_dates[idx]]==subset_det_hedged_rets.value.values))
+
+    def test_types_evaluate_hedged_returns(self):
+        """ hedged_rets """
+        # Should fail if hedged_rets is neither a string or a List of strings
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(hedged_rets=1)
+        # Should fail if hedged_rets is a list of strings, but not all elements are strings
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(hedged_rets=[1, "HEDGED_RETURN_NSA2"])
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(hedged_rets=["HEDGED_RETURN_NSA1", 1])
+        # Should fail if a string hedged return is not in the hedged returns dataframe
+        with self.assertRaises(ValueError):
+            self.be.evaluate_hedged_returns(hedged_rets="not a valid hedged return")
+        # Should fail if a list of hedged returns contains a string that is not in the hedged returns dataframe
+        with self.assertRaises(ValueError):
+            self.be.evaluate_hedged_returns(hedged_rets=["HEDGED_RETURN_NSA1", "not a valid hedged return"])
+        
+        """ cids """
+        # Should fail if cids is neither a string or a List of strings
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(hedged_rets="HEDGED_RETURN_NSA", cids=1)
+        # Should fail if cids is a list of strings, but not all elements are strings
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(hedged_rets="HEDGED_RETURN_NSA", cids=[1, "AUD"])
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(hedged_rets="HEDGED_RETURN_NSA", cids=["AUD", 1])
+        # Should fail if a string cid is not in the cids list
+        with self.assertRaises(ValueError):
+            self.be.evaluate_hedged_returns(hedged_rets="HEDGED_RETURN_NSA", cids="not a valid cid")
+        # Should fail if a list of cids contains a string that is not in the cids list
+        with self.assertRaises(ValueError):
+            self.be.evaluate_hedged_returns(hedged_rets="HEDGED_RETURN_NSA", cids=["AUD", "not a valid cid"])
+        
+        """ correlation_types """
+        # Should fail if correlation_types is not a string
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(correlation_types=1)
+        # Should fail if correlation_types is not a valid string
+        with self.assertRaises(ValueError):
+            self.be.evaluate_hedged_returns(correlation_types="not a valid correlation type")
+        
+        """ title """
+        # Should fail if title is not a string
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(title=1)
+        
+        """ start """
+        # Should fail if start is not a string
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(start=1)
+
+        # Should fail if start is not in ISO format
+        with self.assertRaises(ValueError):
+            self.be.evaluate_hedged_returns(start="hello")
+        
+        """ end """
+        # Should fail if end is not a string
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(end=1)
+
+        # Should fail if end is not in ISO format
+        with self.assertRaises(ValueError):
+            self.be.evaluate_hedged_returns(end="hello")
+
+        """ blacklist """
+        # Should fail if blacklist is not a dictionary
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(blacklist=1)
+        # Should fail if blacklist is a dictionary, but not all keys are strings
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(blacklist={1: ["AUD"]})
+        # Should fail if blacklist is a dictionary, but not all values are tuples
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(blacklist={"HEDGED_RETURN_NSA1": "AUD"})
+        # Should fail if one of the elements in the tuple isn't a timestamp
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(blacklist={"AUD": (pd.Timestamp(year=1999,month=8,day=20), "not a valid timestamp")})
+
+        """ freqs """
+        # Should fail if freqs is not a string or a list of strings
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(freqs=1)
+        # Should fail if freqs is a list of strings, but not all elements are strings
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(freqs=[1, "M"])
+        with self.assertRaises(TypeError):
+            self.be.evaluate_hedged_returns(freqs=["M", 1])
+        # Should fail if freqs is a string, but not a valid frequency string
+        with self.assertRaises(ValueError):
+            self.be.evaluate_hedged_returns(freqs="not a valid frequency string")
+
+    #def test_valid_evaluate_hedged_returns(self):
+        # Check that the function returns a dictionary
+    #    self.assertIsInstance(self.be.evaluate_hedged_returns(), dict)
+        

@@ -620,6 +620,7 @@ class BetaEstimator:
             correlation_types=correlation_types,
             hedged_rets=hedged_rets,
             cids=cids,
+            title=title,
             start=start,
             end=end,
             blacklist=blacklist,
@@ -917,6 +918,7 @@ class BetaEstimator:
         correlation_types: Union[str, List[str]],
         hedged_rets: Optional[Union[str, List[str]]],
         cids: Optional[Union[str, List[str]]],
+        title: Optional[str],
         start: Optional[str],
         end: Optional[str],
         blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]],
@@ -964,15 +966,29 @@ class BetaEstimator:
                 if cids not in self.cids:
                     raise ValueError("cids must be a valid cross-section identifier within the class instance.")
 
+        # title checks
+        if title is not None:
+            if not isinstance(title, str):
+                raise TypeError("title must be a string.")
         # start checks
         if start is not None:
             if not isinstance(start, str):
                 raise TypeError("start must be a string.")
+            # check that the string is a valid date in ISO format
+            try:
+                pd.Timestamp(start)
+            except ValueError:
+                raise ValueError("start must be a string in ISO format.")
 
         # end checks
         if end is not None:
             if not isinstance(end, str):
                 raise TypeError("end must be a string.")
+            # check that the string is a valid date in ISO format
+            try:
+                pd.Timestamp(end)
+            except ValueError:
+                raise ValueError("end must be a string in ISO format.")
 
         # blacklist checks
         if blacklist is not None:
