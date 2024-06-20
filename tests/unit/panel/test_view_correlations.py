@@ -4,6 +4,7 @@ from pandas.testing import assert_frame_equal
 from tests.simulate import make_qdf
 from macrosynergy.panel.view_correlations import correl_matrix
 from macrosynergy.visuals.correlation import (
+    _parse_xcat_labels,
     lag_series,
     _transform_df_for_cross_sectional_corr,
     _transform_df_for_cross_category_corr,
@@ -274,6 +275,88 @@ class TestAll(unittest.TestCase):
         corr2 = _cluster_correlations(corr2.T, is_symmetric=False).T
 
         assert_frame_equal(corr1, corr2)
+
+    def test_invalid_xcat_labels(self):
+
+        with self.assertRaises(AssertionError):
+            correl_matrix(
+                self.dfd,
+                xcats=["XR"],
+                cids=self.cids,
+                max_color=0.1,
+                show=False,
+                annot=True,
+                fmt=".2f",
+                xcat_labels=["XR", "CRY"],
+            )
+
+        with self.assertRaises(AssertionError):
+            correl_matrix(
+                self.dfd,
+                xcats=["XR"],
+                cids=self.cids,
+                max_color=0.1,
+                show=False,
+                annot=True,
+                fmt=".2f",
+                xcat_labels={"XR": "Excess Returns", "CRY": "Carry"},
+            )
+
+    def test_xcat_labels(self):
+
+        try:
+            correl_matrix(
+                self.dfd,
+                xcats=["XR"],
+                cids=["AUD"],
+                cids_secondary=["GBP"],
+                max_color=0.1,
+                show=False,
+                xcat_labels={"XR": "Excess Returns"},
+            )
+        except Exception as e:
+            self.fail(f"correl_matrix raised {e} unexpectedly")
+
+        try:
+            correl_matrix(
+                self.dfd,
+                xcats=["XR", "CRY"],
+                cids=["AUD"],
+                cids_secondary=["GBP"],
+                max_color=0.1,
+                show=False,
+                xcat_labels=["Excess Returns", "Carry"],
+            )
+        except Exception as e:
+            self.fail(f"correl_matrix raised {e} unexpectedly")
+
+        try:
+            correl_matrix(
+                self.dfd,
+                xcats=["XR", "CRY"],
+                xcats_secondary=["CRY"],
+                cids=["AUD"],
+                cids_secondary=["GBP"],
+                max_color=0.1,
+                show=False,
+                xcat_labels=["Excess Returns", "Carry"],
+                xcat_secondary_labels={"CRY": "Carry"},
+            )
+        except Exception as e:
+            self.fail(f"correl_matrix raised {e} unexpectedly")
+
+    def test_parse_xcat_labels(self):
+        xcats = ["XR", "CRY"]
+        xcat_labels_dict = {"XR": "Excess Returns", "CRY": "Carry"}
+        xcat_labels = _parse_xcat_labels(xcats, xcat_labels_dict)
+        self.assertEqual(xcat_labels_dict, xcat_labels)
+
+        xcat_labels_list = ["Excess Returns", "Carry"]
+        xcat_labels = _parse_xcat_labels(xcats, xcat_labels_list)
+        self.assertEqual(xcat_labels_dict, xcat_labels)
+
+        xcat_labels = _parse_xcat_labels(xcats, None)
+        self.assertEqual(xcat_labels, {"XR": "XR", "CRY": "CRY"})
 
 
 if __name__ == "__main__":
