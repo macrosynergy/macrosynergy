@@ -170,6 +170,78 @@ def get_max_lookback(lb: int, nt: float) -> int:
     return int(np.ceil(lb * (1 + nt))) if lb > 0 else 0
 
 
+def _calculate_multi_frequency_vcv_for_period(
+    pivot_returns: pd.DataFrame,
+    rebal_date: pd.Timestamp,
+    est_freqs: List[str],
+    est_weights: List[float],
+    weights_func: Callable[[int, int], np.ndarray],
+    lback_periods: List[int],
+    half_life: List[int],
+    nan_tolerance: float,
+    remove_zeros: bool,
+) -> pd.DataFrame:
+
+    window_df = pivot_returns.loc[pivot_returns.index <= rebal_date]
+    dict_vcv: Dict[str, pd.DataFrame] = {}
+
+    for freq, lb, hl in zip(est_freqs, lback_periods, half_life):
+        piv_ret = _downsample_returns(window_df, freq=freq).iloc[
+            -get_max_lookback(lb=lb, nt=nan_tolerance) :
+        ]
+        dict_vcv[freq] = estimate_variance_covariance(
+            piv_ret=piv_ret,
+            lback_periods=lb,
+            remove_zeros=remove_zeros,
+            weights_func=weights_func,
+            half_life=hl,
+        )
+        if dict_vcv[freq].isna().any().any():
+            raise ValueError(
+                f"N/A values in variance-covariance matrix at freq={freq} at real_date={rebal_date}!\n"
+                f"{dict_vcv[freq].isna().any()}"
+            )
+
+    vcv_df: pd.DataFrame = sum(
+        [
+            est_weights[ix] * ANNUALIZATION_FACTORS[freq] * dict_vcv[freq]
+            for ix, freq in enumerate(est_freqs)
+        ]
+    )
+
+    return vcv_df
+
+
+def _calculate_volatility(
+    vcv_df: pd.DataFrame,
+    signals: pd.DataFrame,
+    date: pd.Timestamp,
+) -> Tuple[pd.Timestamp, float]:
+    s = signals.loc[date, :]
+    s[(s.abs() < 1e-8) | s.isna()] = 0
+    vcv_df.loc[s[s == 0].index, :] = 0
+    vcv_df.loc[:, s[s == 0].index] = 0
+    assert not vcv_df.isna().any().any(), f"N/A values in variance-covariance matrix!\n"
+
+    pvol: float = np.sqrt(s.T.dot(vcv_df).dot(s))
+    return date, pvol
+
+
+def stack_covariances(
+    vcv_df: pd.DataFrame,
+    real_date: pd.Timestamp,
+) -> pd.DataFrame:
+    """Stack the covariance matrix DataFrame."""
+    return (
+        vcv_df.rename_axis("fid1", axis=0)
+        .rename_axis("fid2", axis=1)
+        .stack()
+        .to_frame("value")
+        .reset_index()
+        .assign(real_date=real_date)
+    )
+
+
 def _calculate_portfolio_volatility(
     pivot_returns: pd.DataFrame,
     pivot_signals: pd.DataFrame,
@@ -210,49 +282,29 @@ def _calculate_portfolio_volatility(
     # TODO convert frequencies
     list_vcv: List[pd.DataFrame] = []
     list_pvol: List[Tuple[pd.Timestamp, np.float64]] = []
+
     for td in rebal_dates:
-        window_df = pivot_returns.loc[pivot_returns.index <= td]
-        dict_vcv: Dict[str, pd.DataFrame] = {
-            freq: estimate_variance_covariance(
-                piv_ret=_downsample_returns(window_df, freq=freq).iloc[
-                    -get_max_lookback(lb=lb, nt=nan_tolerance) :
-                ],
-                lback_periods=lb,
-                remove_zeros=remove_zeros,
-                weights_func=weights_func,
-                half_life=hl,
-            )
-            for freq, lb, hl in zip(est_freqs, lback_periods, half_life)
-        }
-
-        vcv_df: pd.DataFrame = sum(
-            [
-                est_weights[ix] * ANNUALIZATION_FACTORS[freq] * dict_vcv[freq]
-                for ix, freq in enumerate(est_freqs)
-            ]
-        )
-        # reshape and drop duplicates in vcv
-
-        list_vcv.append(
-            vcv_df.rename_axis("fid1", axis=0)
-            .rename_axis("fid2", axis=1)
-            .stack()
-            .to_frame("value")
-            .reset_index()
-            .assign(real_date=td)
+        vcv_df = _calculate_multi_frequency_vcv_for_period(
+            pivot_returns=pivot_returns,
+            # pivot_signals=pivot_signals,
+            rebal_date=td,
+            est_freqs=est_freqs,
+            est_weights=est_weights,
+            weights_func=weights_func,
+            lback_periods=lback_periods,
+            half_life=half_life,
+            nan_tolerance=nan_tolerance,
+            remove_zeros=remove_zeros,
         )
 
-        # adjust for signal zero or N/A
-        s = signals.loc[td, :]
-        s[s.abs() < 1e-8] = 0
-        s = s.fillna(0)
-        vcv_df = vcv_df.fillna(0)
+        list_vcv.append(stack_covariances(vcv_df=vcv_df, real_date=td))
 
-        assert (
-            not vcv_df.isna().any().any()
-        ), f"N/A values in variance-covariance matrix!\n"
+        pvol = _calculate_volatility(
+            vcv_df=vcv_df,
+            signals=signals,
+            date=td,
+        )
 
-        pvol: float = np.sqrt(s.T.dot(vcv_df).dot(s))
         list_pvol.append((td, pvol))
 
     pvol = pd.DataFrame(
@@ -260,19 +312,19 @@ def _calculate_portfolio_volatility(
         columns=["real_date", portfolio_return_name],
     ).set_index("real_date")
 
-    vcv_df = pd.concat(list_vcv, axis=0)  # add to cls.vcv
+    vcv_df_long = pd.concat(list_vcv, axis=0)  # add to cls.vcv
 
-    vcv_df["helper"] = vcv_df[["fid1", "fid2", "real_date"]].apply(
+    vcv_df_long["helper"] = vcv_df_long[["fid1", "fid2", "real_date"]].apply(
         func=(lambda x: "-".join(sorted([x["fid1"], x["fid2"]])) + str(x["real_date"])),
         axis=1,
     )
-    vcv_df = (
-        vcv_df.drop_duplicates(subset=["helper"])
+    vcv_df_long = (
+        vcv_df_long.drop_duplicates(subset=["helper"])
         .drop(columns=["helper"])
         .reset_index(drop=True)
     )
 
-    return pvol, vcv_df
+    return pvol, vcv_df_long
 
 
 def _hist_vol(
