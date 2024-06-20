@@ -212,7 +212,7 @@ def _calculate_multi_frequency_vcv_for_period(
     return vcv_df
 
 
-def _calculate_volatility(
+def _calc_vol_tuple(
     vcv_df: pd.DataFrame,
     signals: pd.DataFrame,
     date: pd.Timestamp,
@@ -298,8 +298,7 @@ def _calculate_portfolio_volatility(
         )
 
         list_vcv.append(stack_covariances(vcv_df=vcv_df, real_date=td))
-
-        pvol = _calculate_volatility(
+        vol_tuple = _calc_vol_tuple(
             vcv_df=vcv_df,
             signals=signals,
             date=td,
