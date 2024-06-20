@@ -303,8 +303,7 @@ def _calculate_portfolio_volatility(
             signals=signals,
             date=td,
         )
-
-        list_pvol.append((td, pvol))
+        list_pvol.append(vol_tuple)
 
     pvol = pd.DataFrame(
         list_pvol,
