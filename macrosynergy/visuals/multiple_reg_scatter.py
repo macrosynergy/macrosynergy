@@ -124,6 +124,7 @@ def multiple_reg_scatter(
             coef_box_font_size=coef_box_font_size,
             prob_est=prob_est,
             single_chart=single_chart,
+            separator=separator,
             ax=ax,
         )
 
@@ -258,7 +259,8 @@ if __name__ == "__main__":
         ylab="Excess Return",
         ncol=3,
         nrow=2,
-        coef_box="upper right"
+        coef_box="upper right",
+        separator=2010,
     )
 
     multiple_reg_scatter(
