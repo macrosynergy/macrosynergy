@@ -172,6 +172,7 @@ def get_max_lookback(lb: int, nt: float) -> int:
 
 def _calculate_multi_frequency_vcv_for_period(
     pivot_returns: pd.DataFrame,
+    pivot_signals: pd.DataFrame,
     rebal_date: pd.Timestamp,
     est_freqs: List[str],
     est_weights: List[float],
@@ -196,12 +197,13 @@ def _calculate_multi_frequency_vcv_for_period(
             weights_func=weights_func,
             half_life=hl,
         )
-        if dict_vcv[freq].isna().any().any():
-            raise ValueError(
-                f"N/A values in variance-covariance matrix at freq={freq} at real_date={rebal_date}!\n"
-                f"{dict_vcv[freq].isna().any()}"
-            )
+        # if dict_vcv[freq].isna().any().any():
+        #     raise ValueError(
+        #         f"N/A values in variance-covariance matrix at freq={freq} at real_date={rebal_date}!\n"
+        #         f"{dict_vcv[freq].isna().any()}"
+        #     )
 
+    # NOTE: in this case Float+NA = Na
     vcv_df: pd.DataFrame = sum(
         [
             est_weights[ix] * ANNUALIZATION_FACTORS[freq] * dict_vcv[freq]
@@ -217,10 +219,15 @@ def _calc_vol_tuple(
     signals: pd.DataFrame,
     date: pd.Timestamp,
 ) -> Tuple[pd.Timestamp, float]:
-    s = signals.loc[date, :]
-    s[(s.abs() < 1e-8) | s.isna()] = 0
-    vcv_df.loc[s[s == 0].index, :] = 0
-    vcv_df.loc[:, s[s == 0].index] = 0
+    s = signals.loc[date, :].copy()
+
+    # reduce s to vcv columns
+    s = s[s.index.isin(vcv_df.columns)]
+
+    idx_mask = s.isna() | (s.abs() < 1e-6)
+    s.loc[idx_mask] = 0
+    vcv_df.loc[idx_mask, :] = 0
+    vcv_df.loc[:, idx_mask] = 0
     assert not vcv_df.isna().any().any(), f"N/A values in variance-covariance matrix!\n"
 
     pvol: float = np.sqrt(s.T.dot(vcv_df).dot(s))
@@ -239,6 +246,40 @@ def stack_covariances(
         .to_frame("value")
         .reset_index()
         .assign(real_date=real_date)
+    )
+
+
+def _get_first_usable_date(
+    pivot_returns: pd.DataFrame,
+    pivot_signals: pd.DataFrame,
+    rebal_dates: pd.Series,
+    est_freqs: List[str],
+    lback_periods: List[int],
+    nan_tolerance: float,
+) -> pd.Series:
+    max_lb = 0
+    # for each frequency and lookback
+    for lb, est_freq in zip(lback_periods, est_freqs):
+        # calculate the maximum lookback period
+        _max_lb = get_max_lookback(lb, nan_tolerance)
+        # if this is 0, use the number from FFILL_LIMITS
+        _max_lb = FFILL_LIMITS[est_freq] if _max_lb == 0 else _max_lb
+        max_lb = _max_lb if _max_lb > max_lb else max_lb
+
+    assert set(pivot_returns.columns.tolist()) == set(pivot_signals.columns.tolist())
+    pr_starts = {}
+    ps_starts = {}
+    for col in pivot_returns.columns.tolist():
+        # 'full' start date for returns - where the maximum lookback period is available
+        fstart_ret = pivot_returns[col].first_valid_index() + pd.offsets.BDay(max_lb)
+        fstart_sig = pivot_signals[col].first_valid_index() + pd.offsets.BDay(max_lb)
+        pr_starts[col] = rebal_dates[rebal_dates >= fstart_ret].min()
+        ps_starts[col] = rebal_dates[rebal_dates >= fstart_sig].min()
+
+    # get the later of the two start dates and return
+    return pd.Series(
+        {k: max(pr_starts[k], ps_starts[k]) for k in pr_starts.keys()},
+        name="real_date",
     )
 
 
@@ -282,11 +323,27 @@ def _calculate_portfolio_volatility(
     # TODO convert frequencies
     list_vcv: List[pd.DataFrame] = []
     list_pvol: List[Tuple[pd.Timestamp, np.float64]] = []
+    first_starts = _get_first_usable_date(
+        pivot_returns=pivot_returns,
+        pivot_signals=pivot_signals,
+        rebal_dates=rebal_dates,
+        est_freqs=est_freqs,
+        lback_periods=lback_periods,
+        nan_tolerance=nan_tolerance,
+    )
 
     for td in rebal_dates:
+        # only calculate the VCV for series where we have enough data
+        ...  # TODO
+        avails = first_starts[first_starts <= td].index.tolist()
+        if len(avails) == 0:
+            logger.warning(
+                f"No data available for {td} with lookback period of {max(lback_periods)} days."
+            )
+            continue
         vcv_df = _calculate_multi_frequency_vcv_for_period(
-            pivot_returns=pivot_returns,
-            # pivot_signals=pivot_signals,
+            pivot_returns=pivot_returns[avails],
+            pivot_signals=pivot_signals[avails],
             rebal_date=td,
             est_freqs=est_freqs,
             est_weights=est_weights,
