@@ -103,11 +103,11 @@ class ScoreVisualisers:
         min_obs,
         est_freq,
         postfix,
-        no_zn_scores
+        no_zn_scores,
     ):
         if no_zn_scores:
             return reduce_df(df, xcats=xcats, cids=self.cids)
-        
+
         result_df = None
         for xcat in xcats:
             dfzm = make_zn_scores(
@@ -260,7 +260,7 @@ class ScoreVisualisers:
     def view_score_evolution(
         self,
         xcat: str,
-        freq: str = 'A',
+        freq: str = "A",
         cids: List[str] = None,
         include_latest_period: bool = True,
         include_latest_day: bool = True,
@@ -435,6 +435,43 @@ class ScoreVisualisers:
             vertical_divider=vertical_divider,
         )
 
+    def view_3d_surface(
+        self,
+        xcats: List[str],
+        cids: List[str] = None,
+        cids_sel: List[str] = None,
+        date: str = None,
+    ):
+        if cids is None:
+            cids = self.cids
+
+        df = self.df[
+            (self.df["xcat"].isin(xcats))
+            & (self.df["cid"].isin(cids))
+        ]
+
+        pivot_df = df.pivot(index='xcat', columns='real_date', values='value').dropna(axis=1, how='any')
+        pivot_df = pivot_df.reindex(xcats)
+
+        X = pivot_df.values[0, :]
+        Y = pivot_df.values[1, :]
+        Z = pivot_df.values[2, :]
+
+        X, Y = np.meshgrid(X, Y)
+        Z = Z.reshape(X.shape)
+
+        fig = plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(111, projection="3d")
+        surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm_r)
+
+        ax.set_xlabel(xcats[0])
+        ax.set_ylabel(xcats[1])
+        ax.set_zlabel(xcats[2])
+
+        plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+
+        plt.show()
+
 
 if __name__ == "__main__":
     cids_dmea = ["FRF", "DEM", "ITL", "ESP", "EUR"]
@@ -510,29 +547,34 @@ if __name__ == "__main__":
 
     sv = ScoreVisualisers(df, cids=cids, xcats=xcats)
 
-    sv.view_snapshot(
-        cids=cids,
-        transpose=True,
-        figsize=(14, 12),
-    )
-    sv.view_cid_evolution(
-        cid="USD",
-        xcats=xcats + ["Composite"],
-        xcat_labels={
-            "GGIEDGDP_NSA_ZN": "Currency reserve expansion as % of GDP",
-            "Composite_ZN": "Composite",
-            "NIIPGDP_NSA_ZN": "Monetary base expansion as % of GDP",
-            "CABGDPRATIO_NSA_12MMA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 3 months",
-            "GGOBGDPRATIO_NSA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 6 months",
-        },
-        freq="A",
-        transpose=False,
-    )
-    sv.view_score_evolution(
-        xcat="GGIEDGDP_NSA",
-        cids=cids,
-        freq="BA",
-        transpose=False,
-        start="2010-01-01",
-        title="AHKSJDA",
+    # sv.view_snapshot(
+    #     cids=cids,
+    #     transpose=True,
+    #     figsize=(14, 12),
+    # )
+    # sv.view_cid_evolution(
+    #     cid="USD",
+    #     xcats=xcats + ["Composite"],
+    #     xcat_labels={
+    #         "GGIEDGDP_NSA_ZN": "Currency reserve expansion as % of GDP",
+    #         "Composite_ZN": "Composite",
+    #         "NIIPGDP_NSA_ZN": "Monetary base expansion as % of GDP",
+    #         "CABGDPRATIO_NSA_12MMA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 3 months",
+    #         "GGOBGDPRATIO_NSA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 6 months",
+    #     },
+    #     freq="A",
+    #     transpose=False,
+    # )
+    # sv.view_score_evolution(
+    #     xcat="GGIEDGDP_NSA",
+    #     cids=cids,
+    #     freq="BA",
+    #     transpose=False,
+    #     start="2010-01-01",
+    #     title="AHKSJDA",
+    # )
+    sv.view_3d_surface(
+        xcats=["GGIEDGDP_NSA_ZN", "NIIPGDP_NSA_ZN", "CABGDPRATIO_NSA_12MMA_ZN"],
+        cids=["GBP"],
+        date="2023-05-01",
     )
