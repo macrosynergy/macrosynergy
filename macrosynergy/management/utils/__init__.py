@@ -37,6 +37,7 @@ from .df_utils import (
     quarters_btwn_dates,
     get_eops,
     get_sops,
+    estimate_release_frequency,
 )
 
 from .math import (
@@ -83,5 +84,6 @@ __all__ = [
     "quarters_btwn_dates",
     "get_eops",
     "get_sops",
+    "estimate_release_frequency",
     "expanding_mean_with_nan",
 ]
