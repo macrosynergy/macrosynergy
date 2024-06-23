@@ -1,7 +1,6 @@
 # This is a workflow in for running the package tests for the macrosynergy package when doing a release to PyPI.
 # It runs on Ubuntu, Windows and MacOS, for Python 3.8, 3.9, 3.10 and 3.11.
-
-name: Test Python package on Ubuntu
+name: Test Python package on Ubuntu - Release
 
 on:
   pull_request:
@@ -9,37 +8,103 @@ on:
   workflow_dispatch:
 
 jobs:
-  run-unit-tests-matrix:
+  prepare-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: set-matrix
+        run: |
+          FOLDERS=$(ls -d tests/unit/*/ | sed 's|tests/unit/||' | sed 's|/||' | jq -R -s -c 'split("\n")[:-1]')
+          echo "Matrix: $FOLDERS"
+          echo "::set-output name=matrix::$FOLDERS"
+
+  run-unit-tests-release:
+    needs: prepare-matrix
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.8", "3.9", "3.10", "3.11"]
+        folder: ${{fromJson(needs.prepare-matrix.outputs.matrix)}}
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
         run: |
           pip install .[test]
 
       - name: Lint with flake8
         run: |
-          # Options: exluding docs, scripts and build folders. Also, treating certain errors as warnings.
           flake8 --count --select=E9,F63,F7,F82 --show-source --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
           flake8 --count --exit-zero --max-complexity=10 --max-line-length=127 --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
 
-      - name: Test with pytest
+      - name: Test with pytest in ${{ matrix.folder }}
         run: |
-          # Options: --ignore=tests/specific.py --ignore-glob=tests/ignore-pattern
-          pytest tests/unit/
+          python -m pytest tests/unit/${{ matrix.folder }}
+
+      - name: Upload reports to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: .coverage
+
+  run-unit-tests-release-success:
+    needs: run-unit-tests-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify on failure
+        run: |
+          if [ ${{ job.status }} == 'failure' ]; then
+            echo "Unit tests failed"
+            exit 1
+          else
+            echo "Unit tests passed"
+          fi
+
+  test-build-settings-matrix:
+    needs: run-unit-tests-release-success
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Create and activate virtual environment
+        run: |
+          python -m venv venv
+          source venv/bin/activate
 
       - name: Test build settings
         run: |
-          pip uninstall -y macrosynergy
-          pip install .[all] 
+          pip install .[all]
           python -c "import macrosynergy; print(macrosynergy.__version__)"
-          
+
+  test-build-settings-matrix-success:
+    needs: test-build-settings-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify on failure
+        run: |
+          if [ ${{ job.status }} == 'failure' ]; then
+            echo "Build settings test failed"
+            exit 1
+          else
+            echo "Build settings test passed"
+          fi

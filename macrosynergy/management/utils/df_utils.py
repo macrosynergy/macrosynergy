@@ -2,19 +2,21 @@
 Utility functions for working with DataFrames.
 """
 
-import itertools
-
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.constants import FREQUENCY_MAP
 
 import warnings
-from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
+from typing import Iterable, List, Optional, Union
 
 import numpy as np
 import pandas as pd
-import requests
-import requests.compat
-from .core import get_cid, get_xcat, _map_to_business_day_frequency, is_valid_iso_date
+import datetime
+import macrosynergy.management.constants as ms_constants
+from macrosynergy.management.utils.core import (
+    get_cid,
+    get_xcat,
+    _map_to_business_day_frequency,
+    is_valid_iso_date,
+)
 
 
 def standardise_dataframe(
@@ -31,7 +33,9 @@ def standardise_dataframe(
     :raises <ValueError>: If the input DataFrame is not in the correct format.
     """
     idx_cols: List[str] = QuantamentalDataFrame.IndexCols
-    commonly_used_cols: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+    metric_columns: List[str] = ms_constants.JPMAQS_METRICS
+
+    # Check if the input DF contains the standard columns
     if not set(df.columns).issuperset(set(idx_cols)):
         fail_str: str = (
             f"Error : Tried to standardize DataFrame but failed."
@@ -56,28 +60,38 @@ def standardise_dataframe(
         if len(df.columns) < 4:
             raise ValueError(fail_str)
 
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    # Convert date and ensure specific columns are strings in one step
+    # 'datetime64[ns]' is the default dtype for datetime columns in pandas
+    df["real_date"] = pd.to_datetime(
+        df["real_date"],
+        format="%Y-%m-%d",
+    ).astype("datetime64[ns]")
     df["cid"] = df["cid"].astype(str)
     df["xcat"] = df["xcat"].astype(str)
-    df = df.sort_values(by=["real_date", "cid", "xcat"]).reset_index(drop=True)
+    # sort by cid, xcat and real_date to allow viewing stacked timeseries easily
+    df = (
+        df.drop_duplicates(subset=idx_cols, keep="last")
+        .sort_values(by=["cid", "xcat", "real_date"])
+        .reset_index(drop=True)
+    )
 
-    remaining_cols: Set[str] = set(df.columns) - set(idx_cols)
+    # Sort the 'remaining' columns
+    ## No more row-reordering or shape changes after this point
 
-    df = df[idx_cols + sorted(list(remaining_cols))]
+    jpmaqs_metrics = [mtr for mtr in metric_columns if mtr in df.columns]
+    non_jpmaqs_metrics = (set(df.columns) - set(jpmaqs_metrics)) - set(idx_cols)
+    col_order = idx_cols + jpmaqs_metrics + sorted(list(non_jpmaqs_metrics))
+    df = df[col_order]
 
     # for every remaining col, try to convert to float
-    for col in remaining_cols:
+    for col in col_order:
         try:
             df[col] = df[col].astype(float)
         except:
             pass
 
-    non_idx_cols: list = sorted(list(set(df.columns) - set(idx_cols)))
-    return_df: pd.DataFrame = df[idx_cols + non_idx_cols]
-    assert isinstance(
-        return_df, QuantamentalDataFrame
-    ), "Failed to standardize DataFrame"
-    return return_df
+    assert isinstance(df, QuantamentalDataFrame), "Failed to standardize DataFrame"
+    return df
 
 
 def drop_nan_series(
@@ -153,17 +167,11 @@ def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFr
         )
         value_column: str = cols[0]
 
-    df: pd.DataFrame = df.copy()
-
-    df["ticker"] = df["cid"] + "_" + df["xcat"]
-    # drop cid and xcat
-    df = (
-        df.drop(columns=["cid", "xcat"])
+    return (
+        df.assign(ticker=df["cid"] + "_" + df["xcat"])
         .pivot(index="real_date", columns="ticker", values=value_column)
         .rename_axis(None, axis=1)
     )
-
-    return df
 
 
 def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
@@ -195,57 +203,73 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
 
 
 def apply_slip(
-    df: pd.DataFrame,
+    df: QuantamentalDataFrame,
     slip: int,
-    cids: List[str],
-    xcats: List[str],
-    metrics: List[str],
+    cids: Optional[List[str]] = None,
+    xcats: Optional[List[str]] = None,
+    tickers: Optional[List[str]] = None,
+    metrics: List[str] = ["value"],
     raise_error: bool = True,
-) -> pd.DataFrame:
+) -> QuantamentalDataFrame:
     """
-    Applied a slip, i.e. a negative lag, to the target DataFrame
+    Applies a slip, i.e. a negative lag, to the DataFrame
     for the given cross-sections and categories, on the given metrics.
 
-    :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
+    :param <QuantamentalDataFrame> target_df: DataFrame to which the slip is applied.
     :param <int> slip: Slip to be applied.
     :param <List[str]> cids: List of cross-sections.
-    :param <List[str]> xcats: List of categories.
+    :param <List[str]> xcats: List of target categories.
     :param <List[str]> metrics: List of metrics to which the slip is applied.
-    :return <pd.DataFrame> target_df: DataFrame with the slip applied.
+    :return <QuantamentalDataFrame> target_df: DataFrame with the slip applied.
     :raises <TypeError>: If the provided parameters are not of the expected type.
     :raises <ValueError>: If the provided parameters are semantically incorrect.
     """
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
 
     df = df.copy()
     if not (isinstance(slip, int) and slip >= 0):
         raise ValueError("Slip must be a non-negative integer.")
 
+    if not any([cids, xcats, tickers]):
+        raise ValueError("One of `tickers`, `cids` or `xcats` must be provided.")
+    if tickers is not None:
+        if cids is not None or xcats is not None:
+            raise ValueError("Cannot specify both `tickers` and `cids`/`xcats`.")
     if cids is None:
-        cids = df["cid"].unique().tolist()
+        cids = df["cid"].unique()
     if xcats is None:
-        xcats = df["xcat"].unique().tolist()
+        xcats = df["xcat"].unique()
 
-    sel_tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
-    df["tickers"] = df["cid"] + "_" + df["xcat"]
+    if tickers is not None:
+        sel_tickers = tickers
+    else:
+        sel_tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
 
-    if not set(sel_tickers).issubset(set(df["tickers"].unique())):
+    df["ticker"] = df["cid"] + "_" + df["xcat"]
+    err_str = (
+        "Tickers targetted for applying slip are not present in the DataFrame.\n"
+        "Missing tickers: {tickers}"
+    )
+
+    if not set(sel_tickers).issubset(set(df["ticker"].unique())):
+        missing_tickers = sorted(list(set(sel_tickers) - set(df["ticker"].unique())))
+        _err_str = err_str.format(tickers=missing_tickers)
         if raise_error:
-            raise ValueError(
-                "Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: "
-                f"{sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
-            )
+            raise ValueError(_err_str)
         else:
-            warnings.warn(
-                "Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: "
-                f"{sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
-            )
+            warnings.warn(_err_str)
 
     slip: int = slip.__neg__()
 
-    df[metrics] = df.groupby("tickers")[metrics].shift(slip)
-    df = df.drop(columns=["tickers"])
+    filtered_df = df[df["ticker"].isin(sel_tickers)]
+    filtered_df.loc[:, metrics] = filtered_df.loc[:, metrics].astype(float)
+    filtered_df.loc[:, metrics] = filtered_df.groupby("ticker")[metrics].shift(slip)
+
+    df.loc[df["ticker"].isin(sel_tickers), metrics] = filtered_df[metrics]
+
+    df = df.drop(columns=["ticker"]).reset_index(drop=True)
+    assert isinstance(df, QuantamentalDataFrame), "Failed to apply slip."
 
     return df
 
@@ -348,7 +372,8 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     else:
         df = update_categories(df, df_add)
 
-    return df.reset_index(drop=True)
+    # sort same as in `standardise_dataframe`
+    return df.sort_values(by=["real_date", "cid", "xcat"]).reset_index(drop=True)
 
 
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
@@ -359,21 +384,12 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     :param <pd.DataFrame> df_add: DataFrame with the latest values.
 
     """
-    df["ticker"] = df["cid"] + "_" + df["xcat"]
-    df_add["ticker"] = df_add["cid"] + "_" + df_add["xcat"]
-    agg_df_tick = set(df["ticker"])
-    add_df_tick = set(df_add["ticker"])
-
-    # If the ticker is already defined in the DataFrame, replace with the new series
-    # otherwise append the series to the aggregate DataFrame.
-    df = df[~df["ticker"].isin(list(agg_df_tick.intersection(add_df_tick)))]
-
     df = pd.concat([df, df_add], axis=0, ignore_index=True)
 
-    df = df.drop(["ticker"], axis=1)
-    df_add = df_add.drop(["ticker"], axis=1)
-
-    return df.sort_values(["xcat", "cid", "real_date"])
+    df = df.drop_duplicates(
+        subset=["real_date", "xcat", "cid"], keep="last"
+    ).reset_index(drop=True)
+    return df
 
 
 def update_categories(df: pd.DataFrame, df_add):
@@ -438,45 +454,40 @@ def reduce_df(
         (for out_all True) DataFrame and available and selected xcats and cids.
     """
 
-    dfx = df.copy()
-
     if xcats is not None:
         if not isinstance(xcats, list):
             xcats = [xcats]
 
-    if start is not None:
-        dfx = dfx[dfx["real_date"] >= pd.to_datetime(start)]
+    if start:
+        df = df[df["real_date"] >= pd.to_datetime(start)]
 
-    if end is not None:
-        dfx = dfx[dfx["real_date"] <= pd.to_datetime(end)]
+    if end:
+        df = df[df["real_date"] <= pd.to_datetime(end)]
 
     if blacklist is not None:
-        masks = []
         for key, value in blacklist.items():
-            filt1 = dfx["cid"] == key[:3]
-            filt2 = dfx["real_date"] >= pd.to_datetime(value[0])
-            filt3 = dfx["real_date"] <= pd.to_datetime(value[1])
-            combined_mask = filt1 & filt2 & filt3
-            masks.append(combined_mask)
+            df = df[
+                ~(
+                    (df["cid"] == key[:3])
+                    & (df["real_date"] >= pd.to_datetime(value[0]))
+                    & (df["real_date"] <= pd.to_datetime(value[1]))
+                )
+            ]
 
-        if masks:
-            combined_mask = pd.concat(masks, axis=1).any(axis=1)
-            dfx = dfx[~combined_mask]
-
-    xcats_in_df = dfx["xcat"].unique()
     if xcats is None:
-        xcats = sorted(xcats_in_df)
+        xcats = sorted(df["xcat"].unique())
     else:
+        xcats_in_df = df["xcat"].unique()
         xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
 
-    dfx = dfx[dfx["xcat"].isin(xcats)]
+    df = df[df["xcat"].isin(xcats)]
 
     if intersect:
-        df_uns = dict(dfx.groupby("xcat")["cid"].unique())
-        df_uns = {k: set(v) for k, v in df_uns.items()}
-        cids_in_df = list(set.intersection(*list(df_uns.values())))
+        cids_in_df = set.intersection(
+            *(set(df[df["xcat"] == xcat]["cid"].unique()) for xcat in xcats)
+        )
     else:
-        cids_in_df = dfx["cid"].unique()
+        cids_in_df = df["cid"].unique()
 
     if cids is None:
         cids = sorted(cids_in_df)
@@ -484,13 +495,12 @@ def reduce_df(
         cids = [cids] if isinstance(cids, str) else cids
         cids = [cid for cid in cids if cid in cids_in_df]
 
-        cids = set(cids).intersection(cids_in_df)
-        dfx = dfx[dfx["cid"].isin(cids)]
+    df = df[df["cid"].isin(cids)]
 
     if out_all:
-        return dfx.drop_duplicates(), xcats, sorted(list(cids))
+        return df.drop_duplicates(), xcats, sorted(cids)
     else:
-        return dfx.drop_duplicates()
+        return df.drop_duplicates()
 
 
 def reduce_df_by_ticker(
@@ -571,15 +581,19 @@ def categories_df_aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
     return dfx
 
 
-def categories_df_expln_df(
-    df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_condition: bool, lag: int
+def _categories_df_explanatory_df(
+    dfw: pd.DataFrame,
+    explanatory_xcats: List[str],
+    agg_method: str,
+    sum_condition: bool,
+    lag: int,
 ):
     """
     Produces the explanatory column(s) for the custom DataFrame.
 
-    :param <pd.DataFrame> df_w: group-by DataFrame which has been down-sampled. The
+    :param <pd.DataFrame> dfw: group-by DataFrame which has been down-sampled. The
         respective aggregation method will be applied.
-    :param <List[str]> xpls: list of explanatory category(s).
+    :param <List[str]> explanatory_xcats: list of explanatory category(s).
     :param <str> agg_meth: aggregation method used for all explanatory variables.
     :param <dict> sum_condition: required boolean to negate erroneous zeros if the
         aggregate method used, for the explanatory variable, is sum.
@@ -587,19 +601,19 @@ def categories_df_expln_df(
         category.
     """
 
-    dfw_xpls = pd.DataFrame()
-    for xpl in xpls:
+    dfw_explanatory = pd.DataFrame()
+    for xcat in explanatory_xcats:
         if not sum_condition:
-            xpl_col = df_w[xpl].agg(agg_meth).astype(dtype=np.float32)
+            explanatory_col = dfw[xcat].agg(agg_method).astype(dtype=np.float32)
         else:
-            xpl_col = df_w[xpl].sum(min_count=1)
+            explanatory_col = dfw[xcat].sum(min_count=1)
 
         if lag > 0:
-            xpl_col = xpl_col.groupby(level=0).shift(lag)
+            explanatory_col = explanatory_col.groupby(level=0).shift(lag)
 
-        dfw_xpls[xpl] = xpl_col
+        dfw_explanatory[xcat] = explanatory_col
 
-    return dfw_xpls
+    return dfw_explanatory
 
 
 def categories_df(
@@ -665,11 +679,6 @@ def categories_df(
 
     assert isinstance(xcats, list), f"<list> expected and not {type(xcats)}."
     assert all([isinstance(c, str) for c in xcats]), "List of categories expected."
-    xcat_error = (
-        "The minimum requirement is that a single dependent and explanatory "
-        "variable are included."
-    )
-    assert len(xcats) >= 2, xcat_error
 
     aggs_error = "List of strings, outlining the aggregation methods, expected."
     assert isinstance(xcat_aggs, list), aggs_error
@@ -692,7 +701,27 @@ def categories_df(
         )
         assert len(xcats) == 2, no_xcats
 
+    input_xcats = xcats
+    input_cids = cids
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
+
+    if len(xcats) < 2:
+        raise ValueError("The DataFrame must contain at least two categories. ")
+    elif set(xcats) != set(input_xcats):
+        missing_xcats = list(set(input_xcats) - set(xcats))
+        warnings.warn(
+            f"The following categories are missing from the DataFrame: {missing_xcats}"
+        )
+
+    if len(cids) < 1:
+        raise ValueError(
+            "The DataFrame must contain at least one valid cross section. "
+        )
+    elif input_cids and set(cids) != set(input_cids):
+        missing_cids = list(set(input_cids) - set(cids))
+        warnings.warn(
+            f"The following cross sections are missing from the DataFrame: {missing_cids}"
+        )
 
     metric = ["value", "grading", "mop_lag", "eop_lag"]
     val_error = (
@@ -713,23 +742,23 @@ def categories_df(
 
     df_output = []
     if years is None:
-        df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values=val)
+        dfw = df.pivot(index=("cid", "real_date"), columns="xcat", values=val)
 
         dep = xcats[-1]
         # The possibility of multiple explanatory variables.
-        xpls = xcats[:-1]
+        explanatory_xcats = xcats[:-1]
 
-        df_w = df_w.groupby(
+        dfw = dfw.groupby(
             [
                 pd.Grouper(level="cid"),
                 pd.Grouper(level="real_date", freq=freq),
             ]
         )
 
-        dfw_xpls = categories_df_expln_df(
-            df_w=df_w,
-            xpls=xpls,
-            agg_meth=xcat_aggs[0],
+        dfw_explanatory = _categories_df_explanatory_df(
+            dfw=dfw,
+            explanatory_xcats=explanatory_xcats,
+            agg_method=xcat_aggs[0],
             sum_condition=(xcat_aggs[0] == "sum"),
             lag=lag,
         )
@@ -739,38 +768,38 @@ def categories_df(
         # values will incorrectly be summed to the value zero which is misleading for
         # analysis.
         if not (xcat_aggs[-1] == "sum"):
-            dep_col = df_w[dep].agg(xcat_aggs[1]).astype(dtype=np.float32)
+            dep_col = dfw[dep].agg(xcat_aggs[1]).astype(dtype=np.float32)
         else:
-            dep_col = df_w[dep].sum(min_count=1)
+            dep_col = dfw[dep].sum(min_count=1)
 
         if fwin > 1:
             s = 1 - fwin
             dep_col = dep_col.rolling(window=fwin).mean().shift(s)
 
-        dfw_xpls[dep] = dep_col
+        dfw_explanatory[dep] = dep_col
         # Order such that the return category is the right-most column - will reflect the
         # order of the categories list.
-        dfc = dfw_xpls[xpls + [dep]]
+        dfc = dfw_explanatory[explanatory_xcats + [dep]]
 
     else:
-        s_year = pd.to_datetime(start).year
-        start_year = s_year
-        e_year = df["real_date"].max().year + 1
+        start_year = pd.to_datetime(start).year
+        end_year = df["real_date"].max().year + 1
 
-        grouping = int((e_year - s_year) / years)
-        remainder = (e_year - s_year) % years
+        grouping = int((end_year - start_year) / years)
+        remainder = (end_year - start_year) % years
 
         year_groups = {}
 
+        group_start_year = start_year
         for group in range(grouping):
-            value = [i for i in range(s_year, s_year + years)]
-            key = f"{s_year} - {s_year + (years - 1)}"
+            value = [i for i in range(group_start_year, group_start_year + years)]
+            key = f"{group_start_year} - {group_start_year + (years - 1)}"
             year_groups[key] = value
 
-            s_year += years
+            group_start_year += years
 
-        v = [i for i in range(s_year, s_year + (remainder + 1))]
-        year_groups[f"{s_year} - now"] = v
+        v = [i for i in range(group_start_year, group_start_year + (remainder + 1))]
+        year_groups[f"{group_start_year} - now"] = v
         list_y_groups = list(year_groups.keys())
 
         translate_ = lambda year: list_y_groups[int((year % start_year) / years)]
@@ -816,34 +845,42 @@ def weeks_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
     return dif
 
 
-def get_eops(
+def _get_edge_dates(
     dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
     start_date: Optional[Union[str, pd.Timestamp]] = None,
     end_date: Optional[Union[str, pd.Timestamp]] = None,
     freq: str = "M",
+    direction: str = "end",
 ) -> pd.Series:
-    """
-    Returns a series of end-of-period dates for a given frequency.
-    Dates can be passed as a series, index, a generic iterable or as a start and end date.
+    assert direction in ["start", "end"], "Direction must be either 'start' or 'end'."
+    datettypes = [pd.Timestamp, str, np.datetime64, datetime.date]
 
-    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
-    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
-        be used to generate the end-of-period dates. Can be passed as a series, index, a
-        generic iterable or as a start and end date.
-    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
-        not passed.
-    """
-    if (not isinstance(freq, str)) or (freq.upper() not in FREQUENCY_MAP.keys()):
-        raise ValueError(
-            f"Frequency must be one of {list(FREQUENCY_MAP.keys())}, but received {freq}."
-        )
-    freq: str = freq.upper()
+    freq = _map_to_business_day_frequency(freq)
 
     if bool(start_date) != bool(end_date):
         raise ValueError(
             "Both `start_date` and `end_date` must be passed when using "
             "dates as a start and end date."
         )
+
+    if dates is not None:
+        if not isinstance(dates, (pd.DatetimeIndex, pd.Series, Iterable)):
+            raise TypeError(
+                "Dates must be a pandas DatetimeIndex, Series, or a generic iterable."
+            )
+        if isinstance(dates, pd.DataFrame):
+            dates = dates.iloc[:, 0]
+        if isinstance(dates, (pd.DatetimeIndex, pd.Series)):
+            dates = dates.tolist()
+        dates = list(dates)
+
+        for ix, dt in enumerate(dates):
+            try:
+                dates[ix] = pd.to_datetime(dt)
+            except Exception as e:
+                raise TypeError(
+                    f"Error converting date at index {ix} to a pandas Timestamp: {e}"
+                )
 
     if bool(start_date) and bool(dates):
         raise ValueError(
@@ -873,31 +910,118 @@ def get_eops(
         ),
         columns=["real_date"],
     ).apply(pd.to_datetime, axis=1)
-
     min_date: pd.Timestamp = dts["real_date"].min()
 
-    if freq == "D":
+    if freq == _map_to_business_day_frequency("D"):
         max_date = dts["real_date"].max()
         dtx = pd.bdate_range(start=min_date, end=max_date)
         return dtx[dtx.isin(dts["real_date"])]
 
-    if freq == "M":
+    if freq == _map_to_business_day_frequency("M"):
         func = months_btwn_dates
-    elif freq == "W":
+    elif freq == _map_to_business_day_frequency("W"):
         func = weeks_btwn_dates
-    elif freq == "Q":
+    elif freq == _map_to_business_day_frequency("Q"):
         func = quarters_btwn_dates
-    elif freq == "A":
+    elif freq == _map_to_business_day_frequency("A"):
         func = years_btwn_dates
-    # elif freq == "D":
-    #     func = lambda x, y: len(pd.bdate_range(x, y)) - 1
     else:
         raise ValueError("Frequency parameter must be one of D, M, W, Q, or A.")
 
     dts["period"] = dts["real_date"].apply(func, args=(min_date,))
 
-    t_indices: pd.Series = dts["period"].shift(-1) != dts["period"]
-
+    dx = -1 if direction == "end" else 1
+    t_indices: pd.Series = dts["period"].shift(dx) != dts["period"]
     t_dates: pd.Series = dts["real_date"].loc[t_indices].reset_index(drop=True)
 
     return t_dates
+
+
+def get_eops(
+    dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
+    start_date: Optional[Union[str, pd.Timestamp]] = None,
+    end_date: Optional[Union[str, pd.Timestamp]] = None,
+    freq: str = "M",
+) -> pd.Series:
+    """
+    Returns a series of end-of-period dates for a given frequency.
+    Dates can be passed as a series, index, a generic iterable or as a start and end date.
+
+    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
+    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
+        be used to generate the end-of-period dates. Can be passed as a series, index, a
+        generic iterable or as a start and end date.
+    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
+        not passed.
+    """
+    direction = "end"
+    return _get_edge_dates(
+        dates=dates,
+        start_date=start_date,
+        end_date=end_date,
+        freq=freq,
+        direction=direction,
+    )
+
+
+def get_sops(
+    dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
+    start_date: Optional[Union[str, pd.Timestamp]] = None,
+    end_date: Optional[Union[str, pd.Timestamp]] = None,
+    freq: str = "M",
+) -> pd.Series:
+    """
+    Returns a series of start-of-period dates for a given frequency.
+    Dates can be passed as a series, index, a generic iterable or as a start and end date.
+
+    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
+    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
+        be used to generate the start-of-period dates. Can be passed as a series, index, a
+        generic iterable or as a start and end date.
+    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
+        not passed.
+    """
+    direction = "start"
+    return _get_edge_dates(
+        dates=dates,
+        start_date=start_date,
+        end_date=end_date,
+        freq=freq,
+        direction=direction,
+    )
+
+
+if __name__ == "__main__":
+    from macrosynergy.management.simulate import make_qdf
+
+    cids = ["AUD", "CAD", "GBP", "NZD"]
+    xcats = ["XR1", "XR2", "CRY1", "CRY2"]
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2000-01-01", "2020-12-31", 0.1, 1]
+    df_cids.loc["CAD"] = ["2001-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP"] = ["2002-01-01", "2020-11-30", 0, 2]
+    df_cids.loc["NZD"] = ["2002-01-01", "2020-09-30", -0.1, 2]
+
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
+    df_xcats.loc["XR1"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["XR2"] = ["2000-01-01", "2020-10-30", 1, 2, 0.95, 1]
+    df_xcats.loc["CRY1"] = ["2001-01-01", "2020-10-30", 1, 2, 0.9, 1]
+    df_xcats.loc["CRY2"] = ["2001-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+
+    dfw = categories_df(
+        df=dfd,
+        xcats=xcats[:2] + ["test"],
+        cids=cids,
+        freq="M",
+        # lag=1,
+        xcat_aggs=["last", "sum"],
+        # years=5,
+        # start="2000-01-01",
+    )

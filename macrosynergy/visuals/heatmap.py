@@ -4,7 +4,7 @@ designed to plot time series data as a heatmap.
 """
 
 import pandas as pd
-from typing import List, Dict, Tuple, Optional
+from typing import List, Tuple, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 from seaborn.utils import relative_luminance
@@ -13,8 +13,7 @@ from typing import Union
 from macrosynergy.management.utils import downsample_df_on_real_date
 
 from macrosynergy.visuals.plotter import Plotter
-from macrosynergy.management.types import Numeric, NoneType
-
+from numbers import Number
 from macrosynergy.management.simulate import make_test_df
 
 
@@ -64,16 +63,16 @@ class Heatmap(Plotter):
     def _plot(
         self,
         df: pd.DataFrame,
-        figsize: Tuple[Numeric, Numeric] = (12, 8),
+        figsize: Tuple[Number, Number] = (12, 8),
         x_axis_label: Optional[str] = None,
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 14,
         title: Optional[str] = None,
         title_fontsize: int = 22,
-        title_xadjust: Numeric = 0.5,
-        title_yadjust: Numeric = 1.0,
-        vmin: Optional[Numeric] = None,
-        vmax: Optional[Numeric] = None,
+        title_xadjust: Number = 0.5,
+        title_yadjust: Number = 1.0,
+        vmin: Optional[Number] = None,
+        vmax: Optional[Number] = None,
         show: bool = True,
         save_to_file: Optional[str] = None,
         dpi: int = 300,
@@ -81,8 +80,8 @@ class Heatmap(Plotter):
         on_axis: Optional[plt.Axes] = None,
         max_xticks: int = 50,
         cmap: Optional[Union[str, mpl.colors.Colormap]] = None,
-        rotate_xticks: Optional[Numeric] = 0,
-        rotate_yticks: Optional[Numeric] = 0,
+        rotate_xticks: Optional[Number] = 0,
+        rotate_yticks: Optional[Number] = 0,
         show_tick_lines: Optional[bool] = True,
         show_colorbar: Optional[bool] = True,
         show_annotations: Optional[bool] = False,
@@ -248,16 +247,16 @@ class Heatmap(Plotter):
         end=None,
         freq=None,
         agg="mean",
-        figsize: Optional[Tuple[Numeric, Numeric]] = (12, 8),
+        figsize: Optional[Tuple[Number, Number]] = (12, 8),
         x_axis_label: Optional[str] = None,
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 14,
         title: Optional[str] = None,
         title_fontsize: int = 22,
-        title_xadjust: Numeric = 0.5,
-        title_yadjust: Numeric = 1.0,
-        vmin: Optional[Numeric] = None,
-        vmax: Optional[Numeric] = None,
+        title_xadjust: Number = 0.5,
+        title_yadjust: Number = 1.0,
+        vmin: Optional[Number] = None,
+        vmax: Optional[Number] = None,
         show: bool = True,
         save_to_file: Optional[str] = None,
         dpi: int = 300,
@@ -265,8 +264,8 @@ class Heatmap(Plotter):
         on_axis: Optional[plt.Axes] = None,
         max_xticks: int = 50,
         cmap: Optional[Union[str, mpl.colors.Colormap]] = None,
-        rotate_xticks: Optional[Numeric] = 0,
-        rotate_yticks: Optional[Numeric] = 0,
+        rotate_xticks: Optional[Number] = 0,
+        rotate_yticks: Optional[Number] = 0,
         show_tick_lines: Optional[bool] = True,
         show_colorbar: Optional[bool] = True,
         show_annotations: Optional[bool] = False,
@@ -315,7 +314,7 @@ class Heatmap(Plotter):
         vmax: float = max(1, df[metric].max())
         vmin: float = min(0, df[metric].min())
 
-        df["real_date"]: pd.Series = df["real_date"].dt.strftime("%Y-%m-%d")
+        df["real_date"] = df["real_date"].dt.strftime("%Y-%m-%d")
 
         df = df.pivot_table(index=y_axis_column, columns=x_axis_column, values=metric)
 
@@ -380,7 +379,7 @@ if __name__ == "__main__":
 
     heatmap = Heatmap(df=dfx, xcats=["FX"])
 
-    heatmap.df["real_date"]: pd.Series = heatmap.df["real_date"].dt.strftime("%Y-%m-%d")
+    heatmap.df["real_date"] = heatmap.df["real_date"].dt.strftime("%Y-%m-%d")
     heatmap.df = heatmap.df.pivot_table(
         index="cid", columns="real_date", values="grading"
     )

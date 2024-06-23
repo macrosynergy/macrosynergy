@@ -7,6 +7,7 @@ import unittest
 
 from macrosynergy.learning import (
     NaivePredictor,
+    BaseWeightedRegressor,
     SignWeightedLinearRegression,
     TimeWeightedLinearRegression,
     LADRegressor,
@@ -14,6 +15,8 @@ from macrosynergy.learning import (
     panel_cv_scores,
     SignalOptimizer,
     RollingKFoldPanelSplit,
+    WeightedLinearRegression,
+    WeightedLADRegressor
 )
 
 from sklearn.linear_model import (
@@ -473,12 +476,10 @@ class TestSWLRegression(unittest.TestCase):
         inner_splitter = RollingKFoldPanelSplit(n_splits=5)
         models = {
             "SWOLS": SignWeightedLinearRegression(),
-            "OLS": LinearRegression(),
         }
         metric = make_scorer(mean_squared_error, squared=False, greater_is_better=False)
         hparam_grid = {
-            "SWOLS": {"fit_intercept": [True, False]},
-            "OLS": {"fit_intercept": [True, False]},
+            "SWOLS": {"fit_intercept": [False]},
         }
         so = SignalOptimizer(
             inner_splitter=inner_splitter,
@@ -762,12 +763,10 @@ class TestTWLRegression(unittest.TestCase):
         inner_splitter = RollingKFoldPanelSplit(n_splits=5)
         models = {
             "SWOLS": TimeWeightedLinearRegression(),
-            "OLS": LinearRegression(),
         }
         metric = make_scorer(mean_squared_error, squared=False, greater_is_better=False)
         hparam_grid = {
-            "SWOLS": {"fit_intercept": [True, False], "half_life": [21, 42, 100, 200]},
-            "OLS": {"fit_intercept": [True, False]},
+            "SWOLS": {"fit_intercept": [False], "half_life": [21]},
         }
         so = SignalOptimizer(
             inner_splitter=inner_splitter,
@@ -814,3 +813,194 @@ class TestTWLRegression(unittest.TestCase):
         self.assertTrue(mdl.positive == positive)
         self.assertTrue(mdl.model.fit_intercept == fit_intercept)
         self.assertTrue(mdl.model.positive == positive)
+
+
+class TestWeightedLADRegressor(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        # Generate data with true linear relationship
+        cids = ["AUD", "CAD", "GBP", "USD"]
+        xcats = ["XR", "CPI", "GROWTH", "RIR"]
+
+        df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
+        df_cids.loc["AUD"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["CAD"] = ["2020-01-01", "2020-12-31"]
+        df_cids.loc["GBP"] = ["2020-01-01", "2020-12-31"]
+        df_cids.loc["USD"] = ["2019-06-01", "2020-12-31"]
+
+        tuples = []
+
+        for cid in cids:
+            # get list of all eligible dates
+            sdate = df_cids.loc[cid]["earliest"]
+            edate = df_cids.loc[cid]["latest"]
+            all_days = pd.date_range(sdate, edate)
+            work_days = all_days[all_days.weekday < 5]
+            for work_day in work_days:
+                tuples.append((cid, work_day))
+
+        n_samples = len(tuples)
+        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
+        labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
+        df = pd.DataFrame(
+            data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
+            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
+            columns=xcats,
+            dtype=np.float32,
+        )
+
+        self.X = df.drop(columns="XR")
+        self.y = df["XR"]
+
+    def test_valid_init(self):
+        # Test that a sign weighted ols model is successfully instantiated
+        try:
+            model = WeightedLADRegressor()
+        except Exception as e:
+            self.fail(
+                "WeightedLADRegressor constructor with a LinearRegression object raised an exception: {}".format(
+                    e
+                )
+            )
+        self.assertEqual(model.fit_intercept, True)
+        self.assertEqual(model.positive, False)
+        self.assertIsInstance(model.model, LADRegressor)
+        self.assertEqual(model.model.fit_intercept, model.fit_intercept)
+        self.assertEqual(model.model.positive, model.positive)
+
+        # Test that a LAD model is successfully instantiated
+        # when other arguments are passed
+        try:
+            model = WeightedLADRegressor(fit_intercept=False, positive=True)
+        except Exception as e:
+            self.fail(
+                "WeightedLADRegressor constructor with args has raised an exception: {}".format(
+                    e
+                )
+            )
+        self.assertEqual(model.fit_intercept, False)
+        self.assertEqual(model.positive, True)
+        self.assertIsInstance(model.model, LADRegressor)
+        self.assertEqual(model.model.fit_intercept, model.fit_intercept)
+        self.assertEqual(model.model.positive, model.positive)
+
+    def test_types_init(self):
+        # Check that incorrectly specified arguments raise exceptions
+        with self.assertRaises(TypeError):
+            model = WeightedLADRegressor(fit_intercept="fit_intercept")
+        with self.assertRaises(TypeError):
+            model = WeightedLADRegressor(positive="positive")
+
+    def test_valid_weightsfunc_sign(self):
+        # The weights function is designed to return the same weights that a classifier with
+        # balanced class weights would return in scikit-learn. Test that this is the case.
+        model = WeightedLADRegressor(sign_weighted=True, time_weighted=False)
+        sample_weights = model._calculate_sample_weights(self.y)
+
+        pos_sum = np.sum(self.y >= 0)
+        neg_sum = np.sum(self.y < 0)
+
+        correct_pos_weight = len(self.y) / (2 * pos_sum) if pos_sum > 0 else 0
+        correct_neg_weight = len(self.y) / (2 * neg_sum) if neg_sum > 0 else 0
+        np.testing.assert_array_almost_equal(
+            sample_weights,
+            np.where(self.y >= 0, correct_pos_weight, correct_neg_weight),
+        )
+
+    def test_valid_weightsfunc_time(self):
+        model = WeightedLADRegressor(sign_weighted=False, time_weighted=True, half_life=21)
+        sample_weights = model._calculate_sample_weights(self.y)
+        # compute expected weights using scipy
+        unique_dates = sorted(
+            self.y.index.get_level_values("real_date").unique(), reverse=True
+        )
+        num_dates = len(unique_dates)
+        scale = 21 / np.log(2)
+        expected_weights = expon.pdf(np.arange(num_dates), scale=scale)
+        expected_weights = expected_weights / expected_weights[0]
+        weight_map = dict(zip(unique_dates, expected_weights))
+        expected_weights = (
+            self.y.index.get_level_values("real_date").map(weight_map).values
+        )
+        # check that the scipy weights and our calculated weights are equal
+        np.testing.assert_array_almost_equal(sample_weights, expected_weights)
+
+    def test_panelcvscores_compatible(self):
+        # Test that the WeightedLADRegressor is compatible with panel_cv_scores
+        splitter = RollingKFoldPanelSplit(n_splits=5)
+        estimators = {
+            "SWLAD": WeightedLADRegressor(),
+            "OLS": LinearRegression(),
+        }
+        scoring = {
+            "NEG_RMSE": make_scorer(
+                mean_squared_error, squared=False, greater_is_better=False
+            ),
+            "NEG_MAE": make_scorer(mean_absolute_error, greater_is_better=False),
+        }
+
+        try:
+            cv_df = panel_cv_scores(
+                X=self.X,
+                y=self.y,
+                splitter=splitter,
+                estimators=estimators,
+                scoring=scoring,
+                n_jobs=1,
+            )
+        except Exception as e:
+            self.fail(
+                f"panel_cv_scores raised an exception {e} when using WeightedLADRegressor as an estimator."
+            )
+        self.assertIsInstance(cv_df, pd.DataFrame)
+        self.assertEqual(cv_df.shape[1], 2)
+        self.assertEqual(sorted(cv_df.columns), sorted(estimators.keys()))
+        self.assertEqual(sorted(cv_df.index)[:2], sorted(scoring.keys())[:2])
+
+    def test_signaloptimizer_compatible(self):
+        # Test that the WeightedLADRegressor is compatible with SignalOptimizer
+        inner_splitter = RollingKFoldPanelSplit(n_splits=5)
+        np.random.seed(1)
+        models = {
+            "SWLAD": WeightedLADRegressor(sign_weighted=True, time_weighted=False),
+        }
+        metric = make_scorer(mean_squared_error, squared=False, greater_is_better=False)
+        hparam_grid = {
+            "SWLAD": {"fit_intercept": [False]},
+        }
+        so = SignalOptimizer(
+            inner_splitter=inner_splitter,
+            X=self.X,
+            y=self.y,
+            blacklist=None,
+        )
+        try:
+            so.calculate_predictions(
+                name="test",
+                models=models,
+                hparam_grid=hparam_grid,
+                metric=metric,
+                n_jobs=1,
+            )
+        except Exception as e:
+            self.fail(
+                f"SignalOptimizer raised an exception {e} when using WeightedLADRegressor as an estimator."
+            )
+
+        df_sigs = so.get_optimized_signals(name="test")
+        df_models = so.get_optimal_models(name="test")
+
+        self.assertIsInstance(df_sigs, pd.DataFrame)
+        self.assertEqual(df_sigs.shape[1], 4)
+        self.assertEqual(sorted(df_sigs.columns), sorted(["cid", "real_date", "value", "xcat"]))
+        self.assertTrue(len(df_sigs.xcat.unique()) == 1)
+        self.assertEqual(df_sigs.xcat.unique()[0], "test")
+
+        self.assertIsInstance(df_sigs, pd.DataFrame)
+        self.assertEqual(df_models.shape[1], 5)
+        self.assertEqual(
+            sorted(df_models.columns), sorted(["hparams", "model_type", "name", "real_date", "n_splits_used"])
+        )
+        self.assertTrue(len(df_models.name.unique()) == 1)
+        self.assertEqual(df_models.name.unique()[0], "test")

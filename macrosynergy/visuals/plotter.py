@@ -6,7 +6,6 @@ as well as `argvalidation` and `argcopy` decorators for all methods of the
 plotter classes.
 """
 import logging
-import warnings
 from types import ModuleType
 from typing import Any, Dict, List, Optional
 

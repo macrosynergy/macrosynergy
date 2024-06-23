@@ -2,14 +2,16 @@
 Module with functionality for generating mock 
 quantamental data for testing purposes.
 """
+
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.arima_process import ArmaProcess
-from typing import List, Tuple, Dict, Union
+from typing import List, Dict, Union, Optional
 from collections import defaultdict
 import datetime
 import warnings
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.utils import is_valid_iso_date, get_cid, get_xcat
 
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
@@ -318,8 +320,10 @@ def generate_lines(sig_len: int, style: str = "linear") -> Union[np.ndarray, Lis
 
 
 def make_test_df(
-    cids: List[str] = ["AUD", "CAD", "GBP"],
-    xcats: List[str] = ["XR", "CRY"],
+    cids: Optional[List[str]] = ["AUD", "CAD", "GBP"],
+    xcats: Optional[List[str]] = ["XR", "CRY"],
+    tickers: Optional[List[str]] = None,
+    metrics: List[str] = ["value"],
     start: str = "2010-01-01",
     end: str = "2020-12-31",
     style: str = "any",
@@ -336,32 +340,70 @@ def make_test_df(
 
     :param <List[str]> cids: A list of strings for cids.
     :param <List[str]> xcats: A list of strings for xcats.
-    :param <str> start_date: An ISO-formatted date string.
-    :param <str> end_date: An ISO-formatted date string.
+    :param <List[str]> metrics: A list of strings for metrics.
+    :param <str> start: An ISO-formatted date string.
+    :param <str> end: An ISO-formatted date string.
     :param <str> style: A string that specifies the type of line to generate.
         Current choices are: 'linear', 'decreasing-linear', 'sharp-hill',
-        'four-bit-sine', 'sine', 'cosine', 'sawtooth', 'any'. See 
+        'four-bit-sine', 'sine', 'cosine', 'sawtooth', 'any'. See
         `macrosynergy.management.simulate.simulate_quantamental_data.generate_lines()`.
     """
-
+    ## Check the inputs
     if isinstance(cids, str):
         cids = [cids]
     if isinstance(xcats, str):
         xcats = [xcats]
+    if isinstance(tickers, str):
+        tickers = [tickers]
+    if isinstance(metrics, str):
+        metrics = [metrics]
+    if not isinstance(metrics, list):
+        raise TypeError("`metrics` must be a list of strings.")
+
+    if "all" in metrics:
+        metrics = ["value", "grading", "eop_lag", "mop_lag"]
+
+    if (cids is None) != (xcats is None):
+        raise ValueError("Please provide both `cids` and `xcats` or neither.")
+
+    if tickers is None or len(tickers) == 0:
+        if cids is None:
+            raise ValueError("Please provide a list of tickers or `cids` & `xcats`.")
+
+    for varx, namex in zip(
+        [cids, xcats, metrics, tickers], ["cids", "xcats", "metrics", "tickers"]
+    ):
+        if varx is not None:
+            if not isinstance(varx, list):
+                raise TypeError(f"`{namex}` must be a list.")
+            if len(varx) == 0:
+                raise ValueError(f"`{namex}` cannot be empty.")
+            if not all(isinstance(x, str) for x in varx):
+                raise TypeError(f"All elements in `{namex}` must be strings.")
+
+    for varx, namex in zip([start, end], ["start", "end"]):
+        if not is_valid_iso_date(varx):
+            raise ValueError(f"`{namex}` must be a valid ISO date string.")
+
+    ## Generate the dataframe
 
     dates: pd.DatetimeIndex = pd.bdate_range(start, end)
-
+    all_tickers: List[str] = tickers if tickers is not None else []
+    if cids is not None:
+        all_tickers += [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+    all_tickers = sorted(set(all_tickers))
     df_list: List[pd.DataFrame] = []
-    for cid in cids:
-        for xcat in xcats:
-            df_add: pd.DataFrame = pd.DataFrame(
-                index=dates, columns=["real_date", "cid", "xcat", "value"]
-            )
-            df_add["cid"] = cid
-            df_add["xcat"] = xcat
-            df_add["real_date"] = dates
-            df_add["value"] = generate_lines(len(dates), style=style)
-            df_list.append(df_add)
+
+    for ticker in all_tickers:
+        df_add: pd.DataFrame = pd.DataFrame(
+            index=dates, columns=["real_date", "cid", "xcat", *metrics]
+        )
+        df_add["cid"] = get_cid(ticker)
+        df_add["xcat"] = get_xcat(ticker)
+        df_add["real_date"] = dates
+        for metric in metrics:
+            df_add[metric] = generate_lines(len(dates), style=style)
+        df_list.append(df_add)
 
     return pd.concat(df_list).reset_index(drop=True)
 

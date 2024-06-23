@@ -1,6 +1,7 @@
 """
 Module for calculating z-scores for a panel around a neutral level ("zn scores").
 """
+
 import numpy as np
 import pandas as pd
 from typing import List, Union
@@ -11,7 +12,7 @@ from macrosynergy.management.utils import (
     reduce_df,
     _map_to_business_day_frequency,
 )
-from macrosynergy.management.types import Numeric
+from numbers import Number
 
 
 def expanding_stat(
@@ -27,7 +28,7 @@ def expanding_stat(
 
     :param <pd.Dataframe> df: Daily-frequency time series DataFrame.
     :param <pd.DatetimeIndex> dates_iter: controls the frequency of the neutral &
-        standard deviation calculations.
+        mean absolute deviation calculations.
     :param <str, Number> stat: statistical method to be applied. This is typically 'mean',
         or 'median'.
     :param <bool> sequential: if True (default) the statistic is estimated sequentially.
@@ -136,26 +137,26 @@ def make_zn_scores(
         If one cross section has multiple blacklist periods, numbers are added to the
         keys (i.e. TRY_1, TRY_2, etc.)
     :param <bool> sequential: if True (default) score parameters (neutral level and
-        standard deviations) are estimated sequentially with concurrently available
-        information only.
+        mean absolute deviation) are estimated sequentially with concurrently
+        available information only.
     :param <int> min_obs: the minimum number of observations required to calculate
         zn_scores. Default is 261. The parameter is only applicable if the "sequential"
-        parameter is set to True. Otherwise the neutral level and the standard deviation
-        are both computed in-sample and will use the full sample.
+        parameter is set to True. Otherwise the neutral level and the mean absolute
+        deviation are both computed in-sample and will use the full sample.
     :param <bool> iis: if True (default) zn-scores are also calculated for the initial
         sample period defined by min-obs on an in-sample basis to avoid losing history.
         This is irrelevant if sequential is set to False.
     :param <str, Number> neutral: method to determine neutral level. Default is 'zero'.
         Alternatives are 'mean', 'median' or a number.
-    :param <str> est_freq: the frequency at which standard deviations or means are
+    :param <str> est_freq: the frequency at which mean absolute deviations or means are
         are re-estimated. The options are daily, weekly, monthly & quarterly: "D", "W",
         "M", "Q". Default is daily. Re-estimation is performed at period end.
     :param <float> thresh: threshold value beyond which scores are winsorized,
         i.e. contained at that threshold. The threshold is the maximum absolute
         score value that the function is allowed to produce. The minimum threshold is 1
-        standard deviation.
+        mean absolute deviation.
     :param <float> pan_weight: weight of panel (versus individual cross section) for
-        calculating the z-score parameters, i.e. the neutral level and the standard
+        calculating the z-score parameters, i.e. the neutral level and the mean absolute
         deviation. Default is 1, i.e. panel data are the basis for the parameters.
         Lowest possible value is 0, i.e. parameters are all specific to cross section.
     :param <str> postfix: string appended to category name for output; default is "ZN".
@@ -186,7 +187,7 @@ def make_zn_scores(
 
     if thresh is not None:
         err: str = "The `thresh` parameter must a numerical value >= 1.0."
-        if not isinstance(thresh, Numeric):
+        if not isinstance(thresh, Number):
             raise TypeError(err)
         elif thresh < 1.0:
             raise ValueError(err)
@@ -198,7 +199,7 @@ def make_zn_scores(
         "The `pan_weight` parameter must be a numerical value between 0 and 1 "
         "(inclusive)."
     )
-    if not isinstance(pan_weight, Numeric):
+    if not isinstance(pan_weight, Number):
         raise TypeError(err)
     elif not (0 <= pan_weight <= 1):
         raise ValueError(err)
@@ -384,7 +385,7 @@ if __name__ == "__main__":
         est_freq="w",
     )
 
-    # Daily: panel. Neutral and standard deviation will be computed daily.
+    # Daily: panel. Neutral and mean absolute deviation will be computed daily.
     dfzd = make_zn_scores(
         dfd,
         xcat="XR",

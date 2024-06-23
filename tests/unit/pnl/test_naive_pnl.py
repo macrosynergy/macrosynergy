@@ -1,5 +1,5 @@
 from tests.simulate import make_qdf
-from macrosynergy.pnl.naive_pnl import NaivePnL
+from macrosynergy.pnl.naive_pnl import NaivePnL, create_results_dataframe
 from macrosynergy.management.utils import reduce_df
 import unittest
 from unittest.mock import patch
@@ -169,7 +169,7 @@ class TestAll(unittest.TestCase):
         )
 
         # Will return a DataFrame with the transformed signal.
-        dfw = pnl.__make_signal__(
+        dfw = pnl._make_signal(
             dfx=dfx,
             sig=sig,
             sig_op="zn_score_pan",
@@ -562,6 +562,15 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"plot_pnl raised {e} unexpectedly")
 
+        with self.assertRaises(TypeError):
+            pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"], xcat_labels=1)
+
+        with self.assertWarns(Warning):
+            pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"], xcat_labels=["A", "B"])
+
+        with self.assertRaises(AssertionError):
+            pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"], xcat_labels={"PNL_GROWTH": "A"})
+
         try:
             pnl.signal_heatmap(pnl_name="PNL_GROWTH")
         except Exception as e:
@@ -575,6 +584,191 @@ class TestAll(unittest.TestCase):
         patch.stopall()
         plt.close("all")
         matplotlib.use(mpl_backend)
+
+    def test_validation_of_create_results_dataframe(self):
+        
+        ret = 1
+        sigs = ["CRY", "GROWTH", "INFL"]
+
+        with self.assertRaises(TypeError):
+            results_df = create_results_dataframe(
+                title="Performance metrics, PARITY vs OLS, equity",
+                df=self.dfd,
+                ret=ret,
+                sigs=sigs,
+                cids=self.cids,
+                sig_ops="zn_score_pan",
+                sig_adds=0,
+                neutrals="zero",
+                threshs=2,
+                sig_negs=[True, False, False],
+                bm="USD_EQXR",
+                cosp=True,
+                start="2004-01-01",
+                freqs="M",
+                agg_sigs="last",
+                slip=1,
+            )
+
+        ret = "EQXR"
+        sigs = ["CRY", "GROWTH", 1]
+
+        with self.assertRaises(TypeError):
+            results_df = create_results_dataframe(
+                title="Performance metrics, PARITY vs OLS, equity",
+                df=self.dfd,
+                ret=ret,
+                sigs=sigs,
+                cids=self.cids,
+                sig_ops="zn_score_pan",
+                sig_adds=0,
+                neutrals="zero",
+                threshs=2,
+                sig_negs=[True, False, False],
+                bm="USD_EQXR",
+                cosp=True,
+                start="2004-01-01",
+                freqs="M",
+                agg_sigs="last",
+                slip=1,
+            )
+
+        ret = "EQXR"
+        sigs = ["CRY", "GROWTH", "INFL"]
+
+        with self.assertRaises(TypeError):
+            results_df = create_results_dataframe(
+                title="Performance metrics, PARITY vs OLS, equity",
+                df=self.dfd,
+                ret=ret,
+                sigs=sigs,
+                cids=1,
+                sig_ops="zn_score_pan",
+                sig_adds=0,
+                neutrals="zero",
+                threshs=2,
+                sig_negs=[True, False, False],
+                bm="USD_EQXR",
+                cosp=True,
+                start="2004-01-01",
+                freqs="M",
+                agg_sigs="last",
+                slip=1,
+            )
+
+        with self.assertRaises(TypeError):
+            results_df = create_results_dataframe(
+                title="Performance metrics, PARITY vs OLS, equity",
+                df=self.dfd,
+                ret=ret,
+                sigs=sigs,
+                cids=self.cids,
+                sig_ops=["zn_score_pan", 4, 4],
+                sig_adds=0,
+                neutrals="zero",
+                threshs=2,
+                sig_negs=[True, False, False],
+                bm="USD_EQXR",
+                cosp=True,
+                start="2004-01-01",
+                freqs="M",
+                agg_sigs="last",
+                slip=1,
+            )
+
+        with self.assertRaises(TypeError):
+            results_df = create_results_dataframe(
+                title="Performance metrics, PARITY vs OLS, equity",
+                df=self.dfd,
+                ret=ret,
+                sigs=sigs,
+                cids=self.cids,
+                sig_ops="zn_score_pan",
+                sig_adds=[0, "jsajf"],
+                neutrals="zero",
+                threshs=2,
+                sig_negs=[True, False, False],
+                bm="USD_EQXR",
+                cosp=True,
+                start="2004-01-01",
+                freqs="M",
+                agg_sigs="last",
+                slip=1,
+            )
+
+        with self.assertRaises(TypeError):
+            results_df = create_results_dataframe(
+                title="Performance metrics, PARITY vs OLS, equity",
+                df=self.dfd,
+                ret=ret,
+                sigs=sigs,
+                cids=self.cids,
+                sig_ops="zn_score_pan",
+                sig_adds=0,
+                neutrals=["zero", 132213],
+                threshs=2,
+                sig_negs=[True, False, False],
+                bm="USD_EQXR",
+                cosp=True,
+                start="2004-01-01",
+                freqs="M",
+                agg_sigs="last",
+                slip=1,
+            )
+
+        with self.assertRaises(TypeError):
+            results_df = create_results_dataframe(
+                title="Performance metrics, PARITY vs OLS, equity",
+                df=self.dfd,
+                ret=ret,
+                sigs=sigs,
+                cids=self.cids,
+                sig_ops="zn_score_pan",
+                sig_adds=0,
+                neutrals="zero",
+                threshs="2",
+                sig_negs=[True, False, False],
+                bm="USD_EQXR",
+                cosp=True,
+                start="2004-01-01",
+                freqs="M",
+                agg_sigs="last",
+                slip=1,
+            )
+
+    def test_result_of_create_results_dataframe(self):
+        
+        ret = "EQXR"
+        sigs = ["CRY", "GROWTH", "INFL"]
+        sig_negs = [True, False, False]
+
+        results_df = create_results_dataframe(
+            title="Performance metrics, PARITY vs OLS, equity",
+            df=self.dfd,
+            ret=ret,
+            sigs=sigs,
+            cids=self.cids,
+            sig_ops="zn_score_pan",
+            sig_adds=0,
+            neutrals="zero",
+            threshs=2,
+            sig_negs=sig_negs,
+            bm="USD_EQXR",
+            cosp=True,
+            start="2004-01-01",
+            freqs="M",
+            agg_sigs="last",
+            slip=1,
+        )
+
+        results = results_df.data
+
+        negative_sigs = [sig + "_NEG" if sig_negs[sigs.index(sig)] else sig for sig in sigs]
+
+        self.assertEqual(set(results.index), set(negative_sigs))
+
+        self.assertEqual(len(results.columns), 7)
+
 
 
 if __name__ == "__main__":

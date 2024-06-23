@@ -4,6 +4,7 @@ import pandas as pd
 from macrosynergy.management.simulate.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.category_relations import CategoryRelations
 import textwrap
+import seaborn as sns
 
 
 def multiple_reg_scatter(
@@ -57,6 +58,7 @@ def multiple_reg_scatter(
         single chart. If False, a grid of charts is created.
     :param <List[str]> subplot_titles: list of titles for each subplot. Default is None.
     """
+    sns.set_theme(style="whitegrid")
     if ncol == 0:
         ncol = len(cat_rels)
     if nrow == 0:
@@ -84,9 +86,10 @@ def multiple_reg_scatter(
         col = i % ncol
         if not isinstance(axes, np.ndarray):
             ax = axes
+            ax.set_facecolor("white")
         else:
             ax = axes[i] if (ncol == 1 or nrow == 1) else axes[row, col]
-        
+            ax.set_facecolor("white")
         if subplot_titles is not None:
             subplot_title = subplot_titles[i]
         else:
@@ -121,6 +124,7 @@ def multiple_reg_scatter(
             coef_box_font_size=coef_box_font_size,
             prob_est=prob_est,
             single_chart=single_chart,
+            separator=separator,
             ax=ax,
         )
 
@@ -255,7 +259,8 @@ if __name__ == "__main__":
         ylab="Excess Return",
         ncol=3,
         nrow=2,
-        coef_box="upper right"
+        coef_box="upper right",
+        separator=2010,
     )
 
     multiple_reg_scatter(

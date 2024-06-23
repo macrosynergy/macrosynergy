@@ -2,18 +2,19 @@
 Functions used to visualize correlations across categories or cross-sections of
 panels.
 """
-import itertools
-import pandas as pd
-import numpy as np
-import seaborn as sns
-import scipy.cluster.hierarchy as sch
-from matplotlib import pyplot as plt
-from typing import List, Union, Tuple, Dict, Optional, Any
-from collections import defaultdict
 
-from macrosynergy.management.utils import reduce_df
+import itertools
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
+import scipy.cluster.hierarchy as sch
+import seaborn as sns
+from matplotlib import pyplot as plt
+
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import _map_to_business_day_frequency
+from macrosynergy.management.utils import _map_to_business_day_frequency, reduce_df
 
 
 def view_correlation(
@@ -33,6 +34,9 @@ def view_correlation(
     size: Tuple[float] = (14, 8),
     max_color: float = None,
     show: bool = True,
+    xcat_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    xcat_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    **kwargs: Any,
 ):
     """
     Visualize correlation across categories or cross-sections of panels.
@@ -80,6 +84,11 @@ def view_correlation(
         coefficients for color scale. Default is none. If a value is given it applies
         symmetrically to positive and negative values.
     :param <bool> show: if True the figure will be displayed. Default is True.
+    :param xcat_labels: optional list or dictionary of labels for xcats.
+        A list should be in the same order as xcats, a dictionary should map
+        from each xcat to its label.
+    :param xcat_secondary_labels: optional list or dictionary of labels for xcats_secondary.
+    :param **kwargs: Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
     N.B:. The function displays the heatmap of a correlation matrix across categories or
     cross-sections (depending on which parameter has received multiple elements).
@@ -101,9 +110,19 @@ def view_correlation(
     xlabel = ""
     ylabel = ""
 
+    missing_data_msg = (
+        "The provided dataframe does not contain any data for the "
+        "specified categories: {xcats}. Please check the data."
+    )
+
+    xcat_labels = _parse_xcat_labels(xcats, xcat_labels)
+
     # If more than one set of xcats or cids have been supplied.
     if xcats_secondary or cids_secondary:
         if xcats_secondary:
+            xcat_secondary_labels = _parse_xcat_labels(
+                xcats_secondary, xcat_secondary_labels
+            )
             xcats_secondary = (
                 xcats_secondary
                 if isinstance(xcats_secondary, list)
@@ -111,6 +130,7 @@ def view_correlation(
             )
         else:
             xcats_secondary = xcats
+            xcat_secondary_labels = xcat_labels
 
         if not cids_secondary:
             cids_secondary = cids
@@ -119,6 +139,9 @@ def view_correlation(
         df2, xcats_secondary, cids_secondary = reduce_df(
             df.copy(), xcats_secondary, cids_secondary, start, end, out_all=True
         )
+        for _df, _xc in zip([df1, df2], [xcats, xcats_secondary]):
+            if _df.empty:
+                raise ValueError(missing_data_msg.format(xcats=_xc))
 
         s_date = min(df1["real_date"].min(), df2["real_date"].min()).strftime(
             "%Y-%m-%d"
@@ -142,8 +165,8 @@ def view_correlation(
                     f"from {s_date} to "
                     f"{e_date}"
                 )
-            xlabel = f"{xcats[0]} cross-sections"
-            ylabel = f"{xcats_secondary[0]} cross-sections"
+            xlabel = f"{xcat_labels[xcats[0]]} cross-sections"
+            ylabel = f"{xcat_secondary_labels[xcats_secondary[0]]} cross-sections"
 
         # If more than one xcat in at least one set, we will compute cross category
         # correlation.
@@ -154,7 +177,8 @@ def view_correlation(
             df_w2: pd.DataFrame = _transform_df_for_cross_category_corr(
                 df=df2, xcats=xcats_secondary, val=val, freq=freq, lags=lags_secondary
             )
-
+            df_w1 = df_w1.rename(columns=xcat_labels)
+            df_w2 = df_w2.rename(columns=xcat_secondary_labels)
             if title is None:
                 title = f"Cross-category correlation from {s_date} to " f"{e_date}"
         corr = (
@@ -175,6 +199,8 @@ def view_correlation(
     # If there is only one set of xcats and cids.
     else:
         df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
+        if df.empty:
+            raise ValueError(missing_data_msg.format(xcats=xcats))
 
         s_date: str = df["real_date"].min().strftime("%Y-%m-%d")
         e_date: str = df["real_date"].max().strftime("%Y-%m-%d")
@@ -196,6 +222,7 @@ def view_correlation(
             if title is None:
                 title = f"Cross-category correlation from {s_date} to {e_date}"
 
+        df_w = df_w.rename(columns=xcat_labels)
         corr = df_w.corr(method="pearson")
 
         if cluster:
@@ -221,6 +248,7 @@ def view_correlation(
                 square=False,
                 linewidths=0.5,
                 cbar_kws={"shrink": 0.5},
+                **kwargs,
             )
 
     ax.set(xlabel=xlabel, ylabel=ylabel)
@@ -228,6 +256,32 @@ def view_correlation(
 
     if show:
         plt.show()
+
+
+def _parse_xcat_labels(xcats: List[str], xcat_labels: Union[List[str], Dict[str, str]]):
+    """
+    Parse xcat labels for correlation plot.
+
+    :param xcats: extended categories to be correlated.
+    :param xcat_labels: optional list or dictionary of
+        labels for the extended categories.
+    """
+    labels_dict = {}
+    if xcat_labels is not None:
+        assert len(xcat_labels) == len(xcats), (
+            "The number of labels provided for the extended categories must match the "
+            "number of extended categories."
+        )
+        if isinstance(xcat_labels, list):
+            for xcat, xcat_label in zip(xcats, xcat_labels):
+                labels_dict[xcat] = xcat_label
+        elif isinstance(xcat_labels, dict):
+            labels_dict = xcat_labels
+        else:
+            raise ValueError("The xcats parameter must be a list or a dictionary.")
+    else:
+        labels_dict = {xcat: xcat for xcat in xcats}
+    return labels_dict
 
 
 def _transform_df_for_cross_sectional_corr(
@@ -436,8 +490,8 @@ if __name__ == "__main__":
     # Clustered correlation matrices. Test hierarchical clustering.
     view_correlation(
         df=dfd,
-        xcats=["XR"],
-        xcats_secondary=None,
+        xcats=["XR", "CRY"],
+        # xcats_secondary=["CRY", "XR"],
         cids=cids,
         cids_secondary=None,
         start=start,
@@ -450,4 +504,8 @@ if __name__ == "__main__":
         max_color=None,
         lags=None,
         lags_secondary=None,
+        annot=True,
+        fmt=".2f",
+        xcat_labels=["Returns", "Carry"],
+        # xcat_secondary_labels={"XR": "Excess returns", "CRY": "Carry"},
     )

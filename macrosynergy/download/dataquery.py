@@ -18,7 +18,6 @@ import warnings
 import requests
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Union, Tuple, Any
-from timeit import default_timer as timer
 from tqdm import tqdm
 
 from macrosynergy import __version__ as ms_version_info
@@ -184,14 +183,20 @@ def request_wrapper(
                 method, url, headers=headers, params=params, **kwargs
             ).prepare()
 
-            response: requests.Response = requests.Session().send(
+            with requests.Session().send(
                 prepared_request,
                 proxies=proxy,
                 cert=cert,
-            )
-
-            if isinstance(response, requests.Response):
-                return validate_response(response=response, user_id=user_id)
+            ) as response:
+                if isinstance(response, requests.Response):
+                    return validate_response(response=response, user_id=user_id)
+                else:
+                    raise InvalidResponseError(
+                        f"Request did not return a response.\n"
+                        f"User ID: {user_id}\n"
+                        f"Requested URL: {log_url}\n"
+                        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}; \n"
+                    )
 
         except Exception as exc:
             # if keyboard interrupt, raise as usual
@@ -554,6 +559,9 @@ class DataQueryInterface(object):
     :param <str> token_url: token URL for the DataQuery API. Defaults to OAUTH_TOKEN_URL.
     :param <bool> suppress_warnings: whether to suppress warnings. Defaults to True.
 
+    :param custom_auth: custom authentication object. When specified oauth must be False 
+        and the object must have a get_auth method. Defaults to None.
+
     :return <DataQueryInterface>: DataQueryInterface object.
 
     :raises <TypeError>: if any of the parameters are of the wrong type.
@@ -580,6 +588,7 @@ class DataQueryInterface(object):
         base_url: str = OAUTH_BASE_URL,
         token_url: str = OAUTH_TOKEN_URL,
         suppress_warning: bool = True,
+        custom_auth=None,
     ):
         self._check_connection: bool = check_connection
         self.msg_errors: List[str] = []
@@ -623,6 +632,8 @@ class DataQueryInterface(object):
                 token_url=token_url,
                 proxy=proxy,
             )
+        elif custom_auth is not None:
+            self.auth = custom_auth
         else:
             if base_url == OAUTH_BASE_URL:
                 base_url: str = CERT_BASE_URL
@@ -791,6 +802,7 @@ class DataQueryInterface(object):
     def get_catalogue(
         self,
         group_id: str = JPMAQS_GROUP_ID,
+        page_size: int = 1000,
         verbose: bool = True,
     ) -> List[str]:
         """
@@ -799,18 +811,30 @@ class DataQueryInterface(object):
         tickers in the JPMaQS group. The group ID can be changed to fetch a
         different group's catalogue.
 
-        :param <str> group_id: the group ID to fetch the catalogue for.
+        :param <str> group_id: the group ID to fetch the catalogue for. Defaults to
+            "JPMAQS".
+        :param <int> page_size: the number of tickers to fetch in a single request.
+            Defaults to 1000 (maximum allowed by the API).
 
-        :return <List[str]>: list of tickers in the JPMaQS group.
+        :return <List[str]>: list of tickers in the requested group.
 
         :raises <ValueError>: if the response from the server is not valid.
         """
+        if not isinstance(group_id, str):
+            raise TypeError("`group_id` must be a string.")
+
+        pgsize_err = "`page_size` must be an integer between 1 and 1000."
+        if not isinstance(page_size, int):
+            raise TypeError(pgsize_err)
+        elif (page_size < 1) or (page_size > 1000):
+            raise ValueError(pgsize_err)
+
         if verbose:
-            print("Downloading the JPMaQS catalogue from DataQuery...")
+            print(f"Downloading the {group_id} catalogue from DataQuery...")
         try:
             response_list: Dict = self._fetch(
                 url=self.base_url + CATALOGUE_ENDPOINT,
-                params={"group-id": group_id},
+                params={"group-id": group_id, "limit": page_size},
                 tracking_id=CATALOGUE_TRACKING_ID,
             )
         except Exception as e:
@@ -826,6 +850,8 @@ class DataQueryInterface(object):
             and (len(set(tkr_idx)) == utkr_count)
         ):
             raise ValueError("The downloaded catalogue is corrupt.")
+        if verbose:
+            print(f"Downloaded {group_id} catalogue with {utkr_count} tickers.")
 
         return tickers
 
@@ -863,16 +889,20 @@ class DataQueryInterface(object):
             ):
                 curr_params: Dict = params.copy()
                 curr_params["expressions"] = expr_batch
-                future_objects.append(
-                    executor.submit(
-                        self._fetch_timeseries,
-                        url=url,
-                        params=curr_params,
-                        tracking_id=tracking_id,
-                        *args,
-                        **kwargs,
+                try:
+                    future_objects.append(
+                        executor.submit(
+                            self._fetch_timeseries,
+                            url=url,
+                            params=curr_params,
+                            tracking_id=tracking_id,
+                            *args,
+                            **kwargs,
+                        )
                     )
-                )
+                except Exception as exc:
+                    raise exc
+
                 time.sleep(delay_param)
 
             for ib, future in tqdm(
@@ -882,10 +912,13 @@ class DataQueryInterface(object):
                 total=len(future_objects),
             ):
                 try:
+                    if future.exception() is not None:
+                        raise future.exception()
                     download_outputs.append(future.result())
                     continuous_failures = 0
                 except Exception as exc:
                     if isinstance(exc, (KeyboardInterrupt, AuthenticationError)):
+                        executor.shutdown(wait=False, cancel_futures=True)
                         raise exc
 
                     failed_batches.append(expr_batches[ib])
@@ -913,7 +946,7 @@ class DataQueryInterface(object):
         Used by the `download_data()` method. Exists to provide a method that can be
         modified when inheriting from this class.
 
-        :param <List[Union[Dict, Any]>> download_outputs: list of list of dictionaries/
+        :param <List[Union[Dict, Any]> download_outputs: list of list of dictionaries/
             other objects.
         :return <List[Dict]>: list of dictionaries/other objects.
         """
@@ -937,7 +970,7 @@ class DataQueryInterface(object):
         Used by the `download_data()` method.
         """
 
-        if retry_counter > 0:
+        if 0 < retry_counter < HL_RETRY_COUNT:
             print("Retrying failed downloads. Retry count:", retry_counter)
 
         if retry_counter > HL_RETRY_COUNT:
@@ -1139,12 +1172,12 @@ class DataQueryInterface(object):
 if __name__ == "__main__":
     import os
 
-    client_id = os.getenv("DQ_CLIENT_ID")
-    client_secret = os.getenv("DQ_CLIENT_SECRET")
+    client_id: str = os.getenv("DQ_CLIENT_ID")
+    client_secret: str = os.getenv("DQ_CLIENT_SECRET")
 
     expressions = [
         "DB(JPMAQS,USD_EQXR_VT10,value)",
-        "DB(JPMAQS,AUD_EXALLOPENNESS_NSA_1YMA,value)",
+        "DB(JPMAQS,USD_EQXR_VT10,eop_lag)",
     ]
 
     with DataQueryInterface(
@@ -1155,9 +1188,11 @@ if __name__ == "__main__":
 
         data = dq.download_data(
             expressions=expressions,
-            start_date="2020-01-25",
-            end_date="2023-02-05",
+            start_date="2024-01-25",
+            end_date="2024-02-05",
             show_progress=True,
         )
+
+    print(data)
 
     print(f"Succesfully downloaded data for {len(data)} expressions.")

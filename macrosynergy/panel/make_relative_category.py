@@ -6,7 +6,7 @@ in mind but could be extended to other categories where the nature of the data i
 It is the twin sister of make_relative_value() as we are aggregating categories for a given CID instead of cids for a
 given XCAT.
 """
-import numpy as np
+
 import pandas as pd
 from typing import List, Set
 
@@ -90,11 +90,11 @@ def make_relative_category(
         which the respective category is available is used.
     :param <dict> blacklist: cross-sections with date ranges that should be excluded from
         the output.
-    :param <List[str]> basket: cross-sections to be used for the relative value
-        benchmark. The default is every cross-section in the chosen list that is
+    :param <List[str]> basket: categories to be used for the relative value
+        benchmark. The default is every categories in the chosen list that is
         available in the DataFrame over the respective time-period.
         However, the basket can be reduced to a valid subset of the available
-        cross-sections.
+        categories.
     :param <bool> complete_set: boolean parameter that outlines whether each cid
         is required to have the full set of xcats held by the basket parameter
         for a relative value calculation to occur. If set to True, the cid will be
@@ -115,50 +115,49 @@ def make_relative_category(
         the categories: 'cid', 'xcat', 'real_date' and 'value'.
     """
 
-    expected_columns = ["cid", "xcat", "real_date", "value"]
-    col_error = f"The DataFrame must contain the necessary columns: {expected_columns}."
-    assert set(expected_columns).issubset(set(df.columns)), col_error
+    col_names = ["cid", "xcat", "real_date", "value"]
+    col_error = f"The DataFrame must contain the necessary columns: {col_names}."
+    if not set(col_names).issubset(set(df.columns)):
+        raise ValueError(col_error)
 
-    df = df.loc[:, expected_columns]
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    operations = {
+        "divide": pd.Series.div,
+        "subtract": pd.Series.sub,
+    }
+    if rel_meth not in operations:
+        raise ValueError("rel_meth must be 'subtract' or 'divide'")
 
-    assert rel_meth in ["subtract"], "rel_meth must be 'subtract'"
-
-    xcat_error = (
-        f"List of categories or single single category string expected. "
-        f"Received {type(xcats)}."
-    )
-    assert isinstance(xcats, (list, str)), xcat_error
+    if not isinstance(xcats, (list, str)):
+        raise TypeError("xcats must be a list of strings or a single string.")
 
     if isinstance(xcats, str):
         xcats = [xcats]
 
     if rel_xcats is not None:
-        error_rel_xcat = "List of strings expected for `rel_xcats`."
-        assert isinstance(rel_xcats, list) and all([isinstance(x, str) for x in rel_xcats]), error_rel_xcat
+        if not (
+            isinstance(rel_xcats, list) and all([isinstance(x, str) for x in rel_xcats])
+        ):
+            raise ValueError("List of strings expected for `rel_xcats`.")
 
-        error_length = "`rel_xcats` must have the same number of elements as `xcats`."
-        assert len(xcats) == len(rel_xcats), error_length
+        if len(xcats) != len(rel_xcats):
+            raise ValueError(
+                "`rel_xcats` must have the same number of elements as `xcats`."
+            )
 
         rel_xcats_dict = dict(zip(xcats, rel_xcats))
     else:
-        rel_xcats_dict = {
-            x: x+postfix for x in xcats
-        }
+        rel_xcats_dict = {x: x + postfix for x in xcats}
 
-    col_names = ["cid", "xcat", "real_date", "value"]
-
+    df = df.loc[:, col_names]
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
     # Intersect parameter set to False. Therefore, cross-sections across the categories can vary.
-    all_cids: List[str] = list(set([
-        cvar for cvar in [cids, basket] if cvar is not None
-    ]))
-    # for cvar in [cids, basket]:
-    #     if cvar is not None:
-    #         all_cids.extend(cvar)
-    # all_cids = list(set(all_cids))
-    if len(all_cids) < 1:
-        all_cids = None
-    dfx = reduce_df(df, xcats, all_cids, start, end, blacklist, out_all=False)
+    if basket:
+        all_xcats: List[str] = list(set(xcats).union(set(basket)))
+    else:
+        all_xcats = xcats
+    if len(all_xcats) < 1:
+        all_xcats = None
+    dfx = reduce_df(df, all_xcats, cids, start, end, blacklist, out_all=False)
 
     if cids is None:
         # All cross-sections available - union across categories.
@@ -166,11 +165,10 @@ def make_relative_category(
 
     if basket is not None:
         # Basket must be a subset of the available xcats
-        miss: Set = set(basket) - set(df["xcats"])
-        error_basket = (
-            f"The category basket elements {miss} are not specified or are not available."
-        )
-        assert len(miss) == 0, error_basket
+        miss: Set = set(basket) - set(df["xcat"])
+        error_basket = f"The category basket elements {miss} are not specified or are not available."
+        if not len(miss) == 0:
+            raise ValueError(error_basket)
     else:
         # Default basket is all available cross-sections.
         basket = xcats
@@ -183,7 +181,7 @@ def make_relative_category(
             "basket consisting exclusively of the aforementioned category "
             "is an incorrect usage of the function."
         )
-        raise RuntimeError(run_error)
+        raise ValueError(run_error)
 
     df_list: List[pd.DataFrame] = []
 
@@ -209,53 +207,20 @@ def make_relative_category(
         else:
             continue
 
-        # Redundant if statement, the groupby takes care of the dimension of the 'value' vector
-
-        # if len(basket) > 1:
-        #     # Mean of (available) categories at each point in time. If all
-        #     # categories defined in the "basket" data structure are not available for
-        #     # a specific date, compute the mean over the available subset.
-        #     bm = dfb.groupby(by="real_date").mean(numeric_only=True)
-        # elif len(basket) == 1:
-        #     # Relative value is mapped against a single cross-section.
-        #     bm = dfb.set_index("real_date")["value"]
-        # else:
-        #     # Category is not defined over all cross-sections in the basket and
-        #     # 'complete_cross' equals True.
-        #     continue
-
         # No need of pivoting, we can operate with groupby()
         dfa = df_cid.copy()
-        dfa['count'] = dfa.groupby("real_date")['value'].transform('count')
-        dfa = dfa.loc[dfa['count'] > 1]
-
-        # dfw: pd.DataFrame = df_cid.pivot(
-        #     index="real_date", columns="xcat", values="value"
-        # )
-        # # Computing the relative value is only justified if the number of categories,
-        # # for the respective date, exceeds one. Therefore, if any rows have only a single
-        # # cross-section, remove the dates from the DataFrame.
-        # dfw = dfw[dfw.count(axis=1) > 1]
+        dfa["count"] = dfa.groupby("real_date")["value"].transform("count")
+        dfa = dfa.loc[dfa["count"] > 1]
 
         # The time-index will be delimited by the respective category.
-        dfa = pd.merge(
-            dfa, bm, how="left", on=['real_date'], suffixes=['', '_bm']
-        )
-        dfa = dfa.sort_values(by=['xcat', 'real_date'])
-        # TODO can we use an eval here to avoid the if statement?
-        if rel_meth == "subtract":
-            dfa['value'] = dfa['value'].sub(dfa['value_bm'], axis=0)
-        else:
-            dfa['value'] = dfa['value'].div(dfa['value_bm'], axis=0)
+        dfa = pd.merge(dfa, bm, how="left", on=["real_date"], suffixes=["", "_bm"])
+        dfa = dfa.sort_values(by=["xcat", "real_date"])
+
+        dfa["value"] = operations[rel_meth](dfa["value"], dfa["value_bm"], axis=0)
 
         # cleaning
-        df_new = dfa.drop(columns=['value_bm', 'count']).assign(cid=cid)
+        df_new = dfa.drop(columns=["value_bm", "count"]).assign(cid=cid)
         df_new["xcat"] = df_new["xcat"].map(rel_xcats_dict)
-
-        # if rel_xcats is None:
-        #     df_new["xcat"] = xcat + postfix
-        # else:
-        #     df_new["xcat"] = rel_xcats_dict[xcat]
 
         if (
             df_new.sort_values(["xcat", "real_date"])[col_names].isna().all().all()
@@ -308,7 +273,7 @@ if __name__ == "__main__":
 
     dfd_1_black = make_relative_category(
         dfd,
-        xcats=["CRY1", "CRY1"],
+        xcats=["CRY1", "CRY2"],
         cids=None,
         blacklist=black,
         rel_meth="divide",

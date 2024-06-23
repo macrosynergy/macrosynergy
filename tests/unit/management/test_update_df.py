@@ -357,8 +357,9 @@ class TestAll(unittest.TestCase):
         self.assertTrue(dfd_test.shape == dfd_update.shape)
 
         # Order the two DataFrames and confirm the values match.
-        dfd_test = dfd_test.sort_values(["xcat", "cid", "real_date"])
-        dfd_update = dfd_update.sort_values(["xcat", "cid", "real_date"])
+        _idx = ["xcat", "cid", "real_date"]
+        dfd_test = dfd_test.sort_values(_idx).reset_index(drop=True)
+        dfd_update = dfd_update.sort_values(_idx).reset_index(drop=True)
         self.assertTrue(np.all(dfd_test["value"] == dfd_update["value"]))
 
         dfd_2_rv = make_relative_value(
@@ -432,6 +433,10 @@ class TestAll(unittest.TestCase):
         self.assertTrue(dfd_update_df["grading"].isnull().all())
         self.assertTrue(dfd_update_df["mop_lag"].isnull().all())
 
+    def test_update_df_preserves_original(self):
+        test_df = self.dfd.copy()
+        result_df = update_df(test_df, test_df)
+        self.assertTrue(test_df.equals(self.dfd))
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,262 +1,155 @@
-from concurrent.futures import ThreadPoolExecutor
+import boto3
 import os
 import re
 import time
-import boto3
-import pandas as pd
-import paramiko
 from botocore.exceptions import ClientError
-import logging
 
-#logging.basicConfig(level=logging.DEBUG)
-#paramiko.util.log_to_file('paramiko.log')
-
-# Get ec2 instance with name notebook-runner-* and state isnt terminated
-
-branch_name = "test"
+AWS_BUCKET_NAME = os.getenv('AWS_BUCKET_NAME', None)
+REGION_NAME = "eu-west-2"
+ECR_IMAGE = os.getenv('ECR_IMAGE', None)
+ECS_CLUSTER_NAME = os.getenv('ECS_CLUSTER_NAME', None)
+SUBNET_IDS = os.getenv('SUBNET_IDS', None).split(' ')
+EXECUTION_ROLE_ARN = os.getenv('EXECUTION_ROLE_ARN', None)
 
 start_time = time.time()
 
-aws_region = "eu-west-2"
 
-ec2 = boto3.resource("ec2", region_name=aws_region)
-instances = ec2.instances.filter(
-    Filters=[
-        {"Name": "tag:Name", "Values": ["notebook-runner-*"]},
-        {"Name": "instance-state-name", "Values": ["running", "stopped", "pending", "stopping", "starting"]}
-    ]
-)
-
-print(f"Found {len(list(instances))} instances")
-
-# Get the number of ipynb files in the s3 bucket notebooks
-s3 = boto3.resource("s3")
-bucket = s3.Bucket("macrosynergy-notebook-prod")
-objects_info = [(obj.key, obj.size) for obj in bucket.objects.all()]
-
-# Filter for notebook files
-notebooks_info = [(key, size) for key, size in objects_info if key.endswith(".ipynb") and key != "Signal_optimization_basics.ipynb" and key != "Regression-based_macro_trading_signals.ipynb"]
-notebooks = [obj.key for obj in bucket.objects.filter(Prefix="")]
-notebooks = [notebook for notebook in notebooks if notebook.endswith(".ipynb")]
-sorted_notebooks_info = sorted(notebooks_info, key=lambda x: x[1])
-notebooks = [name for name, size in sorted_notebooks_info]
-print(f"Found {len(notebooks)} notebooks in the s3 bucket")
-
-# Uncomment if you want to run a small batch for test purposes
-# batch_size = 2
-
-# Batch the notebooks
-batches = []
-for i in range(len(list(instances))):
-    batch = notebooks[i::len(list(instances))]
-    # batch = batch[:batch_size]
-    batches.append(batch)
-bucket_url = os.getenv("AWS_NOTEBOOK_BUCKET")
-
-# If len(notebooks) < len(instances), then don't use all instances
-# Start the ec2 instances
-
-for instance in instances:
-    if instance.state["Name"] == "stopping":
-        instance.wait_until_stopped()
-    instance.start()
-
-for instance in instances:
-    instance.wait_until_running()
-
-"""
-1 - Attempt to connect to the instance via SSH
-2 - If failed, retry in 2 seconds and if this is the 10th retry, stop the instance and throw an error
-3 - If succeeded, run commands with no hangup
-4 - Once commands have been completed, get the output from file and store in a dictionary
-5 - Stop the instance
-6 - Send an email with the output
-
-NOTE: If commands have no hangup then need to find a way to know when the commands have been completed
-Suggestion for now is that only once the entire python script is complete does it create the output file which is then deleted once the file has been read
-"""
-
-def connect_to_instance(instance):
-    retries = 0
-    while retries < 10:
-        try:
-            instance_ip = instance.public_ip_address
-            ssh_client = paramiko.SSHClient()
-            ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh_client.connect(
-                hostname=instance_ip, username="ubuntu", key_filename="./notebook_runner.pem"
-            )
-            ssh_client.get_transport().is_active()
-            ssh_client.get_transport().open_session()
-            print(f"Connection to {instance.id} Succeeded!!!")
-            return ssh_client
-        except:
-            if ssh_client:
-                ssh_client.close()
-            retries += 1
-            print("Failed to connect, retrying...")
-            time.sleep(2)
-    print("Failed to connect after 10 retries, stopping instance...")
-    instance.stop()
-    raise Exception("Failed to connect to instance")
-
-def run_commands_on_ec2(instance, notebooks):
-    ssh_client = connect_to_instance(instance)
-    outputs = {"succeeded": [], "failed": []}
-    try:
-        # Initial cleanup commands
-        cleanup_commands = "rm -rf notebooks failed_notebooks.txt successful_notebooks.txt nohup.out myvenv"
-        print(f"Running cleanup commands on {instance.id}...")
-        ssh_client.exec_command(cleanup_commands, timeout=3)
-        time.sleep(3)
-        print(f"Cleanup commands completed on {instance.id}")
-
-        # Wget commands
-        print(f"Running wget commands on {instance.id}...")
-        wget_commands = " && ".join(["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks])
-        stdin, stdout, stderr = ssh_client.exec_command(f"bash -c '{wget_commands}'", timeout=50)
-        stdout.channel.recv_exit_status()
-        print(f"Wget commands completed on {instance.id}")
-        # Consider adding a delay or checking for command completion if necessary
-        
-        print(f"Running venv commands on {instance.id}...")
-        venv_commands = "python3 -m venv myvenv"
-        stdin, stdout, stderr = ssh_client.exec_command(venv_commands, timeout=50)
-        stdout.channel.recv_exit_status()
-        print(f"Venv commands completed on {instance.id}")
-
-        print(f"Running pip commands on {instance.id}...")
-        pip_commands = f"myvenv/bin/python -m pip install linearmodels jupyter nbformat git+https://github.com/macrosynergy/macrosynergy@{branch_name}  --upgrade"
-        stdin, stdout, stderr = ssh_client.exec_command(pip_commands, timeout=50)
-        stdout.channel.recv_exit_status()
-        print(f"Pip commands completed on {instance.id}")
-
-        # Pip and nohup commands
-        notebook_runner_cmd = "nohup myvenv/bin/python run_notebooks.py > nohup.out 2>&1 &"
-        print(f"Running notebook runner commands on {instance.id}...")
-        ssh_client.exec_command(notebook_runner_cmd, timeout=50)
-        
-        print(f"Getting output from instance... {instance.id}")
-        successful_notebooks, failed_notebooks = get_output_from_instance(ssh_client)
-        outputs["succeeded"].extend(successful_notebooks)
-        outputs["failed"].extend(failed_notebooks)
-        print(f"Stopping instance... {instance.id}")
-    finally:
-        ssh_client.close()
-        instance.stop()
-    return outputs
+def clean_string(s):
+    return re.sub(r"[^a-zA-Z0-9\-_]", "", s)
 
 
-def check_output(ssh_client):
-    command = "ls"
-    stdin, stdout, stderr = ssh_client.exec_command(command)
-    output = stdout.read().decode("utf-8")
-    error = stderr.read().decode("utf-8")
-    return "failed_notebooks.txt" in output and "successful_notebooks.txt" in output
-    
+def get_notebooks(bucket_name):
+    s3 = boto3.resource("s3")
+    bucket = s3.Bucket(bucket_name)
 
-def get_output_from_instance(ssh_client):
-    python_running = True
-    start_time = time.time()
-    while python_running:
-        #print(f"Python process is still running on instance, waiting for it to finish...")
-        command = "ps -ef | grep python"
-        stdin, stdout, stderr = ssh_client.exec_command(command)
-        output = stdout.read().decode("utf-8")
-        error = stderr.read().decode("utf-8")
+    notebooks = [obj.key for obj in bucket.objects.all() if obj.key.endswith(".ipynb")]
 
-        if "run_notebooks.py" in output:
-            if time.time() - start_time > 6000:
-                print("Python process has been running for over 100 minutes, stopping instance...")
-                python_running = False
-            time.sleep(5)
-        else:
-            print("Python process has finished")
-            command = "cat nohup.out"
-            stdin, stdout, stderr = ssh_client.exec_command(command, timeout=10)
-            output = stdout.read().decode("utf-8")
-            error = stderr.read().decode("utf-8")
-            print(output)
-            python_running = False
-    
-    print("Python process has finished, getting failed notebooks...")
-    command = "cat failed_notebooks.txt"
-    stdin, stdout, stderr = ssh_client.exec_command(command)
-    output = stdout.read().decode("utf-8")
-    error = stderr.read().decode("utf-8")
-    failed_notebooks = output.split("\n")[:-1] # Removes empty string at the end
+    notebooks.remove("Regression-based_macro_trading_signals.ipynb") # Requires 64 GB of memory currently which is too expensive
 
-    print("Python process has finished, getting successful notebooks...")
-    command = "cat successful_notebooks.txt"
-    stdin, stdout, stderr = ssh_client.exec_command(command)
-    output = stdout.read().decode("utf-8")
-    error = stderr.read().decode("utf-8")
-    successful_notebooks = output.split("\n")[:-1] # Removes empty string at the end
-    
-    return successful_notebooks, failed_notebooks
+    return notebooks
 
-def process_instance(instance):
-    instance_ip = instance.public_ip_address
-    print(f"Running notebooks on {instance.id}")
-    try:
-        batch = batches.pop()
-        output = run_commands_on_ec2(instance, batch)
-    except Exception as e:
-        print(f"Failed to run notebooks: {batch} on {instance.id}")
-        print(e)
-        instance.stop()
-        return {"succeeded": [], "failed": batch}
-    return output
 
-max_threads = min(len(list(instances)), len(batches))
-with ThreadPoolExecutor(max_threads) as executor:
-    # Use executor.map to run the process_instance function concurrently on each instance
-    output = executor.map(process_instance, list(instances))
+def run_task(
+    ecr_image,
+    ecs_client,
+    nb_name,
+    bucket_name,
+    log_group_name,
+    region_name,
+    ecs_cluster_name,
+    subnet_ids,
+    cpu,
+    memory,
+    execution_role_arn,
+):
+    task_def_response = ecs_client.register_task_definition(
+        family=clean_string(nb_name.replace(".ipynb", "")),
+        containerDefinitions=[
+            {
+                "name": clean_string(nb_name.replace(".ipynb", "")),
+                "image": ecr_image,
+                "cpu": cpu,
+                "memory": memory,
+                "essential": True,
+                "environment": [
+                    {
+                        "name": "NOTEBOOK_URL",
+                        "value": f"https://{bucket_name}.s3.{region_name}.amazonaws.com/{nb_name}",
+                    },
+                    {
+                        "name": "BRANCH_NAME",
+                        "value": "test",
+                    },
+                ],
+                "logConfiguration": {
+                    "logDriver": "awslogs",
+                    "options": {
+                        "awslogs-group": log_group_name,
+                        "awslogs-region": region_name,
+                        "awslogs-stream-prefix": "ecs",
+                    },
+                },
+            },
+        ],
+        requiresCompatibilities=["FARGATE"],
+        networkMode="awsvpc",
+        memory=str(memory),
+        cpu=str(cpu),
+        executionRoleArn=execution_role_arn,
+        taskRoleArn=execution_role_arn,
+    )
 
-print("FINSIHED RUNNING ALL NOTEBOOKS")
-merged_dict = {}
+    task_definition = task_def_response["taskDefinition"]["taskDefinitionArn"]
 
-# Merge dictionaries
-for d in list(output):
-    for key, value in d.items():
-        if key in merged_dict:
-            merged_dict[key].extend(value)
-        else:
-            merged_dict[key] = value
+    response = ecs_client.run_task(
+        cluster=ecs_cluster_name,
+        launchType="FARGATE",
+        taskDefinition=task_definition,
+        count=1,
+        networkConfiguration={
+            "awsvpcConfiguration": {"subnets": subnet_ids, "assignPublicIp": "ENABLED"}
+        },
+    )
 
-print(f"Successful notebooks: {merged_dict['succeeded']}\nFailed notebooks: {merged_dict['failed']}")
+    task_arn = response["tasks"][0]["taskArn"]
+    return task_arn
+
+notebooks = get_notebooks(AWS_BUCKET_NAME)
+ecs_client = boto3.client("ecs", region_name=REGION_NAME)
+
+task_arns = []
+
+for notebook in notebooks:
+    if notebook in [
+        "Signal_optimization_basics.ipynb",
+        #"Regression-based_macro_trading_signals.ipynb",
+        "Regression-based_FX_signals.ipynb",
+    ]:
+        cpu = 16384
+        memory = 32768
+    else:
+        cpu = 4096
+        memory = 16384
+    task_arns.append(
+        run_task(
+            ecr_image=ECR_IMAGE,
+            ecs_client=ecs_client,
+            nb_name=notebook,
+            bucket_name=AWS_BUCKET_NAME,
+            log_group_name="/ecs/",
+            region_name=REGION_NAME,
+            ecs_cluster_name=ECS_CLUSTER_NAME,
+            subnet_ids=SUBNET_IDS,
+            cpu=cpu,
+            memory=memory,
+            execution_role_arn=EXECUTION_ROLE_ARN,
+        )
+    )
+
+print("ALL TASKS ARE RUNNING!")
+
+nb_exit_codes = {"succeeded": [], "failed": []}
+
+while len(task_arns) > 0:
+    for task_arn in task_arns:
+        response = ecs_client.describe_tasks(cluster=ECS_CLUSTER_NAME, tasks=[task_arn])
+        task = response["tasks"][0]
+
+        if task["lastStatus"] == "STOPPED":
+            exit_code = task["containers"][0]["exitCode"]
+            task_arns.remove(task_arn)
+            # Get task name
+            nb_name = task["containers"][0]["name"]
+            if exit_code == 0:
+                print(f"{nb_name} succeeded!")
+                nb_exit_codes["succeeded"].append(nb_name)
+            else:
+                print(f"{nb_name} failed!")
+                nb_exit_codes["failed"].append(nb_name)
+
 
 end_time = time.time()
 
-def send_email(subject, body, recipient, sender):
-    # Specify your AWS region
-    aws_region = "eu-west-2"
+total_time = end_time - start_time
 
-    # Create an SES client
-    ses_client = boto3.client("ses", region_name=aws_region)
-
-    # Specify the email content
-    email_content = {"Subject": {"Data": subject}, "Body": {"Html": {"Data": body}}}
-
-    try:
-        # Send the email
-        response = ses_client.send_email(
-            Source=sender,
-            Destination={"ToAddresses": recipient},
-            Message=email_content,
-        )
-        print(f"Email sent! Message ID: {response['MessageId']}")
-
-    except ClientError as e:
-        print(f"Error sending email: {e.response['Error']['Message']}")
-
-if len(merged_dict["failed"]) == 0:
-    exit(0)
-else:
-    email_subject = "Notebook Failures"
-    email_body = f"Please note that the following notebooks failed when ran on the branch {branch_name}: \n{pd.DataFrame(merged_dict['failed']).to_html()}\nThe total time to run all notebooks was {end_time - start_time} seconds."
-    recipient_email = os.getenv("EMAIL_RECIPIENTS").split(",")
-    sender_email = os.getenv("SENDER_EMAIL")
-
-    send_email(email_subject, email_body, recipient_email, sender_email)
-    exit(1)
+print(total_time)

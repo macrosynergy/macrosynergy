@@ -2,6 +2,7 @@
 Functions for calculating the hedge ratios of a panel of returns with respect to a
 single return. 
 """
+
 import warnings
 import numpy as np
 import pandas as pd
@@ -9,11 +10,14 @@ from typing import List, Tuple
 import statsmodels.api as sm
 from statsmodels.regression.linear_model import RegressionResults
 
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.utils import (
+    reduce_df,
+    _map_to_business_day_frequency,
+    standardise_dataframe,
+)
 import matplotlib.pyplot as plt
-
-from macrosynergy.management.utils import _map_to_business_day_frequency
 
 
 def date_alignment(
@@ -63,7 +67,7 @@ def hedge_calculator(
     of timestamps where the numeracy of dates added to the sample is instructed by the
     "refreq" parameter.
 
-    :param <pd.DataFrame> unhedged_return: the return series of the asset that is being
+    :param <pd.Series> unhedged_return: the return series of the asset that is being
         hedged.
     :param <pd.Series> benchmark_return: the return series of the asset being used to
         hedge against the main asset.
@@ -84,6 +88,9 @@ def hedge_calculator(
 
     benchmark_return = benchmark_return.astype(dtype=np.float32)
     unhedged_return = unhedged_return.astype(dtype=np.float32)
+
+    if benchmark_return.name is None:
+        benchmark_return.name = "hedge"
 
     benchmark_return = benchmark_return[
         benchmark_return.first_valid_index() : benchmark_return.last_valid_index()
@@ -118,15 +125,15 @@ def hedge_calculator(
         if d > min_obs_date:
             curr_start_date: pd.Timestamp = rdates[max(0, rdates.index(d) - max_obs)]
             # Inclusive of the re-estimation date.
-            xvar = unhedged_return.loc[curr_start_date:d]
-            yvar = benchmark_return.loc[curr_start_date:d]
+            yvar = unhedged_return.loc[curr_start_date:d]
+            xvar = benchmark_return.loc[curr_start_date:d]
             # Condition currently redundant but will become relevant.
             if meth == "ols":
                 xvar = sm.add_constant(xvar)
                 results: RegressionResults = sm.OLS(yvar, xvar).fit()
                 results_params: pd.Series = results.params
 
-            df_hrat.loc[d] = results_params.loc[cross_section]
+            df_hrat.loc[d] = results_params.loc[benchmark_return.name]
 
     # Any dates prior to the minimum observation which would be classified by NaN values
     # remove from the DataFrame.
@@ -191,7 +198,7 @@ def adjusted_returns(
 
 
 def return_beta(
-    df: pd.DataFrame,
+    df: QuantamentalDataFrame,
     xcat: str = None,
     cids: List[str] = None,
     benchmark_return: str = None,
@@ -206,11 +213,11 @@ def return_beta(
     hedged_returns: bool = False,
     ratio_name: str = "_HR",
     hr_name: str = "H",
-) -> pd.DataFrame:
+) -> QuantamentalDataFrame:
     """
     Estimate sensitivities (betas) of return category with respect to single return.
 
-    :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
+    :param <QuantamentalDataFrame> df: standardized DataFrame with the necessary columns:
         'cid', 'xcat', 'real_date' and 'value.
     :param <str> xcat:  return category based on the type of positions that are
         to be hedged.
@@ -248,7 +255,7 @@ def return_beta(
     :param <str> hr_name: label used to distinguish the hedged returns in the DataFrame.
         The label is appended to the category being hedged. The default is "H".
 
-    :return <pd.Dataframe>: DataFrame with hedge ratio estimates that update at the
+    :return <QuantamentalDataFrame>: DataFrame with hedge ratio estimates that update at the
         chosen re-estimation frequency.
         Additionally, the dataframe can include the hedged returns if the parameter
         `benchmark_return` has been set to True.
@@ -259,38 +266,38 @@ def return_beta(
 
     """
 
-    # Assertions.
-
-    cols = ["cid", "xcat", "real_date", "value"]
-    if not set(cols).issubset(set(df.columns)):
-        raise ValueError(f"`df` must contain the following columns: {cols}")
-
-    df: pd.DataFrame = df[cols]
-
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    # Value checks
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError(f"Expected DataFrame but received <{type(df)}>.")
+    df: QuantamentalDataFrame = standardise_dataframe(df)
 
     all_tix = np.unique(df["cid"] + "_" + df["xcat"])
     bm_error = f"Benchmark return ticker {benchmark_return} is not in the DataFrame."
-    assert benchmark_return in all_tix, bm_error
+    if not benchmark_return in all_tix:
+        raise ValueError(bm_error)
 
     error_xcat = (
         f"The field, xcat, must be a string but received <{type(xcat)}>. Only"
         f" a single category is used to hedge against the main asset."
     )
-    assert isinstance(xcat, str), error_xcat
+    if not isinstance(xcat, str):
+        raise ValueError(error_xcat)
 
     available_categories = df["xcat"].unique()
     error_hedging = (
         f"The return category used to be hedged, {xcat}, is "
         f"not defined in the dataframe."
     )
-    assert xcat in list(available_categories), error_hedging
+    if not xcat in list(available_categories):
+        raise ValueError(error_hedging)
 
     min_obs_error = (
         "The number of minimum observations required to compute a hedge "
-        "ratio is 10 business days, or two weeks."
+        "ratio is 10 business days, or two weeks. Please provide an integer "
+        "value greater than 10."
     )
-    assert min_obs >= 10, min_obs_error
+    if not isinstance(min_obs, int) or min_obs < 10:
+        raise ValueError(min_obs_error)
 
     if not isinstance(max_obs, int) or max_obs < min_obs:
         raise ValueError(f"`max_obs` must be an integer ≫ `min_obs`.")
@@ -301,7 +308,8 @@ def return_beta(
     xcat_hedge = "_".join(post_fix[1:])
     cid_hedge = post_fix[0]
     if xcat_hedge == xcat:
-        cids.remove(cid_hedge)
+        if cid_hedge in cids:
+            cids.remove(cid_hedge)
         warnings.warn(
             f"Return to be hedged for cross section {cid_hedge} is the hedge "
             f"return and has been removed from the panel."
@@ -366,7 +374,7 @@ def return_beta(
         df_hreturn["xcat"] = xcat + "_" + hr_name
         df_hedge = pd.concat([df_hedge, df_hreturn], ignore_index=True)
 
-    return df_hedge[cols]
+    return standardise_dataframe(df_hedge)
 
 
 def beta_display(df_hedge: pd.DataFrame, subplots: bool = False, hr_name: str = "H"):
@@ -431,7 +439,7 @@ if __name__ == "__main__":
     df_hedge = return_beta(
         df=dfd,
         xcat=xcat_hedge,
-        cids=cids,
+        cids=["IDR", "INR", "KRW", "MYR", "PHP"],
         benchmark_return=benchmark_return,
         start="2010-01-01",
         end="2020-10-30",

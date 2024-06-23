@@ -1,6 +1,7 @@
 """
 Classes and functions for analyzing and visualizing the relations of two panel categories.
 """
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -16,8 +17,8 @@ from macrosynergy.management.utils import apply_slip as apply_slip_util
 
 
 class CategoryRelations(object):
-    """
-    Class for analyzing and visualizing the relations of two panel categories.
+    """W
+    Class for analyzing and visualizing the relations of multiple panel categories.
 
     :param <pd.DataFrame> df: standardized DataFrame with the necessary columns:
         'cid', 'xcat', 'real_date' and at least one column with values of interest.
@@ -65,7 +66,7 @@ class CategoryRelations(object):
         for both. Trimming is applied after all other transformations.
     :param <int> slip: implied slippage of feature availability for relationship with
         the target category. This mimics the relationship between trading signals and
-        returns, which is often characterized by a delay due to the setup of of positions.
+        returns, which is often characterized by a delay due to the setup of positions.
         Technically, this is a negative lag (early arrival) of the target category
         in working days prior to any frequency conversion. Default is 0.
     """
@@ -139,7 +140,7 @@ class CategoryRelations(object):
                 df=df,
                 slip=self.slip,
                 cids=self.cids,
-                xcats=self.xcats,
+                xcats=[self.xcats[1]],
                 metrics=metrics_found,
             )
 
@@ -328,15 +329,14 @@ class CategoryRelations(object):
         return df
 
     def corr_prob_calc(
-        self, df_probability: Union[pd.DataFrame, List[pd.DataFrame]], prob_est
+        self, df_probability: Union[pd.DataFrame, List[pd.DataFrame]], prob_est: str
     ):
         """
         Compute the correlation coefficient and probability statistics.
 
         :param <List[pd.DataFrame] or pd.DataFrame> df_probability: pandas DataFrame
             containing the dependent and explanatory variables.
-        :param <bool> prob_bool: boolean parameter which determines whether the
-            probability value is included in the table. The default is True.
+        :param <str> prob_est: type of estimator for probability of significant relation.
 
         :return <List[tuple(float, float)]>:
 
@@ -370,8 +370,8 @@ class CategoryRelations(object):
 
     def corr_probability(
         self,
-        df_probability,
-        prob_est,
+        df_probability: Union[pd.DataFrame, List[pd.DataFrame]],
+        prob_est: str,
         time_period: str = "",
         coef_box_loc: str = "upper left",
         ax: plt.Axes = None,
@@ -382,6 +382,7 @@ class CategoryRelations(object):
         :param <List[pd.DataFrame] or pd.DataFrame> df_probability: pandas DataFrame
             containing the dependent and explanatory variables. Able to handle multiple
             DataFrames representing different time-periods of the original series.
+        :param <str> prob_est: type of estimator for probability of significant relation.
         :param <str> time_period: indicator used to clarify which time-period the
             statistics are computed for. For example, before 2010 and after 2010: the two
             periods experience very different macroeconomic conditions. The default is
@@ -451,7 +452,7 @@ class CategoryRelations(object):
         self,
         title: str = None,
         labels: bool = False,
-        size: Tuple[float] = (12, 8),
+        size: Tuple[float] = None,
         xlab: str = None,
         ylab: str = None,
         coef_box: str = None,
@@ -464,6 +465,7 @@ class CategoryRelations(object):
         separator: Union[str, int] = None,
         title_adj: float = 1,
         single_chart: bool = False,
+        single_scatter: bool = False,
         ncol: int = None,
         ax: plt.Axes = None,
     ):
@@ -555,9 +557,15 @@ class CategoryRelations(object):
         if coef_box_font_size == 0:
             set_font_size = True
             coef_box_font_size = 12
-        
+
         # If "separator" is type Integer, the scatter plot is split across two
         # time-periods where the divisor is the received year.
+        if size is None:
+            size = (3, 3) if separator == "cids" else (12, 8) 
+        else:
+            if not isinstance(size, tuple) or len(size) != 2 or not all(isinstance(i, (int, float)) for i in size):
+                raise TypeError("size must be a tuple of ints/floats.")
+
         if isinstance(separator, int):
             year_error = "Separation by years does not work with year groups."
             assert self.years is None, year_error
@@ -623,7 +631,7 @@ class CategoryRelations(object):
             if ylab is not None:
                 ax.set_ylabel(ylab)
 
-        elif separator == "cids":
+        elif separator == "cids" and not single_scatter:
             assert isinstance(single_chart, bool)
 
             dfx_copy = dfx.reset_index()
@@ -650,7 +658,10 @@ class CategoryRelations(object):
             # categories (dependent & explanatory variable) and the respective
             # cross-sections. The index will be the date timestamp.
 
-            fg = sns.FacetGrid(data=dfx_copy, col="cid", col_wrap=ncol)
+            facet_height = size[1]  # height of each facet in inches
+            facet_aspect = size[0] / size[1]  # aspect ratio of each facet
+
+            fg = sns.FacetGrid(data=dfx_copy, col="cid", col_wrap=ncol, height=facet_height, aspect=facet_aspect)
             fg.map(
                 sns.regplot,
                 self.xcats[0],
@@ -687,11 +698,63 @@ class CategoryRelations(object):
                     fg.axes[i].set_ylabel("")
 
                     if remainder == 0:
-                        fg.axes[no_columns].set_xlabel(xlab)
-                        fg.axes[no_columns].set_ylabel(ylab)
+                        fg.axes[no_columns - 1].set_xlabel(xlab)
+                        fg.axes[no_columns - 1].set_ylabel(ylab)
                     else:
                         fg.axes[-remainder].set_xlabel(xlab)
                         fg.axes[-remainder].set_ylabel(ylab)
+
+        elif separator == "cids" and single_scatter:
+
+            assert isinstance(single_chart, bool)
+
+            dfx_copy = dfx.reset_index()
+            cids = dfx_copy["cid"].unique()
+            n_cids = len(cids)
+
+            error_cids = (
+                "There must be more than one cross-section to use "
+                "separator = 'cids'."
+            )
+            assert n_cids > 1, error_cids
+
+            if ax is None:
+                fig, ax = plt.subplots(figsize=size)
+
+            dfx_list = [dfx_copy[dfx_copy["cid"] == c] for c in cids]
+            for i, dfx_i in enumerate(dfx_list):
+                sns.regplot(
+                    data=dfx_i,
+                    x=self.xcats[0],
+                    y=self.xcats[1],
+                    ci=reg_ci,
+                    order=reg_order,
+                    robust=reg_robust,
+                    fit_reg=fit_reg,
+                    scatter_kws={"s": 30, "alpha": 0.5},
+                    line_kws={"lw": 1},
+                    ax=ax,
+                    label=f'{cids[i]}'
+                )
+
+            if coef_box is not None:
+                data_table = self.corr_probability(
+                    df_probability=dfx_list,
+                    time_period="",
+                    coef_box_loc=coef_box,
+                    prob_est=prob_est,
+                    ax=ax,
+                )
+                data_table.scale(0.4, 2.5)
+                data_table.auto_set_font_size(set_font_size)
+                data_table.set_fontsize(coef_box_font_size)
+
+            ax.legend(loc="upper right", title="Cids")
+            ax.set_title(title, fontsize=14)
+            if xlab is not None:
+                ax.set_xlabel(xlab)
+            if ylab is not None:
+                ax.set_ylabel(ylab)
 
         elif separator is None:
             if ax is None:
@@ -755,6 +818,7 @@ class CategoryRelations(object):
         else:
             ValueError("Separator must be either a valid year <int> or 'cids' <str>.")
 
+        plt.tight_layout()
         if show_plot:
             plt.show()
 
@@ -884,11 +948,12 @@ if __name__ == "__main__":
     cr.reg_scatter(
         labels=False,
         separator="cids",
-        title="Carry and Return",
-        xlab="Carry",
-        ylab="Return",
+        title="Composite macro trend pressure indicator and subsequent IRS fixed receiver returns for USD and EUR, since 2000",
+        xlab="Composite macro trend pressure indicator",
+        ylab="Next month's return on 2-year IRS return, vol-targeted position, %",
         coef_box="lower left",
         ncol=2,
+        single_plot=True,
     )
 
     # Passing Axes object for a subplot
