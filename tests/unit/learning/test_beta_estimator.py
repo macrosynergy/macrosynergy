@@ -1816,5 +1816,15 @@ class TestBetaEstimator(unittest.TestCase):
                 self.be.models_heatmap(beta_xcat=beta_name, figsize=("not a valid number", 1))
             with self.assertRaises(TypeError):
                 self.be.models_heatmap(beta_xcat=beta_name, figsize=("not a valid number", "not a valid number"))
-        
-        
+
+    def test_valid_models_heatmap(self):
+        for beta_name in self.beta_names:
+            try:
+                self.be.models_heatmap(beta_xcat=beta_name)
+            except Exception as e:
+                self.fail(f"models_heatmap raised an exception: {e}")
+            # Repeat but for when cap > 20
+            try:
+                self.be.models_heatmap(beta_xcat = beta_name, cap=21)
+            except Exception as e:
+                self.fail(f"models_heatmap raised an exception: {e}")
