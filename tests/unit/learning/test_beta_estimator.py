@@ -1828,3 +1828,54 @@ class TestBetaEstimator(unittest.TestCase):
                 self.be.models_heatmap(beta_xcat = beta_name, cap=21)
             except Exception as e:
                 self.fail(f"models_heatmap raised an exception: {e}")
+
+    def test_types_get_optimal_models(self):
+        """ beta_xcat """
+        # Should fail if beta_xcat is not a string or list
+        with self.assertRaises(TypeError):
+            self.be.get_optimal_models(beta_xcat=1)
+        # Should fail if beta_xcat is not in the betas dataframe
+        with self.assertRaises(ValueError):
+            self.be.get_optimal_models(beta_xcat="not a valid beta")
+        # Should fail if beta_xcat is a list, but not all elements are strings
+        with self.assertRaises(TypeError):
+            self.be.get_optimal_models(beta_xcat=["BETA_NSA", 1])
+        with self.assertRaises(TypeError):
+            self.be.get_optimal_models(beta_xcat=[1, "BETA_NSA"])
+        with self.assertRaises(TypeError):
+            self.be.get_optimal_models(beta_xcat=[1, 1])
+        # Should fail if a string in the list of beta_xcats is not in the betas dataframe
+        with self.assertRaises(ValueError):
+            self.be.get_optimal_models(beta_xcat=["BETA_NSA", "not a valid beta"])
+        with self.assertRaises(ValueError):
+            self.be.get_optimal_models(beta_xcat=["not a valid beta", "BETA_NSA"])
+        with self.assertRaises(ValueError):
+            self.be.get_optimal_models(beta_xcat=["not a valid beta", "not a valid beta"])
+
+    def test_valid_get_optimal_models(self):
+        # Check that get_optimal_models works as expected without any arguments
+        try:
+            optimal_models = self.be.get_optimal_models()
+        except Exception as e:
+            self.fail(f"get_optimal_models raised an exception: {e}")
+        self.assertIsInstance(optimal_models, pd.DataFrame)
+        self.assertTrue(optimal_models.columns.tolist() == ["real_date", "xcat", "model_type", "hparams", "n_splits"])
+        self.assertTrue(np.all(optimal_models.real_date.isin(self.be.betas.real_date.unique())))
+        self.assertTrue(np.all(optimal_models.xcat.isin(self.be.betas.xcat.unique())))
+        self.assertTrue(np.all(optimal_models.model_type.apply(lambda x: isinstance(x, str))))
+        self.assertTrue(np.all(optimal_models.hparams.apply(lambda x: isinstance(x, dict))))
+        self.assertTrue(np.all(optimal_models.n_splits.apply(lambda x: isinstance(x, int))))
+
+        # Check that get_optimal_models works as expected with a single beta_xcat
+        for beta_name in self.beta_names:
+            try:
+                optimal_models = self.be.get_optimal_models(beta_xcat=beta_name)
+            except Exception as e:
+                self.fail(f"get_optimal_models raised an exception: {e}")
+            self.assertIsInstance(optimal_models, pd.DataFrame)
+            self.assertTrue(optimal_models.columns.tolist() == ["real_date", "xcat", "model_type", "hparams", "n_splits"])
+            self.assertTrue(np.all(optimal_models.real_date.isin(self.be.betas.real_date.unique())))
+            self.assertTrue(np.all(optimal_models.xcat == beta_name))
+            self.assertTrue(np.all(optimal_models.model_type.apply(lambda x: isinstance(x, str))))
+            self.assertTrue(np.all(optimal_models.hparams.apply(lambda x: isinstance(x, dict))))
+            self.assertTrue(np.all(optimal_models.n_splits.apply(lambda x: isinstance(x, int))))

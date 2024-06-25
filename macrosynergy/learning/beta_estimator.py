@@ -1228,6 +1228,8 @@ class BetaEstimator:
 
         if beta_xcat is None:
             return self.chosen_models
+        elif isinstance(beta_xcat, str):
+            return self.chosen_models[self.chosen_models.xcat == beta_xcat]
         else:
             return self.chosen_models[self.chosen_models.xcat.isin(beta_xcat)]
 
@@ -1243,6 +1245,10 @@ class BetaEstimator:
             if not all(isinstance(xcat, str) for xcat in beta_xcat):
                 raise TypeError(
                     "All elements in beta_xcat, when a list, must be strings."
+                )
+            if not all(xcat in self.betas["xcat"].unique() for xcat in beta_xcat):
+                raise ValueError(
+                    "All elements in beta_xcat must be valid beta category names."
                 )
 
     def get_hedged_returns(
