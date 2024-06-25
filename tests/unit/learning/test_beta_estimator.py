@@ -24,6 +24,10 @@ from sklearn.metrics import r2_score, make_scorer
 
 from parameterized import parameterized
 
+from unittest.mock import patch
+import matplotlib
+import matplotlib.pyplot as plt
+
 class TestBetaEstimator(unittest.TestCase):
     @classmethod
     def setUpClass(self):
@@ -194,6 +198,16 @@ class TestBetaEstimator(unittest.TestCase):
             VotingRegressor([("OLS1", LinearRegressionSystem(min_xs_samples=21, data_freq="unadjusted")),("OLS2", LinearRegressionSystem(min_xs_samples=21, data_freq="W"))]),
             RidgeRegressionSystem(min_xs_samples=21),
         ]
+
+        self.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+        self.mock_show = patch("matplotlib.pyplot.show").start()
+
+    @classmethod
+    def tearDownClass(self) -> None:
+        patch.stopall()
+        plt.close("all")
+        matplotlib.use(self.mpl_backend)
 
     def test_valid_init(self):
         # Check class attributes are correctly initialised
@@ -1754,3 +1768,53 @@ class TestBetaEstimator(unittest.TestCase):
         self.assertTrue(all(df.iloc[:,0] >= 0))
         self.assertTrue(all(df.iloc[:,1] >= 0))
         self.assertTrue(all(df.iloc[:,2] >= 0))
+
+    def test_types_models_heatmap(self):
+        """ beta_xcat """
+        # Should fail if beta_xcat is not a string
+        with self.assertRaises(TypeError):
+            self.be.models_heatmap(beta_xcat=1)
+        
+        # Should fail if beta_xcat is not in the betas dataframe
+        with self.assertRaises(ValueError):
+            self.be.models_heatmap(beta_xcat="not a valid beta")
+        
+        """ title """
+        # Should fail if title is not a string
+        for beta_name in self.beta_names:
+            with self.assertRaises(TypeError):
+                self.be.models_heatmap(beta_xcat=beta_name, title=1)
+        
+        """ cap """
+        # Should fail if cap is not an integer
+        for beta_name in self.beta_names:
+            with self.assertRaises(TypeError):
+                self.be.models_heatmap(beta_xcat=beta_name, cap="not an integer")
+        # Should fail if cap is less than 1
+        for beta_name in self.beta_names:
+            with self.assertRaises(ValueError):
+                self.be.models_heatmap(beta_xcat=beta_name, cap=0)
+        # Should raise a RuntimeWarning if cap is greater than 20
+        for beta_name in self.beta_names:
+            with self.assertWarns(RuntimeWarning):
+                self.be.models_heatmap(beta_xcat=beta_name, cap=21)
+        
+        """ figsize """
+        # Should fail if figsize is not a tuple
+        for beta_name in self.beta_names:
+            with self.assertRaises(TypeError):
+                self.be.models_heatmap(beta_xcat=beta_name, figsize=1)
+        # Should fail if figsize is a tuple, but not of length 2
+        for beta_name in self.beta_names:
+            with self.assertRaises(ValueError):
+                self.be.models_heatmap(beta_xcat=beta_name, figsize=(1,2,3))
+        # Should fail if figsize is a tuple, but one of the elements is not an integer or float
+        for beta_name in self.beta_names:
+            with self.assertRaises(TypeError):
+                self.be.models_heatmap(beta_xcat=beta_name, figsize=(1, "not a valid number"))
+            with self.assertRaises(TypeError):
+                self.be.models_heatmap(beta_xcat=beta_name, figsize=("not a valid number", 1))
+            with self.assertRaises(TypeError):
+                self.be.models_heatmap(beta_xcat=beta_name, figsize=("not a valid number", "not a valid number"))
+        
+        
