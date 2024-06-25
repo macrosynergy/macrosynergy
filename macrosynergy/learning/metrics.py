@@ -19,6 +19,8 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import VotingRegressor
 from sklearn.base import RegressorMixin
 
+from sklearn.base import BaseEstimator, RegressorMixin
+
 from macrosynergy.learning.panel_time_series_split import ExpandingKFoldPanelSplit
 
 from typing import Union
@@ -268,6 +270,28 @@ def neg_mean_abs_corr(
         
     NB: this scorer is a specialized function for use in beta estimation.
     """
+    # Checks 
+    if not isinstance(estimator, BaseEstimator):
+        raise TypeError("estimator must be a scikit-learn compatible estimator")
+    if not isinstance(estimator, RegressorMixin):
+        raise TypeError("estimator must be a scikit-learn regressor")
+    if not hasattr(estimator, "coefs_"):
+        raise ValueError(
+            "estimator must be a system of linear models.",
+            "By Macrosynergy convention, this means it must have a coefs_",
+            "dictionary attribute storing betas for each cross-section."
+        )
+    if not isinstance(X_test, pd.DataFrame):
+        raise TypeError("X_test must be a pandas DataFrame")
+    if not isinstance(y_test, (pd.DataFrame, pd.Series)):
+        raise TypeError("y_test must be a pandas DataFrame or Series")
+    if len(X_test) != len(y_test):
+        raise ValueError("X_test and y_test must have the same length")
+    if not isinstance(X_test.index, pd.MultiIndex):
+        raise ValueError("X_test must be multi-indexed.")
+    if not isinstance(y_test.index, pd.MultiIndex):
+        raise ValueError("y_test must be multi-indexed.")
+    
     market_returns = X_test.iloc[:, 0].copy()
     contract_returns = y_test.copy()
     test_cross_sections = X_test.index.get_level_values(

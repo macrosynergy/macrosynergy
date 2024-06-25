@@ -13,7 +13,14 @@ from macrosynergy.learning import (
     regression_balanced_accuracy,
     sharpe_ratio,
     sortino_ratio,
+    neg_mean_abs_corr,
+    LinearRegressionSystem,
+    RidgeRegressionSystem,
+    LADRegressionSystem,
+    CorrelationVolatilitySystem,
 )
+
+from sklearn.linear_model import LinearRegression, LogisticRegression
 
 class TestAll(unittest.TestCase):
     def setUp(self):
@@ -58,6 +65,22 @@ class TestAll(unittest.TestCase):
         self.regressor_true = pd.Series(
             data=regressor_true, index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"])
         )
+
+        # Create a dataframe to test the scorers, as opposed to the metrics 
+        xcats = ["XR", "CPI", "GROWTH", "RIR"]
+        ftrs = np.random.normal(loc=0, scale=1, size=(n_predictions, 3))
+        labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
+        df = pd.DataFrame(
+            data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
+            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
+            columns=xcats,
+            dtype=np.float32,
+        )
+
+        self.X_train = df.drop(columns="XR")
+        self.y_train = df["XR"]
+
+        self.regression_systems = [LinearRegressionSystem(), RidgeRegressionSystem(), LADRegressionSystem()]
 
     def test_valid_panel_significance_probability(self):
         map_result = panel_significance_probability(self.regressor_true, self.regressor_predictions)
@@ -131,6 +154,35 @@ class TestAll(unittest.TestCase):
             sortino_ratio(self.regressor_true.reset_index(), self.regressor_predictions)
         with self.assertRaises(ValueError):
             sortino_ratio(self.regressor_true, self.regressor_predictions[:-1])
+
+    def test_types_neg_mean_abs_corr(self):
+        """ estimator """
+        # Should fail if the estimator isn't a sklearn estimator
+        with self.assertRaises(TypeError):
+            neg_mean_abs_corr(estimator="self.regressor_true", X_test = self.X_train, y_test = self.y_train)
+        # Should fail if the estimator isn't a sklearn regressor
+        with self.assertRaises(TypeError):
+            neg_mean_abs_corr(estimator=LogisticRegression(), X_test = self.X_train, y_test = self.y_train)
+        # Should fail if the estimator isn't a system of linear models
+        with self.assertRaises(ValueError):
+            neg_mean_abs_corr(estimator=LinearRegression(), X_test = self.X_train, y_test = self.y_train)
+        
+        for system in self.regression_systems:
+            """ X_train """
+            # Should fail if the X_test isn't a pandas dataframe
+            with self.assertRaises(TypeError):
+                neg_mean_abs_corr(estimator=system, X_test = "self.X_train", y_test = self.y_train)
+            # Should fail if X_test is not multi-indexed
+            with self.assertRaises(ValueError):
+                neg_mean_abs_corr(estimator=system, X_test = self.X_train.reset_index(), y_test = self.y_train)
+        
+            """ y_train """
+            # Should fail if y_test isn't a pandas series
+            with self.assertRaises(TypeError):
+                neg_mean_abs_corr(estimator=system, X_test = self.X_train, y_test = "self.y_train")
+            # Should fail if y_test is not multi-indexed
+            with self.assertRaises(ValueError):
+                neg_mean_abs_corr(estimator=system, X_test = self.X_train, y_test = self.y_train.reset_index())
 
 if __name__ == "__main__":
     unittest.main()
