@@ -1271,6 +1271,8 @@ class BetaEstimator:
 
         if hedged_return_xcat is None:
             return self.hedged_returns
+        elif isinstance(hedged_return_xcat, str):
+            return self.hedged_returns[self.hedged_returns.xcat == hedged_return_xcat]
         else:
             return self.hedged_returns[
                 self.hedged_returns.xcat.isin(hedged_return_xcat)
@@ -1315,6 +1317,8 @@ class BetaEstimator:
 
         if beta_xcat is None:
             return self.betas
+        elif isinstance(beta_xcat, str):
+            return self.betas[self.betas.xcat == beta_xcat]
         else:
             return self.betas[self.betas.xcat.isin(beta_xcat)]
 

@@ -1917,6 +1917,45 @@ class TestBetaEstimator(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.be.get_hedged_returns(hedged_return_xcat=["not a valid hedged return", "not a valid hedged return"])
         
+    def test_valid_get_hedged_returns(self):
+        # Check that get_hedged_returns works as expected without any arguments
+        try:
+            hedged_returns = self.be.get_hedged_returns()
+        except Exception as e:
+            self.fail(f"get_hedged_returns raised an exception: {e}")
+        self.assertIsInstance(hedged_returns, pd.DataFrame)
+        self.assertTrue(hedged_returns.columns.tolist() == ["cid", "real_date", "xcat", "value"])
+        self.assertTrue(np.all(hedged_returns.real_date.isin(self.be.betas.real_date.unique())))
+        self.assertTrue(np.all(hedged_returns.xcat.isin(self.hedged_return_names)))
+        self.assertTrue(np.all(hedged_returns.cid.isin(self.cids)))
+        self.assertTrue(all(~hedged_returns.value.isna()))
+
+        # Check that get_hedged_returns works as expected with a single hedged_return_xcat
+        for hedged_return_name in self.hedged_return_names:
+            try:
+                hedged_returns = self.be.get_hedged_returns(hedged_return_xcat=hedged_return_name)
+            except Exception as e:
+                self.fail(f"get_hedged_returns raised an exception: {e}")
+            self.assertIsInstance(hedged_returns, pd.DataFrame)
+            self.assertTrue(hedged_returns.columns.tolist() == ["cid", "real_date", "xcat", "value"])
+            self.assertTrue(np.all(hedged_returns.real_date.isin(self.be.betas.real_date.unique())))
+            self.assertTrue(np.all(hedged_returns.xcat == hedged_return_name))
+            self.assertTrue(np.all(hedged_returns.cid.isin(self.cids)))
+            self.assertTrue(all(~hedged_returns.value.isna()))
+
+        # Check that get_hedged_returns works as expected with a list of hedged_return_xcats
+        for hedged_return_name in self.hedged_return_names:
+            try:
+                hedged_returns = self.be.get_hedged_returns(hedged_return_xcat=[hedged_return_name])
+            except Exception as e:
+                self.fail(f"get_hedged_returns raised an exception: {e}")
+            self.assertIsInstance(hedged_returns, pd.DataFrame)
+            self.assertTrue(hedged_returns.columns.tolist() == ["cid", "real_date", "xcat", "value"])
+            self.assertTrue(np.all(hedged_returns.real_date.isin(self.be.betas.real_date.unique())))
+            self.assertTrue(np.all(hedged_returns.xcat.isin(self.hedged_return_names)))
+            self.assertTrue(np.all(hedged_returns.cid.isin(self.cids)))
+            self.assertTrue(all(~hedged_returns.value.isna()))
+
     def test_types_get_betas(self):
         """ beta_xcat """
         # Should fail if beta_xcat is not a string or list
@@ -1939,3 +1978,42 @@ class TestBetaEstimator(unittest.TestCase):
             self.be.get_betas(beta_xcat=["not a valid beta", "BETA_NSA"])
         with self.assertRaises(ValueError):
             self.be.get_betas(beta_xcat=["not a valid beta", "not a valid beta"])
+
+    def test_valid_get_betas(self):
+        # Check that get_betas works as expected without any arguments
+        try:
+            betas = self.be.get_betas()
+        except Exception as e:
+            self.fail(f"get_betas raised an exception: {e}")
+        self.assertIsInstance(betas, pd.DataFrame)
+        self.assertTrue(betas.columns.tolist() == ["cid", "real_date", "xcat", "value"])
+        self.assertTrue(np.all(betas.real_date.isin(self.be.betas.real_date.unique())))
+        self.assertTrue(np.all(betas.xcat.isin(self.beta_names)))
+        self.assertTrue(np.all(betas.cid.isin(self.cids)))
+        self.assertTrue(all(~betas.value.isna()))
+
+        # Check that get_betas works as expected with a single beta_xcat
+        for beta_name in self.beta_names:
+            try:
+                betas = self.be.get_betas(beta_xcat=beta_name)
+            except Exception as e:
+                self.fail(f"get_betas raised an exception: {e}")
+            self.assertIsInstance(betas, pd.DataFrame)
+            self.assertTrue(betas.columns.tolist() == ["cid", "real_date", "xcat", "value"])
+            self.assertTrue(np.all(betas.real_date.isin(self.be.betas.real_date.unique())))
+            self.assertTrue(np.all(betas.xcat == beta_name))
+            self.assertTrue(np.all(betas.cid.isin(self.cids)))
+            self.assertTrue(all(~betas.value.isna()))
+
+        # Check that get_betas works as expected with a list of beta_xcats
+        for beta_name in self.beta_names:
+            try:
+                betas = self.be.get_betas(beta_xcat=[beta_name])
+            except Exception as e:
+                self.fail(f"get_betas raised an exception: {e}")
+            self.assertIsInstance(betas, pd.DataFrame)
+            self.assertTrue(betas.columns.tolist() == ["cid", "real_date", "xcat", "value"])
+            self.assertTrue(np.all(betas.real_date.isin(self.be.betas.real_date.unique())))
+            self.assertTrue(np.all(betas.xcat.isin(self.beta_names)))
+            self.assertTrue(np.all(betas.cid.isin(self.cids)))
+            self.assertTrue(all(~betas.value.isna()))
