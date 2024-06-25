@@ -1289,6 +1289,11 @@ class BetaEstimator:
                 raise TypeError(
                     "All elements in hedged_return_xcat, when a list, must be strings."
                 )
+            if not all(xcat in self.hedged_returns["xcat"].unique() for xcat in hedged_return_xcat):
+                raise ValueError(
+                    "All elements in hedged_return_xcat must be valid beta category names."
+                )
+
 
     def get_betas(
         self,
@@ -1325,6 +1330,10 @@ class BetaEstimator:
             if not all(isinstance(xcat, str) for xcat in beta_xcat):
                 raise TypeError(
                     "All elements in beta_xcat, when a list, must be strings."
+                )
+            if not all(xcat in self.betas["xcat"].unique() for xcat in beta_xcat):
+                raise ValueError(
+                    "All elements in beta_xcat must be valid beta category names."
                 )
 
 
