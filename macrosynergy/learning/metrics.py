@@ -275,12 +275,22 @@ def neg_mean_abs_corr(
         raise TypeError("estimator must be a scikit-learn compatible estimator")
     if not isinstance(estimator, RegressorMixin):
         raise TypeError("estimator must be a scikit-learn regressor")
-    if not hasattr(estimator, "coefs_"):
-        raise ValueError(
-            "estimator must be a system of linear models.",
-            "By Macrosynergy convention, this means it must have a coefs_",
-            "dictionary attribute storing betas for each cross-section."
-        )
+    if isinstance(estimator, VotingRegressor):
+        if not all(isinstance(est[1], RegressorMixin) for est in estimator.estimators):
+            raise TypeError("The voting regressor must be composed of regressors")
+        if not all(hasattr(est[1], "coefs_") for est in estimator.estimators):
+            raise ValueError(
+                "Each estimator in the voting regressor must be a system of linear models."
+                "By Macrosynergy convention, this means it must have a coefs_"
+                "dictionary attribute storing betas for each cross-section."
+            )
+    else:
+        if not hasattr(estimator, "coefs_"):
+            raise ValueError(
+                "estimator must be a system of linear models."
+                "By Macrosynergy convention, this means it must have a coefs_"
+                "dictionary attribute storing betas for each cross-section."
+            )
     if not isinstance(X_test, pd.DataFrame):
         raise TypeError("X_test must be a pandas DataFrame")
     if not isinstance(y_test, (pd.DataFrame, pd.Series)):

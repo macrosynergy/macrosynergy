@@ -33,11 +33,6 @@ class BetaEstimator:
     It is recommended to use `neg_mean_abs_corr` from `macrosynergy.learning`.
     Cross-sectional betas and out-of-sample "hedged" returns are stored in
     quantamental dataframes.
-
-    .. note::
-
-      This class is still **experimental** for now: the predictions
-      and the API might change without any deprecation cycle.
     """
 
     def __init__(
@@ -117,249 +112,12 @@ class BetaEstimator:
             columns=["real_date", "xcat", "model_type", "hparams", "n_splits"]
         )
 
-    def _checks_init_params(
-        self,
-        df: pd.DataFrame,
-        xcat: str,
-        cids: List[str],
-        benchmark_return: str,
-    ):
-        # Dataframe checks
-        if not isinstance(df, pd.DataFrame):
-            raise TypeError("df must be a pandas DataFrame.")
-        if not set(["cid", "xcat", "real_date", "value"]).issubset(df.columns):
-            raise ValueError(
-                "df must contain columns 'cid', 'xcat', 'real_date' and 'value'."
-            )
-        if not df["xcat"].nunique() > 1:
-            raise ValueError(
-                "df must contain at least two xcats. One is required for the contract return panel and another for the benchmark returns."
-            )
-        # xcat checks
-        if not isinstance(xcat, str):
-            raise TypeError("xcat must be a string.")
-        if xcat not in df["xcat"].unique():
-            raise ValueError("xcat must be a valid category in the dataframe.")
-
-        # cids checks
-        if not isinstance(cids, list):
-            raise TypeError("cids must be a list.")
-        if not all(isinstance(cid, str) for cid in cids):
-            raise TypeError("All elements in cids must be strings.")
-        if not all(cid in df["cid"].unique() for cid in cids):
-            raise ValueError(
-                "All cids must be valid cross-section identifiers in the dataframe."
-            )
-
-        # benchmark return checks
-        if not isinstance(benchmark_return, str):
-            raise TypeError("benchmark_return must be a string.")
-        ticker_list = df["cid"] + "_" + df["xcat"]
-        if benchmark_return not in ticker_list.unique():
-            raise ValueError(
-                "benchmark_return must be a valid ticker in the dataframe."
-            )
-        if benchmark_return.split("_", 1)[1] == xcat:
-            raise ValueError(
-                "benchmark_return must belong to a different category than the specified xcat."
-            )
-
-    def _checks_estimate_beta(
-        self,
-        beta_xcat,
-        hedged_return_xcat,
-        inner_splitter,
-        scorer,
-        models,
-        hparam_grid,
-        min_cids,
-        min_periods,
-        est_freq,
-        use_variance_correction,
-        initial_n_splits,
-        threshold_n_periods,
-        hparam_type,
-        n_iter,
-        n_jobs_outer,
-        n_jobs_inner,
-    ):
-        # beta_xcat checks
-        if not isinstance(beta_xcat, str):
-            raise TypeError("beta_xcat must be a string.")
-        if beta_xcat in self.betas["xcat"].unique():
-            raise ValueError(
-                "beta_xcat already exists in the stored quantamental dataframe for beta "
-                "estimates. Please choose a different category name."
-            )
-
-        # hedged_return_xcat checks
-        if not isinstance(hedged_return_xcat, str):
-            raise TypeError("hedged_return_xcat must be a string.")
-        if hedged_return_xcat in self.hedged_returns["xcat"].unique():
-            raise ValueError(
-                "hedged_return_xcat already exists in the stored quantamental dataframe "
-                "for hedged returns. Please choose a different category name."
-            )
-
-        # inner_splitter checks
-        if not isinstance(inner_splitter, BasePanelSplit):
-            raise TypeError("inner_splitter must be an instance of BasePanelSplit.")
-
-        # scorer
-        if not callable(scorer):
-            raise TypeError("scorer must be a callable function.")
-
-        # models grid checks
-        if not isinstance(models, dict):
-            raise TypeError("models must be a dictionary.")
-        if not all(
-            isinstance(model, (BaseEstimator, Pipeline)) for model in models.values()
-        ):
-            raise TypeError(
-                "All values in the models dictionary must be scikit-learn compatible models."
-            )
-        if not all(isinstance(model_name, str) for model_name in models.keys()):
-            raise TypeError("All keys in the models dictionary must be strings.")
-        for model in models.values():
-            if isinstance(model, VotingRegressor):
-                for estimator in model.estimators:
-                    if not hasattr(estimator[1], "coefs_"):
-                        raise ValueError(
-                            "All models must be systems of linear regressors consistent with "
-                            "the scikit-learn API. This means that they must be scikit-learn compatible "
-                            "regressors that have a 'coefs_' attribute storing the estimated betas for each "
-                            "cross-section, as per the standard imposed by the macrosynergy package. "
-                            "Please check that the voting regressor estimators have this attribute."
-                        )
-            else:
-                if not hasattr(model, "coefs_"):
-                    raise ValueError(
-                        "All models must be systems of linear regressors consistent with "
-                        "the scikit-learn API. This means that they must be scikit-learn compatible "
-                        "regressors that have a 'coefs_' attribute storing the estimated betas for each "
-                        "cross-section, as per the standard imposed by the macrosynergy package."
-                    )
-
-        # hparam_grid checks
-        if not isinstance(hparam_grid, dict):
-            raise TypeError("hparam_grid must be a dictionary.")
-        if not all(isinstance(model_name, str) for model_name in hparam_grid.keys()):
-            raise TypeError("All keys in the hparam_grid dictionary must be strings.")
-        if not set(models.keys()) == set(hparam_grid.keys()):
-            raise ValueError(
-                "The keys in the models and hparam_grid dictionaries must match."
-            )
-        if not all(isinstance(grid, (dict, list)) for grid in hparam_grid.values()):
-            raise TypeError(
-                "All values in the hparam_grid dictionary must be dictionaries or lists of dictionaries."
-            )
-        for grid in hparam_grid.values():
-            if isinstance(grid, dict):
-                if not all(isinstance(key, str) for key in grid.keys()):
-                    raise TypeError(
-                        "All keys in the nested dictionaries of hparam_grid must be strings."
-                    )
-                if not all(isinstance(value, list) for value in grid.values()):
-                    raise TypeError(
-                        "All values in the nested dictionaries of hparam_grid must be lists."
-                    )
-            if isinstance(grid, list):
-                if not all(isinstance(sub_grid, dict) for sub_grid in grid):
-                    raise TypeError(
-                        "All elements in the list of hparam_grid must be dictionaries."
-                    )
-                for sub_grid in grid:
-                    if not all(isinstance(key, str) for key in sub_grid.keys()):
-                        raise TypeError(
-                            "All keys in the nested dictionaries of hparam_grid must be strings."
-                        )
-                    if not all(isinstance(value, list) for value in sub_grid.values()):
-                        raise TypeError(
-                            "All values in the nested dictionaries of hparam_grid must be lists."
-                        )
-
-        # min_cids checks
-        if not isinstance(min_cids, int):
-            raise TypeError("min_cids must be an integer.")
-        if min_cids < 1:
-            raise ValueError("min_cids must be greater than 0.")
-
-        # min_periods checks
-        if not isinstance(min_periods, int):
-            raise TypeError("min_periods must be an integer.")
-        if min_periods < 1:
-            raise ValueError("min_periods must be greater than 0.")
-
-        # est_freq checks
-        if not isinstance(est_freq, str):
-            raise TypeError("est_freq must be a string.")
-        if est_freq not in ["D", "W", "M", "Q"]:
-            raise ValueError("est_freq must be one of 'D', 'W', 'M' or 'Q'.")
-
-        # use_variance_correction checks
-        if not isinstance(use_variance_correction, bool):
-            raise TypeError("use_variance_correction must be a boolean.")
-
-        # initial_n_splits checks
-        if initial_n_splits is not None:
-            if not isinstance(initial_n_splits, int):
-                raise TypeError("initial_n_splits must be an integer.")
-            if initial_n_splits < 2:
-                raise ValueError("initial_n_splits must be greater than 1.")
-
-        # threshold_n_periods checks
-        if threshold_n_periods is not None:
-            if not isinstance(threshold_n_periods, int):
-                raise TypeError("threshold_n_periods must be an integer.")
-            if threshold_n_periods < 1:
-                raise ValueError("threshold_n_periods must be greater than 0.")
-
-        # hparam_type checks
-        if not isinstance(hparam_type, str):
-            raise TypeError("hparam_type must be a string.")
-        if hparam_type not in ["grid", "prior", "bayes"]:
-            raise ValueError("hparam_type must be one of 'grid', 'prior' or 'bayes'.")
-        if hparam_type == "bayes":
-            raise NotImplementedError(
-                "Bayesian hyperparameter search is not yet implemented."
-            )
-
-        # n_iter checks
-        if n_iter is not None:
-            if not isinstance(n_iter, int):
-                raise TypeError("n_iter must be an integer.")
-            if n_iter < 1:
-                raise ValueError("n_iter must be greater than 0.")
-
-        # n_jobs_outer checks
-        if not isinstance(n_jobs_outer, int):
-            raise TypeError("n_jobs_outer must be an integer.")
-        if (n_jobs_outer < -1) or (n_jobs_outer == 0):
-            raise ValueError("n_jobs_outer must be greater than zero or equal to -1.")
-
-        # n_jobs_inner checks
-        # TODO: raise warning if the product of n_jobs_outer and n_jobs_inner is greater than the number of available cores
-        if not isinstance(n_jobs_inner, int):
-            raise TypeError("n_jobs_inner must be an integer.")
-        if (n_jobs_inner < -1) or (n_jobs_inner == 0):
-            raise ValueError("n_jobs_inner must be greater than zero or equal to -1.")
-
-        # Check that the number of jobs isn't excessive
-        n_jobs_outer_adjusted = n_jobs_outer if n_jobs_outer != -1 else os.cpu_count()
-        n_jobs_inner_adjusted = n_jobs_inner if n_jobs_inner != -1 else os.cpu_count()
-
-        if n_jobs_outer_adjusted * n_jobs_inner_adjusted > os.cpu_count():
-            warnings.warn(
-                f"n_jobs_outer * n_jobs_inner is greater than the number of available cores. "
-                f"Consider reducing the number of jobs to avoid excessive resource usage."
-            )
-
     def estimate_beta(
         self,
         beta_xcat: str,
         hedged_return_xcat: str,
         inner_splitter: BasePanelSplit,
-        scorer: Callable,  # Possibly find a better type hint for a scikit-learn scorer
+        scorer: Callable,
         models: Dict[str, Union[BaseEstimator, Pipeline]],
         hparam_grid: Dict[str, Dict[str, List]],
         min_cids: int = 1,
@@ -718,6 +476,151 @@ class BetaEstimator:
         
         return corr_df
 
+    def models_heatmap(
+        self,
+        beta_xcat: str,
+        title: Optional[str] = None,
+        cap: Optional[int] = 5,
+        figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
+    ):
+        """
+        Visualizing optimal models used for beta estimation.
+
+        :param <str> beta_xcat: Category name for the panel of estimated contract betas.
+        :param <Optional[str]> title: Title of the heatmap. Default is None. This creates
+            a figure title of the form "Model Selection Heatmap for {name}".
+        :param <Optional[int]> cap: Maximum number of models to display. Default
+            (and limit) is 5. The chosen models are the 'cap' most frequently occurring
+            in the pipeline.
+        :param <Optional[Tuple[Union[int, float], Union[int, float]]]> figsize: Tuple of
+            floats or ints denoting the figure size. Default is (12, 8).
+
+        Note:
+        This method displays the times at which each model in a learning process
+        has been optimal and used for beta estimation, as a binary heatmap.
+        """
+        # Checks
+        self._checks_models_heatmap(
+            beta_xcat=beta_xcat, title=title, cap=cap, figsize=figsize
+        )
+
+        # Get the chosen models for the specified pipeline to visualise selection.
+        chosen_models = self.chosen_models 
+        chosen_models = chosen_models[chosen_models.xcat == beta_xcat].sort_values(
+            by="real_date"
+        )
+        chosen_models["model_hparam_id"] = chosen_models.apply(
+            lambda row: (
+                row["model_type"]
+                if row["hparams"] == {}
+                else f"{row['model_type']}_"
+                + "_".join([f"{key}={value}" for key, value in row["hparams"].items()])
+            ),
+            axis=1,
+        )
+        chosen_models["real_date"] = chosen_models["real_date"].dt.date
+        model_counts = chosen_models.model_hparam_id.value_counts()
+        chosen_models = chosen_models[
+            chosen_models.model_hparam_id.isin(model_counts.index[:cap])
+        ]
+
+        unique_models = chosen_models.model_hparam_id.unique()
+        unique_models = sorted(unique_models, key=lambda x: -model_counts[x])
+        unique_dates = chosen_models.real_date.unique()
+
+        # Fill in binary matrix denoting the selected model at each time
+        binary_matrix = pd.DataFrame(0, index=unique_models, columns=unique_dates)
+        for _, row in chosen_models.iterrows():
+            model_id = row["model_hparam_id"]
+            date = row["real_date"]
+            binary_matrix.at[model_id, date] = 1
+
+        # Display the heatmap.
+        plt.figure(figsize=figsize)
+        if binary_matrix.shape[0] == 1:
+            sns.heatmap(binary_matrix, cmap="binary_r", cbar=False)
+        else:
+            sns.heatmap(binary_matrix, cmap="binary", cbar=False)
+        plt.title(title)
+        plt.show()
+
+    def get_optimal_models(
+        self,
+        beta_xcat: Optional[Union[str, List]] = None,
+    ) -> pd.DataFrame:
+        """
+        Returns a dataframe of optimal models selected for one or more beta estimation
+        processes.
+
+        :param <Optional[Union[str, List]]> beta_xcat: Category name or list of category names
+            for the panel of estimated contract betas. If None, information from all
+            beta estimation processes held within the class instance is returned. Default is None.
+
+        :return: <pd.DataFrame> A dataframe of optimal models selected for given
+            beta estimation processes.
+        """
+        # Checks
+        self._checks_get_optimal_models(beta_xcat=beta_xcat)
+
+        if beta_xcat is None:
+            return self.chosen_models
+        elif isinstance(beta_xcat, str):
+            return self.chosen_models[self.chosen_models.xcat == beta_xcat]
+        else:
+            return self.chosen_models[self.chosen_models.xcat.isin(beta_xcat)]
+        
+    def get_hedged_returns(
+        self,
+        hedged_return_xcat: Optional[Union[str, List]] = None,
+    ):
+        """
+        Returns a dataframe of out-of-sample hedged returns derived from beta estimation processes
+        held within the class instance.
+
+        :param <Optional[Union[str, List]]> hedged_return_xcat: Category name or list of category names
+            for the panel of derived hedged returns. If None, information from all
+            beta estimation processes held within the class instance is returned. Default is None.
+
+        :return: <pd.DataFrame> A dataframe of out-of-sample hedged returns derived from beta estimation
+            processes.
+        """
+        # Checks
+        self._checks_get_hedged_returns(hedged_return_xcat=hedged_return_xcat)
+
+        if hedged_return_xcat is None:
+            return self.hedged_returns
+        elif isinstance(hedged_return_xcat, str):
+            return self.hedged_returns[self.hedged_returns.xcat == hedged_return_xcat]
+        else:
+            return self.hedged_returns[
+                self.hedged_returns.xcat.isin(hedged_return_xcat)
+            ]
+        
+    def get_betas(
+        self,
+        beta_xcat: Optional[Union[str, List]] = None,
+    ):
+        """
+        Returns a dataframe of estimated betas derived from beta estimation processes
+        held within the class instance.
+
+        :param <Optional[Union[str, List]]> beta_xcat: Category name or list of category names
+            for the panel of estimated contract betas. If None, information from all
+            beta estimation processes held within the class instance is returned. Default is None.
+
+        :return: <pd.DataFrame> A dataframe of estimated betas derived from beta estimation
+            processes.
+        """
+        # Checks
+        self._checks_get_betas(beta_xcat=beta_xcat)
+
+        if beta_xcat is None:
+            return self.betas
+        elif isinstance(beta_xcat, str):
+            return self.betas[self.betas.xcat == beta_xcat]
+        else:
+            return self.betas[self.betas.xcat.isin(beta_xcat)]
+        
     def _worker(
         self,
         train_idx: np.ndarray,
@@ -784,13 +687,6 @@ class BetaEstimator:
                     RuntimeWarning,
                 )
                 continue
-            #if not hasattr(search_object, "best_score_"):
-            #    # Then the grid search failed completely
-            #    warnings.warn(
-            #        f"No model was selected at time {training_time}. Hence, no beta can be estimated."
-            #    )
-            #    # TODO: handle this case properly
-            #    continue
 
             # If a model was selected, extract the score, name, estimator and optimal hyperparameters
             optim_name, optim_model, optim_score, optim_params = (
@@ -874,7 +770,6 @@ class BetaEstimator:
         y_test_i,
         hedged_return_xcat,
     ):
-        # TODO: input checks
         betas_series = pd.Series(betas)
         XB = X_test_i.mul(betas_series, level=0, axis=0)
         hedged_returns = y_test_i - XB[self.benchmark_xcat]
@@ -912,7 +807,406 @@ class BetaEstimator:
         mean_abs_corr = df_subset.groupby("cid").apply(calculate_correlation).mean()
 
         return mean_abs_corr
-    
+
+    def _determine_optimal_model(
+        self,
+        model_name: str,
+        model: Union[BaseEstimator, Pipeline],
+        search_object: Union[GridSearchCV, RandomizedSearchCV],
+        optim_score: float,
+        optim_name: str,
+        optim_model: Union[BaseEstimator, Pipeline],
+        optim_params: Dict,
+        use_variance_correction: bool,
+    ):
+        """
+        Private method to determine an optimal model based on cross-validation scores
+        at any given estimation time. A given model, with associated model_name, is
+        compared to the current optimal model. If the current model has a higher score
+        than the optimal model, the current model becomes the optimal model. The new
+        optimal score, model name, model and hyperparameters are returned.
+
+        :param <str> model_name: Name of the model being considered.
+        :param <Union[BaseEstimator, Pipeline]> model: Model being considered.
+        :param <Union[GridSearchCV, RandomizedSearchCV]> search_object: Search object
+            containing the results of the hyperparameter search.
+        :param <float> optim_score: Current optimal score.
+        :param <str> optim_name: Current optimal model name.
+        :param <Union[BaseEstimator, Pipeline]> optim_model: Current optimal model.
+        :param <Dict> optim_params: Current optimal hyperparameters.
+        :param <bool> use_variance_correction: Boolean indicating whether or not to apply a
+            correction to cross-validation scores to account for the variation in scores across
+            splits.
+
+
+        """
+        if not hasattr(search_object, "cv_results_"):
+            return optim_name, optim_model, optim_score, optim_params
+        cv_scores = pd.DataFrame(search_object.cv_results_)
+        splitscorecols = [
+            col
+            for col in cv_scores.columns
+            if (("split" in col) and ("_test_score" in col))
+        ]
+        cv_scores = cv_scores[splitscorecols + ["params"]]
+
+        mean_scores = np.nanmean(cv_scores.iloc[:, :-1], axis=1)
+        std_scores = np.nanstd(cv_scores.iloc[:, :-1], axis=1)
+
+        if all(np.isnan(mean_scores)):
+            return optim_name, optim_model, optim_score, optim_params
+
+        if use_variance_correction:
+            # Select model that aims to jointly maximize the mean metric and minimize the
+            # standard deviation across splits. Equal weighting is placed on both.
+            scaled_mean_scores = (mean_scores - np.nanmin(mean_scores)) / (
+                np.nanmax(mean_scores) - np.nanmin(mean_scores)
+            )
+            scaled_std_scores = (std_scores - np.nanmin(std_scores)) / (
+                np.nanmax(std_scores) - np.nanmin(std_scores)
+            )
+            equalized_scores = (scaled_mean_scores - scaled_std_scores) / 2
+            best_index = np.nanargmax(equalized_scores)
+            score = equalized_scores[best_index]
+        else:
+            best_index = np.nanargmax(mean_scores)
+            score = mean_scores[best_index]
+
+        if score > optim_score:
+            optim_name = model_name
+            optim_score = score
+            optim_params = cv_scores["params"].values[best_index]
+            optim_model = clone(model).set_params(**clone(optim_params, safe=False))
+
+        return optim_name, optim_model, optim_score, optim_params
+
+    def _checks_models_heatmap(
+        self,
+        beta_xcat: str,
+        title: Optional[str] = None,
+        cap: Optional[int] = 5,
+        figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
+    ):
+        if not isinstance(beta_xcat, str):
+            raise TypeError("beta_xcat must be a string.")
+        if beta_xcat not in self.betas["xcat"].unique():
+            raise ValueError(
+                "beta_xcat must be a valid category in the stored beta dataframe."
+                "Check that estimate_beta has been run with the specified beta_xcat."
+            )
+        if title is None:
+            title = f"Model Selection Heatmap for {beta_xcat}"
+        if not isinstance(title, str):
+            raise TypeError("title must be a string.")
+        if not isinstance(cap, int):
+            raise TypeError("cap must be an integer.")
+        if cap < 1:
+            raise ValueError("cap must be greater than 0.")
+        if cap > 20:
+            warnings.warn(
+                f"The maximum number of models to display is 20. The cap has been set to "
+                "20.",
+                RuntimeWarning,
+            )
+            cap = 20
+        if not isinstance(figsize, tuple):
+            raise TypeError("figsize must be a tuple.")
+        if not all(isinstance(value, (int, float)) for value in figsize):
+            raise TypeError("All elements in figsize must be integers or floats.")
+        if len(figsize) != 2:
+            raise ValueError("figsize must be a tuple of length 2.")
+
+    def _checks_get_optimal_models(
+        self,
+        beta_xcat: Optional[Union[str, List]],
+    ):
+        if beta_xcat is not None:
+            if isinstance(beta_xcat, str):
+                beta_xcat = [beta_xcat]
+            if not isinstance(beta_xcat, list):
+                raise TypeError("beta_xcat must be a string or a list")
+            if not all(isinstance(xcat, str) for xcat in beta_xcat):
+                raise TypeError(
+                    "All elements in beta_xcat, when a list, must be strings."
+                )
+            if not all(xcat in self.betas["xcat"].unique() for xcat in beta_xcat):
+                raise ValueError(
+                    "All elements in beta_xcat must be valid beta category names."
+                )
+
+    def _checks_get_hedged_returns(
+        self,
+        hedged_return_xcat: Optional[str],
+    ):
+        if hedged_return_xcat is not None:
+            if isinstance(hedged_return_xcat, str):
+                hedged_return_xcat = [hedged_return_xcat]
+            if not isinstance(hedged_return_xcat, list):
+                raise TypeError("hedged_return_xcat must be a string or a list")
+            if not all(isinstance(xcat, str) for xcat in hedged_return_xcat):
+                raise TypeError(
+                    "All elements in hedged_return_xcat, when a list, must be strings."
+                )
+            if not all(xcat in self.hedged_returns["xcat"].unique() for xcat in hedged_return_xcat):
+                raise ValueError(
+                    "All elements in hedged_return_xcat must be valid beta category names."
+                )
+
+    def _checks_get_betas(
+        self,
+        beta_xcat: Optional[Union[str, List]],
+    ):
+        if beta_xcat is not None:
+            if isinstance(beta_xcat, str):
+                beta_xcat = [beta_xcat]
+            if not isinstance(beta_xcat, list):
+                raise TypeError("beta_xcat must be a string or a list")
+            if not all(isinstance(xcat, str) for xcat in beta_xcat):
+                raise TypeError(
+                    "All elements in beta_xcat, when a list, must be strings."
+                )
+            if not all(xcat in self.betas["xcat"].unique() for xcat in beta_xcat):
+                raise ValueError(
+                    "All elements in beta_xcat must be valid beta category names."
+                )
+            
+    def _checks_init_params(
+        self,
+        df: pd.DataFrame,
+        xcat: str,
+        cids: List[str],
+        benchmark_return: str,
+    ):
+        # Dataframe checks
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("df must be a pandas DataFrame.")
+        if not set(["cid", "xcat", "real_date", "value"]).issubset(df.columns):
+            raise ValueError(
+                "df must contain columns 'cid', 'xcat', 'real_date' and 'value'."
+            )
+        if not df["xcat"].nunique() > 1:
+            raise ValueError(
+                "df must contain at least two xcats. One is required for the contract return panel and another for the benchmark returns."
+            )
+        # xcat checks
+        if not isinstance(xcat, str):
+            raise TypeError("xcat must be a string.")
+        if xcat not in df["xcat"].unique():
+            raise ValueError("xcat must be a valid category in the dataframe.")
+
+        # cids checks
+        if not isinstance(cids, list):
+            raise TypeError("cids must be a list.")
+        if not all(isinstance(cid, str) for cid in cids):
+            raise TypeError("All elements in cids must be strings.")
+        if not all(cid in df["cid"].unique() for cid in cids):
+            raise ValueError(
+                "All cids must be valid cross-section identifiers in the dataframe."
+            )
+
+        # benchmark return checks
+        if not isinstance(benchmark_return, str):
+            raise TypeError("benchmark_return must be a string.")
+        ticker_list = df["cid"] + "_" + df["xcat"]
+        if benchmark_return not in ticker_list.unique():
+            raise ValueError(
+                "benchmark_return must be a valid ticker in the dataframe."
+            )
+        if benchmark_return.split("_", 1)[1] == xcat:
+            raise ValueError(
+                "benchmark_return must belong to a different category than the specified xcat."
+            )
+        
+    def _checks_estimate_beta(
+        self,
+        beta_xcat,
+        hedged_return_xcat,
+        inner_splitter,
+        scorer,
+        models,
+        hparam_grid,
+        min_cids,
+        min_periods,
+        est_freq,
+        use_variance_correction,
+        initial_n_splits,
+        threshold_n_periods,
+        hparam_type,
+        n_iter,
+        n_jobs_outer,
+        n_jobs_inner,
+    ):
+        # beta_xcat checks
+        if not isinstance(beta_xcat, str):
+            raise TypeError("beta_xcat must be a string.")
+        if beta_xcat in self.betas["xcat"].unique():
+            raise ValueError(
+                "beta_xcat already exists in the stored quantamental dataframe for beta "
+                "estimates. Please choose a different category name."
+            )
+
+        # hedged_return_xcat checks
+        if not isinstance(hedged_return_xcat, str):
+            raise TypeError("hedged_return_xcat must be a string.")
+        if hedged_return_xcat in self.hedged_returns["xcat"].unique():
+            raise ValueError(
+                "hedged_return_xcat already exists in the stored quantamental dataframe "
+                "for hedged returns. Please choose a different category name."
+            )
+
+        # inner_splitter checks
+        if not isinstance(inner_splitter, BasePanelSplit):
+            raise TypeError("inner_splitter must be an instance of BasePanelSplit.")
+
+        # scorer
+        if not callable(scorer):
+            raise TypeError("scorer must be a callable function.")
+
+        # models grid checks
+        if not isinstance(models, dict):
+            raise TypeError("models must be a dictionary.")
+        if not all(
+            isinstance(model, (BaseEstimator, Pipeline)) for model in models.values()
+        ):
+            raise TypeError(
+                "All values in the models dictionary must be scikit-learn compatible models."
+            )
+        if not all(isinstance(model_name, str) for model_name in models.keys()):
+            raise TypeError("All keys in the models dictionary must be strings.")
+        for model in models.values():
+            if isinstance(model, VotingRegressor):
+                for estimator in model.estimators:
+                    if not hasattr(estimator[1], "coefs_"):
+                        raise ValueError(
+                            "All models must be systems of linear regressors consistent with "
+                            "the scikit-learn API. This means that they must be scikit-learn compatible "
+                            "regressors that have a 'coefs_' attribute storing the estimated betas for each "
+                            "cross-section, as per the standard imposed by the macrosynergy package. "
+                            "Please check that the voting regressor estimators have this attribute."
+                        )
+            else:
+                if not hasattr(model, "coefs_"):
+                    raise ValueError(
+                        "All models must be systems of linear regressors consistent with "
+                        "the scikit-learn API. This means that they must be scikit-learn compatible "
+                        "regressors that have a 'coefs_' attribute storing the estimated betas for each "
+                        "cross-section, as per the standard imposed by the macrosynergy package."
+                    )
+
+        # hparam_grid checks
+        if not isinstance(hparam_grid, dict):
+            raise TypeError("hparam_grid must be a dictionary.")
+        if not all(isinstance(model_name, str) for model_name in hparam_grid.keys()):
+            raise TypeError("All keys in the hparam_grid dictionary must be strings.")
+        if not set(models.keys()) == set(hparam_grid.keys()):
+            raise ValueError(
+                "The keys in the models and hparam_grid dictionaries must match."
+            )
+        if not all(isinstance(grid, (dict, list)) for grid in hparam_grid.values()):
+            raise TypeError(
+                "All values in the hparam_grid dictionary must be dictionaries or lists of dictionaries."
+            )
+        for grid in hparam_grid.values():
+            if isinstance(grid, dict):
+                if not all(isinstance(key, str) for key in grid.keys()):
+                    raise TypeError(
+                        "All keys in the nested dictionaries of hparam_grid must be strings."
+                    )
+                if not all(isinstance(value, list) for value in grid.values()):
+                    raise TypeError(
+                        "All values in the nested dictionaries of hparam_grid must be lists."
+                    )
+            if isinstance(grid, list):
+                if not all(isinstance(sub_grid, dict) for sub_grid in grid):
+                    raise TypeError(
+                        "All elements in the list of hparam_grid must be dictionaries."
+                    )
+                for sub_grid in grid:
+                    if not all(isinstance(key, str) for key in sub_grid.keys()):
+                        raise TypeError(
+                            "All keys in the nested dictionaries of hparam_grid must be strings."
+                        )
+                    if not all(isinstance(value, list) for value in sub_grid.values()):
+                        raise TypeError(
+                            "All values in the nested dictionaries of hparam_grid must be lists."
+                        )
+
+        # min_cids checks
+        if not isinstance(min_cids, int):
+            raise TypeError("min_cids must be an integer.")
+        if min_cids < 1:
+            raise ValueError("min_cids must be greater than 0.")
+
+        # min_periods checks
+        if not isinstance(min_periods, int):
+            raise TypeError("min_periods must be an integer.")
+        if min_periods < 1:
+            raise ValueError("min_periods must be greater than 0.")
+
+        # est_freq checks
+        if not isinstance(est_freq, str):
+            raise TypeError("est_freq must be a string.")
+        if est_freq not in ["D", "W", "M", "Q"]:
+            raise ValueError("est_freq must be one of 'D', 'W', 'M' or 'Q'.")
+
+        # use_variance_correction checks
+        if not isinstance(use_variance_correction, bool):
+            raise TypeError("use_variance_correction must be a boolean.")
+
+        # initial_n_splits checks
+        if initial_n_splits is not None:
+            if not isinstance(initial_n_splits, int):
+                raise TypeError("initial_n_splits must be an integer.")
+            if initial_n_splits < 2:
+                raise ValueError("initial_n_splits must be greater than 1.")
+
+        # threshold_n_periods checks
+        if threshold_n_periods is not None:
+            if not isinstance(threshold_n_periods, int):
+                raise TypeError("threshold_n_periods must be an integer.")
+            if threshold_n_periods < 1:
+                raise ValueError("threshold_n_periods must be greater than 0.")
+
+        # hparam_type checks
+        if not isinstance(hparam_type, str):
+            raise TypeError("hparam_type must be a string.")
+        if hparam_type not in ["grid", "prior", "bayes"]:
+            raise ValueError("hparam_type must be one of 'grid', 'prior' or 'bayes'.")
+        if hparam_type == "bayes":
+            raise NotImplementedError(
+                "Bayesian hyperparameter search is not yet implemented."
+            )
+
+        # n_iter checks
+        if n_iter is not None:
+            if not isinstance(n_iter, int):
+                raise TypeError("n_iter must be an integer.")
+            if n_iter < 1:
+                raise ValueError("n_iter must be greater than 0.")
+
+        # n_jobs_outer checks
+        if not isinstance(n_jobs_outer, int):
+            raise TypeError("n_jobs_outer must be an integer.")
+        if (n_jobs_outer < -1) or (n_jobs_outer == 0):
+            raise ValueError("n_jobs_outer must be greater than zero or equal to -1.")
+
+        # n_jobs_inner checks
+        # TODO: raise warning if the product of n_jobs_outer and n_jobs_inner is greater than the number of available cores
+        if not isinstance(n_jobs_inner, int):
+            raise TypeError("n_jobs_inner must be an integer.")
+        if (n_jobs_inner < -1) or (n_jobs_inner == 0):
+            raise ValueError("n_jobs_inner must be greater than zero or equal to -1.")
+
+        # Check that the number of jobs isn't excessive
+        n_jobs_outer_adjusted = n_jobs_outer if n_jobs_outer != -1 else os.cpu_count()
+        n_jobs_inner_adjusted = n_jobs_inner if n_jobs_inner != -1 else os.cpu_count()
+
+        if n_jobs_outer_adjusted * n_jobs_inner_adjusted > os.cpu_count():
+            warnings.warn(
+                f"n_jobs_outer * n_jobs_inner is greater than the number of available cores. "
+                f"Consider reducing the number of jobs to avoid excessive resource usage."
+            )
+
     def _checks_evaluate_hedged_returns(
         self,
         correlation_types: Union[str, List[str]],
@@ -1030,315 +1324,6 @@ class BetaEstimator:
             else:
                 if freqs not in ["D", "W", "M", "Q"]:
                     raise ValueError("freqs must be one of 'D', 'W', 'M' or 'Q'.")
-                
-
-    def models_heatmap(
-        self,
-        beta_xcat: str,
-        title: Optional[str] = None,
-        cap: Optional[int] = 5,
-        figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
-    ):
-        """
-        Visualizing optimal models used for beta estimation.
-
-        :param <str> beta_xcat: Category name for the panel of estimated contract betas.
-        :param <Optional[str]> title: Title of the heatmap. Default is None. This creates
-            a figure title of the form "Model Selection Heatmap for {name}".
-        :param <Optional[int]> cap: Maximum number of models to display. Default
-            (and limit) is 5. The chosen models are the 'cap' most frequently occurring
-            in the pipeline.
-        :param <Optional[Tuple[Union[int, float], Union[int, float]]]> figsize: Tuple of
-            floats or ints denoting the figure size. Default is (12, 8).
-
-        Note:
-        This method displays the times at which each model in a learning process
-        has been optimal and used for beta estimation, as a binary heatmap.
-        """
-        # Checks
-        self._checks_models_heatmap(
-            beta_xcat=beta_xcat, title=title, cap=cap, figsize=figsize
-        )
-
-        # Get the chosen models for the specified pipeline to visualise selection.
-        chosen_models = self.chosen_models  # TODO: implement self.get_optimal_models()
-        chosen_models = chosen_models[chosen_models.xcat == beta_xcat].sort_values(
-            by="real_date"
-        )
-        chosen_models["model_hparam_id"] = chosen_models.apply(
-            lambda row: (
-                row["model_type"]
-                if row["hparams"] == {}
-                else f"{row['model_type']}_"
-                + "_".join([f"{key}={value}" for key, value in row["hparams"].items()])
-            ),
-            axis=1,
-        )
-        chosen_models["real_date"] = chosen_models["real_date"].dt.date
-        model_counts = chosen_models.model_hparam_id.value_counts()
-        chosen_models = chosen_models[
-            chosen_models.model_hparam_id.isin(model_counts.index[:cap])
-        ]
-
-        unique_models = chosen_models.model_hparam_id.unique()
-        unique_models = sorted(unique_models, key=lambda x: -model_counts[x])
-        unique_dates = chosen_models.real_date.unique()
-
-        # Fill in binary matrix denoting the selected model at each time
-        binary_matrix = pd.DataFrame(0, index=unique_models, columns=unique_dates)
-        for _, row in chosen_models.iterrows():
-            model_id = row["model_hparam_id"]
-            date = row["real_date"]
-            binary_matrix.at[model_id, date] = 1
-
-        # Display the heatmap.
-        plt.figure(figsize=figsize)
-        if binary_matrix.shape[0] == 1:
-            sns.heatmap(binary_matrix, cmap="binary_r", cbar=False)
-        else:
-            sns.heatmap(binary_matrix, cmap="binary", cbar=False)
-        plt.title(title)
-        plt.show()
-
-    def _determine_optimal_model(
-        self,
-        model_name: str,
-        model: Union[BaseEstimator, Pipeline],
-        search_object: Union[GridSearchCV, RandomizedSearchCV],
-        optim_score: float,
-        optim_name: str,
-        optim_model: Union[BaseEstimator, Pipeline],
-        optim_params: Dict,
-        use_variance_correction: bool,
-    ):
-        """
-        Private method to determine an optimal model based on cross-validation scores
-        at any given estimation time. A given model, with associated model_name, is
-        compared to the current optimal model. If the current model has a higher score
-        than the optimal model, the current model becomes the optimal model. The new
-        optimal score, model name, model and hyperparameters are returned.
-
-        :param <str> model_name: Name of the model being considered.
-        :param <Union[BaseEstimator, Pipeline]> model: Model being considered.
-        :param <Union[GridSearchCV, RandomizedSearchCV]> search_object: Search object
-            containing the results of the hyperparameter search.
-        :param <float> optim_score: Current optimal score.
-        :param <str> optim_name: Current optimal model name.
-        :param <Union[BaseEstimator, Pipeline]> optim_model: Current optimal model.
-        :param <Dict> optim_params: Current optimal hyperparameters.
-        :param <bool> use_variance_correction: Boolean indicating whether or not to apply a
-            correction to cross-validation scores to account for the variation in scores across
-            splits.
-
-
-        """
-        if not hasattr(search_object, "cv_results_"):
-            return optim_name, optim_model, optim_score, optim_params
-        cv_scores = pd.DataFrame(search_object.cv_results_)
-        splitscorecols = [
-            col
-            for col in cv_scores.columns
-            if (("split" in col) and ("_test_score" in col))
-        ]
-        cv_scores = cv_scores[splitscorecols + ["params"]]
-
-        mean_scores = np.nanmean(cv_scores.iloc[:, :-1], axis=1)
-        std_scores = np.nanstd(cv_scores.iloc[:, :-1], axis=1)
-
-        if all(np.isnan(mean_scores)):
-            return optim_name, optim_model, optim_score, optim_params
-
-        if use_variance_correction:
-            # Select model that aims to jointly maximize the mean metric and minimize the
-            # standard deviation across splits. Equal weighting is placed on both.
-            scaled_mean_scores = (mean_scores - np.nanmin(mean_scores)) / (
-                np.nanmax(mean_scores) - np.nanmin(mean_scores)
-            )
-            scaled_std_scores = (std_scores - np.nanmin(std_scores)) / (
-                np.nanmax(std_scores) - np.nanmin(std_scores)
-            )
-            equalized_scores = (scaled_mean_scores - scaled_std_scores) / 2
-            best_index = np.nanargmax(equalized_scores)
-            score = equalized_scores[best_index]
-        else:
-            best_index = np.nanargmax(mean_scores)
-            score = mean_scores[best_index]
-
-        if score > optim_score:
-            optim_name = model_name
-            optim_score = score
-            optim_params = cv_scores["params"].values[best_index]
-            optim_model = clone(model).set_params(**clone(optim_params, safe=False))
-
-        return optim_name, optim_model, optim_score, optim_params
-
-    def _checks_models_heatmap(
-        self,
-        beta_xcat: str,
-        title: Optional[str] = None,
-        cap: Optional[int] = 5,
-        figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
-    ):
-        if not isinstance(beta_xcat, str):
-            raise TypeError("beta_xcat must be a string.")
-        if beta_xcat not in self.betas["xcat"].unique():
-            raise ValueError(
-                "beta_xcat must be a valid category in the stored beta dataframe."
-                "Check that estimate_beta has been run with the specified beta_xcat."
-            )
-        if title is None:
-            title = f"Model Selection Heatmap for {beta_xcat}"
-        if not isinstance(title, str):
-            raise TypeError("title must be a string.")
-        if not isinstance(cap, int):
-            raise TypeError("cap must be an integer.")
-        if cap < 1:
-            raise ValueError("cap must be greater than 0.")
-        if cap > 20:
-            warnings.warn(
-                f"The maximum number of models to display is 20. The cap has been set to "
-                "20.",
-                RuntimeWarning,
-            )
-            cap = 20
-        if not isinstance(figsize, tuple):
-            raise TypeError("figsize must be a tuple.")
-        if not all(isinstance(value, (int, float)) for value in figsize):
-            raise TypeError("All elements in figsize must be integers or floats.")
-        if len(figsize) != 2:
-            raise ValueError("figsize must be a tuple of length 2.")
-
-    def get_optimal_models(
-        self,
-        beta_xcat: Optional[Union[str, List]] = None,
-    ) -> pd.DataFrame:
-        """
-        Returns a dataframe of optimal models selected for one or more beta estimation
-        processes.
-
-        :param <Optional[Union[str, List]]> beta_xcat: Category name or list of category names
-            for the panel of estimated contract betas. If None, information from all
-            beta estimation processes held within the class instance is returned. Default is None.
-
-        :return: <pd.DataFrame> A dataframe of optimal models selected for given
-            beta estimation processes.
-        """
-        # Checks
-        self._checks_get_optimal_models(beta_xcat=beta_xcat)
-
-        if beta_xcat is None:
-            return self.chosen_models
-        elif isinstance(beta_xcat, str):
-            return self.chosen_models[self.chosen_models.xcat == beta_xcat]
-        else:
-            return self.chosen_models[self.chosen_models.xcat.isin(beta_xcat)]
-
-    def _checks_get_optimal_models(
-        self,
-        beta_xcat: Optional[Union[str, List]],
-    ):
-        if beta_xcat is not None:
-            if isinstance(beta_xcat, str):
-                beta_xcat = [beta_xcat]
-            if not isinstance(beta_xcat, list):
-                raise TypeError("beta_xcat must be a string or a list")
-            if not all(isinstance(xcat, str) for xcat in beta_xcat):
-                raise TypeError(
-                    "All elements in beta_xcat, when a list, must be strings."
-                )
-            if not all(xcat in self.betas["xcat"].unique() for xcat in beta_xcat):
-                raise ValueError(
-                    "All elements in beta_xcat must be valid beta category names."
-                )
-
-    def get_hedged_returns(
-        self,
-        hedged_return_xcat: Optional[Union[str, List]] = None,
-    ):
-        """
-        Returns a dataframe of out-of-sample hedged returns derived from beta estimation processes
-        held within the class instance.
-
-        :param <Optional[Union[str, List]]> hedged_return_xcat: Category name or list of category names
-            for the panel of derived hedged returns. If None, information from all
-            beta estimation processes held within the class instance is returned. Default is None.
-
-        :return: <pd.DataFrame> A dataframe of out-of-sample hedged returns derived from beta estimation
-            processes.
-        """
-        # Checks
-        self._checks_get_hedged_returns(hedged_return_xcat=hedged_return_xcat)
-
-        if hedged_return_xcat is None:
-            return self.hedged_returns
-        elif isinstance(hedged_return_xcat, str):
-            return self.hedged_returns[self.hedged_returns.xcat == hedged_return_xcat]
-        else:
-            return self.hedged_returns[
-                self.hedged_returns.xcat.isin(hedged_return_xcat)
-            ]
-
-    def _checks_get_hedged_returns(
-        self,
-        hedged_return_xcat: Optional[str],
-    ):
-        if hedged_return_xcat is not None:
-            if isinstance(hedged_return_xcat, str):
-                hedged_return_xcat = [hedged_return_xcat]
-            if not isinstance(hedged_return_xcat, list):
-                raise TypeError("hedged_return_xcat must be a string or a list")
-            if not all(isinstance(xcat, str) for xcat in hedged_return_xcat):
-                raise TypeError(
-                    "All elements in hedged_return_xcat, when a list, must be strings."
-                )
-            if not all(xcat in self.hedged_returns["xcat"].unique() for xcat in hedged_return_xcat):
-                raise ValueError(
-                    "All elements in hedged_return_xcat must be valid beta category names."
-                )
-
-
-    def get_betas(
-        self,
-        beta_xcat: Optional[Union[str, List]] = None,
-    ):
-        """
-        Returns a dataframe of estimated betas derived from beta estimation processes
-        held within the class instance.
-
-        :param <Optional[Union[str, List]]> beta_xcat: Category name or list of category names
-            for the panel of estimated contract betas. If None, information from all
-            beta estimation processes held within the class instance is returned. Default is None.
-
-        :return: <pd.DataFrame> A dataframe of estimated betas derived from beta estimation
-            processes.
-        """
-        # Checks
-        self._checks_get_betas(beta_xcat=beta_xcat)
-
-        if beta_xcat is None:
-            return self.betas
-        elif isinstance(beta_xcat, str):
-            return self.betas[self.betas.xcat == beta_xcat]
-        else:
-            return self.betas[self.betas.xcat.isin(beta_xcat)]
-
-    def _checks_get_betas(
-        self,
-        beta_xcat: Optional[Union[str, List]],
-    ):
-        if beta_xcat is not None:
-            if isinstance(beta_xcat, str):
-                beta_xcat = [beta_xcat]
-            if not isinstance(beta_xcat, list):
-                raise TypeError("beta_xcat must be a string or a list")
-            if not all(isinstance(xcat, str) for xcat in beta_xcat):
-                raise TypeError(
-                    "All elements in beta_xcat, when a list, must be strings."
-                )
-            if not all(xcat in self.betas["xcat"].unique() for xcat in beta_xcat):
-                raise ValueError(
-                    "All elements in beta_xcat must be valid beta category names."
-                )
 
 
 if __name__ == "__main__":

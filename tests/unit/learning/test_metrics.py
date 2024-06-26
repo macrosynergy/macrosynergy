@@ -21,6 +21,7 @@ from macrosynergy.learning import (
 )
 
 from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.ensemble import VotingRegressor
 
 class TestAll(unittest.TestCase):
     def setUp(self):
@@ -163,9 +164,43 @@ class TestAll(unittest.TestCase):
         # Should fail if the estimator isn't a sklearn regressor
         with self.assertRaises(TypeError):
             neg_mean_abs_corr(estimator=LogisticRegression(), X_test = self.X_train, y_test = self.y_train)
-        # Should fail if the estimator isn't a system of linear models
+        # Should fail if the estimator isn't a system of linear models or a voting regressor 
         with self.assertRaises(ValueError):
-            neg_mean_abs_corr(estimator=LinearRegression(), X_test = self.X_train, y_test = self.y_train)
+            estimator = VotingRegressor(
+                [
+                    ("OLS_system", LinearRegressionSystem()),
+                    ("OLS", LinearRegression()),
+                ]
+            )
+            neg_mean_abs_corr(
+                estimator=estimator,
+                X_test = self.X_train,
+                y_test = self.y_train,
+            )
+        with self.assertRaises(ValueError):
+            estimator = VotingRegressor(
+                [
+                    ("OLS", LinearRegression()),
+                    ("OLS_system", LinearRegressionSystem()),
+                ]
+            )
+            neg_mean_abs_corr(
+                estimator=estimator,
+                X_test = self.X_train,
+                y_test = self.y_train,
+            )
+        with self.assertRaises(ValueError):
+            estimator = VotingRegressor(
+                [
+                    ("OLS1", LinearRegression()),
+                    ("OLS2", LinearRegression()),
+                ]
+            )
+            neg_mean_abs_corr(
+                estimator=estimator,
+                X_test = self.X_train,
+                y_test = self.y_train,
+            )
         
         for system in self.regression_systems:
             """ X_train """
@@ -184,5 +219,7 @@ class TestAll(unittest.TestCase):
             with self.assertRaises(ValueError):
                 neg_mean_abs_corr(estimator=system, X_test = self.X_train, y_test = self.y_train.reset_index())
 
+    def test_valid_neg_mean_abs_corr(self):
+        pass
 if __name__ == "__main__":
     unittest.main()
