@@ -219,6 +219,14 @@ class TestAll(unittest.TestCase):
             with self.assertRaises(ValueError):
                 neg_mean_abs_corr(estimator=system, X_test = self.X_train, y_test = self.y_train.reset_index())
 
+            """ correlation """
+            # Should fail if correlation is not a string
+            with self.assertRaises(TypeError):
+                neg_mean_abs_corr(estimator=system, X_test = self.X_train, y_test = self.y_train, correlation = 1)
+            # Should fail if correlation is not a valid string
+            with self.assertRaises(ValueError):
+                neg_mean_abs_corr(estimator=system, X_test = self.X_train, y_test = self.y_train, correlation = "invalid")
+
     def test_valid_neg_mean_abs_corr(self):
         pass
 if __name__ == "__main__":

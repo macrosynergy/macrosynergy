@@ -295,6 +295,10 @@ def neg_mean_abs_corr(
         raise ValueError("X_test must be multi-indexed.")
     if not isinstance(y_test.index, pd.MultiIndex):
         raise ValueError("y_test must be multi-indexed.")
+    if not isinstance(correlation, str):
+        raise TypeError("correlation must be a string")
+    if correlation not in ["pearson", "spearman", "kendall"]:
+        raise ValueError("correlation must be 'pearson', 'spearman' or 'kendall'")
     
     market_returns = X_test.iloc[:, 0].copy()
     contract_returns = y_test.copy()
