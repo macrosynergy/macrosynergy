@@ -302,7 +302,6 @@ def neg_mean_abs_corr(
         0
     ).unique()  # Need the test cids to know which models to evaluate
 
-    # Handle voting regressor case later
     if isinstance(estimator, VotingRegressor):
         estimators = estimator.estimators_
         coefs_list = [est.coefs_ for est in estimators]
