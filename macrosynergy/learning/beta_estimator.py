@@ -17,6 +17,7 @@ from tqdm.auto import tqdm
 
 from macrosynergy.learning import (
     BasePanelSplit,
+    BaseRegressionSystem,
     ExpandingFrequencyPanelSplit,
     ExpandingKFoldPanelSplit,
     neg_mean_abs_corr,
@@ -1076,7 +1077,7 @@ class BetaEstimator:
         for model in models.values():
             if isinstance(model, VotingRegressor):
                 for estimator in model.estimators:
-                    if not hasattr(estimator[1], "coefs_"):
+                    if not isinstance(estimator[1], BaseRegressionSystem):
                         raise ValueError(
                             "All models must be systems of linear regressors consistent with "
                             "the scikit-learn API. This means that they must be scikit-learn compatible "
@@ -1085,7 +1086,7 @@ class BetaEstimator:
                             "Please check that the voting regressor estimators have this attribute."
                         )
             else:
-                if not hasattr(model, "coefs_"):
+                if not isinstance(model, BaseRegressionSystem):
                     raise ValueError(
                         "All models must be systems of linear regressors consistent with "
                         "the scikit-learn API. This means that they must be scikit-learn compatible "
