@@ -1,6 +1,6 @@
 """
-Collection of non-standard scikit-learn performance metrics for evaluation of
-machine learning model predictions.
+Collection of performance metrics and scores, compatible with scikit-learn,
+for evaluation of machine learning model predictions.
 """
 
 import numpy as np
@@ -17,8 +17,6 @@ from sklearn.metrics import make_scorer, accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import VotingRegressor
-from sklearn.base import RegressorMixin
-
 from sklearn.base import BaseEstimator, RegressorMixin
 
 from macrosynergy.learning.panel_time_series_split import ExpandingKFoldPanelSplit
@@ -30,23 +28,22 @@ def panel_significance_probability(
     y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]
 ) -> float:
     """
-    Function to create a linear mixed effects model between the ground truth returns and
-    the predicted returns, returning the significance of the model slope.
-    Period-specific random effects are included in the model to account for
-    return cross-sectional correlations.
-    This can be passed into sklearn's make_scorer function to be used as a scorer in a
-    grid search or cross validation procedure.
+    Metric to return the probability of significance of a linear mixed effects model beta,
+    retressing the ground truth returns against the predicted returns, with period-specific
+    random effects included in the model to account for cross-sectional correlations.
+    This can be passed into sklearn's `make_scorer` function to be used as a scorer in a
+    hyperparameter search.
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
         multi-indexed by cross-section and date. The dates must be in datetime format.
     :param <Union[pd.Series,np.ndarray]> y_pred: Either a pandas series or numpy array
         of predicted targets. This must have the same length as y_true.
 
-    :return <float> significance_prob: 1 - p-value of the regression slope parameter,
+    :return <float> significance_prob: `1 - p-value` of the regression slope parameter,
         given by the linear mixed effects model.
     """
 
-    # checks
+    # Checks
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas series")
 
@@ -63,6 +60,7 @@ def panel_significance_probability(
         # Sklearn averages each metric over the CV splits.
         # If all the ground truth labels are zero, the regression is invalid due to a
         # singular matrix. Hence, we return zero in this case.
+        # TODO: check whether this is still needed.
         significance_prob = 0
         return significance_prob
 
@@ -71,6 +69,7 @@ def panel_significance_probability(
     groups = y_true.index.get_level_values(1)
 
     # fit model
+    # TODO: use linearmodels not statsmodels and remove iloc
     re = MixedLM(y_true, X, groups=groups).fit(reml=False)
     pval = re.pvalues.iloc[1]
 
@@ -81,7 +80,7 @@ def regression_accuracy(
     y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]
 ) -> float:
     """
-    Function to return the accuracy between the signs of the predictions and targets.
+    Metric to return the accuracy between the signs of the predictions and targets.
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
         multi-indexed by cross-section and date. The dates must be in datetime format.
@@ -91,7 +90,7 @@ def regression_accuracy(
     :return <float>: Accuracy between the signs of the predictions and targets.
     """
 
-    # checks
+    # Checks
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas series")
 
@@ -111,7 +110,7 @@ def regression_balanced_accuracy(
     y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]
 ) -> float:
     """
-    Function to return the balanced accuracy between the signs
+    Metric to return the balanced accuracy between the signs
     of the predictions and targets.
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
@@ -122,7 +121,7 @@ def regression_balanced_accuracy(
     :return <float>: Balanced accuracy between the signs of the predictions and targets.
     """
 
-    # checks
+    # Checks
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas series")
 
@@ -140,7 +139,7 @@ def regression_balanced_accuracy(
 
 def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> float:
     """
-    Function to return a Sharpe ratio for a strategy where we go long if the predictions
+    Metric to return a Sharpe ratio for a strategy where we go long if the predictions
     are positive and short if the predictions are negative.
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
@@ -151,7 +150,7 @@ def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> flo
     :return <float>: Sharpe ratio for the binary strategy.
     """
 
-    # checks
+    # Checks
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas series")
 
@@ -181,7 +180,7 @@ def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> flo
 
 def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> float:
     """
-    Function to return a Sortino ratio for a strategy where we go long if the predictions
+    Metric to return a Sortino ratio for a strategy where we go long if the predictions
     are positive and short if the predictions are negative.
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
@@ -192,7 +191,7 @@ def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> fl
     :return <float>: Sortino ratio for the binary strategy.
     """
 
-    # checks
+    # Checks
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas series")
 
@@ -249,11 +248,6 @@ def neg_mean_abs_corr(
     For calculation of hedged returns for cross-section $c$,
     let $\\hat{\\beta}_{c}$ denote the estimated beta for cross-section c.
     Then $hedged_returns_{c} = contract_returns_{c} - \\hat{\\beta}_{c} * benchmark_returns$.
-
-    .. note::
-
-      This scorer is still **experimental** for now: the predictions
-      and the API might change without any deprecation cycle.
 
     :param <RegressorMixin> estimator: A fitted seemingly unrelated scikit-learn regressor
         with a coefs_ dictionary of type Dict[str, float] containing estimated betas
