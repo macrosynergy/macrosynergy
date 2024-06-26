@@ -207,6 +207,9 @@ class TestAll(unittest.TestCase):
             # Should fail if the X_test isn't a pandas dataframe
             with self.assertRaises(TypeError):
                 neg_mean_abs_corr(estimator=system, X_test = "self.X_train", y_test = self.y_train)
+            # Should fail if X_test doesn't contain only a single column
+            with self.assertRaises(ValueError):
+                neg_mean_abs_corr(estimator=system, X_test = self.X_train, y_test = self.y_train)
             # Should fail if X_test is not multi-indexed
             with self.assertRaises(ValueError):
                 neg_mean_abs_corr(estimator=system, X_test = self.X_train.reset_index(), y_test = self.y_train)
@@ -214,20 +217,23 @@ class TestAll(unittest.TestCase):
             """ y_train """
             # Should fail if y_test isn't a pandas series
             with self.assertRaises(TypeError):
-                neg_mean_abs_corr(estimator=system, X_test = self.X_train, y_test = "self.y_train")
+                neg_mean_abs_corr(estimator=system, X_test = pd.DataFrame(self.X_train.iloc[:,0]), y_test = "self.y_train")
             # Should fail if y_test is not multi-indexed
             with self.assertRaises(ValueError):
-                neg_mean_abs_corr(estimator=system, X_test = self.X_train, y_test = self.y_train.reset_index())
+                neg_mean_abs_corr(estimator=system, X_test = pd.DataFrame(self.X_train.iloc[:,0]), y_test = self.y_train.reset_index())
 
             """ correlation """
             # Should fail if correlation is not a string
             with self.assertRaises(TypeError):
-                neg_mean_abs_corr(estimator=system, X_test = self.X_train, y_test = self.y_train, correlation = 1)
+                neg_mean_abs_corr(estimator=system, X_test = pd.DataFrame(self.X_train.iloc[:,0]), y_test = self.y_train, correlation = 1)
             # Should fail if correlation is not a valid string
             with self.assertRaises(ValueError):
-                neg_mean_abs_corr(estimator=system, X_test = self.X_train, y_test = self.y_train, correlation = "invalid")
+                neg_mean_abs_corr(estimator=system, X_test = pd.DataFrame(self.X_train.iloc[:,0]), y_test = self.y_train, correlation = "invalid")
 
     def test_valid_neg_mean_abs_corr(self):
-        pass
+        for system in self.regression_systems:
+            for correlation in ["pearson", "spearman", "kendall"]:
+                result = neg_mean_abs_corr(estimator=system, X_test = pd.DataFrame(self.X_train.iloc[:,0]), y_test = self.y_train, correlation = correlation)
+                self.assertIsInstance(result, float, "neg_mean_abs_corr should return a float")
 if __name__ == "__main__":
     unittest.main()

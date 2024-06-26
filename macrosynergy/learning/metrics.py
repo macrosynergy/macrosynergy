@@ -293,6 +293,8 @@ def neg_mean_abs_corr(
         raise ValueError("X_test and y_test must have the same length")
     if not isinstance(X_test.index, pd.MultiIndex):
         raise ValueError("X_test must be multi-indexed.")
+    if len(X_test.columns) != 1:
+        raise ValueError("X_test must have a single column.")
     if not isinstance(y_test.index, pd.MultiIndex):
         raise ValueError("y_test must be multi-indexed.")
     if not isinstance(correlation, str):
