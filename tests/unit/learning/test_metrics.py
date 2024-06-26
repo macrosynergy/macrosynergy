@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import unittest
-
+import math
 
 from sklearn.metrics import (
     accuracy_score,
@@ -22,6 +22,9 @@ from macrosynergy.learning import (
 
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.ensemble import VotingRegressor
+
+from sklearn.utils.validation import check_is_fitted
+from sklearn.exceptions import NotFittedError
 
 class TestAll(unittest.TestCase):
     def setUp(self):
@@ -160,10 +163,10 @@ class TestAll(unittest.TestCase):
         """ estimator """
         # Should fail if the estimator isn't a sklearn estimator
         with self.assertRaises(TypeError):
-            neg_mean_abs_corr(estimator="self.regressor_true", X_test = self.X_train, y_test = self.y_train)
+            neg_mean_abs_corr(estimator="self.regressor_true", X_test = pd.DataFrame(self.X_train.iloc[:,0]), y_test = self.y_train)
         # Should fail if the estimator isn't a sklearn regressor
         with self.assertRaises(TypeError):
-            neg_mean_abs_corr(estimator=LogisticRegression(), X_test = self.X_train, y_test = self.y_train)
+            neg_mean_abs_corr(estimator=LogisticRegression(), X_test = pd.DataFrame(self.X_train.iloc[:,0]), y_test = self.y_train)
         # Should fail if the estimator isn't a system of linear models or a voting regressor 
         with self.assertRaises(ValueError):
             estimator = VotingRegressor(
@@ -174,7 +177,7 @@ class TestAll(unittest.TestCase):
             )
             neg_mean_abs_corr(
                 estimator=estimator,
-                X_test = self.X_train,
+                X_test = pd.DataFrame(self.X_train.iloc[:,0]),
                 y_test = self.y_train,
             )
         with self.assertRaises(ValueError):
@@ -186,7 +189,7 @@ class TestAll(unittest.TestCase):
             )
             neg_mean_abs_corr(
                 estimator=estimator,
-                X_test = self.X_train,
+                X_test = pd.DataFrame(self.X_train.iloc[:,0]),
                 y_test = self.y_train,
             )
         with self.assertRaises(ValueError):
@@ -198,13 +201,36 @@ class TestAll(unittest.TestCase):
             )
             neg_mean_abs_corr(
                 estimator=estimator,
-                X_test = self.X_train,
+                X_test = pd.DataFrame(self.X_train.iloc[:,0]),
                 y_test = self.y_train,
             )
-        
+        # Should fail if the estimator isn't fitted
+        for correlation in ["pearson", "spearman", "kendall"]:
+            with self.assertRaises(ValueError):
+                estimator = LinearRegressionSystem()
+                neg_mean_abs_corr(
+                    estimator=estimator,
+                    X_test = pd.DataFrame(self.X_train.iloc[:,0]),
+                    y_test = self.y_train,
+                    correlation = correlation
+                )
+            with self.assertRaises(ValueError):
+                estimator = VotingRegressor(
+                    [
+                        ("OLS1", LinearRegressionSystem()),
+                        ("OLS2", LinearRegressionSystem()),
+                    ]
+                )
+                neg_mean_abs_corr(
+                    estimator=estimator,
+                    X_test = pd.DataFrame(self.X_train.iloc[:,0]),
+                    y_test = self.y_train,
+                    correlation = correlation
+                )
         for system in self.regression_systems:
             """ X_train """
             # Should fail if the X_test isn't a pandas dataframe
+            system.fit(self.X_train, self.y_train)
             with self.assertRaises(TypeError):
                 neg_mean_abs_corr(estimator=system, X_test = "self.X_train", y_test = self.y_train)
             # Should fail if X_test doesn't contain only a single column
@@ -233,7 +259,9 @@ class TestAll(unittest.TestCase):
     def test_valid_neg_mean_abs_corr(self):
         for system in self.regression_systems:
             for correlation in ["pearson", "spearman", "kendall"]:
+                system.fit(self.X_train, self.y_train)
                 result = neg_mean_abs_corr(estimator=system, X_test = pd.DataFrame(self.X_train.iloc[:,0]), y_test = self.y_train, correlation = correlation)
+                self.assertFalse(np.isnan(result), "neg_mean_abs_corr should not return NaN")
                 self.assertIsInstance(result, float, "neg_mean_abs_corr should return a float")
 if __name__ == "__main__":
     unittest.main()

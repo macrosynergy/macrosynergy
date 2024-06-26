@@ -65,6 +65,10 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             # This can happen during sklearn's GridSearch when a voting regressor is used
             y = pd.Series(y, index=X.index)
 
+        # Create data structures to store model information for each cross-section
+        self.coefs_ = {}
+        self.intercepts_ = {}
+
         _validate_Xy_learning(X, y)
 
         cross_sections = X.index.unique(level=0)
@@ -250,10 +254,6 @@ class LinearRegressionSystem(BaseRegressionSystem):
         self.data_freq = data_freq
         self.min_xs_samples = min_xs_samples
 
-        # Create data structures to store model information for each cross-section
-        self.coefs_ = {}
-        self.intercepts_ = {}
-
         super().__init__(
             roll=self.roll,
             data_freq=data_freq,
@@ -345,10 +345,6 @@ class LADRegressionSystem(BaseRegressionSystem):
         self.positive = positive
         self.data_freq = data_freq
         self.min_xs_samples = min_xs_samples
-
-        # Create data structures to store model information for each cross-section
-        self.coefs_ = {}
-        self.intercepts_ = {}
 
         super().__init__(
             roll=roll,
@@ -452,10 +448,6 @@ class RidgeRegressionSystem(BaseRegressionSystem):
         self.min_xs_samples = min_xs_samples
         self.tol = tol
         self.solver = solver
-
-        # Create data structures to store model information for each cross-section
-        self.coefs_ = {}
-        self.intercepts_ = {}
 
         super().__init__(
             roll=roll,
@@ -595,9 +587,6 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             data_freq=data_freq,
             min_xs_samples=min_xs_samples,
         )
-
-        # Create data structures to store the estimated betas for each cross-section
-        self.coefs_ = {}
 
     def _fit_cross_section(self, section, X_section, y_section):
         # Estimate local standard deviations of the benchmark and contract return

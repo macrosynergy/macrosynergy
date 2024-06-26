@@ -19,6 +19,9 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import VotingRegressor
 from sklearn.base import BaseEstimator, RegressorMixin
 
+from sklearn.utils.validation import check_is_fitted
+from sklearn.exceptions import NotFittedError
+
 from macrosynergy.learning.panel_time_series_split import ExpandingKFoldPanelSplit
 
 from typing import Union
@@ -234,8 +237,8 @@ def neg_mean_abs_corr(
     y_test is an out-of-sample panel with a single column comprising financial contract returns.
     Correlation can be 'pearson', 'spearman' or 'kendall'.
 
-    The estimator is expected to be a seemingly unrelated linear regression model
-    possessing a coefs_ dictionary with cross-sectional keys and values corresponding to
+    The estimator is expected to be a system of linear models, that has been fit on a 
+    training panel, possessing a coefs_ dictionary with cross-sectional keys and values corresponding to
     betas.
 
     Specifically, for each cross-section c in X_test, we compute hedged returns,
@@ -269,19 +272,26 @@ def neg_mean_abs_corr(
         raise TypeError("estimator must be a scikit-learn compatible estimator")
     if not isinstance(estimator, RegressorMixin):
         raise TypeError("estimator must be a scikit-learn regressor")
-    if isinstance(estimator, VotingRegressor):
-        if not all(isinstance(est[1], RegressorMixin) for est in estimator.estimators):
-            raise TypeError("The voting regressor must be composed of regressors")
-        if not all(hasattr(est[1], "coefs_") for est in estimator.estimators):
+    if not isinstance(estimator, VotingRegressor):
+        try:
+            check_is_fitted(estimator, attributes=["coefs_"])
+        except NotFittedError:
             raise ValueError(
-                "Each estimator in the voting regressor must be a system of linear models."
-                "By Macrosynergy convention, this means it must have a coefs_"
-                "dictionary attribute storing betas for each cross-section."
+                "estimator must have a coefs_ attribute once fit. Either the estimator"
+                "has not been fit or it is not a system of linear models."
             )
     else:
-        if not hasattr(estimator, "coefs_"):
+        if not all(isinstance(est[1], RegressorMixin) for est in estimator.estimators):
+            raise TypeError("The voting regressor must be composed of regressors")
+        try:
+            check_is_fitted(estimator, attributes=["estimators_"])
+        except NotFittedError:
             raise ValueError(
-                "estimator must be a system of linear models."
+                "The VotingRegressor object must be fit before calling a scorer."
+            )
+        if not all(hasattr(est, "coefs_") for est in estimator.estimators_):
+            raise ValueError(
+                "Each estimator in the voting regressor must be a system of linear models."
                 "By Macrosynergy convention, this means it must have a coefs_"
                 "dictionary attribute storing betas for each cross-section."
             )
