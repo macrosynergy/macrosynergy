@@ -168,7 +168,7 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(TypeError):
             neg_mean_abs_corr(estimator=LogisticRegression(), X_test = pd.DataFrame(self.X_train.iloc[:,0]), y_test = self.y_train)
         # Should fail if the estimator isn't a system of linear models or a voting regressor 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             estimator = VotingRegressor(
                 [
                     ("OLS_system", LinearRegressionSystem()),
@@ -180,7 +180,7 @@ class TestAll(unittest.TestCase):
                 X_test = pd.DataFrame(self.X_train.iloc[:,0]),
                 y_test = self.y_train,
             )
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             estimator = VotingRegressor(
                 [
                     ("OLS", LinearRegression()),
@@ -192,7 +192,7 @@ class TestAll(unittest.TestCase):
                 X_test = pd.DataFrame(self.X_train.iloc[:,0]),
                 y_test = self.y_train,
             )
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             estimator = VotingRegressor(
                 [
                     ("OLS1", LinearRegression()),
