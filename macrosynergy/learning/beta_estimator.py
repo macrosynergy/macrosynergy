@@ -17,13 +17,12 @@ from tqdm.auto import tqdm
 
 from macrosynergy.learning import (
     BasePanelSplit,
-    BaseRegressionSystem,
     ExpandingFrequencyPanelSplit,
     ExpandingKFoldPanelSplit,
     neg_mean_abs_corr,
 )
 from macrosynergy.management import categories_df, reduce_df, update_df
-
+from macrosynergy.learning.predictors.regressor_systems import BaseRegressionSystem
 class BetaEstimator:
     """
     Beta estimation of a panel of contract returns based on regression.
@@ -1328,8 +1327,10 @@ class BetaEstimator:
 
 
 if __name__ == "__main__":
-    from metrics import neg_mean_abs_corr
-    from predictors import LADRegressionSystem, LinearRegressionSystem, CorrelationVolatilitySystem
+    from macrosynergy.learning import (
+        neg_mean_abs_corr,
+        LADRegressionSystem,
+    ) 
     from sklearn.ensemble import VotingRegressor
     from macrosynergy.management.simulate import make_qdf
 
@@ -1352,7 +1353,7 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    # Initialize the BetaEstimator object
+    # Initialize the BetaEstimator object using LADRegressionSystem
     # Use for the benchmark return: USD_BENCH_XR.
     be = BetaEstimator(
         df=dfd,
@@ -1361,6 +1362,7 @@ if __name__ == "__main__":
         cids=cids,
     )
 
+    # Define the necessary model and hyperparameter grid + scorer
     models = {
         "LR": LADRegressionSystem(min_xs_samples=21 * 3),
     }
@@ -1370,6 +1372,7 @@ if __name__ == "__main__":
 
     scorer = neg_mean_abs_corr
 
+    # Run the beta estimation
     be.estimate_beta(
         beta_xcat="BETA_NSA",
         hedged_return_xcat="HEDGED_RETURN_NSA",
@@ -1385,131 +1388,13 @@ if __name__ == "__main__":
         n_jobs_inner=1,
     )
 
+    # Display the models selected over time
     be.models_heatmap(beta_xcat="BETA_NSA")
 
+    # Evaluate the hedged returns by calculating and displaying average correlations
     evaluation_df = be.evaluate_hedged_returns(
         correlation_types=["pearson", "spearman", "kendall"],
         freqs=["W", "M", "Q"],
     )
 
     print(evaluation_df)
-
-    models = {
-        "VOTE": VotingRegressor(
-            [
-                ("LR1", LinearRegressionSystem(min_xs_samples=21, data_freq="D")),
-                ("LR2", LinearRegressionSystem(min_xs_samples=21, data_freq="W")),
-            ]
-        )
-    }
-
-    hparam_grid = {
-        "VOTE" : {
-            "LR1__roll": [21, 21 * 3, 21 * 6, 21 * 12],
-            "LR2__roll": [3, 6, 9, 12],
-        },
-    }
-
-    scorer = neg_mean_abs_corr
-
-    be.estimate_beta(
-        beta_xcat="BETA_NSA",
-        hedged_return_xcat="HEDGED_RETURN_NSA",
-        inner_splitter=ExpandingKFoldPanelSplit(n_splits = 5),
-        scorer=neg_mean_abs_corr,
-        models = models,
-        hparam_grid = hparam_grid,
-        min_cids=1,
-        min_periods=21 * 12,
-        est_freq="Q",
-        use_variance_correction=False,
-        n_jobs_outer=-1,
-        n_jobs_inner=1,
-    )
-
-    print(be.get_optimal_models())
-    print(be.get_betas())
-    print(be.get_hedged_returns())
-    be.models_heatmap(beta_xcat="BETA_NSA")
-
-    """models = {
-        "CORRVOL": CorrelationVolatilitySystem(
-            min_xs_samples=21 * 3,
-        ),
-    }
-    hparam_grid = {
-        "CORRVOL": [
-            #{
-            #    "correlation_lookback": [21*12, 21 * 12 * 2, 21 * 12 * 5, 21 * 12 * 10, None],
-            #    "correlation_type": ["pearson", "kendall", "spearman"],
-            #    "volatility_lookback": [5, 10, 21, 21 * 3, 21 * 6, 21 * 12],
-            #    "volatility_window_type": ["exponential", "rolling"],
-            #    "data_freq" : ["D"]
-            #},
-            {
-                "correlation_lookback": [4*12, 4 * 12 * 2, 4 * 12 * 5, 4 * 12 * 10, None],
-                "correlation_type": ["pearson", "kendall", "spearman"],
-                "volatility_lookback": [2, 4, 4 * 3, 4 * 6, 4 * 12],
-                "volatility_window_type": ["exponential", "rolling"],
-                "data_freq" : ["W"]
-            },
-        ]
-    }
-    scorer = neg_mean_abs_corr
-
-    be.estimate_beta(
-        beta_xcat="BETA_NSA",
-        hedged_return_xcat="HEDGED_RETURN_NSA",
-        inner_splitter=ExpandingKFoldPanelSplit(n_splits = 5),
-        scorer=neg_mean_abs_corr,
-        models = models,
-        hparam_grid = hparam_grid,
-        min_cids=1,
-        min_periods=21 * 3,
-        est_freq="Q",
-        use_variance_correction=False,
-        n_jobs_outer=-1,
-        n_jobs_inner=1,
-    )
-
-    print(be.get_optimal_models())
-    print(be.get_betas())
-    print(be.get_hedged_returns())
-
-    be.models_heatmap(beta_xcat="BETA_NSA")
-    # Define the models and grids to search over
-    models = {
-        "LR_ROLL": LinearRegressionSystem(min_xs_samples=21 * 3),
-    }
-    hparam_grid = {
-        "LR_ROLL": [
-            {"roll": [21, 21 * 3, 21 * 6, 21 * 12], "data_freq": ["D"]},
-            {"roll": [3, 6, 9, 12], "data_freq": ["M"]},
-        ]
-    }
-    scorer = neg_mean_abs_corr
-
-    # Now estimate the betas
-    be.estimate_beta(
-        beta_xcat="BETA_NSA",
-        hedged_return_xcat="HEDGED_RETURN_NSA",
-        inner_splitter=ExpandingKFoldPanelSplit(n_splits=5),
-        scorer=neg_mean_abs_corr,
-        models=models,
-        hparam_grid=hparam_grid,
-        min_cids=4,
-        min_periods=21 * 3,
-        est_freq="Q",
-        use_variance_correction=True,
-        initial_n_splits=5,
-        threshold_n_periods=4,
-        n_jobs_outer=-1,
-        n_jobs_inner=1,
-    )
-
-    # Get the results
-    print(be.get_optimal_models())
-    print(be.get_betas())
-    print(be.get_hedged_returns())
-
-    be.models_heatmap(beta_xcat="BETA_NSA")"""
