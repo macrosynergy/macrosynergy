@@ -82,7 +82,6 @@ class TestLinearRegressionSystem(unittest.TestCase):
         self.assertEqual(model.min_xs_samples, 3)
 
     def test_invalid_params(self):
-
         with self.assertRaises(TypeError):
             LinearRegressionSystem(roll=5.5)
         with self.assertRaises(ValueError):
@@ -93,10 +92,18 @@ class TestLinearRegressionSystem(unittest.TestCase):
             LinearRegressionSystem(positive="True")
         with self.assertRaises(TypeError):
             LinearRegressionSystem(data_freq=5)
+        with self.assertRaises(ValueError):
+            LinearRegressionSystem(data_freq="hello")
         with self.assertRaises(TypeError):
             LinearRegressionSystem(min_xs_samples="2")
         with self.assertRaises(ValueError):
-            LinearRegressionSystem(roll=-5)
+            LinearRegressionSystem(min_xs_samples=-5)
+        with self.assertRaises(ValueError):
+            LinearRegressionSystem(min_xs_samples=1)
+        with self.assertRaises(ValueError):
+            LinearRegressionSystem(min_xs_samples=1)
+        with self.assertRaises(TypeError):
+            LinearRegressionSystem(min_xs_samples=3.7)
 
     @parameterized.expand(
         [(5, True, False, "unadjusted", 2), (5, False, True, "unadjusted", 2), (5, True, True, "M", 2)]

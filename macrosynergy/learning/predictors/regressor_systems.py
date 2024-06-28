@@ -287,8 +287,8 @@ class LinearRegressionSystem(BaseRegressionSystem):
             raise ValueError("data_freq must be one of 'unadjusted', 'W', 'M' or 'Q'.")
         if not isinstance(min_xs_samples, int):
             raise TypeError("min_xs_samples must be an integer.")
-        if min_xs_samples <= 0:
-            raise ValueError("min_xs_samples must be a positive integer.")
+        if min_xs_samples <= 1:
+            raise ValueError("min_xs_samples must be a positive integer greater than one.")
 
 
 class LADRegressionSystem(BaseRegressionSystem):
