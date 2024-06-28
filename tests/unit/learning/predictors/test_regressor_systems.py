@@ -99,7 +99,7 @@ class TestLinearRegressionSystem(unittest.TestCase):
         with self.assertRaises(ValueError):
             LinearRegressionSystem(min_xs_samples=-5)
         with self.assertRaises(ValueError):
-            LinearRegressionSystem(min_xs_samples=1)
+            LinearRegressionSystem(min_xs_samples=0)
         with self.assertRaises(ValueError):
             LinearRegressionSystem(min_xs_samples=1)
         with self.assertRaises(TypeError):
@@ -130,9 +130,69 @@ class TestLinearRegressionSystem(unittest.TestCase):
                 "LinearRegressionSystem constructor raised an exception: {}".format(e)
             )
 
-    def test_create_model(self):
-        model = LinearRegressionSystem()
+    @parameterized.expand(
+        [
+            (None, True, False, "unadjusted", 2),
+            (None, False, False, "unadjusted", 2),
+            (None, False, True, "unadjusted", 2),
+            (None, True, True, "unadjusted", 2),
+            (5, True, False, "unadjusted", 2),
+            (5, False, False, "unadjusted", 2),
+            (5, False, True, "unadjusted", 2),
+            (5, True, True, "unadjusted", 2),
+            (21, True, False, "unadjusted", 2),
+            (21, False, False, "unadjusted", 2),
+            (21, False, True, "unadjusted", 2),
+            (21, True, True, "unadjusted", 2),
+        ]
+    )
+    def test_create_model(self, roll, fit_intercept, positive, data_freq, min_xs_samples):
+        model = LinearRegressionSystem(roll=roll, fit_intercept=fit_intercept, positive=positive, data_freq=data_freq, min_xs_samples=min_xs_samples)
         self.assertIsInstance(model.create_model(), LinearRegression)
+        self.assertEqual(model.create_model().fit_intercept, fit_intercept)
+        self.assertEqual(model.create_model().positive, positive)
+
+    def test_types_fit(self):
+        model = LinearRegressionSystem()
+        """X"""
+        # Fail if X is not a DataFrame
+        with self.assertRaises(TypeError):
+            model.fit(X=1, y=self.y)
+        # Fail if X is not multiindexed
+        with self.assertRaises(ValueError):
+            model.fit(X=self.X.reset_index(), y=self.y)
+        """y"""
+        # Fail if y is not a DataFrame or Series
+        with self.assertRaises(TypeError):
+            model.fit(X=self.X, y=1)
+        # Fail if y is not multiindexed
+        with self.assertRaises(ValueError):
+            model.fit(X=self.X, y=self.y.reset_index())
+
+    def test_valid_fit(self):
+        """ Check the model fits are as expected """
+        cross_sections = self.X.index.get_level_values(0).unique()
+        param_names = ["roll", "fit_intercept", "positive", "data_freq", "min_xs_samples"]
+        param_values = list(
+            itertools.product(
+                [None],
+                [True, False],
+                [True, False],
+                ["unadjusted"],
+                [2],
+            )
+        )
+        for params in param_values:
+            param_dict = {name: param for name, param in zip(param_names, params)}
+            system_model = LinearRegressionSystem().set_params(**param_dict)
+            system_model.fit(pd.DataFrame(self.X.iloc[:,0]), self.y)
+            system_coefs = system_model.coefs_
+            system_intercepts = system_model.intercepts_
+            for cid in cross_sections:
+                model = LinearRegression().set_params(**{key: value for key, value in param_dict.items() if key in ["fit_intercept", "positive"]})
+                model.fit(pd.DataFrame(self.X.iloc[:,0]).xs(cid, level=0), self.y.xs(cid, level=0))
+                np.testing.assert_almost_equal(model.intercept_, system_intercepts[cid])
+                np.testing.assert_almost_equal(model.coef_, system_coefs[cid])
 
 
 class TestLADRegressionSystem(unittest.TestCase):
@@ -207,10 +267,20 @@ class TestLADRegressionSystem(unittest.TestCase):
             LADRegressionSystem(positive="True")
         with self.assertRaises(TypeError):
             LADRegressionSystem(data_freq=5)
+        with self.assertRaises(ValueError):
+            LADRegressionSystem(data_freq="hello")
         with self.assertRaises(TypeError):
             LADRegressionSystem(min_xs_samples="2")
         with self.assertRaises(ValueError):
+            LADRegressionSystem(min_xs_samples=-5)
+        with self.assertRaises(ValueError):
             LADRegressionSystem(roll=-5)
+        with self.assertRaises(ValueError):
+            LADRegressionSystem(min_xs_samples=0)
+        with self.assertRaises(ValueError):
+            LADRegressionSystem(min_xs_samples=1)
+        with self.assertRaises(TypeError):
+            LADRegressionSystem(min_xs_samples=3.7)
 
     @parameterized.expand(
         [(5, True, False, "unadjusted", 2), (5, False, True, "unadjusted", 2), (5, True, True, "M", 2)]
@@ -237,10 +307,74 @@ class TestLADRegressionSystem(unittest.TestCase):
                 "LADRegressionSystem constructor raised an exception: {}".format(e)
             )
 
-    def test_create_model(self):
-        model = LADRegressionSystem()
+    @parameterized.expand(
+        [
+            (None, True, False, "unadjusted", 2),
+            (None, False, False, "unadjusted", 2),
+            (None, False, True, "unadjusted", 2),
+            (None, True, True, "unadjusted", 2),
+            (5, True, False, "unadjusted", 2),
+            (5, False, False, "unadjusted", 2),
+            (5, False, True, "unadjusted", 2),
+            (5, True, True, "unadjusted", 2),
+            (21, True, False, "unadjusted", 2),
+            (21, False, False, "unadjusted", 2),
+            (21, False, True, "unadjusted", 2),
+            (21, True, True, "unadjusted", 2),
+        ]
+    )
+    def test_create_model(self, roll, fit_intercept, positive, data_freq, min_xs_samples):
+        model = LADRegressionSystem(roll=roll, fit_intercept=fit_intercept, positive=positive, data_freq=data_freq, min_xs_samples=min_xs_samples)
         self.assertIsInstance(model.create_model(), LADRegressor)
+        self.assertEqual(model.create_model().fit_intercept, fit_intercept)
+        self.assertEqual(model.create_model().positive, positive)
 
+    def test_types_fit(self):
+        model = LADRegressionSystem()
+        """X"""
+        # Fail if X is not a DataFrame
+        with self.assertRaises(TypeError):
+            model.fit(X=1, y=self.y)
+        # Fail if X is not multiindexed
+        with self.assertRaises(ValueError):
+            model.fit(X=self.X.reset_index(), y=self.y)
+        """y"""
+        # Fail if y is not a DataFrame or Series
+        with self.assertRaises(TypeError):
+            model.fit(X=self.X, y=1)
+        # Fail if y is not multiindexed
+        with self.assertRaises(ValueError):
+            model.fit(X=self.X, y=self.y.reset_index())
+
+    def test_valid_fit(self):
+        """ Check the model fits are as expected """
+        cross_sections = self.X.index.get_level_values(0).unique()
+        param_names = ["roll", "fit_intercept", "positive", "data_freq", "min_xs_samples"]
+        param_values = list(
+            itertools.product(
+                [None],
+                [True, False],
+                [True, False],
+                ["unadjusted"],
+                [2],
+            )
+        )
+        for params in param_values:
+            param_dict = {name: param for name, param in zip(param_names, params)}
+            system_model = LADRegressionSystem().set_params(**param_dict)
+            system_model.fit(pd.DataFrame(self.X.iloc[:,0]), self.y)
+            system_coefs = system_model.coefs_
+            system_intercepts = system_model.intercepts_
+            for cid in cross_sections:
+                model = LADRegressor().set_params(**{key: value for key, value in param_dict.items() if key in ["fit_intercept", "positive"]})
+                model.fit(pd.DataFrame(self.X[self.X.index.get_level_values(0) == cid].iloc[:,0]), self.y[self.y.index.get_level_values(0) == cid])
+                try:
+                    np.testing.assert_almost_equal(model.intercept_, system_intercepts[cid])
+                except TypeError:
+                    # temporary fix
+                    self.assertTrue(model.intercept_ is None)
+                    self.assertTrue(system_intercepts[cid] is None)
+                np.testing.assert_almost_equal(model.coef_, system_coefs[cid])
 
 class TestRidgeRegressionSystem(unittest.TestCase):
     @classmethod
