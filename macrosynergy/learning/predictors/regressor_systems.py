@@ -19,7 +19,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         self,
         roll: Union[int, str] = "full",
         min_xs_samples: int = 2,
-        data_freq: str = "unadjusted",
+        data_freq: Optional[str] = None,
     ):
         """
         Base class for cross-sectional systems of regressors.
@@ -29,7 +29,9 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             Otherwise, this parameter should be an integer specified in units of the native
             data frequency, possibly adjusted by the data_freq attribute. Default is "full".
         :param <int> min_xs_samples: The minimum number of samples required in each
-            cross-section training set for a regression model to be fitted.
+            cross-section training set for a regression model to be fitted. If data_freq is 
+            None, this parameter is specified in units of the underlying dataset frequency.
+            Otherwise, this parameter is assumed to be daily. Default is 2.
         :param <str> data_freq: Training set data frequency. This is primarily
             to be used within the context of market beta estimation in the
             BetaEstimator class in `macrosynergy.learning`, allowing for cross-validation
@@ -37,7 +39,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             are 'unadjusted' to use the native data set frequency, 'W' for weekly,
             'M' for monthly and 'Q' for quarterly. If not 'unadjusted', it is assumed
             the native dataset frequency is daily before downsampling by summation.
-            Default is 'unadjusted'.
+            Default is None.
         """
         self.roll = roll
         self.data_freq = data_freq
@@ -73,13 +75,14 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
 
         cross_sections = X.index.unique(level=0)
 
-        if self.data_freq != "unadjusted":
+        if (self.data_freq is not None) and (self.data_freq != "unadjusted"):
             # Downsample data frequency and adjust min_xs_samples correspondingly
             min_xs_samples = self.select_data_freq()
             X = self._downsample_by_data_freq(X)
             y = self._downsample_by_data_freq(y)
         else:
             min_xs_samples = self.min_xs_samples
+
         for section in cross_sections:
             X_section = X.xs(section, level=0, drop_level=False)
             y_section = y.xs(section, level=0, drop_level=False)
@@ -99,6 +102,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
                     )
             # Fit the model
             self._fit_cross_section(section, X_section, y_section)
+
         return self
 
     def _fit_cross_section(self, section, X_section, y_section):
