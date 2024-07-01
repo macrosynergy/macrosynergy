@@ -92,7 +92,7 @@ class NaivePnL:
             bm_dict = self.add_bm(df=self.dfd, bms=bms, tickers=self.tickers)
 
             self._bm_dict = bm_dict
-            
+
         self.pnl_params = {}
 
     def add_bm(self, df: pd.DataFrame, bms: List[str], tickers: List[str]):
@@ -264,6 +264,7 @@ class NaivePnL:
         rebal_freq: str = "daily",
         rebal_slip=0,
         vol_scale: float = None,
+        leverage: float = 1.0,
         min_obs: int = 261,
         iis: bool = True,
         sequential: bool = True,
@@ -308,6 +309,8 @@ class NaivePnL:
             positions produce PnL from the second day after the signal has been recorded.
         :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
             This is for comparative visualization and not out-of-sample. Default is none.
+        :param <float> leverage: leverage applied to the PnL when a `vol_scale` is not
+            defined. Default is 1.0.
         :param <int> min_obs: the minimum number of observations required to calculate
             zn_scores. Default is 252.
         :param <bool> iis: if True (default) zn-scores are also calculated for the initial
@@ -352,6 +355,18 @@ class NaivePnL:
 
         if thresh is not None and thresh < 1:
             raise ValueError("thresh must be greater than or equal to one.")
+
+        err_lev = "`leverage` must be a numerical value greater than 0."
+        if not isinstance(leverage, (float, int)):
+            raise TypeError(err_lev)
+        elif leverage <= 0:
+            raise ValueError(err_lev)
+        err_vol = "`vol_scale` must be a numerical value greater than 0."
+        if vol_scale is not None:
+            if not isinstance(vol_scale, (float, int)):
+                raise TypeError(err_vol)
+            elif vol_scale <= 0:
+                raise ValueError(err_vol)
 
         # B. Extract DataFrame of exclusively return and signal categories in time series
         # format.
@@ -412,7 +427,9 @@ class NaivePnL:
 
         if vol_scale is not None:
             leverage = vol_scale * (df_pnl_all["value"].std() * np.sqrt(261)) ** (-1)
-            df_pnl["value"] = df_pnl["value"] * leverage
+
+        assert isinstance(leverage, (float, int)), err_lev  # sanity check
+        df_pnl["value"] = df_pnl["value"] * leverage
 
         pnn = ("PNL_" + sig + neg) if pnl_name is None else pnl_name
         # Populating the signal dictionary is required for the display methods:
@@ -426,7 +443,7 @@ class NaivePnL:
 
         agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
         self.df = agg_df.reset_index(drop=True)
-        
+
         self.pnl_params[pnn] = PnLParams(
             pnl_name=pnn,
             signal=sig,
@@ -989,14 +1006,18 @@ class NaivePnL:
         high_watermark = cum_pnl.cummax()
         drawdown = high_watermark - cum_pnl
 
-        df.iloc[6, :] = - drawdown.max()
+        df.iloc[6, :] = -drawdown.max()
 
         monthly_pnl = dfw.resample("M").sum()
         total_pnl = monthly_pnl.sum(axis=0)
         top_5_percent_cutoff = int(np.ceil(len(monthly_pnl) * 0.05))
         top_months = pd.DataFrame(columns=monthly_pnl.columns)
         for column in monthly_pnl.columns:
-            top_months[column] = monthly_pnl[column].nlargest(top_5_percent_cutoff).reset_index(drop=True)
+            top_months[column] = (
+                monthly_pnl[column]
+                .nlargest(top_5_percent_cutoff)
+                .reset_index(drop=True)
+            )
 
         df.iloc[7, :] = top_months.sum() / total_pnl
 
@@ -1253,6 +1274,7 @@ def create_results_dataframe(
 
     return res_df
 
+
 @dataclass
 class PnLParams:
     """
@@ -1335,7 +1357,9 @@ if __name__ == "__main__":
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
     df_eval = pnl.evaluate_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "PNL_INFL_NEG"], start="2015-01-01", end="2020-12-31"
+        pnl_cats=["PNL_GROWTH_NEG", "PNL_INFL_NEG"],
+        start="2015-01-01",
+        end="2020-12-31",
     )
 
     pnl.signal_heatmap(pnl_name="PNL_GROWTH_NEG", pnl_cids=cids, freq="m")
