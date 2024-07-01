@@ -27,20 +27,32 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         :param <Union[int,str]> roll: The lookback of the rolling window for the regression.
             If "full", the entire cross-sectional history is used for each regression.
             Otherwise, this parameter should be an integer specified in units of the native
-            data frequency, possibly adjusted by the data_freq attribute. Default is "full".
-        :param <int> min_xs_samples: The minimum number of samples required in each
-            cross-section training set for a regression model to be fitted. If data_freq is 
-            None, this parameter is specified in units of the underlying dataset frequency.
-            Otherwise, this parameter is assumed to be daily. Default is 2.
-        :param <str> data_freq: Training set data frequency. This is primarily
+            data frequency. If `data_freq` is not None, then an integer value for `roll`
+            should be expressed in units of the frequency specified in `data_freq`.
+            Default is "full".
+        :param <int> min_xs_samples: The minimum number of samples required in a given
+            cross-section for a regression model to be fit for that cross-section.
+            If `data_freq` is None, this parameter is specified in units of the underlying
+            dataset frequency. Otherwise, this parameter should be expressed in units of
+            the frequency specified in `data_freq`. Default is 2.
+        :param <Optional[str]> data_freq: Training set data frequency. This is primarily
             to be used within the context of market beta estimation in the
             BetaEstimator class in `macrosynergy.learning`, allowing for cross-validation
             of the underlying dataset frequency for good beta estimation. Accepted strings
             are 'unadjusted' to use the native data set frequency, 'W' for weekly,
-            'M' for monthly and 'Q' for quarterly. If not 'unadjusted', it is assumed
-            the native dataset frequency is daily before downsampling by summation.
+            'M' for monthly and 'Q' for quarterly. It is recommended to set this parameter
+            to "W", "M" or "Q" only when the native dataset frequency is greater.
             Default is None.
         """
+        # Checks
+        if not isinstance(roll, (int, str)):
+            raise TypeError("roll must be an integer or string.")
+        if (isinstance(roll, int)) and (roll <= 1):
+            raise ValueError("roll must be greater than 1 when an integer is specified.")
+        if (not isinstance(roll, str)) and (roll != "full"):
+            raise ValueError("roll must equal `full` when a string is specified.")
+        
+        # Assignments
         self.roll = roll
         self.data_freq = data_freq
         self.min_xs_samples = min_xs_samples
@@ -59,42 +71,40 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         :param <pd.DataFrame> X: Pandas dataframe of input features.
         :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
             associated with each sample in X.
+
+        :return <BaseRegressionSystem>: Fitted regression system object.
         """
-        # Fit checks
+        # Checks
         if not isinstance(X, pd.DataFrame):
             raise TypeError("The X argument must be a pandas DataFrame.")
         if isinstance(y, np.ndarray):
             # This can happen during sklearn's GridSearch when a voting regressor is used
             y = pd.Series(y, index=X.index)
+        _validate_Xy_learning(X, y)
 
         # Create data structures to store model information for each cross-section
         self.coefs_ = {}
         self.intercepts_ = {}
 
-        _validate_Xy_learning(X, y)
-
-        cross_sections = X.index.unique(level=0)
-
+        # Downsample data frequency if necessary
         if (self.data_freq is not None) and (self.data_freq != "unadjusted"):
-            # Downsample data frequency and adjust min_xs_samples correspondingly
-            min_xs_samples = self.select_data_freq()
+            # Downsample data frequency
             X = self._downsample_by_data_freq(X)
             y = self._downsample_by_data_freq(y)
-        else:
-            min_xs_samples = self.min_xs_samples
 
+        # Iterate over cross-sections and fit a regression model on each
+        cross_sections = X.index.unique(level=0)
         for section in cross_sections:
             X_section = X.xs(section, level=0, drop_level=False)
             y_section = y.xs(section, level=0, drop_level=False)
-            unique_dates = X_section.index.unique()
+            unique_dates = X_section.index.unique() # TODO: sort?
             num_dates = len(unique_dates)
-            # Check if there are enough samples to fit a model
-            if not self._check_xs_dates(min_xs_samples, num_dates):
+            # Skip cross-section if it has insufficient samples
+            if not self._check_xs_dates(self.min_xs_samples, num_dates):
                 continue
-            # If a roll is specified, then adjust the dates accordingly
-            # Only do this if the number of dates is greater than the roll
+            # Roll the data if necessary
             if self.roll:
-                if num_dates < self.roll:
+                if num_dates <= self.roll:
                     continue
                 else:
                     X_section, y_section = self.roll_dates(
@@ -108,6 +118,14 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
     def _fit_cross_section(self, section, X_section, y_section):
         """
         Fit a regression model on a single cross-section.
+
+        :param <str> section: Cross-section identifier.
+        :param <pd.DataFrame> X_section: Pandas dataframe of input features for the
+            given cross-section.
+        :param <pd.Series> y_section: Pandas series of target values for the given
+            cross-section.
+
+        :return: None
         """
         model = self.create_model()
         model.fit(pd.DataFrame(X_section), y_section)
@@ -121,7 +139,10 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
     ):
         """
         Predict method to make model predictions over a panel based on the fitted
-        seemingly unrelated regression.
+        regression system. If a model does not exist for a given cross-section, the
+        prediction will be NaN. This is a necessary feature of this style of regression 
+        model but it has the implication that custom metrics may need to be used, in 
+        accordance with the `scikit-learn` API, to evaluate the model's performance.
 
         :param <pd.DataFrame> X: Pandas dataframe of input features.
 
@@ -136,13 +157,13 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         if not isinstance(X.index.get_level_values(1)[0], datetime.date):
             raise TypeError("The inner index of X must be datetime.date.")
 
+        # Create a series to store predictions
         predictions = pd.Series(index=X.index, data=np.nan)
 
-        # Check whether each test cross-section has an associated model
+        # Store predictions for each test cross-section, if an existing model is available
         cross_sections = predictions.index.get_level_values(0).unique()
         for idx, section in enumerate(cross_sections):
             if section in self.models.keys():
-                # If a model exists, return the estimated OOS contract return.
                 predictions[predictions.index.get_level_values(0) == section] = (
                     self.models[section].predict(X.xs(section, level=0)).flatten()
                 )
@@ -155,19 +176,6 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         X_section = X_section[mask]
         y_section = y_section[mask]
         return X_section, y_section
-
-    def select_data_freq(self):
-        if self.data_freq == "W":
-            min_xs_samples = self.min_xs_samples / 5
-        elif self.data_freq == "M":
-            min_xs_samples = self.min_xs_samples / 21
-        elif self.data_freq == "Q":
-            min_xs_samples = self.min_xs_samples / 63
-        else:
-            raise ValueError(
-                "Invalid data frequency. Accepted values are 'W', 'M' and 'Q'."
-            )
-        return min_xs_samples
 
     @abstractmethod
     def store_model_info(self, section, model):
