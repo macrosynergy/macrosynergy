@@ -1,3 +1,4 @@
+from itertools import cycle
 from typing import Dict, List, Optional, Tuple
 import warnings
 
@@ -439,37 +440,62 @@ class ScoreVisualisers:
         self,
         xcats: List[str],
         cids: List[str] = None,
-        cids_sel: List[str] = None,
-        date: str = None,
+        cid_sel: str = None,
+        real_date: str = None,
     ):
         if cids is None:
-            cids = self.cids
+            cids = self.df['cid'].unique()
 
         df = self.df[
             (self.df["xcat"].isin(xcats))
             & (self.df["cid"].isin(cids))
         ]
 
-        pivot_df = df.pivot(index='xcat', columns='real_date', values='value').dropna(axis=1, how='any')
-        pivot_df = pivot_df.reindex(xcats)
-
-        X = pivot_df.values[0, :]
-        Y = pivot_df.values[1, :]
-        Z = pivot_df.values[2, :]
-
-        X, Y = np.meshgrid(X, Y)
-        Z = Z.reshape(X.shape)
-
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111, projection="3d")
-        surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm_r)
+        colormap = cycle(cm.get_cmap('tab10').colors)  # Using 'tab10' colormap for distinct colors
+
+        for cid in cids:
+            cid_df = df[df['cid'] == cid]
+            pivot_df = cid_df.pivot(index='real_date', columns='xcat', values='value').reindex(columns=xcats).dropna()
+
+            if len(pivot_df) == 0:
+                continue
+
+            xcat_values = {xcat: [] for xcat in xcats}
+
+            for xcat in xcats:
+                xcat_values[xcat] = pivot_df[xcat].values
+
+            if not all(len(xcat_values[xcat]) for xcat in xcats):
+                continue
+
+            X, Y, Z = xcat_values[xcats[0]], xcat_values[xcats[1]], xcat_values[xcats[2]]
+
+            color = next(colormap)
+            surf = ax.plot_trisurf(X, Y, Z, color=color, alpha=0.7, label=f'CID: {cid}')
+
+        if cid_sel and real_date:
+            point_df = self.df[
+                (self.df["xcat"].isin(xcats)) & 
+                (self.df["cid"] == cid_sel) & 
+                (self.df["real_date"] == real_date)
+            ]
+
+            if not point_df.empty:
+                x_values = point_df[point_df['xcat'] == xcats[0]]['value'].values
+                y_values = point_df[point_df['xcat'] == xcats[1]]['value'].values
+                z_values = point_df[point_df['xcat'] == xcats[2]]['value'].values
+
+                if len(x_values) > 0 and len(y_values) > 0 and len(z_values) > 0:
+                    ax.scatter(x_values[0], y_values[0], z_values[0], color='black', s=100, label=f'Selected Point: {cid_sel} on {real_date}')
 
         ax.set_xlabel(xcats[0])
         ax.set_ylabel(xcats[1])
         ax.set_zlabel(xcats[2])
+        ax.set_title('3D Surface Plot')
 
-        plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
-
+        plt.legend()
         plt.show()
 
 
@@ -574,7 +600,8 @@ if __name__ == "__main__":
     #     title="AHKSJDA",
     # )
     sv.view_3d_surface(
-        xcats=["GGIEDGDP_NSA_ZN", "NIIPGDP_NSA_ZN", "CABGDPRATIO_NSA_12MMA_ZN"],
-        cids=["GBP"],
-        date="2023-05-01",
+        xcats=["Composite_ZN", "GGIEDGDP_NSA_ZN", "CABGDPRATIO_NSA_12MMA_ZN"],
+        cids=cids_dmxe,
+        cid_sel="CZK",
+        real_date="2023-05-01",
     )
