@@ -435,7 +435,7 @@ class TestAll(unittest.TestCase):
             thresh=None,
         )
 
-        pnl.make_long_pnl(vol_scale=0, label="Unit_Long_EQXR")
+        pnl.make_long_pnl(vol_scale=None, label="Unit_Long_EQXR")
 
         long_equity = pnl.df[pnl.df["xcat"] == "Unit_Long_EQXR"]
         # Long-only is naturally computed across the panel (individual cross-section's
@@ -553,7 +553,7 @@ class TestAll(unittest.TestCase):
             thresh=None,
         )
 
-        pnl.make_long_pnl(vol_scale=0, label="Unit_Long_EQXR")
+        pnl.make_long_pnl(vol_scale=1, label="Unit_Long_EQXR")
 
         # Confirm the plotting methods do not raise any errors.
 
