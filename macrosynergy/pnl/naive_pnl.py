@@ -309,8 +309,9 @@ class NaivePnL:
             positions produce PnL from the second day after the signal has been recorded.
         :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
             This is for comparative visualization and not out-of-sample. Default is none.
-        :param <float> leverage: leverage applied to the PnL when a `vol_scale` is not
-            defined. Default is 1.0.
+        :param <float> leverage: leverage applied to the raw signal when a `vol_scale` is
+            not defined. Default is 1.0, i.e., position size is 1 or 100% of implied risk
+            capital.
         :param <int> min_obs: the minimum number of observations required to calculate
             zn_scores. Default is 252.
         :param <bool> iis: if True (default) zn-scores are also calculated for the initial
@@ -458,7 +459,10 @@ class NaivePnL:
         )
 
     def make_long_pnl(
-        self, vol_scale: Optional[float] = None, label: Optional[str] = None
+        self,
+        vol_scale: Optional[float] = None,
+        label: Optional[str] = None,
+        leverage: float = 1.0,
     ):
         """
         The long-only returns will be computed which act as a basis for comparison
@@ -472,22 +476,37 @@ class NaivePnL:
             DataFrame. The label will be used in the plotting graphic for plot_pnls().
             If a label is not defined, the default will be the name of the return
             category.
+        :param <float> leverage: leverage applied to the raw signal when a `vol_scale` is
+            not defined. Default is 1.0, i.e., position size is 1 or 100% of implied risk
+            capital.
         """
 
         if vol_scale is not None:
+            vol_err = (
+                "The parameter `vol_scale` must be a numerical value greater than 0."
+            )
             if not isinstance(vol_scale, (float, int)):
-                raise TypeError(
-                    "The volatility scale `vol_scale`" "must be a numerical value."
-                )
+                raise TypeError(vol_err)
+            elif vol_scale <= 0:
+                raise ValueError(vol_err)
+
+        else:
+            err_lev = "`leverage` must be a numerical value greater than 0."
+            if not isinstance(leverage, (float, int)):
+                raise TypeError(err_lev)
+            elif leverage <= 0:
+                raise ValueError(err_lev)
 
         if label is None:
             label = self.ret
 
         dfx = self.df[self.df["xcat"].isin([self.ret])]
 
-        df_long = self.long_only_pnl(dfw=dfx, vol_scale=vol_scale, label=label)
+        df_long = self.long_only_pnl(
+            dfw=dfx, vol_scale=vol_scale, label=label, leverage=leverage
+        )
 
-        self.df = pd.concat([self.df, df_long])
+        self.df: pd.DataFrame = pd.concat([self.df, df_long])
 
         if label not in self.pnl_names:
             self.pnl_names = self.pnl_names + [label]
@@ -495,7 +514,12 @@ class NaivePnL:
         self.df = self.df.reset_index(drop=True)
 
     @staticmethod
-    def long_only_pnl(dfw: pd.DataFrame, vol_scale: float = None, label: str = None):
+    def long_only_pnl(
+        dfw: pd.DataFrame,
+        vol_scale: float = None,
+        label: str = None,
+        leverage: float = 1.0,
+    ):
         """
         Method used to compute the PnL accrued from simply taking a long-only position in
         the category, 'self.ret'. The returns from the category are not predicated on any
@@ -506,10 +530,14 @@ class NaivePnL:
             This is for comparative visualization and not out-of-sample. Default is none.
         :param <str> label: associated label that will be mapped to the long-only
             DataFrame.
+        :param <float> leverage: leverage applied to the raw signal when a `vol_scale` is
+            not defined. Default is 1.0, i.e., position size is 1 or 100% of implied risk
+            capital.
 
         :return <pd.DataFrame> panel_pnl: standardised dataframe containing exclusively
             the return category, and the long-only panel return.
         """
+        lev_err = "`leverage` must be a numerical value greater than 0."
 
         dfw_long = dfw.reset_index(drop=True)
 
@@ -518,9 +546,11 @@ class NaivePnL:
         panel_pnl["cid"] = "ALL"
         panel_pnl["xcat"] = label
 
-        if vol_scale:
+        if vol_scale is not None:
             leverage = vol_scale * (panel_pnl["value"].std() * np.sqrt(261)) ** (-1)
-            panel_pnl["value"] = panel_pnl["value"] * leverage
+
+        assert isinstance(leverage, (float, int)), lev_err
+        panel_pnl["value"] = panel_pnl["value"] * leverage
 
         return panel_pnl[["cid", "xcat", "real_date", "value"]]
 
