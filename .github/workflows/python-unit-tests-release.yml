@@ -29,6 +29,7 @@ jobs:
         os: [ubuntu-latest]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         folder: ${{fromJson(needs.prepare-matrix.outputs.matrix)}}
+        requirements: ["requirements.txt", "requirements-min.txt"]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -42,6 +43,11 @@ jobs:
       - name: Create minimum requirements file
         run: |
           python ./.github/scripts/create_min_requirements.py
+
+      - name: Install dependencies
+        run: |
+          pip install -r ${{ matrix.requirements }}
+          pip install .[test]
 
       - name: Lint with flake8
         run: |
