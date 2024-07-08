@@ -1,5 +1,5 @@
 # This is a workflow in for running the package tests for the macrosynergy package when doing a release to PyPI.
-# It runs on Ubuntu, Windows and MacOS, for Python 3.8, 3.9, 3.10, 2.11 and 3.12.
+# It runs on Ubuntu, Windows and MacOS, for Python 3.8, 3.9, 3.10, 3.11 and 3.12.
 name: Test Python package on Ubuntu - Release
 
 on:
@@ -39,9 +39,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
+      - name: Create minimum requirements file
         run: |
-          pip install .[test]
+          python ./.github/scripts/create_min_requirements.py
 
       - name: Lint with flake8
         run: |
@@ -98,8 +98,8 @@ jobs:
 
       - name: Test build settings
         run: |
-          pip install .[all]
           pip install -r ${{ matrix.requirements }}
+          pip install .[all]
           python -c "import macrosynergy; print(macrosynergy.__version__)"
 
   test-build-settings-matrix-success:
