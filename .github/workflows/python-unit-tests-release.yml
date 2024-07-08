@@ -1,10 +1,10 @@
 # This is a workflow in for running the package tests for the macrosynergy package when doing a release to PyPI.
-# It runs on Ubuntu, Windows and MacOS, for Python 3.8, 3.9, 3.10 and 3.11.
+# It runs on Ubuntu, Windows and MacOS, for Python 3.8, 3.9, 3.10, 2.11 and 3.12.
 name: Test Python package on Ubuntu - Release
 
 on:
   pull_request:
-    branches: [main]
+    branches: [develop, main]
   workflow_dispatch:
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         folder: ${{fromJson(needs.prepare-matrix.outputs.matrix)}}
     runs-on: ${{ matrix.os }}
 
@@ -77,7 +77,8 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        requirements: ["requirements.txt", "requirements-min.txt"]
     steps:
       - uses: actions/checkout@v4
 
@@ -85,6 +86,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: Create minimum requirements file
+        run: |
+          python ./.github/scripts/create_min_requirements.py
 
       - name: Create and activate virtual environment
         run: |
@@ -94,6 +99,7 @@ jobs:
       - name: Test build settings
         run: |
           pip install .[all]
+          pip install -r ${{ matrix.requirements }}
           python -c "import macrosynergy; print(macrosynergy.__version__)"
 
   test-build-settings-matrix-success:
@@ -108,3 +114,4 @@ jobs:
           else
             echo "Build settings test passed"
           fi
+
