@@ -69,7 +69,7 @@ jobs:
 
       - name: Create minimum requirements file
         run: |
-          python ./.github/scripts/create-min-requirements.py
+          python ./.github/scripts/create_min_requirements.py
 
       - name: Install dependencies
         run: |
