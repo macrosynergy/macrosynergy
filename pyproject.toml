@@ -25,12 +25,12 @@ classifiers = [
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
   "Topic :: Software Development",
   "Topic :: Scientific/Engineering",
   "Typing :: Typed",
   "Operating System :: OS Independent",
 ]
-
 
 [project.urls]
 homepage = "https://www.macrosynergy.com"
@@ -108,7 +108,6 @@ include = ["macrosynergy", "macrosynergy.*"]
 exclude = ["tests", "tests.*"]
 namespaces = true
 
-
 [tool.versioneer]
 VCS = "git"
 style = "pep440"
@@ -117,7 +116,7 @@ versionfile_build = "macrosynergy/version.py"
 tag_prefix = "v"
 
 [tool.black]
-target-version = ["py38", "py39", "py310", "py311"]
+target-version = ["py38", "py39", "py310", "py311", "py312"]
 exclude = '''
 (
   | \.egg
