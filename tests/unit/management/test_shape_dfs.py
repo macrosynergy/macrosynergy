@@ -288,7 +288,7 @@ class TestAll(unittest.TestCase):
                     self.dfd[filt1 & filt2]
                     .set_index("real_date")
                     .resample("M")
-                    .mean()
+                    .mean(numeric_only=True)
                 )
             ),
             10,
