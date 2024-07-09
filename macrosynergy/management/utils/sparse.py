@@ -1,11 +1,49 @@
-from typing import Dict
+from typing import Dict, List
 
 import pandas as pd
 import numpy as np
 
 
-# Functions for operations on sparse data
-# class SparseIndicators(Dict) ...:
+class InformationStateChanges(object):
+    """
+    # Functions for operations on sparse data
+    # class SparseIndicators(Dict) ...:
+    # """
+    def __init__(self, values: Dict[str, pd.DataFrame] = dict()):
+        # TODO store start and end dates per ticker...
+        self.values: Dict[str, pd.DataFrame] = values
+
+    @classmethod
+    def from_tickers(cls, tickers: List[str]) -> "InformationStateChanges":
+        return cls({ticker: pd.DataFrame for ticker in tickers})
+
+    def __setitem__(self, item: str, value: pd.DataFrame):
+        self.values[item]: pd.DataFrame = value
+
+    def __getitem__(self, item: str) -> pd.DataFrame:
+        return self.values[item]
+
+    def __setattr__(self, key: str, value: pd.DataFrame):
+        self.values[key]: pd.DataFrame = value
+
+    def __getattr__(self, item) -> pd.DataFrame:
+        return self.values[item]
+    
+    def __getstate__(self):
+        return self.values
+
+    def __setstate__(self, values: Dict[str, pd.DataFrame]):
+        self.values = values
+    
+    def keys(self):
+        return self.values.keys()
+    
+    def items(self):
+        return self.values.items()
+
+    def to_dense(self) -> pd.DataFrame:
+        # TODO convert to QuantamentalDataFrame
+        pass
 
 
 def create_delta_data(df: pd.DataFrame)-> Dict[str, pd.DataFrame]:
@@ -16,9 +54,7 @@ def create_delta_data(df: pd.DataFrame)-> Dict[str, pd.DataFrame]:
     p_grading = df.pivot(index="real_date", columns="xcat", values="grading")
     
     # Create dictionary of changes
-    nd: Dict[str, pd.DataFrame] = {
-        ticker: pd.DataFrame for ticker in p_value.columns
-    }
+    isc: InformationStateChanges = InformationStateChanges.from_tickers(tickers=list(p_value.columns))
     
     mask: pd.DataFrame = p_value.diff(axis=0).abs() > 0
     
@@ -46,7 +82,7 @@ def create_delta_data(df: pd.DataFrame)-> Dict[str, pd.DataFrame]:
         df_tmp["version"]: int = df_tmp["count"] - df_tmp["count_min"]
         df_tmp["diff"]: int = df_tmp["value"].diff(periods=1)
         df_tmp = df_tmp.set_index("real_date")[["value", "eop", "version", "grading", "diff"]]  # version = 0 => release
-        nd[ticker] = df_tmp
+        isc[ticker] = df_tmp
     
     # TODO store as state / print
     print(
@@ -55,21 +91,28 @@ def create_delta_data(df: pd.DataFrame)-> Dict[str, pd.DataFrame]:
         ).sort_values(by="Changes", ascending=False).reset_index(drop=True)
     )
 
-    return nd
+    return isc
 
 
-def calculate_score_on_sparse_indicator(nd: Dict[str, pd.DataFrame], weight: str = None):
+def calculate_score_on_sparse_indicator(isc: InformationStateChanges, weight: str = None):
+    # TODO make into a method on InformationStateChanges?
     # TODO adjust score by eop_lag (business days?) to get a native frequency...
     # TODO convert below operation into a function call?
     # Operations on a per key in data dictionary
-    for key, v in nd.items():
+    for key, v in isc.items():
         mask_rel = v["version"] == 0
         s = v.loc[mask_rel, "diff"]
         # TODO exponential weights (requires knowledge of frequency...)
         std = s.expanding(min_periods=10).std()
     
-        columns = [kk for kk in nd[key].columns if kk != "std"]
-        v = pd.merge(left=v[columns], right=std.to_frame("std"), how='left', left_index=True, right_index=True)
+        columns = [kk for kk in v.columns if kk != "std"]
+        v = pd.merge(
+            left=v[columns],
+            right=std.to_frame("std"),
+            how='left',
+            left_index=True,
+            right_index=True
+        )
         v["std"] = v["std"].ffill()
         v["zscore"] = v["diff"] / v["std"]
         # TODO write as function (nominator and denominator)
@@ -82,14 +125,14 @@ def calculate_score_on_sparse_indicator(nd: Dict[str, pd.DataFrame], weight: str
         )
         v["zscore_norm_linear"] = v["zscore"] * v.index.diff().days/365.24
         v["zscore_norm_squared"] = v["zscore"] * np.sqrt(v.index.diff().days/365.24)
-        nd[key] = v
+        isc[key] = v
 
     # TODO clearer exposition
-    return nd
+    return isc
 
 
 def sparse_to_dense(
-        nd: Dict[str, pd.DataFrame],
+        isc: InformationStateChanges,
         value_column: str,
         min_period: pd.Timestamp,
         max_period: pd.Timestamp,
@@ -99,7 +142,7 @@ def sparse_to_dense(
     # TODO store real_date min and max in object...
     pz = pd.concat(
         [
-            v[value_column].to_frame(k) for k, v in nd.items()
+            v[value_column].to_frame(k) for k, v in isc.items()
         ] + [
             pd.DataFrame(
                 data=0,
@@ -133,7 +176,7 @@ def sparse_to_dense(
     if add_eop:
         p_eop = pd.concat(
             [
-                v["eop"].to_frame(k) for k, v in nd.items()
+                v["eop"].to_frame(k) for k, v in isc.items()
             ] + [
                 pd.DataFrame(
                     data=0,
@@ -165,7 +208,10 @@ def sparse_to_dense(
 
 
 def temporal_aggregator_exponential(
-        df: pd.DataFrame, halflife: int = 5, cid: str = "USD", winsorise: float =None
+        df: pd.DataFrame,
+        halflife: int = 5,
+        cid: str = "USD",
+        winsorise: float =None
     ) -> pd.DataFrame:
     p = df.pivot(index="real_date", columns="xcat", values="value")
     if winsorise:
@@ -177,16 +223,31 @@ def temporal_aggregator_exponential(
     return dfa
 
 
+def temporal_aggregator_mean(
+        df: pd.DataFrame, periods: int = 21, cid: str = "USD", winsorise: float =None
+    ) -> pd.DataFrame:
+    p = df.pivot(index="real_date", columns="xcat", values="value")
+    if winsorise:
+        p = p.clip(lower=-winsorise, upper=winsorise)
+    # Exponential moving average weights (check implementation: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.ewm.html)
+    dfa = p.rolling(periods=periods).mean().stack().to_frame("value").reset_index()
+    dfa["xcat"] += f"MA{periods:d}D"
+    dfa["cid"] = cid
+    return dfa
+
+
 # Aggreagte per period (temporal aggregator)
 # xcats = [cc + "_N" for cc in growth + inflation + labour + sentiment + financial]
 # dfx = msm.reduce_df(df, xcats=xcats, cids=["USD"])
 
 def temporal_aggregator_period(
-        nd: dict[str, pd.DataFrame], start: pd.Timestamp, end: pd.Timestamp
+        isc: InformationStateChanges,
+        start: pd.Timestamp,
+        end: pd.Timestamp
     ) -> pd.DataFrame:
     pz = pd.concat(
         [
-            v["zscore_norm_squared"].to_frame(k) for k, v in nd.items()
+            v["zscore_norm_squared"].to_frame(k) for k, v in isc.items()
         ] + [
             pd.DataFrame(
                 data=0,
@@ -211,7 +272,7 @@ def temporal_aggregator_period(
     # Map out the eop dates
     p_eop = pd.concat(
         [
-            v["eop"].to_frame(k) for k, v in nd.items()
+            v["eop"].to_frame(k) for k, v in isc.items()
         ] + [
             pd.DataFrame(
                 data=0,
