@@ -39,6 +39,11 @@ from .df_utils import (
     get_sops,
 )
 
+from .sparse import (
+    create_delta_data,
+    calculate_score_on_sparse_indicator,
+)
+
 from .math import (
     expanding_mean_with_nan,
 )
@@ -83,5 +88,9 @@ __all__ = [
     "quarters_btwn_dates",
     "get_eops",
     "get_sops",
+    # Sparse
+    "create_delta_data",
+    "calculate_score_on_sparse_indicator",
+    # Math
     "expanding_mean_with_nan",
 ]
