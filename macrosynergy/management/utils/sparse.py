@@ -1,12 +1,15 @@
 from typing import Dict
 
 import pandas as pd
+import numpy as np
+
 
 # Functions for operations on sparse data
 # class SparseIndicators(Dict) ...:
 
+
 def create_delta_data(df: pd.DataFrame)-> Dict[str, pd.DataFrame]:
-    #  TODO store reduce/compact form, together with start/end dates, and timestamps (changes to vintages) essentially the "delta-database"
+    # TODO store reduce/compact form, together with start/end dates, and timestamps (changes to vintages) essentially the "delta-database"
     # TODO group together for releases (find common releases)
     p_value = df.pivot(index="real_date", columns="xcat", values="value")
     p_eop = df.pivot(index="real_date", columns="xcat", values="eop_lag")
@@ -44,8 +47,14 @@ def create_delta_data(df: pd.DataFrame)-> Dict[str, pd.DataFrame]:
         df_tmp["diff"]: int = df_tmp["value"].diff(periods=1)
         df_tmp = df_tmp.set_index("real_date")[["value", "eop", "version", "grading", "diff"]]  # version = 0 => release
         nd[ticker] = df_tmp
+    
     # TODO store as state / print
-    print(pd.DataFrame(store, columns=["Ticker", "Changes", "Period"]).sort_values(by="Changes", ascending=False).reset_index(drop=True))
+    print(
+        pd.DataFrame(
+            store, columns=["Ticker", "Changes", "Period"]
+        ).sort_values(by="Changes", ascending=False).reset_index(drop=True)
+    )
+
     return nd
 
 
@@ -69,7 +78,7 @@ def calculate_score_on_sparse_indicator(nd: Dict[str, pd.DataFrame], weight: str
         # TODO print options
         changes = v.index.diff()
         print(
-            f"{k:30s} days between releases: {changes.min().days:4d} to {changes.max().days:4d} - median {changes.median().days:4d}, linear {changes.median().days/365.25:.4f}, square root {np.sqrt(changes.median().days/365.25):.4f}"
+            f"{key:30s} days between releases: {changes.min().days:4d} to {changes.max().days:4d} - median {changes.median().days:4d}, linear {changes.median().days/365.25:.4f}, square root {np.sqrt(changes.median().days/365.25):.4f}"
         )
         v["zscore_norm_linear"] = v["zscore"] * v.index.diff().days/365.24
         v["zscore_norm_squared"] = v["zscore"] * np.sqrt(v.index.diff().days/365.24)
@@ -79,7 +88,14 @@ def calculate_score_on_sparse_indicator(nd: Dict[str, pd.DataFrame], weight: str
     return nd
 
 
-def sparse_to_dense(nd: Dict[str, pd.DataFrame], value_column: str, min_period: pd.Timestamp, max_period: pd.Timestamp, postfix: str = None, add_eop: bool = True) -> pd.DataFrame:
+def sparse_to_dense(
+        nd: Dict[str, pd.DataFrame],
+        value_column: str,
+        min_period: pd.Timestamp,
+        max_period: pd.Timestamp,
+        postfix: str = None,
+        add_eop: bool = True
+    ) -> pd.DataFrame:
     # TODO store real_date min and max in object...
     pz = pd.concat(
         [
@@ -105,7 +121,14 @@ def sparse_to_dense(nd: Dict[str, pd.DataFrame], value_column: str, min_period: 
     pz.columns.name = "xcat"
     pz.index.name = "real_date"
     
-    df = pz.stack().to_frame("value").reset_index().assign(cid="USD")[["cid", "xcat", "real_date", "value"]]
+    df = (
+        pz
+        .stack()
+        .to_frame("value")
+        .reset_index()
+        .assign(cid="USD")
+        [["cid", "xcat", "real_date", "value"]]
+    )
     
     if add_eop:
         p_eop = pd.concat(
@@ -141,8 +164,10 @@ def sparse_to_dense(nd: Dict[str, pd.DataFrame], value_column: str, min_period: 
     return df
 
 
-def temporal_aggregator_exponential(df: pd.DataFrame, halflife: int = 5, cid: str = "USD", winsorise: float =None) -> pd.DataFrame:
-    p = dfx.pivot(index="real_date", columns="xcat", values="value")
+def temporal_aggregator_exponential(
+        df: pd.DataFrame, halflife: int = 5, cid: str = "USD", winsorise: float =None
+    ) -> pd.DataFrame:
+    p = df.pivot(index="real_date", columns="xcat", values="value")
     if winsorise:
         p = p.clip(lower=-winsorise, upper=winsorise)
     # Exponential moving average weights (check implementation: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.ewm.html)
@@ -156,7 +181,9 @@ def temporal_aggregator_exponential(df: pd.DataFrame, halflife: int = 5, cid: st
 # xcats = [cc + "_N" for cc in growth + inflation + labour + sentiment + financial]
 # dfx = msm.reduce_df(df, xcats=xcats, cids=["USD"])
 
-def temporal_aggregator_period(nd: dict[str, pd.DataFrame], start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+def temporal_aggregator_period(
+        nd: dict[str, pd.DataFrame], start: pd.Timestamp, end: pd.Timestamp
+    ) -> pd.DataFrame:
     pz = pd.concat(
         [
             v["zscore_norm_squared"].to_frame(k) for k, v in nd.items()
@@ -164,8 +191,8 @@ def temporal_aggregator_period(nd: dict[str, pd.DataFrame], start: pd.Timestamp,
             pd.DataFrame(
                 data=0,
                 index=pd.date_range(
-                    start=df.real_date.min(),
-                    end=df.real_date.max(),
+                    start=start,
+                    end=end,
                     freq="B",
                     inclusive='both',
                 ),
@@ -189,8 +216,8 @@ def temporal_aggregator_period(nd: dict[str, pd.DataFrame], start: pd.Timestamp,
             pd.DataFrame(
                 data=0,
                 index=pd.date_range(
-                    start=df.real_date.min(),
-                    end=df.real_date.max(),
+                    start=start,
+                    end=end,
                     freq="B",
                     inclusive='both',
                 ),
