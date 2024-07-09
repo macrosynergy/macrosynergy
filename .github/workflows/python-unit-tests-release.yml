@@ -1,5 +1,5 @@
 # This is a workflow in for running the package tests for the macrosynergy package when doing a release to PyPI.
-# It runs on Ubuntu, Windows and MacOS, for Python 3.8, 3.9, 3.10, 3.11 and 3.12.
+# It runs on Ubuntu, Windows and MacOS, for Python 3.8, 3.9, 3.10 and 3.11.
 name: Test Python package on Ubuntu - Release
 
 on:

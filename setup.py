@@ -15,7 +15,7 @@ MICRO = 23
 ISRELEASED = False
 VERSION = "%d.%d.%d" % (MAJOR, MINOR, MICRO)
 
-if sys.version_info >= (3, 13):
+if sys.version_info >= (3, 12):
     # The first version not in the `Programming Language :: Python :: ...` classifiers above
     warnings.warn(
         f"Macrosynergy {VERSION} may not yet support Python "

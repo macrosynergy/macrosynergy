@@ -25,7 +25,6 @@ classifiers = [
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
   "Topic :: Software Development",
   "Topic :: Scientific/Engineering",
   "Typing :: Typed",
@@ -116,7 +115,7 @@ versionfile_build = "macrosynergy/version.py"
 tag_prefix = "v"
 
 [tool.black]
-target-version = ["py38", "py39", "py310", "py311", "py312"]
+target-version = ["py38", "py39", "py310", "py311"]
 exclude = '''
 (
   | \.egg
