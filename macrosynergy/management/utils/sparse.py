@@ -128,16 +128,31 @@ def calculate_score_on_sparse_indicator(isc: Dict[str, pd.DataFrame], weight: st
         # Weighted according to changes in information states (not underlying frequency)
 
         # TODO print options
-        changes = v.index.diff()
-        print(
-            f"{key:30s} days between releases: {changes.min().days:4d} to {changes.max().days:4d} - median {changes.median().days:4d}, linear {changes.median().days/365.25:.4f}, square root {np.sqrt(changes.median().days/365.25):.4f}"
-        )
+        # changes = v.index.diff()
+        # print(
+        #     f"{key:30s} days between releases: {changes.min().days:4d} to {changes.max().days:4d} - median {changes.median().days:4d}, linear {changes.median().days/365.25:.4f}, square root {np.sqrt(changes.median().days/365.25):.4f}"
+        # )
         v["zscore_norm_linear"] = v["zscore"] * v.index.diff().days/365.24
         v["zscore_norm_squared"] = v["zscore"] * np.sqrt(v.index.diff().days/365.24)
         isc[key] = v
 
+    # TODO return [1] change, and [2] volatility estimate (mainly estimation of volatility for changes...)
     # TODO clearer exposition
     return isc
+
+
+def infer_frequency():
+    # TODO infer frequency from eop_lag
+    # TODO return list of tickers with their frequencies
+    pass
+
+
+def weight_from_frequency(freq: str, base: float = 252):
+    """Weight from frequency"""
+    # TODO apply on multiple tickers
+    freq_map = {"D": 1, "W": 5, "M": 21, "Q": 93, "A": 252}
+    assert freq in freq_map, f"Frequency {freq} not supported"
+    return freq_map[freq] / base
 
 
 def sparse_to_dense(
@@ -167,8 +182,8 @@ def sparse_to_dense(
         axis=1
     ).fillna(0).drop(["rdate"], axis=1)
 
-    # Winsorise and remove insignificant values
-    pz = (pz / (pz.cumsum(axis=0).abs() > 1e-12).astype(int)).clip(lower=-10, upper=10)
+    # Remove insignificant values
+    pz = (pz / (pz.cumsum(axis=0).abs() > 1e-12).astype(int))
     
     pz.columns.name = "xcat"
     pz.index.name = "real_date"
