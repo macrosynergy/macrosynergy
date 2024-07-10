@@ -1,8 +1,16 @@
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Union
+from numbers import Number
 
 import pandas as pd
 import numpy as np
-from macrosynergy.management.utils import qdf_to_ticker_df, get_xcat
+from macrosynergy.management.utils import (
+    qdf_to_ticker_df,
+    ticker_df_to_qdf,
+    concat_single_metric_qdfs,
+)
+from macrosynergy.management.types import QuantamentalDataFrame
+
+import warnings
 
 
 # class InformationStateChanges(object):
@@ -188,6 +196,44 @@ def weight_from_frequency(freq: str, base: float = 252):
     return freq_map[freq] / base
 
 
+def _isc_dict_to_frames(
+    isc: Dict[str, pd.DataFrame], metric: str = "value"
+) -> List[pd.DataFrame]:
+    frames = []
+    for k, v in isc.items():
+        assert isinstance(v, pd.DataFrame)
+        assert metric in v.columns
+        _fr = v[metric].to_frame(k)
+        if _fr.empty:
+            warnings.warn(f"Empty frame for {k}")
+            continue
+
+        frames.append(_fr)
+
+    return frames
+
+
+def _get_metric_df_from_isc(
+    isc: Dict[str, pd.DataFrame],
+    metric: str,
+    date_range: pd.DatetimeIndex,
+    fill: Union[str, Number] = 0,
+) -> pd.DataFrame:
+    if not isinstance(fill, (str, Number)):
+        raise ValueError("fill must be a string or a number")
+    if isinstance(fill, str):
+        assert fill == "ffill", "Only ffill is a valid operation for time series fill"
+
+    df_frames: List[pd.DataFrame] = _isc_dict_to_frames(isc, metric=metric)
+    tdf: pd.DataFrame = pd.concat(df_frames, axis=1).reindex(date_range)
+    if fill == "ffill":
+        tdf = tdf.ffill()
+    else:
+        tdf = tdf.fillna(fill)
+    tdf.columns.name, tdf.index.name = "ticker", "real_date"
+    return tdf
+
+
 def sparse_to_dense(
     isc: Dict[str, pd.DataFrame],
     value_column: str,
@@ -195,77 +241,38 @@ def sparse_to_dense(
     max_period: pd.Timestamp,
     postfix: str = None,
     add_eop: bool = True,
+    add_grading: bool = True,
 ) -> pd.DataFrame:
     # TODO store real_date min and max in object...
-    pz = (
-        pd.concat(
-            [v[value_column].to_frame(k) for k, v in isc.items()]
-            + [
-                pd.DataFrame(
-                    data=0,
-                    index=pd.date_range(
-                        start=min_period,
-                        end=max_period,
-                        freq="B",
-                        inclusive="both",
-                    ),
-                    columns=["rdate"],
-                )
-            ],
-            axis=1,
-        )
-        .fillna(0)
-        .drop(["rdate"], axis=1)
+    dtrange = pd.date_range(
+        start=min_period,
+        end=max_period,
+        freq="B",
+        inclusive="both",
     )
 
-    # Remove insignificant values
-    pz = pz / (pz.cumsum(axis=0).abs() > 1e-12).astype(int)
+    tdf = _get_metric_df_from_isc(isc=isc, metric=value_column, date_range=dtrange)
+    tdf = tdf / (tdf.cumsum(axis=0).abs() > 1e-12).astype(int)
 
-    pz.columns.name = "xcat"
-    pz.index.name = "real_date"
-
-    df = (
-        pz.stack()
-        .to_frame("value")
-        .reset_index()
-        .assign(cid="USD")[["cid", "xcat", "real_date", "value"]]
-    )
-
-    if add_eop:
-        p_eop = (
-            pd.concat(
-                [v["eop"].to_frame(k) for k, v in isc.items()]
-                + [
-                    pd.DataFrame(
-                        data=0,
-                        index=pd.date_range(
-                            start=df.real_date.min(),
-                            end=df.real_date.max(),
-                            freq="B",
-                            inclusive="both",
-                        ),
-                        columns=["rdate"],
-                    )
-                ],
-                axis=1,
+    sm_qdfs: List[QuantamentalDataFrame] = [ticker_df_to_qdf(tdf)]
+    for add_bool, metric_name in zip(
+        [add_eop, add_grading],
+        ["eop", "grading"],
+    ):
+        if add_bool:
+            wdf = _get_metric_df_from_isc(
+                isc=isc, metric=metric_name, date_range=dtrange, fill="ffill"
             )
-            .ffill()
-            .drop(["rdate"], axis=1)
-        )
-        p_eop.index.name = "real_date"
-        p_eop.columns.name = "xcat"
-        df = pd.merge(
-            left=df,
-            right=p_eop.stack().to_frame("eop").reset_index(),
-            how="left",
-            on=["real_date", "xcat"],
-        )
-        df["eop_lag"] = (df["real_date"] - df["eop"]).dt.days
+            sm_qdfs.append(ticker_df_to_qdf(wdf).rename(columns={"value": metric_name}))
+
+    qdf: QuantamentalDataFrame = concat_single_metric_qdfs(sm_qdfs)
+    if add_eop:
+        qdf["eop_lag"] = (qdf["real_date"] - qdf["eop"]).dt.days
 
     if postfix:
-        df["xcat"] += postfix
+        qdf["xcat"] += postfix
     # TODO add eop! (and grading!)
-    return df
+    return qdf
 
 
 def temporal_aggregator_exponential(
