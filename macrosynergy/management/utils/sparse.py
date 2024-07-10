@@ -101,7 +101,6 @@ def _get_diff_data(
 def create_delta_data(
     df: pd.DataFrame, return_density_stats: bool = False
 ) -> pd.DataFrame:
-    assert len(df["cid"].unique()) == 1
     # split into value, eop and grading
     p_value = qdf_to_ticker_df(df, value_column="value")
     p_eop = qdf_to_ticker_df(df, value_column="eop_lag")
@@ -112,11 +111,13 @@ def create_delta_data(
     isc_dict: Dict[str, Any] = {}
     density_stats: Dict[str, Dict[str, Any]] = {}
     for ticker in p_value.columns:
-        df_temp, ddict = _get_diff_data(ticker, p_value, p_eop, p_grading)
-        # use the xcat name in the output
-        _xcat = get_xcat(ticker)
-        isc_dict[_xcat] = df_temp
-        density_stats[_xcat] = ddict
+        df_temp, ddict = _get_diff_data(
+            ticker=ticker,
+            p_value=p_value,
+            p_eop=p_eop,
+            p_grading=p_grading,
+        )
+        isc_dict[ticker], density_stats[ticker] = df_temp, ddict
 
     # flatten the density stats
     _dstats_flat = [
