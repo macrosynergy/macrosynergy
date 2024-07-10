@@ -233,14 +233,14 @@ def temporal_aggregator_exponential(
 
 
 def temporal_aggregator_mean(
-        df: pd.DataFrame, periods: int = 21, cid: str = "USD", winsorise: float =None
+        df: pd.DataFrame, window: int = 21, cid: str = "USD", winsorise: float =None
     ) -> pd.DataFrame:
     p = df.pivot(index="real_date", columns="xcat", values="value")
     if winsorise:
         p = p.clip(lower=-winsorise, upper=winsorise)
     # Exponential moving average weights (check implementation: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.ewm.html)
-    dfa = p.rolling(periods=periods).mean().stack().to_frame("value").reset_index()
-    dfa["xcat"] += f"MA{periods:d}D"
+    dfa = p.rolling(window=window).mean().stack().to_frame("value").reset_index()
+    dfa["xcat"] += f"MA{window:d}D"
     dfa["cid"] = cid
     return dfa
 
@@ -254,6 +254,10 @@ def temporal_aggregator_period(
         start: pd.Timestamp,
         end: pd.Timestamp
     ) -> pd.DataFrame:
+    """Temporal aggregator over periods of changes
+
+    TODO add argument to choose how many periods to aggregate over.
+    """
     pz = pd.concat(
         [
             v["zscore_norm_squared"].to_frame(k) for k, v in isc.items()

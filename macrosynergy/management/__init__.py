@@ -21,6 +21,7 @@ from .utils.sparse import (
     sparse_to_dense,
     temporal_aggregator_exponential,
     temporal_aggregator_period,
+    temporal_aggregator_mean,
 )
 
 __all__ = [
@@ -49,6 +50,7 @@ __all__ = [
     "sparse_to_dense",
     "temporal_aggregator_exponential",
     "temporal_aggregator_period",
+    "temporal_aggregator_mean",
     # Module-as-methods
     "check_availability",
     "simulate_vintage_data",
