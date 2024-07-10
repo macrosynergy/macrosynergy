@@ -161,16 +161,31 @@ def calculate_score_on_sparse_indicator(
         # Weighted according to changes in information states (not underlying frequency)
 
         # TODO print options
-        changes = v.index.diff()
-        print(
-            f"{key:30s} days between releases: {changes.min().days:4d} to {changes.max().days:4d} - median {changes.median().days:4d}, linear {changes.median().days/365.25:.4f}, square root {np.sqrt(changes.median().days/365.25):.4f}"
-        )
-        v["zscore_norm_linear"] = v["zscore"] * v.index.diff().days / 365.24
-        v["zscore_norm_squared"] = v["zscore"] * np.sqrt(v.index.diff().days / 365.24)
+        # changes = v.index.diff()
+        # print(
+        #     f"{key:30s} days between releases: {changes.min().days:4d} to {changes.max().days:4d} - median {changes.median().days:4d}, linear {changes.median().days/365.25:.4f}, square root {np.sqrt(changes.median().days/365.25):.4f}"
+        # )
+        v["zscore_norm_linear"] = v["zscore"] * v.index.diff().days/365.24
+        v["zscore_norm_squared"] = v["zscore"] * np.sqrt(v.index.diff().days/365.24)
         isc[key] = v
 
+    # TODO return [1] change, and [2] volatility estimate (mainly estimation of volatility for changes...)
     # TODO clearer exposition
     return isc
+
+
+def infer_frequency():
+    # TODO infer frequency from eop_lag
+    # TODO return list of tickers with their frequencies
+    pass
+
+
+def weight_from_frequency(freq: str, base: float = 252):
+    """Weight from frequency"""
+    # TODO apply on multiple tickers
+    freq_map = {"D": 1, "W": 5, "M": 21, "Q": 93, "A": 252}
+    assert freq in freq_map, f"Frequency {freq} not supported"
+    return freq_map[freq] / base
 
 
 def sparse_to_dense(
@@ -203,9 +218,9 @@ def sparse_to_dense(
         .drop(["rdate"], axis=1)
     )
 
-    # Winsorise and remove insignificant values
-    pz = (pz / (pz.cumsum(axis=0).abs() > 1e-12).astype(int)).clip(lower=-10, upper=10)
-
+    # Remove insignificant values
+    pz = (pz / (pz.cumsum(axis=0).abs() > 1e-12).astype(int))
+    
     pz.columns.name = "xcat"
     pz.index.name = "real_date"
 
@@ -267,14 +282,14 @@ def temporal_aggregator_exponential(
 
 
 def temporal_aggregator_mean(
-    df: pd.DataFrame, periods: int = 21, cid: str = "USD", winsorise: float = None
-) -> pd.DataFrame:
+        df: pd.DataFrame, window: int = 21, cid: str = "USD", winsorise: float =None
+    ) -> pd.DataFrame:
     p = df.pivot(index="real_date", columns="xcat", values="value")
     if winsorise:
         p = p.clip(lower=-winsorise, upper=winsorise)
     # Exponential moving average weights (check implementation: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.ewm.html)
-    dfa = p.rolling(periods=periods).mean().stack().to_frame("value").reset_index()
-    dfa["xcat"] += f"MA{periods:d}D"
+    dfa = p.rolling(window=window).mean().stack().to_frame("value").reset_index()
+    dfa["xcat"] += f"MA{window:d}D"
     dfa["cid"] = cid
     return dfa
 
@@ -285,29 +300,32 @@ def temporal_aggregator_mean(
 
 
 def temporal_aggregator_period(
-    isc: Dict[str, pd.DataFrame], start: pd.Timestamp, end: pd.Timestamp
-) -> pd.DataFrame:
-    pz = (
-        pd.concat(
-            [v["zscore_norm_squared"].to_frame(k) for k, v in isc.items()]
-            + [
-                pd.DataFrame(
-                    data=0,
-                    index=pd.date_range(
-                        start=start,
-                        end=end,
-                        freq="B",
-                        inclusive="both",
-                    ),
-                    columns=["rdate"],
-                )
-            ],
-            axis=1,
-        )
-        .fillna(0)
-        .drop(["rdate"], axis=1)
-    )
+        isc: Dict[str, pd.DataFrame],
+        start: pd.Timestamp,
+        end: pd.Timestamp
+    ) -> pd.DataFrame:
+    """Temporal aggregator over periods of changes
 
+    TODO add argument to choose how many periods to aggregate over.
+    """
+    pz = pd.concat(
+        [
+            v["zscore_norm_squared"].to_frame(k) for k, v in isc.items()
+        ] + [
+            pd.DataFrame(
+                data=0,
+                index=pd.date_range(
+                    start=start,
+                    end=end,
+                    freq="B",
+                    inclusive='both',
+                ),
+                columns=["rdate"]
+            )
+        ],
+        axis=1
+    ).fillna(0).drop(["rdate"], axis=1)
+    
     # Winsorise and remove insignificant values
     pz = (pz / (pz.cumsum(axis=0).abs() > 1e-12).astype(int)).clip(lower=-10, upper=10)
 
