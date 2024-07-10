@@ -21,7 +21,6 @@ from .utils.sparse import (
     sparse_to_dense,
     temporal_aggregator_exponential,
     temporal_aggregator_period,
-
 )
 
 __all__ = [

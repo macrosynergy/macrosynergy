@@ -4,57 +4,66 @@ import pandas as pd
 import numpy as np
 
 
-class InformationStateChanges(object):
-    """
-    # Functions for operations on sparse data
-    # class SparseIndicators(Dict) ...:
-    # """
-    def __init__(self, values: Dict[str, pd.DataFrame] = dict()):
-        # TODO store start and end dates per ticker...
-        self.values: Dict[str, pd.DataFrame] = values
+# class InformationStateChanges(object):
+#     """
+#     # Functions for operations on sparse data
+#     # class SparseIndicators(Dict) ...:
+#     # """
+#     def __init__(self, values: Dict[str, pd.DataFrame] = dict()):
+#         # TODO store start and end dates per ticker...
+#         self.values: Dict[str, pd.DataFrame] = values
 
-    @classmethod
-    def from_tickers(cls, tickers: List[str]) -> "InformationStateChanges":
-        return cls({ticker: pd.DataFrame for ticker in tickers})
+#     @classmethod
+#     def from_tickers(cls, tickers: List[str]) -> "InformationStateChanges":
+#         return cls({ticker: pd.DataFrame for ticker in tickers})
 
-    def __setitem__(self, item: str, value: pd.DataFrame):
-        self.values[item]: pd.DataFrame = value
+#     def __setitem__(self, item: str, value: pd.DataFrame):
+#         self.values[item] = value
 
-    def __getitem__(self, item: str) -> pd.DataFrame:
-        return self.values[item]
+#     def __getitem__(self, item: str) -> pd.DataFrame:
+#         return self.values[item]
 
-    def __setattr__(self, key: str, value: pd.DataFrame):
-        self.values[key]: pd.DataFrame = value
+#     def __setattr__(self, key: str, value: pd.DataFrame):
+#         self.values[key] = value
 
-    def __getattr__(self, item) -> pd.DataFrame:
-        return self.values[item]
+#     def __getattr__(self, item) -> pd.DataFrame:
+#         return self.values[item]
     
-    def __getstate__(self):
-        return self.values
+#     def __getstate__(self):
+#         return self.values
 
-    def __setstate__(self, values: Dict[str, pd.DataFrame]):
-        self.values = values
+#     def __setstate__(self, values: Dict[str, pd.DataFrame]):
+#         self.values = values
     
-    def keys(self):
-        return self.values.keys()
+#     def keys(self):
+#         return self.values.keys()
     
-    def items(self):
-        return self.values.items()
+#     def items(self):
+#         return self.values.items()
 
-    def to_dense(self) -> pd.DataFrame:
-        # TODO convert to QuantamentalDataFrame
-        pass
+#     def to_dense(self) -> pd.DataFrame:
+#         # TODO convert to QuantamentalDataFrame
+#         pass
 
 
 def create_delta_data(df: pd.DataFrame)-> Dict[str, pd.DataFrame]:
+    """Create delta data (information state changes)
+
+    :param df: QuantamentalDataFrame
+    :return: dictionary of changes
+
+    """
+    # TODO check QuantamentalDataFrame and not pd.DataFrame as input
     # TODO store reduce/compact form, together with start/end dates, and timestamps (changes to vintages) essentially the "delta-database"
     # TODO group together for releases (find common releases)
+
+    # TODO check unique (and pivot is possible) - single cid
     p_value = df.pivot(index="real_date", columns="xcat", values="value")
     p_eop = df.pivot(index="real_date", columns="xcat", values="eop_lag")
     p_grading = df.pivot(index="real_date", columns="xcat", values="grading")
     
     # Create dictionary of changes
-    isc: InformationStateChanges = InformationStateChanges.from_tickers(tickers=list(p_value.columns))
+    isc: Dict[str, pd.DataFrame] = {ticker: pd.DataFrame for ticker in p_value.columns}
     
     mask: pd.DataFrame = p_value.diff(axis=0).abs() > 0
     
@@ -79,8 +88,8 @@ def create_delta_data(df: pd.DataFrame)-> Dict[str, pd.DataFrame]:
         df_tmp = df_tmp.sort_index().reset_index()
         df_tmp["count"] = df_tmp.index
         df_tmp = pd.merge(left=df_tmp, right=df_tmp.groupby(["eop"], as_index=False)["count"].min(), on=["eop"], how="outer", suffixes=(None, "_min"))
-        df_tmp["version"]: int = df_tmp["count"] - df_tmp["count_min"]
-        df_tmp["diff"]: int = df_tmp["value"].diff(periods=1)
+        df_tmp["version"] = df_tmp["count"] - df_tmp["count_min"]
+        df_tmp["diff"] = df_tmp["value"].diff(periods=1)
         df_tmp = df_tmp.set_index("real_date")[["value", "eop", "version", "grading", "diff"]]  # version = 0 => release
         isc[ticker] = df_tmp
     
@@ -94,7 +103,7 @@ def create_delta_data(df: pd.DataFrame)-> Dict[str, pd.DataFrame]:
     return isc
 
 
-def calculate_score_on_sparse_indicator(isc: InformationStateChanges, weight: str = None):
+def calculate_score_on_sparse_indicator(isc: Dict[str, pd.DataFrame], weight: str = None):
     # TODO make into a method on InformationStateChanges?
     # TODO adjust score by eop_lag (business days?) to get a native frequency...
     # TODO convert below operation into a function call?
@@ -132,7 +141,7 @@ def calculate_score_on_sparse_indicator(isc: InformationStateChanges, weight: st
 
 
 def sparse_to_dense(
-        isc: InformationStateChanges,
+        isc: Dict[str, pd.DataFrame],
         value_column: str,
         min_period: pd.Timestamp,
         max_period: pd.Timestamp,
@@ -241,7 +250,7 @@ def temporal_aggregator_mean(
 # dfx = msm.reduce_df(df, xcats=xcats, cids=["USD"])
 
 def temporal_aggregator_period(
-        isc: InformationStateChanges,
+        isc: Dict[str, pd.DataFrame],
         start: pd.Timestamp,
         end: pd.Timestamp
     ) -> pd.DataFrame:
