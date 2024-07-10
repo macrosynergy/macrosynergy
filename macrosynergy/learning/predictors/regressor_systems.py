@@ -262,7 +262,6 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             .copy() # TODO: is copying necessary?
         )
 
-
 class LinearRegressionSystem(BaseRegressionSystem):
     """
     Cross-sectional system of OLS linear regression models for panel data.
@@ -305,9 +304,9 @@ class LinearRegressionSystem(BaseRegressionSystem):
 
     def __init__(
         self,
-        roll: Union[int, str] = "full",
         fit_intercept: bool = True,
         positive: bool = False,
+        roll: Union[int, str] = "full",
         min_xs_samples: int = 2,
         data_freq: Optional[str] = None,
     ):
@@ -316,9 +315,9 @@ class LinearRegressionSystem(BaseRegressionSystem):
             fit_intercept, positive,
         )
 
-        self.roll = roll
         self.fit_intercept = fit_intercept
         self.positive = positive
+        self.roll = roll
         self.data_freq = data_freq
         self.min_xs_samples = min_xs_samples
 
