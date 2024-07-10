@@ -184,19 +184,18 @@ def ticker_df_to_qdf(df: pd.DataFrame, metric: str = "value") -> QuantamentalDat
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Argument `df` must be a pandas DataFrame.")
+    if not isinstance(metric, str):
+        raise TypeError("Argument `metric` must be a string.")
 
     # pivot to long format
     df = (
         df.stack(level=0).reset_index().rename(columns={0: metric, "level_1": "ticker"})
     )
-    # split ticker using get_cid and get_xcat
+
     df["cid"] = get_cid(df["ticker"])
     df["xcat"] = get_xcat(df["ticker"])
-    # drop ticker column
-
     df = df.drop(columns=["ticker"])
 
-    # standardise and return
     return standardise_dataframe(df=df)
 
 
