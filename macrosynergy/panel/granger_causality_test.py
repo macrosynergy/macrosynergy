@@ -282,7 +282,7 @@ def granger_causality_test(
     )
 
     # Pivot df
-    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df, value_column=metric)
+    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df, metric=metric)
 
     # there must only be two columns in df_wide
     assert len(df_wide.columns) == 2, "df_wide must have only two columns"

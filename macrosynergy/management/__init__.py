@@ -11,15 +11,25 @@ from .simulate import simulate_vintage_data, simulate_quantamental_data
 
 from .simulate.simulate_vintage_data import VintageData
 from .simulate.simulate_quantamental_data import make_qdf
-from .utils import common_cids, update_df, reduce_df, categories_df, reduce_df_by_ticker
+from .utils import (
+    common_cids,
+    update_df,
+    reduce_df,
+    categories_df,
+    reduce_df_by_ticker,
+)
 from . import utils, types, decorators, simulate, constants
 from .validation import validate_and_reduce_qdf
+
+from .qdf import QDFManager
 
 __all__ = [
     # METHODS
     "reduce_df",
     "categories_df",
     "reduce_df_by_ticker",
+    "QDFManager",
+    # Functions
     "visual_paneldates",
     "check_enddates",
     "check_startyears",
@@ -40,4 +50,6 @@ __all__ = [
     "simulate_vintage_data",
     "simulate_quantamental_data",
     "validate_and_reduce_qdf",
+    # Classes
+    "QDFManager",
 ]
