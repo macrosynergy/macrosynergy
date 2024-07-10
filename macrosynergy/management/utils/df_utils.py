@@ -174,7 +174,7 @@ def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFr
     )
 
 
-def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
+def ticker_df_to_qdf(df: pd.DataFrame, metric: str = "value") -> QuantamentalDataFrame:
     """
     Converts a wide format DataFrame (with each column representing a ticker)
     to a standardized JPMaQS DataFrame.
@@ -187,9 +187,7 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
 
     # pivot to long format
     df = (
-        df.stack(level=0)
-        .reset_index()
-        .rename(columns={0: "value", "level_1": "ticker"})
+        df.stack(level=0).reset_index().rename(columns={0: metric, "level_1": "ticker"})
     )
     # split ticker using get_cid and get_xcat
     df["cid"] = get_cid(df["ticker"])
