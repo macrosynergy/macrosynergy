@@ -142,7 +142,15 @@ def create_delta_data(
         return isc_dict
 
 
-class StandardDeviationMethod:
+class SubscriptableMeta(type):
+    def __getitem__(cls, item):
+        if hasattr(cls, item) and callable(getattr(cls, item)):
+            return getattr(cls, item)
+        else:
+            raise KeyError(f"{item} is not a valid method name")
+
+
+class StandardDeviationMethod(metaclass=SubscriptableMeta):
     @staticmethod
     def std(s: pd.Series, min_periods: int, **kwargs) -> pd.Series:
         return s.expanding(min_periods=min_periods).std()
@@ -204,7 +212,8 @@ def calculate_score_on_sparse_indicator(
     else:
         if not hasattr(StandardDeviationMethod, std):
             raise ValueError(CALC_SCORE_CUSTOM_METHOD_ERR_MSG.format(std=std))
-        curr_method = getattr(StandardDeviationMethod, std)
+        # curr_method = getattr(StandardDeviationMethod, std)
+        curr_method = StandardDeviationMethod[std]
 
     method_kwargs: Dict[str, Any] = dict(
         min_periods=min_periods, halflife=halflife, **custom_method_kwargs
