@@ -182,10 +182,39 @@ def calculate_score_on_sparse_indicator(
     return isc
 
 
-def infer_frequency():
-    # TODO infer frequency from eop_lag
-    # TODO return list of tickers with their frequencies
-    pass
+def _infer_frequency_timeseries(eop_series: pd.Series) -> Optional[str]:
+    diff = eop_series.diff().dropna()
+    most_common = diff.mode().values[0]
+    frequency_mapping = {1: "B", 5: "W"}
+
+    if most_common in frequency_mapping:
+        return frequency_mapping[most_common]
+
+    # Define ranges for other frequencies
+    frequency_ranges = {
+        "M": range(20, 24),  # (20-23 bdays)
+        "Q": range(60, 67),  # (60-66 bdays)
+        "A": range(250, 253),  # (250-252 bdays)
+    }
+    for freq, freq_range in frequency_ranges.items():
+        if most_common in freq_range:
+            return freq
+
+    return "B"
+
+
+def infer_frequency(df: QuantamentalDataFrame) -> pd.Series:
+    if not isinstance(df, QuantamentalDataFrame):
+        raise ValueError("`df` must be a QuantamentalDataFrame")
+    if not "eop_lag" in df.columns:
+        raise ValueError("`df` must contain an `eop_lag` column")
+
+    ticker_df = qdf_to_ticker_df(df, value_column="eop_lag")
+    freq_dict = {
+        ticker: _infer_frequency_timeseries(ticker_df[ticker])
+        for ticker in ticker_df.columns
+    }
+    return pd.Series(freq_dict)
 
 
 def weight_from_frequency(freq: str, base: float = 252):
