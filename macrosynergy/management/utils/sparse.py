@@ -171,7 +171,10 @@ def calculate_score_on_sparse_indicator(
         # TODO print options
         # changes = v.index.diff()
         # print(
-        #     f"{key:30s} days between releases: {changes.min().days:4d} to {changes.max().days:4d} - median {changes.median().days:4d}, linear {changes.median().days/365.25:.4f}, square root {np.sqrt(changes.median().days/365.25):.4f}"
+        #     f"{key:30s} days between releases: {changes.min().days:4d}"
+        #     f" to {changes.max().days:4d} - median {changes.median().days:4d},"
+        #     f" linear {changes.median().days/365.25:.4f}, square root "
+        #     f"{np.sqrt(changes.median().days/365.25):.4f}"
         # )
         v["zscore_norm_linear"] = v["zscore"] * v.index.diff().days / 365.24
         v["zscore_norm_squared"] = v["zscore"] * np.sqrt(v.index.diff().days / 365.24)
