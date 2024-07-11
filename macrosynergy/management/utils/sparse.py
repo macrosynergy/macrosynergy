@@ -174,6 +174,7 @@ def calculate_score_on_sparse_indicator(
     std: str = "std",
     halflife: int = None,
     min_periods: int = 10,
+    isc_version: int = 0,
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
 ):
@@ -210,10 +211,10 @@ def calculate_score_on_sparse_indicator(
     )
 
     for key, v in isc.items():
-        mask_rel = v["version"] == 0
+        mask_rel = v["version"] == isc_version
         s = v.loc[mask_rel, "diff"]
         # TODO exponential weights (requires knowledge of frequency...)
- 
+
         result: pd.Series = curr_method(s, **method_kwargs)
 
         columns = [kk for kk in v.columns if kk != "std"]
