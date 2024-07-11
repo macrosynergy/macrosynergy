@@ -144,14 +144,15 @@ def create_delta_data(
 
 def calculate_score_on_sparse_indicator(
         isc: Dict[str, pd.DataFrame],
-        std: str = "std",
+        std_type: str = "std",
         halflife: int = None,
-        min_periods: int = 10
+        min_periods: int = 12,
+        std_name: str = None
 ):
     """Calculate score on sparse indicator
 
     :param isc: InformationStateChanges
-    :param std: str default "std" (quadratic loss function i.e. standard deviations)
+    :param std_type: str default "std" (quadratic loss function i.e. standard deviations)
         alternatives are "abs" for linex loss function (mean absolute deviations),
         exp for exponentially weighted quadratic loss function (requires halflife to be specified),
         and exp_abs for Linex loss function (mean absolute deviations exponentially weighted).
@@ -163,38 +164,39 @@ def calculate_score_on_sparse_indicator(
     # TODO adjust score by eop_lag (business days?) to get a native frequency...
     # TODO convert below operation into a function call?
     # Operations on a per key in data dictionary
-    name = "std"
+    if std_name is None and std_type == "std":
+        std_name = "std"
+    elif std_name is None:
+        std_name = f"std_{std_type:s}"
+
     for key, v in isc.items():
         mask_rel = v["version"] == 0
         s = v.loc[mask_rel, "diff"]
         # TODO exponential weights (requires knowledge of frequency...)
-        if std == "std":
+        if std_type == "std":
             std = s.expanding(min_periods=min_periods).std()
-        elif std == "abs":
-            name += "_abs"
+        elif std_type == "abs":
             std = s.abs().expanding(min_periods=min_periods).mean()
-        elif std == "exp":
-            name += "_exp"
+        elif std_type == "exp":
             assert halflife is not None and halflife > 0, "halflife must be defined"
-            std = s.ewm(halflife=halflife).std()
-        elif std == "exp_abs":
-            name += "_exp_abs"
+            std = s.ewm(halflife=halflife, min_periods=min_periods).std()
+        elif std_type == "exp_abs":
             assert halflife is not None and halflife > 0, "halflife must be defined"
-            std = s.abs().ewm(halflife=halflife).mean()
+            std = s.abs().ewm(halflife=halflife, min_periods=min_periods).mean()
         else:
-            raise ValueError(f"std {std} not supported")
+            raise ValueError(f"std {std_type} not supported")
         
         # Check column of std doesn't exist?
-        columns = [kk for kk in v.columns if kk != name]
+        columns = [kk for kk in v.columns if kk != std_name]
         v = pd.merge(
             left=v[columns],
-            right=std.to_frame(name),
+            right=std.to_frame(std_name),
             how="left",
             left_index=True,
             right_index=True,
         )
-        v[name] = v[name].ffill()
-        v["zscore"] = v["diff"] / v[name]
+        v[std_name] = v[std_name].ffill()
+        v["zscore"] = v["diff"] / v[std_name]
 
         isc[key] = v
 
@@ -229,7 +231,9 @@ def infer_frequency(df: QuantamentalDataFrame) -> pd.Series:
         raise ValueError("`df` must be a QuantamentalDataFrame")
     if not "eop_lag" in df.columns:
         raise ValueError("`df` must contain an `eop_lag` column")
-
+ 
+    # Find unique eop dates:
+    # print(f"{k:50s}: {pd.infer_freq(nd[k].eop.unique())}")
     ticker_df = qdf_to_ticker_df(df, value_column="eop_lag")
     freq_dict = {
         ticker: _infer_frequency_timeseries(ticker_df[ticker])
