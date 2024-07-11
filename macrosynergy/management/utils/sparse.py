@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Union, Optional
+from typing import Dict, List, Any, Union, Optional, Callable
 from numbers import Number
 
 import pandas as pd
@@ -142,11 +142,40 @@ def create_delta_data(
         return isc_dict
 
 
+class StandardDeviationMethod:
+    @staticmethod
+    def std(s: pd.Series, min_periods: int = 10, **kwargs) -> pd.Series:
+        return s.expanding(min_periods=min_periods).std()
+
+    @staticmethod
+    def abs(s: pd.Series, min_periods: int = 10, **kwargs) -> pd.Series:
+        return s.abs().expanding(min_periods=min_periods).mean()
+
+    @staticmethod
+    def exp(s: pd.Series, halflife: int, **kwargs) -> pd.Series:
+        return s.ewm(halflife=halflife).std()
+
+    @staticmethod
+    def exp_abs(s: pd.Series, halflife: int, **kwargs) -> pd.Series:
+        return s.abs().ewm(halflife=halflife).mean()
+
+
+CALC_SCORE_CUSTOM_METHOD_ERR_MSG = (
+    "Method {std} not supported. "
+    f"Supported methods are: {dir(StandardDeviationMethod)}. \n"
+    "Alternatively, provide a custom method with signature "
+    "`custom_method(s: pd.Series, **kwargs) -> pd.Series` "
+    "using the `custom_method` and `custom_method_kwargs` arguments."
+)
+
+
 def calculate_score_on_sparse_indicator(
-        isc: Dict[str, pd.DataFrame],
-        std: str = "std",
-        halflife: int = None,
-        min_periods: int = 10
+    isc: Dict[str, pd.DataFrame],
+    std: str = "std",
+    halflife: int = None,
+    min_periods: int = 10,
+    custom_method: Optional[Callable] = None,
+    custom_method_kwargs: Dict = {},
 ):
     """Calculate score on sparse indicator
 
@@ -163,27 +192,34 @@ def calculate_score_on_sparse_indicator(
     # TODO adjust score by eop_lag (business days?) to get a native frequency...
     # TODO convert below operation into a function call?
     # Operations on a per key in data dictionary
+
+    curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
+    if custom_method is not None:
+        if not callable(custom_method):
+            raise TypeError("`custom_method` must be a callable")
+        if not isinstance(custom_method_kwargs, dict):
+            raise TypeError("`custom_method_kwargs` must be a dictionary")
+        curr_method = custom_method
+    else:
+        if not hasattr(StandardDeviationMethod, std):
+            raise ValueError(CALC_SCORE_CUSTOM_METHOD_ERR_MSG.format(std=std))
+        curr_method = getattr(StandardDeviationMethod, std)
+
+    method_kwargs: Dict[str, Any] = dict(
+        min_periods=min_periods, halflife=halflife, **custom_method_kwargs
+    )
+
     for key, v in isc.items():
         mask_rel = v["version"] == 0
         s = v.loc[mask_rel, "diff"]
         # TODO exponential weights (requires knowledge of frequency...)
-        if std == "std":
-            std = s.expanding(min_periods=10).std()
-        elif std == "abs":
-            std = s.abs().expanding(min_periods=10).mean()
-        elif std == "exp":
-            assert halflife is not None and halflife > 0, "halflife must be defined"
-            std = s.ewm(halflife=halflife).std()
-        elif std == "exp_abs":
-            assert halflife is not None and halflife > 0, "halflife must be defined"
-            std = s.abs().ewm(halflife=halflife).mean()
-        else:
-            raise ValueError(f"std {std} not supported")
-        
+ 
+        result: pd.Series = curr_method(s, **method_kwargs)
+
         columns = [kk for kk in v.columns if kk != "std"]
         v = pd.merge(
             left=v[columns],
-            right=std.to_frame("std"),
+            right=result.to_frame("std"),
             how="left",
             left_index=True,
             right_index=True,
