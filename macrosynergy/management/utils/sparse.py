@@ -144,20 +144,20 @@ def create_delta_data(
 
 class StandardDeviationMethod:
     @staticmethod
-    def std(s: pd.Series, min_periods: int = 10, **kwargs) -> pd.Series:
+    def std(s: pd.Series, min_periods: int, **kwargs) -> pd.Series:
         return s.expanding(min_periods=min_periods).std()
 
     @staticmethod
-    def abs(s: pd.Series, min_periods: int = 10, **kwargs) -> pd.Series:
+    def abs(s: pd.Series, min_periods: int, **kwargs) -> pd.Series:
         return s.abs().expanding(min_periods=min_periods).mean()
 
     @staticmethod
-    def exp(s: pd.Series, halflife: int, **kwargs) -> pd.Series:
-        return s.ewm(halflife=halflife).std()
+    def exp(s: pd.Series, halflife: int, min_periods: int, **kwargs) -> pd.Series:
+        return s.ewm(halflife=halflife, min_periods=min_periods).std()
 
     @staticmethod
-    def exp_abs(s: pd.Series, halflife: int, **kwargs) -> pd.Series:
-        return s.abs().ewm(halflife=halflife).mean()
+    def exp_abs(s: pd.Series, halflife: int, min_periods: int, **kwargs) -> pd.Series:
+        return s.abs().ewm(halflife=halflife, min_periods=min_periods).mean()
 
 
 CALC_SCORE_CUSTOM_METHOD_ERR_MSG = (
