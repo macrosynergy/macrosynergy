@@ -365,13 +365,15 @@ def temporal_aggregator_mean(
 
 
 def temporal_aggregator_period(
-    isc: Dict[str, pd.DataFrame], start: pd.Timestamp, end: pd.Timestamp
+    isc: Dict[str, pd.DataFrame],
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    winsorise: int = 10,
 ) -> pd.DataFrame:
     """Temporal aggregator over periods of changes
 
     TODO add argument to choose how many periods to aggregate over.
     """
-
     dt_range = pd.date_range(start=start, end=end, freq="B", inclusive="both")
     tdf: pd.DataFrame = _get_metric_df_from_isc(
         isc=isc,
@@ -381,7 +383,7 @@ def temporal_aggregator_period(
     )
     # Winsorise and remove insignificant values
     tdf = _remove_insignificant_values(tdf, threshold=1e-12)
-    tdf = tdf.clip(lower=-10, upper=10)
+    tdf = tdf.clip(lower=-winsorise, upper=winsorise)
 
     # Map out the eop dates
     p_eop: pd.DataFrame = _get_metric_df_from_isc(
