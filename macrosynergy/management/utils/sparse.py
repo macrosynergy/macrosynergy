@@ -489,25 +489,51 @@ def _calculate_score_on_sparse_indicator_for_class(
 
 
 class InformationStateChanges(object):
-
-    def __init__(self, **kwargs):
-        self.isc_dict: Dict[str, pd.DataFrame] = None
+    def __init__(
+            self,
+            min_period: pd.Timestamp = None,
+            max_period: pd.Timestamp = None,
+        ):
+        self.isc_dict: Dict[str, pd.DataFrame] = dict()
         self.density_stats_df: pd.DataFrame = None
-        self._min_period: pd.Timestamp = None
-        self._max_period: pd.Timestamp = None
+        self._min_period: pd.Timestamp = min_period
+        self._max_period: pd.Timestamp = max_period
 
-    def init(self, qdf: QuantamentalDataFrame, norm: bool = True, **kwargs):
-        if not isinstance(qdf, QuantamentalDataFrame):
-            raise ValueError("`qdf` must be a QuantamentalDataFrame")
+    def __getitem__(self, item):
+        return self.isc_dict[item]
+    
+    def __setitem__(self, key, value):
+        self.isc_dict[key] = value
+
+    def keys(self):
+        return self.isc_dict.keys()
+    
+    def values(self):
+        return self.isc_dict.values()
+    
+    def items(self):
+        return self.isc_dict.items()
+
+    @classmethod
+    def from_qdf(
+        cls,
+        qdf: QuantamentalDataFrame,
+        norm: bool = True,
+        **kwargs
+    ) -> "InformationStateChanges":
+        isc = cls(
+            min_period=qdf.real_date.min(), max_period=qdf.real_date.max()
+        )
+
         isc_dict, density_stats_df = create_delta_data(qdf, return_density_stats=True)
-        self.isc_dict: Dict[str, pd.DataFrame] = isc_dict
-        self.density_stats_df: pd.DataFrame = density_stats_df
-        self._min_period: pd.Timestamp = qdf["real_date"].min()
-        self._max_period: pd.Timestamp = qdf["real_date"].max()
-        if norm:
-            self.calculate_score(**kwargs)
 
-        return self
+        isc.isc_dict = isc_dict
+        isc.density_stats_df = density_stats_df
+
+        if norm:
+            isc.calculate_score(**kwargs)
+    
+        return isc
 
     def to_qdf(
         self,
@@ -524,12 +550,6 @@ class InformationStateChanges(object):
             metrics=metrics,
         )
 
-    @staticmethod
-    def from_qdf(
-        qdf: QuantamentalDataFrame, norm: bool = True, **kwargs
-    ) -> "InformationStateChanges":
-        isc = InformationStateChanges().init(qdf, norm=norm, **kwargs)
-        return isc
 
     def temporal_aggregator_period(
         self,
