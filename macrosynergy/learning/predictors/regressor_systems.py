@@ -466,7 +466,7 @@ class RidgeRegressionSystem(BaseRegressionSystem):
     :param <float> tol: The tolerance for termination. Default is 1e-4.
     :param <str> solver: Solver to use in the computational routines. Options are
         'auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga' and 'lbfgs'.
-        Default is 'lsqr'.
+        Default is 'lsqr'. If `positive` is True, the solver must be 'lbfgs' or 'auto'.
     :param <int> min_xs_samples: The minimum number of samples required in a given 
         cross-section for a regression model to be fit for that cross-section.
         If `data_freq` is None, this parameter is specified in units of the underlying
@@ -579,6 +579,10 @@ class RidgeRegressionSystem(BaseRegressionSystem):
         ]:
             raise ValueError(
                 "solver must be one of 'auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga' or 'lbfgs'."
+            )
+        if positive and solver not in ["lbfgs", "auto"]:
+            raise ValueError(
+                "solver must be one of 'lbfgs' or 'auto' when positive=True."
             )
 
 
