@@ -337,8 +337,7 @@ def sparse_to_dense(
     min_period: pd.Timestamp,
     max_period: pd.Timestamp,
     postfix: str = None,
-    add_eop: bool = True,
-    add_grading: bool = True,
+    metrics: List[str] = ["eop", "grading"],
 ) -> pd.DataFrame:
     # TODO store real_date min and max in object...
     dtrange = pd.date_range(
@@ -352,18 +351,14 @@ def sparse_to_dense(
     tdf = _remove_insignificant_values(tdf, threshold=1e-12)
 
     sm_qdfs: List[QuantamentalDataFrame] = [ticker_df_to_qdf(tdf)]
-    for add_bool, metric_name in zip(
-        [add_eop, add_grading],
-        ["eop", "grading"],
-    ):
-        if add_bool:
-            wdf = _get_metric_df_from_isc(
-                isc=isc, metric=metric_name, date_range=dtrange, fill="ffill"
-            )
-            sm_qdfs.append(ticker_df_to_qdf(wdf, metric=metric_name))
+    for metric_name in metrics:
+        wdf = _get_metric_df_from_isc(
+            isc=isc, metric=metric_name, date_range=dtrange, fill="ffill"
+        )
+        sm_qdfs.append(ticker_df_to_qdf(wdf, metric=metric_name))
 
     qdf: QuantamentalDataFrame = concat_single_metric_qdfs(sm_qdfs)
-    if add_eop:
+    if "eop" in metrics:
         qdf["eop_lag"] = (qdf["real_date"] - qdf["eop"]).dt.days
 
     if postfix:
@@ -476,5 +471,75 @@ def temporal_aggregator_period(
     # return dfa[["real_date", "cid", "xcat", "csum"]].rename(columns={"csum": "value"})
 
 
-if __name__ == "__main__":
-    ...
+class InformationStateChanges(object):
+
+    def __init__(self, **kwargs):
+        self.isc_dict: Dict[str, pd.DataFrame] = None
+        self.density_stats_df: pd.DataFrame = None
+        self._min_period: pd.Timestamp = None
+        self._max_period: pd.Timestamp = None
+
+    def init(self, qdf: QuantamentalDataFrame, norm: bool = True, **kwargs):
+        if not isinstance(qdf, QuantamentalDataFrame):
+            raise ValueError("`qdf` must be a QuantamentalDataFrame")
+        isc_dict, density_stats_df = create_delta_data(qdf, return_density_stats=True)
+        self.isc_dict: Dict[str, pd.DataFrame] = isc_dict
+        self.density_stats_df: pd.DataFrame = density_stats_df
+        self._min_period: pd.Timestamp = qdf["real_date"].min()
+        self._max_period: pd.Timestamp = qdf["real_date"].max()
+        if norm:
+            self.calculate_score(**kwargs)
+
+    def to_dense(
+        self,
+        value_column: str = "value",
+        postfix: str = None,
+        metrics: List[str] = ["eop", "grading"],
+    ) -> pd.DataFrame:
+        return sparse_to_dense(
+            isc=self.isc_dict,
+            value_column=value_column,
+            min_period=self._min_period,
+            max_period=self._max_period,
+            postfix=postfix,
+            metrics=metrics,
+        )
+
+    @staticmethod
+    def from_qdf(qdf: QuantamentalDataFrame, **kwargs) -> "InformationStateChanges":
+        return InformationStateChanges(qdf=qdf, **kwargs)
+
+    def temporal_aggregator_period(
+        self,
+        winsorise: int = 10,
+        start: Optional[pd.Timestamp] = None,
+        end: Optional[pd.Timestamp] = None,
+    ) -> pd.DataFrame:
+        return temporal_aggregator_period(
+            isc=self.isc_dict,
+            start=start or self._min_period,
+            end=end or self._max_period,
+            winsorise=winsorise,
+        )
+
+    def calculate_score(
+        self,
+        std: str = "std",
+        halflife: int = None,
+        min_periods: int = 10,
+        isc_version: int = 0,
+        custom_method: Optional[Callable] = None,
+        custom_method_kwargs: Dict = {},
+    ) -> Dict[str, pd.DataFrame]:
+        
+        self.isc_dict = calculate_score_on_sparse_indicator(
+            isc=self.isc_dict,
+            std=std,
+            halflife=halflife,
+            min_periods=min_periods,
+            isc_version=isc_version,
+            custom_method=custom_method,
+            custom_method_kwargs=custom_method_kwargs,
+        )
+        
+        return self.isc_dict
