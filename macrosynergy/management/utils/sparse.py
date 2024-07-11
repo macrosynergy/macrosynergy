@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Union
+from typing import Dict, List, Any, Union, Optional
 from numbers import Number
 
 import pandas as pd
