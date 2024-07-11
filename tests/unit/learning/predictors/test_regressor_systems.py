@@ -1035,7 +1035,6 @@ class TestRidgeRegressionSystem(unittest.TestCase):
                 np.testing.assert_almost_equal(model.intercept_, system_intercepts[cid], decimal=3)
                 np.testing.assert_almost_equal(model.coef_, system_coefs[cid],decimal=3)
 
-
 class TestCorrelationVolatilitySystem(unittest.TestCase):
     @classmethod
     def setUpClass(self):
@@ -1076,11 +1075,11 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
     def test_check_init_params(self):
         # Test default params
         model = CorrelationVolatilitySystem()
-        self.assertEqual(model.correlation_lookback, None)
+        self.assertEqual(model.correlation_lookback, "full")
         self.assertEqual(model.correlation_type, "pearson")
-        self.assertEqual(model.volatility_lookback, 21)
+        self.assertEqual(model.volatility_lookback, "full")
         self.assertEqual(model.volatility_window_type, "rolling")
-        self.assertEqual(model.data_freq, "unadjusted")
+        self.assertTrue(model.data_freq is None)
         self.assertEqual(model.min_xs_samples, 2)
 
         # Test custom params
