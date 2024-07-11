@@ -510,6 +510,9 @@ class InformationStateChanges(object):
             metrics=metrics,
         )
 
+    def to_qdf(self, **kwargs) -> QuantamentalDataFrame:
+        return self.to_dense(**kwargs)
+
     @staticmethod
     def from_qdf(
         qdf: QuantamentalDataFrame, norm: bool = True, **kwargs
