@@ -314,29 +314,36 @@ def sparse_to_dense(
 
 
 def temporal_aggregator_exponential(
-    df: pd.DataFrame, halflife: int = 5, cid: str = "USD", winsorise: float = None
+    df: pd.DataFrame,
+    halflife: int = 5,
+    winsorise: float = None,
 ) -> pd.DataFrame:
-    p = df.pivot(index="real_date", columns="xcat", values="value")
+    tdf: pd.DataFrame = qdf_to_ticker_df(df)
     if winsorise:
-        p = p.clip(lower=-winsorise, upper=winsorise)
-    # Exponential moving average weights (check implementation: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.ewm.html)
-    dfa = p.ewm(halflife=halflife).mean().stack().to_frame("value").reset_index()
-    dfa["xcat"] += f"EWM{halflife:d}D"
-    dfa["cid"] = cid
-    return dfa
+        tdf = tdf.clip(lower=-winsorise, upper=winsorise)
+    # Exponential moving average weights
+    # (check implementation: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.ewm.html)
+
+    tdf = tdf.ewm(halflife=halflife).mean()
+
+    qdf: QuantamentalDataFrame = ticker_df_to_qdf(tdf)
+    qdf["xcat"] += f"EWM{halflife:d}D"
+    return qdf
 
 
 def temporal_aggregator_mean(
-    df: pd.DataFrame, window: int = 21, cid: str = "USD", winsorise: float = None
+    df: QuantamentalDataFrame,
+    window: int = 21,
+    winsorise: float = None,
 ) -> pd.DataFrame:
-    p = df.pivot(index="real_date", columns="xcat", values="value")
+    tdf: pd.DataFrame = qdf_to_ticker_df(df)
     if winsorise:
-        p = p.clip(lower=-winsorise, upper=winsorise)
-    # Exponential moving average weights (check implementation: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.ewm.html)
-    dfa = p.rolling(window=window).mean().stack().to_frame("value").reset_index()
-    dfa["xcat"] += f"MA{window:d}D"
-    dfa["cid"] = cid
-    return dfa
+        tdf = tdf.clip(lower=-winsorise, upper=winsorise)
+
+    tdf = tdf.rolling(window=window).mean()
+    qdf: QuantamentalDataFrame = ticker_df_to_qdf(tdf)
+    qdf["xcat"] += f"MA{window:d}D"
+    return qdf
 
 
 # Aggreagte per period (temporal aggregator)
