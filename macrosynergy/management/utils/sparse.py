@@ -495,7 +495,7 @@ class InformationStateChanges(object):
 
         return self
 
-    def to_dense(
+    def to_qdf(
         self,
         value_column: str = "value",
         postfix: str = None,
