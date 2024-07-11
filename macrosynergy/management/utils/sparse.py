@@ -163,33 +163,38 @@ def calculate_score_on_sparse_indicator(
     # TODO adjust score by eop_lag (business days?) to get a native frequency...
     # TODO convert below operation into a function call?
     # Operations on a per key in data dictionary
+    name = "std"
     for key, v in isc.items():
         mask_rel = v["version"] == 0
         s = v.loc[mask_rel, "diff"]
         # TODO exponential weights (requires knowledge of frequency...)
         if std == "std":
-            std = s.expanding(min_periods=10).std()
+            std = s.expanding(min_periods=min_periods).std()
         elif std == "abs":
-            std = s.abs().expanding(min_periods=10).mean()
+            name += "_abs"
+            std = s.abs().expanding(min_periods=min_periods).mean()
         elif std == "exp":
+            name += "_exp"
             assert halflife is not None and halflife > 0, "halflife must be defined"
             std = s.ewm(halflife=halflife).std()
         elif std == "exp_abs":
+            name += "_exp_abs"
             assert halflife is not None and halflife > 0, "halflife must be defined"
             std = s.abs().ewm(halflife=halflife).mean()
         else:
             raise ValueError(f"std {std} not supported")
         
-        columns = [kk for kk in v.columns if kk != "std"]
+        # Check column of std doesn't exist?
+        columns = [kk for kk in v.columns if kk != name]
         v = pd.merge(
             left=v[columns],
-            right=std.to_frame("std"),
+            right=std.to_frame(name),
             how="left",
             left_index=True,
             right_index=True,
         )
-        v["std"] = v["std"].ffill()
-        v["zscore"] = v["diff"] / v["std"]
+        v[name] = v[name].ffill()
+        v["zscore"] = v["diff"] / v[name]
 
         isc[key] = v
 
