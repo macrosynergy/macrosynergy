@@ -183,6 +183,7 @@ def calculate_score_on_sparse_indicator(
     halflife: int = None,
     min_periods: int = 10,
     isc_version: int = 0,
+    iis: bool = False,
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
 ):
@@ -235,6 +236,8 @@ def calculate_score_on_sparse_indicator(
             right_index=True,
         )
         v["std"] = v["std"].ffill()
+        if iis:
+            v["std"] = v["std"].bfill()
         v["zscore"] = v["diff"] / v["std"]
 
         isc[key] = v
@@ -490,6 +493,8 @@ class InformationStateChanges(object):
         if norm:
             self.calculate_score(**kwargs)
 
+        return self
+
     def to_dense(
         self,
         value_column: str = "value",
@@ -506,8 +511,11 @@ class InformationStateChanges(object):
         )
 
     @staticmethod
-    def from_qdf(qdf: QuantamentalDataFrame, **kwargs) -> "InformationStateChanges":
-        return InformationStateChanges(qdf=qdf, **kwargs)
+    def from_qdf(
+        qdf: QuantamentalDataFrame, norm: bool = True, **kwargs
+    ) -> "InformationStateChanges":
+        isc = InformationStateChanges().init(qdf, norm=norm, **kwargs)
+        return isc
 
     def temporal_aggregator_period(
         self,
@@ -531,7 +539,7 @@ class InformationStateChanges(object):
         custom_method: Optional[Callable] = None,
         custom_method_kwargs: Dict = {},
     ) -> Dict[str, pd.DataFrame]:
-        
+
         self.isc_dict = calculate_score_on_sparse_indicator(
             isc=self.isc_dict,
             std=std,
@@ -541,5 +549,5 @@ class InformationStateChanges(object):
             custom_method=custom_method,
             custom_method_kwargs=custom_method_kwargs,
         )
-        
+
         return self.isc_dict
