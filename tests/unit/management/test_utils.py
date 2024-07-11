@@ -7,10 +7,12 @@ import numpy as np
 from typing import List, Tuple, Dict, Union, Set, Any
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.download.jpmaqs import timeseries_to_qdf, construct_expressions
 from macrosynergy.management.utils import (
     get_cid,
     get_xcat,
     downsample_df_on_real_date,
+    concat_single_metric_qdfs,
     get_dict_max_depth,
     rec_search_dict,
     is_valid_iso_date,
@@ -31,6 +33,7 @@ from macrosynergy.management.utils import (
 from macrosynergy.management.constants import FREQUENCY_MAP
 from macrosynergy.management.utils.math import expanding_mean_with_nan
 from tests.simulate import make_qdf
+from tests.unit.download.mock_helpers import mock_request_wrapper
 
 
 class TestFunctions(unittest.TestCase):
@@ -407,6 +410,75 @@ class TestFunctions(unittest.TestCase):
         df: pd.DataFrame = test_df.copy()
         rdf: pd.DataFrame = ticker_df_to_qdf(df=df)
         self.assertTrue(df.equals(test_df))
+
+        # pass an integer as a metric
+        df: pd.DataFrame = test_df.copy()
+        with self.assertRaises(TypeError):
+            ticker_df_to_qdf(df=df, metric=1)
+
+        # test the metric acctually works
+        df: pd.DataFrame = test_df.copy()
+        rdf: pd.DataFrame = ticker_df_to_qdf(df=df, metric="hibiscus")
+        self.assertTrue(
+            set(rdf.columns) - set(QuantamentalDataFrame.IndexCols) == set(["hibiscus"])
+        )
+
+    def test_concat_single_metric_qdfs(self):
+
+        with self.assertRaises(TypeError):
+            concat_single_metric_qdfs("")
+
+        with self.assertRaises(ValueError):
+            concat_single_metric_qdfs([], errors=True)
+
+        cids: List[str] = ["GBP", "EUR", "CAD"]
+        xcats: List[str] = ["FXXR_NSA", "EQXR_NSA"]
+        metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+        expressions = construct_expressions(cids=cids, xcats=xcats, metrics=metrics)
+        dicts_lists = mock_request_wrapper(
+            dq_expressions=expressions,
+            start_date="2019-01-01",
+            end_date="2019-01-31",
+        )
+
+        qdfs = [timeseries_to_qdf(dicts) for dicts in dicts_lists]
+        combined = concat_single_metric_qdfs(qdfs)
+        self.assertIsInstance(combined, QuantamentalDataFrame)
+
+        bad_qdfs = qdfs.copy()
+        bad_qdfs[0]["newcol"] = 1
+        with self.assertRaises(ValueError):
+            concat_single_metric_qdfs(bad_qdfs)
+
+        ## different metrics
+
+        test_exprs = [
+            "DB(JPMAQS,GBP_FXXR_NSA,value)",
+            "DB(JPMAQS,GBP_EQXR_NSA,grading)",
+        ]
+        dicts_lists = mock_request_wrapper(
+            dq_expressions=test_exprs,
+            start_date="2019-01-01",
+            end_date="2019-01-31",
+        )
+
+        qdfs = [timeseries_to_qdf(dicts) for dicts in dicts_lists]
+        combined = concat_single_metric_qdfs(qdfs)
+        self.assertIsInstance(combined, QuantamentalDataFrame)
+        self.assertEqual(set(combined["xcat"].unique()), set(["FXXR_NSA", "EQXR_NSA"]))
+        self.assertEqual(set(combined["cid"].unique()), set(["GBP"]))
+        metrics = list(set(combined.columns) - set(QuantamentalDataFrame.IndexCols))
+        self.assertEqual(set(metrics), set(["value", "grading"]))
+
+        for xcat in ["FXXR_NSA", "EQXR_NSA"]:
+            tgt = "grading" if xcat == "FXXR_NSA" else "value"
+            dfn = combined[combined["xcat"] == xcat].copy()
+            self.assertTrue(dfn[tgt].isna().all())
+
+        with self.assertRaises(TypeError):
+            concat_single_metric_qdfs(qdfs + [None], errors="raise")
+
+        self.assertIsNone(concat_single_metric_qdfs([None, None], errors="ignore"))
 
     def test_get_cid(self):
         good_cases: List[Tuple[str, str]] = [

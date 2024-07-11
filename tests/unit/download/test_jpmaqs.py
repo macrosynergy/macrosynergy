@@ -686,58 +686,6 @@ class TestFunctions(unittest.TestCase):
             expression = dictx["attributes"][0]["expression"]
             _test_column(timeseries_to_column(dictx), expression)
 
-    def test_concat_single_metric_qdfs(self):
-
-        with self.assertRaises(TypeError):
-            concat_single_metric_qdfs("")
-
-        with self.assertRaises(ValueError):
-            concat_single_metric_qdfs([], errors=True)
-
-        dicts_lists = mock_request_wrapper(
-            dq_expressions=self.expressions,
-            start_date="2019-01-01",
-            end_date="2019-01-31",
-        )
-
-        qdfs = [timeseries_to_qdf(dicts) for dicts in dicts_lists]
-        combined = concat_single_metric_qdfs(qdfs)
-        self.assertIsInstance(combined, QuantamentalDataFrame)
-
-        bad_qdfs = qdfs.copy()
-        bad_qdfs[0]["newcol"] = 1
-        with self.assertRaises(ValueError):
-            concat_single_metric_qdfs(bad_qdfs)
-
-        ## different metrics
-
-        test_exprs = [
-            "DB(JPMAQS,GBP_FXXR_NSA,value)",
-            "DB(JPMAQS,GBP_EQXR_NSA,grading)",
-        ]
-        dicts_lists = mock_request_wrapper(
-            dq_expressions=test_exprs,
-            start_date="2019-01-01",
-            end_date="2019-01-31",
-        )
-
-        qdfs = [timeseries_to_qdf(dicts) for dicts in dicts_lists]
-        combined = concat_single_metric_qdfs(qdfs)
-        self.assertIsInstance(combined, QuantamentalDataFrame)
-        self.assertEqual(set(combined["xcat"].unique()), set(["FXXR_NSA", "EQXR_NSA"]))
-        self.assertEqual(set(combined["cid"].unique()), set(["GBP"]))
-        metrics = list(set(combined.columns) - set(QuantamentalDataFrame.IndexCols))
-        self.assertEqual(set(metrics), set(["value", "grading"]))
-
-        for xcat in ["FXXR_NSA", "EQXR_NSA"]:
-            tgt = "grading" if xcat == "FXXR_NSA" else "value"
-            dfn = combined[combined["xcat"] == xcat].copy()
-            self.assertTrue(dfn[tgt].isna().all())
-
-        with self.assertRaises(TypeError):
-            concat_single_metric_qdfs(qdfs + [None], errors="raise")
-
-        self.assertIsNone(concat_single_metric_qdfs([None, None], errors="ignore"))
 
     def test_concat_column_dfs(self):
         dicts_list = mock_request_wrapper(
