@@ -209,9 +209,9 @@ def calculate_score_on_sparse_indicator(
     method_kwargs: Dict[str, Any] = dict(
         min_periods=min_periods, halflife=halflife, **custom_method_kwargs
     )
-
+    # if not 0, then use all versions
     for key, v in isc.items():
-        mask_rel = v["version"] == isc_version
+        mask_rel = (v["version"] == 0) if isc_version == 0 else (v["version"] >= 0)
         s = v.loc[mask_rel, "diff"]
         # TODO exponential weights (requires knowledge of frequency...)
 
