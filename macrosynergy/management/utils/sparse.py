@@ -143,8 +143,22 @@ def create_delta_data(
 
 
 def calculate_score_on_sparse_indicator(
-    isc: Dict[str, pd.DataFrame], weight: str = None
+        isc: Dict[str, pd.DataFrame],
+        std: str = "std",
+        halflife: int = None,
+        min_periods: int = 10
 ):
+    """Calculate score on sparse indicator
+
+    :param isc: InformationStateChanges
+    :param std: str default "std" (quadratic loss function i.e. standard deviations)
+        alternatives are "abs" for linex loss function (mean absolute deviations),
+        exp for exponentially weighted quadratic loss function (requires halflife to be specified),
+        and exp_abs for Linex loss function (mean absolute deviations exponentially weighted).
+    :param halflife: int default None
+
+
+    """
     # TODO make into a method on InformationStateChanges?
     # TODO adjust score by eop_lag (business days?) to get a native frequency...
     # TODO convert below operation into a function call?
@@ -153,8 +167,19 @@ def calculate_score_on_sparse_indicator(
         mask_rel = v["version"] == 0
         s = v.loc[mask_rel, "diff"]
         # TODO exponential weights (requires knowledge of frequency...)
-        std = s.expanding(min_periods=10).std()
-
+        if std == "std":
+            std = s.expanding(min_periods=10).std()
+        elif std == "abs":
+            std = s.abs().expanding(min_periods=10).mean()
+        elif std == "exp":
+            assert halflife is not None and halflife > 0, "halflife must be defined"
+            std = s.ewm(halflife=halflife).std()
+        elif std == "exp_abs":
+            assert halflife is not None and halflife > 0, "halflife must be defined"
+            std = s.abs().ewm(halflife=halflife).mean()
+        else:
+            raise ValueError(f"std {std} not supported")
+        
         columns = [kk for kk in v.columns if kk != "std"]
         v = pd.merge(
             left=v[columns],
@@ -165,19 +190,7 @@ def calculate_score_on_sparse_indicator(
         )
         v["std"] = v["std"].ffill()
         v["zscore"] = v["diff"] / v["std"]
-        # TODO write as function (nominator and denominator)
-        # Weighted according to changes in information states (not underlying frequency)
 
-        # TODO print options
-        # changes = v.index.diff()
-        # print(
-        #     f"{key:30s} days between releases: {changes.min().days:4d}"
-        #     f" to {changes.max().days:4d} - median {changes.median().days:4d},"
-        #     f" linear {changes.median().days/365.25:.4f}, square root "
-        #     f"{np.sqrt(changes.median().days/365.25):.4f}"
-        # )
-        v["zscore_norm_linear"] = v["zscore"] * v.index.diff().days / 365.24
-        v["zscore_norm_squared"] = v["zscore"] * np.sqrt(v.index.diff().days / 365.24)
         isc[key] = v
 
     # TODO return [1] change, and [2] volatility estimate (mainly estimation of volatility for changes...)
