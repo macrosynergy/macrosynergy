@@ -358,76 +358,61 @@ def temporal_aggregator_period(
 
     TODO add argument to choose how many periods to aggregate over.
     """
-    pz = (
-        pd.concat(
-            [v["zscore_norm_squared"].to_frame(k) for k, v in isc.items()]
-            + [
-                pd.DataFrame(
-                    data=0,
-                    index=pd.date_range(
-                        start=start,
-                        end=end,
-                        freq="B",
-                        inclusive="both",
-                    ),
-                    columns=["rdate"],
-                )
-            ],
-            axis=1,
-        )
-        .fillna(0)
-        .drop(["rdate"], axis=1)
+
+    dt_range = pd.date_range(start=start, end=end, freq="B", inclusive="both")
+    tdf: pd.DataFrame = _get_metric_df_from_isc(
+        isc=isc,
+        metric="zscore_norm_squared",
+        date_range=dt_range,
+        fill=0,
     )
-
     # Winsorise and remove insignificant values
-    pz = (pz / (pz.cumsum(axis=0).abs() > 1e-12).astype(int)).clip(lower=-10, upper=10)
-
-    pz.columns.name = "ticker"
-    pz.index.name = "real_date"
+    tdf = _remove_insignificant_values(tdf, threshold=1e-12)
+    tdf = tdf.clip(lower=-10, upper=10)
 
     # Map out the eop dates
-    p_eop = (
-        pd.concat(
-            [v["eop"].to_frame(k) for k, v in isc.items()]
-            + [
-                pd.DataFrame(
-                    data=0,
-                    index=pd.date_range(
-                        start=start,
-                        end=end,
-                        freq="B",
-                        inclusive="both",
-                    ),
-                    columns=["rdate"],
-                )
-            ],
-            axis=1,
-        )
-        .ffill()
-        .drop(["rdate"], axis=1)
+    p_eop: pd.DataFrame = _get_metric_df_from_isc(
+        isc=isc,
+        metric="eop",
+        date_range=dt_range,
+        fill="ffill",
     )
-    p_eop.index.name = "real_date"
-    p_eop.columns.name = "ticker"
 
-    # TODO use zscore instead fo zscore_norm_linear!
-    dfa = (
-        pd.merge(
-            left=pz.stack().to_frame("value").reset_index(),
-            right=p_eop.stack().to_frame("eop").reset_index(),
-            how="left",
-            on=["real_date", "ticker"],
-        )
-        .sort_values(by=["ticker", "real_date"])
-        .rename(columns={"ticker": "xcat"})
+    qdf: QuantamentalDataFrame = concat_single_metric_qdfs(
+        [
+            ticker_df_to_qdf(tdf),
+            ticker_df_to_qdf(p_eop, metric="eop"),
+        ]
     )
-    dfa["cumsum"] = dfa.groupby(["xcat", "eop"])["value"].cumsum()
-    dfa["cid"] = "USD"
 
-    # Aggregate (cumulatively) on a per period basis
-    dfa["csum"] = dfa.groupby(["xcat", "eop"])["value"].cumsum()
-    dfa["xcat"] += "_NCSUM"
+    # group by cid, xcat, eop
+    qdf["value"] = (
+        qdf.groupby(["cid", "xcat", "eop"])["value"].cumsum().reset_index(drop=True)
+    )
+    qdf["xcat"] += "_NCSUM"
+    return qdf  # TODO: Check ?
 
-    return dfa[["real_date", "cid", "xcat", "csum"]].rename(columns={"csum": "value"})
+    # rename c
+
+    # # TODO use zscore instead fo zscore_norm_linear!
+    # dfa = (
+    #     pd.merge(
+    #         left=tdf.stack().to_frame("value").reset_index(),
+    #         right=p_eop.stack().to_frame("eop").reset_index(),
+    #         how="left",
+    #         on=["real_date", "ticker"],
+    #     )
+    #     .sort_values(by=["ticker", "real_date"])
+    #     .rename(columns={"ticker": "xcat"})
+    # )
+    # dfa["cumsum"] = dfa.groupby(["xcat", "eop"])["value"].cumsum()
+    # dfa["cid"] = "USD"
+
+    # # Aggregate (cumulatively) on a per period basis
+    # dfa["csum"] = dfa.groupby(["xcat", "eop"])["value"].cumsum()
+    # dfa["xcat"] += "_NCSUM"
+
+    # return dfa[["real_date", "cid", "xcat", "csum"]].rename(columns={"csum": "value"})
 
 
 if __name__ == "__main__":
