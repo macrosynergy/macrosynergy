@@ -13,48 +13,6 @@ from macrosynergy.management.types import QuantamentalDataFrame
 import warnings
 
 
-# class InformationStateChanges(object):
-#     """
-#     # Functions for operations on sparse data
-#     # class SparseIndicators(Dict) ...:
-#     # """
-#     def __init__(self, values: Dict[str, pd.DataFrame] = dict()):
-#         # TODO store start and end dates per ticker...
-#         self.values: Dict[str, pd.DataFrame] = values
-
-#     @classmethod
-#     def from_tickers(cls, tickers: List[str]) -> "InformationStateChanges":
-#         return cls({ticker: pd.DataFrame for ticker in tickers})
-
-#     def __setitem__(self, item: str, value: pd.DataFrame):
-#         self.values[item] = value
-
-#     def __getitem__(self, item: str) -> pd.DataFrame:
-#         return self.values[item]
-
-#     def __setattr__(self, key: str, value: pd.DataFrame):
-#         self.values[key] = value
-
-#     def __getattr__(self, item) -> pd.DataFrame:
-#         return self.values[item]
-
-#     def __getstate__(self):
-#         return self.values
-
-#     def __setstate__(self, values: Dict[str, pd.DataFrame]):
-#         self.values = values
-
-#     def keys(self):
-#         return self.values.keys()
-
-#     def items(self):
-#         return self.values.items()
-
-#     def to_dense(self) -> pd.DataFrame:
-#         # TODO convert to QuantamentalDataFrame
-#         pass
-
-
 def _get_diff_data(
     ticker: str,
     p_value: pd.DataFrame,
@@ -150,7 +108,7 @@ class SubscriptableMeta(type):
             raise KeyError(f"{item} is not a valid method name")
 
 
-class StandardDeviationMethod(metaclass=SubscriptableMeta):
+class StandardDeviationMethods(metaclass=SubscriptableMeta):
     @staticmethod
     def std(s: pd.Series, min_periods: int, **kwargs) -> pd.Series:
         return s.expanding(min_periods=min_periods).std()
@@ -170,7 +128,7 @@ class StandardDeviationMethod(metaclass=SubscriptableMeta):
 
 CALC_SCORE_CUSTOM_METHOD_ERR_MSG = (
     "Method {std} not supported. "
-    f"Supported methods are: {dir(StandardDeviationMethod)}. \n"
+    f"Supported methods are: {dir(StandardDeviationMethods)}. \n"
     "Alternatively, provide a custom method with signature "
     "`custom_method(s: pd.Series, **kwargs) -> pd.Series` "
     "using the `custom_method` and `custom_method_kwargs` arguments."
@@ -183,6 +141,7 @@ def calculate_score_on_sparse_indicator(
     halflife: int = None,
     min_periods: int = 10,
     isc_version: int = 0,
+    iis: bool = False,
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
 ):
@@ -210,10 +169,10 @@ def calculate_score_on_sparse_indicator(
             raise TypeError("`custom_method_kwargs` must be a dictionary")
         curr_method = custom_method
     else:
-        if not hasattr(StandardDeviationMethod, std):
+        if not hasattr(StandardDeviationMethods, std):
             raise ValueError(CALC_SCORE_CUSTOM_METHOD_ERR_MSG.format(std=std))
         # curr_method = getattr(StandardDeviationMethod, std)
-        curr_method = StandardDeviationMethod[std]
+        curr_method = StandardDeviationMethods[std]
 
     method_kwargs: Dict[str, Any] = dict(
         min_periods=min_periods, halflife=halflife, **custom_method_kwargs
@@ -235,6 +194,8 @@ def calculate_score_on_sparse_indicator(
             right_index=True,
         )
         v["std"] = v["std"].ffill()
+        if iis:
+            v["std"] = v["std"].bfill()
         v["zscore"] = v["diff"] / v["std"]
 
         isc[key] = v
@@ -337,8 +298,7 @@ def sparse_to_dense(
     min_period: pd.Timestamp,
     max_period: pd.Timestamp,
     postfix: str = None,
-    add_eop: bool = True,
-    add_grading: bool = True,
+    metrics: List[str] = ["eop", "grading"],
 ) -> pd.DataFrame:
     # TODO store real_date min and max in object...
     dtrange = pd.date_range(
@@ -352,18 +312,14 @@ def sparse_to_dense(
     tdf = _remove_insignificant_values(tdf, threshold=1e-12)
 
     sm_qdfs: List[QuantamentalDataFrame] = [ticker_df_to_qdf(tdf)]
-    for add_bool, metric_name in zip(
-        [add_eop, add_grading],
-        ["eop", "grading"],
-    ):
-        if add_bool:
-            wdf = _get_metric_df_from_isc(
-                isc=isc, metric=metric_name, date_range=dtrange, fill="ffill"
-            )
-            sm_qdfs.append(ticker_df_to_qdf(wdf, metric=metric_name))
+    for metric_name in metrics:
+        wdf = _get_metric_df_from_isc(
+            isc=isc, metric=metric_name, date_range=dtrange, fill="ffill"
+        )
+        sm_qdfs.append(ticker_df_to_qdf(wdf, metric=metric_name))
 
     qdf: QuantamentalDataFrame = concat_single_metric_qdfs(sm_qdfs)
-    if add_eop:
+    if "eop" in metrics:
         qdf["eop_lag"] = (qdf["real_date"] - qdf["eop"]).dt.days
 
     if postfix:
@@ -476,5 +432,135 @@ def temporal_aggregator_period(
     # return dfa[["real_date", "cid", "xcat", "csum"]].rename(columns={"csum": "value"})
 
 
-if __name__ == "__main__":
-    ...
+def _calculate_score_on_sparse_indicator_for_class(
+    cls: "InformationStateChanges",
+    std: str = "std",
+    halflife: int = None,
+    min_periods: int = 10,
+    isc_version: int = 0,
+    iis: bool = False,
+    custom_method: Optional[Callable] = None,
+    custom_method_kwargs: Dict = {},
+):
+    assert isinstance(
+        cls, InformationStateChanges
+    ), "cls must be an InformationStateChanges object"
+    assert hasattr(cls, "isc_dict") and isinstance(
+        cls.isc_dict, dict
+    ), "InformationStateChanges object not initialized"
+
+    curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
+    if custom_method is not None:
+        if not callable(custom_method):
+            raise TypeError("`custom_method` must be a callable")
+        if not isinstance(custom_method_kwargs, dict):
+            raise TypeError("`custom_method_kwargs` must be a dictionary")
+        curr_method = custom_method
+    else:
+        if not hasattr(StandardDeviationMethods, std):
+            raise ValueError(CALC_SCORE_CUSTOM_METHOD_ERR_MSG.format(std=std))
+        # curr_method = getattr(StandardDeviationMethod, std)
+        curr_method = StandardDeviationMethods[std]
+
+    method_kwargs: Dict[str, Any] = dict(
+        min_periods=min_periods, halflife=halflife, **custom_method_kwargs
+    )
+    # if not 0, then use all versions
+    for key, v in cls.isc_dict.items():
+        mask_rel = (v["version"] == 0) if isc_version == 0 else (v["version"] >= 0)
+        s = v.loc[mask_rel, "diff"]
+
+        result: pd.Series = curr_method(s, **method_kwargs)
+
+        columns = [kk for kk in v.columns if kk != "std"]
+        v = pd.merge(
+            left=v[columns],
+            right=result.to_frame("std"),
+            how="left",
+            left_index=True,
+            right_index=True,
+        )
+        v["std"] = v["std"].ffill()
+        if iis:
+            v["std"] = v["std"].bfill()
+        v["zscore"] = v["diff"] / v["std"]
+
+        cls.isc_dict[key] = v
+
+
+class InformationStateChanges(object):
+
+    def __init__(self, **kwargs):
+        self.isc_dict: Dict[str, pd.DataFrame] = None
+        self.density_stats_df: pd.DataFrame = None
+        self._min_period: pd.Timestamp = None
+        self._max_period: pd.Timestamp = None
+
+    def init(self, qdf: QuantamentalDataFrame, norm: bool = True, **kwargs):
+        if not isinstance(qdf, QuantamentalDataFrame):
+            raise ValueError("`qdf` must be a QuantamentalDataFrame")
+        isc_dict, density_stats_df = create_delta_data(qdf, return_density_stats=True)
+        self.isc_dict: Dict[str, pd.DataFrame] = isc_dict
+        self.density_stats_df: pd.DataFrame = density_stats_df
+        self._min_period: pd.Timestamp = qdf["real_date"].min()
+        self._max_period: pd.Timestamp = qdf["real_date"].max()
+        if norm:
+            self.calculate_score(**kwargs)
+
+        return self
+
+    def to_qdf(
+        self,
+        value_column: str = "value",
+        postfix: str = None,
+        metrics: List[str] = ["eop", "grading"],
+    ) -> pd.DataFrame:
+        return sparse_to_dense(
+            isc=self.isc_dict,
+            value_column=value_column,
+            min_period=self._min_period,
+            max_period=self._max_period,
+            postfix=postfix,
+            metrics=metrics,
+        )
+
+    @staticmethod
+    def from_qdf(
+        qdf: QuantamentalDataFrame, norm: bool = True, **kwargs
+    ) -> "InformationStateChanges":
+        isc = InformationStateChanges().init(qdf, norm=norm, **kwargs)
+        return isc
+
+    def temporal_aggregator_period(
+        self,
+        winsorise: int = 10,
+        start: Optional[pd.Timestamp] = None,
+        end: Optional[pd.Timestamp] = None,
+    ) -> pd.DataFrame:
+        return temporal_aggregator_period(
+            isc=self.isc_dict,
+            start=start or self._min_period,
+            end=end or self._max_period,
+            winsorise=winsorise,
+        )
+
+    def calculate_score(
+        self,
+        std: str = "std",
+        halflife: int = None,
+        min_periods: int = 10,
+        isc_version: int = 0,
+        iis: bool = False,
+        custom_method: Optional[Callable] = None,
+        custom_method_kwargs: Dict = {},
+    ):
+        _calculate_score_on_sparse_indicator_for_class(
+            cls=self,
+            std=std,
+            halflife=halflife,
+            min_periods=min_periods,
+            isc_version=isc_version,
+            iis=iis,
+            custom_method=custom_method,
+            custom_method_kwargs=custom_method_kwargs,
+        )
