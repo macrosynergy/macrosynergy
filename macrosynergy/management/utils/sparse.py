@@ -12,6 +12,7 @@ from macrosynergy.management.types import QuantamentalDataFrame
 
 import warnings
 
+
 def _get_diff_data(
     ticker: str,
     p_value: pd.DataFrame,
@@ -431,6 +432,62 @@ def temporal_aggregator_period(
     # return dfa[["real_date", "cid", "xcat", "csum"]].rename(columns={"csum": "value"})
 
 
+def _calculate_score_on_sparse_indicator_for_class(
+    cls: "InformationStateChanges",
+    std: str = "std",
+    halflife: int = None,
+    min_periods: int = 10,
+    isc_version: int = 0,
+    iis: bool = False,
+    custom_method: Optional[Callable] = None,
+    custom_method_kwargs: Dict = {},
+):
+    assert isinstance(
+        cls, InformationStateChanges
+    ), "cls must be an InformationStateChanges object"
+    assert hasattr(cls, "isc_dict") and isinstance(
+        cls.isc_dict, dict
+    ), "InformationStateChanges object not initialized"
+
+    curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
+    if custom_method is not None:
+        if not callable(custom_method):
+            raise TypeError("`custom_method` must be a callable")
+        if not isinstance(custom_method_kwargs, dict):
+            raise TypeError("`custom_method_kwargs` must be a dictionary")
+        curr_method = custom_method
+    else:
+        if not hasattr(StandardDeviationMethods, std):
+            raise ValueError(CALC_SCORE_CUSTOM_METHOD_ERR_MSG.format(std=std))
+        # curr_method = getattr(StandardDeviationMethod, std)
+        curr_method = StandardDeviationMethods[std]
+
+    method_kwargs: Dict[str, Any] = dict(
+        min_periods=min_periods, halflife=halflife, **custom_method_kwargs
+    )
+    # if not 0, then use all versions
+    for key, v in cls.isc_dict.items():
+        mask_rel = (v["version"] == 0) if isc_version == 0 else (v["version"] >= 0)
+        s = v.loc[mask_rel, "diff"]
+
+        result: pd.Series = curr_method(s, **method_kwargs)
+
+        columns = [kk for kk in v.columns if kk != "std"]
+        v = pd.merge(
+            left=v[columns],
+            right=result.to_frame("std"),
+            how="left",
+            left_index=True,
+            right_index=True,
+        )
+        v["std"] = v["std"].ffill()
+        if iis:
+            v["std"] = v["std"].bfill()
+        v["zscore"] = v["diff"] / v["std"]
+
+        cls.isc_dict[key] = v
+
+
 class InformationStateChanges(object):
 
     def __init__(self, **kwargs):
@@ -493,18 +550,17 @@ class InformationStateChanges(object):
         halflife: int = None,
         min_periods: int = 10,
         isc_version: int = 0,
+        iis: bool = False,
         custom_method: Optional[Callable] = None,
         custom_method_kwargs: Dict = {},
-    ) -> Dict[str, pd.DataFrame]:
-
-        self.isc_dict = calculate_score_on_sparse_indicator(
-            isc=self.isc_dict,
+    ):
+        _calculate_score_on_sparse_indicator_for_class(
+            cls=self,
             std=std,
             halflife=halflife,
             min_periods=min_periods,
             isc_version=isc_version,
+            iis=iis,
             custom_method=custom_method,
             custom_method_kwargs=custom_method_kwargs,
         )
-
-        return self.isc_dict
