@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Union, Optional
+from typing import Dict, List, Any, Union, Optional, Callable
 from numbers import Number
 
 import pandas as pd
@@ -142,17 +142,54 @@ def create_delta_data(
         return isc_dict
 
 
+class SubscriptableMeta(type):
+    def __getitem__(cls, item):
+        if hasattr(cls, item) and callable(getattr(cls, item)):
+            return getattr(cls, item)
+        else:
+            raise KeyError(f"{item} is not a valid method name")
+
+
+class StandardDeviationMethod(metaclass=SubscriptableMeta):
+    @staticmethod
+    def std(s: pd.Series, min_periods: int, **kwargs) -> pd.Series:
+        return s.expanding(min_periods=min_periods).std()
+
+    @staticmethod
+    def abs(s: pd.Series, min_periods: int, **kwargs) -> pd.Series:
+        return s.abs().expanding(min_periods=min_periods).mean()
+
+    @staticmethod
+    def exp(s: pd.Series, halflife: int, min_periods: int, **kwargs) -> pd.Series:
+        return s.ewm(halflife=halflife, min_periods=min_periods).std()
+
+    @staticmethod
+    def exp_abs(s: pd.Series, halflife: int, min_periods: int, **kwargs) -> pd.Series:
+        return s.abs().ewm(halflife=halflife, min_periods=min_periods).mean()
+
+
+CALC_SCORE_CUSTOM_METHOD_ERR_MSG = (
+    "Method {std} not supported. "
+    f"Supported methods are: {dir(StandardDeviationMethod)}. \n"
+    "Alternatively, provide a custom method with signature "
+    "`custom_method(s: pd.Series, **kwargs) -> pd.Series` "
+    "using the `custom_method` and `custom_method_kwargs` arguments."
+)
+
+
 def calculate_score_on_sparse_indicator(
-        isc: Dict[str, pd.DataFrame],
-        std_type: str = "std",
-        halflife: int = None,
-        min_periods: int = 12,
-        std_name: str = None
+    isc: Dict[str, pd.DataFrame],
+    std: str = "std",
+    halflife: int = None,
+    min_periods: int = 10,
+    isc_version: int = 0,
+    custom_method: Optional[Callable] = None,
+    custom_method_kwargs: Dict = {},
 ):
     """Calculate score on sparse indicator
 
     :param isc: InformationStateChanges
-    :param std_type: str default "std" (quadratic loss function i.e. standard deviations)
+    :param std: str default "std" (quadratic loss function i.e. standard deviations)
         alternatives are "abs" for linex loss function (mean absolute deviations),
         exp for exponentially weighted quadratic loss function (requires halflife to be specified),
         and exp_abs for Linex loss function (mean absolute deviations exponentially weighted).
@@ -164,39 +201,41 @@ def calculate_score_on_sparse_indicator(
     # TODO adjust score by eop_lag (business days?) to get a native frequency...
     # TODO convert below operation into a function call?
     # Operations on a per key in data dictionary
-    if std_name is None and std_type == "std":
-        std_name = "std"
-    elif std_name is None:
-        std_name = f"std_{std_type:s}"
 
+    curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
+    if custom_method is not None:
+        if not callable(custom_method):
+            raise TypeError("`custom_method` must be a callable")
+        if not isinstance(custom_method_kwargs, dict):
+            raise TypeError("`custom_method_kwargs` must be a dictionary")
+        curr_method = custom_method
+    else:
+        if not hasattr(StandardDeviationMethod, std):
+            raise ValueError(CALC_SCORE_CUSTOM_METHOD_ERR_MSG.format(std=std))
+        # curr_method = getattr(StandardDeviationMethod, std)
+        curr_method = StandardDeviationMethod[std]
+
+    method_kwargs: Dict[str, Any] = dict(
+        min_periods=min_periods, halflife=halflife, **custom_method_kwargs
+    )
+    # if not 0, then use all versions
     for key, v in isc.items():
-        mask_rel = v["version"] == 0
+        mask_rel = (v["version"] == 0) if isc_version == 0 else (v["version"] >= 0)
         s = v.loc[mask_rel, "diff"]
         # TODO exponential weights (requires knowledge of frequency...)
-        if std_type == "std":
-            std = s.expanding(min_periods=min_periods).std()
-        elif std_type == "abs":
-            std = s.abs().expanding(min_periods=min_periods).mean()
-        elif std_type == "exp":
-            assert halflife is not None and halflife > 0, "halflife must be defined"
-            std = s.ewm(halflife=halflife, min_periods=min_periods).std()
-        elif std_type == "exp_abs":
-            assert halflife is not None and halflife > 0, "halflife must be defined"
-            std = s.abs().ewm(halflife=halflife, min_periods=min_periods).mean()
-        else:
-            raise ValueError(f"std {std_type} not supported")
-        
-        # Check column of std doesn't exist?
-        columns = [kk for kk in v.columns if kk != std_name]
+
+        result: pd.Series = curr_method(s, **method_kwargs)
+
+        columns = [kk for kk in v.columns if kk != "std"]
         v = pd.merge(
             left=v[columns],
-            right=std.to_frame(std_name),
+            right=result.to_frame("std"),
             how="left",
             left_index=True,
             right_index=True,
         )
-        v[std_name] = v[std_name].ffill()
-        v["zscore"] = v["diff"] / v[std_name]
+        v["std"] = v["std"].ffill()
+        v["zscore"] = v["diff"] / v["std"]
 
         isc[key] = v
 
@@ -208,7 +247,7 @@ def calculate_score_on_sparse_indicator(
 def _infer_frequency_timeseries(eop_series: pd.Series) -> Optional[str]:
     diff = eop_series.diff().dropna()
     most_common = diff.mode().values[0]
-    frequency_mapping = {1: "B", 5: "W"}
+    frequency_mapping = {1: "D", 5: "W"}
 
     if most_common in frequency_mapping:
         return frequency_mapping[most_common]
@@ -223,7 +262,7 @@ def _infer_frequency_timeseries(eop_series: pd.Series) -> Optional[str]:
         if most_common in freq_range:
             return freq
 
-    return "B"
+    return "D"
 
 
 def infer_frequency(df: QuantamentalDataFrame) -> pd.Series:
@@ -231,9 +270,7 @@ def infer_frequency(df: QuantamentalDataFrame) -> pd.Series:
         raise ValueError("`df` must be a QuantamentalDataFrame")
     if not "eop_lag" in df.columns:
         raise ValueError("`df` must contain an `eop_lag` column")
- 
-    # Find unique eop dates:
-    # print(f"{k:50s}: {pd.infer_freq(nd[k].eop.unique())}")
+
     ticker_df = qdf_to_ticker_df(df, value_column="eop_lag")
     freq_dict = {
         ticker: _infer_frequency_timeseries(ticker_df[ticker])
@@ -374,13 +411,15 @@ def temporal_aggregator_mean(
 
 
 def temporal_aggregator_period(
-    isc: Dict[str, pd.DataFrame], start: pd.Timestamp, end: pd.Timestamp
+    isc: Dict[str, pd.DataFrame],
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    winsorise: int = 10,
 ) -> pd.DataFrame:
     """Temporal aggregator over periods of changes
 
     TODO add argument to choose how many periods to aggregate over.
     """
-
     dt_range = pd.date_range(start=start, end=end, freq="B", inclusive="both")
     tdf: pd.DataFrame = _get_metric_df_from_isc(
         isc=isc,
@@ -390,7 +429,7 @@ def temporal_aggregator_period(
     )
     # Winsorise and remove insignificant values
     tdf = _remove_insignificant_values(tdf, threshold=1e-12)
-    tdf = tdf.clip(lower=-10, upper=10)
+    tdf = tdf.clip(lower=-winsorise, upper=winsorise)
 
     # Map out the eop dates
     p_eop: pd.DataFrame = _get_metric_df_from_isc(
