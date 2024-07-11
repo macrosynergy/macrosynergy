@@ -228,6 +228,12 @@ def weight_from_frequency(freq: str, base: float = 252):
     return freq_map[freq] / base
 
 
+def _remove_insignificant_values(
+    df: pd.DataFrame, threshold: float = 1e-12
+) -> pd.DataFrame:
+    return df / (df.cumsum(axis=0).abs() > threshold).astype(int)
+
+
 def _isc_dict_to_frames(
     isc: Dict[str, pd.DataFrame], metric: str = "value"
 ) -> List[pd.DataFrame]:
