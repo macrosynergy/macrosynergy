@@ -277,10 +277,12 @@ def _get_metric_df_from_isc(
     date_range: pd.DatetimeIndex,
     fill: Union[str, Number] = 0,
 ) -> pd.DataFrame:
+    fill_err: str = "`fill` must be a number to replace NaNs or 'ffill' to forward fill"
     if not isinstance(fill, (str, Number)):
-        raise ValueError("fill must be a string or a number")
+        raise TypeError(fill_err)
     if isinstance(fill, str):
-        assert fill == "ffill", "Only ffill is a valid operation for time series fill"
+        if not fill == "ffill":
+            raise ValueError(fill_err)
 
     df_frames: List[pd.DataFrame] = _isc_dict_to_frames(isc, metric=metric)
     tdf: pd.DataFrame = pd.concat(df_frames, axis=1).reindex(date_range)
