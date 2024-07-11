@@ -290,7 +290,7 @@ def sparse_to_dense(
     )
 
     tdf = _get_metric_df_from_isc(isc=isc, metric=value_column, date_range=dtrange)
-    tdf = tdf / (tdf.cumsum(axis=0).abs() > 1e-12).astype(int)
+    tdf = _remove_insignificant_values(tdf, threshold=1e-12)
 
     sm_qdfs: List[QuantamentalDataFrame] = [ticker_df_to_qdf(tdf)]
     for add_bool, metric_name in zip(
@@ -301,7 +301,7 @@ def sparse_to_dense(
             wdf = _get_metric_df_from_isc(
                 isc=isc, metric=metric_name, date_range=dtrange, fill="ffill"
             )
-            sm_qdfs.append(ticker_df_to_qdf(wdf).rename(columns={"value": metric_name}))
+            sm_qdfs.append(ticker_df_to_qdf(wdf, metric=metric_name))
 
     qdf: QuantamentalDataFrame = concat_single_metric_qdfs(sm_qdfs)
     if add_eop:
