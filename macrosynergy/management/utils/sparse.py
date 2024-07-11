@@ -201,7 +201,7 @@ def calculate_score_on_sparse_indicator(
 def _infer_frequency_timeseries(eop_series: pd.Series) -> Optional[str]:
     diff = eop_series.diff().dropna()
     most_common = diff.mode().values[0]
-    frequency_mapping = {1: "B", 5: "W"}
+    frequency_mapping = {1: "D", 5: "W"}
 
     if most_common in frequency_mapping:
         return frequency_mapping[most_common]
@@ -216,7 +216,7 @@ def _infer_frequency_timeseries(eop_series: pd.Series) -> Optional[str]:
         if most_common in freq_range:
             return freq
 
-    return "B"
+    return "D"
 
 
 def infer_frequency(df: QuantamentalDataFrame) -> pd.Series:
