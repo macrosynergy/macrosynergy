@@ -47,6 +47,7 @@ from .sparse import (
     temporal_aggregator_exponential,
     temporal_aggregator_period,
     temporal_aggregator_mean,
+    InformationStateChanges,
 )
 
 from .math import (
@@ -101,6 +102,7 @@ __all__ = [
     "temporal_aggregator_exponential",
     "temporal_aggregator_period",
     "temporal_aggregator_mean",
+    "InformationStateChanges",
     # Math
     "expanding_mean_with_nan",
 ]
