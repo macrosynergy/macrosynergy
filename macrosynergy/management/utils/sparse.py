@@ -12,49 +12,6 @@ from macrosynergy.management.types import QuantamentalDataFrame
 
 import warnings
 
-
-# class InformationStateChanges(object):
-#     """
-#     # Functions for operations on sparse data
-#     # class SparseIndicators(Dict) ...:
-#     # """
-#     def __init__(self, values: Dict[str, pd.DataFrame] = dict()):
-#         # TODO store start and end dates per ticker...
-#         self.values: Dict[str, pd.DataFrame] = values
-
-#     @classmethod
-#     def from_tickers(cls, tickers: List[str]) -> "InformationStateChanges":
-#         return cls({ticker: pd.DataFrame for ticker in tickers})
-
-#     def __setitem__(self, item: str, value: pd.DataFrame):
-#         self.values[item] = value
-
-#     def __getitem__(self, item: str) -> pd.DataFrame:
-#         return self.values[item]
-
-#     def __setattr__(self, key: str, value: pd.DataFrame):
-#         self.values[key] = value
-
-#     def __getattr__(self, item) -> pd.DataFrame:
-#         return self.values[item]
-
-#     def __getstate__(self):
-#         return self.values
-
-#     def __setstate__(self, values: Dict[str, pd.DataFrame]):
-#         self.values = values
-
-#     def keys(self):
-#         return self.values.keys()
-
-#     def items(self):
-#         return self.values.items()
-
-#     def to_dense(self) -> pd.DataFrame:
-#         # TODO convert to QuantamentalDataFrame
-#         pass
-
-
 def _get_diff_data(
     ticker: str,
     p_value: pd.DataFrame,
@@ -150,7 +107,7 @@ class SubscriptableMeta(type):
             raise KeyError(f"{item} is not a valid method name")
 
 
-class StandardDeviationMethod(metaclass=SubscriptableMeta):
+class StandardDeviationMethods(metaclass=SubscriptableMeta):
     @staticmethod
     def std(s: pd.Series, min_periods: int, **kwargs) -> pd.Series:
         return s.expanding(min_periods=min_periods).std()
@@ -170,7 +127,7 @@ class StandardDeviationMethod(metaclass=SubscriptableMeta):
 
 CALC_SCORE_CUSTOM_METHOD_ERR_MSG = (
     "Method {std} not supported. "
-    f"Supported methods are: {dir(StandardDeviationMethod)}. \n"
+    f"Supported methods are: {dir(StandardDeviationMethods)}. \n"
     "Alternatively, provide a custom method with signature "
     "`custom_method(s: pd.Series, **kwargs) -> pd.Series` "
     "using the `custom_method` and `custom_method_kwargs` arguments."
@@ -211,10 +168,10 @@ def calculate_score_on_sparse_indicator(
             raise TypeError("`custom_method_kwargs` must be a dictionary")
         curr_method = custom_method
     else:
-        if not hasattr(StandardDeviationMethod, std):
+        if not hasattr(StandardDeviationMethods, std):
             raise ValueError(CALC_SCORE_CUSTOM_METHOD_ERR_MSG.format(std=std))
         # curr_method = getattr(StandardDeviationMethod, std)
-        curr_method = StandardDeviationMethod[std]
+        curr_method = StandardDeviationMethods[std]
 
     method_kwargs: Dict[str, Any] = dict(
         min_periods=min_periods, halflife=halflife, **custom_method_kwargs
