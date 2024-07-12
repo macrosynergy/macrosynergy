@@ -14,9 +14,9 @@ import string
 FREQ_STR_MAP = {
     "B": "daily",
     "W-FRI": "weekly",
-    "BME": "monthly",
-    "BQE": "quarterly",
-    "BYE": "yearly",
+    "BM": "monthly",
+    "BQ": "quarterly",
+    "BA": "annual",
 }
 
 
