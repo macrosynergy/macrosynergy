@@ -7,6 +7,8 @@ from macrosynergy.management.utils import (
     qdf_to_ticker_df,
     ticker_df_to_qdf,
     concat_single_metric_qdfs,
+    get_cid,
+    get_xcat,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 
@@ -69,6 +71,8 @@ def create_delta_data(
     # split into value, eop and grading
     p_value = qdf_to_ticker_df(df, value_column="value")
     p_eop = qdf_to_ticker_df(df, value_column="eop_lag")
+    if "grading" not in df.columns:
+        df["grading"] = np.nan
     p_grading = qdf_to_ticker_df(df, value_column="grading")
     assert set(p_value.columns) == set(p_eop.columns) == set(p_grading.columns)
 
