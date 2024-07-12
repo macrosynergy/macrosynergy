@@ -318,7 +318,24 @@ def sparse_to_dense(
         wdf = _get_metric_df_from_isc(
             isc=isc, metric=metric_name, date_range=dtrange, fill="ffill"
         )
-        sm_qdfs.append(ticker_df_to_qdf(wdf, metric=metric_name))
+        # if wdf.empty or wdf.isna().all().all()
+        if wdf.empty or wdf.isna().all().all():
+            dfs = [
+                pd.DataFrame(index=dtrange)
+                .assign(
+                    cid=get_cid(tickerx),
+                    xcat=get_xcat(tickerx),
+                    obs=np.nan,
+                )
+                .rename(columns={"obs": metric_name})
+                .reset_index()
+                for tickerx in wdf.columns
+            ]
+            m_qdf = pd.concat(dfs, axis=0).reset_index(drop=True)
+        else:
+            m_qdf = ticker_df_to_qdf(wdf, metric=metric_name)
+
+        sm_qdfs.append(m_qdf)
 
     qdf: QuantamentalDataFrame = concat_single_metric_qdfs(sm_qdfs)
     if "eop" in metrics:
@@ -326,7 +343,15 @@ def sparse_to_dense(
 
     if postfix:
         qdf["xcat"] += postfix
-    # TODO add eop! (and grading!)
+
+    tickers = (qdf["cid"] + "_" + qdf["xcat"]).unique().tolist()
+    for cid, xcat in zip(get_cid(tickers), get_xcat(tickers)):
+        mask = (qdf["cid"] == cid) & (qdf["xcat"] == xcat)
+        min_date = qdf.loc[mask, "real_date"].min()
+        # assert qdf.loc[mask & (qdf["real_date"] == min_date), "value"].isna().all()
+        if qdf.loc[mask & (qdf["real_date"] == min_date)].isna().any().any():
+            qdf = qdf[~mask | (qdf["real_date"] != min_date)]
+
     return qdf
 
 
