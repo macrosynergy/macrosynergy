@@ -9,6 +9,8 @@ from abc import ABC, abstractmethod
 
 import datetime
 
+from collections import Counter, defaultdict
+
 
 class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
     def __init__(
@@ -155,6 +157,10 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         bootstrap_coefs = np.zeros((bootstrap_iters, X.shape[1]))
         bootstrap_intercepts = np.zeros(bootstrap_iters)
 
+        index_array = np.array(X.index.tolist())
+        level_0_values = index_array[:, 0]
+        level_1_values = index_array[:, 1]
+
         # Now create each of the bootstrap datasets
         for i in range(bootstrap_iters):
             # If method is panel, sample with replacement from the entire dataset
@@ -170,27 +176,76 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
             elif bootstrap_method == "period":
                 # Resample the unique time periods from the panel
                 # and select all observations within those periods
-                unique_time_periods = X.index.get_level_values(1).unique()
                 bootstrap_periods = np.random.choice(
-                    unique_time_periods,
-                    size=int(len(unique_time_periods) * resample_ratio),
+                    level_1_values,
+                    size=int(len(level_1_values) * resample_ratio),
                     replace=True,
                 )
+                period_counts = dict(Counter(bootstrap_periods))
+                count_to_periods = defaultdict(list)
+                for period, count in period_counts.items():
+                    count_to_periods[count].append(period)
+
+                X_resampled = np.empty((0, X.shape[1]))
+                y_resampled = np.empty(0)
+                for count, periods in count_to_periods.items():
+                    X_resampled = np.vstack([
+                        X_resampled,
+                        np.tile(
+                            X[X.index.get_level_values(1).isin(periods)].values,
+                            (count, 1)
+                        ),
+                    ])
+                    y_resampled = np.append(
+                        y_resampled,
+                        np.tile(
+                            y[y.index.get_level_values(1).isin(periods)].values,
+                            count
+                        ),
+                    )
+                #unique_counts = []
+                #indices = []#
+
+                #for count in unique_counts:
+                #    periods_with_count_c = [period for period, c in counter.items() if c == count]
+                #    for period in periods_with_count_c:
+                #        period_indices = np.where(level_1_values == period)[0]
+                #        indices.append(np.random.choice(period_indices, count))
+                #for period, count in counter.items():
+                #    period_indices = np.where(level_1_values == period)[0]
+                #    indices.append(np.tile(period_indices, count))
+
+
+                #X_resampled = X[X.index.get_level_values(1).isin(bootstrap_periods)].values
+                #y_resampled = y[y.index.get_level_values(1).isin(bootstrap_periods)].values
+
+                #repeated_indices = np.hstack([
+                #    np.where(level_1_values == period)[0] for period in bootstrap_periods
+                #])
+
+
+                #period_counts = Counter(bootstrap_periods)
+
+                #indices = np.hstack([
+                #    np.repeat(np.where(level_1_values == period)[0], count)
+                #    for period, count in period_counts.items()
+                #])
+
+                #X_resampled = X.values[indices, :]
+                #y_resampled = y.values[indices]
                 # now get samples from X and y within those periods
-                indices = []
-                for period in bootstrap_periods:
-                    period_indices = X.index[X.index.get_level_values(1) == period]
-                    indices.extend(period_indices.tolist())
+                #X_resampled = np.empty((0, X.shape[1]))
+                #y_resampled = np.empty(0)
 
-                bootstrap_idx = pd.Index(indices)
+                #for period in bootstrap_periods.unique():
 
-                X_resampled = X.loc[bootstrap_idx]
-                y_resampled = y.loc[bootstrap_idx]
+                #    period_indices = np.where(level_1_values == period)[0]
+                #    X_resampled = np.vstack((X_resampled, X.values[period_indices, :]))
+                #    y_resampled = np.append(y_resampled, y.values[period_indices])
 
             elif bootstrap_method == "cross":
                 # Resample the unique cross sections from the panel
                 # and select all observations within those cross sections
-                unique_cross_sections = X.index.get_level_values(0).unique()
                 bootstrap_cross_sections = np.random.choice(
                     unique_cross_sections,
                     size=int(len(unique_cross_sections) * resample_ratio),
@@ -211,7 +266,6 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
 
             elif bootstrap_method == "cross_per_period":
                 # Resample observations within each unique time period
-                unique_time_periods = X.index.get_level_values(1).unique()
                 indices = []
 
                 for time_period in unique_time_periods:
@@ -230,7 +284,6 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
 
             elif bootstrap_method == "period_per_cross":
                 # Resample observations within each unique cross section
-                unique_cross_sections = X.index.get_level_values(0).unique()
                 indices = []
 
                 for cross_section in unique_cross_sections:
@@ -526,9 +579,9 @@ if __name__ == "__main__":
     X = dfd.drop(columns=["XR"])
     y = dfd["XR"]
 
-    # Linear regression with analytical standard error adjustment
+    """ Linear regression with analytical standard error adjustment """
 
-    model = ModifiedLinearRegression(method="standard")
+    """model = ModifiedLinearRegression(method="standard")
     model.fit(X, y)
     print("Modified OLS intercept:", model.intercept_)
     print("Modified OLS coefficients:", model.coef_)
@@ -573,4 +626,58 @@ if __name__ == "__main__":
         test_size=21 * 12 * 2,
     )
     so.models_heatmap("ModifiedOLS_analytic")
-    so.coefs_stackedbarplot("ModifiedOLS_analytic")
+    so.coefs_stackedbarplot("ModifiedOLS_analytic")"""
+
+    """ Linear regression with panel bootstrap adjustment """
+
+    model = ModifiedLinearRegression(
+        method="bootstrap",
+        bootstrap_method="period",
+        bootstrap_iters=100,
+        resample_ratio=0.5,
+    )
+    model.fit(X, y)
+    print("Modified OLS intercept:", model.intercept_)
+    print("Modified OLS coefficients:", model.coef_)
+    print("Modified OLS signal:", model.predict(X))
+
+    # Grid search for a modified linear regression with analytical standard error adjustment
+    cv = GridSearchCV(
+        estimator=model,
+        param_grid={
+            "fit_intercept": [True, False],
+            "positive": [True, False],
+        },
+        cv=5,
+        n_jobs=-1,
+    )
+    cv.fit(X, y)
+    print("Modified OLS grid search results:")
+    print("-----------------------------")
+    print(pd.DataFrame(cv.cv_results_))
+    print("-----------------------------")
+
+    # Try with signal optimizer
+    inner_splitter = ExpandingKFoldPanelSplit(n_splits = 5)
+    so = SignalOptimizer(
+        inner_splitter=inner_splitter,
+        X = X,
+        y = y,
+    )
+    so.calculate_predictions(
+        name="ModifiedOLS_period",
+        models = {
+            "mlr": model,
+        },
+        metric = make_scorer(r2_score, greater_is_better=True),
+        hparam_grid= {
+            "mlr": {
+                "fit_intercept": [True, False],
+                "positive": [True, False],
+            },
+        },
+        hparam_type="grid",
+        test_size=21 * 12 * 2,
+    )
+    so.models_heatmap("ModifiedOLS_period")
+    so.coefs_stackedbarplot("ModifiedOLS_period")
