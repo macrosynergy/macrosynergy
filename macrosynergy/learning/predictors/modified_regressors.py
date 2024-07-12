@@ -490,9 +490,11 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
     import macrosynergy.management as msm
+    from macrosynergy.learning import SignalOptimizer, ExpandingKFoldPanelSplit
 
     from sklearn.linear_model import LinearRegression
     from sklearn.model_selection import GridSearchCV
+    from sklearn.metrics import make_scorer, r2_score
 
     # Randomly generate an unbalanced panel dataset, multi-indexed by cross-section and
     # real_date
@@ -547,3 +549,28 @@ if __name__ == "__main__":
     print("-----------------------------")
     print(pd.DataFrame(cv.cv_results_))
     print("-----------------------------")
+
+    # Try with signal optimizer
+    inner_splitter = ExpandingKFoldPanelSplit(n_splits = 5)
+    so = SignalOptimizer(
+        inner_splitter=inner_splitter,
+        X = X,
+        y = y,
+    )
+    so.calculate_predictions(
+        name="ModifiedOLS_analytic",
+        models = {
+            "mlr": ModifiedLinearRegression(method="standard"),
+        },
+        metric = make_scorer(r2_score, greater_is_better=True),
+        hparam_grid= {
+            "mlr": {
+                "fit_intercept": [True, False],
+                "positive": [True, False],
+            },
+        },
+        hparam_type="grid",
+        test_size=21 * 12 * 2,
+    )
+    so.models_heatmap("ModifiedOLS_analytic")
+    so.coefs_stackedbarplot("ModifiedOLS_analytic")
