@@ -5,6 +5,9 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from typing import Union
 from abc import ABC, abstractmethod
 
+import datetime
+
+
 class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
     def __init__(
         self,
@@ -19,8 +22,8 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         Base class for linear regressors where coefficients are modified by estimated
         standard errors to account for statistical precision of the estimates.
 
-        :param <RegressorMixin> model: The underlying linear model to be modified. This 
-            model must have `coef_` and `intercept_` attributes, in accordance with 
+        :param <RegressorMixin> model: The underlying linear model to be modified. This
+            model must have `coef_` and `intercept_` attributes, in accordance with
             standard `scikit-learn` conventions.
         :param <str> method: The method used to modify the coefficients. Accepted values
             are "standard" and "bootstrap".
@@ -28,11 +31,11 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
             prevent division by zero in the case of very small standard errors. Default
             value is 1e-2.
         :param <str> bootstrap_method: The bootstrap method used to modify the coefficients.
-            Accepted values are "panel", "period", "cross", "cross_per_period" 
+            Accepted values are "panel", "period", "cross", "cross_per_period"
             and "period_per_cross". Default value is "panel".
-        :param <int> bootstrap_iters: The number of bootstrap iterations to perform in 
-            order to determine the standard errors of the model parameters under the bootstrap 
-            approach. Default value is 1000.   
+        :param <int> bootstrap_iters: The number of bootstrap iterations to perform in
+            order to determine the standard errors of the model parameters under the bootstrap
+            approach. Default value is 1000.
         :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
             in each bootstrap dataset. This is a fraction of the quantity of the panel
             component to be resampled. Default value is 1.
@@ -61,9 +64,9 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         y: Union[pd.DataFrame, pd.Series],
     ):
         """
-        Fit method to fit the underlying linear model, as passed into the constructor, 
-        and subsequently modify coefficients based on estimated standard errors to produce 
-        a trading signal that accounts for the statistical precision of the factor 
+        Fit method to fit the underlying linear model, as passed into the constructor,
+        and subsequently modify coefficients based on estimated standard errors to produce
+        a trading signal that accounts for the statistical precision of the factor
 
         :param <pd.DataFrame> X: Pandas dataframe of input features.
         :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
@@ -74,14 +77,16 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         # Checks
         self.check_fit_params(X=X, y=y)
 
-        # Fit 
+        # Fit
         self.model.fit(X, y)
-        
+
         if not hasattr(self.model, "coef_"):
             raise AttributeError("The underlying model must have a `coef_` attribute.")
         if not hasattr(self.model, "intercept_"):
-            raise AttributeError("The underlying model must have an `intercept_` attribute.")
-        
+            raise AttributeError(
+                "The underlying model must have an `intercept_` attribute."
+            )
+
         # Modify coefficients
         if self.method == "standard":
             self.intercept_, self.coef_ = self.adjust_analytical_se(
@@ -96,11 +101,11 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 y,
                 self.bootstrap_method,
                 self.bootstrap_iters,
-                self.resample_ratio
+                self.resample_ratio,
             )
 
         return self
-    
+
     def predict(
         self,
         X: pd.DataFrame,
@@ -121,7 +126,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
             raise ValueError("X must be multi-indexed.")
 
         return np.dot(X, self.coef_) + self.intercept_
-    
+
     def adjust_analytical_se(
         self,
         model: RegressorMixin,
@@ -134,7 +139,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
             "This function must be implemented in a subclass of BaseModifiedRegressor "
             "if known standard error expressions are available."
         )
-    
+
     def adjust_bootstrap_se(
         self,
         model: RegressorMixin,
@@ -147,7 +152,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         # Create storage for bootstrap coefficients and intercepts
         bootstrap_coefs = np.zeros((bootstrap_iters, X.shape[1]))
         bootstrap_intercepts = np.zeros(bootstrap_iters)
-        
+
         # Now create each of the bootstrap datasets
         for i in range(bootstrap_iters):
             # If method is panel, sample with replacement from the entire dataset
@@ -192,7 +197,9 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 # now get samples from X and y within those cross sections
                 indices = []
                 for cross_section in bootstrap_cross_sections:
-                    cross_section_indices = X.index[X.index.get_level_values(0) == cross_section]
+                    cross_section_indices = X.index[
+                        X.index.get_level_values(0) == cross_section
+                    ]
                     indices.extend(cross_section_indices.tolist())
 
                 bootstrap_idx = pd.Index(indices)
@@ -203,7 +210,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
             elif bootstrap_method == "cross_per_period":
                 # Resample observations within each unique time period
                 unique_time_periods = X.index.get_level_values(1).unique()
-                indices = [] 
+                indices = []
 
                 for time_period in unique_time_periods:
                     period_indices = X.index[X.index.get_level_values(1) == time_period]
@@ -222,10 +229,12 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
             elif bootstrap_method == "period_per_cross":
                 # Resample observations within each unique cross section
                 unique_cross_sections = X.index.get_level_values(0).unique()
-                indices = [] 
+                indices = []
 
                 for cross_section in unique_cross_sections:
-                    cross_section_indices = X.index[X.index.get_level_values(0) == cross_section]
+                    cross_section_indices = X.index[
+                        X.index.get_level_values(0) == cross_section
+                    ]
                     bootstrap_idx = np.random.choice(
                         cross_section_indices,
                         size=int(len(cross_section_indices) * resample_ratio),
@@ -246,14 +255,14 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
 
         # Calculate the standard errors
         coef_se = np.std(bootstrap_coefs, axis=0, ddof=0)
-        intercept_se = np.std(bootstrap_intercepts,ddof=0)
+        intercept_se = np.std(bootstrap_intercepts, ddof=0)
 
         # Adjust the coefficients and intercepts by the standard errors
         coef = model.coef_ / (coef_se + self.error_offset)
         intercept = model.intercept_ / (intercept_se + self.error_offset)
 
         return intercept, coef
-        
+
     def check_init_params(
         model: RegressorMixin,
         method: str,
@@ -273,9 +282,9 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         :param <float> error_offset: A small offset to add to the standard errors to
             prevent division by zero in the case of very small standard errors.
         :param <str> bootstrap_method: The bootstrap method used to modify the
-        coefficients. Accepted values are "panel", "period", "cross", "cross_per_period" 
+        coefficients. Accepted values are "panel", "period", "cross", "cross_per_period"
             and "period_per_cross".
-        :param <int> bootstrap_iters: The number of bootstrap iterations to perform in 
+        :param <int> bootstrap_iters: The number of bootstrap iterations to perform in
             order to determine the standard errors of the model parameters under the
             bootstrap approach.
         :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
@@ -321,7 +330,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 raise TypeError("bootstrap_iters must be an integer.")
             if bootstrap_iters <= 0:
                 raise ValueError("bootstrap_iters must be a positive integer.")
-            
+
         # resample_ratio
         if method == "bootstrap":
             if not isinstance(resample_ratio, (float, int)):
@@ -330,7 +339,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 raise ValueError("resample_ratio must be greater than 0.")
             if resample_ratio > 1:
                 raise ValueError("resample_ratio must be less than or equal to 1.")
-            
+
     def check_fit_params(
         X: pd.DataFrame,
         y: Union[pd.DataFrame, pd.Series],
@@ -374,4 +383,38 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 "The indices of the input dataframe X and the output dataframe y don't "
                 "match."
             )
-        
+
+
+if __name__ == "__main__":
+    from macrosynergy.management.simulate import make_qdf
+    import macrosynergy.management as msm
+
+    # Randomly generate an unbalanced panel dataset, multi-indexed by cross-section and
+    # real_date
+
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", 1, 2, 0.8, 0.5]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd["grading"] = np.ones(dfd.shape[0])
+    black = {"GBP": ["2009-01-01", "2012-06-30"], "CAD": ["2018-01-01", "2100-01-01"]}
+    dfd = msm.reduce_df(df=dfd, cids=cids, xcats=xcats, blacklist=black)
+
+    dfd = dfd.pivot(index=["cid", "real_date"], columns="xcat", values="value")
+    X = dfd.drop(columns=["XR"])
+    y = dfd["XR"]
