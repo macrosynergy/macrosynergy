@@ -21,6 +21,7 @@ from .df_utils import (
     drop_nan_series,
     qdf_to_ticker_df,
     ticker_df_to_qdf,
+    concat_single_metric_qdfs,
     apply_slip,
     downsample_df_on_real_date,
     update_df,
@@ -37,6 +38,16 @@ from .df_utils import (
     quarters_btwn_dates,
     get_eops,
     get_sops,
+)
+
+from .sparse import (
+    create_delta_data,
+    calculate_score_on_sparse_indicator,
+    sparse_to_dense,
+    temporal_aggregator_exponential,
+    temporal_aggregator_period,
+    temporal_aggregator_mean,
+    InformationStateChanges,
 )
 
 from .math import (
@@ -65,6 +76,7 @@ __all__ = [
     "drop_nan_series",
     "qdf_to_ticker_df",
     "ticker_df_to_qdf",
+    "concat_single_metric_qdfs",
     "apply_slip",
     "downsample_df_on_real_date",
     "update_df",
@@ -83,5 +95,14 @@ __all__ = [
     "quarters_btwn_dates",
     "get_eops",
     "get_sops",
+    # Sparse Indicators
+    "create_delta_data",
+    "calculate_score_on_sparse_indicator",
+    "sparse_to_dense",
+    "temporal_aggregator_exponential",
+    "temporal_aggregator_period",
+    "temporal_aggregator_mean",
+    "InformationStateChanges",
+    # Math
     "expanding_mean_with_nan",
 ]
