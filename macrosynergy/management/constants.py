@@ -40,7 +40,7 @@ FREQUENCY_MAP = {
     "Q": "BQ",
     "A": "BA",
 }
-JPMAQS_METRICS: list[str] = ["value", "grading", "eop_lag", "mop_lag"]
+JPMAQS_METRICS: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
 
 ANNUALIZATION_FACTORS = {
     "A": 1,
