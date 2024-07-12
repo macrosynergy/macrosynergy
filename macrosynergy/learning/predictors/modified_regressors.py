@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
+
 from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.linear_model import LinearRegression
 
 from typing import Union
 from abc import ABC, abstractmethod
@@ -264,6 +266,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         return intercept, coef
 
     def check_init_params(
+        self,
         model: RegressorMixin,
         method: str,
         error_offset: float,
@@ -341,6 +344,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 raise ValueError("resample_ratio must be less than or equal to 1.")
 
     def check_fit_params(
+        self,
         X: pd.DataFrame,
         y: Union[pd.DataFrame, pd.Series],
     ):
@@ -383,11 +387,112 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 "The indices of the input dataframe X and the output dataframe y don't "
                 "match."
             )
+        
+class ModifiedLinearRegression(BaseModifiedRegressor):
+    def __init__(
+        self,
+        method: str,
+        fit_intercept: bool = True,
+        positive: bool = False,
+        error_offset: float = 1e-2,
+        bootstrap_method: str = "panel",
+        bootstrap_iters: int = 1000,
+        resample_ratio: Union[float, int] = 1,
+    ):
+        """
+        Custom class to train an OLS linear regression model with coefficients modified 
+        by estimated standard errors to account for statistical precision of the estimates.
+        
+        :param <str> method: The method used to modify the coefficients. Accepted values
+            are "standard" and "bootstrap".
+        :param <bool> fit_intercept: Whether to fit an intercept term in the model.
+            Default is True.
+        :param <bool> positive: Whether to constrain the coefficients to be positive.
+            Default is False.
+        :param <float> error_offset: A small offset to add to the standard errors to
+            prevent division by zero in the case of very small standard errors. Default
+            value is 1e-2.
+        :param <str> bootstrap_method: The bootstrap method used to modify the coefficients.
+            Accepted values are "panel", "period", "cross", "cross_per_period"
+            and "period_per_cross". Default value is "panel".
+        :param <int> bootstrap_iters: The number of bootstrap iterations to perform in
+            order to determine the standard errors of the model parameters under the bootstrap
+            approach. Default value is 1000.
+        :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
+            in each bootstrap dataset. This is a fraction of the quantity of the panel
+            component to be resampled. Default value is 1.
+
+        :return None
+        """
+        self.fit_intercept = fit_intercept
+        self.positive = positive
+
+        super().__init__(
+            model=LinearRegression(fit_intercept=self.fit_intercept, positive=self.positive),
+            method=method,
+            error_offset=error_offset,
+            bootstrap_method=bootstrap_method,
+            bootstrap_iters=bootstrap_iters,
+            resample_ratio=resample_ratio,
+        )
+
+    def adjust_analytical_se(
+        self,
+        model: RegressorMixin,
+        X: pd.DataFrame,
+        y: Union[pd.DataFrame, pd.Series],
+    ):
+        """
+        Method to adjust the coefficients of the linear model by the analytical
+        standard error expression obtain through assuming multivariate normality of the
+        model errors.
+
+        :param <RegressorMixin> model: The underlying linear model to be modified. This
+            model must have `coef_` and `intercept_` attributes, in accordance with
+            standard `scikit-learn` conventions.
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+
+        :return <float>, <np.ndarray>: The adjusted intercept and coefficients.
+        """
+        # Calculate the standard errors
+        coef_se = np.sqrt(
+            np.diag(
+                np.linalg.inv(np.dot(X.T, X))
+                * np.sum(np.square(y - model.predict(X)))
+                / (X.shape[0] - X.shape[1])
+            )
+        )
+        intercept_se = np.sqrt(
+            np.sum(np.square(y - model.predict(X))) / (X.shape[0] - X.shape[1])
+        )
+
+        # Adjust the coefficients and intercepts by the standard errors
+        coef = model.coef_ / (coef_se + self.error_offset)
+        intercept = model.intercept_ / (intercept_se + self.error_offset)
+
+        return intercept, coef
+    
+    def set_params(self, **params):
+        super().set_params(**params)
+        if "fit_intercept" in params or "positive" in params:
+            # Re-initialize the LinearRegression instance with updated parameters
+            self.model = LinearRegression(
+                fit_intercept=self.fit_intercept, positive=self.positive
+            )
+
+        return self
+
+
 
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
     import macrosynergy.management as msm
+
+    from sklearn.linear_model import LinearRegression
+    from sklearn.model_selection import GridSearchCV
 
     # Randomly generate an unbalanced panel dataset, multi-indexed by cross-section and
     # real_date
@@ -405,10 +510,10 @@ if __name__ == "__main__":
     df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
 
     df_xcats = pd.DataFrame(index=xcats, columns=cols)
-    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
-    df_xcats.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
-    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", 1, 2, 0.8, 0.5]
+    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0, 1, 0, 3]
+    df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 0, 1, 0, 0]
+    df_xcats.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 0, 1, -0.9, 0]
+    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", 0, 1, 0.8, 0]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfd["grading"] = np.ones(dfd.shape[0])
@@ -418,3 +523,27 @@ if __name__ == "__main__":
     dfd = dfd.pivot(index=["cid", "real_date"], columns="xcat", values="value")
     X = dfd.drop(columns=["XR"])
     y = dfd["XR"]
+
+    # Linear regression with analytical standard error adjustment
+
+    model = ModifiedLinearRegression(method="standard")
+    model.fit(X, y)
+    print("Modified OLS intercept:", model.intercept_)
+    print("Modified OLS coefficients:", model.coef_)
+    print("Modified OLS signal:", model.predict(X))
+
+    # Grid search for a modified linear regression with analytical standard error adjustment
+    cv = GridSearchCV(
+        estimator=ModifiedLinearRegression(method="standard"),
+        param_grid={
+            "fit_intercept": [True, False],
+            "positive": [True, False],
+        },
+        cv=5,
+        n_jobs=-1,
+    )
+    cv.fit(X, y)
+    print("Modified OLS grid search results:")
+    print("-----------------------------")
+    print(pd.DataFrame(cv.cv_results_))
+    print("-----------------------------")
