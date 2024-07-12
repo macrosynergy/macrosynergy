@@ -5,34 +5,19 @@ import datetime
 import numpy as np
 
 from typing import List, Tuple, Dict, Union, Set, Any
-
-from macrosynergy.management.utils import (
-    get_cid,
-    get_xcat,
-    concat_single_metric_qdfs,
-    ticker_df_to_qdf,
-    qdf_to_ticker_df,
-)
-from macrosynergy.management.utils.sparse import (
-    _get_diff_data,
-    create_delta_data,
-    StandardDeviationMethods,
-    calculate_score_on_sparse_indicator,
-    _infer_frequency_timeseries,
-    infer_frequency,
-    weight_from_frequency,
-    _remove_insignificant_values,
-    _isc_dict_to_frames,
-    _get_metric_df_from_isc,
-    sparse_to_dense,
-    temporal_aggregator_exponential,
-    temporal_aggregator_mean,
-    temporal_aggregator_period,
-    _calculate_score_on_sparse_indicator_for_class,
-    InformationStateChanges,
-)
+from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.utils import concat_single_metric_qdfs, ticker_df_to_qdf
+from macrosynergy.management.utils.sparse import InformationStateChanges
 import random
 import string
+
+FREQ_STR_MAP = {
+    "B": "daily",
+    "W-FRI": "weekly",
+    "BME": "monthly",
+    "BQE": "quarterly",
+    "BYE": "yearly",
+}
 
 
 def random_string(
@@ -42,43 +27,23 @@ def random_string(
 
 
 def get_end_of_period_for_date(
-    dt: pd.Timestamp,
+    date: pd.Timestamp,
     freq: str,
 ) -> pd.Timestamp:
-    # Get the end of the period for a given date and frequency
-    if freq == "B":
-        return dt
-    elif freq == "W-FRI":
-        return dt + pd.DateOffset(days=4)
-    elif freq == "BME":
-        return dt + pd.DateOffset(months=1) - pd.DateOffset(days=1)
-    elif freq == "BQE":
-        return dt + pd.DateOffset(months=3) - pd.DateOffset(days=1)
-    elif freq == "BYE":
-        return dt + pd.DateOffset(years=1) - pd.DateOffset(days=1)
-    else:
-        raise ValueError(f"Unknown frequency: {freq}")
+    prev_date = pd.bdate_range(start=date, periods=1, freq=freq)[0]
+    return prev_date
 
 
 def get_long_format_data(
     cids: List[str] = ["USD", "EUR", "JPY", "GBP"],
     start: str = "2010-01-01",
-    end: str = "2020-01-01",
+    end: str = "2020-01-21",
     xcats: List[str] = ["GDP", "CPI", "UNEMP", "RATE"],
-    # num_xcats: int = 4,
     num_freqs: int = 2,
 ) -> pd.DataFrame:
     # Map of frequency codes to their descriptive names
-    freq_map = {
-        "B": "daily",
-        "W-FRI": "weekly",
-        "BME": "monthly",
-        "BQE": "quarterly",
-        "BYE": "yearly",
-    }
-
+    freq_map = FREQ_STR_MAP.copy()
     full_date_range = pd.bdate_range(start=start, end=end)
-
     get_random_freq = lambda: random.choice(list(freq_map.keys()))
 
     # Generate ticker symbols by combining currency ids and category names
@@ -91,28 +56,31 @@ def get_long_format_data(
 
     # Generate time series data for each (ticker, frequency) tuple
     values_ts_list: List[pd.Series] = []
+    eop_ts_list: List[pd.Series] = []
+    eoplag_ts_list: List[pd.Series] = []
+
     for ticker, freq in ticker_freq_tuples:
         dts = pd.bdate_range(start=start, end=end, freq=freq)
         namex = f"{ticker}_{freq_map[freq].upper()}"
         ts = pd.Series(np.random.random(len(dts)), index=dts, name=namex)
         ts = ts.reindex(full_date_range).ffill()
+        ts.loc[ts.isna()] = np.random.random(ts.isna().sum())
         values_ts_list.append(ts)
 
-    eop_ts_list: List[pd.Series] = []
-    for ticker, freq in ticker_freq_tuples:
-        dts = pd.bdate_range(start=start, end=end, freq=freq)
-        namex = f"{ticker}_{freq_map[freq].upper()}"
-        tpls = [(dt, get_end_of_period_for_date(dt, freq)) for dt in dts]
-        ts = pd.Series(dict(tpls), name=namex)
-        ts = ts.reindex(full_date_range).ffill()
-        eop_ts_list.append(ts)
-
-    eoplag_ts_list: List[pd.Series] = []
-    for _ts in eop_ts_list:
-        eop_lag = pd.Series(
-            (_ts.index.to_series() - _ts).dt.days, index=_ts.index, name=_ts.name
+        tseop = pd.Series(
+            dict([(dt, get_end_of_period_for_date(dt, freq)) for dt in dts]), name=namex
         )
-        eoplag_ts_list.append(eop_lag)
+        tseop = tseop.reindex(full_date_range).ffill()
+        tseop.loc[tseop.isna()] = min(full_date_range)
+        eop_ts_list.append(tseop)
+
+        _tdf = tseop.to_frame().reset_index()
+        _tdf["eop_lag"] = _tdf.apply(
+            lambda x: abs((x["index"].date() - x[tseop.name].date()).days),
+            axis=1,
+        )
+        tseop = pd.Series(_tdf["eop_lag"].values, index=_tdf["index"], name=tseop.name)
+        eoplag_ts_list.append(tseop)
 
     def concat_ts_list(
         ts_list: List[pd.Series],
