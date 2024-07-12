@@ -505,6 +505,12 @@ class InformationStateChanges(object):
     def __setitem__(self, key, value):
         self.isc_dict[key] = value
 
+    def __str__(self):
+        return str(self.isc_dict)
+    
+    def __repr__(self):
+        return repr(self.isc_dict)
+
     def keys(self):
         return self.isc_dict.keys()
     
