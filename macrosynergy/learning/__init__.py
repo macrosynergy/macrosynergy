@@ -41,6 +41,7 @@ from .predictors import (
     LADRegressionSystem,
     RidgeRegressionSystem,
     LinearRegressionSystem,
+    CorrelationVolatilitySystem,
 )
 
 from .beta_estimator import BetaEstimator
@@ -88,4 +89,5 @@ __all__ = [
     "LADRegressionSystem",
     "RidgeRegressionSystem",
     "LinearRegressionSystem",
+    "CorrelationVolatilitySystem",
 ]
