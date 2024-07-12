@@ -521,10 +521,10 @@ def _calculate_score_on_sparse_indicator_for_class(
 
 class InformationStateChanges(object):
     def __init__(
-            self,
-            min_period: pd.Timestamp = None,
-            max_period: pd.Timestamp = None,
-        ):
+        self,
+        min_period: pd.Timestamp = None,
+        max_period: pd.Timestamp = None,
+    ):
         self.isc_dict: Dict[str, pd.DataFrame] = dict()
         self.density_stats_df: pd.DataFrame = None
         self._min_period: pd.Timestamp = min_period
@@ -532,36 +532,30 @@ class InformationStateChanges(object):
 
     def __getitem__(self, item):
         return self.isc_dict[item]
-    
+
     def __setitem__(self, key, value):
         self.isc_dict[key] = value
 
     def __str__(self):
         return str(self.isc_dict)
-    
+
     def __repr__(self):
         return repr(self.isc_dict)
 
     def keys(self):
         return self.isc_dict.keys()
-    
+
     def values(self):
         return self.isc_dict.values()
-    
+
     def items(self):
         return self.isc_dict.items()
 
     @classmethod
     def from_qdf(
-        cls,
-        qdf: QuantamentalDataFrame,
-        norm: bool = True,
-        **kwargs
+        cls, qdf: QuantamentalDataFrame, norm: bool = True, **kwargs
     ) -> "InformationStateChanges":
-        isc = cls(
-            min_period=qdf.real_date.min(), max_period=qdf.real_date.max()
-        )
-
+        isc = cls(min_period=qdf["real_date"].min(), max_period=qdf["real_date"].max())
         isc_dict, density_stats_df = create_delta_data(qdf, return_density_stats=True)
 
         isc.isc_dict = isc_dict
@@ -569,7 +563,7 @@ class InformationStateChanges(object):
 
         if norm:
             isc.calculate_score(**kwargs)
-    
+
         return isc
 
     def to_qdf(
@@ -586,7 +580,6 @@ class InformationStateChanges(object):
             postfix=postfix,
             metrics=metrics,
         )
-
 
     def temporal_aggregator_period(
         self,
