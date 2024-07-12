@@ -99,9 +99,48 @@ def get_long_format_data(
     )
 
 
-class TestFunctions(unittest.TestCase): ...
+def _get_helper_col(df: QuantamentalDataFrame) -> QuantamentalDataFrame:
+    assert isinstance(df, QuantamentalDataFrame)
+    return df["cid"] + "-" + df["xcat"] + "-" + df["real_date"].dt.strftime("%Y-%m-%d")
+
+
+class TestInformationStateChanges(unittest.TestCase):
+    def test_isc_object_round_trip(self) -> None:
+
+        qdfidx = QuantamentalDataFrame.IndexCols
+
+        df = get_long_format_data()
+        dfc = df.copy()
+        tdf = InformationStateChanges.from_qdf(df).to_qdf()
+
+        diff_mask = abs(df["value"].diff())
+        diff_mask: pd.Series = diff_mask > 0.0  # type: ignore
+        diff_df: pd.DataFrame = tdf.loc[diff_mask, :].reset_index(drop=True)
+
+        # create helper column which is cid-xcat-real_date
+        diff_df.loc[:, "helper"] = _get_helper_col(diff_df)
+        dfc.loc[:, "helper"] = _get_helper_col(dfc)
+
+        # reduce the diff_df to only the diffs (helpers)
+        dfc = dfc[dfc["helper"].isin(diff_df["helper"])].reset_index(drop=True)
+
+        diff_df = diff_df.drop(columns=qdfidx).set_index("helper")
+        dfc = dfc.drop(columns=qdfidx).set_index("helper")
+
+        # keep only the users columns (no grading columns)
+        diff_df = diff_df.loc[:, dfc.columns]
+
+        self.assertTrue(diff_df.equals(dfc))
+
+    def test_isc_to_qdf(self) -> None:
+        df = get_long_format_data()
+        ## Test that the grading is not output when not asked for
+        tdf = InformationStateChanges.from_qdf(df).to_qdf(metrics=["eop"])
+        self.assertTrue("value" in tdf.columns)
+        self.assertTrue("eop" in tdf.columns)
+        self.assertTrue("eop_lag" in tdf.columns)
+        self.assertTrue("grading" not in tdf.columns)
 
 
 if __name__ == "__main__":
-    df = get_long_format_data()
-    df
+    unittest.main()
