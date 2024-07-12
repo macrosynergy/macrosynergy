@@ -21,6 +21,16 @@ def _get_diff_data(
     p_eop: pd.DataFrame,
     p_grading: pd.DataFrame,
 ) -> pd.DataFrame:
+    """
+    Get the diff data for a given ticker from wide/pivoted dataframes (`ticker_df`) of
+    metrics `value`, `eop_lag` and `grading`.
+
+    :param <str> ticker: The ticker to get the diff data for.
+    :param <pd.DataFrame> p_value: The pivoted DataFrame of the `value` metric.
+    :param <pd.DataFrame> p_eop: The pivoted DataFrame of the `eop_lag` metric.
+    :param <pd.DataFrame> p_grading: The pivoted DataFrame of the `grading` metric.
+    """
+
     # calculate basic density stats
     diff_mask = p_value.diff(axis=0).abs() > 0.0
     diff_density = 100 * diff_mask[ticker].sum() / (~p_value[ticker].isna()).sum()
@@ -66,8 +76,21 @@ def _get_diff_data(
 
 
 def create_delta_data(
-    df: pd.DataFrame, return_density_stats: bool = False
-) -> pd.DataFrame:
+    df: QuantamentalDataFrame, return_density_stats: bool = False
+) -> Union[Dict[str, pd.DataFrame], pd.DataFrame]:
+    """
+    Creates a dictionary of dataframes with the changes in the information state for each
+    ticker in the QuantamentalDataFrame. Optionally, returns a DataFrame with the statistics
+    for change frequency, density and date range for each ticker.
+    :param <QuantamentalDataFrame> df: The QuantamentalDataFrame to calculate the changes for.
+    :param <bool> return_density_stats: If True, returns a DataFrame with the density stats for each ticker.
+
+    :return: A dictionary of DataFrames with the changes in the information state for each ticker.
+    """
+
+    if not isinstance(df, QuantamentalDataFrame):
+        raise ValueError("`df` must be a QuantamentalDataFrame")
+
     # split into value, eop and grading
     p_value = qdf_to_ticker_df(df, value_column="value")
     p_eop = qdf_to_ticker_df(df, value_column="eop_lag")
@@ -105,6 +128,10 @@ def create_delta_data(
 
 
 class SubscriptableMeta(type):
+    """
+    Convenience metaclass to allow subscripting of methods on a class.
+    """
+
     def __getitem__(cls, item):
         if hasattr(cls, item) and callable(getattr(cls, item)):
             return getattr(cls, item)
@@ -113,20 +140,66 @@ class SubscriptableMeta(type):
 
 
 class StandardDeviationMethods(metaclass=SubscriptableMeta):
+    """
+    Class to hold methods for calculating standard deviations.
+    Each method must comply to the following signature:
+        `func(s: pd.Series, **kwargs) -> pd.Series`
+
+    Currently supported methods are:
+
+    - `std`: Standard deviation
+    - `abs`: Absolute standard deviation
+    - `exp`: Exponentially weighted standard deviation
+    - `exp_abs`: Exponentially weighted absolute standard deviation
+    """
+
     @staticmethod
     def std(s: pd.Series, min_periods: int, **kwargs) -> pd.Series:
+        """
+        Calculate the standard deviation of a Series.
+
+        :param <pd.Series> s: The Series to calculate the standard deviation for.
+        :param <int> min_periods: The minimum number of periods required for the calculation.
+        :return: The standard deviation of the Series.
+        """
         return s.expanding(min_periods=min_periods).std()
 
     @staticmethod
     def abs(s: pd.Series, min_periods: int, **kwargs) -> pd.Series:
+        """
+        Calculate the absolute standard deviation of a Series.
+
+        :param <pd.Series> s: The Series to calculate the absolute standard deviation for.
+        :param <int> min_periods: The minimum number of periods required for the calculation.
+        :return: The absolute standard deviation of the Series.
+        """
         return s.abs().expanding(min_periods=min_periods).mean()
 
     @staticmethod
     def exp(s: pd.Series, halflife: int, min_periods: int, **kwargs) -> pd.Series:
+        """
+        Calculate the exponentially weighted standard deviation of a Series.
+
+        :param <pd.Series> s: The Series to calculate the exponentially weighted standard
+            deviation for.
+        :param <int> halflife: The halflife of the exponential weighting.
+        :param <int> min_periods: The minimum number of periods required for the
+            calculation.
+        :return: The exponentially weighted standard deviation of the Series.
+        """
         return s.ewm(halflife=halflife, min_periods=min_periods).std()
 
     @staticmethod
     def exp_abs(s: pd.Series, halflife: int, min_periods: int, **kwargs) -> pd.Series:
+        """
+        Calculate the exponentially weighted absolute standard deviation of a Series.
+
+        :param <pd.Series> s: The Series to calculate the exponentially weighted absolute
+            standard deviation for.
+        :param <int> halflife: The halflife of the exponential weighting.
+        :param <int> min_periods: The minimum number of periods required for the calculation.
+        :return: The exponentially weighted absolute standard deviation of the Series.
+        """
         return s.abs().ewm(halflife=halflife, min_periods=min_periods).mean()
 
 
@@ -148,17 +221,31 @@ def calculate_score_on_sparse_indicator(
     iis: bool = False,
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
-):
+) -> Dict[str, pd.DataFrame]:
     """Calculate score on sparse indicator
 
-    :param isc: InformationStateChanges
-    :param std: str default "std" (quadratic loss function i.e. standard deviations)
-        alternatives are "abs" for linex loss function (mean absolute deviations),
-        exp for exponentially weighted quadratic loss function (requires halflife to be specified),
-        and exp_abs for Linex loss function (mean absolute deviations exponentially weighted).
-    :param halflife: int default None
+    :param <Dict[str, pd.DataFrame]> isc: A dictionary of DataFrames with the changes in
+        the information state for each ticker.
 
+    :param <str> std: The method to use for calculating the standard deviation.
+        Supported methods are `std`, `abs`, `exp` and `exp_abs`. See the documentation for
+        `StandardDeviationMethods` for more information.
+    :param <int> halflife: The halflife of the exponential weighting. Only used with `exp`
+        and `exp_abs` methods. Default is None.
+    :param <int> min_periods: The minimum number of periods required for the calculation.
+        Default is 10.
+    :param <int> isc_version: The version of the information state changes to use. If set
+        to 0 (default), only the first version is used. If set to any other positive integer,
+        all versions are used.
+    :param <bool> iis: if True (default) zn-scores are also calculated for the initial
+        sample period defined by `min_periods`, on an in-sample basis, to avoid losing history.
 
+    :param <Callable> custom_method: A custom method to use for calculating the standard
+        deviation. Must have the signature `custom_method(s: pd.Series, **kwargs) -> pd.Series`.
+
+    :param <Dict> custom_method_kwargs: Keyword arguments to pass to the custom method.
+
+    :return: A dictionary of DataFrames with the changes in the information state for each ticker.
     """
     # TODO make into a method on InformationStateChanges?
     # TODO adjust score by eop_lag (business days?) to get a native frequency...
@@ -210,6 +297,12 @@ def calculate_score_on_sparse_indicator(
 
 
 def _infer_frequency_timeseries(eop_series: pd.Series) -> Optional[str]:
+    """
+    Infer the frequency of a time series based on the most common difference between
+    consecutive end-of-period dates.
+    :param <pd.Series> eop_series: A Series of end-of-period dates.
+    :return: The inferred frequency of the time series. One of "D", "W", "M", "Q" or "A".
+    """
     diff = eop_series.diff().dropna()
     most_common = diff.mode().values[0]
     frequency_mapping = {1: "D", 5: "W"}
@@ -231,6 +324,13 @@ def _infer_frequency_timeseries(eop_series: pd.Series) -> Optional[str]:
 
 
 def infer_frequency(df: QuantamentalDataFrame) -> pd.Series:
+    """
+    Infer the frequency of a QuantamentalDataFrame based on the most common difference
+    between consecutive end-of-period dates.
+
+    :param <QuantamentalDataFrame> df: The QuantamentalDataFrame to infer the frequency for.
+    :return: A Series with the inferred frequency for each ticker in the QuantamentalDataFrame.
+    """
     if not isinstance(df, QuantamentalDataFrame):
         raise ValueError("`df` must be a QuantamentalDataFrame")
     if not "eop_lag" in df.columns:
@@ -255,12 +355,22 @@ def weight_from_frequency(freq: str, base: float = 252):
 def _remove_insignificant_values(
     df: pd.DataFrame, threshold: float = 1e-12
 ) -> pd.DataFrame:
+    """
+    Convenience function to remove insignificant values from a DataFrame.
+
+    :param <pd.DataFrame> df: The DataFrame to remove insignificant values from.
+    :param <float> threshold: The threshold below which values are considered insignificant.
+    :return: The DataFrame with insignificant values removed.
+    """
     return df / (df.cumsum(axis=0).abs() > threshold).astype(int)
 
 
 def _isc_dict_to_frames(
     isc: Dict[str, pd.DataFrame], metric: str = "value"
 ) -> List[pd.DataFrame]:
+    """
+    Convert a dictionary of DataFrames to a list of DataFrames with a specific metric.
+    """
     frames = []
     for k, v in isc.items():
         assert isinstance(v, pd.DataFrame)
@@ -281,6 +391,16 @@ def _get_metric_df_from_isc(
     date_range: pd.DatetimeIndex,
     fill: Union[str, Number] = 0,
 ) -> pd.DataFrame:
+    """
+    Get a DataFrame with a specific metric from a dictionary of DataFrames.
+
+    :param <Dict[str, pd.DataFrame]> isc: A dictionary of DataFrames with the changes in
+        the information state for each ticker.
+    :param <str> metric: The name of the metric to extract.
+    :param <pd.DatetimeIndex> date_range: The date range to reindex the DataFrame to.
+    :param <Union[str, Number]> fill: The value to fill NaNs with. If 'ffill', forward fill
+        NaNs. Default is 0.
+    """
     fill_err: str = "`fill` must be a number to replace NaNs or 'ffill' to forward fill"
     if not isinstance(fill, (str, Number)):
         raise TypeError(fill_err)
@@ -306,6 +426,21 @@ def sparse_to_dense(
     postfix: str = None,
     metrics: List[str] = ["eop", "grading"],
 ) -> pd.DataFrame:
+    """
+    Convert a dictionary of DataFrames with changes in the information state to a dense
+    DataFrame (QuantamentalDataFrame).
+
+    :param <Dict[str, pd.DataFrame]> isc: A dictionary of DataFrames with the changes in
+        the information state for each ticker.
+    :param <str> value_column: The name of the column to use as the value.
+    :param <pd.Timestamp> min_period: The minimum period to include in the DataFrame.
+    :param <pd.Timestamp> max_period: The maximum period to include in the DataFrame.
+    :param <str> postfix: A postfix to append to the xcat column. Default is None.
+    :param <List[str]> metrics: A list of metrics to include in the DataFrame. Default is
+        ["eop", "grading"].
+    :return: A dense DataFrame with the changes in the information state.
+    """
+
     # TODO store real_date min and max in object...
     dtrange = pd.date_range(
         start=min_period,
@@ -360,18 +495,23 @@ def sparse_to_dense(
 
 
 def temporal_aggregator_exponential(
-    df: pd.DataFrame,
+    df: QuantamentalDataFrame,
     halflife: int = 5,
     winsorise: float = None,
 ) -> pd.DataFrame:
+    """
+    Temporal aggregator using exponential moving average.
+
+    :param <QuantamentalDataFrame> df: The QuantamentalDataFrame to aggregate.
+    :param <int> halflife: The halflife of the exponential moving average.
+    :param <float> winsorise: The value to winsorise the data to. Default is None.
+    :return: A DataFrame with the aggregated values.
+    """
     tdf: pd.DataFrame = qdf_to_ticker_df(df)
     if winsorise:
         tdf = tdf.clip(lower=-winsorise, upper=winsorise)
     # Exponential moving average weights
-    # (check implementation: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.ewm.html)
-
     tdf = tdf.ewm(halflife=halflife).mean()
-
     qdf: QuantamentalDataFrame = ticker_df_to_qdf(tdf)
     qdf["xcat"] += f"EWM{halflife:d}D"
     return qdf
@@ -382,6 +522,14 @@ def temporal_aggregator_mean(
     window: int = 21,
     winsorise: float = None,
 ) -> pd.DataFrame:
+    """
+    Temporal aggregator using a rolling mean.
+
+    :param <QuantamentalDataFrame> df: The QuantamentalDataFrame to aggregate.
+    :param <int> window: The window size for the rolling mean.
+    :param <float> winsorise: The value to winsorise the data to. Default is None.
+    :return: A DataFrame with the aggregated values.
+    """
     tdf: pd.DataFrame = qdf_to_ticker_df(df)
     if winsorise:
         tdf = tdf.clip(lower=-winsorise, upper=winsorise)
@@ -392,20 +540,22 @@ def temporal_aggregator_mean(
     return qdf
 
 
-# Aggreagte per period (temporal aggregator)
-# xcats = [cc + "_N" for cc in growth + inflation + labour + sentiment + financial]
-# dfx = msm.reduce_df(df, xcats=xcats, cids=["USD"])
-
-
 def temporal_aggregator_period(
     isc: Dict[str, pd.DataFrame],
     start: pd.Timestamp,
     end: pd.Timestamp,
     winsorise: int = 10,
+    postfix: str = "_NCSUM",
 ) -> pd.DataFrame:
-    """Temporal aggregator over periods of changes
+    """Temporal aggregator over periods of changes in the information state.
 
-    TODO add argument to choose how many periods to aggregate over.
+    :param <Dict[str, pd.DataFrame]> isc: A dictionary of DataFrames with the changes in
+        the information state for each ticker.
+    :param <pd.Timestamp> start: The start date of the period to aggregate.
+    :param <pd.Timestamp> end: The end date of the period to aggregate.
+    :param <int> winsorise: The value to winsorise the data to. Default is 10.
+    :param <str> postfix: A postfix to append to the xcat column. Default is "_NCSUM".
+    :return: A DataFrame with the aggregated values.
     """
     dt_range = pd.date_range(start=start, end=end, freq="B", inclusive="both")
     tdf: pd.DataFrame = _get_metric_df_from_isc(
@@ -437,30 +587,9 @@ def temporal_aggregator_period(
     qdf["value"] = (
         qdf.groupby(["cid", "xcat", "eop"])["value"].cumsum().reset_index(drop=True)
     )
-    qdf["xcat"] += "_NCSUM"
-    return qdf  # TODO: Check ?
-
-    # rename c
-
-    # # TODO use zscore instead fo zscore_norm_linear!
-    # dfa = (
-    #     pd.merge(
-    #         left=tdf.stack().to_frame("value").reset_index(),
-    #         right=p_eop.stack().to_frame("eop").reset_index(),
-    #         how="left",
-    #         on=["real_date", "ticker"],
-    #     )
-    #     .sort_values(by=["ticker", "real_date"])
-    #     .rename(columns={"ticker": "xcat"})
-    # )
-    # dfa["cumsum"] = dfa.groupby(["xcat", "eop"])["value"].cumsum()
-    # dfa["cid"] = "USD"
-
-    # # Aggregate (cumulatively) on a per period basis
-    # dfa["csum"] = dfa.groupby(["xcat", "eop"])["value"].cumsum()
-    # dfa["xcat"] += "_NCSUM"
-
-    # return dfa[["real_date", "cid", "xcat", "csum"]].rename(columns={"csum": "value"})
+    if postfix:
+        qdf["xcat"] += postfix
+    return qdf
 
 
 def _calculate_score_on_sparse_indicator_for_class(
@@ -473,6 +602,11 @@ def _calculate_score_on_sparse_indicator_for_class(
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
 ):
+    """
+    Calculate score on sparse indicator for a class.
+    Effectively a re-implementation of the function `calculate_score_on_sparse_indicator`
+    that specifically operates on an `InformationStateChanges` object.
+    """
     assert isinstance(
         cls, InformationStateChanges
     ), "cls must be an InformationStateChanges object"
@@ -520,6 +654,14 @@ def _calculate_score_on_sparse_indicator_for_class(
 
 
 class InformationStateChanges(object):
+    """
+    Class to hold information state changes for a set of tickers.
+
+    Initialize using the `from_qdf` class method to create an `InformationStateChanges`
+    object from a `QuantamentalDataFrame`. The `calculate_score` method can be used to
+    calculate scores for the information state changes.
+    """
+
     def __init__(
         self,
         min_period: pd.Timestamp = None,
@@ -543,18 +685,38 @@ class InformationStateChanges(object):
         return repr(self.isc_dict)
 
     def keys(self):
+        """
+        A list of tickers in the InformationStateChanges object.
+        """
         return self.isc_dict.keys()
 
     def values(self):
+        """
+        Extract the DataFrames from the InformationStateChanges object.
+        """
         return self.isc_dict.values()
 
     def items(self):
+        """
+        Iterate through (ticker, DataFrame) pairs in the InformationStateChanges object.
+        """
         return self.isc_dict.items()
 
     @classmethod
     def from_qdf(
         cls, qdf: QuantamentalDataFrame, norm: bool = True, **kwargs
     ) -> "InformationStateChanges":
+        """
+        Create an InformationStateChanges object from a QuantamentalDataFrame.
+
+        :param <QuantamentalDataFrame> qdf: The QuantamentalDataFrame to create the
+            InformationStateChanges object from.
+        :param <bool> norm: If True, calculate the score for the information state changes.
+        :param <**kwargs>: Additional keyword arguments to pass to the `calculate_score`
+            method.
+        :return: An InformationStateChanges object.
+        """
+
         isc = cls(min_period=qdf["real_date"].min(), max_period=qdf["real_date"].max())
         isc_dict, density_stats_df = create_delta_data(qdf, return_density_stats=True)
 
@@ -572,6 +734,15 @@ class InformationStateChanges(object):
         postfix: str = None,
         metrics: List[str] = ["eop", "grading"],
     ) -> pd.DataFrame:
+        """
+        Convert the InformationStateChanges object to a QuantamentalDataFrame.
+
+        :param <str> value_column: The name of the column to use as the value.
+        :param <str> postfix: A postfix to append to the xcat column. Default is None.
+        :param <List[str]> metrics: A list of metrics to include in the DataFrame. Default is
+            ["eop", "grading"].
+        :return: A QuantamentalDataFrame with the information state changes.
+        """
         return sparse_to_dense(
             isc=self.isc_dict,
             value_column=value_column,
@@ -587,6 +758,17 @@ class InformationStateChanges(object):
         start: Optional[pd.Timestamp] = None,
         end: Optional[pd.Timestamp] = None,
     ) -> pd.DataFrame:
+        """
+        Temporal aggregator over periods of changes in the information state.
+
+        :param <int> winsorise: The value to winsorise the data to. Default is 10.
+        :param <pd.Timestamp> start: The start date of the period to aggregate.
+        :param <pd.Timestamp> end: The end date of the period to aggregate.
+        :return: A DataFrame with the aggregated values.
+
+
+
+        """
         return temporal_aggregator_period(
             isc=self.isc_dict,
             start=start or self._min_period,
@@ -604,6 +786,29 @@ class InformationStateChanges(object):
         custom_method: Optional[Callable] = None,
         custom_method_kwargs: Dict = {},
     ):
+        """
+        Calculate score on sparse indicator for the InformationStateChanges object.
+
+        :param <str> std: The method to use for calculating the standard deviation.
+            Supported methods are `std`, `abs`, `exp` and `exp_abs`. See the documentation for
+            `StandardDeviationMethods` for more information.
+
+        :param <int> halflife: The halflife of the exponential weighting. Only used with `exp`
+            and `exp_abs` methods. Default is None.
+        :param <int> min_periods: The minimum number of periods required for the calculation.
+            Default is 10.
+        :param <int> isc_version: The version of the information state changes to use. If set
+            to 0 (default), only the first version is used. If set to any other positive integer,
+            all versions are used.
+        :param <bool> iis: if True (default) zn-scores are also calculated for the initial
+            sample period defined by `min_periods`, on an in-sample basis, to avoid losing history.
+        :param <Callable> custom_method: A custom method to use for calculating the standard
+            deviation. Must have the signature `custom_method(s: pd.Series, **kwargs) -> pd.Series`.
+        :param <Dict> custom_method_kwargs: Keyword arguments to pass to the custom method.
+
+
+        """
+
         _calculate_score_on_sparse_indicator_for_class(
             cls=self,
             std=std,
