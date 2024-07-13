@@ -30,7 +30,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
             model must have `coef_` and `intercept_` attributes, in accordance with
             standard `scikit-learn` conventions.
         :param <str> method: The method used to modify the coefficients. Accepted values
-            are "standard" and "bootstrap".
+            are "analytic" and "bootstrap".
         :param <float> error_offset: A small offset to add to the standard errors to
             prevent division by zero in the case of very small standard errors. Default
             value is 1e-2.
@@ -92,7 +92,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
             )
 
         # Modify coefficients
-        if self.method == "standard":
+        if self.method == "analytic":
             self.intercept_, self.coef_ = self.adjust_analytical_se(
                 self.model,
                 X,
@@ -296,7 +296,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
             model must have `coef_` and `intercept_` attributes once fit, in accordance
             with standard `scikit-learn` conventions.
         :param <str> method: The method used to modify the coefficients. Accepted values
-            are "standard" and "bootstrap".
+            are "analytic" and "bootstrap".
         :param <float> error_offset: A small offset to add to the standard errors to
             prevent division by zero in the case of very small standard errors.
         :param <str> bootstrap_method: The bootstrap method used to modify the
@@ -319,8 +319,8 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         # method
         if not isinstance(method, str):
             raise TypeError("method must be a string.")
-        if method not in ["standard", "bootstrap"]:
-            raise ValueError("method must be either 'standard' or 'bootstrap'.")
+        if method not in ["analytic", "bootstrap"]:
+            raise ValueError("method must be either 'analytic' or 'bootstrap'.")
         # error_offset
         if not isinstance(error_offset, (float, int)):
             raise TypeError("error_offset must be a float or an integer.")
@@ -331,7 +331,6 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
             if not isinstance(bootstrap_method, str):
                 raise TypeError("bootstrap_method must be a string.")
             if bootstrap_method not in [
-                "standard",
                 "panel",
                 "period",
                 "cross",
@@ -339,7 +338,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 "period_per_cross",
             ]:
                 raise ValueError(
-                    "bootstrap_method must be one of 'standard', 'panel', 'period', "
+                    "bootstrap_method must be one of 'panel', 'period', "
                     "'cross', 'cross_per_period', or 'period_per_cross'."
                 )
         # bootstrap_iters
@@ -419,7 +418,7 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         by estimated standard errors to account for statistical precision of the estimates.
         
         :param <str> method: The method used to modify the coefficients. Accepted values
-            are "standard" and "bootstrap".
+            are "analytic" and "bootstrap".
         :param <bool> fit_intercept: Whether to fit an intercept term in the model.
             Default is True.
         :param <bool> positive: Whether to constrain the coefficients to be positive.
@@ -542,7 +541,7 @@ if __name__ == "__main__":
     y = dfd["XR"]
 
     method_pairs = [
-        ("standard", "panel"),
+        ("analytic", "panel"),
         ("bootstrap", "panel"),
         ("bootstrap", "period"),
         ("bootstrap", "cross"),
