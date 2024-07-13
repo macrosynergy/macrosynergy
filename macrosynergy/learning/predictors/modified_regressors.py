@@ -158,8 +158,11 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         bootstrap_intercepts = np.zeros(bootstrap_iters)
 
         index_array = np.array(X.index.tolist())
-        level_0_values = index_array[:, 0]
-        level_1_values = index_array[:, 1]
+        cross_sections = index_array[:, 0]
+        real_dates = index_array[:, 1]
+        unique_cross_sections = np.unique(cross_sections)
+        unique_real_dates = np.unique(real_dates)
+
 
         # Now create each of the bootstrap datasets
         for i in range(bootstrap_iters):
@@ -173,19 +176,25 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 X_resampled = X.values[bootstrap_idx, :]
                 y_resampled = y.values[bootstrap_idx]
 
+            # If mehtod is period, sample with replacement from the unique time periods
             elif bootstrap_method == "period":
                 # Resample the unique time periods from the panel
                 # and select all observations within those periods
                 bootstrap_periods = np.random.choice(
-                    level_1_values,
-                    size=int(len(level_1_values) * resample_ratio),
+                    unique_real_dates,
+                    size=int(len(unique_real_dates) * resample_ratio),
                     replace=True,
                 )
+                # Instead of looping through the periods chosen, it is more efficient to
+                # identify how many times each period was chosen and loop through
+                # those counts.
+                # Obtain a {count: [periods]} dictionary
                 period_counts = dict(Counter(bootstrap_periods))
                 count_to_periods = defaultdict(list)
                 for period, count in period_counts.items():
                     count_to_periods[count].append(period)
 
+                # For each count, tile the observations within the periods with that count
                 X_resampled = np.empty((0, X.shape[1]))
                 y_resampled = np.empty(0)
                 for count, periods in count_to_periods.items():
@@ -203,45 +212,6 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                             count
                         ),
                     )
-                #unique_counts = []
-                #indices = []#
-
-                #for count in unique_counts:
-                #    periods_with_count_c = [period for period, c in counter.items() if c == count]
-                #    for period in periods_with_count_c:
-                #        period_indices = np.where(level_1_values == period)[0]
-                #        indices.append(np.random.choice(period_indices, count))
-                #for period, count in counter.items():
-                #    period_indices = np.where(level_1_values == period)[0]
-                #    indices.append(np.tile(period_indices, count))
-
-
-                #X_resampled = X[X.index.get_level_values(1).isin(bootstrap_periods)].values
-                #y_resampled = y[y.index.get_level_values(1).isin(bootstrap_periods)].values
-
-                #repeated_indices = np.hstack([
-                #    np.where(level_1_values == period)[0] for period in bootstrap_periods
-                #])
-
-
-                #period_counts = Counter(bootstrap_periods)
-
-                #indices = np.hstack([
-                #    np.repeat(np.where(level_1_values == period)[0], count)
-                #    for period, count in period_counts.items()
-                #])
-
-                #X_resampled = X.values[indices, :]
-                #y_resampled = y.values[indices]
-                # now get samples from X and y within those periods
-                #X_resampled = np.empty((0, X.shape[1]))
-                #y_resampled = np.empty(0)
-
-                #for period in bootstrap_periods.unique():
-
-                #    period_indices = np.where(level_1_values == period)[0]
-                #    X_resampled = np.vstack((X_resampled, X.values[period_indices, :]))
-                #    y_resampled = np.append(y_resampled, y.values[period_indices])
 
             elif bootstrap_method == "cross":
                 # Resample the unique cross sections from the panel
@@ -251,56 +221,48 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                     size=int(len(unique_cross_sections) * resample_ratio),
                     replace=True,
                 )
-                # now get samples from X and y within those cross sections
-                indices = []
-                for cross_section in bootstrap_cross_sections:
-                    cross_section_indices = X.index[
-                        X.index.get_level_values(0) == cross_section
-                    ]
-                    indices.extend(cross_section_indices.tolist())
+                # Obtain a {count: [cross_sections]} dictionary
+                cross_section_counts = dict(Counter(bootstrap_cross_sections))
+                count_to_cross_sections = defaultdict(list)
+                for cross_section, count in cross_section_counts.items():
+                    count_to_cross_sections[count].append(cross_section)
 
-                bootstrap_idx = pd.Index(indices)
-
-                X_resampled = X.loc[bootstrap_idx]
-                y_resampled = y.loc[bootstrap_idx]
+                # For each count, tile the observations within the cross-sections with that count
+                X_resampled = np.empty((0, X.shape[1]))
+                y_resampled = np.empty(0)
+                for count, cross_sections in count_to_cross_sections.items():
+                    X_resampled = np.vstack([
+                        X_resampled,
+                        np.tile(
+                            X[X.index.get_level_values(0).isin(cross_sections)].values,
+                            (count, 1)
+                        ),
+                    ])
+                    y_resampled = np.append(
+                        y_resampled,
+                        np.tile(
+                            y[y.index.get_level_values(0).isin(cross_sections)].values,
+                            count
+                        ),
+                    )
 
             elif bootstrap_method == "cross_per_period":
-                # Resample observations within each unique time period
-                indices = []
-
-                for time_period in unique_time_periods:
-                    period_indices = X.index[X.index.get_level_values(1) == time_period]
-                    bootstrap_idx = np.random.choice(
-                        period_indices,
-                        size=int(len(period_indices) * resample_ratio),
-                        replace=True,
-                    )
-                    indices.extend(bootstrap_idx)
-
-                bootstrap_idx = pd.Index(indices)
-
-                X_resampled = X.loc[bootstrap_idx]
-                y_resampled = y.loc[bootstrap_idx]
+                # Get number of samples to resample within each unique time period
+                n_resample = int(len(unique_cross_sections) * resample_ratio)
+                X_resampled = X.groupby(level=1).sample(replace=True, n=n_resample)
+                y_resampled = y.loc[X_resampled.index]
+                # convert to numpy arrays
+                X_resampled = X_resampled.values
+                y_resampled = y_resampled.values
 
             elif bootstrap_method == "period_per_cross":
-                # Resample observations within each unique cross section
-                indices = []
-
-                for cross_section in unique_cross_sections:
-                    cross_section_indices = X.index[
-                        X.index.get_level_values(0) == cross_section
-                    ]
-                    bootstrap_idx = np.random.choice(
-                        cross_section_indices,
-                        size=int(len(cross_section_indices) * resample_ratio),
-                        replace=True,
-                    )
-                    indices.extend(bootstrap_idx)
-
-                bootstrap_idx = pd.Index(indices)
-
-                X_resampled = X.loc[bootstrap_idx]
-                y_resampled = y.loc[bootstrap_idx]
+                # Get number of samples to resample within each cross-section
+                n_resample = int(len(unique_real_dates) * resample_ratio)
+                X_resampled = X.groupby(level=0).sample(replace=True, n=n_resample)
+                y_resampled = y.loc[X_resampled.index]
+                # convert to numpy arrays
+                X_resampled = X_resampled.values
+                y_resampled = y_resampled.values
 
             model.fit(X_resampled, y_resampled)
 
@@ -630,7 +592,7 @@ if __name__ == "__main__":
 
     """ Linear regression with panel bootstrap adjustment """
 
-    model = ModifiedLinearRegression(
+    """model = ModifiedLinearRegression(
         method="bootstrap",
         bootstrap_method="period",
         bootstrap_iters=100,
@@ -680,4 +642,173 @@ if __name__ == "__main__":
         test_size=21 * 12 * 2,
     )
     so.models_heatmap("ModifiedOLS_period")
-    so.coefs_stackedbarplot("ModifiedOLS_period")
+    so.coefs_stackedbarplot("ModifiedOLS_period")"""
+
+    """ Linear regression with cross bootstrap adjustment """
+
+    """model = ModifiedLinearRegression(
+        method="bootstrap",
+        bootstrap_method="cross",
+        bootstrap_iters=100,
+        resample_ratio=0.5,
+    )
+    model.fit(X, y)
+    print("Modified OLS intercept:", model.intercept_)
+    print("Modified OLS coefficients:", model.coef_)
+    print("Modified OLS signal:", model.predict(X))
+
+    # Grid search for a modified linear regression with analytical standard error adjustment
+    cv = GridSearchCV(
+        estimator=model,
+        param_grid={
+            "fit_intercept": [True, False],
+            "positive": [True, False],
+        },
+        cv=5,
+        n_jobs=-1,
+    )
+    cv.fit(X, y)
+    print("Modified OLS grid search results:")
+    print("-----------------------------")
+    print(pd.DataFrame(cv.cv_results_))
+    print("-----------------------------")
+
+    # Try with signal optimizer
+    inner_splitter = ExpandingKFoldPanelSplit(n_splits = 5)
+    so = SignalOptimizer(
+        inner_splitter=inner_splitter,
+        X = X,
+        y = y,
+    )
+    so.calculate_predictions(
+        name="ModifiedOLS_cross",
+        models = {
+            "mlr": model,
+        },
+        metric = make_scorer(r2_score, greater_is_better=True),
+        hparam_grid= {
+            "mlr": {
+                "fit_intercept": [True, False],
+                "positive": [True, False],
+            },
+        },
+        hparam_type="grid",
+        test_size=21 * 12 * 2,
+    )
+    so.models_heatmap("ModifiedOLS_cross")
+    so.coefs_stackedbarplot("ModifiedOLS_cross")"""
+
+    """model = ModifiedLinearRegression(
+        method="bootstrap",
+        bootstrap_method="cross_per_period",
+        bootstrap_iters=100,
+        resample_ratio=0.5,
+    )
+    model.fit(X, y)
+    print("Modified OLS intercept:", model.intercept_)
+    print("Modified OLS coefficients:", model.coef_)
+    print("Modified OLS signal:", model.predict(X))
+
+    # Grid search for a modified linear regression with analytical standard error adjustment
+    cv = GridSearchCV(
+        estimator=model,
+        param_grid={
+            "fit_intercept": [True, False],
+            "positive": [True, False],
+        },
+        cv=5,
+        n_jobs=-1,
+    )
+    cv.fit(X, y)
+    print("Modified OLS grid search results:")
+    print("-----------------------------")
+    print(pd.DataFrame(cv.cv_results_))
+    print("-----------------------------")
+
+    # Try with signal optimizer
+    inner_splitter = ExpandingKFoldPanelSplit(n_splits = 5)
+    so = SignalOptimizer(
+        inner_splitter=inner_splitter,
+        X = X,
+        y = y,
+    )
+    so.calculate_predictions(
+        name="ModifiedOLS_cross_per_period",
+        models = {
+            "mlr": model,
+        },
+        metric = make_scorer(r2_score, greater_is_better=True),
+        hparam_grid= {
+            "mlr": {
+                "fit_intercept": [True, False],
+                "positive": [True, False],
+            },
+        },
+        hparam_type="grid",
+        test_size=21 * 12 * 2,
+    )
+    so.models_heatmap("ModifiedOLS_cross_per_period")
+    so.coefs_stackedbarplot("ModifiedOLS_cross_per_period")"""
+    method_pairs = [
+        ("standard", "panel"),
+        ("bootstrap", "panel"),
+        ("bootstrap", "period"),
+        ("bootstrap", "cross"),
+        ("bootstrap", "cross_per_period"),
+        ("bootstrap", "period_per_cross"),
+    ]
+    for method in method_pairs:
+        model = ModifiedLinearRegression(
+            method=method[0],
+            bootstrap_method=method[1],
+            bootstrap_iters=100,
+            resample_ratio=0.75,
+        )
+        # Fit the model
+        model.fit(X, y)
+        print("----")
+        print("Modified OLS intercept:", model.intercept_)
+        print("Modified OLS coefficients:", model.coef_)
+        print("Modified OLS signal:", model.predict(X))
+        print("----")
+
+        # Grid search 
+        cv = GridSearchCV(
+            estimator=model,
+            param_grid={
+                "fit_intercept": [True, False],
+                "positive": [True, False],
+            },
+            cv=5,
+            n_jobs=-1,
+        )
+        cv.fit(X, y)
+        print("----")
+        print("Modified OLS grid search results:")
+        print(pd.DataFrame(cv.cv_results_))
+        print("----")
+        
+        # Try with signal optimizer
+        inner_splitter = ExpandingKFoldPanelSplit(n_splits = 5)
+        so = SignalOptimizer(
+            inner_splitter=inner_splitter,
+            X = X,
+            y = y,
+        )
+        so.calculate_predictions(
+            name=f"ModifiedOLS_{method[0]}_{method[1]}",
+            models = {
+                "mlr": model,
+            },
+            metric = make_scorer(r2_score, greater_is_better=True),
+            hparam_grid= {
+                "mlr": {
+                    "fit_intercept": [True, False],
+                    "positive": [True, False],
+                },
+            },
+            hparam_type="grid",
+            test_size=21 * 12 * 2,
+        )
+        so.models_heatmap(f"ModifiedOLS_{method[0]}_{method[1]}")
+        so.coefs_stackedbarplot(f"ModifiedOLS_{method[0]}_{method[1]}")
