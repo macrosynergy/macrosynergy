@@ -4,7 +4,7 @@ import pandas as pd
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import LinearRegression
 
-from typing import Union
+from typing import Union, Optional
 from abc import ABC, abstractmethod
 
 import datetime
@@ -21,6 +21,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         bootstrap_method: str = "panel",
         bootstrap_iters: int = 1000,
         resample_ratio: Union[float, int] = 1,
+        analytic_method: Optional[str] = None,
     ):
         """
         Base class for linear regressors where coefficients are modified by estimated
@@ -43,6 +44,11 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
             in each bootstrap dataset. This is a fraction of the quantity of the panel
             component to be resampled. Default value is 1.
+        :param <Optional[str]> analytic_method: The analytic method used to calculate
+            standard errors. Expressions for analytic standard errors are expected to be
+            written within the method `adjust_analytical_se` and this parameter can be 
+            passed into `adjust_analyical_se` for an alternative analytic standard error
+            estimate, for instance White's estimator. Default value is None.
 
         :return None
         """
@@ -52,6 +58,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         self.bootstrap_method = bootstrap_method
         self.bootstrap_iters = bootstrap_iters
         self.resample_ratio = resample_ratio
+        self.analytic_method = analytic_method
 
         self.check_init_params(
             model=self.model,
@@ -60,6 +67,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
             bootstrap_method=self.bootstrap_method,
             bootstrap_iters=self.bootstrap_iters,
             resample_ratio=self.resample_ratio,
+            analytic_method=self.analytic_method,
         )
 
     def fit(
@@ -97,6 +105,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 self.model,
                 X,
                 y,
+                self.analytic_method,
             )
         elif self.method == "bootstrap":
             self.intercept_, self.coef_ = self.adjust_bootstrap_se(
@@ -136,7 +145,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         model: RegressorMixin,
         X: pd.DataFrame,
         y: Union[pd.DataFrame, pd.Series],
-        **kwargs,
+        analytic_method: Optional[str],
     ):
         raise NotImplementedError(
             "Analytical standard error adjustments are not available for most models."
@@ -288,6 +297,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         bootstrap_method: str,
         bootstrap_iters: int,
         resample_ratio: Union[float, int],
+        analytic_method: Optional[str] = None,
     ):
         """
         Method to check the validity of the initialization parameters of the class.
@@ -308,6 +318,11 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
             in each bootstrap dataset. This is a fraction of the quantity of the panel
             component to be resampled.
+        :param <Optional[str]> analytic_method: The analytic method used to calculate
+            standard errors. Expressions for analytic standard errors are expected to be
+            written within the method `adjust_analytical_se` and this parameter can be
+            passed into `adjust_analyical_se` for an alternative analytic standard error
+            estimate, for instance White's estimator.
 
         :return None
         """
@@ -356,6 +371,12 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 raise ValueError("resample_ratio must be greater than 0.")
             if resample_ratio > 1:
                 raise ValueError("resample_ratio must be less than or equal to 1.")
+            
+        # analytic_method
+        if method == "analytic":
+            if analytic_method is not None:
+                if not isinstance(analytic_method, str):
+                    raise TypeError("analytic_method must be a string.")
 
     def check_fit_params(
         self,
@@ -412,6 +433,7 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         bootstrap_method: str = "panel",
         bootstrap_iters: int = 1000,
         resample_ratio: Union[float, int] = 1,
+        analytic_method: Optional[str] = None,
     ):
         """
         Custom class to train an OLS linear regression model with coefficients modified 
@@ -435,6 +457,11 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
             in each bootstrap dataset. This is a fraction of the quantity of the panel
             component to be resampled. Default value is 1.
+        :param <Optional[str]> analytic_method: The analytic method used to calculate
+            standard errors. Expressions for analytic standard errors are expected to be
+            written within the method `adjust_analytical_se` and this parameter can be
+            passed into `adjust_analyical_se` for an alternative analytic standard error
+            estimate, for instance White's estimator. Default value is None.
 
         :return None
         """
@@ -448,6 +475,7 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
             bootstrap_method=bootstrap_method,
             bootstrap_iters=bootstrap_iters,
             resample_ratio=resample_ratio,
+            analytic_method=analytic_method,
         )
 
     def adjust_analytical_se(
@@ -455,11 +483,14 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         model: RegressorMixin,
         X: pd.DataFrame,
         y: Union[pd.DataFrame, pd.Series],
+        analytic_method: Optional[str],
     ):
         """
-        Method to adjust the coefficients of the linear model by the analytical
-        standard error expression obtain through assuming multivariate normality of the
-        model errors.
+        Method to adjust the coefficients of the linear model by an analytical
+        standard error expression. The default is to use the standard error estimate
+        obtained through assuming multivariate normality of the model errors as well as
+        heteroskedasticity and zero mean. If `analytic_method` is "White", the White
+        estimator is used to estimate the standard errors.
 
         :param <RegressorMixin> model: The underlying linear model to be modified. This
             model must have `coef_` and `intercept_` attributes, in accordance with
@@ -467,26 +498,41 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         :param <pd.DataFrame> X: Pandas dataframe of input features.
         :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
             associated with each sample in X.
+        :param <Optional[str]> analytic_method: The analytic method used to calculate
+            standard errors. If None, the default method is used. Currently, the only
+            alternative we offer is White's estimator, which requires "White" to be
+            specified. Default value is None.
 
         :return <float>, <np.ndarray>: The adjusted intercept and coefficients.
         """
+        # Checks 
+        if analytic_method is not None:
+            if not isinstance(analytic_method, str):
+                raise TypeError("analytic_method must be a string.")
+            if analytic_method not in ["White"]:
+                raise ValueError("analytic_method must be 'White'.")
+            
         # Calculate the standard errors
-        coef_se = np.sqrt(
-            np.diag(
-                np.linalg.inv(np.dot(X.T, X))
-                * np.sum(np.square(y - model.predict(X)))
-                / (X.shape[0] - X.shape[1])
+        if analytic_method is None:
+            coef_se = np.sqrt(
+                np.diag(
+                    np.linalg.inv(np.dot(X.T, X))
+                    * np.sum(np.square(y - model.predict(X)))
+                    / (X.shape[0] - X.shape[1])
+                )
             )
-        )
-        intercept_se = np.sqrt(
-            np.sum(np.square(y - model.predict(X))) / (X.shape[0] - X.shape[1])
-        )
+            intercept_se = np.sqrt(
+                np.sum(np.square(y - model.predict(X))) / (X.shape[0] - X.shape[1])
+            )
 
-        # Adjust the coefficients and intercepts by the standard errors
-        coef = model.coef_ / (coef_se + self.error_offset)
-        intercept = model.intercept_ / (intercept_se + self.error_offset)
+            # Adjust the coefficients and intercepts by the standard errors
+            coef = model.coef_ / (coef_se + self.error_offset)
+            intercept = model.intercept_ / (intercept_se + self.error_offset)
 
-        return intercept, coef
+            return intercept, coef
+        else:
+            pass
+            
     
     def set_params(self, **params):
         super().set_params(**params)
