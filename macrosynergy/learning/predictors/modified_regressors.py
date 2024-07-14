@@ -536,7 +536,7 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
                 )
             )
 
-        else:
+        elif analytic_method == "White":
             # Implement HC3
             leverages = np.diag(X_new @ np.linalg.inv(X_new.T @ X_new) @ X_new.T)
             se = (
@@ -546,6 +546,11 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
                 @ np.linalg.inv(X_new.T @ X_new)
             )
             se = np.sqrt(np.diag(se))
+
+        else:
+            raise NotImplementedError(
+                "Currently, only the standard and White standard errors are implemented"
+            )
 
         if self.fit_intercept:
             coef_se = se[1:]
