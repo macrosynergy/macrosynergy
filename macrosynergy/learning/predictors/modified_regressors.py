@@ -539,7 +539,7 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         elif analytic_method == "White":
             # Implement HC3
             leverages = np.diag(X_new @ np.linalg.inv(X_new.T @ X_new) @ X_new.T)
-            weights = 1 / (1 - leverages)**2
+            weights = 1 / (1 - leverages) ** 2
             W = np.diag(weights)
             cov_matrix = (
                 np.linalg.inv(X_new.T @ X_new)
