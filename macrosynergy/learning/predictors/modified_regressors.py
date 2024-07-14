@@ -46,7 +46,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
             component to be resampled. Default value is 1.
         :param <Optional[str]> analytic_method: The analytic method used to calculate
             standard errors. Expressions for analytic standard errors are expected to be
-            written within the method `adjust_analytical_se` and this parameter can be 
+            written within the method `adjust_analytical_se` and this parameter can be
             passed into `adjust_analyical_se` for an alternative analytic standard error
             estimate, for instance White's estimator. Default value is None.
 
@@ -172,7 +172,6 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         unique_cross_sections = np.unique(cross_sections)
         unique_real_dates = np.unique(real_dates)
 
-
         # Now create each of the bootstrap datasets
         for i in range(bootstrap_iters):
             # If method is panel, sample with replacement from the entire dataset
@@ -207,18 +206,19 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 X_resampled = np.empty((0, X.shape[1]))
                 y_resampled = np.empty(0)
                 for count, periods in count_to_periods.items():
-                    X_resampled = np.vstack([
-                        X_resampled,
-                        np.tile(
-                            X[X.index.get_level_values(1).isin(periods)].values,
-                            (count, 1)
-                        ),
-                    ])
+                    X_resampled = np.vstack(
+                        [
+                            X_resampled,
+                            np.tile(
+                                X[X.index.get_level_values(1).isin(periods)].values,
+                                (count, 1),
+                            ),
+                        ]
+                    )
                     y_resampled = np.append(
                         y_resampled,
                         np.tile(
-                            y[y.index.get_level_values(1).isin(periods)].values,
-                            count
+                            y[y.index.get_level_values(1).isin(periods)].values, count
                         ),
                     )
 
@@ -240,18 +240,22 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 X_resampled = np.empty((0, X.shape[1]))
                 y_resampled = np.empty(0)
                 for count, cross_sections in count_to_cross_sections.items():
-                    X_resampled = np.vstack([
-                        X_resampled,
-                        np.tile(
-                            X[X.index.get_level_values(0).isin(cross_sections)].values,
-                            (count, 1)
-                        ),
-                    ])
+                    X_resampled = np.vstack(
+                        [
+                            X_resampled,
+                            np.tile(
+                                X[
+                                    X.index.get_level_values(0).isin(cross_sections)
+                                ].values,
+                                (count, 1),
+                            ),
+                        ]
+                    )
                     y_resampled = np.append(
                         y_resampled,
                         np.tile(
                             y[y.index.get_level_values(0).isin(cross_sections)].values,
-                            count
+                            count,
                         ),
                     )
 
@@ -371,7 +375,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 raise ValueError("resample_ratio must be greater than 0.")
             if resample_ratio > 1:
                 raise ValueError("resample_ratio must be less than or equal to 1.")
-            
+
         # analytic_method
         if method == "analytic":
             if analytic_method is not None:
@@ -422,7 +426,8 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 "The indices of the input dataframe X and the output dataframe y don't "
                 "match."
             )
-        
+
+
 class ModifiedLinearRegression(BaseModifiedRegressor):
     def __init__(
         self,
@@ -436,9 +441,9 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         analytic_method: Optional[str] = None,
     ):
         """
-        Custom class to train an OLS linear regression model with coefficients modified 
+        Custom class to train an OLS linear regression model with coefficients modified
         by estimated standard errors to account for statistical precision of the estimates.
-        
+
         :param <str> method: The method used to modify the coefficients. Accepted values
             are "analytic" and "bootstrap".
         :param <bool> fit_intercept: Whether to fit an intercept term in the model.
@@ -469,7 +474,9 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         self.positive = positive
 
         super().__init__(
-            model=LinearRegression(fit_intercept=self.fit_intercept, positive=self.positive),
+            model=LinearRegression(
+                fit_intercept=self.fit_intercept, positive=self.positive
+            ),
             method=method,
             error_offset=error_offset,
             bootstrap_method=bootstrap_method,
@@ -505,35 +512,54 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
 
         :return <float>, <np.ndarray>: The adjusted intercept and coefficients.
         """
-        # Checks 
+        # Checks
         if analytic_method is not None:
             if not isinstance(analytic_method, str):
                 raise TypeError("analytic_method must be a string.")
             if analytic_method not in ["White"]:
                 raise ValueError("analytic_method must be 'White'.")
-            
+
+        if self.fit_intercept:
+            X_new = np.column_stack((np.ones(len(X)), X.values))
+        else:
+            X_new = X.values
+
         # Calculate the standard errors
+        predictions = model.predict(X)
+        residuals = y - predictions
         if analytic_method is None:
-            coef_se = np.sqrt(
+            se = np.sqrt(
                 np.diag(
                     np.linalg.inv(np.dot(X.T, X))
-                    * np.sum(np.square(y - model.predict(X)))
+                    * np.sum(np.square(residuals))
                     / (X.shape[0] - X.shape[1])
                 )
             )
-            intercept_se = np.sqrt(
-                np.sum(np.square(y - model.predict(X))) / (X.shape[0] - X.shape[1])
-            )
 
-            # Adjust the coefficients and intercepts by the standard errors
-            coef = model.coef_ / (coef_se + self.error_offset)
-            intercept = model.intercept_ / (intercept_se + self.error_offset)
-
-            return intercept, coef
         else:
-            pass
-            
-    
+            # Implement HC3
+            leverages = np.diag(X_new @ np.linalg.inv(X_new.T @ X_new) @ X_new.T)
+            se = (
+                np.linalg.inv(X_new.T @ X_new)
+                @ (X_new.T * (np.square(residuals) / np.square(1 - leverages)))
+                @ X_new
+                @ np.linalg.inv(X_new.T @ X_new)
+            )
+            se = np.sqrt(np.diag(se))
+
+        if self.fit_intercept:
+            coef_se = se[1:]
+            intercept_se = se[0]
+        else:
+            coef_se = se
+            intercept_se = 0
+
+        # Adjust the coefficients and intercepts by the standard errors
+        coef = model.coef_ / (coef_se + self.error_offset)
+        intercept = model.intercept_ / (intercept_se + self.error_offset)
+
+        return intercept, coef
+
     def set_params(self, **params):
         super().set_params(**params)
         if "fit_intercept" in params or "positive" in params:
@@ -543,8 +569,6 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
             )
 
         return self
-
-
 
 
 if __name__ == "__main__":
@@ -609,7 +633,7 @@ if __name__ == "__main__":
         print("Modified OLS signal:", model.predict(X))
         print("----")
 
-        # Grid search 
+        # Grid search
         cv = GridSearchCV(
             estimator=model,
             param_grid={
@@ -624,21 +648,21 @@ if __name__ == "__main__":
         print("Modified OLS grid search results:")
         print(pd.DataFrame(cv.cv_results_))
         print("----")
-        
+
         # Try with signal optimizer
-        inner_splitter = ExpandingKFoldPanelSplit(n_splits = 5)
+        inner_splitter = ExpandingKFoldPanelSplit(n_splits=5)
         so = SignalOptimizer(
             inner_splitter=inner_splitter,
-            X = X,
-            y = y,
+            X=X,
+            y=y,
         )
         so.calculate_predictions(
             name=f"ModifiedOLS_{method[0]}_{method[1]}",
-            models = {
+            models={
                 "mlr": model,
             },
-            metric = make_scorer(r2_score, greater_is_better=True),
-            hparam_grid= {
+            metric=make_scorer(r2_score, greater_is_better=True),
+            hparam_grid={
                 "mlr": {
                     "fit_intercept": [True, False],
                     "positive": [True, False],
