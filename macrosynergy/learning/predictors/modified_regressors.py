@@ -530,7 +530,7 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         if analytic_method is None:
             se = np.sqrt(
                 np.diag(
-                    np.linalg.inv(np.dot(X.T, X))
+                    np.linalg.inv(np.dot(X_new.T, X_new))
                     * np.sum(np.square(residuals))
                     / (X.shape[0] - X.shape[1])
                 )
@@ -539,13 +539,14 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         elif analytic_method == "White":
             # Implement HC3
             leverages = np.diag(X_new @ np.linalg.inv(X_new.T @ X_new) @ X_new.T)
-            se = (
+            weights = 1 / (1 - leverages)**2
+            W = np.diag(weights)
+            cov_matrix = (
                 np.linalg.inv(X_new.T @ X_new)
-                @ (X_new.T * (np.square(residuals) / np.square(1 - leverages)))
-                @ X_new
+                @ (X_new.T @ W @ np.diag(np.square(residuals)) @ X_new)
                 @ np.linalg.inv(X_new.T @ X_new)
             )
-            se = np.sqrt(np.diag(se))
+            se = np.sqrt(np.diag(cov_matrix))
 
         else:
             raise NotImplementedError(
@@ -616,12 +617,13 @@ if __name__ == "__main__":
     y = dfd["XR"]
 
     method_pairs = [
-        ("analytic", "panel"),
-        ("bootstrap", "panel"),
-        ("bootstrap", "period"),
-        ("bootstrap", "cross"),
-        ("bootstrap", "cross_per_period"),
-        ("bootstrap", "period_per_cross"),
+        ("analytic", "panel", None),
+        ("analytic", "panel", "White"),
+        ("bootstrap", "panel", None),
+        ("bootstrap", "period", None),
+        ("bootstrap", "cross", None),
+        ("bootstrap", "cross_per_period", None),
+        ("bootstrap", "period_per_cross", None),
     ]
     for method in method_pairs:
         model = ModifiedLinearRegression(
@@ -629,6 +631,7 @@ if __name__ == "__main__":
             bootstrap_method=method[1],
             bootstrap_iters=100,
             resample_ratio=0.75,
+            analytic_method=method[2],
         )
         # Fit the model
         model.fit(X, y)
