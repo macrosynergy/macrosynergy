@@ -90,7 +90,8 @@ def create_delta_data(
 
     if not isinstance(df, QuantamentalDataFrame):
         raise ValueError("`df` must be a QuantamentalDataFrame")
-
+    if not isinstance(return_density_stats, bool):
+        raise ValueError("`return_density_stats` must be a boolean")
     # split into value, eop and grading
     p_value = qdf_to_ticker_df(df, value_column="value")
     p_eop = qdf_to_ticker_df(df, value_column="eop_lag")
@@ -202,7 +203,12 @@ class VolatilityEstimationMethods(metaclass=SubscriptableMeta):
         :return: The exponentially weighted absolute standard deviation of the Series.
         """
         mean = s.ewm(halflife=halflife, min_periods=min_periods).mean()
-        sd = (s - mean.bfill()).abs().ewm(halflife=halflife, min_periods=min_periods).mean()
+        sd = (
+            (s - mean.bfill())
+            .abs()
+            .ewm(halflife=halflife, min_periods=min_periods)
+            .mean()
+        )
         return sd
 
 
@@ -250,9 +256,6 @@ def calculate_score_on_sparse_indicator(
 
     :return: A dictionary of DataFrames with the changes in the information state for each ticker.
     """
-    # TODO make into a method on InformationStateChanges?
-    # TODO adjust score by eop_lag (business days?) to get a native frequency...
-    # TODO convert below operation into a function call?
     # Operations on a per key in data dictionary
 
     curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
@@ -294,8 +297,6 @@ def calculate_score_on_sparse_indicator(
 
         isc[key] = v
 
-    # TODO return [1] change, and [2] volatility estimate (mainly estimation of volatility for changes...)
-    # TODO clearer exposition
     return isc
 
 
