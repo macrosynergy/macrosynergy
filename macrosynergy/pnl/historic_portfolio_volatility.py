@@ -218,15 +218,18 @@ def _calc_vol_tuple(
     vcv_df: pd.DataFrame,
     signals: pd.DataFrame,
     date: pd.Timestamp,
+    available_cids: List[str],
 ) -> Tuple[pd.Timestamp, float]:
+
     s = signals.loc[date, :].copy()
 
-    # reduce s to vcv columns
-    if not set(s.index).issubset(vcv_df.columns):
+    s = s.loc[available_cids]
+    vcv_df = vcv_df.loc[available_cids, available_cids]
+    if not set(s.index) == set(vcv_df.columns):
         raise ValueError(
-            f"Signals do not match variance-covariance matrix at {date}!\n"
-            f"Signals: {s.index.tolist()}\n"
-            f"VCV: {vcv_df.columns.tolist()}"
+            "Signals and variance-covariance matrix do not have the same columns."
+            f"\nSignals: {s.columns.tolist()}"
+            f"\nVariance-Covariance: {vcv_df.columns.tolist()}"
         )
 
     idx_mask = s.isna() | (s.abs() < 1e-6)
@@ -360,6 +363,7 @@ def _calculate_portfolio_volatility(
             vcv_df=vcv_df,
             signals=signals,
             date=td,
+            available_cids=avails,
         )
         list_pvol.append(vol_tuple)
 
