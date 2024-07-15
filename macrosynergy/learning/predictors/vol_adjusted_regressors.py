@@ -23,33 +23,6 @@ class BaseVolAdjRegressor(BaseEstimator, RegressorMixin, ABC):
         resample_ratio: Union[float, int] = 1,
         analytic_method: Optional[str] = None,
     ):
-        """
-        Base class for scikit-learn compatible regressors where predictions are
-        modified by estimated prediction volatility.
-
-        :param <RegressorMixin> model: The underlying model to be modified.
-        :param <str> method: The method used to modify the predictions. Accepted values
-            are "analytic" and "bootstrap".
-        :param <float> error_offset: A small offset to add to the estimated prediction error to
-            prevent division by zero in the case of very small prediction errors. Default
-            value is 1e-2.
-        :param <str> bootstrap_method: The bootstrap method used to modify the coefficients.
-            Accepted values are "panel", "period", "cross", "cross_per_period"
-            and "period_per_cross". Default value is "panel".
-        :param <int> bootstrap_iters: The number of bootstrap iterations to perform in
-            order to determine the prediction errors under the bootstrap
-            approach. Default value is 1000.
-        :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
-            in each bootstrap dataset. This is a fraction of the quantity of the panel
-            component to be resampled. Default value is 1.
-        :param <Optional[str]> analytic_method: The analytic method used to calculate
-            prediction errors. Expressions for analytic prediction errors are expected to be
-            written within the method `adjust_analytical_pe` and this parameter can be 
-            passed into `adjust_analyical_pe` for an alternative analytic prediction error
-            estimate. Default value is None.
-
-        :return None
-        """
         self.model = model
         self.method = method
         self.error_offset = error_offset
@@ -89,29 +62,8 @@ class BaseVolAdjRegressor(BaseEstimator, RegressorMixin, ABC):
 
         # Fit
         self.model.fit(X, y)
-
-        # Develop ensemble
-        self.ensemble = self.panel_ensemble(
-            self.model, 
-            X,
-            y,
-        )
-        if self.method == "analytic":
-            self.ensemble = self.analytical_pe(
-                self.model,
-                X,
-                y,
-                self.analytic_method,
-            )
-        elif self.method == "bootstrap":
-            self.intercept_, self.coef_ = self.adjust_bootstrap_pe(
-                self.model,
-                X,
-                y,
-                self.bootstrap_method,
-                self.bootstrap_iters,
-                self.resample_ratio,
-            )
+        self.coef_ = self.model.coef_
+        self.intercept_ = self.model.intercept_
 
         return self
 
@@ -134,33 +86,52 @@ class BaseVolAdjRegressor(BaseEstimator, RegressorMixin, ABC):
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
 
-        return np.dot(X, self.coef_) + self.intercept_
+        predictions = np.dot(X, self.coef_) + self.intercept_
 
-    def adjust_analytical_se(
+        # If method = "analytic", estimate the prediction errors analytically
+        if self.method == "analytic":
+            predictions = self.adjust_analytical_pe(
+                model=self.model,
+                X=X,
+                preds=predictions,
+                analytic_method=self.analytic_method,
+            )
+        elif self.method == "bootstrap":
+            predictions = self.adjust_bootstrap_pe(
+                model=self.model,
+                X=X,
+                preds=predictions,
+                bootstrap_method=self.bootstrap_method,
+                bootstrap_iters=self.bootstrap_iters,
+                resample_ratio=self.resample_ratio,
+            )
+
+        return predictions
+
+    def adjust_analytical_pe(
         self,
         model: RegressorMixin,
         X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
+        preds: Union[pd.DataFrame, pd.Series],
         analytic_method: Optional[str],
     ):
         raise NotImplementedError(
-            "Analytical standard error adjustments are not available for most models."
+            "Analytical prediction error adjustments are not available for most models."
             "This function must be implemented in a subclass of BaseModifiedRegressor "
-            "if known standard error expressions are available."
+            "if known prediction error expressions are available."
         )
 
-    def adjust_bootstrap_se(
+    def adjust_bootstrap_pe(
         self,
         model: RegressorMixin,
         X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
+        preds: Union[pd.DataFrame, pd.Series],
         bootstrap_method: str,
         bootstrap_iters: int,
         resample_ratio: Union[float, int],
     ):
-        # Create storage for bootstrap coefficients and intercepts
-        bootstrap_coefs = np.zeros((bootstrap_iters, X.shape[1]))
-        bootstrap_intercepts = np.zeros(bootstrap_iters)
+        # Create storage for bootstrap predictions
+        bootstrap_preds = np.zeros((bootstrap_iters, X.shape[0]))
 
         index_array = np.array(X.index.tolist())
         cross_sections = index_array[:, 0]
@@ -271,19 +242,16 @@ class BaseVolAdjRegressor(BaseEstimator, RegressorMixin, ABC):
 
             model.fit(X_resampled, y_resampled)
 
-            # Store the coefficients and intercepts
-            bootstrap_coefs[i] = model.coef_
-            bootstrap_intercepts[i] = model.intercept_
+            # Store the predictions
+            bootstrap_preds[i] = model.predict(X)
 
-        # Calculate the standard errors
-        coef_se = np.std(bootstrap_coefs, axis=0, ddof=0)
-        intercept_se = np.std(bootstrap_intercepts, ddof=0)
+        # Calculate the prediction errors
+        pes = np.std(bootstrap_preds, axis=0, ddof=0)
 
-        # Adjust the coefficients and intercepts by the standard errors
-        coef = model.coef_ / (coef_se + self.error_offset)
-        intercept = model.intercept_ / (intercept_se + self.error_offset)
+        # Adjust the predictions by the standard errors
+        preds = preds / (pes + self.error_offset)
 
-        return intercept, coef
+        return preds
 
     def check_init_params(
         self,
@@ -417,7 +385,7 @@ class BaseVolAdjRegressor(BaseEstimator, RegressorMixin, ABC):
                 "match."
             )
         
-class ModifiedLinearRegression(BaseModifiedRegressor):
+class VolAdjLinearRegression(BaseVolAdjRegressor):
     def __init__(
         self,
         method: str,
@@ -430,31 +398,31 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         analytic_method: Optional[str] = None,
     ):
         """
-        Custom class to train an OLS linear regression model with coefficients modified 
-        by estimated standard errors to account for statistical precision of the estimates.
+        Custom class to train an OLS linear regression model with predictions modified 
+        by estimated prediction errors to account for statistical precision of the predictions.
         
-        :param <str> method: The method used to modify the coefficients. Accepted values
+        :param <str> method: The method used to modify the predictions. Accepted values
             are "analytic" and "bootstrap".
         :param <bool> fit_intercept: Whether to fit an intercept term in the model.
             Default is True.
         :param <bool> positive: Whether to constrain the coefficients to be positive.
             Default is False.
-        :param <float> error_offset: A small offset to add to the standard errors to
-            prevent division by zero in the case of very small standard errors. Default
+        :param <float> error_offset: A small offset to add to the prediction errors to
+            prevent division by zero in the case of very small prediction errors. Default
             value is 1e-2.
-        :param <str> bootstrap_method: The bootstrap method used to modify the coefficients.
+        :param <str> bootstrap_method: The bootstrap method used to modify the predictions.
             Accepted values are "panel", "period", "cross", "cross_per_period"
             and "period_per_cross". Default value is "panel".
         :param <int> bootstrap_iters: The number of bootstrap iterations to perform in
-            order to determine the standard errors of the model parameters under the bootstrap
+            order to determine the prediction errors under the bootstrap
             approach. Default value is 1000.
         :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
             in each bootstrap dataset. This is a fraction of the quantity of the panel
             component to be resampled. Default value is 1.
         :param <Optional[str]> analytic_method: The analytic method used to calculate
-            standard errors. Expressions for analytic standard errors are expected to be
-            written within the method `adjust_analytical_se` and this parameter can be
-            passed into `adjust_analyical_se` for an alternative analytic standard error
+            prediction errors. Expressions for analytic prediction errors are expected to be
+            written within the method `adjust_analytical_pe` and this parameter can be
+            passed into `adjust_analyical_pe` for an alternative analytic prediction error
             estimate, for instance White's estimator. Default value is None.
 
         :return None
@@ -472,19 +440,19 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
             analytic_method=analytic_method,
         )
 
-    def adjust_analytical_se(
+    def adjust_analytical_pe(
         self,
         model: RegressorMixin,
         X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
+        preds: Union[pd.DataFrame, pd.Series],
         analytic_method: Optional[str],
     ):
         """
-        Method to adjust the coefficients of the linear model by an analytical
-        standard error expression. The default is to use the standard error estimate
-        obtained through assuming multivariate normality of the model errors as well as
-        heteroskedasticity and zero mean. If `analytic_method` is "White", the White
-        estimator is used to estimate the standard errors.
+        Method to adjust the predictions of the linear model by an analytical
+        prediction error expression. The default is to use the prediction error estimate
+        obtained through assuming heteroskedasticity and zero mean.
+        If `analytic_method` is "White", the White estimator is used to estimate the
+        prediction errors.
 
         :param <RegressorMixin> model: The underlying linear model to be modified. This
             model must have `coef_` and `intercept_` attributes, in accordance with
@@ -493,39 +461,65 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
             associated with each sample in X.
         :param <Optional[str]> analytic_method: The analytic method used to calculate
-            standard errors. If None, the default method is used. Currently, the only
+            prediction errors. If None, the default method is used. Currently, the only
             alternative we offer is White's estimator, which requires "White" to be
             specified. Default value is None.
 
         :return <float>, <np.ndarray>: The adjusted intercept and coefficients.
         """
-        # Checks 
+        # Checks
         if analytic_method is not None:
             if not isinstance(analytic_method, str):
                 raise TypeError("analytic_method must be a string.")
             if analytic_method not in ["White"]:
                 raise ValueError("analytic_method must be 'White'.")
-            
-        # Calculate the standard errors
+
+        if self.fit_intercept:
+            X_new = np.column_stack((np.ones(len(X)), X.values))
+        else:
+            X_new = X.values
+
+        # Calculate the prediction errors
+        predictions = model.predict(X)
+        residuals = y - predictions
         if analytic_method is None:
-            coef_se = np.sqrt(
+            pe = np.sqrt(
+                    np.diag(
+                        X_new 
+                        @ np.linalg.inv(X_new.T @ X_new)
+                        @ X_new.T
+                        * np.sum(np.square(residuals))
+                        / (X.shape[0] - X.shape[1])
+                    )
+                )
+
+        elif analytic_method == "White":
+            # Implement HC3
+            leverages = np.diag(X_new @ np.linalg.inv(X_new.T @ X_new) @ X_new.T)
+            weights = 1 / (1 - leverages) ** 2
+            W = np.diag(weights)
+            cov_matrix = (
+                np.linalg.inv(X_new.T @ X_new)
+                @ (X_new.T @ W @ np.diag(np.square(residuals)) @ X_new)
+                @ np.linalg.inv(X_new.T @ X_new)
+            )
+            pe = np.sqrt(
                 np.diag(
-                    np.linalg.inv(np.dot(X.T, X))
-                    * np.sum(np.square(y - model.predict(X)))
-                    / (X.shape[0] - X.shape[1])
+                    X_new 
+                    @ cov_matrix
+                    @ X_new.T
                 )
             )
-            intercept_se = np.sqrt(
-                np.sum(np.square(y - model.predict(X))) / (X.shape[0] - X.shape[1])
+
+        else:
+            raise NotImplementedError(
+                "Currently, only the standard and White standard errors are implemented"
             )
 
-            # Adjust the coefficients and intercepts by the standard errors
-            coef = model.coef_ / (coef_se + self.error_offset)
-            intercept = model.intercept_ / (intercept_se + self.error_offset)
+        # Adjust the predictions by the prediction errors
+        preds = preds / (pe + self.error_offset)
 
-            return intercept, coef
-        else:
-            pass
+        return preds
             
     
     def set_params(self, **params):
@@ -589,7 +583,7 @@ if __name__ == "__main__":
         ("bootstrap", "period_per_cross"),
     ]
     for method in method_pairs:
-        model = ModifiedLinearRegression(
+        model = VolAdjLinearRegression(
             method=method[0],
             bootstrap_method=method[1],
             bootstrap_iters=100,
