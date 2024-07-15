@@ -186,3 +186,7 @@ coverage/
 coverage.xml
 
 *.pem
+
+# Visual studio
+.trunk/
+launch.json
