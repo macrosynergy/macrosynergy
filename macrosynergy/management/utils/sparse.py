@@ -90,7 +90,8 @@ def create_delta_data(
 
     if not isinstance(df, QuantamentalDataFrame):
         raise ValueError("`df` must be a QuantamentalDataFrame")
-
+    if not isinstance(return_density_stats, bool):
+        raise ValueError("`return_density_stats` must be a boolean")
     # split into value, eop and grading
     p_value = qdf_to_ticker_df(df, value_column="value")
     p_eop = qdf_to_ticker_df(df, value_column="eop_lag")
@@ -202,7 +203,12 @@ class VolatilityEstimationMethods(metaclass=SubscriptableMeta):
         :return: The exponentially weighted absolute standard deviation of the Series.
         """
         mean = s.ewm(halflife=halflife, min_periods=min_periods).mean()
-        sd = (s - mean.bfill()).abs().ewm(halflife=halflife, min_periods=min_periods).mean()
+        sd = (
+            (s - mean.bfill())
+            .abs()
+            .ewm(halflife=halflife, min_periods=min_periods)
+            .mean()
+        )
         return sd
 
 
@@ -250,9 +256,6 @@ def calculate_score_on_sparse_indicator(
 
     :return: A dictionary of DataFrames with the changes in the information state for each ticker.
     """
-    # TODO make into a method on InformationStateChanges?
-    # TODO adjust score by eop_lag (business days?) to get a native frequency...
-    # TODO convert below operation into a function call?
     # Operations on a per key in data dictionary
 
     curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
@@ -294,43 +297,47 @@ def calculate_score_on_sparse_indicator(
 
         isc[key] = v
 
-    # TODO return [1] change, and [2] volatility estimate (mainly estimation of volatility for changes...)
-    # TODO clearer exposition
     return isc
 
 
-def _infer_frequency_timeseries(eop_series: pd.Series) -> Optional[str]:
+def _infer_frequency_timeseries(eop_lag_series: pd.Series) -> Optional[str]:
     """
-    Infer the frequency of a time series based on the most common difference between
-    consecutive end-of-period dates.
-    :param <pd.Series> eop_series: A Series of end-of-period dates.
+    Infer the frequency of a time series based on the pattern of eop_lag values,
+    considering resets to 0 to detect period ends.
+    :param <pd.Series> eop_lag_series: A Series of eop_lag values.
     :return: The inferred frequency of the time series. One of "D", "W", "M", "Q" or "A".
     """
-    diff = eop_series.diff().dropna()
-    most_common = diff.mode().values[0]
-    frequency_mapping = {1: "D", 5: "W"}
+    # Identify resets to 0 which indicate the end of a period
+    reset_indices = eop_lag_series[eop_lag_series == 0].index
+    if len(reset_indices) < 2:
+        return "D"  # Default to daily if insufficient data
 
-    if most_common in frequency_mapping:
-        return frequency_mapping[most_common]
+    # Calculate periods between resets
+    periods = reset_indices.to_series().diff().dropna().dt.days
 
-    # Define ranges for other frequencies
-    frequency_ranges = {
-        "M": range(20, 24),  # (20-23 bdays)
-        "Q": range(60, 67),  # (60-66 bdays)
-        "A": range(250, 253),  # (250-252 bdays)
+    # Determine the most common period length
+    most_common_period = periods.mode().values[0]
+
+    # Define ranges for different frequencies
+    freqs = {
+        "D": 1,  
+        "W": 7,  
+        "M": 30, 
+        "Q": 91, 
+        "A": 365 
     }
-    for freq, freq_range in frequency_ranges.items():
-        if most_common in freq_range:
+    # 10% tolerance for frequency ranges
+    for freq, freq_range in freqs.items():
+        rng = (1 - 0.1) * freq_range, (1 + 0.1) * freq_range
+        if rng[0] <= most_common_period <= rng[1]:
             return freq
 
-    return "D"
+    return "D"  # Default to daily if no match is found
 
 
 def infer_frequency(df: QuantamentalDataFrame) -> pd.Series:
     """
-    Infer the frequency of a QuantamentalDataFrame based on the most common difference
-    between consecutive end-of-period dates.
-
+    Infer the frequency of a QuantamentalDataFrame based on the most common eop_lag values.
     :param <QuantamentalDataFrame> df: The QuantamentalDataFrame to infer the frequency for.
     :return: A Series with the inferred frequency for each ticker in the QuantamentalDataFrame.
     """
