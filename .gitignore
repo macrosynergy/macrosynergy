@@ -187,5 +187,6 @@ coverage.xml
 
 *.pem
 
-# Visual studio code files
+# Visual studio
 .trunk/
+launch.json
