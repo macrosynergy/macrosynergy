@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.base import BaseEstimator, RegressorMixin, clone
 from sklearn.linear_model import LinearRegression
 
 from typing import Union, Optional
@@ -108,8 +108,10 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
                 self.analytic_method,
             )
         elif self.method == "bootstrap":
+            # clone the model to avoid modifying the original model
+            model = clone(self.model)
             self.intercept_, self.coef_ = self.adjust_bootstrap_se(
-                self.model,
+                model,
                 X,
                 y,
                 self.bootstrap_method,
@@ -124,7 +126,29 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         X: pd.DataFrame,
     ):
         """
-        Predict method to predict the target variable using the underlying linear model.
+        Method to predict the target variable using the underlying linear model.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        """
+        # Checks
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError(
+                "Input feature matrix must be a pandas dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas dataframe."
+            )
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        
+        return self.model.predict(X)
+
+    def create_signal(
+        self,
+        X: pd.DataFrame,
+    ):
+        """
+        Method to create a signal based on adjusting the underlying factor model weights
+        by their standard errors.
 
         :param <pd.DataFrame> X: Pandas dataframe of input features.
         """
@@ -288,8 +312,8 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, ABC):
         intercept_se = np.std(bootstrap_intercepts, ddof=0)
 
         # Adjust the coefficients and intercepts by the standard errors
-        coef = model.coef_ / (coef_se + self.error_offset)
-        intercept = model.intercept_ / (intercept_se + self.error_offset)
+        coef = self.model.coef_ / (coef_se + self.error_offset)
+        intercept = self.model.intercept_ / (intercept_se + self.error_offset)
 
         return intercept, coef
 
@@ -526,11 +550,12 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
 
         # Calculate the standard errors
         predictions = model.predict(X)
-        residuals = y - predictions
+        residuals = (y - predictions).to_numpy()
+        XtX_inv = np.linalg.inv(X_new.T @ X_new)
         if analytic_method is None:
             se = np.sqrt(
                 np.diag(
-                    np.linalg.inv(np.dot(X_new.T, X_new))
+                    XtX_inv
                     * np.sum(np.square(residuals))
                     / (X.shape[0] - X.shape[1])
                 )
@@ -538,14 +563,12 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
 
         elif analytic_method == "White":
             # Implement HC3
-            leverages = np.diag(X_new @ np.linalg.inv(X_new.T @ X_new) @ X_new.T)
+            leverages = np.sum((X_new @ XtX_inv) * X_new, axis=1)
             weights = 1 / (1 - leverages) ** 2
-            W = np.diag(weights)
-            cov_matrix = (
-                np.linalg.inv(X_new.T @ X_new)
-                @ (X_new.T @ W @ np.diag(np.square(residuals)) @ X_new)
-                @ np.linalg.inv(X_new.T @ X_new)
-            )
+            residuals_squared = np.square(residuals)
+            weighted_residuals_squared = weights * residuals_squared
+            Omega = X_new.T * weighted_residuals_squared @ X_new
+            cov_matrix = XtX_inv @ Omega @ XtX_inv
             se = np.sqrt(np.diag(cov_matrix))
 
         else:
@@ -638,7 +661,8 @@ if __name__ == "__main__":
         print("----")
         print("Modified OLS intercept:", model.intercept_)
         print("Modified OLS coefficients:", model.coef_)
-        print("Modified OLS signal:", model.predict(X))
+        print("Modified OLS predictions:", model.predict(X))
+        print("Modified OLS signal:", model.create_signal(X))
         print("----")
 
         # Grid search
@@ -678,6 +702,7 @@ if __name__ == "__main__":
             },
             hparam_type="grid",
             test_size=21 * 12 * 2,
+            n_jobs = 1
         )
         so.models_heatmap(f"ModifiedOLS_{method[0]}_{method[1]}")
         so.coefs_stackedbarplot(f"ModifiedOLS_{method[0]}_{method[1]}")
