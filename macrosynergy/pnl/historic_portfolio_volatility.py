@@ -222,7 +222,12 @@ def _calc_vol_tuple(
     s = signals.loc[date, :].copy()
 
     # reduce s to vcv columns
-    s = s[s.index.isin(vcv_df.columns)]
+    if not set(s.index).issubset(vcv_df.columns):
+        raise ValueError(
+            f"Signals do not match variance-covariance matrix at {date}!\n"
+            f"Signals: {s.index.tolist()}\n"
+            f"VCV: {vcv_df.columns.tolist()}"
+        )
 
     idx_mask = s.isna() | (s.abs() < 1e-6)
     s.loc[idx_mask] = 0
@@ -260,9 +265,7 @@ def _get_first_usable_date(
     max_lb = 0
     # for each frequency and lookback
     for lb, est_freq in zip(lback_periods, est_freqs):
-        # calculate the maximum lookback period
         _max_lb = get_max_lookback(lb, nan_tolerance)
-        # if this is 0, use the number from FFILL_LIMITS
         _max_lb = FFILL_LIMITS[est_freq] if _max_lb == 0 else _max_lb
         max_lb = _max_lb if _max_lb > max_lb else max_lb
 
@@ -333,8 +336,6 @@ def _calculate_portfolio_volatility(
     )
 
     for td in rebal_dates:
-        # only calculate the VCV for series where we have enough data
-        ...  # TODO
         avails = first_starts[first_starts <= td].index.tolist()
         if len(avails) == 0:
             logger.warning(
