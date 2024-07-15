@@ -139,7 +139,7 @@ class SubscriptableMeta(type):
             raise KeyError(f"{item} is not a valid method name")
 
 
-class StandardDeviationMethods(metaclass=SubscriptableMeta):
+class VolatilityEstimationMethods(metaclass=SubscriptableMeta):
     """
     Class to hold methods for calculating standard deviations.
     Each method must comply to the following signature:
@@ -148,15 +148,15 @@ class StandardDeviationMethods(metaclass=SubscriptableMeta):
     Currently supported methods are:
 
     - `std`: Standard deviation
-    - `abs`: Absolute standard deviation
+    - `abs`: Mean absolute deviation
     - `exp`: Exponentially weighted standard deviation
-    - `exp_abs`: Exponentially weighted absolute standard deviation
+    - `exp_abs`: Exponentially weighted mean absolute deviation
     """
 
     @staticmethod
     def std(s: pd.Series, min_periods: int, **kwargs) -> pd.Series:
         """
-        Calculate the standard deviation of a Series.
+        Calculate the expanding standard deviation of a Series.
 
         :param <pd.Series> s: The Series to calculate the standard deviation for.
         :param <int> min_periods: The minimum number of periods required for the calculation.
@@ -167,13 +167,14 @@ class StandardDeviationMethods(metaclass=SubscriptableMeta):
     @staticmethod
     def abs(s: pd.Series, min_periods: int, **kwargs) -> pd.Series:
         """
-        Calculate the absolute standard deviation of a Series.
+        Calculate the expanding mean absolute deviation of a Series.
 
         :param <pd.Series> s: The Series to calculate the absolute standard deviation for.
         :param <int> min_periods: The minimum number of periods required for the calculation.
         :return: The absolute standard deviation of the Series.
         """
-        return s.abs().expanding(min_periods=min_periods).mean()
+        mean = s.expanding(min_periods=min_periods).mean()
+        return (s - mean.bfill()).abs().expanding(min_periods=min_periods).mean()
 
     @staticmethod
     def exp(s: pd.Series, halflife: int, min_periods: int, **kwargs) -> pd.Series:
@@ -192,7 +193,7 @@ class StandardDeviationMethods(metaclass=SubscriptableMeta):
     @staticmethod
     def exp_abs(s: pd.Series, halflife: int, min_periods: int, **kwargs) -> pd.Series:
         """
-        Calculate the exponentially weighted absolute standard deviation of a Series.
+        Calculate the exponentially weighted mean absolute deviation of a Series.
 
         :param <pd.Series> s: The Series to calculate the exponentially weighted absolute
             standard deviation for.
@@ -200,12 +201,14 @@ class StandardDeviationMethods(metaclass=SubscriptableMeta):
         :param <int> min_periods: The minimum number of periods required for the calculation.
         :return: The exponentially weighted absolute standard deviation of the Series.
         """
-        return s.abs().ewm(halflife=halflife, min_periods=min_periods).mean()
+        mean = s.ewm(halflife=halflife, min_periods=min_periods).mean()
+        sd = (s - mean.bfill()).abs().ewm(halflife=halflife, min_periods=min_periods).mean()
+        return sd
 
 
 CALC_SCORE_CUSTOM_METHOD_ERR_MSG = (
     "Method {std} not supported. "
-    f"Supported methods are: {dir(StandardDeviationMethods)}. \n"
+    f"Supported methods are: {dir(VolatilityEstimationMethods)}. \n"
     "Alternatively, provide a custom method with signature "
     "`custom_method(s: pd.Series, **kwargs) -> pd.Series` "
     "using the `custom_method` and `custom_method_kwargs` arguments."
@@ -229,7 +232,7 @@ def calculate_score_on_sparse_indicator(
 
     :param <str> std: The method to use for calculating the standard deviation.
         Supported methods are `std`, `abs`, `exp` and `exp_abs`. See the documentation for
-        `StandardDeviationMethods` for more information.
+        `VolatilityEstimationMethods` for more information.
     :param <int> halflife: The halflife of the exponential weighting. Only used with `exp`
         and `exp_abs` methods. Default is None.
     :param <int> min_periods: The minimum number of periods required for the calculation.
@@ -260,10 +263,10 @@ def calculate_score_on_sparse_indicator(
             raise TypeError("`custom_method_kwargs` must be a dictionary")
         curr_method = custom_method
     else:
-        if not hasattr(StandardDeviationMethods, std):
+        if not hasattr(VolatilityEstimationMethods, std):
             raise ValueError(CALC_SCORE_CUSTOM_METHOD_ERR_MSG.format(std=std))
         # curr_method = getattr(StandardDeviationMethod, std)
-        curr_method = StandardDeviationMethods[std]
+        curr_method = VolatilityEstimationMethods[std]
 
     method_kwargs: Dict[str, Any] = dict(
         min_periods=min_periods, halflife=halflife, **custom_method_kwargs
@@ -622,10 +625,10 @@ def _calculate_score_on_sparse_indicator_for_class(
             raise TypeError("`custom_method_kwargs` must be a dictionary")
         curr_method = custom_method
     else:
-        if not hasattr(StandardDeviationMethods, std):
+        if not hasattr(VolatilityEstimationMethods, std):
             raise ValueError(CALC_SCORE_CUSTOM_METHOD_ERR_MSG.format(std=std))
         # curr_method = getattr(StandardDeviationMethod, std)
-        curr_method = StandardDeviationMethods[std]
+        curr_method = VolatilityEstimationMethods[std]
 
     method_kwargs: Dict[str, Any] = dict(
         min_periods=min_periods, halflife=halflife, **custom_method_kwargs
