@@ -15,6 +15,16 @@ from .utils import common_cids, update_df, reduce_df, categories_df, reduce_df_b
 from . import utils, types, decorators, simulate, constants
 from .validation import validate_and_reduce_qdf
 
+from .utils.sparse import (
+    create_delta_data,
+    calculate_score_on_sparse_indicator,
+    sparse_to_dense,
+    temporal_aggregator_exponential,
+    temporal_aggregator_period,
+    temporal_aggregator_mean,
+    InformationStateChanges,
+)
+
 __all__ = [
     # METHODS
     "reduce_df",
@@ -35,6 +45,14 @@ __all__ = [
     "decorators",
     "simulate",
     "constants",
+    # Sparse Indicators
+    "create_delta_data",
+    "calculate_score_on_sparse_indicator",
+    "sparse_to_dense",
+    "temporal_aggregator_exponential",
+    "temporal_aggregator_period",
+    "temporal_aggregator_mean",
+    "InformationStateChanges",
     # Module-as-methods
     "check_availability",
     "simulate_vintage_data",
