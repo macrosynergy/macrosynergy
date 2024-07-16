@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import warnings
 from itertools import product
 from typing import Dict, List, Optional, Tuple, Union
+from numbers import Number
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -92,7 +93,7 @@ class NaivePnL:
             bm_dict = self.add_bm(df=self.dfd, bms=bms, tickers=self.tickers)
 
             self._bm_dict = bm_dict
-            
+
         self.pnl_params = {}
 
     def add_bm(self, df: pd.DataFrame, bms: List[str], tickers: List[str]):
@@ -260,10 +261,11 @@ class NaivePnL:
         sig_op: str = "zn_score_pan",
         sig_add: float = 0,
         sig_neg: bool = False,
-        pnl_name: str = None,
+        pnl_name: Optional[str] = None,
         rebal_freq: str = "daily",
-        rebal_slip=0,
-        vol_scale: float = None,
+        rebal_slip: int = 0,
+        vol_scale: Optional[float] = None,
+        leverage: float = 1.0,
         min_obs: int = 261,
         iis: bool = True,
         sequential: bool = True,
@@ -308,6 +310,9 @@ class NaivePnL:
             positions produce PnL from the second day after the signal has been recorded.
         :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
             This is for comparative visualization and not out-of-sample. Default is none.
+        :param <float> leverage: leverage applied to the raw signal when a `vol_scale` is
+            not defined. Default is 1.0, i.e., position size is 1 or 100% of implied risk
+            capital.
         :param <int> min_obs: the minimum number of observations required to calculate
             zn_scores. Default is 252.
         :param <bool> iis: if True (default) zn-scores are also calculated for the initial
@@ -324,34 +329,54 @@ class NaivePnL:
             threshold is one standard deviation. Default is no threshold.
 
         """
-
-        # A. Checks
+        for varx, name, typex in (
+            (sig, "sig", str),
+            (sig_op, "sig_op", str),
+            (sig_add, "sig_add", (Number)), # testing for number instead of (float, int)
+            (sig_neg, "sig_neg", bool),
+            (pnl_name, "pnl_name", (str, type(None))),
+            (rebal_freq, "rebal_freq", str),
+            (rebal_slip, "rebal_slip", int),
+            (vol_scale, "vol_scale", (Number, type(None))),
+            (leverage, "leverage", (Number)),
+            (min_obs, "min_obs", int),
+            (iis, "iis", bool),
+            (sequential, "sequential", bool),
+            (neutral, "neutral", str),
+            (thresh, "thresh", (Number, type(None))),
+        ):
+            if not isinstance(varx, typex):
+                raise TypeError(f"{name} must be a {typex}.")
 
         error_sig = (
             f"Signal category missing from the options defined on the class: "
             f"{self.sigs}. "
         )
-        assert sig in self.sigs, error_sig
+        if sig not in self.sigs:
+            raise ValueError(error_sig)
 
         sig_options = ["zn_score_pan", "zn_score_cs", "binary"]
         error_sig_method = (
             f"The signal transformation method, {sig_op}, is not one of "
             f"the options specified: {sig_options}."
         )
-        assert sig_op in sig_options, error_sig_method
+        if sig_op not in sig_options:
+            raise ValueError(error_sig_method)
 
         freq_params = ["daily", "weekly", "monthly"]
         freq_error = f"Re-balancing frequency must be one of: {freq_params}."
-        assert rebal_freq in freq_params, freq_error
-
-        sig_neg_error = "Boolean object expected for negative conversion."
-        assert isinstance(sig_neg, bool), sig_neg_error
-
-        sig_add_error = "Numeric value expected for signal addition."
-        assert isinstance(sig_add, (float, int)), sig_add_error
+        if rebal_freq not in freq_params:
+            raise ValueError(freq_error)
 
         if thresh is not None and thresh < 1:
             raise ValueError("thresh must be greater than or equal to one.")
+
+        err_lev = "`leverage` must be a numerical value greater than 0."
+        if leverage <= 0:
+            raise ValueError(err_lev)
+        err_vol = "`vol_scale` must be a numerical value greater than 0."
+        if vol_scale is not None and (vol_scale <= 0):
+            raise ValueError(err_vol)
 
         # B. Extract DataFrame of exclusively return and signal categories in time series
         # format.
@@ -412,7 +437,9 @@ class NaivePnL:
 
         if vol_scale is not None:
             leverage = vol_scale * (df_pnl_all["value"].std() * np.sqrt(261)) ** (-1)
-            df_pnl["value"] = df_pnl["value"] * leverage
+
+        assert isinstance(leverage, (float, int)), err_lev  # sanity check
+        df_pnl["value"] = df_pnl["value"] * leverage
 
         pnn = ("PNL_" + sig + neg) if pnl_name is None else pnl_name
         # Populating the signal dictionary is required for the display methods:
@@ -426,7 +453,7 @@ class NaivePnL:
 
         agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
         self.df = agg_df.reset_index(drop=True)
-        
+
         self.pnl_params[pnn] = PnLParams(
             pnl_name=pnn,
             signal=sig,
@@ -441,7 +468,10 @@ class NaivePnL:
         )
 
     def make_long_pnl(
-        self, vol_scale: Optional[float] = None, label: Optional[str] = None
+        self,
+        vol_scale: Optional[float] = None,
+        label: Optional[str] = None,
+        leverage: float = 1.0,
     ):
         """
         The long-only returns will be computed which act as a basis for comparison
@@ -455,22 +485,37 @@ class NaivePnL:
             DataFrame. The label will be used in the plotting graphic for plot_pnls().
             If a label is not defined, the default will be the name of the return
             category.
+        :param <float> leverage: leverage applied to the raw signal when a `vol_scale` is
+            not defined. Default is 1.0, i.e., position size is 1 or 100% of implied risk
+            capital.
         """
 
         if vol_scale is not None:
+            vol_err = (
+                "The parameter `vol_scale` must be a numerical value greater than 0."
+            )
             if not isinstance(vol_scale, (float, int)):
-                raise TypeError(
-                    "The volatility scale `vol_scale`" "must be a numerical value."
-                )
+                raise TypeError(vol_err)
+            elif vol_scale <= 0:
+                raise ValueError(vol_err)
+
+        else:
+            err_lev = "`leverage` must be a numerical value greater than 0."
+            if not isinstance(leverage, (float, int)):
+                raise TypeError(err_lev)
+            elif leverage <= 0:
+                raise ValueError(err_lev)
 
         if label is None:
             label = self.ret
 
         dfx = self.df[self.df["xcat"].isin([self.ret])]
 
-        df_long = self.long_only_pnl(dfw=dfx, vol_scale=vol_scale, label=label)
+        df_long = self.long_only_pnl(
+            dfw=dfx, vol_scale=vol_scale, label=label, leverage=leverage
+        )
 
-        self.df = pd.concat([self.df, df_long])
+        self.df: pd.DataFrame = pd.concat([self.df, df_long])
 
         if label not in self.pnl_names:
             self.pnl_names = self.pnl_names + [label]
@@ -478,7 +523,12 @@ class NaivePnL:
         self.df = self.df.reset_index(drop=True)
 
     @staticmethod
-    def long_only_pnl(dfw: pd.DataFrame, vol_scale: float = None, label: str = None):
+    def long_only_pnl(
+        dfw: pd.DataFrame,
+        vol_scale: float = None,
+        label: str = None,
+        leverage: float = 1.0,
+    ):
         """
         Method used to compute the PnL accrued from simply taking a long-only position in
         the category, 'self.ret'. The returns from the category are not predicated on any
@@ -489,10 +539,14 @@ class NaivePnL:
             This is for comparative visualization and not out-of-sample. Default is none.
         :param <str> label: associated label that will be mapped to the long-only
             DataFrame.
+        :param <float> leverage: leverage applied to the raw signal when a `vol_scale` is
+            not defined. Default is 1.0, i.e., position size is 1 or 100% of implied risk
+            capital.
 
         :return <pd.DataFrame> panel_pnl: standardised dataframe containing exclusively
             the return category, and the long-only panel return.
         """
+        lev_err = "`leverage` must be a numerical value greater than 0."
 
         dfw_long = dfw.reset_index(drop=True)
 
@@ -501,9 +555,12 @@ class NaivePnL:
         panel_pnl["cid"] = "ALL"
         panel_pnl["xcat"] = label
 
-        if vol_scale:
+        if vol_scale is not None:
             leverage = vol_scale * (panel_pnl["value"].std() * np.sqrt(261)) ** (-1)
-            panel_pnl["value"] = panel_pnl["value"] * leverage
+
+        if not isinstance(leverage, Number) or leverage <= 0:
+            raise TypeError(lev_err)
+        panel_pnl["value"] = panel_pnl["value"] * leverage
 
         return panel_pnl[["cid", "xcat", "real_date", "value"]]
 
@@ -572,9 +629,10 @@ class NaivePnL:
             pnl_cats = self.pnl_names
         else:
             pnl_cats_error = (
-                f"List of PnL categories expected - received " f"{type(pnl_cats)}."
+                f"List of PnL categories expected - received {type(pnl_cats)}."
             )
-            assert isinstance(pnl_cats, list), pnl_cats_error
+            if not isinstance(pnl_cats, list):
+                raise TypeError(pnl_cats_error)
 
             pnl_cats_copy = pnl_cats.copy()
             pnl_cats = [pnl for pnl in pnl_cats if pnl in self.pnl_names]
@@ -591,7 +649,8 @@ class NaivePnL:
                 )
 
         error_message = "Either pnl_cats or pnl_cids must be a list of length 1"
-        assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1), error_message
+        if not ((len(pnl_cats) == 1) | (len(pnl_cids) == 1)):
+            raise ValueError(error_message)
 
         # adjust ncols of the facetgrid if necessary
         if max([len(pnl_cats), len(pnl_cids)]) < ncol:
@@ -613,7 +672,8 @@ class NaivePnL:
             if xcat_labels is None:
                 xcat_labels = pnl_cats.copy()
             else:
-                assert len(xcat_labels) == len(pnl_cats), error_message
+                if not len(xcat_labels) == len(pnl_cats):
+                    raise ValueError(error_message)
                 xcat_labels = [xcat_labels[pnl] for pnl in pnl_cats]
 
         elif isinstance(xcat_labels, list) and all(
@@ -623,7 +683,8 @@ class NaivePnL:
                 "xcat_labels should be a dictionary with keys as pnl_cats and values as "
                 "the custom labels. This will be enforced in a future version.",
             )
-            assert len(xcat_labels) == len(pnl_cats), error_message
+            if len(xcat_labels) != len(pnl_cats):
+                raise ValueError(error_message)
         else:
             raise TypeError(
                 "xcat_labels should be a dictionary with keys as pnl_cats and values as "
@@ -752,17 +813,18 @@ class NaivePnL:
             Default is (14, number of cross sections).
         """
 
-        assert isinstance(pnl_name, str), (
-            "The method expects to receive a single " "PnL name."
-        )
+        if not isinstance(pnl_name, str):
+            raise TypeError("The method expects to receive a single PnL name.")
         error_cats = (
             f"The PnL passed to 'pnl_name' parameter is not defined. The "
             f"possible options are {self.pnl_names}."
         )
-        assert pnl_name in self.pnl_names, error_cats
+        if pnl_name not in self.pnl_names:
+            raise ValueError(error_cats)
 
         error_time = "Defined time-period must be monthly ('m') or quarterly ('q')"
-        assert isinstance(freq, str) and freq in ["m", "q"], error_time
+        if not isinstance(freq, str) or freq not in ["m", "q"]:
+            raise ValueError(error_time)
 
         error_cids = (
             f"Cross-sections not available. Available cids are:" f"{self.cids}."
@@ -771,10 +833,12 @@ class NaivePnL:
         if pnl_cids is None:
             pnl_cids = self.cids
         else:
-            assert set(pnl_cids) <= set(self.cids), error_cids
+            if not set(pnl_cids) <= set(self.cids):
+                raise ValueError(error_cids)
 
-        assert isinstance(x_label, str), f"<str> expected - received {type(x_label)}."
-        assert isinstance(y_label, str), f"<str> expected - received {type(y_label)}."
+        for vname, lbl in zip(["x_label", "y_label"], [x_label, y_label]):
+            if not isinstance(lbl, str):
+                raise TypeError(f"<str> expected for `{vname}` - received {type(lbl)}.")
 
         dfx: pd.DataFrame = self.signal_df[pnl_name]
         dfw: pd.DataFrame = dfx.pivot(index="real_date", columns="cid", values="sig")
@@ -989,14 +1053,18 @@ class NaivePnL:
         high_watermark = cum_pnl.cummax()
         drawdown = high_watermark - cum_pnl
 
-        df.iloc[6, :] = - drawdown.max()
+        df.iloc[6, :] = -drawdown.max()
 
         monthly_pnl = dfw.resample("M").sum()
         total_pnl = monthly_pnl.sum(axis=0)
         top_5_percent_cutoff = int(np.ceil(len(monthly_pnl) * 0.05))
         top_months = pd.DataFrame(columns=monthly_pnl.columns)
         for column in monthly_pnl.columns:
-            top_months[column] = monthly_pnl[column].nlargest(top_5_percent_cutoff).reset_index(drop=True)
+            top_months[column] = (
+                monthly_pnl[column]
+                .nlargest(top_5_percent_cutoff)
+                .reset_index(drop=True)
+            )
 
         df.iloc[7, :] = top_months.sum() / total_pnl
 
@@ -1253,6 +1321,7 @@ def create_results_dataframe(
 
     return res_df
 
+
 @dataclass
 class PnLParams:
     """
@@ -1335,7 +1404,9 @@ if __name__ == "__main__":
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
     df_eval = pnl.evaluate_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "PNL_INFL_NEG"], start="2015-01-01", end="2020-12-31"
+        pnl_cats=["PNL_GROWTH_NEG", "PNL_INFL_NEG"],
+        start="2015-01-01",
+        end="2020-12-31",
     )
 
     pnl.signal_heatmap(pnl_name="PNL_GROWTH_NEG", pnl_cids=cids, freq="m")
