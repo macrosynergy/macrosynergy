@@ -18,6 +18,7 @@ def _get_diff_data(
     val_series: pd.Series,
     eop_serioes: pd.Series,
     grading_series: pd.Series,
+    fvi: pd.Timestamp,
 ) -> pd.DataFrame:
     """
     Get the diff data for a given ticker from wide/pivoted dataframes (`ticker_df`) of
@@ -30,7 +31,8 @@ def _get_diff_data(
     :return: A DataFrame with the diff data.
     :rtype: pd.DataFrame
     """
-    dates = val_series.index[diff_mask]
+    # get the first index as well
+    dates = val_series.index[diff_mask].union([fvi])
 
     # create the diff dataframe
     df_temp: pd.DataFrame = pd.DataFrame(
@@ -126,6 +128,7 @@ def create_delta_data(
             val_series=values_df[ticker],
             eop_serioes=eop_df[ticker],
             grading_series=grading_df[ticker],
+            fvi=fvi_series[ticker],
         )
         density_stats[ticker] = _get_diff_density_stats(
             diff_mask=diff_mask[ticker],
@@ -483,7 +486,6 @@ def sparse_to_dense(
         wdf = _get_metric_df_from_isc(
             isc=isc, metric=metric_name, date_range=dtrange, fill="ffill"
         )
-        # if wdf.empty or wdf.isna().all().all()
         if wdf.empty or wdf.isna().all().all():
             dfs = [
                 pd.DataFrame(index=dtrange)
@@ -508,14 +510,6 @@ def sparse_to_dense(
 
     if postfix:
         qdf["xcat"] += postfix
-
-    tickers = (qdf["cid"] + "_" + qdf["xcat"]).unique().tolist()
-    for cid, xcat in zip(get_cid(tickers), get_xcat(tickers)):
-        mask = (qdf["cid"] == cid) & (qdf["xcat"] == xcat)
-        min_date = qdf.loc[mask, "real_date"].min()
-        # assert qdf.loc[mask & (qdf["real_date"] == min_date), "value"].isna().all()
-        if qdf.loc[mask & (qdf["real_date"] == min_date)].isna().any().any():
-            qdf = qdf[~mask | (qdf["real_date"] != min_date)]
 
     return qdf
 
