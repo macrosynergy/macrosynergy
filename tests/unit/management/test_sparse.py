@@ -6,7 +6,11 @@ import numpy as np
 
 from typing import List, Tuple, Dict, Union, Set, Any
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.utils import concat_single_metric_qdfs, ticker_df_to_qdf
+from macrosynergy.management.utils import (
+    concat_single_metric_qdfs,
+    ticker_df_to_qdf,
+    qdf_to_ticker_df,
+)
 from macrosynergy.management.utils.sparse import (
     InformationStateChanges,
     VolatilityEstimationMethods,
@@ -351,10 +355,12 @@ class TestInformationStateChanges(unittest.TestCase):
 
         df = get_long_format_data()
         dfc = df.copy()
+
         tdf = InformationStateChanges.from_qdf(df).to_qdf()
 
         diff_mask = abs(df["value"].diff())
         diff_mask: pd.Series = diff_mask > 0.0  # type: ignore
+        diff_mask.iloc[0] = True
         diff_df: pd.DataFrame = tdf.loc[diff_mask, :].reset_index(drop=True)
 
         # create helper column which is cid-xcat-real_date
@@ -370,7 +376,23 @@ class TestInformationStateChanges(unittest.TestCase):
         # keep only the users columns (no grading columns)
         diff_df = diff_df.loc[:, dfc.columns]
 
-        self.assertTrue(diff_df.equals(dfc))
+        self.assertTrue(diff_df.eq(dfc).all().all())
+
+    def test_isc_object_round_trip_wide(self) -> None:
+
+        df = get_long_format_data()
+        dfc = df.copy()
+
+        tdf = InformationStateChanges.from_qdf(df).to_qdf()
+        wdf_orig = qdf_to_ticker_df(df)
+        wdf_trip = qdf_to_ticker_df(tdf)
+
+        self.assertTrue(wdf_orig.columns.equals(wdf_trip.columns))
+
+        for col in wdf_orig.columns:
+            ots_diff: pd.Series = wdf_orig[col].diff().abs() > 0
+            ots_diff.loc[wdf_orig[col].first_valid_index()] = True
+            self.assertTrue((wdf_trip[col][ots_diff]).eq(wdf_orig[col][ots_diff]).all())
 
     def test_isc_to_qdf(self) -> None:
         df = get_long_format_data(start="2010-01-01", end="2012-01-01")
