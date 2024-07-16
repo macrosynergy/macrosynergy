@@ -387,23 +387,23 @@ if __name__ == "__main__":
         # single_chart=True,
     )
 
-    # timelines(
-    #     df=df,
-    #     xcats=sel_xcats[0],
-    #     cids=sel_cids,
-    #     # cs_mean=True,
-    #     # xcat_grid=False,
-    #     single_chart=True,
-    #     cs_mean=True,
-    # )
+    timelines(
+        df=df,
+        xcats=sel_xcats[0],
+        cids=sel_cids,
+        # cs_mean=True,
+        # xcat_grid=False,
+        single_chart=True,
+        cs_mean=True,
+    )
 
-    # timelines(
-    #     df=df,
-    #     same_y=False,
-    #     xcats=sel_xcats[0],
-    #     cids=sel_cids,
-    #     title=(
-    #         "Plotting multiple cross sections for a single category \n with different "
-    #         "y-axis!"
-    #     ),
-    # )
+    timelines(
+        df=df,
+        same_y=False,
+        xcats=sel_xcats[0],
+        cids=sel_cids,
+        title=(
+            "Plotting multiple cross sections for a single category \n with different "
+            "y-axis!"
+        ),
+    )
