@@ -1,5 +1,6 @@
-from typing import Dict, List, Any, Union, Optional, Callable
+from typing import Dict, List, Any, Union, Optional, Callable, Tuple
 from numbers import Number
+import json
 
 import pandas as pd
 import numpy as np
@@ -761,6 +762,62 @@ class InformationStateChanges(object):
             postfix=postfix,
             metrics=metrics,
         )
+
+    def to_dict(
+            self, ticker: str
+        ) -> Dict[str, Union[List[Tuple[str, float, str, float]], Tuple[str, str, str], str]]:
+        # TODO store as arrays instead: [{"data": {"real_date": [], "value": [], "eop": [], "grading": []}}]
+        data = [
+            (f"{index:%Y-%m-%d}", row.value, f"{row.eop:%Y-%m-%d}", row.grading)
+            for index, row in self[ticker][["value", "eop", "grading"]].iterrows()
+        ]
+
+        columns = ("real_date", "value", "eop", "grading")
+        return_dict = {
+            "data": data,
+            "columns": columns,
+            "last_real_date": f"{self._max_period:%Y-%m-%d}",
+            "ticker": ticker
+        }
+        return return_dict
+
+    def to_json(self, ticker: str) -> str:
+        return json.dumps(self.to_dict(ticker))
+
+    def get_releases(
+        self,
+        from_date: pd.Timestamp = pd.Timestamp.today().normalize() - pd.offsets.BDay(1),
+        to_date: pd.Timestamp = pd.Timestamp.today().normalize(),
+        excl_xcats: List[str] = None,
+    ) -> pd.DataFrame:
+        store = []
+        for k, v in self.items():
+            real_date = v.index.max()
+            s = v[v.index == real_date]
+            store.append(
+                (
+                    k,
+                    real_date,
+                    s.eop.iloc[0],
+                    s.value.iloc[0],
+                    s['diff'].iloc[0],
+                    s.version.iloc[0]
+                )
+            )
+
+        rel = pd.DataFrame(
+            store,
+            columns=["ticker", "real_date", "eop", "value", "change", "version"]
+        ).sort_values(by=["real_date", "eop", "ticker"]).reset_index(drop=True)
+
+        mask = (
+            (rel.real_date >= from_date)
+            & (rel.real_date <= to_date)
+        )
+        if excl_xcats:
+            mask &= ~rel.ticker.str.contains("|".join(excl_xcats))
+        
+        return rel.loc[mask].set_index("ticker")
 
     def temporal_aggregator_period(
         self,
