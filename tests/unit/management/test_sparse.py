@@ -6,7 +6,11 @@ import numpy as np
 
 from typing import List, Tuple, Dict, Union, Set, Any
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.utils import concat_single_metric_qdfs, ticker_df_to_qdf
+from macrosynergy.management.utils import (
+    concat_single_metric_qdfs,
+    ticker_df_to_qdf,
+    is_valid_iso_date,
+)
 from macrosynergy.management.utils.sparse import (
     InformationStateChanges,
     VolatilityEstimationMethods,
@@ -22,6 +26,7 @@ from macrosynergy.management.utils.sparse import (
 )
 import random
 import string
+import json
 
 FREQ_STR_MAP = {
     "B": "daily",
@@ -338,6 +343,43 @@ class TestInformationStateChanges(unittest.TestCase):
         self.assertTrue("banana" in isc.isc_dict.keys())
         self.assertTrue(isinstance(isc.isc_dict["banana"], pd.DataFrame))
 
+    def test_to_dict(self) -> None:
+        df = get_long_format_data(end="2012-01-01")
+        tickers = (df["cid"] + "_" + df["xcat"]).unique().tolist()
+        ticker: str = random.choice(tickers)
+
+        isc = InformationStateChanges.from_qdf(df)
+
+        with self.assertRaises(TypeError):
+            isc.to_dict()
+
+        res: Dict[str, Any] = isc.to_dict(ticker)
+        self.assertTrue(isinstance(res, dict))
+        # must have data, columns, ticker, last_real_date as keys
+        self.assertEqual(
+            set(res.keys()), set(["data", "columns", "ticker", "last_real_date"])
+        )
+        self.assertTrue(res["columns"] == ("real_date", "value", "eop", "grading"))
+        self.assertTrue(is_valid_iso_date(res["last_real_date"]))
+        self.assertTrue(isinstance(res["data"], list))
+        self.assertTrue(all([isinstance(x, tuple) for x in res["data"]]))
+
+    def test_to_json(self) -> None:
+        df = get_long_format_data(end="2012-01-01")
+        tickers = (df["cid"] + "_" + df["xcat"]).unique().tolist()
+        ticker: str = random.choice(tickers)
+
+        isc = InformationStateChanges.from_qdf(df)
+
+        with self.assertRaises(TypeError):
+            isc.to_json()
+
+        res: str = isc.to_json(ticker)
+        self.assertEqual(
+            json.dumps(isc.to_dict(ticker), sort_keys=True),
+            json.dumps(json.loads(res), sort_keys=True),
+        )
+
     def test_isc_object_round_trip(self) -> None:
 
         qdfidx = QuantamentalDataFrame.IndexCols
@@ -366,7 +408,7 @@ class TestInformationStateChanges(unittest.TestCase):
         self.assertTrue(diff_df.equals(dfc))
 
     def test_isc_to_qdf(self) -> None:
-        df = get_long_format_data(start="2010-01-01", end="2012-01-01")
+        df = get_long_format_data(end="2012-01-01")
         ## Test that the grading is not output when not asked for
         tdf = InformationStateChanges.from_qdf(df).to_qdf(
             metrics=["eop"], postfix="$%A"
@@ -379,7 +421,7 @@ class TestInformationStateChanges(unittest.TestCase):
         self.assertTrue([str(u).endswith("$%A") for u in list(tdf["xcat"])])
 
     def test_temporal_aggregator_period(self) -> None:
-        df = get_long_format_data(start="2010-01-01", end="2012-01-01")
+        df = get_long_format_data(end="2012-01-01")
         iscobj = InformationStateChanges.from_qdf(df)
         for k, v in iscobj.items():
             v["zscore_norm_squared"] = np.random.random(len(v))
@@ -439,6 +481,10 @@ class TestInformationStateChanges(unittest.TestCase):
         ## type error with std as 'banana'
         with self.assertRaises(ValueError):
             isc_obj.calculate_score(**{**argsdict, "std": "banana"})
+
+    def test_get_releases(self):
+        ...
+        # TODO
 
 
 if __name__ == "__main__":
