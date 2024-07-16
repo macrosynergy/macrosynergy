@@ -515,11 +515,8 @@ class FacetPlot(Plotter):
 
         # sort by the title - only
         if all("title" in ditem.keys() for ditem in plot_dict.values()):
-            _plot_dict: Dict[str, Dict[str, Union[str, List[str]]]] = dict(
-                sorted(plot_dict.items(), key=lambda x: x[1]["title"])
-            )
             _plot_dict: Dict[str, Dict[str, Union[str, List[str]]]] = {
-                i: ditem for i, ditem in enumerate(_plot_dict.values())
+                i: ditem for i, ditem in enumerate(plot_dict.values())
             }
             plot_dict: Dict[str, Dict[str, Union[str, List[str]]]] = _plot_dict.copy()
 
