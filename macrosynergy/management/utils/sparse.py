@@ -16,18 +16,19 @@ from macrosynergy.management.types import QuantamentalDataFrame
 def _get_diff_data(
     diff_mask: pd.Series,
     val_series: pd.Series,
-    eop_serioes: pd.Series,
+    eop_series: pd.Series,
     grading_series: pd.Series,
     fvi: pd.Timestamp,
 ) -> pd.DataFrame:
     """
-    Get the diff data for a given ticker from wide/pivoted dataframes (`ticker_df`) of
+    Get the diff data for a given ticker from wide/pivoted DataFrames (`ticker_df`) of
     metrics `value`, `eop_lag` and `grading`.
 
     :param <pd.Series> diff_mask: A boolean mask indicating where the value has changed.
     :param <pd.Series> val_series: The value series.
-    :param <pd.Series> eop_serioes: The end-of-period lag series.
+    :param <pd.Series> eop_series: The end-of-period lag series.
     :param <pd.Series> grading_series: The grading series.
+    :param <pd.Timestamp> fvi: The first valid index (fvi) for the ticker.
     :return: A DataFrame with the diff data.
     :rtype: pd.DataFrame
     """
@@ -35,12 +36,14 @@ def _get_diff_data(
     dates = val_series.index[diff_mask].union([fvi])
 
     # create the diff dataframe
-    df_temp: pd.DataFrame = pd.DataFrame(
-        {
-            "value": val_series.loc[dates],
-            "eop_lag": eop_serioes.loc[dates],
-            "grading": grading_series.loc[dates],
-        }
+    df_temp: pd.DataFrame = pd.concat(
+        (
+            val_series.loc[dates].to_frame("value"),
+            eop_series.loc[dates].to_frame("eop_lag"),
+            grading_series.loc[dates].to_frame("grading"),
+        ),
+        axis=1,
+        ignore_index=False
     )
 
     df_temp["eop"] = df_temp.index - pd.to_timedelta(df_temp["eop_lag"], unit="D")
