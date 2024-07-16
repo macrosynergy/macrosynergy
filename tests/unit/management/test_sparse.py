@@ -146,6 +146,13 @@ class TestFunctions(unittest.TestCase):
         with self.assertRaises(ValueError):
             create_delta_data(df=qdf, return_density_stats="yes")
 
+        # drop value and assert value error
+        with self.assertRaises(ValueError):
+            create_delta_data(df=qdf.drop(columns="value"))
+
+        # test with missing eop_lag
+        create_delta_data(qdf.drop(columns="eop_lag"))
+
     def test_calculate_score_on_sparse_indicator(self) -> None:
         qdf = self.qdf_small.copy()
         argsdict = dict(
