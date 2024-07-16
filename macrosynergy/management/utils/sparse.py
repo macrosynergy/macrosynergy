@@ -129,7 +129,7 @@ def create_delta_data(
         isc_dict[ticker] = _get_diff_data(
             diff_mask=diff_mask[ticker],
             val_series=values_df[ticker],
-            eop_serioes=eop_df[ticker],
+            eop_series=eop_df[ticker],
             grading_series=grading_df[ticker],
             fvi=fvi_series[ticker],
         )
