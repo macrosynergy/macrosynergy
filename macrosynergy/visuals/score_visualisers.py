@@ -222,7 +222,7 @@ class ScoreVisualisers:
         if composite_zscore in xcats:
             dfw = dfw[
                 [composite_zscore]
-                + [xcat for xcat in dfw.columns if xcat != composite_zscore]
+                + [xcat for xcat in xcats if xcat != composite_zscore]
             ]
 
         if xcat_labels:
@@ -396,7 +396,7 @@ class ScoreVisualisers:
         if composite_zscore in xcats:
             dfw_resampled = dfw_resampled[
                 [composite_zscore]
-                + [xcat for xcat in dfw_resampled.columns if xcat != composite_zscore]
+                + [xcat for xcat in xcats if xcat != composite_zscore]
             ]
 
         if xcat_labels:
