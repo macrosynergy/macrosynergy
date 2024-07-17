@@ -40,6 +40,16 @@ from .df_utils import (
     get_sops,
 )
 
+from .sparse import (
+    create_delta_data,
+    calculate_score_on_sparse_indicator,
+    sparse_to_dense,
+    temporal_aggregator_exponential,
+    temporal_aggregator_period,
+    temporal_aggregator_mean,
+    InformationStateChanges,
+)
+
 from .math import (
     expanding_mean_with_nan,
 )
@@ -85,5 +95,14 @@ __all__ = [
     "quarters_btwn_dates",
     "get_eops",
     "get_sops",
+    # Sparse Indicators
+    "create_delta_data",
+    "calculate_score_on_sparse_indicator",
+    "sparse_to_dense",
+    "temporal_aggregator_exponential",
+    "temporal_aggregator_period",
+    "temporal_aggregator_mean",
+    "InformationStateChanges",
+    # Math
     "expanding_mean_with_nan",
 ]
