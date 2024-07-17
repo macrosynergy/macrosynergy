@@ -69,3 +69,23 @@ class TestBasePanelBootstrap(unittest.TestCase):
         self.assertEqual(bpb.bootstrap_method, bootstrap_method)
         self.assertEqual(bpb.resample_ratio, resample_ratio)
         self.assertTrue(bpb.max_features is None)
+
+    def test_types_init(self):
+        # Bootstrap method 
+        with self.assertRaises(TypeError):
+            BasePanelBootstrap(bootstrap_method=1)
+        with self.assertRaises(ValueError):
+            BasePanelBootstrap(bootstrap_method="invalid_method")
+        # resample_ratio 
+        with self.assertRaises(TypeError):
+            BasePanelBootstrap(resample_ratio="invalid_ratio")
+        with self.assertRaises(ValueError):
+            BasePanelBootstrap(resample_ratio=-1)
+        with self.assertRaises(ValueError):
+            BasePanelBootstrap(resample_ratio=1.1)
+        with self.assertRaises(ValueError):
+            BasePanelBootstrap(resample_ratio=0)
+        # max_features
+        with self.assertRaises(NotImplementedError):
+            BasePanelBootstrap(max_features=1)
+        
