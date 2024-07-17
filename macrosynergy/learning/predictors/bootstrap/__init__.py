@@ -1,8 +1,8 @@
-from bootstrap import (
+from .bootstrap import (
     BasePanelBootstrap,
 )
 
-from modified_regressors import (
+from .modified_regressors import (
     BaseModifiedRegressor,
     ModifiedLinearRegression,
 )
