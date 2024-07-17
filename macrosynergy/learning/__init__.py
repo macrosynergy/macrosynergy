@@ -43,6 +43,7 @@ from .predictors import (
     LinearRegressionSystem,
     CorrelationVolatilitySystem,
     ModifiedLinearRegression,
+    BaseModifiedRegressor,
 )
 
 from .beta_estimator import BetaEstimator
@@ -82,6 +83,7 @@ __all__ = [
     "SignWeightedLinearRegression",
     "TimeWeightedLinearRegression",
     "ModifiedLinearRegression",
+    "BaseModifiedRegressor",
     # market beta estimation
     "BetaEstimator",
     "WeightedLinearRegression",

@@ -23,7 +23,7 @@ from .regressor_systems import (
     CorrelationVolatilitySystem,
 )
 
-from bootstrap.modified_regressors import (
+from .bootstrap import (
     ModifiedLinearRegression,
     BaseModifiedRegressor,
 )
