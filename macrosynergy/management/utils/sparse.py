@@ -782,6 +782,7 @@ class InformationStateChanges(object):
         - pd.offsets.BDay(1),
         to_date: Optional[Union[pd.Timestamp, str]] = pd.Timestamp.today().normalize(),
         excl_xcats: List[str] = None,
+        latest_only: bool = True,
     ) -> pd.DataFrame:
 
         if excl_xcats is not None:
@@ -791,20 +792,28 @@ class InformationStateChanges(object):
             if not all(isinstance(x, str) for x in excl_xcats):
                 raise ValueError(excl_xcat_err)
 
+        if not isinstance(latest_only, bool):
+            raise ValueError("`latest_only` must be a boolean")
+
         dt_err = "`{varname}` must be a `pd.Timestamp` or an ISO formatted date"
         for var_name in ["from_date", "to_date"]:
             if not isinstance(eval(var_name), (pd.Timestamp, str, type(None))):
                 raise ValueError(dt_err.format(varname=var_name))
 
-        from_date = pd.Timestamp(from_date) if isinstance(from_date, str) else from_date
-        to_date = pd.Timestamp(to_date) if isinstance(to_date, str) else to_date
+        if from_date is None:
+            from_date = self._min_period
+        elif isinstance(from_date, str):
+            from_date = pd.Timestamp(from_date)
+        if to_date is None:
+            to_date = self._max_period
+        elif isinstance(to_date, str):
+            to_date = pd.Timestamp(to_date)
 
         store: List[Tuple[str, pd.Timestamp, float, float, float, int]] = []
         for k, v in self.items():
             s: pd.DataFrame = v.copy()
-            if bool(from_date):
+            if not latest_only:
                 s = s[s.index >= from_date]
-            if bool(to_date):
                 s = s[s.index <= to_date]
 
             real_date: pd.Timestamp = s.last_valid_index()
@@ -832,8 +841,12 @@ class InformationStateChanges(object):
         if excl_xcats:
             rel = rel[~rel["ticker"].str.contains("|".join(excl_xcats))]
 
-        return rel.set_index("ticker")
+        if latest_only:
+            rel = rel.loc[
+                (rel["real_date"] >= from_date) & (rel["real_date"] <= to_date)
+            ]
 
+        return rel.set_index("ticker")
 
     def temporal_aggregator_period(
         self,
