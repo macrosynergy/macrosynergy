@@ -2,12 +2,13 @@ from .bootstrap import (
     BasePanelBootstrap,
 )
 
-from .base_modified_regressor import (
+from .modified_regressors import (
     BaseModifiedRegressor,
+    ModifiedLinearRegression,
 )
 
 __all__ = [
     "BasePanelBootstrap",
     "BaseModifiedRegressor",
-    #"BaseVolAdjRegressor",
+    "ModifiedLinearRegression",
 ]
