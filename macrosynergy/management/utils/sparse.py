@@ -837,6 +837,13 @@ class InformationStateChanges(object):
             from_date, to_date = to_date, from_date
 
         rel: pd.DataFrame = self.get_latest_releases(excl_xcats=excl_xcats)
+
+        # BUG: the user is cannot query any other period except for the latest release.
+        # -- let's say the latest release is for 2021-09-30,
+        # and the user requests a date range that does not include this date,
+        # then this function is redundant; same functionality can be achieved by
+        # using the `get_latest_releases` method.
+        
         mask = (rel["real_date"] >= from_date) & (rel["real_date"] <= to_date)
 
         return rel.loc[mask].set_index("ticker")
