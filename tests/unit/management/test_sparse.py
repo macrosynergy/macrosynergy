@@ -483,8 +483,10 @@ class TestInformationStateChanges(unittest.TestCase):
             isc_obj.calculate_score(**{**argsdict, "std": "banana"})
 
     def test_get_releases(self):
-        ...
-        # TODO
+        qdf = get_long_format_data(end="2012-01-01")
+        isc_obj = InformationStateChanges.from_qdf(qdf)
+        res = isc_obj.get_latest_releases()
+        self.assertTrue(isinstance(res, pd.DataFrame))
 
 
 if __name__ == "__main__":
