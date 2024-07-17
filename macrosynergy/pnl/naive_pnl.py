@@ -160,7 +160,10 @@ class NaivePnL:
         if sig_op == "binary":
             dfw = dfx.pivot(index=["cid", "real_date"], columns="xcat", values="value")
             dfw["psig"] = np.sign(dfw[sig])
-        elif sig_op != "raw":
+        elif sig_op == "raw":
+            dfw = dfx.pivot(index=["cid", "real_date"], columns="xcat", values="value")
+            dfw["psig"] = dfw[sig]
+        else:
             panw = 1 if sig_op == "zn_score_pan" else 0
             # The re-estimation frequency for the neutral level and standard deviation
             # will be the same as the re-balancing frequency. For instance, if the
