@@ -499,6 +499,10 @@ if __name__ == "__main__":
     X = dfd.drop(columns=["XR"])
     y = dfd["XR"]
 
+    # First instantiate the BaseModifiedRegressor
+    obj = BaseModifiedRegressor(model=LinearRegression(), method="bootstrap")
+
+    # Demonstrate ModifiedLinearRegression usage
     method_pairs = [
         ("analytic", "panel", None),
         ("analytic", "panel", "White"),
