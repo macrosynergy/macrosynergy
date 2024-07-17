@@ -778,6 +778,9 @@ class InformationStateChanges(object):
 
     def get_latest_releases(
         self,
+        from_date: Optional[Union[pd.Timestamp, str]] = pd.Timestamp.today().normalize()
+        - pd.offsets.BDay(1),
+        to_date: Optional[Union[pd.Timestamp, str]] = pd.Timestamp.today().normalize(),
         excl_xcats: List[str] = None,
     ) -> pd.DataFrame:
 
@@ -788,10 +791,24 @@ class InformationStateChanges(object):
             if not all(isinstance(x, str) for x in excl_xcats):
                 raise ValueError(excl_xcat_err)
 
+        dt_err = "`{varname}` must be a `pd.Timestamp` or an ISO formatted date"
+        for var_name in ["from_date", "to_date"]:
+            if not isinstance(eval(var_name), (pd.Timestamp, str, type(None))):
+                raise ValueError(dt_err.format(varname=var_name))
+
+        from_date = pd.Timestamp(from_date) if isinstance(from_date, str) else from_date
+        to_date = pd.Timestamp(to_date) if isinstance(to_date, str) else to_date
+
         store: List[Tuple[str, pd.Timestamp, float, float, float, int]] = []
         for k, v in self.items():
-            real_date = v.index.max()
-            s: pd.DataFrame = v[v.index == real_date]
+            s: pd.DataFrame = v.copy()
+            if bool(from_date):
+                s = s[s.index >= from_date]
+            if bool(to_date):
+                s = s[s.index <= to_date]
+
+            real_date: pd.Timestamp = s.last_valid_index()
+
             store.append(
                 (
                     k,
@@ -815,38 +832,8 @@ class InformationStateChanges(object):
         if excl_xcats:
             rel = rel[~rel["ticker"].str.contains("|".join(excl_xcats))]
 
-        return rel
+        return rel.set_index("ticker")
 
-    def view_period_of_releases(
-        self,
-        excl_xcats: List[str] = None,
-        from_date: Union[pd.Timestamp, str] = pd.Timestamp.today().normalize()
-        - pd.offsets.BDay(1),
-        to_date: Union[pd.Timestamp, str] = pd.Timestamp.today().normalize(),
-    ) -> pd.DataFrame:
-
-        dt_err = "`{varname}` must be a `pd.Timestamp` or an ISO formatted date"
-        for var_name in ["from_date", "to_date"]:
-            if not isinstance(eval(var_name), (pd.Timestamp, str)):
-                raise ValueError(dt_err.format(varname=var_name))
-
-        from_date = pd.Timestamp(from_date) if isinstance(from_date, str) else from_date
-        to_date = pd.Timestamp(to_date) if isinstance(to_date, str) else to_date
-
-        if to_date < from_date:
-            from_date, to_date = to_date, from_date
-
-        rel: pd.DataFrame = self.get_latest_releases(excl_xcats=excl_xcats)
-
-        # BUG: the user is cannot query any other period except for the latest release.
-        # -- let's say the latest release is for 2021-09-30,
-        # and the user requests a date range that does not include this date,
-        # then this function is redundant; same functionality can be achieved by
-        # using the `get_latest_releases` method.
-        
-        mask = (rel["real_date"] >= from_date) & (rel["real_date"] <= to_date)
-
-        return rel.loc[mask].set_index("ticker")
 
     def temporal_aggregator_period(
         self,
