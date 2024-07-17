@@ -816,16 +816,16 @@ class InformationStateChanges(object):
                 s = s[s.index >= from_date]
                 s = s[s.index <= to_date]
 
-            real_date: pd.Timestamp = s.last_valid_index()
+            last_valid_index = s.last_valid_index()
 
             store.append(
                 (
                     k,
-                    real_date,
-                    s["eop"].iloc[0],
-                    s["value"].iloc[0],
-                    s["diff"].iloc[0],
-                    s["version"].iloc[0],
+                    last_valid_index,
+                    s["eop"].loc[last_valid_index],
+                    s["value"].loc[last_valid_index],
+                    s["diff"].loc[last_valid_index],
+                    s["version"].loc[last_valid_index],
                 )
             )
 
