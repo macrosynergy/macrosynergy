@@ -88,4 +88,44 @@ class TestBasePanelBootstrap(unittest.TestCase):
         # max_features
         with self.assertRaises(NotImplementedError):
             BasePanelBootstrap(max_features=1)
+
+    @parameterized.expand(itertools.product(["panel", "period", "cross", "cross_per_period", "period_per_cross"], [0.1, 0.25, 0.5, 0.75, 0.9, 1]))
+    def test_valid_dataset(self, bootstrap_method, resample_ratio):
+        bpb = BasePanelBootstrap(
+            bootstrap_method=bootstrap_method,
+            resample_ratio=resample_ratio,
+        )
+        # Test that each returned object is of the correct format
+        X, y = bpb.create_bootstrap_dataset(self.X, self.y)
+        self.assertIsInstance(X, pd.DataFrame)
+        self.assertTrue(len(X) > 0)
+        self.assertIsInstance(y, pd.Series)
+        self.assertTrue(len(y) > 0)
+        self.assertTrue(len(X) == len(y))
+        self.assertTrue(all(X.index == y.index))
+
         
+    @parameterized.expand(itertools.product(["panel", "period", "cross", "cross_per_period", "period_per_cross"], [0.1, 0.25, 0.5, 0.75, 0.9, 1]))
+    def test_types_dataset(self, bootstrap_method, resample_ratio):
+        bpb = BasePanelBootstrap(
+            bootstrap_method=bootstrap_method,
+            resample_ratio=resample_ratio,
+        )
+        # X
+        with self.assertRaises(TypeError):
+            bpb.create_bootstrap_dataset(X=1, y=self.y)
+        with self.assertRaises(TypeError):
+            bpb.create_bootstrap_dataset(X="self.X", y=self.y)
+        with self.assertRaises(ValueError):
+            bpb.create_bootstrap_dataset(X=self.X.iloc[:20], y=self.y)
+        with self.assertRaises(ValueError):
+            bpb.create_bootstrap_dataset(X=self.X.reset_index(), y=self.y)
+        # y
+        with self.assertRaises(TypeError):
+            bpb.create_bootstrap_dataset(X=self.X, y=1)
+        with self.assertRaises(TypeError):
+            bpb.create_bootstrap_dataset(X=self.X, y="self.y")
+        with self.assertRaises(ValueError):
+            bpb.create_bootstrap_dataset(X=self.X, y=self.y.iloc[:20])
+        with self.assertRaises(ValueError):
+            bpb.create_bootstrap_dataset(X=self.X, y=self.y.reset_index())

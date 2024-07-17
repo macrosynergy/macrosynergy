@@ -122,7 +122,7 @@ class BasePanelBootstrap(ABC):
         """
         bootstrap_idx = np.random.choice(
             np.arange(X.shape[0]),
-            size=int(self.resample_ratio * X.shape[0]),
+            size=int(np.ceil(self.resample_ratio * X.shape[0])),
             replace=True,
         )
         X_resampled = X.iloc[bootstrap_idx]
@@ -151,7 +151,7 @@ class BasePanelBootstrap(ABC):
         # Resample unique panel dates with replacement
         bootstrap_periods = np.random.choice(
             unique_real_dates,
-            size=int(self.resample_ratio * len(unique_real_dates)),
+            size=int(np.ceil(self.resample_ratio * len(unique_real_dates))),
             replace=True,
         )
 
@@ -227,7 +227,7 @@ class BasePanelBootstrap(ABC):
         # Resample unique panel cross-sections with replacement
         bootstrap_cross_sections = np.random.choice(
             unique_cross_sections,
-            size=int(len(unique_cross_sections) * self.resample_ratio),
+            size=int(np.ceil(len(unique_cross_sections) * self.resample_ratio)),
             replace=True,
         )
 
@@ -300,7 +300,7 @@ class BasePanelBootstrap(ABC):
         :return Tuple[pd.DataFrame, Union[pd.DataFrame, pd.Series]]: A tuple of the
             resampled feature matrix and target vector.
         """
-        n_resample = int(len(unique_cross_sections) * self.resample_ratio)
+        n_resample = int(np.ceil(len(unique_cross_sections) * self.resample_ratio))
         X_resampled = X.groupby(level=1).sample(replace=True, n=n_resample)
         y_resampled = y.loc[X_resampled.index]
 
@@ -325,7 +325,7 @@ class BasePanelBootstrap(ABC):
         :return Tuple[pd.DataFrame, Union[pd.DataFrame, pd.Series]]: A tuple of the
             resampled feature matrix and target vector.
         """
-        n_resample = int(len(unique_real_dates) * self.resample_ratio)
+        n_resample = int(np.ceil(len(unique_real_dates) * self.resample_ratio))
         X_resampled = X.groupby(level=0).sample(replace=True, n=n_resample)
         y_resampled = y.loc[X_resampled.index]
 
