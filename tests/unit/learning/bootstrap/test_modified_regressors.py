@@ -143,7 +143,7 @@ class TestBaseModifiedRegressor(unittest.TestCase):
             bmr.fit(X=self.X.iloc[:20], y=self.y)
         with self.assertRaises(ValueError):
             bmr.fit(X=self.X.reset_index(), y=self.y)
-            
+
         # y
         with self.assertRaises(TypeError):
             bmr.fit(X=self.X, y=1)
