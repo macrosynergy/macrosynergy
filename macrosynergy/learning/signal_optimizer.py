@@ -810,8 +810,16 @@ class SignalOptimizer:
                 intercept_data,
                 ftr_selection_data,
             )
-        # Store the best estimator predictions
-        preds: np.ndarray = optim_model.predict(X_test_i)
+        # Store the best estimator predictions/signals
+        # If optim_model has a create_signal method, use it otherwise use predict
+        if hasattr(optim_model, "create_signal"):
+            if callable(getattr(optim_model, "create_signal")):
+                preds: np.ndarray = optim_model.create_signal(X_test_i)
+            else:
+                preds: np.ndarray = optim_model.predict(X_test_i)
+        else:
+            preds: np.ndarray = optim_model.predict(X_test_i)
+            
         prediction_data = [name, test_index, preds]
 
         # See if the best model has coefficients and intercepts
