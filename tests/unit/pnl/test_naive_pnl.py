@@ -348,6 +348,65 @@ class TestAll(unittest.TestCase):
             test_data = pnl_dfw["ALL"].loc[date]
             self.assertTrue(round(float(test_data), 4) == round(pnl_return_date, 4))
 
+    def test_make_pnl_args(self):
+
+        def _random_func(): ...
+
+        ret = "EQXR"
+        sigs = ["CRY", "GROWTH", "INFL"]
+        pnl = NaivePnL(
+            self.dfd,
+            ret=ret,
+            sigs=sigs,
+            cids=self.cids,
+            start="2000-01-01",
+            blacklist=self.blacklist,
+            bms=["EUR_DUXR", "USD_DUXR"],
+        )
+
+        argdict = dict(
+            sig="GROWTH",
+            sig_op="zn_score_pan",
+            rebal_freq="daily",
+            vol_scale=None,
+            leverage=2,
+            rebal_slip=0,
+            pnl_name="PNL_GROWTH",
+            min_obs=252,
+            iis=True,
+            sequential=True,
+            neutral="zero",
+            thresh=None,
+        )
+        for key in argdict:
+            argdict_copy = argdict.copy()
+            argdict_copy[key] = _random_func
+            with self.assertRaises(TypeError):
+                pnl.make_pnl(**argdict_copy)
+
+        for argx in ["sig", "sig_op", "rebal_freq", "neutral"]:
+            argdict_copy = argdict.copy()  # replace with random string
+            argdict_copy[argx] = "random_string"
+            with self.assertRaises(ValueError):
+                pnl.make_pnl(**argdict_copy)
+
+        for argx in ["thresh", "leverage", "vol_scale"]:
+            argdict_copy = argdict.copy()
+            argdict_copy[argx] = -1
+            with self.assertRaises(ValueError):
+                pnl.make_pnl(**argdict_copy)
+
+        argdict = {k: v for k, v in argdict.items() if k in ["vol_scale", "leverage"]}
+        argdict["label"] = None
+        for argx in ["vol_scale", "leverage"]:
+            argdict_copy = argdict.copy()
+            argdict_copy[argx] = -1
+            with self.assertRaises(ValueError):
+                pnl.make_long_pnl(**argdict_copy)
+            argdict_copy[argx] = "random_string"
+            with self.assertRaises(TypeError):
+                pnl.make_long_pnl(**argdict_copy)
+
     def test_make_pnl_neg(self):
         # The majority of the logic for make_pnl is tested through the method
         # test_make_pnl(). Therefore, aim to isolate the application of the negative
@@ -435,7 +494,7 @@ class TestAll(unittest.TestCase):
             thresh=None,
         )
 
-        pnl.make_long_pnl(vol_scale=0, label="Unit_Long_EQXR")
+        pnl.make_long_pnl(vol_scale=None, label="Unit_Long_EQXR")
 
         long_equity = pnl.df[pnl.df["xcat"] == "Unit_Long_EQXR"]
         # Long-only is naturally computed across the panel (individual cross-section's
@@ -519,6 +578,7 @@ class TestAll(unittest.TestCase):
                 atol=0.0001,
             )
         )
+        pnl.make_long_pnl(vol_scale=None, label=None)
 
     def test_plotting_methods(self):
         plt.close("all")
@@ -553,7 +613,7 @@ class TestAll(unittest.TestCase):
             thresh=None,
         )
 
-        pnl.make_long_pnl(vol_scale=0, label="Unit_Long_EQXR")
+        pnl.make_long_pnl(vol_scale=1, label="Unit_Long_EQXR")
 
         # Confirm the plotting methods do not raise any errors.
 
@@ -566,10 +626,15 @@ class TestAll(unittest.TestCase):
             pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"], xcat_labels=1)
 
         with self.assertWarns(Warning):
-            pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"], xcat_labels=["A", "B"])
+            pnl.plot_pnls(
+                pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"], xcat_labels=["A", "B"]
+            )
 
-        with self.assertRaises(AssertionError):
-            pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"], xcat_labels={"PNL_GROWTH": "A"})
+        with self.assertRaises(ValueError):
+            pnl.plot_pnls(
+                pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"],
+                xcat_labels={"PNL_GROWTH": "A"},
+            )
 
         try:
             pnl.signal_heatmap(pnl_name="PNL_GROWTH")
@@ -586,7 +651,7 @@ class TestAll(unittest.TestCase):
         matplotlib.use(mpl_backend)
 
     def test_validation_of_create_results_dataframe(self):
-        
+
         ret = 1
         sigs = ["CRY", "GROWTH", "INFL"]
 
@@ -737,7 +802,7 @@ class TestAll(unittest.TestCase):
             )
 
     def test_result_of_create_results_dataframe(self):
-        
+
         ret = "EQXR"
         sigs = ["CRY", "GROWTH", "INFL"]
         sig_negs = [True, False, False]
@@ -763,12 +828,13 @@ class TestAll(unittest.TestCase):
 
         results = results_df.data
 
-        negative_sigs = [sig + "_NEG" if sig_negs[sigs.index(sig)] else sig for sig in sigs]
+        negative_sigs = [
+            sig + "_NEG" if sig_negs[sigs.index(sig)] else sig for sig in sigs
+        ]
 
         self.assertEqual(set(results.index), set(negative_sigs))
 
         self.assertEqual(len(results.columns), 7)
-
 
 
 if __name__ == "__main__":

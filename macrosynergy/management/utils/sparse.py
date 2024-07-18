@@ -1,6 +1,6 @@
-from typing import Dict, List, Any, Union, Optional, Callable
+from typing import Dict, List, Any, Union, Optional, Callable, Tuple
 from numbers import Number
-
+import warnings
 import pandas as pd
 import numpy as np
 from macrosynergy.management.utils import (
@@ -12,47 +12,40 @@ from macrosynergy.management.utils import (
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 
-import warnings
-
 
 def _get_diff_data(
-    ticker: str,
-    p_value: pd.DataFrame,
-    p_eop: pd.DataFrame,
-    p_grading: pd.DataFrame,
+    diff_mask: pd.Series,
+    val_series: pd.Series,
+    eop_series: pd.Series,
+    grading_series: pd.Series,
+    fvi: pd.Timestamp,
 ) -> pd.DataFrame:
     """
-    Get the diff data for a given ticker from wide/pivoted dataframes (`ticker_df`) of
+    Get the diff data for a given ticker from wide/pivoted DataFrames (`ticker_df`) of
     metrics `value`, `eop_lag` and `grading`.
 
-    :param <str> ticker: The ticker to get the diff data for.
-    :param <pd.DataFrame> p_value: The pivoted DataFrame of the `value` metric.
-    :param <pd.DataFrame> p_eop: The pivoted DataFrame of the `eop_lag` metric.
-    :param <pd.DataFrame> p_grading: The pivoted DataFrame of the `grading` metric.
+    :param <pd.Series> diff_mask: A boolean mask indicating where the value has changed.
+    :param <pd.Series> val_series: The value series.
+    :param <pd.Series> eop_series: The end-of-period lag series.
+    :param <pd.Series> grading_series: The grading series.
+    :param <pd.Timestamp> fvi: The first valid index (fvi) for the ticker.
+    :return: A DataFrame with the diff data.
+    :rtype: pd.DataFrame
     """
-
-    # calculate basic density stats
-    diff_mask = p_value.diff(axis=0).abs() > 0.0
-    diff_density = 100 * diff_mask[ticker].sum() / (~p_value[ticker].isna()).sum()
-    fvi = p_value[ticker].first_valid_index().strftime("%Y-%m-%d")
-    lvi = p_value[ticker].last_valid_index().strftime("%Y-%m-%d")
-    dtrange_str = f"{fvi} : {lvi}"
-    ddict = {
-        "diff_density": diff_density,
-        "date_range": dtrange_str,
-    }
-
-    dates = p_value[ticker].index[diff_mask[ticker]]
+    # get the first index as well
+    dates = val_series.index[diff_mask].union([fvi])
 
     # create the diff dataframe
-    df_temp = pd.concat(
+    df_temp: pd.DataFrame = pd.concat(
         (
-            p_value.loc[dates, ticker].to_frame("value"),
-            p_eop.loc[dates, ticker].to_frame("eop_lag"),
-            p_grading.loc[dates, ticker].to_frame("grading"),
+            val_series.loc[dates].to_frame("value"),
+            eop_series.loc[dates].to_frame("eop_lag"),
+            grading_series.loc[dates].to_frame("grading"),
         ),
         axis=1,
+        ignore_index=False,
     )
+
     df_temp["eop"] = df_temp.index - pd.to_timedelta(df_temp["eop_lag"], unit="D")
     df_temp["release"] = df_temp["eop_lag"].diff(periods=1) < 0
 
@@ -72,7 +65,23 @@ def _get_diff_data(
         ["value", "eop", "version", "grading", "diff"]
     ]
 
-    return df_temp, ddict
+    return df_temp
+
+
+def _get_diff_density_stats(
+    diff_mask: pd.Series, val_series: pd.Series, fvi: pd.Timestamp, lvi: pd.Timestamp
+) -> Dict[str, Union[float, str]]:
+    """
+    Get the density stats for a given ticker from a boolean mask indicating where the value
+    has changed and the value series.
+
+    :param <pd.Series> diff_mask: A boolean mask indicating where the value has changed.
+    :param <pd.Series> val_series: The value series.
+    :return: A dictionary with the density stats.
+    """
+    diff_density: Number = 100 * diff_mask.sum() / (~val_series.isna()).sum()
+    dtrange_str = f"{fvi.strftime('%Y-%m-%d')} : {lvi.strftime('%Y-%m-%d')}"
+    return {"diff_density": diff_density, "date_range": dtrange_str}
 
 
 def create_delta_data(
@@ -90,26 +99,46 @@ def create_delta_data(
 
     if not isinstance(df, QuantamentalDataFrame):
         raise ValueError("`df` must be a QuantamentalDataFrame")
-
-    # split into value, eop and grading
-    p_value = qdf_to_ticker_df(df, value_column="value")
-    p_eop = qdf_to_ticker_df(df, value_column="eop_lag")
+    if not isinstance(return_density_stats, bool):
+        raise ValueError("`return_density_stats` must be a boolean")
+    if "value" not in df.columns:
+        raise ValueError("`df` must contain a `value` column")
+    if "eop_lag" not in df.columns:
+        df["eop_lag"] = np.nan
     if "grading" not in df.columns:
         df["grading"] = np.nan
-    p_grading = qdf_to_ticker_df(df, value_column="grading")
-    assert set(p_value.columns) == set(p_eop.columns) == set(p_grading.columns)
+
+    values_df = qdf_to_ticker_df(df, value_column="value")
+    eop_df = qdf_to_ticker_df(df, value_column="eop_lag")
+    grading_df = qdf_to_ticker_df(df, value_column="grading")
+    assert set(values_df.columns) == set(eop_df.columns) == set(grading_df.columns)
+    all_tickers: List[str] = values_df.columns.tolist()
+
+    # get the first valid index for each column
+    fvi_series: pd.Series = values_df.apply(lambda x: x.first_valid_index())
+    lvi_series: pd.Series = values_df.apply(lambda x: x.last_valid_index())
 
     # create dicts to store the dataframes and density stats
     isc_dict: Dict[str, Any] = {}
-    density_stats: Dict[str, Dict[str, Any]] = {}
-    for ticker in p_value.columns:
-        df_temp, ddict = _get_diff_data(
-            ticker=ticker,
-            p_value=p_value,
-            p_eop=p_eop,
-            p_grading=p_grading,
+    # density_stats: Dict[str, Dict[str, Any]] = {}
+
+    diff_mask = values_df.diff(axis=0).abs() > 1e-12
+    density_stats: Dict[str, Dict[str, Union[float, str]]] = {}
+
+    for ticker in all_tickers:
+        isc_dict[ticker] = _get_diff_data(
+            diff_mask=diff_mask[ticker],
+            val_series=values_df[ticker],
+            eop_series=eop_df[ticker],
+            grading_series=grading_df[ticker],
+            fvi=fvi_series[ticker],
         )
-        isc_dict[ticker], density_stats[ticker] = df_temp, ddict
+        density_stats[ticker] = _get_diff_density_stats(
+            diff_mask=diff_mask[ticker],
+            val_series=values_df[ticker],
+            fvi=fvi_series[ticker],
+            lvi=lvi_series[ticker],
+        )
 
     # flatten the density stats
     _dstats_flat = [
@@ -202,7 +231,12 @@ class VolatilityEstimationMethods(metaclass=SubscriptableMeta):
         :return: The exponentially weighted absolute standard deviation of the Series.
         """
         mean = s.ewm(halflife=halflife, min_periods=min_periods).mean()
-        sd = (s - mean.bfill()).abs().ewm(halflife=halflife, min_periods=min_periods).mean()
+        sd = (
+            (s - mean.bfill())
+            .abs()
+            .ewm(halflife=halflife, min_periods=min_periods)
+            .mean()
+        )
         return sd
 
 
@@ -250,9 +284,6 @@ def calculate_score_on_sparse_indicator(
 
     :return: A dictionary of DataFrames with the changes in the information state for each ticker.
     """
-    # TODO make into a method on InformationStateChanges?
-    # TODO adjust score by eop_lag (business days?) to get a native frequency...
-    # TODO convert below operation into a function call?
     # Operations on a per key in data dictionary
 
     curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
@@ -294,43 +325,41 @@ def calculate_score_on_sparse_indicator(
 
         isc[key] = v
 
-    # TODO return [1] change, and [2] volatility estimate (mainly estimation of volatility for changes...)
-    # TODO clearer exposition
     return isc
 
 
-def _infer_frequency_timeseries(eop_series: pd.Series) -> Optional[str]:
+def _infer_frequency_timeseries(eop_lag_series: pd.Series) -> Optional[str]:
     """
-    Infer the frequency of a time series based on the most common difference between
-    consecutive end-of-period dates.
-    :param <pd.Series> eop_series: A Series of end-of-period dates.
+    Infer the frequency of a time series based on the pattern of eop_lag values,
+    considering resets to 0 to detect period ends.
+    :param <pd.Series> eop_lag_series: A Series of eop_lag values.
     :return: The inferred frequency of the time series. One of "D", "W", "M", "Q" or "A".
     """
-    diff = eop_series.diff().dropna()
-    most_common = diff.mode().values[0]
-    frequency_mapping = {1: "D", 5: "W"}
+    # Identify resets to 0 which indicate the end of a period
+    reset_indices = eop_lag_series[eop_lag_series == 0].index
+    if len(reset_indices) < 2:
+        return "D"  # Default to daily if insufficient data
 
-    if most_common in frequency_mapping:
-        return frequency_mapping[most_common]
+    # Calculate periods between resets
+    periods = reset_indices.to_series().diff().dropna().dt.days
 
-    # Define ranges for other frequencies
-    frequency_ranges = {
-        "M": range(20, 24),  # (20-23 bdays)
-        "Q": range(60, 67),  # (60-66 bdays)
-        "A": range(250, 253),  # (250-252 bdays)
-    }
-    for freq, freq_range in frequency_ranges.items():
-        if most_common in freq_range:
+    # Determine the most common period length
+    most_common_period = periods.mode().values[0]
+
+    # Define ranges for different frequencies
+    freqs = {"D": 1, "W": 7, "M": 30, "Q": 91, "A": 365}
+    # 10% tolerance for frequency ranges
+    for freq, freq_range in freqs.items():
+        rng = (1 - 0.1) * freq_range, (1 + 0.1) * freq_range
+        if rng[0] <= most_common_period <= rng[1]:
             return freq
 
-    return "D"
+    return "D"  # Default to daily if no match is found
 
 
 def infer_frequency(df: QuantamentalDataFrame) -> pd.Series:
     """
-    Infer the frequency of a QuantamentalDataFrame based on the most common difference
-    between consecutive end-of-period dates.
-
+    Infer the frequency of a QuantamentalDataFrame based on the most common eop_lag values.
     :param <QuantamentalDataFrame> df: The QuantamentalDataFrame to infer the frequency for.
     :return: A Series with the inferred frequency for each ticker in the QuantamentalDataFrame.
     """
@@ -460,7 +489,6 @@ def sparse_to_dense(
         wdf = _get_metric_df_from_isc(
             isc=isc, metric=metric_name, date_range=dtrange, fill="ffill"
         )
-        # if wdf.empty or wdf.isna().all().all()
         if wdf.empty or wdf.isna().all().all():
             dfs = [
                 pd.DataFrame(index=dtrange)
@@ -485,14 +513,6 @@ def sparse_to_dense(
 
     if postfix:
         qdf["xcat"] += postfix
-
-    tickers = (qdf["cid"] + "_" + qdf["xcat"]).unique().tolist()
-    for cid, xcat in zip(get_cid(tickers), get_xcat(tickers)):
-        mask = (qdf["cid"] == cid) & (qdf["xcat"] == xcat)
-        min_date = qdf.loc[mask, "real_date"].min()
-        # assert qdf.loc[mask & (qdf["real_date"] == min_date), "value"].isna().all()
-        if qdf.loc[mask & (qdf["real_date"] == min_date)].isna().any().any():
-            qdf = qdf[~mask | (qdf["real_date"] != min_date)]
 
     return qdf
 
