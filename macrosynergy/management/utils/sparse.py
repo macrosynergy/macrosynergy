@@ -795,7 +795,7 @@ class InformationStateChanges(object):
     def to_json(self, ticker: str) -> str:
         return json.dumps(self.to_dict(ticker))
 
-    def get_latest_releases(
+    def get_releases(
         self,
         from_date: Optional[Union[pd.Timestamp, str]] = pd.Timestamp.today().normalize()
         - pd.offsets.BDay(1),
@@ -803,6 +803,16 @@ class InformationStateChanges(object):
         excl_xcats: List[str] = None,
         latest_only: bool = True,
     ) -> pd.DataFrame:
+        """
+        Get the latest releases for the InformationStateChanges object.
+
+        :param <pd.Timestamp> from_date: The start date of the period to get releases for.
+        :param <pd.Timestamp> to_date: The end date of the period to get releases for.
+        :param <List[str]> excl_xcats: A list of xcats to exclude from the releases.
+        :param <bool> latest_only: If True, only the latest release for each ticker is
+            returned. Default is True.
+        # TODO : verify `latest_only` behavior
+        """
 
         if excl_xcats is not None:
             excl_xcat_err = "`excl_xcats` must be a list of strings"
@@ -828,37 +838,37 @@ class InformationStateChanges(object):
         elif isinstance(to_date, str):
             to_date = pd.Timestamp(to_date)
 
+        if from_date > to_date:
+            from_date, to_date = to_date, from_date
+            warnings.warn("`from_date` is greater than `to_date`. Swapping the dates.")
+
         store: List[Tuple[str, pd.Timestamp, float, float, float, int]] = []
         for k, v in self.items():
             s: pd.DataFrame = v.copy()
             if not latest_only:
-                s = s[s.index >= from_date]
-                s = s[s.index <= to_date]
+                s = s[(s.index >= from_date) & (s.index <= to_date)]
 
             last_valid_index = s.last_valid_index()
-
             store.append(
-                (
-                    k,
-                    last_valid_index,
-                    s["eop"].loc[last_valid_index],
-                    s["value"].loc[last_valid_index],
-                    s["diff"].loc[last_valid_index],
-                    s["version"].loc[last_valid_index],
-                )
+                {
+                    "ticker": k,
+                    "real_date": last_valid_index,
+                    **s.loc[last_valid_index].to_dict(),
+                }
             )
 
+        # TODO: return all cols, or only these? (currently all)
+        # ["ticker", "real_date", "eop", "value", "change", "version"]
         rel = (
-            pd.DataFrame(
-                store,
-                columns=["ticker", "real_date", "eop", "value", "change", "version"],
-            )
+            pd.DataFrame(store)
             .sort_values(by=["real_date", "eop", "ticker"])
             .reset_index(drop=True)
+            .rename(columns={"diff": "change"})
         )
 
         if excl_xcats:
-            rel = rel[~rel["ticker"].str.contains("|".join(excl_xcats))]
+            # rel = rel[~rel["ticker"].str.contains("|".join(excl_xcats))]
+            rel = rel[~pd.Series(get_xcat(rel["ticker"])).isin(excl_xcats)]
 
         if latest_only:
             rel = rel.loc[
