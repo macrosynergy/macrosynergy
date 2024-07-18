@@ -43,7 +43,7 @@ def _get_diff_data(
             grading_series.loc[dates].to_frame("grading"),
         ),
         axis=1,
-        ignore_index=False
+        ignore_index=False,
     )
 
     df_temp["eop"] = df_temp.index - pd.to_timedelta(df_temp["eop_lag"], unit="D")
