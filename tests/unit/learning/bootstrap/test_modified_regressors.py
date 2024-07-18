@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.svm import LinearSVR
 
 import itertools
@@ -80,3 +80,76 @@ class TestBaseModifiedRegressor(unittest.TestCase):
         self.assertEqual(bmr.bootstrap_method, bootstrap_method)
         self.assertEqual(bmr.resample_ratio, resample_ratio)
         self.assertEqual(bmr.analytic_method, analytic_method)
+
+    def test_types_init(self):
+        # model
+        with self.assertRaises(TypeError):
+            BaseModifiedRegressor(model="invalid_model")
+        with self.assertRaises(TypeError):
+            BaseModifiedRegressor(model=LogisticRegression())
+        
+        # method
+        with self.assertRaises(TypeError):
+            BaseModifiedRegressor(model = LinearRegression(), method=1)
+        with self.assertRaises(ValueError):
+            BaseModifiedRegressor(model = LinearRegression(), method="invalid_method")
+
+        # error_offset
+        with self.assertRaises(TypeError):
+            BaseModifiedRegressor(model = LinearRegression(), method="analytic", error_offset="invalid_offset")
+        with self.assertRaises(ValueError):
+            BaseModifiedRegressor(model = LinearRegression(), method="analytic", error_offset=-1)
+
+        # bootstrap_method
+        with self.assertRaises(TypeError):
+            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", bootstrap_method=1)
+        with self.assertRaises(ValueError):
+            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", bootstrap_method="invalid_method")
+
+        # bootstrap_iters
+        with self.assertRaises(TypeError):
+            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", bootstrap_iters="invalid_iters")
+        with self.assertRaises(ValueError):
+            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", bootstrap_iters=-1)
+
+        # resample_ratio
+        with self.assertRaises(TypeError):
+            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", resample_ratio="invalid_ratio")
+        with self.assertRaises(ValueError):
+            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", resample_ratio=-1)
+        with self.assertRaises(ValueError):
+            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", resample_ratio=1.1)
+
+        # max_features
+        with self.assertRaises(NotImplementedError):
+            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", max_features=1)
+
+        # analytic_method
+        with self.assertRaises(TypeError):
+            BaseModifiedRegressor(model = LinearRegression(), method="analytic", analytic_method=1)
+
+    def test_types_fit(self):
+        bmr = BaseModifiedRegressor(
+            model=LinearRegression(),
+            method="analytic",
+        )
+
+        # X
+        with self.assertRaises(TypeError):
+            bmr.fit(X=1, y=self.y)
+        with self.assertRaises(TypeError):
+            bmr.fit(X="self.X", y=self.y)
+        with self.assertRaises(ValueError):
+            bmr.fit(X=self.X.iloc[:20], y=self.y)
+        with self.assertRaises(ValueError):
+            bmr.fit(X=self.X.reset_index(), y=self.y)
+            
+        # y
+        with self.assertRaises(TypeError):
+            bmr.fit(X=self.X, y=1)
+        with self.assertRaises(TypeError):
+            bmr.fit(X=self.X, y="self.y")
+        with self.assertRaises(ValueError):
+            bmr.fit(X=self.X, y=self.y.iloc[:20])
+        with self.assertRaises(ValueError):
+            bmr.fit(X=self.X, y=self.y.reset_index())
