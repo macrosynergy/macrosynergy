@@ -11,6 +11,8 @@ from macrosynergy.management.utils import (
     ticker_df_to_qdf,
     is_valid_iso_date,
     qdf_to_ticker_df,
+    get_cid,
+    get_xcat,
 )
 from macrosynergy.management.utils.sparse import (
     InformationStateChanges,
@@ -511,8 +513,57 @@ class TestInformationStateChanges(unittest.TestCase):
     def test_get_releases(self):
         qdf = get_long_format_data(end="2012-01-01")
         isc_obj = InformationStateChanges.from_qdf(qdf)
-        res = isc_obj.get_latest_releases()
+        from_date = "2010-01-01"
+        to_date = "2010-10-01"
+        res = isc_obj.get_releases(
+            from_date=from_date,
+            to_date=to_date,
+            latest_only=False,
+        )
+
         self.assertTrue(isinstance(res, pd.DataFrame))
+        self.assertTrue(res["real_date"].max() <= pd.Timestamp(to_date))
+        self.assertTrue(res["real_date"].min() >= pd.Timestamp(from_date))
+        self.assertFalse(res.index.duplicated().any())
+        self.assertEqual(res.index.name, "ticker")
+        expc_cols: List[str] = ["real_date", "eop", "value", "change", "version"]
+        missing_cols: Set[str] = set(expc_cols) - set(res.columns)
+        self.assertTrue(len(missing_cols) == 0, f"Missing columns: {missing_cols}")
+
+    def test_get_releases_latest(self):
+        qdf = get_long_format_data(
+            start="2020-01-01",
+            end=pd.Timestamp.today().normalize(),
+        )
+        _today = pd.Timestamp.today().normalize()
+        _lbd = _today - pd.offsets.BDay(1)
+        all_tickers = (qdf["cid"] + "_" + qdf["xcat"]).unique()
+        random_tickers = random.choices(all_tickers, k=5)
+        cdf = pd.DataFrame(
+            [
+                {
+                    "cid": get_cid(ticker),
+                    "xcat": get_xcat(ticker),
+                    "real_date": _lbd,
+                    "value": np.random.random(),
+                    "eop": _lbd,
+                    "eop_lag": 0,
+                }
+                for ticker in random_tickers
+            ]
+        )
+        qdf = qdf[~qdf["real_date"].isin([_lbd, _today])]
+        qdf = (
+            pd.concat([qdf, cdf], axis=0, ignore_index=True)
+            .drop_duplicates(subset=["cid", "xcat"], keep="last")
+            .reset_index(drop=True)
+        )
+
+        isc_obj = InformationStateChanges.from_qdf(qdf)
+        res = isc_obj.get_releases()
+
+        self.assertTrue(set(res.index) == set(random_tickers))
+        self.assertTrue(res["real_date"].unique().tolist() == [_lbd])
 
 
 if __name__ == "__main__":
