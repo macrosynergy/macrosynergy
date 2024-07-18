@@ -129,3 +129,18 @@ class TestBasePanelBootstrap(unittest.TestCase):
             bpb.create_bootstrap_dataset(X=self.X, y=self.y.iloc[:20])
         with self.assertRaises(ValueError):
             bpb.create_bootstrap_dataset(X=self.X, y=self.y.reset_index())
+
+    @parameterized.expand([0.1, 0.25, 0.5, 0.75, 0.9, 1])
+    def test_valid_panel_bootstrap(self, resample_ratio):
+        bpb = BasePanelBootstrap(
+            bootstrap_method="panel",
+            resample_ratio=resample_ratio,
+        )
+        # Test that a correctly resampled dataset is returned
+        np.random.seed(42)
+        X_resample, y_resample = bpb._panel_bootstrap(self.X, self.y)
+        np.random.seed(42)
+        idx = np.random.choice([i for i in range(len(self.X))], size=int(np.ceil(resample_ratio * self.X.shape[0])), replace=True)
+        X_resample_true = self.X.iloc[idx]
+        y_resample_true = self.y.iloc[idx]
+        self.assertTrue(all(X_resample == X_resample_true))
