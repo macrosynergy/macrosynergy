@@ -134,7 +134,7 @@ class BasePanelBootstrap(ABC):
         self,
         X: pd.DataFrame,
         y: Union[pd.DataFrame, pd.Series],
-        unique_real_dates: np.ndarray[pd.Timestamp],
+        unique_real_dates: np.ndarray,
     ):
         """
         Method to generate a bootstrap dataset by resampling periods in the panel.
@@ -210,7 +210,7 @@ class BasePanelBootstrap(ABC):
         self,
         X: pd.DataFrame,
         y: Union[pd.DataFrame, pd.Series],
-        unique_cross_sections: np.ndarray[str],
+        unique_cross_sections: np.ndarray,
     ):
         """
         Method to generate a bootstrap dataset by resampling cross-sections in the panel.
@@ -285,7 +285,7 @@ class BasePanelBootstrap(ABC):
         self,
         X: pd.DataFrame,
         y: Union[pd.DataFrame, pd.Series],
-        unique_cross_sections: np.ndarray[str],      
+        unique_cross_sections: np.ndarray,      
     ):
         """
         Method to generate a bootstrap dataset by resampling cross-sections within each
@@ -310,7 +310,7 @@ class BasePanelBootstrap(ABC):
         self,
         X: pd.DataFrame,
         y: Union[pd.DataFrame, pd.Series],
-        unique_real_dates: np.ndarray[pd.Timestamp],      
+        unique_real_dates: np.ndarray,      
     ):
         """
         Method to generate a bootstrap dataset by resampling periods within each
