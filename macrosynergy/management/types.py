@@ -4,6 +4,7 @@ Module hosting custom types and meta-classes for use across the package.
 
 from typing import List, Optional
 import pandas as pd
+from macrosynergy.management.decorators import argvalidation
 
 
 class NoneTypeMeta(type):
@@ -21,6 +22,14 @@ class NoneType(metaclass=NoneTypeMeta):
     """
 
     pass
+
+
+class ArgValidationMeta(type):
+    def __new__(cls, name, bases, dct: dict):
+        for key, value in dct.items():
+            if callable(value):
+                dct[key] = argvalidation(value)
+        return super().__new__(cls, name, bases, dct)
 
 
 class QuantamentalDataFrameMeta(type):
