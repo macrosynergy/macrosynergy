@@ -10,6 +10,7 @@ from macrosynergy.management.utils import (
     concat_single_metric_qdfs,
     get_cid,
     get_xcat,
+    is_valid_iso_date,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 
@@ -365,7 +366,7 @@ def infer_frequency(df: QuantamentalDataFrame) -> pd.Series:
     :return: A Series with the inferred frequency for each ticker in the QuantamentalDataFrame.
     """
     if not isinstance(df, QuantamentalDataFrame):
-        raise ValueError("`df` must be a QuantamentalDataFrame")
+        raise TypeError("`df` must be a QuantamentalDataFrame")
     if not "eop_lag" in df.columns:
         raise ValueError("`df` must contain an `eop_lag` column")
 
@@ -816,9 +817,9 @@ class InformationStateChanges(object):
         if excl_xcats is not None:
             excl_xcat_err = "`excl_xcats` must be a list of strings"
             if not isinstance(excl_xcats, list):
-                raise ValueError(excl_xcat_err)
+                raise TypeError(excl_xcat_err)
             if not all(isinstance(x, str) for x in excl_xcats):
-                raise ValueError(excl_xcat_err)
+                raise TypeError(excl_xcat_err)
 
         if not isinstance(latest_only, bool):
             raise ValueError("`latest_only` must be a boolean")
@@ -826,7 +827,9 @@ class InformationStateChanges(object):
         dt_err = "`{varname}` must be a `pd.Timestamp` or an ISO formatted date"
         for var_name in ["from_date", "to_date"]:
             if not isinstance(eval(var_name), (pd.Timestamp, str, type(None))):
-                raise ValueError(dt_err.format(varname=var_name))
+                raise TypeError(dt_err.format(varname=var_name))
+            if isinstance(eval(var_name), str):
+                is_valid_iso_date(eval(var_name))
 
         if from_date is None:
             from_date = self._min_period
