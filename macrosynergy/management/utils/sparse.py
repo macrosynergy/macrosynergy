@@ -811,7 +811,6 @@ class InformationStateChanges(object):
         :param <List[str]> excl_xcats: A list of xcats to exclude from the releases.
         :param <bool> latest_only: If True, only the latest release for each ticker is
             returned. Default is True.
-        # TODO : verify `latest_only` behavior
         """
 
         if excl_xcats is not None:
