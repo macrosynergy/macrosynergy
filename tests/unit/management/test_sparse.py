@@ -558,9 +558,7 @@ class TestInformationStateChanges(unittest.TestCase):
         self.assertTrue(isinstance(res, pd.DataFrame))
         self.assertTrue(res["real_date"].max() <= pd.Timestamp(to_date))
         self.assertTrue(res["real_date"].min() >= pd.Timestamp(from_date))
-        self.assertFalse(res.index.duplicated().any())
-        self.assertEqual(res.index.name, "ticker")
-        expc_cols: List[str] = ["real_date", "eop", "value", "change", "version"]
+        expc_cols = ["real_date", "ticker", "eop", "value", "change", "version"]
         missing_cols: Set[str] = set(expc_cols) - set(res.columns)
         self.assertTrue(len(missing_cols) == 0, f"Missing columns: {missing_cols}")
 
@@ -570,7 +568,7 @@ class TestInformationStateChanges(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             isc_obj.get_releases(from_date=1)
-            
+
         with self.assertRaises(ValueError):
             isc_obj.get_releases(from_date="banana")
 
@@ -587,6 +585,8 @@ class TestInformationStateChanges(unittest.TestCase):
         )
         _today = pd.Timestamp.today().normalize()
         _lbd = _today - pd.offsets.BDay(1)
+        _tmin2 = _today - pd.offsets.BDay(2)
+        _tmin3 = _today - pd.offsets.BDay(3)
         all_tickers = (qdf["cid"] + "_" + qdf["xcat"]).unique()
         random_tickers = random.choices(all_tickers, k=5)
         cdf = pd.DataFrame(
@@ -602,7 +602,7 @@ class TestInformationStateChanges(unittest.TestCase):
                 for ticker in random_tickers
             ]
         )
-        qdf = qdf[~qdf["real_date"].isin([_lbd, _today])]
+        qdf = qdf[~qdf["real_date"].isin([_lbd, _today, _tmin2, _tmin3])]
         qdf = (
             pd.concat([qdf, cdf], axis=0, ignore_index=True)
             .drop_duplicates(subset=["cid", "xcat"], keep="last")
@@ -614,6 +614,11 @@ class TestInformationStateChanges(unittest.TestCase):
 
         self.assertTrue(set(res.index) == set(random_tickers))
         self.assertTrue(res["real_date"].unique().tolist() == [_lbd])
+
+        ## try with release calendar
+        res = isc_obj.get_releases(latest_only=False, from_date=_tmin3)
+        self.assertTrue(set(res["ticker"]) == set(random_tickers))
+        self.assertTrue(all(res["real_date"] > _tmin3))
 
     def test_get_releases_excl_xcats(self):
         cids = ["USD", "EUR", "JPY", "GBP"]
