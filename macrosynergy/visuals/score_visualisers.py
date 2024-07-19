@@ -232,6 +232,7 @@ class ScoreVisualisers:
             & (self.df["real_date"] == date)
         ]
         dfw = df.pivot(index="cid", columns="xcat", values="value")
+        dfw = dfw.reindex(cids)
         dfw.columns.name = None
         dfw.index.name = None
 
@@ -331,6 +332,7 @@ class ScoreVisualisers:
                 dfw_resampled.index = list(dfw_resampled.index.strftime("%Y"))
 
         dfw_resampled = dfw_resampled.transpose()
+        dfw_resampled = dfw_resampled.reindex(cids)
 
         if transpose:
             dfw_resampled = dfw_resampled.transpose()
