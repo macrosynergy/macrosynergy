@@ -90,7 +90,8 @@ class ScoreVisualisers:
             )
 
         self.df = update_df(self.df, composite_df)
-        self.xcats = self.df["xcat"].unique().tolist()
+        self.xcats = [xcat for xcat in xcats if xcat in self.df["xcat"].unique()]
+        self.xcat_labels = xcat_labels
 
     def _validate_params(self, cids, xcats, xcat_comp):
         if cids and (
@@ -219,6 +220,7 @@ class ScoreVisualisers:
         cids = cids or self.cids
         xcats = xcats or self.xcats
         xcats = self._apply_postfix(xcats)
+        xcat_labels = xcat_labels or self.xcat_labels
 
         date = (
             pd.to_datetime(date)
@@ -246,7 +248,7 @@ class ScoreVisualisers:
             dfw = dfw[xcats]
 
         if xcat_labels:
-            if set(self._apply_postfix(list(xcat_labels.keys()))) == set(dfw.columns):
+            if set(self._apply_postfix(list(xcat_labels.keys()))) >= set(dfw.columns):
                 dfw.columns = [
                     xcat_labels.get(
                         self._strip_postfix([xcat])[0],
@@ -380,6 +382,7 @@ class ScoreVisualisers:
 
         freq = "2AS" if freq == "BA" else freq
 
+        xcat_labels = xcat_labels or self.xcat_labels
         xcats = self._apply_postfix(xcats)
 
         df = self.df[self.df["cid"] == cid]
@@ -423,7 +426,7 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled[xcats]
 
         if xcat_labels:
-            if set(self._apply_postfix(list(xcat_labels.keys()))) == set(
+            if set(self._apply_postfix(list(xcat_labels.keys()))) >= set(
                 dfw_resampled.columns
             ):
                 dfw_resampled.columns = [
@@ -531,7 +534,13 @@ if __name__ == "__main__":
             show_progress=True,
         )
 
-    sv = ScoreVisualisers(df, cids=cids, xcats=xcats)
+    sv = ScoreVisualisers(df, cids=cids, xcats=xcats, xcat_labels={
+            "GGIEDGDP_NSA_ZN": "Currency reserve expansion as % of GDP",
+            "Composite_ZN": "Composite",
+            "NIIPGDP_NSA_ZN": "Monetary base expansion as % of GDP",
+            "CABGDPRATIO_NSA_12MMA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 3 months",
+            "GGOBGDPRATIO_NSA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 6 months",
+        })
 
     sv.view_snapshot(
         cids=cids,
@@ -542,13 +551,6 @@ if __name__ == "__main__":
     sv.view_cid_evolution(
         cid="USD",
         xcats=xcats + ["Composite"],
-        xcat_labels={
-            "GGIEDGDP_NSA_ZN": "Currency reserve expansion as % of GDP",
-            "Composite_ZN": "Composite",
-            "NIIPGDP_NSA_ZN": "Monetary base expansion as % of GDP",
-            "CABGDPRATIO_NSA_12MMA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 3 months",
-            "GGOBGDPRATIO_NSA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 6 months",
-        },
         freq="A",
         transpose=False,
     )
