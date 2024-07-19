@@ -161,6 +161,9 @@ class NaivePnL:
         if sig_op == "binary":
             dfw = dfx.pivot(index=["cid", "real_date"], columns="xcat", values="value")
             dfw["psig"] = np.sign(dfw[sig])
+        elif sig_op == "raw":
+            dfw = dfx.pivot(index=["cid", "real_date"], columns="xcat", values="value")
+            dfw["psig"] = dfw[sig]
         else:
             panw = 1 if sig_op == "zn_score_pan" else 0
             # The re-estimation frequency for the neutral level and standard deviation
@@ -278,7 +281,7 @@ class NaivePnL:
         :param <str> sig: name of raw signal that is basis for positioning. The signal
             is assumed to be recorded at the end of the day prior to position taking.
         :param <str> sig_op: signal transformation options; must be one of
-            'zn_score_pan', 'zn_score_cs', or 'binary'. The default is 'zn_score_pan'.
+            'zn_score_pan', 'zn_score_cs', 'binary', or 'raw'. The default is 'zn_score_pan'.
             'zn_score_pan': transforms raw signals into z-scores around zero value
             based on the whole panel. The neutral level & standard deviation will use the
             cross-section of panels.
@@ -355,7 +358,7 @@ class NaivePnL:
         if sig not in self.sigs:
             raise ValueError(error_sig)
 
-        sig_options = ["zn_score_pan", "zn_score_cs", "binary"]
+        sig_options = ["zn_score_pan", "zn_score_cs", "binary", "raw"]
         error_sig_method = (
             f"The signal transformation method, {sig_op}, is not one of "
             f"the options specified: {sig_options}."

@@ -33,6 +33,7 @@ class ScoreVisualisers:
         signs: Optional[List[float]] = None,
         complete_xcats: bool = False,
         no_zn_scores: bool = False,
+        rescore_composite: bool = False,
     ):
         self._validate_params(cids, xcats, xcat_comp)
 
@@ -71,6 +72,22 @@ class ScoreVisualisers:
             complete_xcats=complete_xcats,
             new_xcat=self.xcat_comp,
         )
+
+        if rescore_composite:
+            composite_df = make_zn_scores(
+                composite_df,
+                xcat=self.xcat_comp,
+                sequential=sequential,
+                cids=self.cids,
+                blacklist=blacklist,
+                iis=iis,
+                neutral=neutral,
+                pan_weight=pan_weight,
+                thresh=thresh,
+                min_obs=min_obs,
+                est_freq=est_freq,
+                postfix="",
+            )
 
         self.df = update_df(self.df, composite_df)
         self.xcats = self.df["xcat"].unique().tolist()
