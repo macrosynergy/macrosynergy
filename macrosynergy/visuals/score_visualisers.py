@@ -242,6 +242,8 @@ class ScoreVisualisers:
                 [composite_zscore]
                 + [xcat for xcat in xcats if xcat != composite_zscore]
             ]
+        else:
+            dfw = dfw[xcats]
 
         if xcat_labels:
             if set(self._apply_postfix(list(xcat_labels.keys()))) == set(dfw.columns):
@@ -417,6 +419,8 @@ class ScoreVisualisers:
                 [composite_zscore]
                 + [xcat for xcat in xcats if xcat != composite_zscore]
             ]
+        else:
+            dfw_resampled = dfw_resampled[xcats]
 
         if xcat_labels:
             if set(self._apply_postfix(list(xcat_labels.keys()))) == set(
@@ -531,6 +535,7 @@ if __name__ == "__main__":
 
     sv.view_snapshot(
         cids=cids,
+        xcats=xcats,
         transpose=True,
         figsize=(14, 12),
     )
