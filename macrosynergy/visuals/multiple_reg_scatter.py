@@ -71,9 +71,9 @@ def multiple_reg_scatter(
             )
 
     if separator is not None:
-        if separator == "cids":
+        if separator == "cids" and not single_scatter:
             raise ValueError(
-                "Separator 'cids' is not permitted in multiple_reg_scatter. To get a plot across multiple cids, please specify separator as cids inside reg_scatter."
+                "Separator 'cids' is not permitted in multiple_reg_scatter, unless single_scatter is set to true. To get a plot across multiple cids, please specify separator as cids inside reg_scatter."
             )
     fig, axes = plt.subplots(
         nrows=nrow, ncols=ncol, figsize=figsize, sharex=True, sharey=True
@@ -189,6 +189,15 @@ if __name__ == "__main__":
         years=None,
     )
 
+    cr1.reg_scatter(
+        labels=False,
+        single_scatter=True,
+        title="Carry and Return",
+        xlab="Carry",
+        ylab="Return",
+        prob_est="map",
+    )
+
     cr2 = CategoryRelations(
         dfdx,
         xcats=["CRY", "GROWTH"],
@@ -262,7 +271,8 @@ if __name__ == "__main__":
         ncol=3,
         nrow=2,
         coef_box="upper right",
-        separator=2010,
+        separator=cids,
+        single_scatter=True
     )
 
     multiple_reg_scatter(
