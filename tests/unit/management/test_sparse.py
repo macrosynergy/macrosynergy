@@ -530,6 +530,19 @@ class TestInformationStateChanges(unittest.TestCase):
         missing_cols: Set[str] = set(expc_cols) - set(res.columns)
         self.assertTrue(len(missing_cols) == 0, f"Missing columns: {missing_cols}")
 
+        # test get_releases warning when dates are swapped
+        with self.assertWarns(UserWarning):
+            isc_obj.get_releases(from_date=to_date, to_date=from_date)
+
+        with self.assertRaises(ValueError):
+            isc_obj.get_releases(from_date="banana")
+
+        with self.assertRaises(ValueError):
+            isc_obj.get_releases(latest_only="banana")
+
+        # test with dates=None
+        res = isc_obj.get_releases(from_date=None, to_date=None)
+
     def test_get_releases_latest(self):
         qdf = get_long_format_data(
             start="2020-01-01",
