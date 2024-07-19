@@ -21,6 +21,7 @@ from macrosynergy.management.utils.sparse import (
     calculate_score_on_sparse_indicator,
     infer_frequency,
     _remove_insignificant_values,
+    weight_from_frequency,
     _isc_dict_to_frames,
     _get_metric_df_from_isc,
     temporal_aggregator_exponential,
@@ -267,6 +268,39 @@ class TestFunctions(unittest.TestCase):
             self.assertTrue(tx in res.index)
             found_freq = tx.split("_")[-1][0].upper()
             self.assertEqual(res[tx], found_freq)
+
+        with self.assertRaises(TypeError):
+            infer_frequency(1)
+
+        with self.assertRaises(ValueError):
+            infer_frequency(qdf.drop(columns="eop_lag"))
+
+        # make the eop 1000 for all
+        qdfc = qdf.copy()
+        qdfc["eop_lag"] = 1000
+        res = infer_frequency(qdfc)
+        self.assertTrue(set(res) == {"D"})  # daily is the fallback
+
+        qdfc = qdf.copy()
+        qdfc["eop_lag"] = np.random.randint(1, 1000, len(qdfc))
+        res = infer_frequency(qdfc)
+        self.assertTrue(set(res) == {"D"})  # daily is the fallback
+
+    def test_weight_from_frequency(self) -> None:
+        # {"D": 1, "W": 5, "M": 21, "Q": 93, "A": 252}
+        fdict = {"D": 1, "W": 5, "M": 21, "Q": 93, "A": 252}
+
+        for i in range(1, 100):
+            base_num = random.randint(1, 255)
+            for freq, weight in fdict.items():
+                expc_res = weight / base_num
+                res = weight_from_frequency(freq, base=base_num)
+                self.assertEqual(res, expc_res)
+
+        ltrs = set(string.ascii_uppercase) - set(fdict.keys())
+        for ltr in ltrs:
+            with self.assertRaises(AssertionError):
+                weight_from_frequency(ltr)
 
 
 class TestTemporalAggregators(unittest.TestCase):
@@ -534,6 +568,9 @@ class TestInformationStateChanges(unittest.TestCase):
         with self.assertWarns(UserWarning):
             isc_obj.get_releases(from_date=to_date, to_date=from_date)
 
+        with self.assertRaises(TypeError):
+            isc_obj.get_releases(from_date=1)
+            
         with self.assertRaises(ValueError):
             isc_obj.get_releases(from_date="banana")
 
@@ -577,6 +614,55 @@ class TestInformationStateChanges(unittest.TestCase):
 
         self.assertTrue(set(res.index) == set(random_tickers))
         self.assertTrue(res["real_date"].unique().tolist() == [_lbd])
+
+    def test_get_releases_excl_xcats(self):
+        cids = ["USD", "EUR", "JPY", "GBP"]
+        xcats = ["GDP", "CPI", "UNEMP", "FX", "BOND", "EQ", "COM"]
+        start = "2020-01-01"
+        end = pd.Timestamp.today().normalize()
+        qdf = get_long_format_data(cids=cids, xcats=xcats, start=start, end=end)
+        # update xcats - they have freq. appended as suffix
+        xcats = qdf["xcat"].unique().tolist()
+        isc_obj = InformationStateChanges.from_qdf(qdf)
+
+        _today = pd.Timestamp.today().normalize()
+        _lbd = _today - pd.offsets.BDay(1)
+        all_tickers = (qdf["cid"] + "_" + qdf["xcat"]).unique()
+
+        # pick 3 random xcats
+        selected_xcats = random.choices(xcats, k=3)
+        excl_xcats = list(set(xcats) - set(selected_xcats))
+        cdf = pd.DataFrame(
+            [
+                {
+                    "cid": get_cid(ticker),
+                    "xcat": get_xcat(ticker),
+                    "real_date": _lbd,
+                    "value": np.random.random(),
+                    "eop": _lbd,
+                    "eop_lag": 0,
+                }
+                for ticker in all_tickers
+            ]
+        )
+        qdf = qdf[~qdf["real_date"].isin([_lbd, _today])]
+        qdf = (
+            pd.concat([qdf, cdf], axis=0, ignore_index=True)
+            .drop_duplicates(subset=["cid", "xcat"], keep="last")
+            .reset_index(drop=True)
+        )
+
+        isc_obj = InformationStateChanges.from_qdf(qdf)
+        res = isc_obj.get_releases(excl_xcats=excl_xcats)
+
+        self.assertTrue(set(get_xcat(list(set(res.index)))) == set(selected_xcats))
+        self.assertTrue(res["real_date"].unique().tolist() == [_lbd])
+
+        with self.assertRaises(TypeError):
+            isc_obj.get_releases(excl_xcats="banana")
+
+        with self.assertRaises(TypeError):
+            isc_obj.get_releases(excl_xcats=[1])
 
 
 if __name__ == "__main__":
