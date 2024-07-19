@@ -778,7 +778,6 @@ class InformationStateChanges(object):
     ) -> Dict[
         str, Union[List[Tuple[str, float, str, float]], Tuple[str, str, str], str]
     ]:
-        # TODO store as arrays instead: [{"data": {"real_date": [], "value": [], "eop": [], "grading": []}}]
         data = [
             (f"{index:%Y-%m-%d}", row.value, f"{row.eop:%Y-%m-%d}", row.grading)
             for index, row in self[ticker][["value", "eop", "grading"]].iterrows()
@@ -859,8 +858,6 @@ class InformationStateChanges(object):
                 }
             )
 
-        # TODO: return all cols, or only these? (currently all)
-        # ["ticker", "real_date", "eop", "value", "change", "version"]
         rel = (
             pd.DataFrame(store)
             .sort_values(by=["real_date", "eop", "ticker"])
@@ -869,7 +866,6 @@ class InformationStateChanges(object):
         )
 
         if excl_xcats:
-            # rel = rel[~rel["ticker"].str.contains("|".join(excl_xcats))]
             rel = rel[~pd.Series(get_xcat(rel["ticker"])).isin(excl_xcats)]
 
         if latest_only:
