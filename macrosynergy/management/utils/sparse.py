@@ -811,6 +811,8 @@ class InformationStateChanges(object):
         :param <List[str]> excl_xcats: A list of xcats to exclude from the releases.
         :param <bool> latest_only: If True, only the latest release for each ticker is
             returned. Default is True.
+        :return: A DataFrame with the latest releases for each ticker. If `latest_only` is
+            False, all releases within the date range are returned.
         """
 
         if excl_xcats is not None:
@@ -819,6 +821,8 @@ class InformationStateChanges(object):
                 raise TypeError(excl_xcat_err)
             if not all(isinstance(x, str) for x in excl_xcats):
                 raise TypeError(excl_xcat_err)
+        else:
+            excl_xcats = []
 
         if not isinstance(latest_only, bool):
             raise ValueError("`latest_only` must be a boolean")
@@ -843,37 +847,29 @@ class InformationStateChanges(object):
             from_date, to_date = to_date, from_date
             warnings.warn("`from_date` is greater than `to_date`. Swapping the dates.")
 
-        store: List[Tuple[str, pd.Timestamp, float, float, float, int]] = []
+        dfs_list = []
         for k, v in self.items():
+            if get_xcat(k) in excl_xcats:
+                continue
             s: pd.DataFrame = v.copy()
-            if not latest_only:
-                s = s[(s.index >= from_date) & (s.index <= to_date)]
+            s = s[(s.index >= from_date) & (s.index <= to_date)]
+            s["ticker"] = k
+            if latest_only and not s.empty:
+                s = s.loc[[s.last_valid_index()]]
 
-            last_valid_index = s.last_valid_index()
-            store.append(
-                {
-                    "ticker": k,
-                    "real_date": last_valid_index,
-                    **s.loc[last_valid_index].to_dict(),
-                }
-            )
+            dfs_list.append(s.reset_index())
 
         rel = (
-            pd.DataFrame(store)
+            pd.concat(dfs_list, axis=0)
             .sort_values(by=["real_date", "eop", "ticker"])
-            .reset_index(drop=True)
             .rename(columns={"diff": "change"})
+            .reset_index(drop=True)
         )
 
-        if excl_xcats:
-            rel = rel[~pd.Series(get_xcat(rel["ticker"])).isin(excl_xcats)]
-
         if latest_only:
-            rel = rel.loc[
-                (rel["real_date"] >= from_date) & (rel["real_date"] <= to_date)
-            ]
-
-        return rel.set_index("ticker")
+            return rel.set_index("ticker")
+        else:
+            return rel
 
     def temporal_aggregator_period(
         self,
