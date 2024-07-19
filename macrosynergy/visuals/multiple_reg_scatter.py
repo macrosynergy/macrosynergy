@@ -28,6 +28,7 @@ def multiple_reg_scatter(
     separator=None,
     single_chart=False,
     subplot_titles=None,
+    single_scatter=False
 ):
     """
     Visualize the results of a multiple regression analysis across categories.
@@ -126,6 +127,7 @@ def multiple_reg_scatter(
             single_chart=single_chart,
             separator=separator,
             ax=ax,
+            single_scatter=single_scatter
         )
 
     plt.subplots_adjust(top=title_yadj - 0.01)
