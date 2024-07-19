@@ -19,7 +19,7 @@ class ScoreVisualisers:
         xcats: List[str] = None,
         xcat_labels: Dict[str, str] = None,
         xcat_comp: str = "Composite",
-        weights: Dict[str, str] = None,
+        weights: List[float] = None,
         blacklist: Dict[str, str] = None,
         sequential: bool = True,
         iis: bool = True,
@@ -59,7 +59,12 @@ class ScoreVisualisers:
             no_zn_scores,
         )
         self.old_xcats = [xcat_comp] + xcats
-        self.xcats = self.df["xcat"].unique().tolist()
+        self.xcats = self._apply_postfix(xcats)
+        for xcat in self.xcats:
+            if xcat not in self.df["xcat"].unique():
+                self.xcats.remove(xcat)
+                warnings.warn(f"{xcat} not in the DataFrame")
+
 
         composite_df = linear_composite(
             self.df,
@@ -90,7 +95,7 @@ class ScoreVisualisers:
             )
 
         self.df = update_df(self.df, composite_df)
-        self.xcats = [xcat for xcat in xcats if xcat in self.df["xcat"].unique()]
+        self.xcats = [self.xcat_comp] + self.xcats
         self.xcat_labels = xcat_labels
 
     def _validate_params(self, cids, xcats, xcat_comp):
@@ -540,7 +545,7 @@ if __name__ == "__main__":
             "NIIPGDP_NSA_ZN": "Monetary base expansion as % of GDP",
             "CABGDPRATIO_NSA_12MMA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 3 months",
             "GGOBGDPRATIO_NSA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 6 months",
-        })
+        }, rescore_composite=True, weights=[1, 1, 1, 10])
 
     sv.view_snapshot(
         cids=cids,
