@@ -708,7 +708,7 @@ class CategoryRelations(object):
 
             assert isinstance(single_chart, bool)
 
-            if coef_box == "upper right": # Since otherwise this overlaps with c
+            if coef_box == "upper right": # Since otherwise this overlaps with cid legend
                 coef_box = "upper left"
 
             dfx_copy = dfx.reset_index()
@@ -767,41 +767,6 @@ class CategoryRelations(object):
                 ax.set_xlabel(xlab)
             if ylab is not None:
                 ax.set_ylabel(ylab)
-
-            # dfx_list = [dfx_copy[dfx_copy["cid"] == c] for c in cids]
-            # for i, dfx_i in enumerate(dfx_list):
-            #     sns.regplot(
-            #         data=dfx_i,
-            #         x=self.xcats[0],
-            #         y=self.xcats[1],
-            #         ci=reg_ci,
-            #         order=reg_order,
-            #         robust=reg_robust,
-            #         fit_reg=fit_reg,
-            #         scatter_kws={"s": 30, "alpha": 0.5},
-            #         line_kws={"lw": 1},
-            #         ax=ax,
-            #         label=f'{cids[i]}'
-            #     )
-
-            # if coef_box is not None:
-            #     data_table = self.corr_probability(
-            #         df_probability=dfx_list,
-            #         time_period="",
-            #         coef_box_loc=coef_box,
-            #         prob_est=prob_est,
-            #         ax=ax,
-            #     )
-            #     data_table.scale(0.4, 2.5)
-            #     data_table.auto_set_font_size(set_font_size)
-            #     data_table.set_fontsize(coef_box_font_size)
-
-            # ax.legend(loc="upper right", title="Cids")
-            # ax.set_title(title, fontsize=14)
-            # if xlab is not None:
-            #     ax.set_xlabel(xlab)
-            # if ylab is not None:
-            #     ax.set_ylabel(ylab)
 
         elif separator is None:
             if ax is None:
