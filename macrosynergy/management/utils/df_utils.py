@@ -1061,18 +1061,24 @@ def merge_categories(df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: Li
 
     real_dates = list(df["real_date"].unique())
 
-    def _get_values_for_xcat(real_dates, xcat_index):
+    def _get_values_for_xcat(real_dates, xcat_index, cid):
 
-        values = df[(df["real_date"].isin(real_dates)) & (df["xcat"] == xcats[xcat_index]) & (df["cid"].isin(cids))]
+        values = df[(df["real_date"].isin(real_dates)) & (df["xcat"] == xcats[xcat_index]) & (df["cid"] == cid)]
         if not real_dates == list(values["real_date"].unique()):
             if xcat_index + 1 >= len(xcats):
                 return values
-            values = update_df(values, _get_values_for_xcat(list(set(real_dates) - set(values["real_date"].unique())), xcat_index + 1))
+            values = update_df(values, _get_values_for_xcat(list(set(real_dates) - set(values["real_date"].unique())), xcat_index + 1, cid))
 
         values.loc[:, "xcat"] = new_xcat
         return values
+    
+    result_df = None
 
-    result_df = _get_values_for_xcat(real_dates, xcat_index=0)
+    for cid in cids:
+        if result_df is None:
+            result_df = _get_values_for_xcat(real_dates, 0, cid)
+        else:
+            result_df = update_df(result_df, _get_values_for_xcat(real_dates, xcat_index=0, cid=cid))
 
     return result_df
 
