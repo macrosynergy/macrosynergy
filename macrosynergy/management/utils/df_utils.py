@@ -1073,7 +1073,10 @@ def merge_categories(df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: Li
         return values
 
     for cid in cids:
-        result_df = _get_values_for_xcat(real_dates, xcat_index=0, cid=cid)
+        if result_df is None:
+            result_df = _get_values_for_xcat(real_dates, 0, cid)
+        else:
+            result_df = update_df(result_df, _get_values_for_xcat(real_dates, xcat_index=0, cid=cid))
 
     return result_df
 
