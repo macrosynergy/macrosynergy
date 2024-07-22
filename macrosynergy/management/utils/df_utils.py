@@ -1024,6 +1024,63 @@ def get_eops(
         direction=direction,
     )
 
+def merge_categories(df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: List[str] = None):
+    """
+    Merges categories of different preferences into a single one, with the most preferred 
+    being used first and others substituted in order.
+
+    :param <pd.DataFrame> df: standardized JPMaQS DataFrame with the necessary columns
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
+    :param <List[str]> xcats: extended categories to be merged.
+    :param <List[str]> cids: cross sections to be included. Default is all in the
+        DataFrame.
+    :param <str> new_xcat: name of the new category to be created. Default is None.
+
+    :return <pd.DataFrame>: DataFrame with the merged category.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("The DataFrame must be a pandas DataFrame.")
+    if not isinstance(xcats, list):
+        raise TypeError("The categories must be a list of strings.")
+    if not all(isinstance(xcat, str) for xcat in xcats):
+        raise TypeError("The categories must be a list of strings.")
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("The DataFrame must be a Quantamental DataFrame.")
+    if not isinstance(new_xcat, str):
+        raise TypeError("The new category must be a string.")
+    if not set(xcats).issubset(df["xcat"].unique()):
+        raise ValueError("The categories must be present in the DataFrame.")
+    if cids is None:
+        cids = list(df["cid"].unique())
+    if not isinstance(cids, list):
+        raise TypeError("The cross sections must be a list of strings.")
+    if not all(isinstance(cid, str) for cid in cids):
+        raise TypeError("The cross sections must be a list of strings.")
+    if not set(cids).issubset(df["cid"].unique()):
+        raise ValueError("The cross sections must be present in the DataFrame.")
+
+    real_dates = list(df["real_date"].unique())
+
+    def _get_values_for_xcat(real_dates, xcat_index, cid):
+
+        values = df[(df["real_date"].isin(real_dates)) & (df["xcat"] == xcats[xcat_index]) & (df["cid"] == cid)]
+        if not real_dates == list(values["real_date"].unique()):
+            if xcat_index + 1 >= len(xcats):
+                return values
+            values = update_df(values, _get_values_for_xcat(list(set(real_dates) - set(values["real_date"].unique())), xcat_index + 1, cid))
+
+        values.loc[:, "xcat"] = new_xcat
+        return values
+    
+    result_df = None
+
+    for cid in cids:
+        if result_df is None:
+            result_df = _get_values_for_xcat(real_dates, 0, cid)
+        else:
+            result_df = update_df(result_df, _get_values_for_xcat(real_dates, xcat_index=0, cid=cid))
+
+    return result_df
 
 def get_sops(
     dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
