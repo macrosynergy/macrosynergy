@@ -7,10 +7,12 @@ import numpy as np
 from typing import List, Tuple, Dict, Union, Set, Any
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.download.jpmaqs import timeseries_to_qdf, construct_expressions
 from macrosynergy.management.utils import (
     get_cid,
     get_xcat,
     downsample_df_on_real_date,
+    concat_single_metric_qdfs,
     get_dict_max_depth,
     rec_search_dict,
     is_valid_iso_date,
@@ -26,11 +28,13 @@ from macrosynergy.management.utils import (
     get_sops,
     _map_to_business_day_frequency,
     apply_slip,
+    merge_categories,
     Timer,
 )
 from macrosynergy.management.constants import FREQUENCY_MAP
 from macrosynergy.management.utils.math import expanding_mean_with_nan
 from tests.simulate import make_qdf
+from tests.unit.download.mock_helpers import mock_request_wrapper
 
 
 class TestFunctions(unittest.TestCase):
@@ -407,6 +411,75 @@ class TestFunctions(unittest.TestCase):
         df: pd.DataFrame = test_df.copy()
         rdf: pd.DataFrame = ticker_df_to_qdf(df=df)
         self.assertTrue(df.equals(test_df))
+
+        # pass an integer as a metric
+        df: pd.DataFrame = test_df.copy()
+        with self.assertRaises(TypeError):
+            ticker_df_to_qdf(df=df, metric=1)
+
+        # test the metric acctually works
+        df: pd.DataFrame = test_df.copy()
+        rdf: pd.DataFrame = ticker_df_to_qdf(df=df, metric="hibiscus")
+        self.assertTrue(
+            set(rdf.columns) - set(QuantamentalDataFrame.IndexCols) == set(["hibiscus"])
+        )
+
+    def test_concat_single_metric_qdfs(self):
+
+        with self.assertRaises(TypeError):
+            concat_single_metric_qdfs("")
+
+        with self.assertRaises(ValueError):
+            concat_single_metric_qdfs([], errors=True)
+
+        cids: List[str] = ["GBP", "EUR", "CAD"]
+        xcats: List[str] = ["FXXR_NSA", "EQXR_NSA"]
+        metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+        expressions = construct_expressions(cids=cids, xcats=xcats, metrics=metrics)
+        dicts_lists = mock_request_wrapper(
+            dq_expressions=expressions,
+            start_date="2019-01-01",
+            end_date="2019-01-31",
+        )
+
+        qdfs = [timeseries_to_qdf(dicts) for dicts in dicts_lists]
+        combined = concat_single_metric_qdfs(qdfs)
+        self.assertIsInstance(combined, QuantamentalDataFrame)
+
+        bad_qdfs = qdfs.copy()
+        bad_qdfs[0]["newcol"] = 1
+        with self.assertRaises(ValueError):
+            concat_single_metric_qdfs(bad_qdfs)
+
+        ## different metrics
+
+        test_exprs = [
+            "DB(JPMAQS,GBP_FXXR_NSA,value)",
+            "DB(JPMAQS,GBP_EQXR_NSA,grading)",
+        ]
+        dicts_lists = mock_request_wrapper(
+            dq_expressions=test_exprs,
+            start_date="2019-01-01",
+            end_date="2019-01-31",
+        )
+
+        qdfs = [timeseries_to_qdf(dicts) for dicts in dicts_lists]
+        combined = concat_single_metric_qdfs(qdfs)
+        self.assertIsInstance(combined, QuantamentalDataFrame)
+        self.assertEqual(set(combined["xcat"].unique()), set(["FXXR_NSA", "EQXR_NSA"]))
+        self.assertEqual(set(combined["cid"].unique()), set(["GBP"]))
+        metrics = list(set(combined.columns) - set(QuantamentalDataFrame.IndexCols))
+        self.assertEqual(set(metrics), set(["value", "grading"]))
+
+        for xcat in ["FXXR_NSA", "EQXR_NSA"]:
+            tgt = "grading" if xcat == "FXXR_NSA" else "value"
+            dfn = combined[combined["xcat"] == xcat].copy()
+            self.assertTrue(dfn[tgt].isna().all())
+
+        with self.assertRaises(TypeError):
+            concat_single_metric_qdfs(qdfs + [None], errors="raise")
+
+        self.assertIsNone(concat_single_metric_qdfs([None, None], errors="ignore"))
 
     def test_get_cid(self):
         good_cases: List[Tuple[str, str]] = [
@@ -1016,6 +1089,70 @@ class TestFunctions(unittest.TestCase):
                 cids=sel_cids,
                 metrics=["value"],
             )
+
+    def test_merge_categories(self):
+        cids: List[str] = ["AUD", "CAD", "GBP", "NZD", "JPY", "CHF"]
+        xcats: List[str] = ["XR", "CRY", "GROWTH", "INFL"]
+        test_df: pd.DataFrame = make_test_df(cids=cids, xcats=xcats)
+
+        # Ensure that test dataframe has differing values for XR and CRY on 2015-01-01 
+        test_df.loc[(test_df["cid"] == "AUD") & (test_df["xcat"] == "XR") & (test_df["real_date"] == "2015-01-01"), "value"] = 1.0
+
+        test_df.loc[(test_df["cid"] == "AUD") & (test_df["xcat"] == "CRY") & (test_df["real_date"] == "2015-01-01"), "value"] = 2.0
+        # Typings are correct
+
+        with self.assertRaises(TypeError):
+            merge_categories("AUD", 1)
+
+        with self.assertRaises(TypeError):
+            merge_categories(test_df, xcats=1, new_xcat="NEW_CAT")
+
+        with self.assertRaises(TypeError):
+            merge_categories(test_df, xcats=["XR", "CRY"], new_xcat="NEW_CAT", cids="AUD")
+
+        with self.assertRaises(TypeError):
+            merge_categories(test_df, xcats=["XR", "CRY"], cids=["AUD"], new_xcat=1)
+
+        # Check dataframe has correct format
+
+        with self.assertRaises(TypeError):
+            merge_categories(test_df.drop(columns=["value", "real_date"]), xcats=["XR", "CRY"], new_xcat="NEW_CAT", cids=["AUD"])
+        
+        # Check values specified exist in Dataframe
+
+        with self.assertRaises(ValueError):
+            merge_categories(test_df, xcats=["XR", "CRY", "NOT_PRESENT", "INFL"], new_xcat="NEW_CAT", cids=["AUD"])
+
+        with self.assertRaises(ValueError):
+            merge_categories(test_df, xcats=["XR", "CRY", "INFL"], new_xcat="NEW_CAT", cids=["NOPE"])
+
+        # Check that the new category is created
+
+        new_xcat = "NEW_CAT"
+        new_df = merge_categories(test_df, xcats=["XR", "CRY"], cids=["AUD"], new_xcat=new_xcat)
+        self.assertTrue(new_xcat in new_df["xcat"].unique())
+
+        # Check that the new category is equal to preference 1
+
+        new_df = merge_categories(test_df, xcats=["XR", "CRY"], cids=["AUD"], new_xcat=new_xcat)
+        new_df_values = new_df[new_df["xcat"] == new_xcat]["value"].reset_index(drop=True)
+
+        test_df_values = test_df[(test_df["xcat"] == "XR") & (test_df["cid"] == "AUD")]["value"].reset_index(drop=True)
+
+        self.assertTrue(new_df_values.equals(test_df_values))
+
+        # Check that the new category is equal to preference 2 if preference 1 does not exist
+
+        mask = ~((test_df['cid'] == "AUD") & (test_df['xcat'] == "XR") & (test_df['real_date'] == "2015-01-01"))
+        df_filtered = test_df[mask].reset_index(drop=True)
+
+        new_df = merge_categories(df_filtered, xcats=["XR", "CRY"], cids=["AUD"], new_xcat=new_xcat)
+
+        new_df_value = new_df[(new_df["xcat"] == new_xcat) & (test_df['cid'] == "AUD") & (test_df['real_date'] == "2015-01-01")]["value"].reset_index(drop=True)
+        self.assertTrue(new_df_value.equals(test_df[(test_df['cid'] == "AUD") & (test_df['xcat'] == "CRY") & (test_df['real_date'] == "2015-01-01")]["value"].reset_index(drop=True)))
+        self.assertTrue(not new_df_value.equals(test_df[(test_df['cid'] == "AUD") & (test_df['xcat'] == "XR") & (test_df['real_date'] == "2015-01-01")]["value"].reset_index(drop=True)))
+
+
 
 
 class TestTimer(unittest.TestCase):

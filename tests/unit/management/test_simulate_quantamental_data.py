@@ -11,6 +11,8 @@ from macrosynergy.management.simulate import (
     generate_lines,
     make_test_df,
 )
+from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.utils import get_cid, get_xcat
 
 
 class Test_All(unittest.TestCase):
@@ -250,21 +252,21 @@ class Test_All(unittest.TestCase):
         cids: List[str] = ["AUD", "CAD", "GBP", "USD"]
         xcats: List[str] = ["XR", "IR"]
         tickers: List[str] = [f"{cid}_{xc}" for cid in cids for xc in xcats]
-        start_date: str = "2010-01-01"
-        end_date: str = "2020-12-31"
-        date_range: pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
+        start: str = "2010-01-01"
+        end: str = "2020-12-31"
+        date_range: pd.DatetimeIndex = pd.bdate_range(start=start, end=end)
         line_styles: List[str] = generate_lines(sig_len=len(date_range), style="all")
 
         for ls in list(line_styles):
             df: pd.DataFrame = make_test_df(
-                cids=cids, xcats=xcats, start=start_date, end=end_date, style=ls
+                cids=cids, xcats=xcats, start=start, end=end, style=ls
             )
 
             self.assertTrue(isinstance(df, pd.DataFrame))
             self.assertFalse(df.empty)
             self.assertTrue(set(df.columns) == {"cid", "xcat", "real_date", "value"})
 
-            ebdates: pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
+            ebdates: pd.DatetimeIndex = pd.bdate_range(start=start, end=end)
             self.assertTrue(set(ebdates) == set(df["real_date"]))
             self.assertTrue(
                 df["real_date"].nunique()
@@ -289,6 +291,62 @@ class Test_All(unittest.TestCase):
                             generate_lines(sig_len=len(ebdates), style=ls),
                         )
                     )
+
+    def test_make_test_df_errors(self):
+        good_args: dict = {
+            "cids": ["AUD", "CAD", "GBP", "USD"],
+            "xcats": ["XR", "IR"],
+            "tickers": ["USD_FXXR_NSA"],
+            "metrics": ["all"],
+            "start": "2010-01-01",
+            "end": "2020-12-31",
+            "style": "any",
+        }
+
+        # test type errors
+
+        for argx in good_args.keys():
+            bad_args: dict = good_args.copy()
+            bad_args[argx] = 10
+            self.assertRaises(TypeError, make_test_df, **bad_args)
+
+        # test value errors
+        for argx in ["cids", "xcats"]:
+            bad_args: dict = good_args.copy()
+            bad_args[argx] = None
+            self.assertRaises(ValueError, make_test_df, **bad_args)
+
+        # test tickers and cids & xcats all being None
+        bad_args: dict = good_args.copy()
+        bad_args["cids"] = None
+        bad_args["xcats"] = None
+        bad_args["tickers"] = None
+        self.assertRaises(ValueError, make_test_df, **bad_args)
+
+    def test_make_test_df_metrics(self):
+        good_args: dict = {
+            "cids": ["AUD", "CAD", "GBP", "USD"],
+            "xcats": ["XR", "IR"],
+            "tickers": ["USD_FXXR_NSA"],
+            "metrics": ["all"],
+            "start": "2010-01-01",
+            "end": "2020-12-31",
+            "style": "any",
+        }
+        all_metrics = ["value", "grading", "eop_lag", "mop_lag"]
+        # test all metrics
+        df: pd.DataFrame = make_test_df(**good_args)
+        self.assertTrue(
+            set(df.columns) - set(QuantamentalDataFrame.IndexCols) == set(all_metrics)
+        )
+
+        # test one by one
+        for metric in all_metrics:
+            good_args["metrics"] = [metric]
+            df: pd.DataFrame = make_test_df(**good_args)
+            self.assertTrue(
+                set(df.columns) - set(QuantamentalDataFrame.IndexCols) == {metric}
+            )
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ from macrosynergy.management.utils.core import (
     _map_to_business_day_frequency,
     is_valid_iso_date,
 )
-
+import functools
 
 def standardise_dataframe(
     df: pd.DataFrame, verbose: bool = False
@@ -174,7 +174,7 @@ def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFr
     )
 
 
-def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
+def ticker_df_to_qdf(df: pd.DataFrame, metric: str = "value") -> QuantamentalDataFrame:
     """
     Converts a wide format DataFrame (with each column representing a ticker)
     to a standardized JPMaQS DataFrame.
@@ -184,22 +184,83 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Argument `df` must be a pandas DataFrame.")
+    if not isinstance(metric, str):
+        raise TypeError("Argument `metric` must be a string.")
 
     # pivot to long format
     df = (
-        df.stack(level=0)
-        .reset_index()
-        .rename(columns={0: "value", "level_1": "ticker"})
+        df.stack(level=0).reset_index().rename(columns={0: metric, "level_1": "ticker"})
     )
-    # split ticker using get_cid and get_xcat
+
     df["cid"] = get_cid(df["ticker"])
     df["xcat"] = get_xcat(df["ticker"])
-    # drop ticker column
-
     df = df.drop(columns=["ticker"])
 
-    # standardise and return
     return standardise_dataframe(df=df)
+
+
+def concat_single_metric_qdfs(
+    df_list: List[QuantamentalDataFrame],
+    errors: str = "ignore",
+) -> QuantamentalDataFrame:
+    """
+    Combines a list of Quantamental DataFrames into a single DataFrame.
+
+    :param <List[QuantamentalDataFrame]> df_list: A list of Quantamental DataFrames.
+    :param <str> errors: The error handling method to use. If 'raise', then invalid
+        items in the list will raise an error. If 'ignore', then invalid items will be
+        ignored. Default is 'ignore'.
+    :return <QuantamentalDataFrame>: The combined DataFrame.
+    """
+    if not isinstance(df_list, list):
+        raise TypeError("Argument `df_list` must be a list.")
+
+    if errors not in ["raise", "ignore"]:
+        raise ValueError("`errors` must be one of 'raise' or 'ignore'.")
+
+    if errors == "raise":
+        if not all([isinstance(df, QuantamentalDataFrame) for df in df_list]):
+            raise TypeError(
+                "All elements in `df_list` must be Quantamental DataFrames."
+            )
+    else:
+        df_list = [df for df in df_list if isinstance(df, QuantamentalDataFrame)]
+        if len(df_list) == 0:
+            return None
+
+    def _get_metric(df: QuantamentalDataFrame) -> str:
+        lx = list(set(df.columns) - set(QuantamentalDataFrame.IndexCols))
+        if len(lx) != 1:
+            raise ValueError(
+                "Each QuantamentalDataFrame must have exactly one metric column."
+            )
+        return lx[0]
+
+    def _group_by_metric(
+        dfl: List[QuantamentalDataFrame], fm: List[str]
+    ) -> List[List[QuantamentalDataFrame]]:
+        r = [[] for _ in range(len(fm))]
+        while dfl:
+            metric = _get_metric(df=dfl[0])
+            r[fm.index(metric)] += [dfl.pop(0)]
+        return r
+
+    found_metrics = list(set(map(_get_metric, df_list)))
+
+    df_list = _group_by_metric(dfl=df_list, fm=found_metrics)
+
+    # use pd.merge to join on QuantamentalDataFrame.IndexCols
+    df: pd.DataFrame = functools.reduce(
+        lambda left, right: pd.merge(
+            left, right, on=["real_date", "cid", "xcat"], how="outer"
+        ),
+        map(
+            lambda fm: pd.concat(df_list.pop(0), axis=0, ignore_index=False),
+            found_metrics,
+        ),
+    )
+
+    return standardise_dataframe(df)
 
 
 def apply_slip(
@@ -963,6 +1024,63 @@ def get_eops(
         direction=direction,
     )
 
+def merge_categories(df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: List[str] = None):
+    """
+    Merges categories of different preferences into a single one, with the most preferred 
+    being used first and others substituted in order.
+
+    :param <pd.DataFrame> df: standardized JPMaQS DataFrame with the necessary columns
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
+    :param <List[str]> xcats: extended categories to be merged.
+    :param <List[str]> cids: cross sections to be included. Default is all in the
+        DataFrame.
+    :param <str> new_xcat: name of the new category to be created. Default is None.
+
+    :return <pd.DataFrame>: DataFrame with the merged category.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("The DataFrame must be a pandas DataFrame.")
+    if not isinstance(xcats, list):
+        raise TypeError("The categories must be a list of strings.")
+    if not all(isinstance(xcat, str) for xcat in xcats):
+        raise TypeError("The categories must be a list of strings.")
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("The DataFrame must be a Quantamental DataFrame.")
+    if not isinstance(new_xcat, str):
+        raise TypeError("The new category must be a string.")
+    if not set(xcats).issubset(df["xcat"].unique()):
+        raise ValueError("The categories must be present in the DataFrame.")
+    if cids is None:
+        cids = list(df["cid"].unique())
+    if not isinstance(cids, list):
+        raise TypeError("The cross sections must be a list of strings.")
+    if not all(isinstance(cid, str) for cid in cids):
+        raise TypeError("The cross sections must be a list of strings.")
+    if not set(cids).issubset(df["cid"].unique()):
+        raise ValueError("The cross sections must be present in the DataFrame.")
+
+    real_dates = list(df["real_date"].unique())
+
+    def _get_values_for_xcat(real_dates, xcat_index, cid):
+
+        values = df[(df["real_date"].isin(real_dates)) & (df["xcat"] == xcats[xcat_index]) & (df["cid"] == cid)]
+        if not real_dates == list(values["real_date"].unique()):
+            if xcat_index + 1 >= len(xcats):
+                return values
+            values = update_df(values, _get_values_for_xcat(list(set(real_dates) - set(values["real_date"].unique())), xcat_index + 1, cid))
+
+        values.loc[:, "xcat"] = new_xcat
+        return values
+    
+    result_df = None
+
+    for cid in cids:
+        if result_df is None:
+            result_df = _get_values_for_xcat(real_dates, 0, cid)
+        else:
+            result_df = update_df(result_df, _get_values_for_xcat(real_dates, xcat_index=0, cid=cid))
+
+    return result_df
 
 def get_sops(
     dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
