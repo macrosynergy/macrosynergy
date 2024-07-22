@@ -1065,7 +1065,7 @@ def merge_categories(df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: Li
 
         values = df[(df["real_date"].isin(real_dates)) & (df["xcat"] == xcats[xcat_index]) & (df["cid"].isin(cids))]
         if not real_dates == list(values["real_date"].unique()):
-            if xcat_index + 1 >= len(xcats):
+            if xcat_index >= len(xcats):
                 return values
             values = update_df(values, _get_values_for_xcat(list(set(real_dates) - set(values["real_date"].unique())), xcat_index + 1))
 
