@@ -28,7 +28,7 @@ def multiple_reg_scatter(
     separator=None,
     single_chart=False,
     subplot_titles=None,
-    single_scatter=False
+    color_code_cids=False
 ):
     """
     Visualize the results of a multiple regression analysis across categories.
@@ -71,10 +71,14 @@ def multiple_reg_scatter(
             )
 
     if separator is not None:
-        if separator == "cids" and not single_scatter:
+        if separator == "cids":
             raise ValueError(
-                "Separator 'cids' is not permitted in multiple_reg_scatter, unless single_scatter is set to true. To get a plot across multiple cids, please specify separator as cids inside reg_scatter."
+                "Separator 'cids' is not permitted in multiple_reg_scatter. To get a plot across multiple cids, please specify separator as cids inside reg_scatter."
             )
+
+    single_scatter = color_code_cids
+    separator = "cids" if color_code_cids else separator
+
     fig, axes = plt.subplots(
         nrows=nrow, ncols=ncol, figsize=figsize, sharex=True, sharey=True
     )
@@ -189,14 +193,15 @@ if __name__ == "__main__":
         years=None,
     )
 
-    cr1.reg_scatter(
-        labels=False,
-        single_scatter=True,
-        title="Carry and Return",
-        xlab="Carry",
-        ylab="Return",
-        prob_est="map",
-    )
+    # cr1.reg_scatter(
+    #     labels=False,
+    #     single_scatter=True,
+    #     title="Carry and Return",
+    #     xlab="Carry",
+    #     ylab="Return",
+    #     prob_est="map",
+    #     separator="cids"
+    # )
 
     cr2 = CategoryRelations(
         dfdx,
@@ -271,8 +276,7 @@ if __name__ == "__main__":
         ncol=3,
         nrow=2,
         coef_box="upper right",
-        separator=cids,
-        single_scatter=True
+        color_code_cids=True
     )
 
     multiple_reg_scatter(
