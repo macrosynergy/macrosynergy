@@ -708,7 +708,7 @@ class CategoryRelations(object):
 
             assert isinstance(single_chart, bool)
 
-            if coef_box == "upper right": # Since otherwise this overlaps with cid-legend
+            if coef_box == "upper right": # Since otherwise this overlaps with cid legend
                 coef_box = "upper left"
 
             dfx_copy = dfx.reset_index()
@@ -734,7 +734,7 @@ class CategoryRelations(object):
                 robust=reg_robust,
                 fit_reg=fit_reg,
                 scatter=False,  # Do not plot scatter points in regplot
-                line_kws={"lw": 1},
+                line_kws={"lw": 1, "color": "black"},
                 ax=ax
             )
 
