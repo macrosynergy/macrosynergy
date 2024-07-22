@@ -1071,6 +1071,8 @@ def merge_categories(df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: Li
 
         values.loc[:, "xcat"] = new_xcat
         return values
+    
+    result_df = None
 
     for cid in cids:
         if result_df is None:
