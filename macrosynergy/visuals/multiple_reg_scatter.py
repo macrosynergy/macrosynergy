@@ -277,11 +277,11 @@ if __name__ == "__main__":
         color_cids=True
     )
 
-    # multiple_reg_scatter(
-    #     [cr1, cr2, cr3, cr4, cr5, cr6],
-    #     title="Growth trend and subsequent sectoral equity returns.",
-    #     xlab="Real technical growth trend",
-    #     ylab="Excess Return",
-    #     ncol=6,
-    #     nrow=2,
-    # )
+    multiple_reg_scatter(
+        [cr1, cr2, cr3, cr4, cr5, cr6],
+        title="Growth trend and subsequent sectoral equity returns.",
+        xlab="Real technical growth trend",
+        ylab="Excess Return",
+        ncol=6,
+        nrow=2,
+    )
