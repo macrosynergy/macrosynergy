@@ -147,6 +147,7 @@ def timeseries_to_qdf(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
         )
         .assign(cid=cid, xcat=xcat)
         .dropna()
+        .astype({"cid": "category", "xcat": "category"})
     )
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y%m%d")
