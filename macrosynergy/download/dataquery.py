@@ -816,7 +816,7 @@ class DataQueryInterface(object):
         :param <int> page_size: the number of tickers to fetch in a single request.
             Defaults to 1000 (maximum allowed by the API).
 
-        :return <List[str]>: list of tickers in the requested group.
+        :return <List[str]>: list of all tickers in the requested group.
 
         :raises <ValueError>: if the response from the server is not valid.
         """
