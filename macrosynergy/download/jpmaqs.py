@@ -17,7 +17,11 @@ import itertools
 
 import pandas as pd
 
-from macrosynergy.download.dataquery import DataQueryInterface, API_DELAY_PARAM
+from macrosynergy.download.dataquery import (
+    JPMAQS_GROUP_ID,
+    DataQueryInterface,
+    API_DELAY_PARAM,
+)
 from macrosynergy.download.exceptions import InvalidDataframeError
 from macrosynergy.management.utils import is_valid_iso_date, concat_single_metric_qdfs
 from macrosynergy.management.constants import JPMAQS_METRICS
@@ -799,8 +803,19 @@ class JPMaQSDownload(DataQueryInterface):
 
         return ts_list
 
-    def download_data(self, *args, **kwargs):
-        return super().download_data(*args, **kwargs)
+    # def download_data(self, *args, **kwargs):
+    #     """
+    #     Downloads data from the DataQuery API.
+    #     """
+    #     return super().download_data(*args, **kwargs)
+
+    def get_catalogue(
+        self,
+        group_id: str = JPMAQS_GROUP_ID,
+        page_size: int = 1000,
+        verbose: bool = True,
+    ) -> List[str]:
+        return super().get_catalogue(group_id, page_size, verbose)
 
     def download_all_to_disk(
         self,
@@ -818,6 +833,29 @@ class JPMaQSDownload(DataQueryInterface):
     ) -> None:
         """
         Downloads all JPMaQS data to disk.
+
+        :param <str> path: path to the directory where the data will be saved.
+        :param <Optional[List[str] expressions: Default is None, meaning all expressions
+            in the JPMaQS catalogue will be downloaded. If provided, only the expressions
+            in the list will be downloaded.
+        :param <bool> as_dataframe: Default is True, meaning the data will be saved as a
+            DataFrame (either in the Quantamental Data Format ('qdf') or wide format ('wide')).
+            If False, the data will be saved as JSON files, with one expression per file.
+        :param <str> dataframe_format: Default is 'qdf'. If `as_dataframe` is True, this
+            parameter specifies the format of the DataFrame. Must be one of 'qdf' or 'wide'.
+        :param <bool> show_progress: Default is True, meaning the progress of the download
+            will be displayed. If False, the progress will not be displayed.
+        :param <float> delay_param: Default is 0.2 seconds (fastest allowed by DataQuery API).
+            The delay parameter to use when making requests to the DataQuery API. Ideally, this
+            should not be changed.
+        :param <int> batch_size: Default is None, meaning the batch size will be set to the
+            default value of the DataQuery API. If provided, this parameter specifies the
+            number of expressions to download in each batch.
+        :param <int> retry: Default is 3, meaning the download will be retried 3 times for
+            any expressions that fail to download. If set to 0, no retries will be attempted.
+        :param <bool> overwrite: Default is True, meaning the data will be overwritten if it
+            already exists. If False, the data will not be overwritten.
+        :param <dict> kwargs: any other keyword arguments.
         """
         save_path: Optional[str] = None
         if path == "":
@@ -1130,6 +1168,9 @@ if __name__ == "__main__":
             end_date=end_date,
             show_progress=True,
             report_time_taken=True,
+            # as_dataframe=False,
+            dataframe_format="wide",
         )
-        print(data.info())
-        print(data)
+        print(len(data))
+        # print(data.info())
+        # print(data)
