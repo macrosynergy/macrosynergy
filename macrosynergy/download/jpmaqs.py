@@ -835,7 +835,7 @@ class JPMaQSDownload(DataQueryInterface):
         Downloads all JPMaQS data to disk.
 
         :param <str> path: path to the directory where the data will be saved.
-        :param <Optional[List[str] expressions: Default is None, meaning all expressions
+        :param <Optional[List[str]> expressions: Default is None, meaning all expressions
             in the JPMaQS catalogue will be downloaded. If provided, only the expressions
             in the list will be downloaded.
         :param <bool> as_dataframe: Default is True, meaning the data will be saved as a
@@ -849,8 +849,8 @@ class JPMaQSDownload(DataQueryInterface):
             The delay parameter to use when making requests to the DataQuery API. Ideally, this
             should not be changed.
         :param <int> batch_size: Default is None, meaning the batch size will be set to the
-            default value of the DataQuery API. If provided, this parameter specifies the
-            number of expressions to download in each batch.
+            default size (20). If provided, this parameter specifies the number of expressions
+            to download in each batch.
         :param <int> retry: Default is 3, meaning the download will be retried 3 times for
             any expressions that fail to download. If set to 0, no retries will be attempted.
         :param <bool> overwrite: Default is True, meaning the data will be overwritten if it
