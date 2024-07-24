@@ -803,12 +803,6 @@ class JPMaQSDownload(DataQueryInterface):
 
         return ts_list
 
-    # def download_data(self, *args, **kwargs):
-    #     """
-    #     Downloads data from the DataQuery API.
-    #     """
-    #     return super().download_data(*args, **kwargs)
-
     def get_catalogue(
         self,
         group_id: str = JPMAQS_GROUP_ID,
