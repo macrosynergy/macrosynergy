@@ -1162,9 +1162,6 @@ if __name__ == "__main__":
             end_date=end_date,
             show_progress=True,
             report_time_taken=True,
-            # as_dataframe=False,
-            dataframe_format="wide",
         )
-        print(len(data))
-        # print(data.info())
-        # print(data)
+        print(data.info())
+        print(data)
