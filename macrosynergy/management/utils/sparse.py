@@ -626,6 +626,7 @@ def _calculate_score_on_sparse_indicator_for_class(
     iis: bool = False,
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
+    volatility_forecast: bool = True
 ):
     """
     Calculate score on sparse indicator for a class.
@@ -661,7 +662,7 @@ def _calculate_score_on_sparse_indicator_for_class(
         columns = [kk for kk in v.columns if kk != "std"]
         v = pd.merge(
             left=v[columns],
-            right=result.to_frame("std"),
+            right=result.to_frame("std").shift(periods=int(volatility_forecast)),
             how="left",
             left_index=True,
             right_index=True,
