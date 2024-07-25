@@ -282,8 +282,9 @@ def calculate_score_on_sparse_indicator(
 
     :param <Callable> custom_method: A custom method to use for calculating the standard
         deviation. Must have the signature `custom_method(s: pd.Series, **kwargs) -> pd.Series`.
-
     :param <Dict> custom_method_kwargs: Keyword arguments to pass to the custom method.
+    :param <bool> volatility_forecast: If True (default), the volatility forecast is shifted
+        one period forward to align with the information state changes.
 
     :return: A dictionary of DataFrames with the changes in the information state for each ticker.
     """
@@ -924,6 +925,9 @@ class InformationStateChanges(object):
         :param <Callable> custom_method: A custom method to use for calculating the standard
             deviation. Must have the signature `custom_method(s: pd.Series, **kwargs) -> pd.Series`.
         :param <Dict> custom_method_kwargs: Keyword arguments to pass to the custom method.
+        :param <bool> volatility_forecast: If True (default), the volatility forecast is shifted
+            one period forward to align with the information state changes.
+        :return: None
         """
 
         _calculate_score_on_sparse_indicator_for_class(
@@ -937,3 +941,4 @@ class InformationStateChanges(object):
             custom_method_kwargs=custom_method_kwargs,
             volatility_forecast=volatility_forecast,
         )
+        return self
