@@ -260,6 +260,7 @@ def calculate_score_on_sparse_indicator(
     iis: bool = False,
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
+    volatility_forecast: bool = True,
 ) -> Dict[str, pd.DataFrame]:
     """Calculate score on sparse indicator
 
@@ -315,7 +316,7 @@ def calculate_score_on_sparse_indicator(
         columns = [kk for kk in v.columns if kk != "std"]
         v = pd.merge(
             left=v[columns],
-            right=result.to_frame("std"),
+            right=result.to_frame("std").shift(periods=int(volatility_forecast)),
             how="left",
             left_index=True,
             right_index=True,
@@ -626,7 +627,7 @@ def _calculate_score_on_sparse_indicator_for_class(
     iis: bool = False,
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
-    volatility_forecast: bool = True
+    volatility_forecast: bool = True,
 ):
     """
     Calculate score on sparse indicator for a class.
@@ -902,6 +903,7 @@ class InformationStateChanges(object):
         iis: bool = False,
         custom_method: Optional[Callable] = None,
         custom_method_kwargs: Dict = {},
+        volatility_forecast: bool = True,
     ):
         """
         Calculate score on sparse indicator for the InformationStateChanges object.
@@ -933,4 +935,5 @@ class InformationStateChanges(object):
             iis=iis,
             custom_method=custom_method,
             custom_method_kwargs=custom_method_kwargs,
+            volatility_forecast=volatility_forecast,
         )
