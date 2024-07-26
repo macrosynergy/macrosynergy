@@ -669,6 +669,41 @@ class TestInformationStateChanges(unittest.TestCase):
         with self.assertRaises(TypeError):
             isc_obj.get_releases(excl_xcats=[1])
 
+    def test_calc_score_vol_forecast(self):
+        qdf = get_long_format_data(end="2012-01-01")
+
+        # check that roundtrip remains the same
+        qdfa = (
+            InformationStateChanges.from_qdf(qdf)
+            .calculate_score(volatility_forecast=True)
+            .to_qdf()
+        ).sort_index()
+
+        qdfb = (
+            InformationStateChanges.from_qdf(qdf)
+            .calculate_score(volatility_forecast=False)
+            .to_qdf()
+        ).sort_index()
+
+        self.assertTrue(qdfa.equals(qdfb))
+
+        ## Test the actual std in the information state changes
+
+        isc = InformationStateChanges.from_qdf(qdf).calculate_score(
+            volatility_forecast=True, min_periods=1
+        )
+
+        isc_test = InformationStateChanges.from_qdf(qdf).calculate_score(
+            volatility_forecast=False, min_periods=1
+        )
+
+        self.assertTrue(set(isc.keys()) == set(isc_test.keys()))
+
+        for ticker in isc.keys():
+            dfa = isc[ticker].sort_index()
+            dfb = isc_test[ticker].sort_index()
+            self.assertTrue((dfa["std"]).equals(dfb["std"].shift(periods=1)))
+
 
 if __name__ == "__main__":
     unittest.main()
