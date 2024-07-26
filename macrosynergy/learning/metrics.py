@@ -1,6 +1,6 @@
 """
-Collection of non-standard scikit-learn performance metrics for evaluation of
-machine learning model predictions.
+Collection of performance metrics and scores, compatible with scikit-learn,
+for evaluation of machine learning model predictions.
 """
 
 import numpy as np
@@ -17,9 +17,13 @@ from sklearn.metrics import make_scorer, accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import VotingRegressor
-from sklearn.base import RegressorMixin
+from sklearn.base import BaseEstimator, RegressorMixin
+
+from sklearn.utils.validation import check_is_fitted
+from sklearn.exceptions import NotFittedError
 
 from macrosynergy.learning.panel_time_series_split import ExpandingKFoldPanelSplit
+from macrosynergy.learning.predictors.regressor_systems import BaseRegressionSystem
 
 from typing import Union
 
@@ -28,23 +32,22 @@ def panel_significance_probability(
     y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]
 ) -> float:
     """
-    Function to create a linear mixed effects model between the ground truth returns and
-    the predicted returns, returning the significance of the model slope.
-    Period-specific random effects are included in the model to account for
-    return cross-sectional correlations.
-    This can be passed into sklearn's make_scorer function to be used as a scorer in a
-    grid search or cross validation procedure.
+    Metric to return the probability of significance of a linear mixed effects model beta,
+    retressing the ground truth returns against the predicted returns, with period-specific
+    random effects included in the model to account for cross-sectional correlations.
+    This can be passed into sklearn's `make_scorer` function to be used as a scorer in a
+    hyperparameter search.
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
         multi-indexed by cross-section and date. The dates must be in datetime format.
     :param <Union[pd.Series,np.ndarray]> y_pred: Either a pandas series or numpy array
         of predicted targets. This must have the same length as y_true.
 
-    :return <float> significance_prob: 1 - p-value of the regression slope parameter,
+    :return <float> significance_prob: `1 - p-value` of the regression slope parameter,
         given by the linear mixed effects model.
     """
 
-    # checks
+    # Checks
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas series")
 
@@ -61,6 +64,7 @@ def panel_significance_probability(
         # Sklearn averages each metric over the CV splits.
         # If all the ground truth labels are zero, the regression is invalid due to a
         # singular matrix. Hence, we return zero in this case.
+        # TODO: check whether this is still needed.
         significance_prob = 0
         return significance_prob
 
@@ -69,6 +73,7 @@ def panel_significance_probability(
     groups = y_true.index.get_level_values(1)
 
     # fit model
+    # TODO: use linearmodels not statsmodels and remove iloc
     re = MixedLM(y_true, X, groups=groups).fit(reml=False)
     pval = re.pvalues.iloc[1]
 
@@ -79,7 +84,7 @@ def regression_accuracy(
     y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]
 ) -> float:
     """
-    Function to return the accuracy between the signs of the predictions and targets.
+    Metric to return the accuracy between the signs of the predictions and targets.
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
         multi-indexed by cross-section and date. The dates must be in datetime format.
@@ -89,7 +94,7 @@ def regression_accuracy(
     :return <float>: Accuracy between the signs of the predictions and targets.
     """
 
-    # checks
+    # Checks
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas series")
 
@@ -109,7 +114,7 @@ def regression_balanced_accuracy(
     y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]
 ) -> float:
     """
-    Function to return the balanced accuracy between the signs
+    Metric to return the balanced accuracy between the signs
     of the predictions and targets.
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
@@ -120,7 +125,7 @@ def regression_balanced_accuracy(
     :return <float>: Balanced accuracy between the signs of the predictions and targets.
     """
 
-    # checks
+    # Checks
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas series")
 
@@ -138,7 +143,7 @@ def regression_balanced_accuracy(
 
 def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> float:
     """
-    Function to return a Sharpe ratio for a strategy where we go long if the predictions
+    Metric to return a Sharpe ratio for a strategy where we go long if the predictions
     are positive and short if the predictions are negative.
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
@@ -149,7 +154,7 @@ def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> flo
     :return <float>: Sharpe ratio for the binary strategy.
     """
 
-    # checks
+    # Checks
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas series")
 
@@ -179,7 +184,7 @@ def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> flo
 
 def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> float:
     """
-    Function to return a Sortino ratio for a strategy where we go long if the predictions
+    Metric to return a Sortino ratio for a strategy where we go long if the predictions
     are positive and short if the predictions are negative.
 
     :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
@@ -190,7 +195,7 @@ def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> fl
     :return <float>: Sortino ratio for the binary strategy.
     """
 
-    # checks
+    # Checks
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas series")
 
@@ -233,8 +238,8 @@ def neg_mean_abs_corr(
     y_test is an out-of-sample panel with a single column comprising financial contract returns.
     Correlation can be 'pearson', 'spearman' or 'kendall'.
 
-    The estimator is expected to be a seemingly unrelated linear regression model
-    possessing a coefs_ dictionary with cross-sectional keys and values corresponding to
+    The estimator is expected to be a system of linear models, that has been fit on a 
+    training panel, possessing a coefs_ dictionary with cross-sectional keys and values corresponding to
     betas.
 
     Specifically, for each cross-section c in X_test, we compute hedged returns,
@@ -247,11 +252,6 @@ def neg_mean_abs_corr(
     For calculation of hedged returns for cross-section $c$,
     let $\\hat{\\beta}_{c}$ denote the estimated beta for cross-section c.
     Then $hedged_returns_{c} = contract_returns_{c} - \\hat{\\beta}_{c} * benchmark_returns$.
-
-    .. note::
-
-      This scorer is still **experimental** for now: the predictions
-      and the API might change without any deprecation cycle.
 
     :param <RegressorMixin> estimator: A fitted seemingly unrelated scikit-learn regressor
         with a coefs_ dictionary of type Dict[str, float] containing estimated betas
@@ -268,13 +268,61 @@ def neg_mean_abs_corr(
         
     NB: this scorer is a specialized function for use in beta estimation.
     """
+    # Checks 
+    if not isinstance(estimator, BaseEstimator):
+        raise TypeError("estimator must be a scikit-learn compatible estimator")
+    if not isinstance(estimator, RegressorMixin):
+        raise TypeError("estimator must be a scikit-learn regressor")
+    if not isinstance(estimator, VotingRegressor):
+        if not isinstance(estimator, BaseRegressionSystem):
+            raise TypeError(
+                "estimator must be a system of linear models. By Macrosynergy convention,"
+                "this means it inherits from BaseRegressionSystem in `macrosynergy.learning`."
+            )
+        try:
+            check_is_fitted(estimator, attributes=["coefs_"])
+        except NotFittedError:
+            raise ValueError(
+                "estimator must be fit before calling a scorer."
+            )
+    else:
+        if not all(isinstance(est[1], RegressorMixin) for est in estimator.estimators):
+            raise TypeError("The voting regressor must be composed of regressors")
+        if not all(isinstance(est[1], BaseRegressionSystem) for est in estimator.estimators):
+            raise TypeError(
+                "Each estimator in the voting regressor must be a system of linear models."
+                "By Macrosynergy convention, this means it inherits from BaseRegressionSystem"
+                "in `macrosynergy.learning`."
+            )
+        try:
+            check_is_fitted(estimator, attributes=["estimators_"])
+        except NotFittedError:
+            raise ValueError(
+                "The VotingRegressor object must be fit before calling a scorer."
+            )
+    if not isinstance(X_test, pd.DataFrame):
+        raise TypeError("X_test must be a pandas DataFrame")
+    if not isinstance(y_test, (pd.DataFrame, pd.Series)):
+        raise TypeError("y_test must be a pandas DataFrame or Series")
+    if len(X_test) != len(y_test):
+        raise ValueError("X_test and y_test must have the same length")
+    if not isinstance(X_test.index, pd.MultiIndex):
+        raise ValueError("X_test must be multi-indexed.")
+    if len(X_test.columns) != 1:
+        raise ValueError("X_test must have a single column.")
+    if not isinstance(y_test.index, pd.MultiIndex):
+        raise ValueError("y_test must be multi-indexed.")
+    if not isinstance(correlation, str):
+        raise TypeError("correlation must be a string")
+    if correlation not in ["pearson", "spearman", "kendall"]:
+        raise ValueError("correlation must be 'pearson', 'spearman' or 'kendall'")
+    
     market_returns = X_test.iloc[:, 0].copy()
     contract_returns = y_test.copy()
     test_cross_sections = X_test.index.get_level_values(
         0
     ).unique()  # Need the test cids to know which models to evaluate
 
-    # Handle voting regressor case later
     if isinstance(estimator, VotingRegressor):
         estimators = estimator.estimators_
         coefs_list = [est.coefs_ for est in estimators]
@@ -306,9 +354,11 @@ def neg_mean_abs_corr(
             )
             # Compute negative absolute market correlation
             if correlation == "pearson":
-                abs_corr = abs(stats.pearsonr(hedged_returns_c, market_returns_c)[0])
+                abs_corr = abs(np.corrcoef(hedged_returns_c.values, market_returns_c.values)[0,1])
             elif correlation == "spearman":
-                abs_corr = abs(stats.spearmanr(hedged_returns_c, market_returns_c)[0])
+                hedged_returns_c_ranked = np.argsort(np.argsort(hedged_returns_c.values))
+                market_returns_c_ranked = np.argsort(np.argsort(market_returns_c.values))
+                abs_corr = abs(np.corrcoef(hedged_returns_c_ranked, market_returns_c_ranked)[0,1])
             else:
                 # kendall
                 abs_corr = abs(stats.kendalltau(hedged_returns_c, market_returns_c)[0])
