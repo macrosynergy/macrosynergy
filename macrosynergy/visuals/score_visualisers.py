@@ -323,7 +323,7 @@ class ScoreVisualisers:
 
         if include_latest_day:
             latest_day = dfw.ffill().iloc[-1]
-            dfw_resampled.loc[df["real_date"].max()] = latest_day
+            dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
             if freq == "Q":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
@@ -404,7 +404,7 @@ class ScoreVisualisers:
 
         if include_latest_day:
             latest_day = dfw.ffill().iloc[-1]
-            dfw_resampled.loc[df["real_date"].max()] = latest_day
+            dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
             if freq == "Q":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
