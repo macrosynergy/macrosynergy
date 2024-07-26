@@ -754,14 +754,14 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             raise TypeError("correlation_lookback must be an integer or string.")
         if (isinstance(correlation_lookback, int)) and (correlation_lookback <= 1):
             raise ValueError("correlation_lookback must be greater than 1 when an integer is specified.")
-        if (not isinstance(correlation_lookback, str)) and (correlation_lookback != "full"):
+        if (isinstance(correlation_lookback, str)) and (correlation_lookback != "full"):
             raise ValueError("correlation_lookback must equal `full` when a string is specified.")
         # volatility_lookback
         if not isinstance(volatility_lookback, (int, str)):
             raise TypeError("volatility_lookback must be an integer or string.")
         if (isinstance(volatility_lookback, int)) and (volatility_lookback <= 1):
             raise ValueError("volatility_lookback must be greater than 1 when an integer is specified.")
-        if (not isinstance(volatility_lookback, str)) and (volatility_lookback != "full"):
+        if (isinstance(volatility_lookback, str)) and (volatility_lookback != "full"):
             raise ValueError("volatility_lookback must equal `full` when a string is specified.")
         # correlation_type
         if not isinstance(correlation_type, str):
