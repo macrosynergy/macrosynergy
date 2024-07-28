@@ -4,12 +4,12 @@ import re
 from typing import List, Tuple, Dict, Any
 
 
-def format_docstring(docstr: str) -> str:
+def format_docstring(data_lines: List[str]) -> str:
     param_pattern = re.compile(r":param\s+<(\w+)>\s+(\w+):\s+(.*)")
     return_pattern = re.compile(r":return\s+<(\w+)>:\s+(.*)")
     raises_pattern = re.compile(r":raises\s+<(\w+)>:\s+(.*)")
 
-    lines = docstr.split("\n")
+    lines = data_lines.copy()
     formatted_lines = []
 
     # Process :param lines
