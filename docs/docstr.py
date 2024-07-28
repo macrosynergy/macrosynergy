@@ -66,17 +66,16 @@ def format_docstring(docstr: str) -> str:
 
 
 # def format_docstring(docstr: str):
-def find_docstrings(filestr: str) -> List[Tuple[int, int]]:
+def find_docstrings(file_lines: List[str]) -> List[Tuple[int, int]]:
     """
     Finds the start and end indices of all docstrings in the given file.
     :param <str> filestr: The content of the file.
     :return <List[Tuple[int, int]>: A list of tuples containing the start and end indices of all docstrings.
     """
-    lines = filestr.split("\n")
     results: List[Tuple[int, int]] = []
 
     curr_start = None
-    for i, line in enumerate(lines):
+    for i, line in enumerate(file_lines):
         if (line.strip() in ['"""', "'''"]) and curr_start is None:
             curr_start = i
         elif curr_start is not None and line.strip() in ['"""', "'''"]:
@@ -93,18 +92,15 @@ def format_python_file(file_path: str):
     """
     # open the file
     with open(file_path, "r", encoding="utf8") as file:
-        data = file.read()
+        data_lines = file.readlines()
 
     # find all docstrings
-    docstrings_coords = find_docstrings(data)
+    docstrings_coords = find_docstrings(data_lines)
     for start, end in docstrings_coords:
-        docstr = data[start:end]
-        formatted_docstr = format_docstring(docstr)
-        data = data[:start] + formatted_docstr + data[end:]
+        data_lines[start : end + 1] = format_docstring(data_lines[start : end + 1])
 
     with open(file_path, "w", encoding="utf8") as file:
-        for line in data:
-            file.write(format_docstring(line))
+        file.writelines(data_lines)
 
 
 def format_python_files(root_dir: str):
