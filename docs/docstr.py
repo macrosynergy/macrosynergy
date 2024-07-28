@@ -1,68 +1,73 @@
 import argparse
 import glob
 import re
+import os
 from typing import List, Tuple, Dict, Any
+
+sphinx_directives = {
+    "param": "Parameters",
+    "return": "Returns",
+    "raises": "Raises",
+    "rtype": "Returns",
+}
+
+
+def is_directive(line: str) -> bool:
+    return any(
+        line.startswith(f":{directive}") for directive in sphinx_directives.keys()
+    )
+
+
+def format_param_docstr(docstr: str) -> str:
+    # the docstring is in the format ":param <TYPE> name: description"
+    type_start = docstr.find("<") + 1
+    type_end = docstr.find(">", type_start)
+    type_str = docstr[type_start:type_end]
+
+    name_start = type_end + 1
+    name_end = docstr.find(":", name_start)
+    name_str = docstr[name_start:name_end]
+
+
+def format_return_docstr(docstr: str) -> str: ...
+
+
+def format_raises_docstr(docstr: str) -> str: ...
+
+
+def format_rtype_docstr(docstr: str) -> str: ...
+
+
+def format_directive(docstr: str) -> str:
+    patterns = ["param", "return", "raises", "rtype"]
+    fdict = {f: eval(f"format_{f}_docstr") for f in patterns}
+    assert is_directive(docstr), "The given docstring is not a directive."
+
+    for pattern in patterns:
+        if docstr.startswith(f":{pattern}"):
+            return fdict[pattern](docstr)
 
 
 def format_docstring(data_lines: List[str]) -> str:
-    param_pattern = re.compile(r":param\s+<(\w+)>\s+(\w+):\s+(.*)")
-    return_pattern = re.compile(r":return\s+<(\w+)>:\s+(.*)")
-    raises_pattern = re.compile(r":raises\s+<(\w+)>:\s+(.*)")
+    directive_lines: List[bool] = list(map(is_directive, data_lines))
 
-    lines = data_lines.copy()
-    formatted_lines = []
+    formatted_groups: List[str] = []
+    curr_group = []
+    for i, line in enumerate(data_lines):
+        if (directive_lines[i] is True) and bool(curr_group):
+            formatted_groups.append("\n".join(curr_group))
+            curr_group = []
+        curr_group.append(line)
+    if bool(curr_group):
+        formatted_groups.append("\n".join(curr_group))
 
-    # Process :param lines
-    params = []
-    for line in lines:
-        param_match = param_pattern.match(line)
-        if param_match:
-            param_type, param_name, param_desc = param_match.groups()
-            params.append((param_name, param_type, param_desc))
-        else:
-            formatted_lines.append(line)
+    for group in formatted_groups:
+        if is_directive(group):
+            format_directive(group)
 
-    if params:
-        formatted_lines.append("Parameters")
-        formatted_lines.append("----------")
-        for name, type_, desc in params:
-            formatted_lines.append(f"{name} : {type_}")
-            formatted_lines.append(f"    {desc}")
-        formatted_lines.append("")
+    formatted_groups
 
-    # Process :return line
-    for line in lines:
-        return_match = return_pattern.match(line)
-        if return_match:
-            return_type, return_desc = return_match.groups()
-            formatted_lines.append("Returns")
-            formatted_lines.append("-------")
-            formatted_lines.append(f"{return_type}")
-            formatted_lines.append(f"    {return_desc}")
-            formatted_lines.append("")
-        else:
-            formatted_lines.append(line)
-
-    # Process :raises line
-    for line in lines:
-        raises_match = raises_pattern.match(line)
-        if raises_match:
-            raises_type, raises_desc = raises_match.groups()
-            formatted_lines.append("Raises")
-            formatted_lines.append("------")
-            formatted_lines.append(f"{raises_type}")
-            formatted_lines.append(f"    {raises_desc}")
-            formatted_lines.append("")
-        else:
-            formatted_lines.append(line)
-
-    # Remove any duplicate lines
-    final_lines = []
-    for line in formatted_lines:
-        if line not in final_lines:
-            final_lines.append(line)
-
-    return "\n".join(final_lines)
+    return "\n".join(formatted_groups)
 
 
 # def format_docstring(docstr: str):
@@ -99,6 +104,9 @@ def format_python_file(file_path: str):
     for start, end in docstrings_coords:
         data_lines[start : end + 1] = format_docstring(data_lines[start : end + 1])
 
+    # find the last occurance of os.sep in the file path
+    last_sep = file_path.rfind(".")
+    file_path = file_path[:last_sep] + "_fmt" + file_path[last_sep:]
     with open(file_path, "w", encoding="utf8") as file:
         file.writelines(data_lines)
 
@@ -119,7 +127,8 @@ if __name__ == "__main__":
         "--dir",
         type=str,
         help="The root directory to search for python files.",
-        required=True,
+        # required=True,
+        default="macrosynergy",
     )
     args = parser.parse_args()
 
