@@ -7,11 +7,12 @@ import pandas as pd
 
 import datetime
 
+from scipy.sparse._csr import csr_matrix
 import scipy.stats as stats
 
-from sklearn.linear_model import Lasso, ElasticNet
+from sklearn.linear_model import Lasso, ElasticNet, Lars
 from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
-from sklearn.feature_selection import SelectorMixin
+from sklearn.feature_selection import SelectorMixin, SelectFromModel
 from sklearn.exceptions import NotFittedError
 
 from statsmodels.tools.tools import add_constant
@@ -357,6 +358,26 @@ class LassoSelector(BaseEstimator, SelectorMixin):
             return X.iloc[:, :0]
 
         return X.iloc[:, self.selected_ftr_idxs]
+
+
+class LarsSelector(SelectFromModel):
+
+    def __init__(self, fit_intercept=True):
+        self.fit_intercept = fit_intercept
+        super().__init__(Lars(fit_intercept=self.fit_intercept))
+
+    def transform(self, X):
+        mask = self.get_support()
+        if not mask.any():
+            warnings.warn(
+                (
+                    "No features were selected: either the data is"
+                    " too noisy or the selection test too strict."
+                ),
+                UserWarning,
+            )
+            return X.iloc[:, :0]
+        return X.iloc[:, mask]
 
 
 class MapSelector(BaseEstimator, SelectorMixin):
@@ -945,6 +966,10 @@ if __name__ == "__main__":
     y = dfd2["XR"]
 
     selector = LassoSelector(0.2)
+    selector.fit(X, y)
+    print(selector.transform(X).columns)
+    
+    selector = LarsSelector(fit_intercept=False)
     selector.fit(X, y)
     print(selector.transform(X).columns)
 
