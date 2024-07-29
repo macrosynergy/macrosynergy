@@ -1148,7 +1148,7 @@ class TestFunctions(unittest.TestCase):
 
         new_df = merge_categories(df_filtered, xcats=["XR", "CRY"], cids=["AUD"], new_xcat=new_xcat)
 
-        new_df_value = new_df[(new_df["xcat"] == new_xcat) & (test_df['cid'] == "AUD") & (test_df['real_date'] == "2015-01-01")]["value"].reset_index(drop=True)
+        new_df_value = new_df[(new_df["xcat"] == new_xcat) & (new_df['cid'] == "AUD") & (new_df['real_date'] == "2015-01-01")]["value"].reset_index(drop=True)
         self.assertTrue(new_df_value.equals(test_df[(test_df['cid'] == "AUD") & (test_df['xcat'] == "CRY") & (test_df['real_date'] == "2015-01-01")]["value"].reset_index(drop=True)))
         self.assertTrue(not new_df_value.equals(test_df[(test_df['cid'] == "AUD") & (test_df['xcat'] == "XR") & (test_df['real_date'] == "2015-01-01")]["value"].reset_index(drop=True)))
 
