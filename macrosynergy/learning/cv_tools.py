@@ -9,7 +9,7 @@ import pandas as pd
 import datetime
 from typing import Union, Optional, Dict
 
-from macrosynergy.learning.panel_time_series_split import (
+from macrosynergy.learning.splitters.panel_time_series_split import (
     BasePanelSplit,
     ExpandingKFoldPanelSplit,
 )

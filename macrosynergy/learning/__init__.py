@@ -1,6 +1,6 @@
 from . import predictors
 
-from .panel_time_series_split import (
+from .splitters.panel_time_series_split import (
     ExpandingKFoldPanelSplit,
     RollingKFoldPanelSplit,
     ExpandingIncrementPanelSplit,
