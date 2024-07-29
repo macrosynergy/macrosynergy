@@ -282,11 +282,13 @@ class ScoreVisualisers:
         xcats = self._apply_postfix(xcats)
         xcat_labels = xcat_labels or self.xcat_labels
 
-        date = (
-            pd.to_datetime(date)
-            if date
-            else self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
-        )
+        if date:
+            date = pd.to_datetime(date)
+        else:
+            if self.df["real_date"].max() == pd.Timestamp.today():
+                date = pd.Timestamp.today() - pd.tseries.offsets.BDay(1)
+            else:
+                date = self.df["real_date"].max()
 
         df = self.df[
             (self.df["xcat"].isin(xcats))
@@ -403,7 +405,10 @@ class ScoreVisualisers:
 
         if include_latest_day:
             latest_day = dfw.ffill().iloc[-1]
-            dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
+            if self.df["real_date"].max() == pd.Timestamp.today():
+                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
+            else:
+                dfw_resampled.loc[self.df["real_date"].max()] = latest_day
             if freq == "Q":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
@@ -510,7 +515,10 @@ class ScoreVisualisers:
 
         if include_latest_day:
             latest_day = dfw.ffill().iloc[-1]
-            dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
+            if self.df["real_date"].max() == pd.Timestamp.today():
+                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
+            else:
+                dfw_resampled.loc[self.df["real_date"].max()] = latest_day
             if freq == "Q":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
