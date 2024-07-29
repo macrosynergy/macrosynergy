@@ -19,6 +19,9 @@ from macrosynergy.management.utils.core import (
 )
 import functools
 
+IDX_COLS_SORT_ORDER = ["cid", "xcat", "real_date"]
+
+
 def standardise_dataframe(
     df: pd.DataFrame, verbose: bool = False
 ) -> QuantamentalDataFrame:
@@ -71,7 +74,7 @@ def standardise_dataframe(
     # sort by cid, xcat and real_date to allow viewing stacked timeseries easily
     df = (
         df.drop_duplicates(subset=idx_cols, keep="last")
-        .sort_values(by=["cid", "xcat", "real_date"])
+        .sort_values(by=IDX_COLS_SORT_ORDER)
         .reset_index(drop=True)
     )
 
@@ -434,7 +437,7 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
         df = update_categories(df, df_add)
 
     # sort same as in `standardise_dataframe`
-    return df.sort_values(by=["real_date", "cid", "xcat"]).reset_index(drop=True)
+    return df.sort_values(by=IDX_COLS_SORT_ORDER).reset_index(drop=True)
 
 
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
