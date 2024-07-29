@@ -1083,7 +1083,7 @@ def merge_categories(df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: Li
         else:
             result_df = update_df(result_df, _get_values_for_xcat(real_dates, xcat_index=0, cid=cid))
 
-    return result_df
+    return result_df.sort_values(by=IDX_COLS_SORT_ORDER).reset_index(drop=True)
 
 def get_sops(
     dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
