@@ -12,6 +12,38 @@ from macrosynergy.panel import linear_composite, make_zn_scores
 
 
 class ScoreVisualisers:
+    """
+    Class to visualize the scores and linear composite of specified categories and 
+    cross-sections.
+    
+    Parameters
+    :param <pd.DataFrame> df: A DataFrame with the following columns:
+        'cid', 'xcat', 'real_date', and at least one metric from -
+        'value', 'grading', 'eop_lag', or 'mop_lag'.
+    :param <List[str]> cids: A list of cids to select from the DataFrame.
+        If None, all cids are selected.
+    :param <List[str]> xcats: A list of xcats to select from the DataFrame.
+        If None, all xcats are selected.
+    :param <Dict[str, str]> xcat_labels: A dictionary mapping xcats to their labels.
+    :param <str> xcat_comp: The name of the composite xcat.
+    :param <List[float]> weights: A list of weights for the linear composite.
+    :param <Dict[str, str]> blacklist: A dictionary mapping xcats to their blacklists.
+    :param <bool> sequential: If True, calculate ZN scores sequentially.
+    :param <bool> iis: If True, calculate ZN scores for individual indicators.
+    :param <str> neutral: The method to calculate the neutral score.
+    :param <float> pan_weight: The weight for the panel score.
+    :param <float> thresh: The threshold for the ZN score.
+    :param <int> min_obs: The minimum number of observations required to calculate ZN 
+        scores.
+    :param <str> est_freq: The frequency of the ZN score.
+    :param <str> postfix: The postfix to append to the xcats.
+    :param <bool> normalize_weights: If True, normalize the weights.
+    :param <List[float]> signs: A list of signs for the linear composite.
+    :param <bool> complete_xcats: If True, all xcats must have data for the composite to 
+        have data.
+    :param <bool> no_zn_scores: If True, do not calculate ZN scores.
+    :param <bool> rescore_composite: If True, rescore the composite ZN scores.
+    """
     def __init__(
         self,
         df: pd.DataFrame,
@@ -222,16 +254,41 @@ class ScoreVisualisers:
         cmap: str = None,
         cmap_range: Tuple[float, float] = None,
     ):
+        """
+        View a snapshot of the scores for the specified cids and xcats at the specified
+        date.
+
+        Parameters
+        :param <List[str]> cids: A list of cids to select from the DataFrame.
+            If None, all cids are selected.
+        :param <List[str]> xcats: A list of xcats to select from the DataFrame.
+            If None, all xcats are selected.
+        :param <bool> transpose: If True, transpose the snapshot so cids are on the x-axis
+            and xcats are on the y-axis.
+        :param <str> date: ISO-8601 formatted date. The date of the snapshot. If None, the
+            latest date in the DataFrame is selected.
+        :param <bool> annot: If True, annotate the heatmap.
+        :param <str> title: The title of the heatmap.
+        :param <int> title_fontsize: The fontsize of the title.
+        :param <tuple> figsize: The size of the figure.
+        :param <dict> xcat_labels: A dictionary mapping xcats to their labels.
+        :param <dict> xticks: A dictionary of arguments to label the x axis.
+        :param <int> round_decimals: The number of decimals to round the scores to.
+        :param <str> cmap: The colormap of the heatmap.
+        :param <tuple> cmap_range: The range of the colormap.
+        """
         cids = cids or self.cids
         xcats = xcats or self.xcats
         xcats = self._apply_postfix(xcats)
         xcat_labels = xcat_labels or self.xcat_labels
 
-        date = (
-            pd.to_datetime(date)
-            if date
-            else self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
-        )
+        if date:
+            date = pd.to_datetime(date)
+        else:
+            if self.df["real_date"].max() == pd.Timestamp.today():
+                date = pd.Timestamp.today() - pd.tseries.offsets.BDay(1)
+            else:
+                date = self.df["real_date"].max()
 
         df = self.df[
             (self.df["xcat"].isin(xcats))
@@ -302,6 +359,31 @@ class ScoreVisualisers:
         cmap_range: Tuple[float, float] = None,
         round_decimals: int = 2,
     ):
+        """
+        View the evolution of the scores for the specified xcat and cids.
+
+        Parameters
+        :param <str> xcat: The category to view the evolution of.
+        :param <str> freq: The frequency of the evolution. Must be 'Q', 'A', or 'BA'.
+        :param <List[str]> cids: A list of cids to select from the DataFrame.
+            If None, all cids are selected.
+        :param <bool> include_latest_period: If True, include the latest period in the
+            evolution.
+        :param <bool> include_latest_day: If True, include the latest day in the 
+            evolution.
+        :param <str> start: ISO-8601 formatted date. Select data from this date onwards.
+            If None, all dates are selected.
+        :param <bool> transpose: If True, transpose the evolution so cids are on the 
+            x-axis and dates are on the y-axis.
+        :param <bool> annot: If True, annotate the heatmap.
+        :param <str> title: The title of the heatmap.
+        :param <int> title_fontsize: The fontsize of the title.
+        :param <dict> xticks: A dictionary of arguments to label the x axis.
+        :param <tuple> figsize: The size of the figure.
+        :param <int> round_decimals: The number of decimals to round the scores to.
+        :param <str> cmap: The colormap of the heatmap.
+        :param <tuple> cmap_range: The range of the colormap.
+        """
         cids = cids or self.cids
         xcat = xcat if xcat.endswith(self.postfix) else xcat + self.postfix
 
@@ -323,7 +405,10 @@ class ScoreVisualisers:
 
         if include_latest_day:
             latest_day = dfw.ffill().iloc[-1]
-            dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
+            if self.df["real_date"].max() == pd.Timestamp.today():
+                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
+            else:
+                dfw_resampled.loc[self.df["real_date"].max()] = latest_day
             if freq == "Q":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
@@ -379,6 +464,32 @@ class ScoreVisualisers:
         cmap_range: Tuple[float, float] = None,
         round_decimals: int = 2,
     ):
+        """
+        View the evolution of the scores for the specified cid and xcats.
+
+        Parameters
+        :param <str> cid: The cross-section to view the evolution of.
+        :param <List[str]> xcats: A list of xcats to select from the DataFrame.
+            If None, all xcats are selected.
+        :param <str> freq: The frequency of the evolution. Must be 'Q', 'A', or 'BA'.
+        :param <bool> include_latest_period: If True, include the latest period in the
+            evolution.
+        :param <bool> include_latest_day: If True, include the latest day in the
+            evolution.
+        :param <str> start: ISO-8601 formatted date. Select data from this date onwards.
+            If None, all dates are selected.
+        :param <bool> transpose: If True, transpose the evolution so xcats are on the
+            x-axis and dates are on the y-axis.
+        :param <bool> annot: If True, annotate the heatmap.
+        :param <str> title: The title of the heatmap.
+        :param <int> title_fontsize: The fontsize of the title.
+        :param <dict> xticks: A dictionary of arguments to label the x axis.
+        :param <tuple> figsize: The size of the figure.
+        :param <dict> xcat_labels: A dictionary mapping xcats to their labels.
+        :param <int> round_decimals: The number of decimals to round the scores to.
+        :param <str> cmap: The colormap of the heatmap.
+        :param <tuple> cmap_range: The range of the colormap.
+        """
         if not isinstance(cid, str):
             raise TypeError("cid must be a string")
 
@@ -404,7 +515,10 @@ class ScoreVisualisers:
 
         if include_latest_day:
             latest_day = dfw.ffill().iloc[-1]
-            dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
+            if self.df["real_date"].max() == pd.Timestamp.today():
+                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
+            else:
+                dfw_resampled.loc[self.df["real_date"].max()] = latest_day
             if freq == "Q":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
