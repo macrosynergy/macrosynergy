@@ -965,32 +965,32 @@ if __name__ == "__main__":
     X = dfd2.drop(columns=["XR"])
     y = dfd2["XR"]
 
-    selector = LassoSelector(0.2)
-    selector.fit(X, y)
-    print(selector.transform(X).columns)
+    # selector = LassoSelector(0.2)
+    # selector.fit(X, y)
+    # print(selector.transform(X).columns)
     
-    selector = LarsSelector(fit_intercept=False)
-    selector.fit(X, y)
-    print(selector.transform(X).columns)
+    # selector = LarsSelector(fit_intercept=False)
+    # selector.fit(X, y)
+    # print(selector.transform(X).columns)
 
     selector = MapSelector(1e-20)
     selector.fit(X, y)
     print(selector.transform(X).columns)
 
-    # Split X and y into training and test sets
-    X_train, X_test = (
-        X[X.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
-        X[X.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
-    )
-    y_train, y_test = (
-        y[y.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
-        y[y.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
-    )
+    # # Split X and y into training and test sets
+    # X_train, X_test = (
+    #     X[X.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
+    #     X[X.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
+    # )
+    # y_train, y_test = (
+    #     y[y.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
+    #     y[y.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
+    # )
 
-    selector = ZnScoreAverager(neutral="zero", use_signs=False)
-    selector.fit(X_train, y_train)
-    print(selector.transform(X_test))
+    # selector = ZnScoreAverager(neutral="zero", use_signs=False)
+    # selector.fit(X_train, y_train)
+    # print(selector.transform(X_test))
 
-    selector = ZnScoreAverager(neutral="zero")
-    selector.fit(X_train, y_train)
-    print(selector.transform(X_test))
+    # selector = ZnScoreAverager(neutral="zero")
+    # selector.fit(X_train, y_train)
+    # print(selector.transform(X_test))
