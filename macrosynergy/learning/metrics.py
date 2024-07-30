@@ -19,7 +19,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import VotingRegressor
 from sklearn.base import RegressorMixin
 
-from macrosynergy.learning.splitters.panel_time_series_split import ExpandingKFoldPanelSplit
+#from macrosynergy.learning.splitters import ExpandingKFoldPanelSplit
 
 from typing import Union
 

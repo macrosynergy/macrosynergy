@@ -18,11 +18,11 @@ from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from tqdm.auto import tqdm
 
-from macrosynergy.learning.panel_time_series_split import (
+from macrosynergy.learning.splitters import (
     BasePanelSplit,
     ExpandingIncrementPanelSplit,
-    RollingKFoldPanelSplit,
-    ExpandingKFoldPanelSplit,
+    #RollingKFoldPanelSplit,
+    #ExpandingKFoldPanelSplit,
 )
 
 from macrosynergy.learning.predictors import LADRegressionSystem

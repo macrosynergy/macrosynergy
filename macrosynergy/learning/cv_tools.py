@@ -9,9 +9,9 @@ import pandas as pd
 import datetime
 from typing import Union, Optional, Dict
 
-from macrosynergy.learning.splitters.panel_time_series_split import (
+from macrosynergy.learning.splitters import (
     BasePanelSplit,
-    ExpandingKFoldPanelSplit,
+    #ExpandingKFoldPanelSplit,
 )
 from sklearn.model_selection import cross_validate
 from sklearn.metrics import make_scorer

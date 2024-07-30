@@ -162,25 +162,45 @@ class BasePanelLearner:
             Number of jobs to run in parallel for the inner loop in the nested 
             cross-validation. Default is 1.
         """
+        # Checks 
+        self._check_run(
+            name = name,
+            outer_splitter = outer_splitter,
+            inner_splitters = inner_splitters,
+            models = models,
+            hyperparameters = hyperparameters,
+            scorers = scorers,
+            search_type = search_type,
+            n_iter = n_iter,
+            splits_function = splits_function,
+            use_variance_correction = use_variance_correction,
+            n_jobs_outer = n_jobs_outer,
+            n_jobs_inner = n_jobs_inner,
+        )
+
+        # Determine all outer splits and run the learning process in parallel
         train_test_splits = list(outer_splitter.split(self.X, self.y))
 
         # Return nested dictionary with results
-        optim_results = Parallel(n_jobs=n_jobs_outer)(
-            delayed(self._worker)(
-                name = name,
-                train_idx = train_idx,
-                test_idx = test_idx,
-                inner_splitters = inner_splitters,
-                models = models,
-                hyperparameters = hyperparameters,
-                scorers = scorers,
-                use_variance_correction = use_variance_correction,
-                search_type = search_type,
-                n_iter = n_iter,
-                splits_function = splits_function,
-                n_jobs_inner = n_jobs_inner,
-            )
-            for idx, (train_idx, test_idx) in tqdm(enumerate(train_test_splits), total=len(train_test_splits))
+        optim_results = tqdm(
+            Parallel(n_jobs=n_jobs_outer, return_as="generator")(
+                delayed(self._worker)(
+                    name = name,
+                    train_idx = train_idx,
+                    test_idx = test_idx,
+                    inner_splitters = inner_splitters,
+                    models = models,
+                    hyperparameters = hyperparameters,
+                    scorers = scorers,
+                    use_variance_correction = use_variance_correction,
+                    search_type = search_type,
+                    n_iter = n_iter,
+                    splits_function = splits_function,
+                    n_jobs_inner = n_jobs_inner,
+                )
+                for idx, (train_idx, test_idx) in enumerate(train_test_splits)
+            ),
+            total=len(train_test_splits),
         )
 
         return optim_results

@@ -16,11 +16,11 @@ from collections import defaultdict
 from tqdm.auto import tqdm
 #from tqdm import tqdm
 
-from macrosynergy.learning import (
+from macrosynergy.learning.splitters import (
     BasePanelSplit,
-    ExpandingFrequencyPanelSplit,
-    ExpandingKFoldPanelSplit,
-    neg_mean_abs_corr,
+    #ExpandingFrequencyPanelSplit,
+    #ExpandingKFoldPanelSplit,
+    #neg_mean_abs_corr,
 )
 from macrosynergy.management import categories_df, reduce_df, update_df
 
