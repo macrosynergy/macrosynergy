@@ -5,8 +5,15 @@ from .expanding_increment_splitters import (
     ExpandingFrequencyPanelSplit,
 )
 
+from .kfold_splitters import (
+    ExpandingKFoldPanelSplit,
+    RollingKFoldPanelSplit,
+)
+
 __all__ = [
     "BasePanelSplit",
     "ExpandingIncrementPanelSplit",
     "ExpandingFrequencyPanelSplit",
+    "ExpandingKFoldPanelSplit",
+    "RollingKFoldPanelSplit",
 ]
