@@ -646,8 +646,8 @@ if __name__ == "__main__":
     from macrosynergy.download import JPMaQSDownload
 
     # Retrieve credentials
-    client_id: str = "4tfCezQjgA6wbRKL" #os.getenv("DQ_CLIENT_ID")
-    client_secret: str = "ed9nm7C49sy5dh7iqvjlosehzx12bagx4zwkQRcKsgmLh5xd0alhlhjtgpxkbti6vm4byayl1Adgwf8" #os.getenv("DQ_CLIENT_SECRET")
+    client_id: str = os.getenv("DQ_CLIENT_ID")
+    client_secret: str = os.getenv("DQ_CLIENT_SECRET")
 
     with JPMaQSDownload(client_id=client_id, client_secret=client_secret) as dq:
         df = dq.download(
