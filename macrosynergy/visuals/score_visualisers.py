@@ -285,10 +285,12 @@ class ScoreVisualisers:
         if date:
             date = pd.to_datetime(date)
         else:
-            if self.df["real_date"].max() == pd.Timestamp.today():
+            if self.df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
                 date = pd.Timestamp.today() - pd.tseries.offsets.BDay(1)
             else:
                 date = self.df["real_date"].max()
+
+        date = date.strftime("%Y-%m-%d")
 
         df = self.df[
             (self.df["xcat"].isin(xcats))
@@ -322,7 +324,7 @@ class ScoreVisualisers:
         if transpose:
             dfw = dfw.transpose()
 
-        title = title or f"Snapshot for {date.strftime('%Y-%m-%d')}"
+        title = title or f"Snapshot for {date}"
 
         horizontal_divider = transpose and composite_zscore in xcats
         vertical_divider = not transpose and composite_zscore in xcats
@@ -405,10 +407,12 @@ class ScoreVisualisers:
 
         if include_latest_day:
             latest_day = dfw.ffill().iloc[-1]
-            if self.df["real_date"].max() == pd.Timestamp.today():
+            if self.df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
                 dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
+                print("Latest day: ", self.df["real_date"].max() - pd.tseries.offsets.BDay(1))
             else:
                 dfw_resampled.loc[self.df["real_date"].max()] = latest_day
+                print("Latest day: ", self.df["real_date"].max())
             if freq == "Q":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
@@ -515,10 +519,12 @@ class ScoreVisualisers:
 
         if include_latest_day:
             latest_day = dfw.ffill().iloc[-1]
-            if self.df["real_date"].max() == pd.Timestamp.today():
+            if self.df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
                 dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
+                print("Latest day: ", self.df["real_date"].max() - pd.tseries.offsets.BDay(1))
             else:
                 dfw_resampled.loc[self.df["real_date"].max()] = latest_day
+                print("Latest day: ", self.df["real_date"].max())
             if freq == "Q":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
@@ -635,7 +641,6 @@ if __name__ == "__main__":
     tickers = [cid + "_" + xcat for cid in cids for xcat in xcats]
 
     start_date = "1990-01-01"
-    end_date = "2023-07-01"
 
     import os
     from macrosynergy.download import JPMaQSDownload
@@ -672,6 +677,7 @@ if __name__ == "__main__":
         xcats=xcats + ["Composite"],
         freq="A",
         transpose=False,
+        include_latest_day=True
     )
     sv.view_score_evolution(
         xcat="GGIEDGDP_NSA",
@@ -680,4 +686,5 @@ if __name__ == "__main__":
         transpose=False,
         start="2010-01-01",
         title="AHKSJDA",
+        include_latest_day=True
     )
