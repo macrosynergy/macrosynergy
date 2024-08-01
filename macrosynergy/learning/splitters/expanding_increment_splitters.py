@@ -134,6 +134,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
 
         splits, Xy = self._determine_unique_training_times(Xy)
 
+        # Determine the training and test indices for each split
         train_splits: List[np.ndarray] = [
             splits[0] if not self.max_periods else splits[0][-self.max_periods :]
         ]
@@ -213,7 +214,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
             np.ceil(len(unique_dates_train) / self.train_intervals)
         )
         splits: List = np.array_split(unique_dates_train, self.n_splits)
-        # (e) add the first training set to the list of training splits, so that the dates
+        # Add the first training set to the list of training splits, so that the dates
         # that constitute each training split are together.
         splits.insert(
             0,
@@ -228,7 +229,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
 
         return splits, Xy
 
-    def get_n_splits(self, X=None, y=None, groups=None) -> int:
+    def get_n_splits(self, X=None, y=None, groups=None):
         """
         Calculates and returns the number of splits.
 
