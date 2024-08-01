@@ -3,19 +3,10 @@ Classes for incremental expanding panel cross-validators.
 """
 
 import datetime
-from typing import Optional, List, Tuple, Iterable, Union
+from typing import Optional, List
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-from sklearn.model_selection import (
-    BaseCrossValidator,
-    GridSearchCV,
-    cross_validate,
-)
-from sklearn.linear_model import Lasso, LinearRegression
 
 from macrosynergy.learning.splitters import BasePanelSplit
 
@@ -38,21 +29,21 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         test set. Default is 21. 
     min_cids : int
         The minimum number of cross-sections required for the first training set. Default
-        is 4. Either start_date or (min_cids, min_periods, min_xcats) must be provided. If
+        is 4. Either start_date or (min_cids, min_periods) must be provided. If
         both are provided, start_date takes precedence.
     min_periods : int
         The minimum number of time periods required for the first training set. Default is
-        500. Either start_date or (min_cids, min_periods, min_xcats) must be provided. If
+        500. Either start_date or (min_cids, min_periods) must be provided. If
         both are provided, start_date takes precedence.
     min_xcats : Optional[int]
         The minimum number of features required in the first training set. Default is
         None, in which case only samples where all features are present are considered.
-        Either start_date or (min_cids, min_periods, min_xcats) must be provided. If
-        both are provided, start_date takes precedence.
     start_date : Optional[str]
-        The first rebalancing date in ISO 8601 format. This is the last date of the first
-        training set. Default is None. Either start_date or (min_cids, min_periods, min_xcats)
-        must be provided. If both are provided, start_date takes precedence.
+        The targeted final date in the initial training set in ISO 8601 format. When
+        min_xcats is not None, the largest date out of start_date and the first date
+        at which min_xcats features are available is used. Otherwise, start_date is used.
+        Default is None. Either start_date or (min_cids, min_periods) must be provided.
+        If both are provided, start_date takes precedence.
     max_periods : Optional[int]
         The maximum number of time periods in each training set. If the maximum is
         exceeded, the earliest periods are cut off. This effectively creates rolling
@@ -60,19 +51,21 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
     
     Notes
     -----
-    The first training set is either determined by the specification of `start_date` or by
-    the parameters `min_cids`, `min_periods` and `min_xcats` collectively. When
-    `start_date` is provided, the initial training set comprises all available data prior
-    to the `start_date`, unless `max_periods` is specified, in which case at most the last
-    `max_periods` periods prior to the `start_date` are included. 
+    The first training set is determined by, firstly, the specification of `start_date` or
+    by the parameters `min_cids`, `min_periods`, and secondly, the value of `min_xcats`.
+    When `start_date` is provided, the initial training set comprises all available data
+    before and including the `start_date`, unless `max_periods` is specified, in which
+    case at most the last `max_periods` periods prior to the `start_date` are included. 
 
-    If `start_date` is not provided, the first training set is determined by the parameters
-    `min_cids`, `min_periods` and `min_xcats`. This set comprises at least `min_periods`
-    time periods for at least `min_cids` cross-sections. If `min_xcats` is not None, then the
-    first training/test split is also subject to the availability of at least `min_xcats`
-    features. If `min_xcats` is None, the analysis is restricted to samples for which all 
-    features are available. This triple specification is critical in handling both
-    cross-sectional and category panel imbalance, which are common in macroeconomic panels.
+    If `start_date` is not provided, the first training set is determined by the
+    parameters `min_cids` and `min_periods`. This set comprises at least `min_periods`
+    time periods for at least `min_cids` cross-sections.
+    
+    If `min_xcats` is not None, then the first training/test split is also subject to the
+    availability of at least `min_xcats` features. If `min_xcats` is None, the analysis is
+    restricted to samples for which all features are available. This specification
+    is critical in handling both cross-sectional and category panel imbalance, which are
+    common in macroeconomic panels.
     """
 
     def __init__(
@@ -86,7 +79,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         max_periods: Optional[int] = None,
     ):
         # Checks
-        self._check_init(
+        self._check_init_params(
             train_intervals = train_intervals,
             test_size = test_size,
             min_cids = min_cids,
@@ -106,7 +99,8 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         self.max_periods = max_periods
 
     def split(self, X, y, groups=None):
-        """Generate indices to split data into training and test sets.
+        """
+        Generate indices to split data into training and test sets.
 
         Parameters
         ----------
@@ -114,12 +108,10 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
             Pandas dataframe of features, multi-indexed by (cross-section, date). The
             dates must be in datetime format. Otherwise the dataframe must be in wide
             format: each feature is a column.
-        
         y : Union[pd.DataFrame, pd.Series]
             Pandas dataframe or series of a target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format. If a dataframe
             is provided, the target variable must be the sole column.
-        
         groups : None
             Ignored. Exists for compatibility with scikit-learn.
 
@@ -127,12 +119,11 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         ------
         train : np.ndarray
             The training set indices for that split.
-
         test : np.ndarray
             The testing set indices for that split.
         """
         # Checks
-        self._check_split(X, y, groups)
+        self._check_split_params(X, y, groups)
 
         # Determine the unique dates in each training split
         train_indices = []
@@ -168,46 +159,52 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
     
     def _determine_unique_training_times(self, Xy):
         """
-        Returns the unique dates in each training split. This
-        method is called by self.split(). It further returns other variables needed for
-        ensuing components of the split method.
+        Returns the unique dates in each training split.
+        
+        Parameters
+        ----------
+        Xy : pd.DataFrame
+            Combined pandas dataframe of features and the target variable, multi-indexed
+            by (cross-section, date).
+
+        Notes
+        -----
+        This method is called by self.split(). It also returns other variables needed
+        for ensuing components of the self.split() method.
         """
         self.unique_dates:  pd.DatetimeIndex = (
             Xy.index.get_level_values(1).unique().sort_values()
         )
         # First determine the dates for the first training set
-        if self.start_date:
-            date_last_train = self.start_date
-        elif self.min_xcats is None:
-            # Then the splits are restricted to samples where all features are available.
-            Xy.dropna(inplace=True)
-            # Get samples prior to the first date in the panel where `min_periods` time
-            # periods are available for at least `min_cids` cross-sections.
-            init_mask = Xy.groupby(level=1).size().sort_index() >= self.min_cids
-            date_first_min_cids: pd.Timestamp = (
-                init_mask[init_mask == True].reset_index().real_date.min()
-            )
-            date_last_train: pd.Timestamp = self.unique_dates[
-                self.unique_dates.get_loc(date_first_min_cids) + self.min_periods - 1
-            ]
-        else:
-            # Then the first training set is dependent on min_cids, min_periods and min_xcats.
-            # (1) Find first time at which min_xcats features are available and filter
-            # the panel to include only dates after this time.
+        if self.min_xcats:
+            # Get first date at which min_xcats features are available.
             X = Xy.drop(columns=[Xy.columns[-1]])
             xcat_first_dates = X.notna().apply(lambda col: X.index.get_level_values(1)[col].min())
             xcat_first_dates_counts = xcat_first_dates.value_counts().sort_index().cumsum()
             first_valid_date = xcat_first_dates_counts[xcat_first_dates_counts >= self.min_xcats].index.min()
-            Xy = Xy.loc[Xy.index.get_level_values(1) >= first_valid_date]
-            # Get samples prior to the first date in the panel where `min_periods` time
-            # periods are available for at least `min_cids` cross-sections.
-            init_mask = Xy.groupby(level=1).size().sort_index() >= self.min_cids
-            date_first_min_cids: pd.Timestamp = (
-                init_mask[init_mask == True].reset_index().real_date.min()
-            )
-            date_last_train: pd.Timestamp = self.unique_dates[
-                self.unique_dates.get_loc(date_first_min_cids) + self.min_periods - 1
-            ]
+            if self.start_date:
+                date_last_train = max(self.start_date, first_valid_date)
+            else:
+                # then min_cids and min_periods are used to determine the first training set.
+                init_mask = Xy.groupby(level=1).size().sort_index() >= self.min_cids
+                date_first_min_cids: pd.Timestamp = (
+                    init_mask[init_mask == True].reset_index().real_date.min()
+                )
+                date_last_train: pd.Timestamp = self.unique_dates[
+                    self.unique_dates.get_loc(date_first_min_cids) + self.min_periods - 1
+                ]
+        else:
+            Xy.dropna(inplace=True)
+            if self.start_date:
+                date_last_train = self.start_date
+            else:
+                init_mask = Xy.groupby(level=1).size().sort_index() >= self.min_cids
+                date_first_min_cids: pd.Timestamp = (
+                    init_mask[init_mask == True].reset_index().real_date.min()
+                )
+                date_last_train: pd.Timestamp = self.unique_dates[
+                    self.unique_dates.get_loc(date_first_min_cids) + self.min_periods - 1
+                ]
 
         unique_dates_train: pd.arrays.DatetimeArray = self.unique_dates[
             self.unique_dates.get_loc(date_last_train) + 1 : -self.test_size
@@ -235,29 +232,63 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         """
         Calculates and returns the number of splits.
 
-        :param <pd.DataFrame> X: Pandas dataframe of features,
-            multi-indexed by (cross-section, date). The dates must be in datetime format.
-            Otherwise the dataframe must be in wide format: each feature is a column.
-        :param <pd.DataFrame> y: Pandas dataframe of the target variable, multi-indexed by
-            (cross-section, date). The dates must be in datetime format.
-        :param <pd.DataFrame> groups: Always ignored, exists for compatibility.
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Pandas dataframe of features, multi-indexed by (cross-section, date). The
+            dates must be in datetime format. Otherwise the dataframe must be in wide
+            format: each feature is a column.
+        
+        y : Union[pd.DataFrame, pd.Series]
+            Pandas dataframe or series of a target variable, multi-indexed by
+            (cross-section, date). The dates must be in datetime format. If a dataframe
+            is provided, the target variable must be the sole column.
+        
+        groups : None
+            Ignored. Exists for compatibility with scikit-learn.
 
-        :return <int> n_splits: Returns the number of splits.
+        Returns
+        -------
+        n_splits : int
+            The number of splits.
         """
-        self._determine_unique_time_splits(X, y)
+        Xy = pd.concat([X, y], axis=1)
+        Xy.dropna(subset=[Xy.columns[-1]], inplace=True)
+        self._determine_unique_time_splits(Xy)
 
         return self.n_splits
     
-    def _check_init(
+    def _check_init_params(
         self,
-        train_intervals: int,
-        test_size: int,
-        min_cids: int,
-        min_periods: int,
-        min_xcats: Optional[int],
-        start_date: Optional[str],
-        max_periods: Optional[int],
+        train_intervals,
+        test_size,
+        min_cids,
+        min_periods,
+        min_xcats,
+        start_date,
+        max_periods,
     ):
+        """
+        Type and value checks for the class initialisation parameters. 
+
+        Parameters
+        ----------
+        train_intervals : int
+            The number of time periods by which the previous training set is expanded. 
+        test_size : int
+            The number of time periods forward of each training set to use in the associated
+            test set.
+        min_cids : int
+            The minimum number of cross-sections required for the first training set.
+        min_periods : int
+            The minimum number of time periods required for the first training set.
+        min_xcats : Optional[int]
+            The minimum number of features required in the first training set.
+        start_date : Optional[str]
+            The targeted final date in the initial training set in ISO 8601 format.
+        max_periods : Optional[int]
+            The maximum number of time periods in each training set.
+        """
         # train_intervals 
         if not isinstance(train_intervals, int):
             raise TypeError(
@@ -326,8 +357,43 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
                 f"max_periods must be an integer greater than 0. Got {max_periods}."
             )
         
-    def _check_split(self, X, y, groups):
-        pass
+    def _check_split_params(self, X, y, groups):
+        """
+        Type and value checks for the `split()` method parameters.
+        
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Pandas dataframe of features, multi-indexed by (cross-section, date). The
+            dates must be in datetime format. Otherwise the dataframe must be in wide
+            format: each feature is a column.
+        
+        y : Union[pd.DataFrame, pd.Series]
+            Pandas dataframe or series of a target variable, multi-indexed by
+            (cross-section, date). The dates must be in datetime format. If a dataframe
+            is provided, the target variable must be the sole column.
+        
+        groups : None
+            Ignored. Exists for compatibility with scikit-learn. 
+        """
+        # X
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not pd.api.types.is_datetime64_any_dtype(X.index.get_level_values(1)):
+            raise ValueError(f"The dates in X must be datetime objects. Got {X.index.get_level_values(1).dtype} instead.")
+        # y
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed.")
+        if not pd.api.types.is_datetime64_any_dtype(y.index.get_level_values(1)):
+            raise ValueError(f"The dates in y must be datetime objects. Got {y.index.get_level_values(1).dtype} instead.")
+        if not X.index.equals(y.index):
+            raise ValueError(
+                "The indices of the input dataframe X and the output dataframe y don't"
+                "match."
+            )
+        # groups
+        if groups is not None:
+            raise ValueError("groups is not supported by this splitter.")
 
 class ExpandingFrequencyPanelSplit(BasePanelSplit):
     """
