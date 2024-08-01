@@ -462,6 +462,7 @@ def validate_downloaded_data(
     expected_expressions: List[str],
     as_dataframe: bool = True,
     dataframe_format: str = "qdf",
+    show_progress: bool = True,
 ) -> List[str]:
     """
     Validate the downloaded data in the provided path.
@@ -471,6 +472,7 @@ def validate_downloaded_data(
         to be downloaded.
     :param <bool> as_dataframe: whether to load the files as dataframes.
     :param <str> dataframe_format: the format of the dataframe. Must be one of 'qdf' or 'wide'.
+    :param <bool> show_progress: whether to show a progress bar.
     :return <list[str]>: list of expressions that are missing from the downloaded data.
     """
     if not os.path.isdir(path):
@@ -489,7 +491,11 @@ def validate_downloaded_data(
     all_exprs = []
     all_exprs = joblib.Parallel(n_jobs=-1)(
         joblib.delayed(get_expression_func)(file_path)
-        for file_path in tqdm(files, desc="Validating downloaded data")
+        for file_path in tqdm(
+            files,
+            desc="Validating downloaded data",
+            disable=not show_progress,
+        )
     )
     # join all the lists of expressions
     all_exprs = list(itertools.chain.from_iterable(all_exprs))
@@ -1016,16 +1022,24 @@ class JPMaQSDownload(DataQueryInterface):
         assert all([d is True for d in data])
         if path == "":
             return
+        d_exprs = [
+            os.path.basename(csv).split(".")[0]
+            for csv in glob.glob(f"{save_path}/**/*.csv", recursive=True)
+        ]
+        if len(d_exprs) == 0:
+            raise ValueError("No data was downloaded.")
+
+        if as_dataframe and dataframe_format == "qdf":
+            d_exprs = construct_expressions(tickers=d_exprs, metrics=self.valid_metrics)
+
+        logger.info(f"Downloaded {len(d_exprs)} expressions.")
 
         unavailable_expressions = validate_downloaded_data(
             path=save_path,
             expected_expressions=expressions,
             as_dataframe=as_dataframe,
             dataframe_format=dataframe_format,
-        )
-
-        print(
-            f"Downloaded {len(expressions) - len(unavailable_expressions)} expressions."
+            show_progress=show_progress,
         )
 
         if len(unavailable_expressions) > 0:
