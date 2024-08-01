@@ -10,7 +10,13 @@ except ModuleNotFoundError:
     __version__ = FULLVERSION
     __git_revision__ = GIT_REVISION
 
-from . import visuals, download, panel, pnl, management, signal, learning
+import sys
+
+from . import visuals, download, panel, pnl, management, signal
+if sys.version_info >= (3, 8):
+    from . import learning
+
+
 from .management.utils import check_package_version
 
 __all__ = [
