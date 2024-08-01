@@ -2,8 +2,7 @@
 Base class for a cross-validation splitter for panel data.
 """
 
-import datetime
-from typing import Optional, List, Tuple, Iterable
+from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -12,107 +11,82 @@ import seaborn as sns
 
 from sklearn.model_selection import (
     BaseCrossValidator,
-    GridSearchCV,
-    cross_validate,
 )
-from sklearn.linear_model import Lasso, LinearRegression
 
-class BasePanelSplit(BaseCrossValidator):
+from abc import ABC, abstractmethod
+
+class BasePanelSplit(BaseCrossValidator, ABC):
     """
-    Base class for a cross-validation splitter for panel data.
+    Abstract base class for a generic panel cross-validator.
 
-    BasePanelSplit defines the necessary methods for a panel cross-validator to contain
-    in order to be compatible with sklearn's API. The class also contains a method for 
-    visualising the splits produced by the splitter, which can be useful for both
-    debugging and explainability. 
-    Base class for the production of paired training and test splits for panel data.
-    All children classes possess the following methods: get_n_splits and visualise_splits.
-    The method 'get_n_splits' is required so that our panel splitters  can inherit from
-    sklearn's BaseCrossValidator class, allowing for seamless integration with sklearn's
-    API. The method 'visualise_splits' is a convenience method for visualising the splits
-    produced by each child splitter, giving the user confidence in the splits produced for
-    their use case.
+    Provides the necessary visualisation methods for all panel splitters, for 
+    explainability and debugging purposes.
     """
+    @abstractmethod
+    def __init__(self):
+        pass
 
-    def get_n_splits(self, X=None, y=None, groups=None) -> int:
-        """Returns the number of splits in the cross-validator.
 
-        :param <pd.DataFrame> X: Always ignored, exists for compatibility with
-            scikit-learn.
-        :param <pd.DataFrame> y: Always ignored, exists for compatibility with
-            scikit-learn.
-        :param <pd.DataFrame> groups: Always ignored, exists for compatibility with
-            scikit-learn.
-
-        :return <int> n_splits: Returns the number of splits.
+    def get_n_splits(self, X=None, y=None, groups=None):
         """
+        Returns the number of splits in the cross-validator.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Always ignored, exists for compatibility with scikit-learn.
+        y : Union[pd.Series, pd.DataFrame]
+            Always ignored, exists for compatibility with scikit-learn.
+        groups : None
+            Always ignored, exists for compatibility with scikit-learn.
+
+        Returns
+        -------
+        n_splits : int
+            Number of splits in the cross-validator.
+        """
+
         return self.n_splits
-
-    def _validate_Xy(self, X: pd.DataFrame, y: pd.DataFrame) -> None:
-        """
-        Private helper method to validate the input dataframes X and y.
-
-        :param <pd.DataFrame> X: Pandas dataframe of features/quantamental indicators,
-            multi-indexed by (cross-section, date). The dates must be in datetime format.
-            Otherwise the dataframe must be in wide format: each feature is a column.
-        :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
-            (cross-section, date). The dates must be in datetime format.
-        """
-        # Check that X and y are multi-indexed
-        if not isinstance(X.index, pd.MultiIndex):
-            raise ValueError("X must be multi-indexed.")
-        if not isinstance(y.index, pd.MultiIndex):
-            raise ValueError("y must be multi-indexed.")
-        # Check the inner multi-index levels are datetime indices
-        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
-            raise TypeError("The inner index of X must be datetime.date.")
-        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
-            raise TypeError("The inner index of y must be datetime.date.")
-        # Check that X and y are indexed in the same order
-        if not X.index.equals(y.index):
-            raise ValueError(
-                "The indices of the input dataframe X and the output dataframe y don't"
-                "match."
-            )
 
     def _calculate_xranges(
         self,
         cs_dates: pd.DatetimeIndex,
         real_dates: pd.DatetimeIndex,
         freq_offset: pd.DateOffset,
-    ) -> List[Tuple[pd.Timestamp, pd.Timedelta]]:
+    ):
         """
-        Private helper method to determine the ranges of contiguous dates in each training
-        and test set, for use in visualisation.
+        Returns date ranges of contiguous blocks in each training and test set. 
 
-        :param <pd.DatetimeIndex> cs_dates: DatetimeIndex of dates in a set for a given
-            cross-section.
-        :param <pd.DatetimeIndex> real_dates: DatetimeIndex of all dates in the panel.
-        :param <pd.DateOffset> freq_offset: DateOffset object representing the frequency
-            of the dates in the panel.
-
-        :return <List[Tuple[pd.Timestamp,pd.Timedelta]]> xranges: list of tuples of the
-            form (start date, length of contiguous dates).
+        Parameters
+        ----------
+        cs_dates : pd.DatetimeIndex
+            DatetimeIndex of dates in a set for a given cross-section.
+        real_dates : pd.DatetimeIndex
+            DatetimeIndex of all dates in the panel.
+        freq_offset : pd.DateOffset
+            DateOffset object representing the frequency of the dates in the panel.
+        
+        Returns
+        -------
+        xranges : List[Tuple[pd.Timestamp, pd.Timedelta]]
+            List of tuples of the form (start date, length of contiguous dates).
         """
-
-        xranges: List[Tuple[pd.Timestamp, pd.Timedelta]] = []
+        xranges = []
         if len(cs_dates) == 0:
             return xranges
 
-        filtered_real_dates: pd.DatetimeIndex = real_dates[
+        filtered_real_dates = real_dates[
             (real_dates >= cs_dates.min()) & (real_dates <= cs_dates.max())
         ]
-        difference: pd.DatetimeIndex = filtered_real_dates.difference(cs_dates)
+        difference = filtered_real_dates.difference(cs_dates)
 
-        # A single contiguous range of dates.
         if len(difference) == 0:
+            # Only one contiguous range of dates.
             xranges.append(
                 (cs_dates.min(), cs_dates.max() + freq_offset - cs_dates.min())
             )
-            return xranges
-
-        # Multiple contiguous ranges of dates.
         else:
+            # Handle multiple contiguous ranges of dates.
             while len(difference) > 0:
                 xranges.append((cs_dates.min(), difference.min() - cs_dates.min()))
                 cs_dates = cs_dates[(cs_dates >= difference.min())]
@@ -121,24 +95,31 @@ class BasePanelSplit(BaseCrossValidator):
             xranges.append(
                 (cs_dates.min(), cs_dates.max() + freq_offset - cs_dates.min())
             )
-            return xranges
+
+        return xranges
 
     def visualise_splits(
-        self, X: pd.DataFrame, y: pd.DataFrame, figsize: Tuple[int, int] = (20, 5)
-    ) -> None:
+        self,
+        X,
+        y,
+        figsize = (20, 5),
+    ):
         """
-        Method to visualise the splits created according to the parameters specified in
-        the constructor.
+        Visualise the cross-validation splits. 
 
-        :param <pd.DataFrame> X: Pandas dataframe of features/quantamental indicators,
-            multi-indexed by (cross-section, date). The dates must be in datetime format.
-            Otherwise the dataframe must be in wide format: each feature is a column.
-        :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
-            (cross-section, date). The dates must be in datetime format.
-        :param <Tuple[int,int]> figsize: tuple of integers specifying the splitter
-            visualisation figure size.
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Pandas dataframe of features/quantamental indicators, multi-indexed by
+            (cross-section, date). The dates must be in datetime format. The
+            dataframe must be in wide format: each feature is a column.
+        y : pd.DataFrame
+            Pandas dataframe of target variable, multi-indexed by (cross-section, date).
+            The dates must be in datetime format.
+        figsize : Tuple[int, int]
+            Tuple of integers specifying the splitter visualisation figure size.
 
-        :return None
+        TODO: adjust this logic due to new min_xcats parameter
         """
         sns.set_theme(style="whitegrid", palette="colorblind")
         Xy: pd.DataFrame = pd.concat([X, y], axis=1).dropna()
@@ -147,13 +128,15 @@ class BasePanelSplit(BaseCrossValidator):
         )
         real_dates = Xy.index.get_level_values(1).unique().sort_values()
 
+        # Infer native dataset frequency
         freq_est = pd.infer_freq(real_dates)
         if freq_est is None:
             freq_est = real_dates.to_series().diff().min()
         freq_offset = pd.tseries.frequencies.to_offset(freq_est)
 
-        splits: List[Tuple[np.ndarray[int], np.ndarray[int]]] = list(self.split(X, y))
+        splits = list(self.split(X, y))
 
+        # Set up plotting labels and figure
         split_idxs: List[int] = (
             [0, len(splits) // 4, len(splits) // 2, 3 * len(splits) // 4, -1]
             if self.n_splits > 5
@@ -177,8 +160,8 @@ class BasePanelSplit(BaseCrossValidator):
             figsize=figsize,
         )
 
+        
         operations = []
-
         for cs_idx, cs in enumerate(cross_sections):
             for idx, split_idx in enumerate(split_idxs):
                 # Get the dates in the training and test sets for the given cross-section.
