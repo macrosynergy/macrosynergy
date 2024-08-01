@@ -406,12 +406,11 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled.iloc[:-1]
 
         if include_latest_day:
-            latest_day = dfw.ffill().iloc[-1]
             if self.df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
-                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
+                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = dfw.ffill().loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)]
                 print("Latest day: ", self.df["real_date"].max() - pd.tseries.offsets.BDay(1))
             else:
-                dfw_resampled.loc[self.df["real_date"].max()] = latest_day
+                dfw_resampled.loc[self.df["real_date"].max()] = dfw.ffill().loc[self.df["real_date"].max()]
                 print("Latest day: ", self.df["real_date"].max())
             if freq == "Q":
                 dfw_resampled.index = list(
@@ -518,12 +517,11 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled.iloc[:-1]
 
         if include_latest_day:
-            latest_day = dfw.ffill().iloc[-1]
             if self.df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
-                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
+                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = dfw.ffill().loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)]
                 print("Latest day: ", self.df["real_date"].max() - pd.tseries.offsets.BDay(1))
             else:
-                dfw_resampled.loc[self.df["real_date"].max()] = latest_day
+                dfw_resampled.loc[self.df["real_date"].max()] = dfw.ffill().loc[self.df["real_date"].max()]
                 print("Latest day: ", self.df["real_date"].max())
             if freq == "Q":
                 dfw_resampled.index = list(
@@ -658,17 +656,11 @@ if __name__ == "__main__":
             show_progress=True,
         )
 
-    sv = ScoreVisualisers(df, cids=cids, xcats=xcats, xcat_labels={
-            "GGIEDGDP_NSA_ZN": "Currency reserve expansion as % of GDP",
-            "Composite_ZN": "Composite",
-            "NIIPGDP_NSA_ZN": "Monetary base expansion as % of GDP",
-            "CABGDPRATIO_NSA_12MMA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 3 months",
-            "GGOBGDPRATIO_NSA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 6 months",
-        }, rescore_composite=True, weights=[1, 1, 1, 10])
+    sv = ScoreVisualisers(df, cids=cids, xcats=xcats, thresh=3, no_zn_scores=True, complete_xcats=False, rescore_composite=True)
 
     sv.view_snapshot(
-        cids=cids,
-        xcats=xcats,
+        cids=["USD"],
+        xcats=xcats + ["Composite"],
         transpose=True,
         figsize=(14, 12),
     )
@@ -676,8 +668,7 @@ if __name__ == "__main__":
         cid="USD",
         xcats=xcats + ["Composite"],
         freq="A",
-        transpose=False,
-        include_latest_day=True
+        transpose=False
     )
     sv.view_score_evolution(
         xcat="GGIEDGDP_NSA",
