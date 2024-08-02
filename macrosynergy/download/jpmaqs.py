@@ -500,7 +500,7 @@ def validate_downloaded_data(
     # join all the lists of expressions
     all_exprs = list(itertools.chain.from_iterable(all_exprs))
 
-    missing_exprs = list(set(expected_expressions) - set(all_exprs))
+    missing_exprs = sorted(set(expected_expressions) - set(all_exprs))
 
     if len(missing_exprs) > 0:
         logger.critical(
