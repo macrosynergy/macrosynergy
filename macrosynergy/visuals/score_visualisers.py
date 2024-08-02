@@ -285,10 +285,12 @@ class ScoreVisualisers:
         if date:
             date = pd.to_datetime(date)
         else:
-            if self.df["real_date"].max() == pd.Timestamp.today():
+            if self.df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
                 date = pd.Timestamp.today() - pd.tseries.offsets.BDay(1)
             else:
                 date = self.df["real_date"].max()
+
+        date = date.strftime("%Y-%m-%d")
 
         df = self.df[
             (self.df["xcat"].isin(xcats))
@@ -322,7 +324,7 @@ class ScoreVisualisers:
         if transpose:
             dfw = dfw.transpose()
 
-        title = title or f"Snapshot for {date.strftime('%Y-%m-%d')}"
+        title = title or f"Snapshot for {date}"
 
         horizontal_divider = transpose and composite_zscore in xcats
         vertical_divider = not transpose and composite_zscore in xcats
@@ -404,11 +406,12 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled.iloc[:-1]
 
         if include_latest_day:
-            latest_day = dfw.ffill().iloc[-1]
-            if self.df["real_date"].max() == pd.Timestamp.today():
-                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
+            if self.df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
+                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = dfw.ffill().loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)]
+                print("Latest day: ", self.df["real_date"].max() - pd.tseries.offsets.BDay(1))
             else:
-                dfw_resampled.loc[self.df["real_date"].max()] = latest_day
+                dfw_resampled.loc[self.df["real_date"].max()] = dfw.ffill().loc[self.df["real_date"].max()]
+                print("Latest day: ", self.df["real_date"].max())
             if freq == "Q":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
@@ -514,11 +517,12 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled.iloc[:-1]
 
         if include_latest_day:
-            latest_day = dfw.ffill().iloc[-1]
-            if self.df["real_date"].max() == pd.Timestamp.today():
-                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = latest_day
+            if self.df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
+                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = dfw.ffill().loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)]
+                print("Latest day: ", self.df["real_date"].max() - pd.tseries.offsets.BDay(1))
             else:
-                dfw_resampled.loc[self.df["real_date"].max()] = latest_day
+                dfw_resampled.loc[self.df["real_date"].max()] = dfw.ffill().loc[self.df["real_date"].max()]
+                print("Latest day: ", self.df["real_date"].max())
             if freq == "Q":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
@@ -635,7 +639,6 @@ if __name__ == "__main__":
     tickers = [cid + "_" + xcat for cid in cids for xcat in xcats]
 
     start_date = "1990-01-01"
-    end_date = "2023-07-01"
 
     import os
     from macrosynergy.download import JPMaQSDownload
@@ -653,17 +656,11 @@ if __name__ == "__main__":
             show_progress=True,
         )
 
-    sv = ScoreVisualisers(df, cids=cids, xcats=xcats, xcat_labels={
-            "GGIEDGDP_NSA_ZN": "Currency reserve expansion as % of GDP",
-            "Composite_ZN": "Composite",
-            "NIIPGDP_NSA_ZN": "Monetary base expansion as % of GDP",
-            "CABGDPRATIO_NSA_12MMA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 3 months",
-            "GGOBGDPRATIO_NSA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 6 months",
-        }, rescore_composite=True, weights=[1, 1, 1, 10])
+    sv = ScoreVisualisers(df, cids=cids, xcats=xcats, thresh=3, no_zn_scores=True, complete_xcats=False, rescore_composite=True)
 
     sv.view_snapshot(
-        cids=cids,
-        xcats=xcats,
+        cids=["USD"],
+        xcats=xcats + ["Composite"],
         transpose=True,
         figsize=(14, 12),
     )
@@ -671,7 +668,7 @@ if __name__ == "__main__":
         cid="USD",
         xcats=xcats + ["Composite"],
         freq="A",
-        transpose=False,
+        transpose=False
     )
     sv.view_score_evolution(
         xcat="GGIEDGDP_NSA",
@@ -680,4 +677,5 @@ if __name__ == "__main__":
         transpose=False,
         start="2010-01-01",
         title="AHKSJDA",
+        include_latest_day=True
     )
