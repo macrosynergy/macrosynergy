@@ -292,15 +292,16 @@ class ScoreVisualisers:
             DataFrame. If None, all cross-sections in the frame are selected.
         :param <List[str]> xcats: A list of category tickers to select from the DataFrame.
             If None, all categories are selected.
-        :param <bool> transpose: If True, transpose the snapshot so cids are on the x-axis
-            and xcats are on the y-axis.
+        :param <bool> transpose: If True, transpose the snapshot so cross-section 
+            identifiers are on the x-axis and category tickers are on the y-axis.
         :param <str> date: ISO-8601 formatted date. The date of the snapshot. If None, the
-            latest date in the DataFrame is selected.
+            latest date in the DataFrame is selected. Unless the date is today, then the 
+            latest date is set to the previous business day.
         :param <bool> annot: If True, annotate the heatmap.
         :param <str> title: The title of the heatmap.
         :param <int> title_fontsize: The fontsize of the title.
         :param <tuple> figsize: The size of the figure.
-        :param <dict> xcat_labels: A dictionary mapping xcats to their labels.
+        :param <dict> xcat_labels: A dictionary mapping category tickers to their labels.
         :param <dict> xticks: A dictionary of arguments to label the x axis.
         :param <int> round_decimals: The number of decimals to round the scores to.
         :param <str> cmap: The colormap of the heatmap.
@@ -396,16 +397,19 @@ class ScoreVisualisers:
         Parameters
         :param <str> xcat: The category to view the evolution of.
         :param <str> freq: The frequency of the evolution. Must be 'Q', 'A', or 'BA'.
-        :param <List[str]> cids: A list of cids to select from the DataFrame.
-            If None, all cids are selected.
+        :param <List[str]> cids: A list of cross-section identifiers to select from the 
+            DataFrame. If None, all in the dataframe are selected.
         :param <bool> include_latest_period: If True, include the latest period in the
             evolution.
         :param <bool> include_latest_day: If True, include the latest day in the 
-            evolution.
+            evolution. If the latest date is today, then the latest date is set to the 
+            previous business day.
+        :param <str> date: ISO-8601 formatted date. The date of the snapshot. If None, the
+            latest date in the DataFrame is selected.
         :param <str> start: ISO-8601 formatted date. Select data from this date onwards.
             If None, all dates are selected.
-        :param <bool> transpose: If True, transpose the evolution so cids are on the 
-            x-axis and dates are on the y-axis.
+        :param <bool> transpose: If True, transpose the evolution so cross-section 
+            identifiers are on the x-axis and dates are on the y-axis.
         :param <bool> annot: If True, annotate the heatmap.
         :param <str> title: The title of the heatmap.
         :param <int> title_fontsize: The fontsize of the title.
@@ -501,13 +505,14 @@ class ScoreVisualisers:
 
         Parameters
         :param <str> cid: The cross-section to view the evolution of.
-        :param <List[str]> xcats: A list of xcats to select from the DataFrame.
-            If None, all xcats are selected.
+        :param <List[str]> xcats: A list of category tickers to select from the DataFrame.
+            If None, all are selected.
         :param <str> freq: The frequency of the evolution. Must be 'Q', 'A', or 'BA'.
         :param <bool> include_latest_period: If True, include the latest period in the
             evolution.
         :param <bool> include_latest_day: If True, include the latest day in the
-            evolution.
+            evolution. If the latest date is today, then the latest date is set to the 
+            previous business day.
         :param <str> start: ISO-8601 formatted date. Select data from this date onwards.
             If None, all dates are selected.
         :param <bool> transpose: If True, transpose the evolution so xcats are on the
