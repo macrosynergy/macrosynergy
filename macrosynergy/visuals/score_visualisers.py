@@ -17,38 +17,68 @@ class ScoreVisualisers:
     cross-sections.
     
     Parameters
-    :param <pd.DataFrame> df: A DataFrame with the following columns:
+    :param <pd.DataFrame> df: A standardized JPMaQS with the following columns:
         'cid', 'xcat', 'real_date', and at least one metric from -
         'value', 'grading', 'eop_lag', or 'mop_lag'.
-    :param <List[str]> cids: A list of cids to select from the DataFrame.
-        If None, all cids are selected.
-    :param <List[str]> xcats: A list of xcats to select from the DataFrame.
-        If None, all xcats are selected.
-    :param <Dict[str, str]> xcat_labels: A dictionary mapping xcats to their labels.
-    :param <str> xcat_comp: The name of the composite xcat.
-    :param <List[float]> weights: A list of weights for the linear composite.
-    :param <Dict[str, str]> blacklist: A dictionary mapping xcats to their blacklists.
-    :param <bool> sequential: If True, calculate ZN scores sequentially.
-    :param <bool> iis: If True, calculate ZN scores for individual indicators.
+    :param <List[str]> cids: A list of cross-section identifiers to select from the 
+        DataFrame. If None, all cross-sections in the frame are selected.
+    :param <List[str]> xcats: A list of category tickers to select from the DataFrame.
+        If None, all categories are selected.
+    :param <Dict[str, str]> xcat_labels: A dictionary mapping category tickers (keys) to 
+        their labels (values).
+    :param <str> xcat_comp: The name of the composite category. Default is 'Composite'.
+    :param <List[float]> weights: A list of weights for the linear composite. Default is 
+        equal weights. The length of the list must be equal to the number of categories in 
+        xcats. If weights do not add up to 1, they are normalized.
+    :param <bool> normalize_weights: If True (default), normalize weights if they do not
+        add to one.
+    :param <List[float]> signs: A list of signs in order to use both negative and 
+        positive values of categories for the linear composite. 
+        This must have the same length as weights and xcats, and correspondes to the
+        order of categories in xcats. Default is all positive.
+    :param <Dict[str, str]> blacklist: A dictionary of cross-sections (keys) and date 
+        ranges (values) that should be excluded. If one cross-section has several 
+        blacklist periods append numbers to the cross-section identifier.
+    :param <bool> complete_xcats: If True, all xcats must have data for the 
+        composite to be calculated. Default is False, which means that the composite is
+        calculate if at least one category has data.
+    :param <bool> no_zn_scores: Per default, all categories are scored before they are
+        averaged into the composite. If True, the class does not calculate scores and 
+        takes the average of the original categiries. This is useful if those are
+        already score or of similar scale.
+    :param <bool> rescore_composite: If True, the composite is re-scored to a normal
+        unit scale. Default is False.
+    :param <bool> sequential: if True (default) score parameters (neutral level and mean 
+        absolute deviation) are estimated sequentially with concurrently available 
+        information only.
+    :param <int> min_obs: the minimum number of observations required to calculate 
+        zn_scores. Default is 261. The parameter is only applicable if the “sequential” 
+        parameter is set to True. Otherwise the neutral level and the mean absolute 
+        deviation are both computed in-sample and will use the full sample.
+    :param <bool> iis: if True (default) zn-scores are also calculated for the initial 
+        sample period defined by min-obs on an in-sample basis to avoid losing history. 
+        This is irrelevant if sequential is set to False.
     :param <str> neutral: The method to calculate the neutral score.
-    :param <float> pan_weight: The weight for the panel score.
-    :param <float> thresh: The threshold for the ZN score.
-    :param <int> min_obs: The minimum number of observations required to calculate ZN 
-        scores.
-    :param <str> est_freq: The frequency of the ZN score.
-    :param <str> postfix: The postfix to append to the xcats.
-    :param <bool> normalize_weights: If True, normalize the weights.
-    :param <List[float]> signs: A list of signs for the linear composite.
-    :param <bool> complete_xcats: If True, all xcats must have data for the composite to 
-        have data.
-    :param <bool> no_zn_scores: If True, do not calculate ZN scores.
-    :param <bool> rescore_composite: If True, rescore the composite ZN scores.
+        Default is ‘zero’. Alternatives are ‘mean’, ‘median’ or a number.
+    :param <float> pan_weight: The weight of panel (versus individual cross section) for 
+        calculating the z-score parameters, i.e. the neutral level and the mean absolute 
+        deviation. Default is 1, i.e. panel data are the basis for the parameters. 
+        Lowest possible value is 0, i.e. parameters are all specific to cross section.
+    :param <float> thresh: The threshold value beyond which scores are winsorized, 
+        i.e. contained at that threshold. The threshold is the maximum absolute score 
+        value that the function is allowed to produce. The minimum threshold is 1 mean 
+        absolute deviation.
+    :param <str> est_freq: the frequency at which mean absolute deviations or means are 
+        re-estimated. The options are daily, weekly, monthly & quarterly: “D”, “W”, “M”, 
+        “Q”. Default is monthly. Re-estimation is performed at period end.
+    :param <str> postfix: The string appended to category name for output; 
+        default is “_ZN”.
     """
     def __init__(
         self,
         df: pd.DataFrame,
-        cids: List[str] = None,
         xcats: List[str] = None,
+        cids: List[str] = None,
         xcat_labels: Dict[str, str] = None,
         xcat_comp: str = "Composite",
         weights: List[float] = None,
@@ -255,14 +285,13 @@ class ScoreVisualisers:
         cmap_range: Tuple[float, float] = None,
     ):
         """
-        View a snapshot of the scores for the specified cids and xcats at the specified
-        date.
+        View heatmap of the scores at the specified or latest available date.
 
         Parameters
-        :param <List[str]> cids: A list of cids to select from the DataFrame.
-            If None, all cids are selected.
-        :param <List[str]> xcats: A list of xcats to select from the DataFrame.
-            If None, all xcats are selected.
+        :param <List[str]> cids: A list of cross-section identifiers to select from the 
+            DataFrame. If None, all cross-sections in the frame are selected.
+        :param <List[str]> xcats: A list of category tickers to select from the DataFrame.
+            If None, all categories are selected.
         :param <bool> transpose: If True, transpose the snapshot so cids are on the x-axis
             and xcats are on the y-axis.
         :param <str> date: ISO-8601 formatted date. The date of the snapshot. If None, the
