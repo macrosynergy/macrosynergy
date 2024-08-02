@@ -708,6 +708,9 @@ class CategoryRelations(object):
 
             assert isinstance(single_chart, bool)
 
+            if coef_box == "upper right": # Since otherwise this overlaps with cid legend
+                coef_box = "upper left"
+
             dfx_copy = dfx.reset_index()
             cids = dfx_copy["cid"].unique()
             n_cids = len(cids)
@@ -721,25 +724,34 @@ class CategoryRelations(object):
             if ax is None:
                 fig, ax = plt.subplots(figsize=size)
 
-            dfx_list = [dfx_copy[dfx_copy["cid"] == c] for c in cids]
-            for i, dfx_i in enumerate(dfx_list):
-                sns.regplot(
-                    data=dfx_i,
-                    x=self.xcats[0],
-                    y=self.xcats[1],
-                    ci=reg_ci,
-                    order=reg_order,
-                    robust=reg_robust,
-                    fit_reg=fit_reg,
-                    scatter_kws={"s": 30, "alpha": 0.5},
-                    line_kws={"lw": 1},
-                    ax=ax,
-                    label=f'{cids[i]}'
+            # Perform a single global regression
+            sns.regplot(
+                data=dfx_copy,
+                x=self.xcats[0],
+                y=self.xcats[1],
+                ci=reg_ci,
+                order=reg_order,
+                robust=reg_robust,
+                fit_reg=fit_reg,
+                scatter=False,  # Do not plot scatter points in regplot
+                line_kws={"lw": 1, "color": "black"},
+                ax=ax
+            )
+
+            # Color code the scatter points by cid
+            for i, cid in enumerate(cids):
+                dfx_i = dfx_copy[dfx_copy["cid"] == cid]
+                ax.scatter(
+                    dfx_i[self.xcats[0]],
+                    dfx_i[self.xcats[1]],
+                    label=f'{cid}',
+                    s=30,
+                    alpha=0.5
                 )
 
             if coef_box is not None:
                 data_table = self.corr_probability(
-                    df_probability=dfx_list,
+                    df_probability=dfx_copy,
                     time_period="",
                     coef_box_loc=coef_box,
                     prob_est=prob_est,

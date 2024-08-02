@@ -433,7 +433,7 @@ class SignWeightedLADRegressor(WeightedLADRegressor):
         )
 
 
-class TimeWeightedLADRegressor(TimeWeightedRegressor):
+class TimeWeightedLADRegressor(WeightedLADRegressor):
     def __init__(
         self,
         fit_intercept: bool = True,
@@ -514,6 +514,7 @@ if __name__ == "__main__":
             .copy()
         )
     lm = LinearRegression()
+    
     # lm.fit(X, y)
     # lm_preds = lm.predict(X)
     # # Sign-Weighted Linear Regression
