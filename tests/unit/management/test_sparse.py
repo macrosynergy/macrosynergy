@@ -6,7 +6,14 @@ import numpy as np
 
 from typing import List, Tuple, Dict, Union, Set, Any
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.utils import concat_single_metric_qdfs, ticker_df_to_qdf
+from macrosynergy.management.utils import (
+    concat_single_metric_qdfs,
+    ticker_df_to_qdf,
+    is_valid_iso_date,
+    qdf_to_ticker_df,
+    get_cid,
+    get_xcat,
+)
 from macrosynergy.management.utils.sparse import (
     InformationStateChanges,
     VolatilityEstimationMethods,
@@ -14,6 +21,7 @@ from macrosynergy.management.utils.sparse import (
     calculate_score_on_sparse_indicator,
     infer_frequency,
     _remove_insignificant_values,
+    weight_from_frequency,
     _isc_dict_to_frames,
     _get_metric_df_from_isc,
     temporal_aggregator_exponential,
@@ -22,6 +30,7 @@ from macrosynergy.management.utils.sparse import (
 )
 import random
 import string
+import json
 
 FREQ_STR_MAP = {
     "B": "daily",
@@ -146,6 +155,13 @@ class TestFunctions(unittest.TestCase):
         with self.assertRaises(ValueError):
             create_delta_data(df=qdf, return_density_stats="yes")
 
+        # drop value and assert value error
+        with self.assertRaises(ValueError):
+            create_delta_data(df=qdf.drop(columns="value"))
+
+        # test with missing eop_lag
+        create_delta_data(qdf.drop(columns="eop_lag"))
+
     def test_calculate_score_on_sparse_indicator(self) -> None:
         qdf = self.qdf_small.copy()
         argsdict = dict(
@@ -253,6 +269,39 @@ class TestFunctions(unittest.TestCase):
             found_freq = tx.split("_")[-1][0].upper()
             self.assertEqual(res[tx], found_freq)
 
+        with self.assertRaises(TypeError):
+            infer_frequency(1)
+
+        with self.assertRaises(ValueError):
+            infer_frequency(qdf.drop(columns="eop_lag"))
+
+        # make the eop 1000 for all
+        qdfc = qdf.copy()
+        qdfc["eop_lag"] = 1000
+        res = infer_frequency(qdfc)
+        self.assertTrue(set(res) == {"D"})  # daily is the fallback
+
+        qdfc = qdf.copy()
+        qdfc["eop_lag"] = np.random.randint(1, 1000, len(qdfc))
+        res = infer_frequency(qdfc)
+        self.assertTrue(set(res) == {"D"})  # daily is the fallback
+
+    def test_weight_from_frequency(self) -> None:
+        # {"D": 1, "W": 5, "M": 21, "Q": 93, "A": 252}
+        fdict = {"D": 1, "W": 5, "M": 21, "Q": 93, "A": 252}
+
+        for i in range(1, 100):
+            base_num = random.randint(1, 255)
+            for freq, weight in fdict.items():
+                expc_res = weight / base_num
+                res = weight_from_frequency(freq, base=base_num)
+                self.assertEqual(res, expc_res)
+
+        ltrs = set(string.ascii_uppercase) - set(fdict.keys())
+        for ltr in ltrs:
+            with self.assertRaises(AssertionError):
+                weight_from_frequency(ltr)
+
 
 class TestTemporalAggregators(unittest.TestCase):
     def setUp(self) -> None:
@@ -338,16 +387,55 @@ class TestInformationStateChanges(unittest.TestCase):
         self.assertTrue("banana" in isc.isc_dict.keys())
         self.assertTrue(isinstance(isc.isc_dict["banana"], pd.DataFrame))
 
+    def test_to_dict(self) -> None:
+        df = get_long_format_data(end="2012-01-01")
+        tickers = (df["cid"] + "_" + df["xcat"]).unique().tolist()
+        ticker: str = random.choice(tickers)
+
+        isc = InformationStateChanges.from_qdf(df)
+
+        with self.assertRaises(TypeError):
+            isc.to_dict()
+
+        res: Dict[str, Any] = isc.to_dict(ticker)
+        self.assertTrue(isinstance(res, dict))
+        # must have data, columns, ticker, last_real_date as keys
+        self.assertEqual(
+            set(res.keys()), set(["data", "columns", "ticker", "last_real_date"])
+        )
+        self.assertTrue(res["columns"] == ("real_date", "value", "eop", "grading"))
+        self.assertTrue(is_valid_iso_date(res["last_real_date"]))
+        self.assertTrue(isinstance(res["data"], list))
+        self.assertTrue(all([isinstance(x, tuple) for x in res["data"]]))
+
+    def test_to_json(self) -> None:
+        df = get_long_format_data(end="2012-01-01")
+        tickers = (df["cid"] + "_" + df["xcat"]).unique().tolist()
+        ticker: str = random.choice(tickers)
+
+        isc = InformationStateChanges.from_qdf(df)
+
+        with self.assertRaises(TypeError):
+            isc.to_json()
+
+        res: str = isc.to_json(ticker)
+        self.assertEqual(
+            json.dumps(isc.to_dict(ticker), sort_keys=True),
+            json.dumps(json.loads(res), sort_keys=True),
+        )
+
     def test_isc_object_round_trip(self) -> None:
 
         qdfidx = QuantamentalDataFrame.IndexCols
 
         df = get_long_format_data()
         dfc = df.copy()
+
         tdf = InformationStateChanges.from_qdf(df).to_qdf()
 
         diff_mask = abs(df["value"].diff())
         diff_mask: pd.Series = diff_mask > 0.0  # type: ignore
+        diff_mask.iloc[0] = True
         diff_df: pd.DataFrame = tdf.loc[diff_mask, :].reset_index(drop=True)
 
         # create helper column which is cid-xcat-real_date
@@ -363,10 +451,26 @@ class TestInformationStateChanges(unittest.TestCase):
         # keep only the users columns (no grading columns)
         diff_df = diff_df.loc[:, dfc.columns]
 
-        self.assertTrue(diff_df.equals(dfc))
+        self.assertTrue(diff_df.eq(dfc).all().all())
+
+    def test_isc_object_round_trip_wide(self) -> None:
+
+        df = get_long_format_data()
+        dfc = df.copy()
+
+        tdf = InformationStateChanges.from_qdf(df).to_qdf()
+        wdf_orig = qdf_to_ticker_df(df)
+        wdf_trip = qdf_to_ticker_df(tdf)
+
+        self.assertTrue(wdf_orig.columns.equals(wdf_trip.columns))
+
+        for col in wdf_orig.columns:
+            ots_diff: pd.Series = wdf_orig[col].diff().abs() > 0
+            ots_diff.loc[wdf_orig[col].first_valid_index()] = True
+            self.assertTrue((wdf_trip[col][ots_diff]).eq(wdf_orig[col][ots_diff]).all())
 
     def test_isc_to_qdf(self) -> None:
-        df = get_long_format_data(start="2010-01-01", end="2012-01-01")
+        df = get_long_format_data(end="2012-01-01")
         ## Test that the grading is not output when not asked for
         tdf = InformationStateChanges.from_qdf(df).to_qdf(
             metrics=["eop"], postfix="$%A"
@@ -379,7 +483,7 @@ class TestInformationStateChanges(unittest.TestCase):
         self.assertTrue([str(u).endswith("$%A") for u in list(tdf["xcat"])])
 
     def test_temporal_aggregator_period(self) -> None:
-        df = get_long_format_data(start="2010-01-01", end="2012-01-01")
+        df = get_long_format_data(end="2012-01-01")
         iscobj = InformationStateChanges.from_qdf(df)
         for k, v in iscobj.items():
             v["zscore_norm_squared"] = np.random.random(len(v))
@@ -439,6 +543,166 @@ class TestInformationStateChanges(unittest.TestCase):
         ## type error with std as 'banana'
         with self.assertRaises(ValueError):
             isc_obj.calculate_score(**{**argsdict, "std": "banana"})
+
+    def test_get_releases(self):
+        qdf = get_long_format_data(end="2012-01-01")
+        isc_obj = InformationStateChanges.from_qdf(qdf)
+        from_date = "2010-01-01"
+        to_date = "2010-10-01"
+        res = isc_obj.get_releases(
+            from_date=from_date,
+            to_date=to_date,
+            latest_only=False,
+        )
+
+        self.assertTrue(isinstance(res, pd.DataFrame))
+        self.assertTrue(res["real_date"].max() <= pd.Timestamp(to_date))
+        self.assertTrue(res["real_date"].min() >= pd.Timestamp(from_date))
+        expc_cols = ["real_date", "ticker", "eop", "value", "change", "version"]
+        missing_cols: Set[str] = set(expc_cols) - set(res.columns)
+        self.assertTrue(len(missing_cols) == 0, f"Missing columns: {missing_cols}")
+
+        # test get_releases warning when dates are swapped
+        with self.assertWarns(UserWarning):
+            isc_obj.get_releases(from_date=to_date, to_date=from_date)
+
+        with self.assertRaises(TypeError):
+            isc_obj.get_releases(from_date=1)
+
+        with self.assertRaises(ValueError):
+            isc_obj.get_releases(from_date="banana")
+
+        with self.assertRaises(ValueError):
+            isc_obj.get_releases(latest_only="banana")
+
+        # test with dates=None
+        res = isc_obj.get_releases(from_date=None, to_date=None)
+
+    def test_get_releases_latest(self):
+        qdf = get_long_format_data(
+            start="2020-01-01",
+            end=pd.Timestamp.today().normalize(),
+        )
+        _today = pd.Timestamp.today().normalize()
+        _lbd = _today - pd.offsets.BDay(1)
+        _tmin2 = _today - pd.offsets.BDay(2)
+        _tmin3 = _today - pd.offsets.BDay(3)
+        all_tickers = (qdf["cid"] + "_" + qdf["xcat"]).unique()
+        random_tickers = random.choices(all_tickers, k=5)
+        cdf = pd.DataFrame(
+            [
+                {
+                    "cid": get_cid(ticker),
+                    "xcat": get_xcat(ticker),
+                    "real_date": _lbd,
+                    "value": np.random.random(),
+                    "eop": _lbd,
+                    "eop_lag": 0,
+                }
+                for ticker in random_tickers
+            ]
+        )
+        qdf = qdf[~qdf["real_date"].isin([_lbd, _today, _tmin2, _tmin3])]
+        qdf = (
+            pd.concat([qdf, cdf], axis=0, ignore_index=True)
+            .drop_duplicates(subset=["cid", "xcat"], keep="last")
+            .reset_index(drop=True)
+        )
+
+        isc_obj = InformationStateChanges.from_qdf(qdf)
+        res = isc_obj.get_releases()
+
+        self.assertTrue(set(res.index) == set(random_tickers))
+        self.assertTrue(res["real_date"].unique().tolist() == [_lbd])
+
+        ## try with release calendar
+        res = isc_obj.get_releases(latest_only=False, from_date=_tmin3)
+        self.assertTrue(set(res["ticker"]) == set(random_tickers))
+        self.assertTrue(all(res["real_date"] > _tmin3))
+
+    def test_get_releases_excl_xcats(self):
+        cids = ["USD", "EUR", "JPY", "GBP"]
+        xcats = ["GDP", "CPI", "UNEMP", "FX", "BOND", "EQ", "COM"]
+        start = "2020-01-01"
+        end = pd.Timestamp.today().normalize()
+        qdf = get_long_format_data(cids=cids, xcats=xcats, start=start, end=end)
+        # update xcats - they have freq. appended as suffix
+        xcats = qdf["xcat"].unique().tolist()
+        isc_obj = InformationStateChanges.from_qdf(qdf)
+
+        _today = pd.Timestamp.today().normalize()
+        _lbd = _today - pd.offsets.BDay(1)
+        all_tickers = (qdf["cid"] + "_" + qdf["xcat"]).unique()
+
+        # pick 3 random xcats
+        selected_xcats = random.choices(xcats, k=3)
+        excl_xcats = list(set(xcats) - set(selected_xcats))
+        cdf = pd.DataFrame(
+            [
+                {
+                    "cid": get_cid(ticker),
+                    "xcat": get_xcat(ticker),
+                    "real_date": _lbd,
+                    "value": np.random.random(),
+                    "eop": _lbd,
+                    "eop_lag": 0,
+                }
+                for ticker in all_tickers
+            ]
+        )
+        qdf = qdf[~qdf["real_date"].isin([_lbd, _today])]
+        qdf = (
+            pd.concat([qdf, cdf], axis=0, ignore_index=True)
+            .drop_duplicates(subset=["cid", "xcat"], keep="last")
+            .reset_index(drop=True)
+        )
+
+        isc_obj = InformationStateChanges.from_qdf(qdf)
+        res = isc_obj.get_releases(excl_xcats=excl_xcats)
+
+        self.assertTrue(set(get_xcat(list(set(res.index)))) == set(selected_xcats))
+        self.assertTrue(res["real_date"].unique().tolist() == [_lbd])
+
+        with self.assertRaises(TypeError):
+            isc_obj.get_releases(excl_xcats="banana")
+
+        with self.assertRaises(TypeError):
+            isc_obj.get_releases(excl_xcats=[1])
+
+    def test_calc_score_vol_forecast(self):
+        qdf = get_long_format_data(end="2012-01-01")
+
+        # check that roundtrip remains the same
+        qdfa = (
+            InformationStateChanges.from_qdf(qdf)
+            .calculate_score(volatility_forecast=True)
+            .to_qdf()
+        ).sort_index()
+
+        qdfb = (
+            InformationStateChanges.from_qdf(qdf)
+            .calculate_score(volatility_forecast=False)
+            .to_qdf()
+        ).sort_index()
+
+        self.assertTrue(qdfa.equals(qdfb))
+
+        ## Test the actual std in the information state changes
+
+        isc = InformationStateChanges.from_qdf(qdf).calculate_score(
+            volatility_forecast=True, min_periods=1
+        )
+
+        isc_test = InformationStateChanges.from_qdf(qdf).calculate_score(
+            volatility_forecast=False, min_periods=1
+        )
+
+        self.assertTrue(set(isc.keys()) == set(isc_test.keys()))
+
+        for ticker in isc.keys():
+            dfa = isc[ticker].sort_index()
+            dfb = isc_test[ticker].sort_index()
+            self.assertTrue((dfa["std"]).equals(dfb["std"].shift(periods=1)))
 
 
 if __name__ == "__main__":

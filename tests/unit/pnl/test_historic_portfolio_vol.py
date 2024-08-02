@@ -9,6 +9,7 @@ from unittest import mock
 import warnings
 from macrosynergy.pnl.historic_portfolio_volatility import (
     historic_portfolio_vol,
+    unstack_covariances,
     _hist_vol,
     _calculate_portfolio_volatility,
     flat_weights_arr,
@@ -290,7 +291,21 @@ class TestArgChecks(unittest.TestCase):
 
 
 class TestMisc(unittest.TestCase):
-    def setUp(self): ...
+    def setUp(self):
+        data = {
+            "real_date": [
+                "2022-01-01",
+                "2022-01-01",
+                "2022-01-01",
+                "2022-01-02",
+                "2022-01-02",
+                "2022-01-02",
+            ],
+            "fid1": ["A", "A", "B", "A", "B", "B"],
+            "fid2": ["A", "B", "B", "A", "A", "B"],
+            "value": [1.0, 0.5, 1.0, 1.0, 0.8, 1.0],
+        }
+        self.vcv_df = pd.DataFrame(data)
 
     def tearDown(self): ...
 
@@ -353,6 +368,36 @@ class TestMisc(unittest.TestCase):
             res = _downsample_returns(piv_df, freq)
             res_mock = _downsample_returns_mock(piv_df, freq)
             self.assertTrue(res.equals(res_mock))
+
+    def test_unstack_covariances_no_fillna(self):
+        result = unstack_covariances(self.vcv_df, fillna=False)
+
+        expected_result = {
+            "2022-01-01": pd.DataFrame(
+                {"A": {"A": 1.0, "B": 0.5}, "B": {"A": None, "B": 1.0}}
+            ),
+            "2022-01-02": pd.DataFrame(
+                {"A": {"A": 1.0, "B": None}, "B": {"A": 0.8, "B": 1.0}}
+            ),
+        }
+
+        for dt in result:
+            self.assertTrue(result[dt].equals(expected_result[dt]))
+
+    def test_unstack_covariances_with_fillna(self):
+        result = unstack_covariances(self.vcv_df, fillna=True)
+
+        expected_result = {
+            "2022-01-01": pd.DataFrame(
+                {"A": {"A": 1.0, "B": 0.5}, "B": {"A": 0.5, "B": 1.0}}
+            ),
+            "2022-01-02": pd.DataFrame(
+                {"A": {"A": 1.0, "B": 0.8}, "B": {"A": 0.8, "B": 1.0}}
+            ),
+        }
+
+        for dt in result:
+            self.assertTrue(result[dt].equals(expected_result[dt]))
 
 
 class TestCalculatePortfolioVolatility(unittest.TestCase):
@@ -604,6 +649,10 @@ class TestHistVolEntrypoint(unittest.TestCase):
         # test raises TypeError with start=123
         with self.assertRaises(TypeError):
             historic_portfolio_vol(**{**all_args, "start": 123})
+
+        for argx, inpx in zip(["start", "end"], ["5006-59-01", "2024-14-14"]):
+            with self.assertRaises(ValueError):
+                historic_portfolio_vol(**{**all_args, argx: inpx})
 
 
 if __name__ == "__main__":
