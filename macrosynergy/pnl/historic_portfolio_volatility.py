@@ -314,8 +314,6 @@ def _calculate_portfolio_volatility(
 
     rebal_dates = get_sops(dates=pivot_signals.index, freq=rebal_freq)
 
-    signals = pivot_signals.loc[rebal_dates, :]
-
     # Returns batches
     logger.info(
         "Rebalance portfolio from %s to %s (%s times)",
@@ -324,7 +322,7 @@ def _calculate_portfolio_volatility(
         rebal_dates.shape[0],
     )
 
-    td = rebal_dates.iloc[-1]
+    # td = rebal_dates.iloc[-1]
 
     # TODO convert frequencies
     list_vcv: List[pd.DataFrame] = []
@@ -361,7 +359,8 @@ def _calculate_portfolio_volatility(
         list_vcv.append(stack_covariances(vcv_df=vcv_df, real_date=td))
         vol_tuple = _calc_vol_tuple(
             vcv_df=vcv_df,
-            signals=signals,
+            # signals=signals,
+            signals=pivot_signals,
             date=td,
             available_cids=avails,
         )
