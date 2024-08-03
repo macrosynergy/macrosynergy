@@ -9,14 +9,15 @@ from macrosynergy.learning.splitters import BasePanelSplit
 
 from typing import List
 
+
 class ExpandingKFoldPanelSplit(BasePanelSplit):
-    """ Time-respecting K-Fold cross-validator for panel data.
+    """Time-respecting K-Fold cross-validator for panel data.
 
     Provides train/test indices to split a panel into train/test sets. The unique dates
     in the panel are divided into 'n_splits + 1' sequential and non-overlapping intervals,
     resulting in 'n_splits' pairs of training and test sets. The 'i'th training set is the
     union of the first 'i' intervals, and the 'i'th test set is the 'i+1'th interval.
-    
+
     Parameters
     ----------
     n_splits : int
@@ -27,15 +28,16 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
     This splitter can be considered to be a panel data analogue to the `TimeSeriesSplit`
     splitter provided by `scikit-learn`.`
     """
-    def __init__(self, n_splits = 5):
+
+    def __init__(self, n_splits=5):
         # Checks
         self._check_init_params(n_splits)
-        
+
         # Attributes
         self.n_splits = n_splits
-        
+
     def split(self, X, y, groups=None):
-        """ Generate indices to split data into training and test sets. 
+        """Generate indices to split data into training and test sets.
 
         Parameters
         ----------
@@ -43,12 +45,12 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
             Pandas dataframe of features, multi-indexed by (cross-section, date). The
             dates must be in datetime format. Otherwise the dataframe must be in wide
             format: each feature is a column.
-        
+
         y : Union[pd.DataFrame, pd.Series]
             Pandas dataframe or series of a target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format. If a dataframe
             is provided, the target variable must be the sole column.
-        
+
         groups : None
             Ignored. Exists for compatibility with scikit-learn.
 
@@ -91,18 +93,22 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
             raise ValueError(
                 f"Cannot have number of splits less than 2. Got n_splits={n_splits}."
             )
-        
+
     def _check_split_params(self, X, y, groups):
         # X
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
         if not pd.api.types.is_datetime64_any_dtype(X.index.get_level_values(1)):
-            raise ValueError(f"The dates in X must be datetime objects. Got {X.index.get_level_values(1).dtype} instead.")
+            raise ValueError(
+                f"The dates in X must be datetime objects. Got {X.index.get_level_values(1).dtype} instead."
+            )
         # y
         if not isinstance(y.index, pd.MultiIndex):
             raise ValueError("y must be multi-indexed.")
         if not pd.api.types.is_datetime64_any_dtype(y.index.get_level_values(1)):
-            raise ValueError(f"The dates in y must be datetime objects. Got {y.index.get_level_values(1).dtype} instead.")
+            raise ValueError(
+                f"The dates in y must be datetime objects. Got {y.index.get_level_values(1).dtype} instead."
+            )
         if not X.index.equals(y.index):
             raise ValueError(
                 "The indices of the input dataframe X and the output dataframe y don't"
@@ -111,6 +117,7 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
         # groups
         if groups is not None:
             raise ValueError("groups is not supported by this splitter.")
+
 
 class RollingKFoldPanelSplit(BasePanelSplit):
     """
@@ -132,28 +139,28 @@ class RollingKFoldPanelSplit(BasePanelSplit):
     test set "rolling" forward in time.
     """
 
-    def __init__(self, n_splits = 5):
+    def __init__(self, n_splits=5):
         # Checks
         self._check_init_params(n_splits)
 
-        #Attributes
+        # Attributes
         self.n_splits = n_splits
-        
+
     def split(self, X, y, groups=None):
-        """ Generate indices to split data into training and test sets.
-        
+        """Generate indices to split data into training and test sets.
+
         Parameters
         ----------
         X : pd.DataFrame
             Pandas dataframe of features, multi-indexed by (cross-section, date). The
             dates must be in datetime format. Otherwise the dataframe must be in wide
             format: each feature is a column.
-        
+
         y : Union[pd.DataFrame, pd.Series]
             Pandas dataframe or series of a target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format. If a dataframe
             is provided, the target variable must be the sole column.
-        
+
         groups : None
             Ignored. Exists for compatibility with scikit-learn.
 
@@ -195,18 +202,22 @@ class RollingKFoldPanelSplit(BasePanelSplit):
             raise ValueError(
                 f"Cannot have number of splits less than 2. Got {n_splits}."
             )
-        
+
     def _check_split_params(self, X, y, groups):
         # X
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
         if not pd.api.types.is_datetime64_any_dtype(X.index.get_level_values(1)):
-            raise ValueError(f"The dates in X must be datetime objects. Got {X.index.get_level_values(1).dtype} instead.")
+            raise ValueError(
+                f"The dates in X must be datetime objects. Got {X.index.get_level_values(1).dtype} instead."
+            )
         # y
         if not isinstance(y.index, pd.MultiIndex):
             raise ValueError("y must be multi-indexed.")
         if not pd.api.types.is_datetime64_any_dtype(y.index.get_level_values(1)):
-            raise ValueError(f"The dates in y must be datetime objects. Got {y.index.get_level_values(1).dtype} instead.")
+            raise ValueError(
+                f"The dates in y must be datetime objects. Got {y.index.get_level_values(1).dtype} instead."
+            )
         if not X.index.equals(y.index):
             raise ValueError(
                 "The indices of the input dataframe X and the output dataframe y don't"
