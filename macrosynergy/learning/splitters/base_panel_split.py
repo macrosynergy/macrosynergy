@@ -15,17 +15,18 @@ from sklearn.model_selection import (
 
 from abc import ABC, abstractmethod
 
+
 class BasePanelSplit(BaseCrossValidator, ABC):
     """
     Abstract base class for a generic panel cross-validator.
 
-    Provides the necessary visualisation methods for all panel splitters, for 
+    Provides the necessary visualisation methods for all panel splitters, for
     explainability and debugging purposes.
     """
+
     @abstractmethod
     def __init__(self):
         pass
-
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """
@@ -57,7 +58,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         freq_offset,
     ):
         """
-        Returns date ranges of contiguous blocks in each training and test set. 
+        Returns date ranges of contiguous blocks in each training and test set.
 
         Parameters
         ----------
@@ -67,7 +68,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
             DatetimeIndex of all dates in the panel.
         freq_offset : pd.DateOffset
             DateOffset object representing the frequency of the dates in the panel.
-        
+
         Returns
         -------
         xranges : List[Tuple[pd.Timestamp, pd.Timedelta]]
@@ -75,7 +76,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         """
         xranges = []
         if len(cs_dates) == 0:
-            # No dates in the training or test set - return empty list. 
+            # No dates in the training or test set - return empty list.
             return xranges
 
         # Filter all dates in the panel spanning the dates in the considered set
@@ -106,10 +107,10 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         self,
         X,
         y,
-        figsize = (20, 5),
+        figsize=(20, 5),
     ):
         """
-        Visualise the cross-validation splits. 
+        Visualise the cross-validation splits.
 
         Parameters
         ----------
@@ -127,16 +128,14 @@ class BasePanelSplit(BaseCrossValidator, ABC):
 
         # Obtain relevant data
         Xy: pd.DataFrame = self._combine_Xy(X, y)
-        cross_sections = np.array(
-            sorted(Xy.index.get_level_values(0).unique())
-        )
+        cross_sections = np.array(sorted(Xy.index.get_level_values(0).unique()))
         real_dates = Xy.index.get_level_values(1).unique().sort_values()
 
         # Infer native dataset frequency
         freq_est = pd.infer_freq(real_dates)
         if freq_est is None:
             freq_est = real_dates.to_series().diff().min()
-        freq_offset = pd.tseries.frequencies.to_offset(freq_est) # Good approximation
+        freq_offset = pd.tseries.frequencies.to_offset(freq_est)  # Good approximation
 
         splits = list(self.split(X, y))
 
@@ -195,9 +194,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         # Add all the broken bar plots to the figure.
         for cs_idx, idx, xranges, color, label in operations:
             if len(cross_sections) == 1:
-                ax[idx].broken_barh(
-                    xranges, (-0.4, 0.8), facecolors=color, label=label
-                )
+                ax[idx].broken_barh(xranges, (-0.4, 0.8), facecolors=color, label=label)
                 ax[idx].set_xlim(real_dates.min(), real_dates.max() + difference)
                 ax[idx].set_yticks([0])
                 ax[idx].set_yticklabels([cross_sections[0]])
@@ -208,7 +205,9 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                 ax[cs_idx, idx].broken_barh(
                     xranges, (-0.4, 0.8), facecolors=color, label=label
                 )
-                ax[cs_idx, idx].set_xlim(real_dates.min(), real_dates.max() + difference)
+                ax[cs_idx, idx].set_xlim(
+                    real_dates.min(), real_dates.max() + difference
+                )
                 ax[cs_idx, idx].set_yticks([0])
                 ax[cs_idx, idx].set_yticklabels([cross_sections[cs_idx]])
                 ax[cs_idx, idx].tick_params(axis="x", rotation=90)
@@ -232,8 +231,8 @@ class BasePanelSplit(BaseCrossValidator, ABC):
     @abstractmethod
     def _combine_Xy(self, X, y):
         """
-        Combine the features and target variable into a single dataframe. This is 
-        dependent on the specific splitter implementation and, consequently, the 
+        Combine the features and target variable into a single dataframe. This is
+        dependent on the specific splitter implementation and, consequently, the
         implementation of the constructor.
 
         Parameters
