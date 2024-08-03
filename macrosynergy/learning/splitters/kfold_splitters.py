@@ -226,3 +226,36 @@ class RollingKFoldPanelSplit(BasePanelSplit):
         # groups
         if groups is not None:
             raise ValueError("groups is not supported by this splitter.")
+        
+class RecencyKFoldPanelSplit(BasePanelSplit):
+    """
+    K-Fold cross-validator for panel data that uses the last 'n_splits' collection of 
+    'n_periods' panel dates as independent test sets, with all information prior to each of
+    these the respective training sets. 
+    """
+    def __init__(self, n_splits=5, n_periods=252):
+        # Checks
+        self._check_init_params(n_splits, n_periods)
+
+        # Attributes
+        self.n_splits = n_splits
+        self.n_periods = n_periods
+
+    def split(self, X, y, groups=None):
+        pass 
+
+    def _check_init_params(self, n_splits: int, n_periods: int):
+        # n_splits
+        if not isinstance(n_splits, int):
+            raise TypeError(f"n_splits must be an integer. Got {type(n_splits)}.")
+        if n_splits < 2:
+            raise ValueError(
+                f"Cannot have number of splits less than 2. Got {n_splits}."
+            )
+        # n_periods
+        if not isinstance(n_periods, int):
+            raise TypeError(f"n_periods must be an integer. Got {type(n_periods)}.")
+        if n_periods < 1:
+            raise ValueError(
+                f"Cannot have number of periods less than 1. Got {n_periods}."
+            )
