@@ -10,7 +10,93 @@ import pandas as pd
 
 from macrosynergy.learning.splitters import BasePanelSplit
 
-class ExpandingIncrementPanelSplit(BasePanelSplit):
+class WalkForwardPanelSplit(BasePanelSplit):
+    """
+    Base class for a generic walk-forward panel cross-validator. 
+
+    Provides train/test indices to split a panel into train/test sets. Following an 
+    initial training set construction, a forward test set is created. The training and 
+    test set pair evolves over time by walking forward through the panel. 
+
+    Parameters
+    ----------
+    min_cids : int
+        Minimum number of cross-sections required for the first training set.
+        Either start_date or (min_cids, min_periods) must be provided.
+        If both are provided, start_date takes precedence.
+    min_periods : int
+        Minimum number of time periods required for the first training set. Either
+        start_date or (min_cids, min_periods) must be provided. If both are
+        provided, start_date takes precedence.
+    min_xcats : Optional[int]
+        Minimum number of features required in the first training set. Default is None,
+        in which case only samples where all features are present are considered.
+    start_date : Optional[str]
+        The targeted final date in the initial training set in ISO 8601 format. When
+        min_xcats is not None, the largest date out of start_date and the first date
+        at which min_xcats features are available is used. Otherwise, start_date is used.
+        Default is None. Either start_date or (min_cids, min_periods) must be provided.
+        If both are provided, start_date takes precedence.
+    max_periods : Optional[int]
+        The maximum number of time periods in each training set. If the maximum is
+        exceeded, the earliest periods are cut off. This effectively creates rolling
+        training sets. Default is None.
+    """
+    def __init__(
+        self,
+        min_cids,
+        min_periods,
+        min_xcats = None,
+        start_date = None,
+        max_periods = None,
+    ):
+        # Checks
+        self._check_wf_params(
+            min_cids = min_cids,
+            min_periods = min_periods,
+            min_xcats = min_xcats,
+            start_date = start_date,
+            max_periods = max_periods,
+        )
+        
+        # Attributes
+        self.min_cids = min_cids
+        self.min_periods = min_periods
+        self.min_xcats = min_xcats
+        self.start_date = pd.Timestamp(start_date) if start_date else None
+        self.max_periods = max_periods
+
+    def _check_wf_params(self, min_cids, min_periods, min_xcats, start_date, max_periods):
+        # min_cids 
+        if not isinstance(min_cids, int):
+            raise TypeError(f"min_cids must be an integer. Got {type(min_cids)}.")
+        if min_cids < 1:
+            raise ValueError(f"min_cids must be an integer greater than 0. Got {min_cids}.")
+        # min_periods
+        if not isinstance(min_periods, int):
+            raise TypeError(f"min_periods must be an integer. Got {type(min_periods)}.")
+        if min_periods < 1:
+            raise ValueError(f"min_periods must be an integer greater than 0. Got {min_periods}.")
+        # min_xcats
+        if min_xcats is not None and not isinstance(min_xcats, int):
+            raise TypeError(f"min_xcats must be an integer. Got {type(min_xcats)}.")
+        if min_xcats is not None and min_xcats < 1:
+            raise ValueError(f"min_xcats must be an integer greater than 0. Got {min_xcats}.")
+        # start_date
+        if start_date is not None and not isinstance(start_date, str):
+            raise TypeError(f"start_date must be a string. Got {type(start_date)}.")
+        if start_date is not None:
+            try:
+                datetime.datetime.fromisoformat(start_date)
+            except ValueError:
+                raise ValueError(f"start_date must be in ISO 8601 format. Got {start_date}.")
+        # max_periods
+        if max_periods is not None and not isinstance(max_periods, int):
+            raise TypeError(f"max_periods must be an integer. Got {type(max_periods)}.")
+        if max_periods is not None and max_periods < 1:
+            raise ValueError(f"max_periods must be an integer greater than 0. Got {max_periods}.")
+
+class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
     """
     Walk-forward cross-validator over a panel. 
 
@@ -92,11 +178,6 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         # Attributes
         self.train_intervals = train_intervals
         self.test_size = test_size
-        self.min_cids = min_cids
-        self.min_periods = min_periods
-        self.min_xcats = min_xcats
-        self.start_date = pd.Timestamp(start_date) if start_date else None
-        self.max_periods = max_periods
 
     def split(self, X, y, groups=None):
         """
@@ -396,7 +477,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         if groups is not None:
             raise ValueError("groups is not supported by this splitter.")
 
-class ExpandingFrequencyPanelSplit(BasePanelSplit):
+class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
     """
     Walk-forward cross-validator over a panel. 
 
