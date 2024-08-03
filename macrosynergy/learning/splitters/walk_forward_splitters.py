@@ -842,8 +842,6 @@ if __name__ == "__main__":
 
     # ExpandingFrequencyPanelSplit
     splitter = ExpandingIncrementPanelSplit(
-        train_intervals=21 * 12, test_size=1
+        train_intervals=21 * 12, test_size=21 * 12
     )
-    for train_idx, test_idx in splitter.split(X, y):
-        pass
-    print("Hello")
+    splitter.visualise_splits(X, y)

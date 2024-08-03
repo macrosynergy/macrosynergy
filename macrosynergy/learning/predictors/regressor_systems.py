@@ -21,7 +21,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         min_xs_samples: int = 2,
     ):
         """
-        Base class for systems of regressors.
+        Abstract base class for systems of regressors.
 
         :param <int> roll: The lookback of the rolling window for the regression. If None,
             the entire cross-sectional history is used for each regression. This should

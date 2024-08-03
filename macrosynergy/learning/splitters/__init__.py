@@ -1,6 +1,6 @@
 from .base_panel_split import BasePanelSplit
 
-from .expanding_increment_splitters import (
+from .walk_forward_splitters import (
     ExpandingIncrementPanelSplit,
     ExpandingFrequencyPanelSplit,
 )

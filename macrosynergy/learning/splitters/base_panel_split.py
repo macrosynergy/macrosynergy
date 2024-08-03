@@ -169,11 +169,11 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         for cs_idx, cs in enumerate(cross_sections):
             for idx, split_idx in enumerate(split_idxs):
                 # Get the dates in the training and test sets for the given cross-section.
-                cs_train_dates: pd.DatetimeIndex = Xy.iloc[splits[split_idx][0]][
-                    Xy.iloc[splits[split_idx][0]].index.get_level_values(0) == cs
+                cs_train_dates: pd.DatetimeIndex = X.iloc[splits[split_idx][0]][
+                    X.iloc[splits[split_idx][0]].index.get_level_values(0) == cs
                 ].index.get_level_values(1)
-                cs_test_dates: pd.DatetimeIndex = Xy.iloc[splits[split_idx][1]][
-                    Xy.iloc[splits[split_idx][1]].index.get_level_values(0) == cs
+                cs_test_dates: pd.DatetimeIndex = X.iloc[splits[split_idx][1]][
+                    X.iloc[splits[split_idx][1]].index.get_level_values(0) == cs
                 ].index.get_level_values(1)
 
                 xranges_train: List[Tuple[pd.Timestamp, pd.Timedelta]] = (
