@@ -10,7 +10,7 @@ import pandas as pd
 
 from macrosynergy.learning.splitters import BasePanelSplit
 
-from abc import ABC, abstractmethod
+from abc import ABC
 
 class WalkForwardPanelSplit(BasePanelSplit, ABC):
     """
