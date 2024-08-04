@@ -6,6 +6,10 @@ from macrosynergy.panel import categories_df
 from joblib import Parallel, delayed
 from tqdm.auto import tqdm
 
+from typing import List, Dict
+
+import warnings
+
 class BasePanelLearner:
     def __init__(self, df, xcats, cids = None, start = None, end = None, blacklist = None, freq = "M", lag = 1, xcat_aggs = ["last", "sum"]):
         """
@@ -91,11 +95,18 @@ class BasePanelLearner:
         self.X = df_long.iloc[:, :-1]
         self.y = df_long.iloc[:, -1]
 
+        # Store necessary information for indexing
+        self.index = self.X.index
+        self.date_levels = self.X.index.get_level_values(1)
+        self.sorted_date_levels = sorted(self.date_levels.unique())
+        self.xs_levels = self.X.index.get_level_values(0)
+        self.sorted_xs_levels = sorted(self.xs_levels.unique())
+
     def run(
         self,
         name,
         outer_splitter,
-        inner_splitters, # List of splitters for hyperparameter tuning
+        inner_splitters,
         models,
         hyperparameters,
         scorers, # List or string of scorers, not metrics
@@ -105,6 +116,7 @@ class BasePanelLearner:
         use_variance_correction = False, 
         n_jobs_outer = -1,
         n_jobs_inner = 1,
+        strategy_eval_periods = None,
     ):
         """
         Run a learning process over the panel. 
@@ -112,20 +124,20 @@ class BasePanelLearner:
         Parameters
         ----------
         name : str
-            Category name of the learning process. 
+            Category name for the forecasted panel resulting from the learning process. 
 
-        outer_splitter : Union[ExpandingIncrementPanelSplit, ExpandingFrequencyPanelSplit]
+        outer_splitter : WalkForwardPanelSplit
             Outer splitter for the learning process. This should be an instance of
-            either ExpandingIncrementPanelSplit or ExpandingFrequencyPanelSplit.
+            WalkForwardPanelSplit. 
 
-        inner_splitters : Union[BasePanelSplit, List[BasePanelSplit]]
+        inner_splitters : Union[BaseCrossValidator, List[BaseCrossValidator]]
             Inner splitters for the learning process. These should be instances of 
-            BasePanelSplit.
+            BaseCrossValidator. 
 
         models : Dict[str, Union[BaseEstimator, List[BaseEstimator]]]
             Dictionary of named models to be used/selected between in the learning
             process. The keys are the names of the models, and the values are scikit-learn
-            compatible models, possibly a PipeLine object. 
+            compatible models, possibly a Pipeline object. 
 
         hyperparameters : Dict[str, Union[Dict[str, List], Callable]]
             Dictionary of hyperparameters to be used in the learning process. The keys are
@@ -134,7 +146,7 @@ class BasePanelLearner:
             Bayesian search.
 
         scorers : Union[Callable, List[Callable]]
-            Scorer(s) to be used in the learning process. These should be functions that 
+            Scorer(s) to be used for cross-validation. These should be functions that 
             accept an already-fitted estimator, an input matrix `X_test` and a target vector
             `y_test`, and return a scalar score. To convert a `scikit-learn` metric to a scorer,
             please use the `make_scorer` function in `sklearn.metrics`.
@@ -149,7 +161,7 @@ class BasePanelLearner:
 
         splits_function : TODO
 
-        use_variance_correction : bool
+        use_variance_correction : Union[bool, List[bool]]
             Boolean indicating whether or not to take into account variance across splits
             in the hyperparameter and model selection process in cross-validation. 
             Default is False.
@@ -161,6 +173,12 @@ class BasePanelLearner:
         n_jobs_inner : int
             Number of jobs to run in parallel for the inner loop in the nested 
             cross-validation. Default is 1.
+
+        strategy_eval_periods : Optional[int]
+            Number of periods to adjust each training set to create an out-of-sample
+            hold-out set for value evaluation. If not None, then a thresholded z-score 
+            signal is created for each hyperparameter and model choice, and a Sharpe ratio
+            is computed and combined with a cross-validation score for model selection. 
         """
         # Checks 
         self._check_run(
@@ -197,6 +215,7 @@ class BasePanelLearner:
                     n_iter = n_iter,
                     splits_function = splits_function,
                     n_jobs_inner = n_jobs_inner,
+                    strategy_eval_periods = strategy_eval_periods,
                 )
                 for idx, (train_idx, test_idx) in enumerate(train_test_splits)
             ),
@@ -205,6 +224,142 @@ class BasePanelLearner:
 
         return optim_results
 
+    def _worker(
+        self,
+        name: str,
+        train_idx,
+        test_idx,
+        inner_splitters: list,
+        models: dict,
+        hyperparameters: dict,
+        scorers: list,
+        use_variance_correction: list,
+        search_type: str,
+        n_iter: int,
+        splits_function: callable,
+        n_jobs_inner: int,
+        strategy_eval_periods: int,
+    ):
+        """
+        Selects an optimal model from a collection of candidates, with optimal hyperparameters.
+        This model is fit on a training set, and evaluated on a test set. Predictions, scores
+        and hyperparameter/model selection information are stored. 
 
+        Parameters
+        ----------
+        train_idx : np.ndarray
+            Training set indices
+        test_idx : np.ndarray
+            Test set indices
+        inner_splitters : list
+            List of inner splitters for the learning process.
+        models : dict
+            Dictionary of named models to be used/selected between in the learning
+            process.
+        hyperparameters : dict
+            Dictionary of hyperparameters to be used in the learning process, corresponding
+            to each model.
+        scorers : list
+            List of scorers to be used for cross-validation.
+        use_variance_correction : list
+            List of boolean values indicating whether or not to take into account variance
+            across splits in the hyperparameter and model selection process in cross-validation.
+            If only a single element is provided, it is broadcasted to all splitters.
+        search_type : str
+            Search type for hyperparameter tuning.
+        n_iter : int
+            Number of iterations for random or bayes search.
+        splits_function : TODO
+        n_jobs_inner : int
+            Number of jobs to run in parallel for the inner loop in the nested cross-validation.
+        strategy_eval_periods : int
+            Number of periods to adjust each training set to create an out-of-sample hold-out
+            set for value evaluation.
 
-    
+        Returns
+        -------
+        TODO
+        """
+        # Set up training and test sets
+        X_train_i: np.ndarray = self.X.values[train_idx, :]
+        y_train_i: np.ndarray = self.y.values[train_idx]
+        X_test_i: np.ndarray = self.X.values[test_idx,:]
+
+        # Get test set index information to correctly store results
+        test_index = self.index[test_idx]
+        test_xs_levels = self.xs_levels[test_idx]
+        test_date_levels = self.date_levels[test_idx]
+        sorted_test_date_levels = np.sort(np.unique(test_date_levels))
+
+        # Features can lag behind the targets, so adjust the test set dates
+        # so that the timestamp of predictions correspond to the date at which
+        # the prediction is made possible (timestamp of the features)
+        locs: np.ndarray = (
+            np.searchsorted(self.date_levels, sorted_test_date_levels, side="left") - self.lag
+        )
+        adj_test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
+            [self.date_levels[i] if i >= 0 else pd.NaT for i in locs]
+        )
+
+        # Create new test set index
+        date_map = dict(zip(test_date_levels, adj_test_date_levels))
+        mapped_dates = test_date_levels.map(date_map)
+        test_index = pd.MultiIndex.from_arrays(
+            [test_xs_levels, mapped_dates], names=["cid", "real_date"]
+        )
+        test_date_levels = test_index.get_level_values(1)
+        sorted_date_levels = sorted(test_date_levels.unique())
+
+        # Perform hyperparameter and model selection process
+        optim_name, optim_model, optim_params, optim_score = self._hyperparameter_search(
+            X_train_i = X_train_i,
+            y_train_i = y_train_i,
+            inner_splitters = inner_splitters,
+            models = models,
+            hyperparameters = hyperparameters,
+            scorers = scorers,
+            use_variance_correction = use_variance_correction,
+            search_type = search_type,
+            n_iter = n_iter,
+            splits_function = splits_function,
+            n_jobs_inner = n_jobs_inner,
+            strategy_eval_periods = strategy_eval_periods,
+        )
+
+        # Handle case where no model was selected
+        if optim_name is None:
+            warnings.warn(
+                f"No model was chosen for {name} at rebalancing date {test_date_levels[0]}. Setting to zero.",
+                RuntimeWarning,
+            )
+            preds = np.zeros(len(test_index))
+            prediction_data = [name, test_index, preds]
+            modelchoice_data = [
+                test_date_levels.date[0],
+                name,
+                "None",
+                {},
+                int(n_splits),
+            ]
+            return prediction_data, modelchoice_data
+        
+        # Store the best estimator predictions/signals
+        # If optim_model has a create_signal method, use it otherwise use predict
+        if hasattr(optim_model, "create_signal"):
+            if callable(getattr(optim_model, "create_signal")):
+                preds: np.ndarray = optim_model.create_signal(X_test_i)
+            else:
+                preds: np.ndarray = optim_model.predict(X_test_i)
+        else:
+            preds: np.ndarray = optim_model.predict(X_test_i)
+            
+        prediction_data = [name, test_index, preds]
+        modelchoice_data = [
+            test_date_levels.date[0],
+            name,
+            optim_name,
+            optim_params,
+            int(n_splits),
+        ]
+
+        return prediction_data, modelchoice_data
