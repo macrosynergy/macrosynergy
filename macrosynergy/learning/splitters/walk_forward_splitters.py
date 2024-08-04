@@ -127,7 +127,48 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
             raise ValueError(
                 f"max_periods must be an integer greater than 0. Got {max_periods}."
             )
+        
+    def _check_split_params(self, X, y, groups):
+        """
+        Type and value checks for the `split()` method parameters.
 
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Pandas dataframe of features, multi-indexed by (cross-section, date). The
+            dates must be in datetime format. Otherwise the dataframe must be in wide
+            format: each feature is a column.
+
+        y : Union[pd.DataFrame, pd.Series]
+            Pandas dataframe or series of a target variable, multi-indexed by
+            (cross-section, date). The dates must be in datetime format. If a dataframe
+            is provided, the target variable must be the sole column.
+
+        groups : None
+            Ignored. Exists for compatibility with scikit-learn.
+        """
+        # X
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not pd.api.types.is_datetime64_any_dtype(X.index.get_level_values(1)):
+            raise ValueError(
+                f"The dates in X must be datetime objects. Got {X.index.get_level_values(1).dtype} instead."
+            )
+        # y
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed.")
+        if not pd.api.types.is_datetime64_any_dtype(y.index.get_level_values(1)):
+            raise ValueError(
+                f"The dates in y must be datetime objects. Got {y.index.get_level_values(1).dtype} instead."
+            )
+        if not X.index.equals(y.index):
+            raise ValueError(
+                "The indices of the input dataframe X and the output dataframe y don't"
+                "match."
+            )
+        # groups
+        if groups is not None:
+            raise ValueError("groups is not supported by this splitter.")
 
 class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
     """
@@ -189,13 +230,13 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
 
     def __init__(
         self,
-        train_intervals: int = 21,
-        test_size: int = 21,
-        min_cids: int = 4,
-        min_periods: int = 500,
-        min_xcats: Optional[int] = None,
-        start_date: Optional[str] = None,
-        max_periods: Optional[int] = None,
+        train_intervals = 21,
+        test_size = 21,
+        min_cids = 4,
+        min_periods = 500,
+        min_xcats = None,
+        start_date = None,
+        max_periods = None,
     ):
         # Checks
         super().__init__(
@@ -247,7 +288,7 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
 
         real_dates = X.index.get_level_values(1)
         Xy = self._combine_Xy(X, y)
-        splits, Xy = self._determine_unique_training_times(Xy, real_dates)
+        splits = self._determine_unique_training_times(Xy, real_dates)
 
         # Determine the training and test indices for each split
         train_splits: List[np.ndarray] = [
@@ -342,7 +383,7 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
 
         self.n_splits = n_splits + 1
 
-        return splits, Xy
+        return splits
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """
@@ -407,48 +448,6 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
             raise ValueError(
                 f"test_size must be an integer greater than 0. Got {test_size}."
             )
-
-    def _check_split_params(self, X, y, groups):
-        """
-        Type and value checks for the `split()` method parameters.
-
-        Parameters
-        ----------
-        X : pd.DataFrame
-            Pandas dataframe of features, multi-indexed by (cross-section, date). The
-            dates must be in datetime format. Otherwise the dataframe must be in wide
-            format: each feature is a column.
-
-        y : Union[pd.DataFrame, pd.Series]
-            Pandas dataframe or series of a target variable, multi-indexed by
-            (cross-section, date). The dates must be in datetime format. If a dataframe
-            is provided, the target variable must be the sole column.
-
-        groups : None
-            Ignored. Exists for compatibility with scikit-learn.
-        """
-        # X
-        if not isinstance(X.index, pd.MultiIndex):
-            raise ValueError("X must be multi-indexed.")
-        if not pd.api.types.is_datetime64_any_dtype(X.index.get_level_values(1)):
-            raise ValueError(
-                f"The dates in X must be datetime objects. Got {X.index.get_level_values(1).dtype} instead."
-            )
-        # y
-        if not isinstance(y.index, pd.MultiIndex):
-            raise ValueError("y must be multi-indexed.")
-        if not pd.api.types.is_datetime64_any_dtype(y.index.get_level_values(1)):
-            raise ValueError(
-                f"The dates in y must be datetime objects. Got {y.index.get_level_values(1).dtype} instead."
-            )
-        if not X.index.equals(y.index):
-            raise ValueError(
-                "The indices of the input dataframe X and the output dataframe y don't"
-                "match."
-            )
-        # groups
-        if groups is not None:
-            raise ValueError("groups is not supported by this splitter.")
 
     def _combine_Xy(self, X, y):
         """
@@ -553,34 +552,30 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
 
     def __init__(
         self,
-        expansion_freq: str = "D",
-        test_freq: str = "D",
-        min_cids: int = 4,
-        min_periods: int = 500,
-        min_xcats: Optional[int] = None,
-        start_date: Optional[str] = None,
-        max_periods: Optional[int] = None,
+        expansion_freq = "D",
+        test_freq = "D",
+        min_cids = 4,
+        min_periods = 500,
+        min_xcats = None,
+        start_date = None,
+        max_periods = None,
     ):
-        # Input checks
-        self._check_init_params(
-            expansion_freq=expansion_freq,
-            test_freq=test_freq,
+        # Checks 
+        super().__init__(
             min_cids=min_cids,
             min_periods=min_periods,
             min_xcats=min_xcats,
             start_date=start_date,
             max_periods=max_periods,
         )
+        self._check_init_params(
+            expansion_freq=expansion_freq,
+            test_freq=test_freq,
+        )
 
         # Attributes
         self.expansion_freq = expansion_freq
         self.test_freq = test_freq
-        self.min_cids = min_cids
-        self.min_periods = min_periods
-        self.min_xcats = min_xcats
-        self.start_date = pd.Timestamp(start_date) if start_date else None
-        self.max_periods = max_periods
-
         self.freq_offsets = {
             "D": pd.DateOffset(days=1),
             "W": pd.DateOffset(weeks=1),
@@ -615,15 +610,16 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
         test : np.ndarray
             The testing set indices for that split.
         """
+        # Checks
         self._check_split_params(X, y)
 
+        # Determine the unique dates in each training split
         train_indices = []
         test_indices = []
 
-        Xy = pd.concat([X, y], axis=1)
-        Xy.dropna(subset=[Xy.columns[-1]], inplace=True)
-
-        splits, Xy = self._determine_unique_training_times(Xy)
+        real_dates = X.index.get_level_values(1)
+        Xy = self._combine_Xy(X, y)
+        splits = self._determine_unique_training_times(Xy, real_dates)
 
         train_splits: List[np.ndarray] = [
             splits[0] if not self.max_periods else splits[0][-self.max_periods :]
@@ -653,7 +649,7 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
                 )
             test_indices = np.where(Xy.index.get_level_values(1).isin(test_dates))[0]
 
-            return train_indices, test_indices
+            yield train_indices, test_indices
 
     def get_n_splits(self, X=None, y=None, groups=None) -> int:
         """
@@ -672,59 +668,67 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
 
         return self.n_splits
 
-    def _determine_unique_training_times(self, Xy):
+    def _determine_unique_training_times(self, Xy, real_dates):
         """
-        Returns the unique dates in each training split. This method is called by
-        self.split(). It further returns other variables needed for ensuing components of
-        the split method.
+        Returns the unique dates in each training split.
+
+        Parameters
+        ----------
+        Xy : pd.DataFrame
+            Combined pandas dataframe of features and the target variable, multi-indexed
+            by (cross-section, date).
+        real_dates : pd.Index
+            The dates associated with each sample in Xy.
+
+        Notes
+        -----
+        This method is called by self.split(). It also returns other variables needed
+        for ensuing components of the self.split() method.
         """
         self.unique_dates: pd.DatetimeIndex = (
-            Xy.index.get_level_values(1).unique().sort_values()
+            real_dates.unique().sort_values()
         )
         # First determine the dates for the first training set
-        if self.start_date:
-            date_last_train = self.start_date
-        elif self.min_xcats is None:
-            # Then the splits are restricted to samples where all features are available.
-            Xy.dropna(inplace=True)
-            # Get all samples before the first date in the panel where `min_periods` time
-            # periods are available for at least `min_cids` cross-sections.
-            init_mask: pd.Series = (
-                Xy.groupby(level=1).size().sort_index() >= self.min_cids
-            )
-            date_first_min_cids: pd.Timestamp = (
-                init_mask[init_mask == True].reset_index().real_date.min()
-            )
-            date_last_train: pd.Timestamp = self.unique_dates[
-                self.unique_dates.get_loc(date_first_min_cids) + self.min_periods - 1
-            ]
-        else:
-            # Then the first training set is dependent on min_cids, min_periods and min_xcats.
-            # (1) Find first time at which min_xcats features are available and filter
-            # the panel to include only dates after this time.
+        if self.min_xcats:
+            # Get first date at which min_xcats features are available.
             X = Xy.drop(columns=[Xy.columns[-1]])
-            xcat_first_dates = X.notna().apply(
-                lambda col: X.index.get_level_values(1)[col].min()
-            )
+            xcat_first_dates = X.notna().apply(lambda col: real_dates[col].min())
             xcat_first_dates_counts = (
                 xcat_first_dates.value_counts().sort_index().cumsum()
             )
             first_valid_date = xcat_first_dates_counts[
                 xcat_first_dates_counts >= self.min_xcats
             ].index.min()
-            Xy = Xy.loc[Xy.index.get_level_values(1) >= first_valid_date]
-            # Get samples prior to the first date in the panel where `min_periods` time
-            # periods are available for at least `min_cids` cross-sections.
-            init_mask = Xy.groupby(level=1).size().sort_index() >= self.min_cids
-            date_first_min_cids: pd.Timestamp = (
-                init_mask[init_mask == True].reset_index().real_date.min()
-            )
-            date_last_train: pd.Timestamp = self.unique_dates[
-                self.unique_dates.get_loc(date_first_min_cids) + self.min_periods - 1
-            ]
+            if self.start_date:
+                date_last_train = max(self.start_date, first_valid_date)
+            else:
+                # then min_cids and min_periods are used to determine the first training set.
+                init_mask = Xy.groupby(level=1).size().sort_index() >= self.min_cids
+                date_first_min_cids: pd.Timestamp = (
+                    init_mask[init_mask == True].reset_index().real_date.min()
+                )
+                date_last_train: pd.Timestamp = self.unique_dates[
+                    self.unique_dates.get_loc(date_first_min_cids)
+                    + self.min_periods
+                    - 1
+                ]
+        else:
+            if self.start_date:
+                date_last_train = self.start_date
+            else:
+                init_mask = Xy.groupby(level=1).size().sort_index() >= self.min_cids
+                date_first_min_cids: pd.Timestamp = (
+                    init_mask[init_mask == True].reset_index().real_date.min()
+                )
+                date_last_train: pd.Timestamp = self.unique_dates[
+                    self.unique_dates.get_loc(date_first_min_cids)
+                    + self.min_periods
+                    - 1
+                ]
 
-        # (2) Loop through the unique dates in the panel to create the training and test sets
-        # We can loop until before the last "test_freq" dates in the panel
+        # Determine all remaining training splits
+        # To do this, loop through unique panel dates to create the training and test sets
+        # Loop until the last "test_freq" dates in the panel are reached
         end_date = self.unique_dates[-1] - self.freq_offsets[self.test_freq]
         unique_dates_train: pd.arrays.DatetimeArray = self.unique_dates[
             (self.unique_dates > date_last_train) & (self.unique_dates <= end_date)
@@ -747,20 +751,20 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
                 splits.append(split_dates)
             current_date = next_date
 
-        self.n_splits = len(splits) + 1
-
-        # (e) add the first training set to the list of training splits, so that the dates
+        # Add the first training set to the list of training splits, so that the dates
         # that constitute each training split are together.
         splits.insert(
             0,
-            Xy.index.get_level_values(1)[
-                Xy.index.get_level_values(1) <= date_last_train
+            real_dates[
+                real_dates <= date_last_train
             ]
             .unique()
             .sort_values(),
         )
 
-        return splits, Xy
+        self.n_splits = len(splits)
+
+        return splits
 
     def _check_init_params(
         self,
@@ -791,52 +795,6 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
                 f"test_freq must be one of 'D', 'W', 'M', 'Q' or 'Y'."
                 f" Got {test_freq}."
             )
-
-        # min_cids
-        if not isinstance(min_cids, int):
-            raise TypeError(f"min_cids must be an integer. Got {type(min_cids)}.")
-        if min_cids < 1:
-            raise ValueError(
-                f"min_cids must be an integer greater than 0. Got {min_cids}."
-            )
-
-        # min_periods
-        if not isinstance(min_periods, int):
-            raise TypeError(f"min_periods must be an integer. Got {type(min_periods)}.")
-        if min_periods < 1:
-            raise ValueError(
-                f"min_periods must be an integer greater than 0. Got {min_periods}."
-            )
-
-        # min_xcats
-        if min_xcats is not None and not isinstance(min_xcats, int):
-            raise TypeError(f"min_xcats must be an integer. Got {type(min_xcats)}.")
-        if min_xcats is not None and min_xcats < 1:
-            raise ValueError(
-                f"min_xcats must be an integer greater than 0." f" Got {min_xcats}."
-            )
-
-        # start_date
-        if start_date is not None and not isinstance(start_date, str):
-            raise TypeError(f"start_date must be a string. Got {type(start_date)}.")
-        if start_date is not None:
-            try:
-                datetime.datetime.fromisoformat(start_date)
-            except ValueError:
-                raise ValueError(
-                    f"start_date must be in ISO 8601 format. Got {start_date}."
-                )
-
-        # max_periods
-        if max_periods is not None and not isinstance(max_periods, int):
-            raise TypeError(f"max_periods must be an integer. Got {type(max_periods)}.")
-        if max_periods is not None and max_periods < 1:
-            raise ValueError(
-                f"max_periods must be an integer greater than 0. Got {max_periods}."
-            )
-
-    def _check_split_params(self, X, y):
-        pass
 
 
 if __name__ == "__main__":
