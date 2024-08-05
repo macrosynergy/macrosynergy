@@ -10,7 +10,9 @@ from typing import List, Dict
 
 import warnings
 
-class BasePanelLearner:
+from abc import ABC, abstractmethod
+
+class BasePanelLearner(ABC):
     def __init__(self, df, xcats, cids = None, start = None, end = None, blacklist = None, freq = "M", lag = 1, xcat_aggs = ["last", "sum"]):
         """
         Base class for a sequential learning process over a panel. 
@@ -341,7 +343,9 @@ class BasePanelLearner:
                 {},
                 int(n_splits),
             ]
-            return prediction_data, modelchoice_data
+            other_data = self._extract_stats(optim_name, optim_model, optim_params, optim_score)
+
+            return prediction_data, modelchoice_data, other_data
         
         # Store the best estimator predictions/signals
         # If optim_model has a create_signal method, use it otherwise use predict
@@ -361,5 +365,108 @@ class BasePanelLearner:
             optim_params,
             int(n_splits),
         ]
+        other_data = self._extract_stats(optim_name, optim_model, optim_params, optim_score)
 
-        return prediction_data, modelchoice_data
+        return prediction_data, modelchoice_data, other_data
+    
+    def _hyperparameter_search(
+        self,
+        X_train_i,
+        y_train_i,
+        inner_splitters,
+        models,
+        hyperparameters,
+        scorers,
+        use_variance_correction,
+        search_type,
+        n_iter,
+        splits_function,
+        n_jobs_inner,
+        strategy_eval_periods,
+    ):
+        """
+        Selects an optimal model from a collection of candidates, with optimal hyperparameters.
+        This model is fit on a training set, and evaluated on a test set. Predictions, scores
+        and hyperparameter/model selection information are stored. 
+
+        Parameters
+        ----------
+        X_train_i : np.ndarray
+            Training set features.
+        y_train_i : np.ndarray
+            Training set target.
+        inner_splitters : list
+            List of inner splitters for the learning process.
+        models : dict
+            Dictionary of named models to be used/selected between in the learning
+            process.
+        hyperparameters : dict
+            Dictionary of hyperparameters to be used in the learning process, corresponding
+            to each model.
+        scorers : list
+            List of scorers to be used for cross-validation.
+        use_variance_correction : list
+            List of boolean values indicating whether or not to take into account variance
+            across splits in the hyperparameter and model selection process in cross-validation.
+            If only a single element is provided, it is broadcasted to all splitters.
+        search_type : str
+            Search type for hyperparameter tuning.
+        n_iter : int
+            Number of iterations for random or bayes search.
+        splits_function : TODO
+        n_jobs_inner : int
+            Number of jobs to run in parallel for the inner loop in the nested cross-validation.
+        strategy_eval_periods : int
+            Number of periods to adjust each training set to create an out-of-sample hold-out
+            set for value evaluation.
+
+        Returns
+        -------
+        optim_name : str
+            Name of the optimal model.
+        optim_model : BaseEstimator
+            Optimal model chosen.
+        optim_params : dict
+            Optimal hyperparameters chosen.
+        optim_score : float
+            Cross-validation score. 
+        """
+        # Initialize variables
+        optim_name = None
+        optim_model = None
+        optim_params = None
+        optim_score = -np.inf
+
+        # Iterate over models
+        for name, model in models.items():
+            # Get hyperparameters
+            params = hyperparameters[name]
+            # Iterate over splitters
+            for inner_splitter in inner_splitters:
+                # Iterate over scorers
+                for scorer in scorers:
+                    # Perform cross-validation
+                    pass
+            #
+    @abstractmethod
+    def _extract_stats(self, optim_name, optim_model, optim_params, optim_score):
+        """
+        Extracts extra statistics from the optimal model selected by the process.
+
+        Parameters
+        ----------
+        optim_name : str
+            Name of the optimal model.
+        optim_model : BaseEstimator
+            Optimal model chosen.
+        optim_params : dict
+            Optimal hyperparameters chosen.
+        optim_score : float
+            Cross-validation score. 
+
+        Returns
+        -------
+        other_data : dict
+            Nested dictionary of statistics of the form {rebalancing_date: {statistic: value}}.
+        """
+        pass
