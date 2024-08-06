@@ -716,8 +716,9 @@ class FacetPlot(Plotter):
         df["X"] = pd.to_datetime(df["X"])
 
         # Infer the most common frequency of the time series
-        differences = df["X"].diff().dt.total_seconds().dropna()
+        differences = df["X"].diff().dt.total_seconds().dropna().astype(int)
         frequency_seconds = differences.mode()[0]
+
         frequency = pd.to_timedelta(frequency_seconds, unit="s")
 
         # Ignore weekends if daily

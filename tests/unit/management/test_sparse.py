@@ -611,9 +611,13 @@ class TestInformationStateChanges(unittest.TestCase):
 
         isc_obj = InformationStateChanges.from_qdf(qdf)
         res = isc_obj.get_releases()
+        
+        # Ensure compatibility with Pandas 1.3.5
+        unique_dates = res['real_date'].unique()
+        timestamp_list = [pd.Timestamp(date) for date in unique_dates]
 
         self.assertTrue(set(res.index) == set(random_tickers))
-        self.assertTrue(res["real_date"].unique().tolist() == [_lbd])
+        self.assertTrue(timestamp_list == [_lbd])
 
         ## try with release calendar
         res = isc_obj.get_releases(latest_only=False, from_date=_tmin3)
@@ -660,8 +664,12 @@ class TestInformationStateChanges(unittest.TestCase):
         isc_obj = InformationStateChanges.from_qdf(qdf)
         res = isc_obj.get_releases(excl_xcats=excl_xcats)
 
+        # Ensure compatibility with Pandas 1.3.5
+        unique_dates = res['real_date'].unique()
+        timestamp_list = [pd.Timestamp(date) for date in unique_dates]
+
         self.assertTrue(set(get_xcat(list(set(res.index)))) == set(selected_xcats))
-        self.assertTrue(res["real_date"].unique().tolist() == [_lbd])
+        self.assertTrue(timestamp_list == [_lbd])
 
         with self.assertRaises(TypeError):
             isc_obj.get_releases(excl_xcats="banana")

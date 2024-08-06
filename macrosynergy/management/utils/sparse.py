@@ -478,11 +478,12 @@ def sparse_to_dense(
     """
 
     # TODO store real_date min and max in object...
+    # Note: default behaviour includes both start and end dates
     dtrange = pd.date_range(
         start=min_period,
         end=max_period,
         freq="B",
-        inclusive="both",
+        # inclusive="both",
     )
 
     tdf = _get_metric_df_from_isc(isc=isc, metric=value_column, date_range=dtrange)
@@ -584,7 +585,13 @@ def temporal_aggregator_period(
     :param <str> postfix: A postfix to append to the xcat column. Default is "_NCSUM".
     :return: A DataFrame with the aggregated values.
     """
-    dt_range = pd.date_range(start=start, end=end, freq="B", inclusive="both")
+    # Note: default behaviour includes both start and end dates
+    dt_range = pd.date_range(
+        start=start,
+        end=end,
+        freq="B",
+        # inclusive="both"
+    )
     tdf: pd.DataFrame = _get_metric_df_from_isc(
         isc=isc,
         metric="zscore_norm_squared",

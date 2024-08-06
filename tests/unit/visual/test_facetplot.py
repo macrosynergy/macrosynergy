@@ -14,6 +14,7 @@ from parameterized import parameterized
 class TestAll(unittest.TestCase):
     @classmethod
     def setUpClass(self):
+        np.random.seed(42)
         # Prevents plots from being displayed during tests.
         plt.close("all")
         self.mpl_backend: str = matplotlib.get_backend()
@@ -51,9 +52,10 @@ class TestAll(unittest.TestCase):
         black_list = {"AUD": [blacklist_start_date, "2010-12-10"]}
 
         fp.df = reduce_df(fp.df, blacklist=black_list)
+
         X, Y = fp._insert_nans(fp.df.real_date.to_numpy(), fp.df.value.to_numpy())
 
-        idx = np.argwhere(X == blacklist_start_date)[0][0]
+        idx = np.where(X == blacklist_start_date)[0][0]
 
         np.testing.assert_equal(Y[idx], np.nan)
 
@@ -75,7 +77,7 @@ class TestAll(unittest.TestCase):
         X, Y = fp._insert_nans(fp.df.real_date.to_numpy(), fp.df.value.to_numpy())
 
         for date in [first_date_start, second_date_start]:
-            idx = np.argwhere(X == date)[0][0]
+            idx = np.where(X == date)[0][0]
             np.testing.assert_equal(Y[idx], np.nan)
 
     def test_insert_nans_no_gaps(self):
@@ -108,3 +110,8 @@ class TestAll(unittest.TestCase):
         X, Y = fp._insert_nans(fp.df.real_date.to_numpy(), fp.df.value.to_numpy())
 
         np.testing.assert_equal(Y[1], np.nan)
+
+if __name__ == "__main__":
+    # unittest.main()
+    TestAll().setUpClass()
+    TestAll().test_insert_nans_0_2010_01_05()

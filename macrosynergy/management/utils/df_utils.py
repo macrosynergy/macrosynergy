@@ -383,7 +383,7 @@ def downsample_df_on_real_date(
         df.set_index("real_date")
         .groupby(groupby_columns)
         .resample(freq)
-        .agg(agg, numeric_only=True)
+        .agg(agg)
         .reset_index()
     )
 

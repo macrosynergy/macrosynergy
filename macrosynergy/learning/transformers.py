@@ -10,13 +10,13 @@ import datetime
 import scipy.stats as stats
 
 from sklearn.linear_model import Lasso, ElasticNet
-from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
+from sklearn.base import BaseEstimator, TransformerMixin, _OneToOneFeatureMixin
 from sklearn.feature_selection import SelectorMixin
 from sklearn.exceptions import NotFittedError
 
 from statsmodels.tools.tools import add_constant
 
-from linearmodels.panel import RandomEffects
+# from linearmodels.panel import RandomEffects
 
 from typing import Union, Any, Optional
 
@@ -759,7 +759,7 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         return X.groupby(level="real_date").count().expanding().sum().to_numpy()
 
 
-class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
+class PanelMinMaxScaler(BaseEstimator, TransformerMixin, _OneToOneFeatureMixin):
     """
     Transformer class to extend scikit-learn's MinMaxScaler() to panel datasets. It is
     intended to replicate the aforementioned class, but critically returning
@@ -820,7 +820,7 @@ class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
         return calc
 
 
-class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
+class PanelStandardScaler(BaseEstimator, TransformerMixin, _OneToOneFeatureMixin):
     def __init__(self, with_mean: bool = True, with_std: bool = True):
         """
         Transformer class to extend scikit-learn's StandardScaler() to panel datasets.
