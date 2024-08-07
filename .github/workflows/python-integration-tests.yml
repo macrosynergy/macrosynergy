@@ -35,3 +35,48 @@ jobs:
         run: |
           python -m pip install .[all] 
           python -c "import macrosynergy; print(macrosynergy.__version__)"
+  
+  dependency-integration-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Import Python package
+        run: |
+          python -c "import macrosynergy"
+
+  min-dependency-integration-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.8
+
+      - name: Create minimum requirements file
+        run: |
+          python ./.github/scripts/create_min_requirements.py
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-min.txt
+
+      - name: Import Python package
+        run: |
+          python -c "import macrosynergy"
+

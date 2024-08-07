@@ -29,6 +29,7 @@ jobs:
         os: [ubuntu-latest]
         python-version: ["3.8", "3.9", "3.10", "3.11"]
         folder: ${{fromJson(needs.prepare-matrix.outputs.matrix)}}
+        requirements: ["requirements.txt", "requirements-min.txt"]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -39,8 +40,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Create minimum requirements file
+        run: |
+          python ./.github/scripts/create_min_requirements.py
+
       - name: Install dependencies
         run: |
+          pip install -r ${{ matrix.requirements }}
           pip install .[test]
 
       - name: Lint with flake8
@@ -78,6 +84,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.8", "3.9", "3.10", "3.11"]
+        requirements: ["requirements.txt", "requirements-min.txt"]
     steps:
       - uses: actions/checkout@v4
 
@@ -86,6 +93,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Create minimum requirements file
+        run: |
+          python ./.github/scripts/create_min_requirements.py
+
       - name: Create and activate virtual environment
         run: |
           python -m venv venv
@@ -93,6 +104,7 @@ jobs:
 
       - name: Test build settings
         run: |
+          pip install -r ${{ matrix.requirements }}
           pip install .[all]
           python -c "import macrosynergy; print(macrosynergy.__version__)"
 
@@ -108,3 +120,4 @@ jobs:
           else
             echo "Build settings test passed"
           fi
+
