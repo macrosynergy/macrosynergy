@@ -17,6 +17,7 @@ from macrosynergy.management.utils.core import (
     _map_to_business_day_frequency,
     is_valid_iso_date,
 )
+from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY
 import functools
 
 IDX_COLS_SORT_ORDER = ["cid", "xcat", "real_date"]
@@ -383,7 +384,7 @@ def downsample_df_on_real_date(
         df.set_index("real_date")
         .groupby(groupby_columns)
         .resample(freq)
-        .agg(agg)
+        .agg(agg, **RESAMPLE_NUMERIC_ONLY)
         .reset_index()
     )
 

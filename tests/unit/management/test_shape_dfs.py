@@ -2,6 +2,7 @@ import unittest
 import random
 import numpy as np
 import pandas as pd
+from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY
 from tests.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df, categories_df
 from math import ceil, floor
@@ -288,7 +289,7 @@ class TestAll(unittest.TestCase):
                     self.dfd[filt1 & filt2]
                     .set_index("real_date")
                     .resample("M")
-                    .mean()
+                    .mean(**RESAMPLE_NUMERIC_ONLY)
                 )
             ),
             10,
