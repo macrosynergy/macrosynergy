@@ -1062,7 +1062,8 @@ def merge_categories(df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: Li
     if not set(cids).issubset(df["cid"].unique()):
         raise ValueError("The cross sections must be present in the DataFrame.")
 
-    real_dates = list(df["real_date"].unique())
+    unique_dates = df['real_date'].unique()
+    real_dates = [pd.Timestamp(date) for date in unique_dates]
 
     def _get_values_for_xcat(real_dates, xcat_index, cid):
 

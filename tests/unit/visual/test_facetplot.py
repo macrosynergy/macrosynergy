@@ -14,7 +14,6 @@ from parameterized import parameterized
 class TestAll(unittest.TestCase):
     @classmethod
     def setUpClass(self):
-        np.random.seed(42)
         # Prevents plots from being displayed during tests.
         plt.close("all")
         self.mpl_backend: str = matplotlib.get_backend()
@@ -110,8 +109,3 @@ class TestAll(unittest.TestCase):
         X, Y = fp._insert_nans(fp.df.real_date.to_numpy(), fp.df.value.to_numpy())
 
         np.testing.assert_equal(Y[1], np.nan)
-
-if __name__ == "__main__":
-    # unittest.main()
-    TestAll().setUpClass()
-    TestAll().test_insert_nans_0_2010_01_05()

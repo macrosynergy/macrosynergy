@@ -525,6 +525,7 @@ class FacetPlot(Plotter):
         ##############################
 
         fig = plt.figure(figsize=figsize)
+        renderer = fig.canvas.get_renderer()
 
         outer_gs: GridSpec = GridSpec(
             ncols=grid_dim[0],
@@ -545,8 +546,8 @@ class FacetPlot(Plotter):
         if title is not None:
             # get the figure coordinates of the title
             fig_width, fig_height = (
-                suptitle.get_window_extent().width,
-                suptitle.get_window_extent().height,
+                suptitle.get_window_extent(renderer=renderer).width,
+                suptitle.get_window_extent(renderer=renderer).height,
             )
             title_newline_adjust: float = title_fontsize / 500
             if title_yadjust is not None and title_yadjust != 1.0:
@@ -556,7 +557,7 @@ class FacetPlot(Plotter):
             title_height: float = (title.count("\n") + 1) * title_newline_adjust
 
             re_adj[3] = (
-                re_adj[3] - title_height + fig_height / fig.get_window_extent().height
+                re_adj[3] - title_height + fig_height / fig.get_window_extent(renderer=renderer).height
             )
 
         axs: Union[np.ndarray, plt.Axes] = outer_gs.subplots(
@@ -671,12 +672,12 @@ class FacetPlot(Plotter):
             )
 
             leg_width, leg_height = (
-                leg.get_window_extent().width,
-                leg.get_window_extent().height,
+                leg.get_window_extent(renderer=renderer).width,
+                leg.get_window_extent(renderer=renderer).height,
             )
             fig_width, fig_height = (
-                fig.get_window_extent().width,
-                fig.get_window_extent().height,
+                fig.get_window_extent(renderer=renderer).width,
+                fig.get_window_extent(renderer=renderer).height,
             )
 
             if "lower" in legend_loc:

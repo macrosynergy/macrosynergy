@@ -6,9 +6,7 @@ from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
-import seaborn as sns
 
-from macrosynergy import PYTHON_3_8_OR_LATER
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.visuals import Heatmap
 
@@ -58,7 +56,6 @@ def view_grades(
         sdate = df["real_date"].min().strftime("%Y-%m-%d")
         title = f"Average grade of vintages since {sdate}"
         
-    # if PYTHON_3_8_OR_LATER:
     heatmap.plot_metric(
         x_axis_column="cid",
         y_axis_column="xcat",
@@ -73,17 +70,6 @@ def view_grades(
         show_annotations=True,
         show_boundaries=True,
     )
-    # else:
-    #     sns.heatmap(
-    #         heatmap.df,
-    #         cmap="YlOrBr",
-    #         annot=True,
-    #         fmt=".1f",
-    #         linewidths=0.5,
-    #         cbar=False,
-    #         xticklabels=True,
-    #         yticklabels=True,
-    #     )
 
 
 if __name__ == "__main__":

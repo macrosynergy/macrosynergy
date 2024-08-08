@@ -1,1 +1,0 @@
-"""DataQuery integration tests"""

@@ -483,7 +483,6 @@ def sparse_to_dense(
         start=min_period,
         end=max_period,
         freq="B",
-        # inclusive="both",
     )
 
     tdf = _get_metric_df_from_isc(isc=isc, metric=value_column, date_range=dtrange)
@@ -590,7 +589,6 @@ def temporal_aggregator_period(
         start=start,
         end=end,
         freq="B",
-        # inclusive="both"
     )
     tdf: pd.DataFrame = _get_metric_df_from_isc(
         isc=isc,
