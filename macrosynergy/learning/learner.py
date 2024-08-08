@@ -104,7 +104,7 @@ class BasePanelLearner:
         self,
         name,
         outer_splitter,
-        inner_splitters, # List of splitters for hyperparameter tuning
+        inner_splitters,
         models,
         hyperparameters,
         scorers, # List or string of scorers, not metrics
@@ -114,6 +114,7 @@ class BasePanelLearner:
         use_variance_correction = False, 
         n_jobs_outer = -1,
         n_jobs_inner = 1,
+        strategy_eval_periods = None,
     ):
         """
         Run a learning process over the panel. 
@@ -121,20 +122,20 @@ class BasePanelLearner:
         Parameters
         ----------
         name : str
-            Category name of the learning process. 
+            Category name for the forecasted panel resulting from the learning process. 
 
-        outer_splitter : Union[ExpandingIncrementPanelSplit, ExpandingFrequencyPanelSplit]
+        outer_splitter : WalkForwardPanelSplit
             Outer splitter for the learning process. This should be an instance of
-            either ExpandingIncrementPanelSplit or ExpandingFrequencyPanelSplit.
+            WalkForwardPanelSplit. 
 
-        inner_splitters : Union[BasePanelSplit, List[BasePanelSplit]]
+        inner_splitters : Union[BaseCrossValidator, List[BaseCrossValidator]]
             Inner splitters for the learning process. These should be instances of 
-            BasePanelSplit.
+            BaseCrossValidator. 
 
         models : Dict[str, Union[BaseEstimator, List[BaseEstimator]]]
             Dictionary of named models to be used/selected between in the learning
             process. The keys are the names of the models, and the values are scikit-learn
-            compatible models, possibly a PipeLine object. 
+            compatible models, possibly a Pipeline object. 
 
         hyperparameters : Dict[str, Union[Dict[str, List], Callable]]
             Dictionary of hyperparameters to be used in the learning process. The keys are
@@ -143,7 +144,7 @@ class BasePanelLearner:
             Bayesian search.
 
         scorers : Union[Callable, List[Callable]]
-            Scorer(s) to be used in the learning process. These should be functions that 
+            Scorer(s) to be used for cross-validation. These should be functions that 
             accept an already-fitted estimator, an input matrix `X_test` and a target vector
             `y_test`, and return a scalar score. To convert a `scikit-learn` metric to a scorer,
             please use the `make_scorer` function in `sklearn.metrics`.
@@ -160,7 +161,7 @@ class BasePanelLearner:
             Dictionary of changepoints for the number of splits in inner cross-validation 
             splitters. Keys are real dates and values are integers. Default is None. 
 
-        use_variance_correction : bool
+        use_variance_correction : Union[bool, List[bool]]
             Boolean indicating whether or not to take into account variance across splits
             in the hyperparameter and model selection process in cross-validation. 
             Default is False.
@@ -172,6 +173,12 @@ class BasePanelLearner:
         n_jobs_inner : int
             Number of jobs to run in parallel for the inner loop in the nested 
             cross-validation. Default is 1.
+
+        strategy_eval_periods : Optional[int]
+            Number of periods to adjust each training set to create an out-of-sample
+            hold-out set for value evaluation. If not None, then a thresholded z-score 
+            signal is created for each hyperparameter and model choice, and a Sharpe ratio
+            is computed and combined with a cross-validation score for model selection. 
         """
         # Checks 
         self._check_run(
@@ -208,6 +215,7 @@ class BasePanelLearner:
                     n_iter = n_iter,
                     splits_function = split_dictionary,
                     n_jobs_inner = n_jobs_inner,
+                    strategy_eval_periods = strategy_eval_periods,
                 )
                 for idx, (train_idx, test_idx) in enumerate(train_test_splits)
             ),
@@ -334,6 +342,3 @@ class BasePanelLearner:
             modelchoice_data,
             other_data,
         )
-
-
-    

@@ -83,6 +83,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         filtered_real_dates = real_dates[
             (real_dates >= cs_dates.min()) & (real_dates <= cs_dates.max())
         ]
+        # Differences may arise due to blacklisting
         difference = filtered_real_dates.difference(cs_dates)
 
         if len(difference) == 0:
@@ -164,7 +165,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
 
         # Determine ranges of contiguous dates in each training and test set, within each
         # cross-section and split.
-        operations = []
+        plot_components = []
         for cs_idx, cs in enumerate(cross_sections):
             for idx, split_idx in enumerate(split_idxs):
                 # Get the dates in the training and test sets for the given cross-section.
@@ -182,8 +183,8 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                     self._calculate_xranges(cs_test_dates, real_dates, freq_offset)
                 )
 
-                operations.append((cs_idx, idx, xranges_train, "royalblue", "Train"))
-                operations.append((cs_idx, idx, xranges_test, "lightcoral", "Test"))
+                plot_components.append((cs_idx, idx, xranges_train, "royalblue", "Train"))
+                plot_components.append((cs_idx, idx, xranges_test, "lightcoral", "Test"))
 
         # Calculate the difference between final two dates.
         # This will be added to the x-axis limits to ensure that the final split is visible.
@@ -192,7 +193,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         difference = last_date - second_to_last_date
 
         # Add all the broken bar plots to the figure.
-        for cs_idx, idx, xranges, color, label in operations:
+        for cs_idx, idx, xranges, color, label in plot_components:
             if len(cross_sections) == 1:
                 ax[idx].broken_barh(xranges, (-0.4, 0.8), facecolors=color, label=label)
                 ax[idx].set_xlim(real_dates.min(), real_dates.max() + difference)
