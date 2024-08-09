@@ -10,7 +10,7 @@ dynamic = ["version"]
 authors = [{ name = "Macrosynergy", email = "info@macrosynergy.com" }]
 readme = { file = "README.md", content-type = "text/markdown" } # file can be a list
 license = { file = "LICENSE" }
-requires-python = ">=3.8"
+requires-python = ">=3.7"
 dependencies = [
   "seaborn>=0.13.0",
   "matplotlib>=3.6.0",

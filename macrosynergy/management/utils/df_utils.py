@@ -17,6 +17,7 @@ from macrosynergy.management.utils.core import (
     _map_to_business_day_frequency,
     is_valid_iso_date,
 )
+from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY
 import functools
 
 IDX_COLS_SORT_ORDER = ["cid", "xcat", "real_date"]
@@ -383,7 +384,7 @@ def downsample_df_on_real_date(
         df.set_index("real_date")
         .groupby(groupby_columns)
         .resample(freq)
-        .agg(agg, numeric_only=True)
+        .agg(agg, **RESAMPLE_NUMERIC_ONLY)
         .reset_index()
     )
 
@@ -1062,7 +1063,8 @@ def merge_categories(df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: Li
     if not set(cids).issubset(df["cid"].unique()):
         raise ValueError("The cross sections must be present in the DataFrame.")
 
-    real_dates = list(df["real_date"].unique())
+    unique_dates = df['real_date'].unique()
+    real_dates = [pd.Timestamp(date) for date in unique_dates]
 
     def _get_values_for_xcat(real_dates, xcat_index, cid):
 

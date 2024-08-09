@@ -366,7 +366,8 @@ def validate_downloaded_df(
         if isinstance(data_df, QuantamentalDataFrame)
         else data_df.index.unique()
     )
-    dates_missing = list(set(dates_expected) - set(found_dates))
+
+    dates_missing = list(set(dates_expected) - set(pd.to_datetime(found_dates)))
     log_str = (
         "The expressions in the downloaded data are not a subset of the expected expressions."
         " Missing expressions: {missing_exprs}"

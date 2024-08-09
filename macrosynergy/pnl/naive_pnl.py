@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
+from macrosynergy import PYTHON_3_8_OR_LATER
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df, update_df
 from macrosynergy.panel.make_zn_scores import make_zn_scores
@@ -1309,18 +1310,19 @@ def create_results_dataframe(
     if sigs_renamed:
         res_df.rename(index=sigs_renamed, inplace=True)
 
-    res_df = (
-        res_df.style.format("{:.3f}")
-        .set_caption(title)
-        .set_table_styles(
-            [
-                {
-                    "selector": "caption",
-                    "props": [("text-align", "center"), ("font-weight", "bold")],
-                }
-            ]
+    if PYTHON_3_8_OR_LATER:
+        res_df = (
+            res_df.style.format("{:.3f}")
+            .set_caption(title)
+            .set_table_styles(
+                [
+                    {
+                        "selector": "caption",
+                        "props": [("text-align", "center"), ("font-weight", "bold")],
+                    }
+                ]
+            )
         )
-    )
 
     return res_df
 
