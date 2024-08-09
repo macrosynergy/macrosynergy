@@ -453,6 +453,90 @@ def contract_signals(
     return df_out
 
 
+def multi_signal_contract_signals(
+    df: QuantamentalDataFrame,
+    contract_dicts: dict[str, dict[str, Any]],
+    common_args: dict[str, Any],
+):
+    """
+    Calculate contract signals for multiple signal specifications. Each signal
+    specification is a dictionary with arguments for a call to `contract_signals()`. The
+    common arguments are passed to all calls. The dataframe is passed to all calls, and
+    should not be included in the dictionaries, or common arguments. Please see the
+    documentation for `contract_signals()` for more information on the arguments.
+    Note: when two (or more) of the arguments produce a series with the same name, each
+    new series will overwrite the previous one.
+
+    :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
+        columns: 'cid', 'xcat', 'real_date' and 'value'.
+    :param <dict[str, dict[str, Any]]> contract_dicts: dictionary of dictionaries
+        with arguments for each call to `contract_signals()`. The keys are the names
+        of the signal specifications.
+    :param <dict[str, Any]> common_args: dictionary with common arguments for all calls
+        to `contract_signals()`. These are passed to all calls, and should not be included
+        in the dictionaries in `contract_dicts`.
+
+    :return <QuantamentalDataFrame>: dataframe with the contract signals for all traded
+        contracts and the specified strategies. It has the standard JPMaQS DataFrame.
+        The contract signals have the following format "<cid>_<ctype>_<sname>_CSIG".
+    """
+    # Check that the types are correct
+    types_dict: dict = {
+        "sig": str,
+        "cids": list,
+        "ctypes": list,
+        "cscales": (list, NoneType),
+        "csigns": (list, NoneType),
+        "hbasket": (list, NoneType),
+        "hscales": (list, NoneType),
+        "hratios": (str, NoneType),
+        "relative_value": bool,
+        "start": (str, NoneType),
+        "end": (str, NoneType),
+        "blacklist": (dict, NoneType),
+        "sname": str,
+    }
+
+    type_error_msg: str = "{} must be <{}> not <{}>"
+    value_error_msg: str = "{} must not be an empty {}"
+    for k, v in common_args.items():
+        if not isinstance(v, types_dict[k]):
+            raise TypeError(type_error_msg.format(k, types_dict[k], type(v)))
+        if types_dict[k] in [list, str, dict] and len(v) == 0:
+            raise ValueError(value_error_msg.format(k, str(types_dict[k])))
+
+    type_error_msg = type_error_msg + " ; in arguments passed for {}"
+    value_error_msg = value_error_msg + " ; in arguments passed for {}"
+
+    for dict_name, dict_args in contract_dicts.items():
+        for k, v in dict_args.items():
+            if not isinstance(v, types_dict[k]):
+                raise TypeError(
+                    type_error_msg.format(k, types_dict[k], type(v), dict_name)
+                )
+            if types_dict[k] in [list, str, dict] and len(v) == 0:
+                raise ValueError(
+                    value_error_msg.format(k, str(types_dict[k]), dict_name)
+                )
+
+    # Calculate the contract signals for each signal specification
+    # Keep updating the dataframe with the new signals to allow signals to be used to
+    # generate other signals
+    # the awkward syntax **{**a, **b} is used to update left dict values with right dict values
+    # to avoid conflicts in the keys of the two dictionaries
+
+    df = pd.DataFrame()
+    for dict_args in contract_dicts.values():
+        df = pd.concat(
+            [
+                df,
+                contract_signals(df=df, **{**common_args, **dict_args}),
+            ],
+            axis=0,
+        )
+    return standardise_dataframe(df)
+
+
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_test_df
 
