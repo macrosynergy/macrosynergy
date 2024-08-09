@@ -1,5 +1,4 @@
 """
-
 Constants used throughout the package.
 
 Frequency Mappings

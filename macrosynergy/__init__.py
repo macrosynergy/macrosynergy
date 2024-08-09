@@ -21,7 +21,7 @@ __all__ = [
     "management",
     "signal",
     "learning",
-    "check_package_version"
+    "check_package_version",
 ]
 
 __name__ = ["__version__"]
