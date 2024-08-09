@@ -22,6 +22,7 @@ from macrosynergy.pnl.historic_portfolio_volatility import (
     _check_missing_data,
     _check_frequency,
     _check_input_arguments,
+    _get_first_usable_date,
     RETURN_SERIES_XCAT,
 )
 from macrosynergy.management.utils import (
@@ -403,9 +404,9 @@ class TestMisc(unittest.TestCase):
 class TestCalculatePortfolioVolatility(unittest.TestCase):
     def setUp(self):
         mkdf_args = dict(
-            cids=["USD", "EUR", "GBP", "JPY", "CHF"],
+            cids=["USD", "EUR", "GBP", "JPY", "CHF", "HUF"],
             xcats=["EQ"],
-            start="2020-01-01",
+            start="2010-01-01",
             end="2021-01-01",
         )
         _dft = make_test_df(**mkdf_args)
@@ -474,9 +475,28 @@ class TestCalculatePortfolioVolatility(unittest.TestCase):
     def test_calls(self):
         # test that estimate_variance_covariance is called N times
         rebal_dates = self.expected_rebal_dates(
-            self.good_args["pivot_returns"].index, self.good_args["rebal_freq"]
+            self.good_args["pivot_signals"].index, self.good_args["rebal_freq"]
         )
-        _call_count = len(self.good_args["est_freqs"]) * len(rebal_dates)
+        rebal_dates
+        fsts = _get_first_usable_date(
+            pivot_returns=self.good_args["pivot_returns"],
+            pivot_signals=self.good_args["pivot_signals"],
+            est_freqs=self.good_args["est_freqs"],
+            lback_periods=self.good_args["lback_periods"],
+            nan_tolerance=self.good_args["nan_tolerance"],
+            rebal_dates=rebal_dates,
+        )
+        # excl_dt_count = sum(
+        #     [len(fsts[fsts <= rd].index.tolist()) > 0 for rd in rebal_dates]
+        # )
+        # _call_count = len(self.good_args["est_freqs"]) * (
+        #     len(rebal_dates) - excl_dt_count
+        # )
+        _call_count = 0
+        for rd in rebal_dates:
+            if len(fsts[fsts <= rd].index.tolist()) > 0:
+                for freq in self.good_args["est_freqs"]:
+                    _call_count += 1
 
         with mock.patch(
             "macrosynergy.pnl.historic_portfolio_volatility.estimate_variance_covariance",

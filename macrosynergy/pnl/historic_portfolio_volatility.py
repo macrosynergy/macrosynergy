@@ -170,6 +170,125 @@ def get_max_lookback(lb: int, nt: float) -> int:
     return int(np.ceil(lb * (1 + nt))) if lb > 0 else 0
 
 
+def _calculate_multi_frequency_vcv_for_period(
+    pivot_returns: pd.DataFrame,
+    pivot_signals: pd.DataFrame,
+    rebal_date: pd.Timestamp,
+    est_freqs: List[str],
+    est_weights: List[float],
+    weights_func: Callable[[int, int], np.ndarray],
+    lback_periods: List[int],
+    half_life: List[int],
+    nan_tolerance: float,
+    remove_zeros: bool,
+) -> pd.DataFrame:
+
+    window_df = pivot_returns.loc[pivot_returns.index <= rebal_date]
+    dict_vcv: Dict[str, pd.DataFrame] = {}
+
+    for freq, lb, hl in zip(est_freqs, lback_periods, half_life):
+        piv_ret = _downsample_returns(window_df, freq=freq).iloc[
+            -get_max_lookback(lb=lb, nt=nan_tolerance) :
+        ]
+        dict_vcv[freq] = estimate_variance_covariance(
+            piv_ret=piv_ret,
+            lback_periods=lb,
+            remove_zeros=remove_zeros,
+            weights_func=weights_func,
+            half_life=hl,
+        )
+        # if dict_vcv[freq].isna().any().any():
+        #     raise ValueError(
+        #         f"N/A values in variance-covariance matrix at freq={freq} at real_date={rebal_date}!\n"
+        #         f"{dict_vcv[freq].isna().any()}"
+        #     )
+
+    # NOTE: in this case Float+NA = Na
+    vcv_df: pd.DataFrame = sum(
+        [
+            est_weights[ix] * ANNUALIZATION_FACTORS[freq] * dict_vcv[freq]
+            for ix, freq in enumerate(est_freqs)
+        ]
+    )
+
+    return vcv_df
+
+
+def _calc_vol_tuple(
+    vcv_df: pd.DataFrame,
+    signals: pd.DataFrame,
+    date: pd.Timestamp,
+    available_cids: List[str],
+) -> Tuple[pd.Timestamp, float]:
+
+    s = signals.loc[date, :].copy()
+
+    s = s.loc[available_cids]
+    vcv_df = vcv_df.loc[available_cids, available_cids]
+    if not set(s.index) == set(vcv_df.columns):
+        raise ValueError(
+            "Signals and variance-covariance matrix do not have the same columns."
+            f"\nSignals: {s.columns.tolist()}"
+            f"\nVariance-Covariance: {vcv_df.columns.tolist()}"
+        )
+
+    idx_mask = s.isna() | (s.abs() < 1e-6)
+    s.loc[idx_mask] = 0
+    vcv_df.loc[idx_mask, :] = 0
+    vcv_df.loc[:, idx_mask] = 0
+    assert not vcv_df.isna().any().any(), f"N/A values in variance-covariance matrix!\n"
+
+    pvol: float = np.sqrt(s.T.dot(vcv_df).dot(s))
+    return date, pvol
+
+
+def stack_covariances(
+    vcv_df: pd.DataFrame,
+    real_date: pd.Timestamp,
+) -> pd.DataFrame:
+    """Stack the covariance matrix DataFrame."""
+    return (
+        vcv_df.rename_axis("fid1", axis=0)
+        .rename_axis("fid2", axis=1)
+        .stack()
+        .to_frame("value")
+        .reset_index()
+        .assign(real_date=real_date)
+    )
+
+
+def _get_first_usable_date(
+    pivot_returns: pd.DataFrame,
+    pivot_signals: pd.DataFrame,
+    rebal_dates: pd.Series,
+    est_freqs: List[str],
+    lback_periods: List[int],
+    nan_tolerance: float,
+) -> pd.Series:
+    max_lb = 0
+    # for each frequency and lookback
+    for lb, est_freq in zip(lback_periods, est_freqs):
+        _max_lb = get_max_lookback(lb, nan_tolerance)
+        _max_lb = FFILL_LIMITS[est_freq] if _max_lb == 0 else _max_lb
+        max_lb = _max_lb if _max_lb > max_lb else max_lb
+
+    assert set(pivot_returns.columns.tolist()) == set(pivot_signals.columns.tolist())
+    pr_starts = {}
+    ps_starts = {}
+    for col in pivot_returns.columns.tolist():
+        # 'full' start date for returns - where the maximum lookback period is available
+        fstart_ret = pivot_returns[col].first_valid_index() + pd.offsets.BDay(max_lb)
+        fstart_sig = pivot_signals[col].first_valid_index() + pd.offsets.BDay(max_lb)
+        pr_starts[col] = rebal_dates[rebal_dates >= fstart_ret].min()
+        ps_starts[col] = rebal_dates[rebal_dates >= fstart_sig].min()
+
+    # get the later of the two start dates and return
+    return pd.Series(
+        {k: max(pr_starts[k], ps_starts[k]) for k in pr_starts.keys()},
+        name="real_date",
+    )
+
+
 def _calculate_portfolio_volatility(
     pivot_returns: pd.DataFrame,
     pivot_signals: pd.DataFrame,
@@ -195,8 +314,6 @@ def _calculate_portfolio_volatility(
 
     rebal_dates = get_sops(dates=pivot_signals.index, freq=rebal_freq)
 
-    signals = pivot_signals.loc[rebal_dates, :]
-
     # Returns batches
     logger.info(
         "Rebalance portfolio from %s to %s (%s times)",
@@ -205,74 +322,68 @@ def _calculate_portfolio_volatility(
         rebal_dates.shape[0],
     )
 
-    td = rebal_dates.iloc[-1]
+    # td = rebal_dates.iloc[-1]
 
     # TODO convert frequencies
     list_vcv: List[pd.DataFrame] = []
     list_pvol: List[Tuple[pd.Timestamp, np.float64]] = []
+    first_starts = _get_first_usable_date(
+        pivot_returns=pivot_returns,
+        pivot_signals=pivot_signals,
+        rebal_dates=rebal_dates,
+        est_freqs=est_freqs,
+        lback_periods=lback_periods,
+        nan_tolerance=nan_tolerance,
+    )
+
     for td in rebal_dates:
-        window_df = pivot_returns.loc[pivot_returns.index <= td]
-        dict_vcv: Dict[str, pd.DataFrame] = {
-            freq: estimate_variance_covariance(
-                piv_ret=_downsample_returns(window_df, freq=freq).iloc[
-                    -get_max_lookback(lb=lb, nt=nan_tolerance) :
-                ],
-                lback_periods=lb,
-                remove_zeros=remove_zeros,
-                weights_func=weights_func,
-                half_life=hl,
+        avails = first_starts[first_starts <= td].index.tolist()
+        if len(avails) == 0:
+            logger.warning(
+                f"No data available for {td} with lookback period of {max(lback_periods)} days."
             )
-            for freq, lb, hl in zip(est_freqs, lback_periods, half_life)
-        }
-
-        vcv_df: pd.DataFrame = sum(
-            [
-                est_weights[ix] * ANNUALIZATION_FACTORS[freq] * dict_vcv[freq]
-                for ix, freq in enumerate(est_freqs)
-            ]
-        )
-        # reshape and drop duplicates in vcv
-
-        list_vcv.append(
-            vcv_df.rename_axis("fid1", axis=0)
-            .rename_axis("fid2", axis=1)
-            .stack()
-            .to_frame("value")
-            .reset_index()
-            .assign(real_date=td)
+            continue
+        vcv_df = _calculate_multi_frequency_vcv_for_period(
+            pivot_returns=pivot_returns[avails],
+            pivot_signals=pivot_signals[avails],
+            rebal_date=td,
+            est_freqs=est_freqs,
+            est_weights=est_weights,
+            weights_func=weights_func,
+            lback_periods=lback_periods,
+            half_life=half_life,
+            nan_tolerance=nan_tolerance,
+            remove_zeros=remove_zeros,
         )
 
-        # TODO adjust for signal zero or N/A
-        s = signals.loc[td, :]
-        mask: pd.Series = s.isnull() | (s.abs() < 1e-8)
-        vcv_df.loc[s.index[mask], :] = 0
-        vcv_df.loc[:, s.index[mask]] = 0
-        s[mask] = 0
-        assert (
-            vcv_df.isnull().sum().sum() == 0
-        ), f"N/A values in variance-covariance matrix!\n{vcv_df}"
-
-        pvol: float = np.sqrt(s.T.dot(vcv_df).dot(s))
-        list_pvol.append((td, pvol))
+        list_vcv.append(stack_covariances(vcv_df=vcv_df, real_date=td))
+        vol_tuple = _calc_vol_tuple(
+            vcv_df=vcv_df,
+            # signals=signals,
+            signals=pivot_signals,
+            date=td,
+            available_cids=avails,
+        )
+        list_pvol.append(vol_tuple)
 
     pvol = pd.DataFrame(
         list_pvol,
         columns=["real_date", portfolio_return_name],
     ).set_index("real_date")
 
-    vcv_df = pd.concat(list_vcv, axis=0)  # add to cls.vcv
+    vcv_df_long = pd.concat(list_vcv, axis=0)  # add to cls.vcv
 
-    vcv_df["helper"] = vcv_df[["fid1", "fid2", "real_date"]].apply(
+    vcv_df_long["helper"] = vcv_df_long[["fid1", "fid2", "real_date"]].apply(
         func=(lambda x: "-".join(sorted([x["fid1"], x["fid2"]])) + str(x["real_date"])),
         axis=1,
     )
-    vcv_df = (
-        vcv_df.drop_duplicates(subset=["helper"])
+    vcv_df_long = (
+        vcv_df_long.drop_duplicates(subset=["helper"])
         .drop(columns=["helper"])
         .reset_index(drop=True)
     )
 
-    return pvol, vcv_df
+    return pvol, vcv_df_long
 
 
 def _hist_vol(
@@ -749,9 +860,6 @@ if __name__ == "__main__":
         end=end,
         return_variance_covariance=False,
     )
-
-    expc_idx = pd.Timestamp("2019-04-26")
-    assert df_copy_vol.max()["real_date"] == expc_idx  # np.seed is 42
 
     # print(df_copy_vol.head(10))
     # print(df_copy_vol.tail(10))
