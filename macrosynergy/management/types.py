@@ -43,8 +43,12 @@ class QuantamentalDataFrameMeta(type):
             result = result and len(instance.columns) > len(IDX_COLS)
             result = result and len(instance.columns) == len(set(instance.columns))
 
+            datetypestr = str(instance["real_date"].dtype)
+            _condA = datetypestr in ["datetime64[ns]", "datetime64[ms]"]
+            _condB = datetypestr.startswith("datetime64[") and datetypestr.endswith("]")
             correct_date_type: bool = (
-                instance["real_date"].dtype == "datetime64[ns]"
+                _condA
+                or _condB
                 or isinstance(instance["real_date"].dtype, pd.DatetimeTZDtype)
                 or instance.empty
             )
