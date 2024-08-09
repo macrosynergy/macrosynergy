@@ -3,18 +3,18 @@ A subclass inheriting from `macrosynergy.visuals.plotter.Plotter`,
 designed to plot time series data as a heatmap.
 """
 
-import pandas as pd
-from typing import List, Tuple, Optional
+from numbers import Number
+from typing import List, Optional, Tuple, Union
+
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from seaborn.utils import relative_luminance
-import matplotlib as mpl
-from typing import Union
-from macrosynergy.management.utils import downsample_df_on_real_date
 
-from macrosynergy.visuals.plotter import Plotter
-from numbers import Number
 from macrosynergy.management.simulate import make_test_df
+from macrosynergy.management.utils import downsample_df_on_real_date
+from macrosynergy.visuals.plotter import Plotter
 
 
 class Heatmap(Plotter):
@@ -310,11 +310,11 @@ class Heatmap(Plotter):
 
         if "real_date" not in [x_axis_column, y_axis_column]:
             df = df.groupby(["xcat", "cid"]).mean().reset_index()
+        else:
+            df["real_date"] = df["real_date"].dt.strftime("%Y-%m-%d")
 
         vmax: float = max(1, df[metric].max())
         vmin: float = min(0, df[metric].min())
-
-        df["real_date"] = df["real_date"].dt.strftime("%Y-%m-%d")
 
         df = df.pivot_table(index=y_axis_column, columns=x_axis_column, values=metric)
 

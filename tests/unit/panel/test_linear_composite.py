@@ -474,10 +474,11 @@ class TestAll(unittest.TestCase):
         rdf: pd.DataFrame = linear_composite(
             df=dfd, cids=_cids, xcats=_xcat, complete_cids=True, weights=_weights
         )
-        # chekc that all the dates in the input are there in the output, cast to pd.Timestamp
+                
+        # check that all the dates in the input are there in the output, cast to pd.Timestamp
         self.assertTrue(
             set(rdf["real_date"].unique().tolist())
-            == set(pd.to_datetime(dfd["real_date"].unique().tolist()))
+            == set(dfd["real_date"].unique().tolist())
         )
         interesting_dates: List[str] = ["2000-01-17", "2000-01-18", "2000-01-19"]
         # with complete_cids=True, 2000-01-17 to 2000-01-19 should be nan
