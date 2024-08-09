@@ -34,7 +34,7 @@ runs:
       if: steps.cache.outputs.cache-hit != 'true' && startsWith(inputs.python-version, '3.7')
       run: |
         pip install . --no-deps
-        pip install -r requirements-py37.txt
+        pip install -r tests/requirements-py37.txt
         pip uninstall -y macrosynergy
         # No explicit caching step is needed as the cache action takes care of this 
 
