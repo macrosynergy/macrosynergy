@@ -2,9 +2,10 @@
 Functions for visualizing data grading and blacklisted periods from a quantamental 
 DataFrame.
 """
+from typing import List, Tuple
+
 import numpy as np
 import pandas as pd
-from typing import List, Tuple
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.visuals import Heatmap
@@ -54,7 +55,7 @@ def view_grades(
     if title is None:
         sdate = df["real_date"].min().strftime("%Y-%m-%d")
         title = f"Average grade of vintages since {sdate}"
-
+        
     heatmap.plot_metric(
         x_axis_column="cid",
         y_axis_column="xcat",
