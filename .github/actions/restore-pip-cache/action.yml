@@ -29,10 +29,19 @@ runs:
         restore-keys: |
           ${{ runner.os }}-pip-
 
-    - name: Install dependencies if cache was not found
+    - name: Install dependencies if cache was not found (Python 3.7)
       shell: bash
-      if: steps.cache.outputs.cache-hit != 'true'
+      if: steps.cache.outputs.cache-hit != 'true' && startsWith(inputs.python-version, '3.7')
+      run: |
+        pip install . --no-deps
+        pip install -r requirements-py37.txt
+        pip uninstall -y macrosynergy
+        # No explicit caching step is needed as the cache action takes care of this 
+
+    - name: Install dependencies if cache was not found (Python >= 3.8)
+      shell: bash
+      if: steps.cache.outputs.cache-hit != 'true' && !startsWith(inputs.python-version, '3.7')
       run: |
         pip install .[all]
-        pip uninstall -y macrosynergy 
+        pip uninstall -y macrosynergy
         # No explicit caching step is needed as the cache action takes care of this

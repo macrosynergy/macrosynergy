@@ -15,10 +15,10 @@ from typing import (
     Tuple,
     Type,
     Union,
-    
 )
-import sys
-if sys.version_info >= (3, 8):
+
+from macrosynergy import PYTHON_3_8_OR_LATER
+if PYTHON_3_8_OR_LATER:
     from typing import get_args, get_origin
 else:
     from typing_extensions import get_args, get_origin
