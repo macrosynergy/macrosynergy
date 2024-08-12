@@ -70,6 +70,90 @@ def _get_diff_data(
     return df_temp
 
 
+def _load_isc_from_df(
+    df: pd.DataFrame,
+    ticker: str,
+    value_column: str = "value",
+    eop_column: str = "eop",
+    grading_column: str = "grading",
+    real_date_column: str = "real_date",
+) -> pd.DataFrame:
+
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("`df` must be a DataFrame")
+    if not isinstance(ticker, str):
+        raise ValueError("`ticker` must be a string")
+    if not set([value_column, eop_column, grading_column, real_date_column]).issubset(
+        df.columns
+    ):
+        dx = {
+            var_str: eval(var_str)
+            for var_str in [
+                "value_column",
+                "eop_column",
+                "grading_column",
+                "real_date_column",
+            ]
+        }
+        raise ValueError(
+            "`df` must contain columns specified in `value_column`, `eop_column`,"
+            f" `grading_column` and `real_date_column`.\n"
+            f"Args: {dx}"
+            f"Columns: {df.columns}"
+        )
+    df_temp = (
+        df[[real_date_column, value_column, eop_column, grading_column]]
+        .copy()
+        .sort_index()
+        .reset_index()
+    )
+    df_temp["count"] = df_temp.index
+    df_temp = pd.merge(
+        left=df_temp,
+        right=df_temp.groupby([eop_column], as_index=False)["count"].min(),
+        on=[eop_column],
+        how="outer",
+        suffixes=(None, "_min"),
+    )
+
+    df_temp["version"] = df_temp["count"] - df_temp["count_min"]
+    df_temp["diff"] = df_temp[value_column].diff(periods=1)
+    df_temp = df_temp.set_index(real_date_column)[
+        [value_column, eop_column, "version", grading_column, "diff"]
+    ]
+
+    # check if the grading is a number type
+    if not pd.api.types.is_numeric_dtype(df_temp[grading_column]):
+        # cast the grading to a float
+        df_temp[grading_column] = df_temp[grading_column].astype(float)
+    if any(df_temp[grading_column] > 3):
+        # divide the grading by 10
+        df_temp[grading_column] = df_temp[grading_column] / 10
+    if any(1 > df_temp[grading_column]) or any(df_temp[grading_column] > 3):
+        raise ValueError(
+            "Grading values must be between 1.0 and 3.0 (incl.),"
+            " or integers between 10 and 30"
+        )
+
+    return df_temp
+
+def _get_diff_density_stats_from_df(
+    isc_df: pd.DataFrame,
+) -> Dict[str, Union[float, str]]:
+    """
+    Get the density stats for a given ticker from a DataFrame with the changes in the
+    information state.
+
+    :param <pd.DataFrame> isc_df: A DataFrame with the changes in the information state.
+    :return: A dictionary with the density stats.
+    """
+    diff_mask = isc_df["diff"].abs() > 1e-12
+    diff_density = 100 * diff_mask.sum() / (~isc_df["value"].isna()).sum()
+    fvi, lvi = isc_df["value"].first_valid_index(), isc_df["value"].last_valid_index()
+    dtrange_str = f"{fvi.strftime('%Y-%m-%d')} : {lvi.strftime('%Y-%m-%d')}"
+    return {"diff_density": diff_density, "date_range": dtrange_str}
+
+
 def _get_diff_density_stats(
     diff_mask: pd.Series, val_series: pd.Series, fvi: pd.Timestamp, lvi: pd.Timestamp
 ) -> Dict[str, Union[float, str]]:
