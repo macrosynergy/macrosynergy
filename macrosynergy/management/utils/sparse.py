@@ -137,6 +137,7 @@ def _load_isc_from_df(
 
     return df_temp
 
+
 def _get_diff_density_stats_from_df(
     isc_df: pd.DataFrame,
 ) -> Dict[str, Union[float, str]]:
@@ -797,6 +798,26 @@ class InformationStateChanges(object):
     def __repr__(self):
         return repr(self.isc_dict)
 
+    def __add__(self, other):
+        if not isinstance(other, InformationStateChanges):
+            raise TypeError(
+                "Unsupported operand type(s) for +: 'InformationStateChanges' and {}".format(
+                    type(other)
+                )
+            )
+        new_isc = InformationStateChanges(
+            min_period=self._min_period, max_period=self._max_period
+        )
+        sameticks = sorted(set(self.keys()).intersection(set(other.keys())))
+        if len(sameticks) > 0:
+            raise ValueError(
+                "Tickers overlap between the two "
+                "InformationStateChanges, cannot overwrite data.\n"
+                "Overlap: {}".format(sameticks)
+            )
+        new_isc.isc_dict = {**self.isc_dict, **other.isc_dict}
+        return new_isc
+
     def keys(self):
         """
         A list of tickers in the InformationStateChanges object.
@@ -817,7 +838,10 @@ class InformationStateChanges(object):
 
     @classmethod
     def from_qdf(
-        cls, qdf: QuantamentalDataFrame, norm: bool = True, **kwargs
+        cls: "InformationStateChanges",
+        qdf: QuantamentalDataFrame,
+        norm: bool = True,
+        **kwargs,
     ) -> "InformationStateChanges":
         """
         Create an InformationStateChanges object from a QuantamentalDataFrame.
@@ -830,11 +854,60 @@ class InformationStateChanges(object):
         :return: An InformationStateChanges object.
         """
 
-        isc = cls(min_period=qdf["real_date"].min(), max_period=qdf["real_date"].max())
+        isc: InformationStateChanges = cls(
+            min_period=qdf["real_date"].min(), max_period=qdf["real_date"].max()
+        )
         isc_dict, density_stats_df = create_delta_data(qdf, return_density_stats=True)
 
         isc.isc_dict = isc_dict
         isc.density_stats_df = density_stats_df
+
+        if norm:
+            isc.calculate_score(**kwargs)
+
+        return isc
+
+    @classmethod
+    def from_isc_df(
+        cls: "InformationStateChanges",
+        df: pd.DataFrame,
+        ticker: str,
+        value_column: str = "value",
+        eop_column: str = "eop",
+        grading_column: str = "grading",
+        real_date_column: str = "real_date",
+        norm: bool = True,
+        **kwargs,
+    ) -> "InformationStateChanges":
+        """
+        Create an InformationStateChanges object from a DataFrame.
+
+        :param <pd.DataFrame> df: The DataFrame to create the InformationStateChanges object from.
+        :param <str> ticker: The ticker to create the InformationStateChanges object for.
+        :param <str> value_column: The name of the column to use as the value.
+        :param <str> eop_column: The name of the column to use as the end of period date.
+        :param <str> grading_column: The name of the column to use as the grading.
+        :param <str> real_date_column: The name of the column to use as the real date.
+        :return: An InformationStateChanges object.
+        """
+
+        isc_df: pd.DataFrame = _load_isc_from_df(
+            df=df,
+            ticker=ticker,
+            value_column=value_column,
+            eop_column=eop_column,
+            grading_column=grading_column,
+            real_date_column=real_date_column,
+        )
+        isc_dict = {ticker: isc_df}
+        density_stats_df = _get_diff_density_stats_from_df(isc_df)
+        minx = isc_df["value"].first_valid_index()
+        maxx = isc_df["value"].last_valid_index()
+        isc = cls(min_period=minx, max_period=maxx)
+        setattr(isc, "isc_dict", isc_dict)
+        setattr(isc, "density_stats_df", density_stats_df)
+        assert isinstance(isc, InformationStateChanges)
+        assert len(isc.isc_dict) == 1
 
         if norm:
             isc.calculate_score(**kwargs)
@@ -1031,3 +1104,16 @@ class InformationStateChanges(object):
             volatility_forecast=volatility_forecast,
         )
         return self
+
+
+if __name__ == "__main__":
+    # C:\Users\PalashTyagi\Code\jpmaqs-isc-git\jpmaqs-iscs/INR_HPI_SA_P1Q1QL4.csv --load this file
+
+    df = pd.read_csv(
+        "./jpmaqs-isc-git/jpmaqs-iscs/INR_HPI_SA_P1Q1QL4.csv",
+        parse_dates=["real_date", "eop"],
+        date_format="%Y%m%d",
+    )
+    ticker = "INR_HPI_SA_P1Q1QL4"
+    isc = InformationStateChanges.from_isc_df(df, ticker=ticker, iis=True)
+    print(isc)
