@@ -17,7 +17,7 @@ from .transformers import (
     PanelStandardScaler,
     FeatureAverager,
 )
-from .metrics import (
+from .model_evaluation import (
     neg_mean_abs_corr,
     panel_significance_probability,
     sharpe_ratio,
