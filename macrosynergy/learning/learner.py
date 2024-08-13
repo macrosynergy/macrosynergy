@@ -157,7 +157,7 @@ class BasePanelLearner:
         n_iter : int
             Number of iterations for random or bayes search. Default is 100.
 
-        splits_function : Optional[dict]
+        splits_dictionary : Optional[dict]
             Dictionary of changepoints for the number of splits in inner cross-validation 
             splitters. Keys are real dates and values are integers. Default is None. 
 
@@ -213,7 +213,7 @@ class BasePanelLearner:
                     use_variance_correction = use_variance_correction,
                     search_type = search_type,
                     n_iter = n_iter,
-                    splits_function = split_dictionary,
+                    splits_dictionary = split_dictionary,
                     n_jobs_inner = n_jobs_inner,
                     strategy_eval_periods = strategy_eval_periods,
                 )
@@ -236,7 +236,7 @@ class BasePanelLearner:
         use_variance_correction,
         search_type,
         n_iter,
-        splits_function,
+        splits_dictionary,
         n_jobs_inner,
     ):
         """
@@ -274,7 +274,7 @@ class BasePanelLearner:
         optim_model = None
         optim_score = -np.inf
 
-        optim_name, optim_model, optim_score, optim_params, n_splits  = self._hyperparameter_search(
+        optim_name, optim_model, optim_score, optim_params, n_splits  = self._model_search(
             X_train = X_train,
             y_train = y_train,
             inner_splitters = inner_splitters,
@@ -283,7 +283,7 @@ class BasePanelLearner:
             scorers = scorers,
             search_type = search_type,
             n_iter = n_iter,
-            splits_function = splits_function,
+            splits_dictionary = splits_dictionary,
             use_variance_correction = use_variance_correction,
             n_jobs_inner = n_jobs_inner,
         )
@@ -330,7 +330,7 @@ class BasePanelLearner:
                 int(n_splits),
             ]
 
-            # Store other information
+            # Store other information - inherited classes can specify this method to store coefficients, intercepts etc if needed
             other_data: List[List] = self._extract_model_info(
                 name,
                 self.date_levels[train_idx],
@@ -342,3 +342,44 @@ class BasePanelLearner:
             modelchoice_data,
             other_data,
         )
+    
+    def _model_search(
+        self,
+        X_train,
+        y_train,
+        inner_splitters,
+        models,
+        hyperparameters,
+        scorers,
+        search_type,
+        n_iter,
+        splits_dictionary,
+        use_variance_correction,
+        n_jobs_inner,
+    ):
+        """
+        Returns optimal model, optimal hyperparameters, optimal validation score and
+        number of splits used in non-adaptive splitters. 
+        """
+        for model_name, model in models.items():
+            model_scores = {} # Dictionary {model names: score}
+            for splitter_name, splitter in inner_splitters.items():
+                splitter_scores = {} # Dictionary {splitter names: score}
+                for scorer_name, scorer in scorers.items():
+                    hparam_scores: np.array = self._hyperparameter_search(
+                        X_train = X_train,
+                        y_train = y_train,
+                        model = model,
+                        hyperparameters = hyperparameters[model_name],
+                        inner_splitter = splitter,
+                        scorer = scorer,
+                        search_type = search_type,
+                        n_iter = n_iter,
+                        splits_dictionary = splits_dictionary,
+                        use_variance_correction = use_variance_correction,
+                        n_jobs_inner = n_jobs_inner,
+                    )
+
+
+
+    
