@@ -1107,13 +1107,12 @@ class InformationStateChanges(object):
 
 
 if __name__ == "__main__":
-    # C:\Users\PalashTyagi\Code\jpmaqs-isc-git\jpmaqs-iscs/INR_HPI_SA_P1Q1QL4.csv --load this file
 
     df = pd.read_csv(
-        "./jpmaqs-isc-git/jpmaqs-iscs/INR_HPI_SA_P1Q1QL4.csv",
+        "./data/df.csv",
         parse_dates=["real_date", "eop"],
         date_format="%Y%m%d",
     )
-    ticker = "INR_HPI_SA_P1Q1QL4"
+    ticker = "TICKER"
     isc = InformationStateChanges.from_isc_df(df, ticker=ticker, iis=True)
     print(isc)
