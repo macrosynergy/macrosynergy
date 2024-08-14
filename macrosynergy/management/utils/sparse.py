@@ -128,7 +128,7 @@ def _load_isc_from_df(
         df_temp.loc[:, grading_column] = df_temp[grading_column].astype(float)
     if any(df_temp[grading_column] > 3):
         # divide the grading by 10
-        df_temp.loc[:, grading_column] = df_temp[grading_column] / 10
+        df_temp.loc[:, grading_column] = df_temp[grading_column] / 10.0
     if any(1 > df_temp[grading_column]) or any(df_temp[grading_column] > 3):
         raise ValueError(
             "Grading values must be between 1.0 and 3.0 (incl.),"
