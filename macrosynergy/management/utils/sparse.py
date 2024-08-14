@@ -116,19 +116,20 @@ def _load_isc_from_df(
         suffixes=(None, "_min"),
     )
 
+    # force all columns to be float
+    df_temp.loc[:, value_column] = df_temp.loc[:, value_column].astype(float)
+    df_temp.loc[:, grading_column] = df_temp.loc[:, grading_column].astype(float)
+
     df_temp["version"] = df_temp["count"] - df_temp["count_min"]
     df_temp["diff"] = df_temp[value_column].diff(periods=1)
     df_temp = df_temp.set_index(real_date_column)[
         [value_column, eop_column, "version", grading_column, "diff"]
     ]
 
-    # check if the grading is a number type
-    if not pd.api.types.is_numeric_dtype(df_temp[grading_column]):
-        # cast the grading to a float
-        df_temp.loc[:, grading_column] = df_temp[grading_column].astype(float)
     if any(df_temp[grading_column] > 3):
-        # divide the grading by 10
-        df_temp.loc[:, grading_column] = df_temp[grading_column] / 10.0
+        df_temp.loc[:, grading_column] = (
+            df_temp.loc[:, grading_column].astype(float) / 10.0
+        )
     if any(1 > df_temp[grading_column]) or any(df_temp[grading_column] > 3):
         raise ValueError(
             "Grading values must be between 1.0 and 3.0 (incl.),"
@@ -1109,10 +1110,11 @@ class InformationStateChanges(object):
 if __name__ == "__main__":
 
     df = pd.read_csv(
-        "./data/df.csv",
+        
+        r"C:\Users\PalashTyagi\Code\jpmaqs-datastore\.dockervolume\jpmaqs-data\jpmaqs-isc-dir\jpmaqs-iscs\TRY_CTOT_NSA_PI.csv",
         parse_dates=["real_date", "eop"],
         date_format="%Y%m%d",
     )
-    ticker = "TICKER"
+    ticker = "TRY_CTOT_NSA_PI"
     isc = InformationStateChanges.from_isc_df(df, ticker=ticker, iis=True)
     print(isc)
