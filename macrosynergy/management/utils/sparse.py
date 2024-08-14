@@ -786,7 +786,7 @@ class InformationStateChanges(object):
         self._min_period: pd.Timestamp = min_period
         self._max_period: pd.Timestamp = max_period
 
-    def __getitem__(self, item):
+    def __getitem__(self, item) -> pd.DataFrame:
         return self.isc_dict[item]
 
     def __setitem__(self, key, value):
