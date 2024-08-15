@@ -1,11 +1,11 @@
 from . import predictors
 
 from .splitters import (
-    #ExpandingKFoldPanelSplit,
+    ExpandingKFoldPanelSplit,
     #RollingKFoldPanelSplit,
     ExpandingIncrementPanelSplit,
     #ExpandingFrequencyPanelSplit,
-    BasePanelSplit,
+    # BasePanelSplit,
 )
 from .cv_tools import panel_cv_scores
 from .transformers import (

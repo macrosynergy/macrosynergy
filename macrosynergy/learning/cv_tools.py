@@ -9,10 +9,10 @@ import pandas as pd
 import datetime
 from typing import Union, Optional, Dict
 
-from macrosynergy.learning.splitters import (
-    BasePanelSplit,
-    #ExpandingKFoldPanelSplit,
-)
+# from macrosynergy.learning.splitters import (
+#     # BasePanelSplit,
+#     #ExpandingKFoldPanelSplit,
+# )
 from sklearn.model_selection import cross_validate
 from sklearn.metrics import make_scorer
 
@@ -20,7 +20,7 @@ from sklearn.metrics import make_scorer
 def panel_cv_scores(
     X: pd.DataFrame,
     y: Union[pd.DataFrame, pd.Series],
-    splitter: BasePanelSplit,
+    splitter,
     estimators: dict,
     scoring: dict,
     show_longbias: Optional[bool] = True,

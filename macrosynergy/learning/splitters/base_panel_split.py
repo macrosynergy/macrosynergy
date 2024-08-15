@@ -229,26 +229,26 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         plt.tight_layout()
         plt.show()
 
-    @abstractmethod
-    def _combine_Xy(self, X, y):
-        """
-        Combine the features and target variable into a single dataframe. This is
-        dependent on the specific splitter implementation and, consequently, the
-        implementation of the constructor.
+    # @abstractmethod
+    # def _combine_Xy(self, X, y):
+    #     """
+    #     Combine the features and target variable into a single dataframe. This is
+    #     dependent on the specific splitter implementation and, consequently, the
+    #     implementation of the constructor.
 
-        Parameters
-        ----------
-        X : pd.DataFrame
-            Pandas dataframe of features/quantamental indicators, multi-indexed by
-            (cross-section, date). The dates must be in datetime format. The
-            dataframe must be in wide format: each feature is a column.
-        y : pd.DataFrame
-            Pandas dataframe of target variable, multi-indexed by (cross-section, date).
-            The dates must be in datetime format.
+    #     Parameters
+    #     ----------
+    #     X : pd.DataFrame
+    #         Pandas dataframe of features/quantamental indicators, multi-indexed by
+    #         (cross-section, date). The dates must be in datetime format. The
+    #         dataframe must be in wide format: each feature is a column.
+    #     y : pd.DataFrame
+    #         Pandas dataframe of target variable, multi-indexed by (cross-section, date).
+    #         The dates must be in datetime format.
 
-        Returns
-        -------
-        Xy : pd.DataFrame
-            Combined dataframe of the features and the target variable.
-        """
-        pass
+    #     Returns
+    #     -------
+    #     Xy : pd.DataFrame
+    #         Combined dataframe of the features and the target variable.
+    #     """
+    #     pass

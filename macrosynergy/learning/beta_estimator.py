@@ -18,8 +18,8 @@ from tqdm.auto import tqdm
 
 from macrosynergy.learning.splitters import (
     BasePanelSplit,
-    #ExpandingFrequencyPanelSplit,
-    #ExpandingKFoldPanelSplit,
+    ExpandingFrequencyPanelSplit,
+    ExpandingKFoldPanelSplit,
     #neg_mean_abs_corr,
 )
 from macrosynergy.management import categories_df, reduce_df, update_df
@@ -478,7 +478,8 @@ class BetaEstimator:
         # estimates, calculate OOS hedged returns and store results
         train_test_splits = list(outer_splitter.split(X=self.X, y=self.y))
 
-        results = Parallel(n_jobs=n_jobs_outer)(
+        results = tqdm(
+            Parallel(n_jobs=n_jobs_outer)(
                 delayed(self._worker)(
                     train_idx=train_idx,
                     test_idx=test_idx,
@@ -499,8 +500,10 @@ class BetaEstimator:
                     ),
                     n_jobs_inner=n_jobs_inner,
                 )
-                for idx, (train_idx, test_idx) in tqdm(enumerate(train_test_splits),total=len(train_test_splits),)
-            )
+                for idx, (train_idx, test_idx) in enumerate(train_test_splits)
+            ),
+            total=len(train_test_splits),
+        )
 
         for beta_data, hedged_data, model_data in results:
             if beta_data != []:
