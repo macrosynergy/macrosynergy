@@ -5,7 +5,6 @@ Scikit-learn compatible performance metrics for model evaluation.
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
-import datetime
 
 from linearmodels.panel import RandomEffects
 
@@ -16,6 +15,7 @@ from typing import Union
 def regression_accuracy(
     y_true,
     y_pred,
+    type: str = "panel"
 ):
     """
     Accuracy of signs between regression labels and predictions. 
@@ -27,12 +27,26 @@ def regression_accuracy(
         True regression labels.
     y_pred : array-like of shape (n_samples,)
         Predicted regression labels.
+    type : str, default="panel"
+        The panel dimension over which to compute the accuracy. Options are "panel", 
+        "cross_section" and "time_periods".
 
     Returns
     -------
 
     accuracy : float
         The accuracy betweens signs of prediction-target pairs. 
+
+    Notes
+    -----
+    Accuracy can be calculated over the whole panel, considering all samples irrespective
+    of cross-section or time period. It can be beneficial, however, to compute accuracies
+    for each cross-section and average them, or equivalently for each time period. When
+    type = "cross_section", the reported accuracy is the mean accuray across
+    cross-sections, reflecting the ability of a model to be effective across all
+    cross-sections in the panel. When type = "time_periods", the reported accuracy is the
+    mean accuracy across time periods, reflecting the ability of a model to be effective
+    across all time periods/rebalancing dates in the panel.
     """
 
     return accuracy_score(y_true < 0, y_pred < 0)
@@ -124,6 +138,11 @@ def sharpe_ratio(
         Predicted regression labels.
     binary : bool, default=True
         Whether to consider only directional returns.
+
+    Returns
+    -------
+    sharpe_ratio : float
+        The Sharpe ratio of the strategy.
     """
     if binary:
         portfolio_returns = np.where(y_pred > 0, y_true, -y_true)
@@ -157,6 +176,11 @@ def sortino_ratio(
         Predicted regression labels.
     binary : bool, default=True
         Whether to consider only directional returns.
+
+    Returns
+    -------
+    sortino_ratio : float
+        The Sortino ratio of the strategy.
     """
     if binary:
         portfolio_returns = np.where(y_pred > 0, y_true, -y_true)
@@ -173,3 +197,37 @@ def sortino_ratio(
         sortino_ratio = average_return / denominator
 
     return sortino_ratio
+
+def correlation_coefficient(
+    y_true, 
+    y_pred,
+    correlation_type = "pearson",      
+):
+    """
+    Correlation coefficient between true and predicted regression labels.
+
+    Parameters
+    ----------
+    y_true : array-like of shape (n_samples,)
+        True regression labels.
+    y_pred : array-like of shape (n_samples,)
+        Predicted regression labels.
+    correlation_type : str, default="pearson"
+        The type of correlation coefficient to compute. Options are "pearson", "spearman"
+        and "kendall".
+
+    Returns
+    -------
+    correlation : float
+        The correlation coefficient between true and predicted regression labels.
+    """
+    if correlation_type == "pearson":
+        correlation = stats.pearsonr(y_true, y_pred)[0]
+    elif correlation_type == "spearman":
+        correlation = stats.spearmanr(y_true, y_pred)[0]
+    elif correlation_type == "kendall":
+        correlation = stats.kendalltau(y_true, y_pred)[0]
+    else:
+        raise ValueError("Invalid correlation type. Options are 'pearson', 'spearman' and 'kendall'.")
+    
+    return correlation
