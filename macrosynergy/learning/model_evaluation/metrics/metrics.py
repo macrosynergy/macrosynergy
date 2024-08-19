@@ -13,8 +13,6 @@ from sklearn.metrics import accuracy_score, balanced_accuracy_score
 
 from typing import Union
 
-# Regression accuracy 
-
 def regression_accuracy(
     y_true,
     y_pred,
@@ -39,8 +37,6 @@ def regression_accuracy(
 
     return accuracy_score(y_true < 0, y_pred < 0)
 
-# Regression balanced accuracy
-
 def regression_balanced_accuracy(
     y_true,
     y_pred,        
@@ -64,8 +60,6 @@ def regression_balanced_accuracy(
     """
     
     return balanced_accuracy_score(y_true < 0, y_pred < 0)
-
-# Macrosynergy panel test significance
 
 def panel_significance_probability(
     y_true,
@@ -113,82 +107,67 @@ def panel_significance_probability(
     
     return 1 - pval
 
-def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> float:
+def sharpe_ratio(
+    y_true,
+    y_pred,
+    binary = True,
+):
     """
-    Function to return a Sharpe ratio for a strategy where we go long if the predictions
-    are positive and short if the predictions are negative.
+    Sharpe ratio of a strategy where the trader goes long when the predictions are positive
+    and short when the predictions are negative. 
 
-    :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
-        multi-indexed by cross-section and date. The dates must be in datetime format.
-    :param <Union[pd.Series,np.ndarray]> y_pred: Either a pandas series or numpy array
-        of predicted targets. This must have the same length as y_true.
-
-    :return <float>: Sharpe ratio for the binary strategy.
+    Parameters
+    ----------
+    y_true : pd.Series of shape (n_samples,)
+        True regression labels.
+    y_pred : array-like of shape (n_samples,)
+        Predicted regression labels.
+    binary : bool, default=True
+        Whether to consider only directional returns.
     """
-
-    # checks
-    if not isinstance(y_true, pd.Series):
-        raise TypeError("y_true must be a pandas series")
-
-    if not isinstance(y_true.index, pd.MultiIndex):
-        raise ValueError("y_true must be multi-indexed.")
-
-    if not isinstance(y_true.index.get_level_values(1)[0], datetime.date):
-        raise TypeError("The inner index of y must be datetime.date.")
-
-    if not (len(y_true) == len(y_pred)):
-        raise ValueError("y_true and y_pred must have the same length.")
-
-    portfolio_returns = np.where(y_pred > 0, y_true, -y_true)
+    if binary:
+        portfolio_returns = np.where(y_pred > 0, y_true, -y_true)
+    else:
+        raise NotImplementedError("Non-binary Sharpe ratio not yet implemented.")
+     
     average_return = np.mean(portfolio_returns)
     std_return = np.std(portfolio_returns)
 
     if std_return == 0:
-        # Sklearn averages each metric over the CV splits.
-        # If the standard deviation is zero, the portfolio returns are constant.
-        # So we return zero to ignore this split in the average.
         sharpe_ratio = 0
     else:
         sharpe_ratio = average_return / std_return
 
     return sharpe_ratio
 
-
-def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.ndarray]) -> float:
+def sortino_ratio(
+    y_true,
+    y_pred,
+    binary = True,
+):
     """
-    Function to return a Sortino ratio for a strategy where we go long if the predictions
-    are positive and short if the predictions are negative.
+    Sortino ratio of a strategy where the trader goes long when the predictions are positive
+    and short when the predictions are negative. 
 
-    :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
-        multi-indexed by cross-section and date. The dates must be in datetime format.
-    :param <Union[pd.Series,np.ndarray]> y_pred: Either a pandas series or numpy array
-        of predicted targets. This must have the same length as y_true.
-
-    :return <float>: Sortino ratio for the binary strategy.
+    Parameters
+    ----------
+    y_true : pd.Series of shape (n_samples,)
+        True regression labels.
+    y_pred : array-like of shape (n_samples,)
+        Predicted regression labels.
+    binary : bool, default=True
+        Whether to consider only directional returns.
     """
+    if binary:
+        portfolio_returns = np.where(y_pred > 0, y_true, -y_true)
+    else:
+        raise NotImplementedError("Non-binary Sortino ratio not yet implemented.")
 
-    # checks
-    if not isinstance(y_true, pd.Series):
-        raise TypeError("y_true must be a pandas series")
-
-    if not isinstance(y_true.index, pd.MultiIndex):
-        raise ValueError("y_true must be multi-indexed.")
-
-    if not isinstance(y_true.index.get_level_values(1)[0], datetime.date):
-        raise TypeError("The inner index of y must be datetime.date.")
-
-    if not (len(y_true) == len(y_pred)):
-        raise ValueError("y_true and y_pred must have the same length.")
-
-    portfolio_returns = np.where(y_pred > 0, y_true, -y_true)
     negative_returns = portfolio_returns[portfolio_returns < 0]
     average_return = np.mean(portfolio_returns)
     denominator = np.sqrt(np.mean(negative_returns**2))
 
     if denominator == 0:
-        # Sklearn averages each metric over the CV splits.
-        # If the denominator is zero, the sortino ratio over this period is invalid.
-        # So we return zero to ignore this split in the average.
         sortino_ratio = 0
     else:
         sortino_ratio = average_return / denominator
