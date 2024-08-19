@@ -1027,6 +1027,11 @@ class SignalOptimizer:
             .set_index("real_date")
         )
 
+        # Sort dataframe columns in descending order of the number of times they were selected
+        ftr_count = selected_ftrs.sum().sort_values(ascending=False)
+        reindexed_columns = ftr_count.index
+        selected_ftrs = selected_ftrs[reindexed_columns]
+        
         # Create the heatmap
         plt.figure(figsize=figsize)
         if np.all(selected_ftrs == 1):
@@ -1112,6 +1117,7 @@ class SignalOptimizer:
         ]
 
         unique_models = chosen_models.model_hparam_id.unique()
+        unique_models = sorted(unique_models, key=lambda x: -model_counts[x])
         unique_dates = chosen_models.real_date.unique()
 
         # Fill in binary matrix denoting the selected model at each time
@@ -1368,6 +1374,11 @@ class SignalOptimizer:
         ftrcoef_df = ftrcoef_df.set_index("real_date")
         ftrcoef_df = ftrcoef_df.iloc[:, 1:]
 
+        # Sort dataframe columns in ascending order of the number of Na values in the columns
+        na_count = ftrcoef_df.isna().sum().sort_values()
+        reindexed_columns = na_count.index
+        ftrcoef_df = ftrcoef_df[reindexed_columns]
+        
         if ftrs is not None:
             ftrcoef_df = ftrcoef_df[ftrs]
         else:
@@ -1547,8 +1558,14 @@ class SignalOptimizer:
 
         # Reshape dataframe for plotting
         ftrcoef_df = self.get_ftr_coefficients(name)
-        ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
+        years = ftrcoef_df["real_date"].dt.year
+        years.name = "year"
         ftrcoef_df.drop(columns=["real_date", "name"], inplace=True)
+
+        # Sort dataframe columns in ascending order of the number of Na values in the columns
+        na_count = ftrcoef_df.isna().sum().sort_values()
+        reindexed_columns = na_count.index
+        ftrcoef_df = pd.concat((ftrcoef_df[reindexed_columns], years), axis=1)
 
         # Define colour map
         default_cycle_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"][:10]
@@ -1733,7 +1750,7 @@ if __name__ == "__main__":
     models = {
         "OLS": Pipeline(
             [
-                ("selector", MapSelector(threshold=0.2)),
+                ("selector", MapSelector(threshold=0.3)),
                 ("model", LinearRegression(fit_intercept=True)),
             ]
         ),
@@ -1787,7 +1804,7 @@ if __name__ == "__main__":
     models = {
         "OLS": Pipeline(
             [
-                # ("selector", MapSelector(threshold=0.2)),
+                ("selector", MapSelector(threshold=0.2)),
                 ("model", LADRegressionSystem(fit_intercept=True)),
             ]
         ),
