@@ -129,7 +129,7 @@ def regression_balanced_accuracy(
     if type == "panel":
         return balanced_accuracy_score(y_true < 0, y_pred < 0)
     
-    elif type == "cross-section":
+    elif type == "cross_section":
         balanced_accuracies = []
         unique_cross_sections = y_true.index.get_level_values(0).unique()
         for cross_section in unique_cross_sections:
@@ -378,7 +378,7 @@ def sortino_ratio(
     if type == "panel":
         negative_returns = portfolio_returns[portfolio_returns < 0]
         average_return = np.mean(portfolio_returns)
-        denominator = np.sqrt(np.mean(negative_returns**2))
+        denominator = np.std(negative_returns)
 
         if denominator == 0:
             sortino_ratio = 0
@@ -395,7 +395,7 @@ def sortino_ratio(
             cross_section_returns = portfolio_returns[cross_section_mask]
             negative_returns = cross_section_returns[cross_section_returns < 0]
             average_return = np.mean(cross_section_returns)
-            denominator = np.sqrt(np.mean(negative_returns**2))
+            denominator = np.std(negative_returns)
 
             if denominator == 0:
                 sortino_ratio = 0
@@ -414,7 +414,7 @@ def sortino_ratio(
             time_period_returns = portfolio_returns[time_period_mask]
             negative_returns = time_period_returns[time_period_returns < 0]
             average_return = np.mean(time_period_returns)
-            denominator = np.sqrt(np.mean(negative_returns**2))
+            denominator = np.std(negative_returns)
 
             if denominator == 0:
                 sortino_ratio = 0
