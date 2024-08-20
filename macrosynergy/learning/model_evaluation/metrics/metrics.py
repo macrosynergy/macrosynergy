@@ -187,6 +187,31 @@ def panel_significance_probability(
     concerned coefficient. Since the test requires a panel structure, the inputs are
     required to be pd.Series, multi-indexed by cross-section and real date. 
     """
+    # Checks
+    # y_true
+    if not isinstance(y_true, pd.Series):
+        raise TypeError("y_true must be a pd.Series")
+    if not y_true.index.nlevels == 2:
+        raise ValueError("y_true must be multi-indexed with two levels")
+    if not y_true.index.get_level_values(0).dtype == "object":
+        raise ValueError("y_true outer index must be strings")
+    if not y_true.index.get_level_values(1).dtype == "datetime64[ns]":
+        raise ValueError("y_true inner index must be datetime")
+    
+    # y_pred
+    if not isinstance(y_pred, pd.Series):
+        raise TypeError("y_pred must be a pd.Series")
+    if not y_pred.index.nlevels == 2:
+        raise ValueError("y_pred must be multi-indexed with two levels")
+    if not y_pred.index.get_level_values(0).dtype == "object":
+        raise ValueError("y_pred outer index must be strings")
+    if not y_pred.index.get_level_values(1).dtype == "datetime64[ns]":
+        raise ValueError("y_pred inner index must be datetime")
+    if len(y_true) != len(y_pred):
+        raise ValueError("y_true and y_pred must have the same length")
+    if not y_true.index.equals(y_pred.index):
+        raise ValueError("y_true and y_pred must have the same index")
+    
     # Convert cross-section labels to integer codes 
     unique_cross_sections = sorted(y_true.index.get_level_values(0).unique())
     cross_section_codes = dict(zip(unique_cross_sections, range(1, len(unique_cross_sections) + 1)))
