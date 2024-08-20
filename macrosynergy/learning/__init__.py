@@ -24,6 +24,7 @@ from .model_evaluation import (
     sortino_ratio,
     regression_accuracy,
     regression_balanced_accuracy,
+    correlation_coefficient,
 )
 from .signal_optimizer import SignalOptimizer
 
