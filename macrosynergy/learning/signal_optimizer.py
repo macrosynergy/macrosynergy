@@ -999,15 +999,21 @@ class SignalOptimizer:
     def feature_selection_heatmap(
         self,
         name: str,
+        remove_blanks: bool = True,
         title: Optional[str] = None,
+        cap: Optional[int] = None,
         figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
     ):
         """
         Method to visualise the selected features in a scikit-learn pipeline.
 
         :param <str> name: Name of the prediction model.
+        :param <bool> remove_blanks: Whether to remove features from the heatmap that were
+            never selected. Default is True.
         :param <Optional[str]> title: Title of the heatmap. Default is None. This creates
             a figure title of the form "Model Selection Heatmap for {name}".
+        :param <int> cap: Maximum number of features to display. Default is None. The chosen
+            features are the 'cap' most frequently occurring in the pipeline.
         :param <Optional[Tuple[Union[int, float], Union[int, float]]]> figsize: Tuple of
             floats or ints denoting the figure size. Default is (12, 8).
 
@@ -1029,6 +1035,11 @@ class SignalOptimizer:
 
         # Sort dataframe columns in descending order of the number of times they were selected
         ftr_count = selected_ftrs.sum().sort_values(ascending=False)
+        if remove_blanks:
+            ftr_count = ftr_count[ftr_count > 0]
+        if cap is not None:
+            ftr_count = ftr_count.head(cap)
+
         reindexed_columns = ftr_count.index
         selected_ftrs = selected_ftrs[reindexed_columns]
         
@@ -1467,6 +1478,7 @@ class SignalOptimizer:
         name: str,
         ftrs: List[str] = None,
         title: str = None,
+        cap: Optional[int] = None,
         ftrs_renamed: dict = None,
         figsize=(10, 6),
     ):
@@ -1482,6 +1494,9 @@ class SignalOptimizer:
         :param <Optional[List]> ftrs: List of feature names to plot. Default is None.
         :param <Optional[str]> title: Title of the plot. Default is None. This creates
             a figure title of the form "Stacked bar plot of model coefficients: {name}".
+        :param <int> cap: Maximum number of features to display. Default is None. The chosen
+            features are the 'cap' most frequently occurring in the pipeline. This cannot
+            exceed 10.
         :param <Optional[dict]> ftrs_renamed: Dictionary to rename the feature names for
             visualisation in the plot legend. Default is None, which uses the original
             feature names.
@@ -1552,6 +1567,13 @@ class SignalOptimizer:
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
+        if cap is not None:
+            if not isinstance(cap, int):
+                raise TypeError("The cap argument must be an integer.")
+            if cap <= 0:
+                raise ValueError("The cap argument must be greater than zero.")
+            if cap > 10:
+                raise ValueError("The cap argument must be no greater than 10.")
 
         # Set the style
         plt.style.use("seaborn-v0_8-darkgrid")
@@ -1566,7 +1588,8 @@ class SignalOptimizer:
         na_count = ftrcoef_df.isna().sum().sort_values()
         reindexed_columns = na_count.index
         ftrcoef_df = pd.concat((ftrcoef_df[reindexed_columns], years), axis=1)
-
+        if cap is not None:
+            ftrcoef_df = ftrcoef_df.head(cap)
         # Define colour map
         default_cycle_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"][:10]
         cmap = mcolors.LinearSegmentedColormap.from_list(
