@@ -187,9 +187,9 @@ def panel_significance_probability(
 
     # Create random effects model
     re = RandomEffects(y_true.swaplevel(), y_pred.swaplevel()).fit()
-    coef = re.params[y_pred.name]
-    zstat = coef / re.std_errors[y_pred.name]
-    pval = 2 * (1 - stats.norm.cdf(zstat))
+    coef = re.params.values[0]
+    zstat = coef / re.std_errors.values[0]
+    pval = 2 * (1 - stats.norm.cdf(abs(zstat)))
     
     return 1 - pval
 
