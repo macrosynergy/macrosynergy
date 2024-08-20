@@ -1587,9 +1587,11 @@ class SignalOptimizer:
         # Sort dataframe columns in ascending order of the number of Na values in the columns
         na_count = ftrcoef_df.isna().sum().sort_values()
         reindexed_columns = na_count.index
-        ftrcoef_df = pd.concat((ftrcoef_df[reindexed_columns], years), axis=1)
+        ftrcoef_df = ftrcoef_df[reindexed_columns]
         if cap is not None:
-            ftrcoef_df = ftrcoef_df.head(cap)
+            ftrcoef_df = ftrcoef_df.T.head(cap).T
+        ftrcoef_df = pd.concat((ftrcoef_df, years), axis=1)
+
         # Define colour map
         default_cycle_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"][:10]
         cmap = mcolors.LinearSegmentedColormap.from_list(
