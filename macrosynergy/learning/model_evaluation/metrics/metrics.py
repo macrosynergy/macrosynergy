@@ -48,6 +48,10 @@ def regression_accuracy(
     When type = "time_periods", the returned accuracy is the mean accuracy across time
     periods, an empirical estimate of the expected accuracy for a time period of interest.
     """
+    # Checks
+    _check_metric_params(y_true, y_pred, type)
+
+    # Compute accuracy
     if type == "panel":
         return accuracy_score(y_true < 0, y_pred < 0)
     
@@ -118,6 +122,10 @@ def regression_balanced_accuracy(
     accuracy across time periods, an empirical estimate of the expected
     balanced accuracy for a time period of interest.
     """
+    # Checks
+    _check_metric_params(y_true, y_pred, type)
+
+    # Compute balanced accuracy
     if type == "panel":
         return balanced_accuracy_score(y_true < 0, y_pred < 0)
     
@@ -235,6 +243,10 @@ def sharpe_ratio(
     time periods, an empirical estimate of the expected Sharpe ratio for a time period of
     interest.
     """
+    # Checks
+    _check_metric_params(y_true, y_pred, type)
+
+    # Compute Sharpe ratio
     if binary:
         portfolio_returns = np.where(y_pred > 0, y_true, -y_true)
     else:
@@ -329,6 +341,10 @@ def sortino_ratio(
     across time periods, an empirical estimate of the expected Sortino ratio for a time
     period of interest.
     """
+    # Checks
+    _check_metric_params(y_true, y_pred, type)
+
+    # Compute Sortino ratio
     if binary:
         portfolio_returns = np.where(y_pred > 0, y_true, -y_true)
     else:
@@ -423,6 +439,10 @@ def correlation_coefficient(
     coefficient across time periods, an empirical estimate of the expected correlation
     coefficient for a time period of interest.
     """
+    # Checks
+    _check_metric_params(y_true, y_pred, type)
+
+    # Compute correlation coefficient
     if type == "panel":
         if correlation_type == "pearson":
             correlation = stats.pearsonr(y_true, y_pred)[0]
@@ -468,3 +488,45 @@ def correlation_coefficient(
             correlations.append(correlation)
 
         return np.mean(correlations)
+    
+def _check_metric_params(
+    y_true, 
+    y_pred,
+    type,
+):
+    """
+    Generic input validation for model evaluation metrics.
+
+    Parameters
+    ----------
+    y_true : pd.Series of shape (n_samples,)
+        True regression labels.
+    y_pred : array-like of shape (n_samples,)
+        Predicted regression labels.
+    type : str
+        The panel dimension over which to compute the metric. Options are "panel",
+        "cross_section" and "time_periods".
+
+    Returns
+    -------
+    None
+    """
+    # y_true
+    if not isinstance(y_true, pd.Series):
+        raise TypeError("y_true must be a pd.Series")
+    if not y_true.index.nlevels == 2:
+        raise ValueError("y_true must be multi-indexed with two levels")
+    if not y_true.index.get_level_values(0).dtype == "object":
+        raise ValueError("y_true outer index must be strings")
+    if not y_true.index.get_level_values(1).dtype == "datetime64[ns]":
+        raise ValueError("y_true inner index must be datetime")
+    
+    # y_pred
+    if len(y_true) != len(y_pred):
+        raise ValueError("y_true and y_pred must have the same length")
+    
+    # type
+    if not isinstance(type, str):
+        raise TypeError("type must be a string")
+    if type not in ["panel", "cross_section", "time_periods"]:
+        raise ValueError("Invalid type. Options are 'panel', 'cross_section' and 'time_periods'")
