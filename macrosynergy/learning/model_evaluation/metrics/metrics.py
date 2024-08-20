@@ -23,7 +23,7 @@ def regression_accuracy(
     Parameters
     ----------
 
-    y_true : array-like of shape (n_samples,)
+    y_true : pd.Series of shape (n_samples,)
         True regression labels.
     y_pred : array-like of shape (n_samples,)
         Predicted regression labels.
@@ -48,8 +48,34 @@ def regression_accuracy(
     mean accuracy across time periods, reflecting the ability of a model to be effective
     across all time periods/rebalancing dates in the panel.
     """
+    if type == "panel":
+        return accuracy_score(y_true < 0, y_pred < 0)
+    elif type == "cross_section":
+        accuracies = []
+        unique_cross_sections = y_true.index.get_level_values(0).unique()
+        for cross_section in unique_cross_sections:
+            cross_section_mask = (y_true.index.get_level_values(0) == cross_section)
+            accuracies.append(
+                accuracy_score(
+                    y_true.values[cross_section_mask] < 0,
+                    y_pred[cross_section_mask] < 0
+                )
+            )
+        return np.mean(accuracies)
+    elif type == "time_periods":
+        accuracies = []
+        unique_time_periods = y_true.index.get_level_values(1).unique()
+        for time_period in unique_time_periods:
+            time_period_mask = (y_true.index.get_level_values(1) == time_period)
+            accuracies.append(
+                accuracy_score(
+                    y_true.values[time_period_mask] < 0,
+                    y_pred[time_period_mask] < 0
+                )
+            )
+        return np.mean(accuracies)
 
-    return accuracy_score(y_true < 0, y_pred < 0)
+
 
 def regression_balanced_accuracy(
     y_true,
