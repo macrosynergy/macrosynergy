@@ -61,7 +61,24 @@ class TestMetrics(unittest.TestCase):
         )
 
     def test_types_accuracy(self):
-        pass
+        # y_true
+        with self.assertRaises(TypeError):
+            regression_accuracy("hello", self.regressor_predictions)
+        with self.assertRaises(TypeError):
+            regression_accuracy(np.zeros(len(self.regressor_predictions)), self.regressor_predictions)
+        with self.assertRaises(ValueError):
+            regression_accuracy(self.regressor_predictions.reset_index(drop=True), self.regressor_predictions)
+        # y_pred
+        with self.assertRaises(TypeError):
+            regression_accuracy(self.regressor_true, "hello")
+        with self.assertRaises(ValueError):
+            regression_accuracy(self.regressor_true, self.regressor_predictions.head(5))
+        # type 
+        with self.assertRaises(ValueError):
+            regression_accuracy(self.regressor_true, self.regressor_predictions, type = "hello")
+        with self.assertRaises(TypeError):
+            regression_accuracy(self.regressor_true, self.regressor_predictions, type = 1)
+            
 
     def test_valid_accuracy(self):
         # Test accuracy over the panel
@@ -94,7 +111,23 @@ class TestMetrics(unittest.TestCase):
         self.assertEqual(accuracy, expected_result, "regression_accuracy should return the same value as sklearn.metrics.accuracy_score, when applied over time periods")
 
     def test_types_balanced_accuracy(self):
-        pass
+        # y_true
+        with self.assertRaises(TypeError):
+            regression_balanced_accuracy("hello", self.regressor_predictions)
+        with self.assertRaises(TypeError):
+            regression_balanced_accuracy(np.zeros(len(self.regressor_predictions)), self.regressor_predictions)
+        with self.assertRaises(ValueError):
+            regression_balanced_accuracy(self.regressor_predictions.reset_index(drop=True), self.regressor_predictions)
+        # y_pred
+        with self.assertRaises(TypeError):
+            regression_balanced_accuracy(self.regressor_true, "hello")
+        with self.assertRaises(ValueError):
+            regression_balanced_accuracy(self.regressor_true, self.regressor_predictions.head(5))
+        # type 
+        with self.assertRaises(ValueError):
+            regression_balanced_accuracy(self.regressor_true, self.regressor_predictions, type = "hello")
+        with self.assertRaises(TypeError):
+            regression_balanced_accuracy(self.regressor_true, self.regressor_predictions, type = 1)
 
     def test_valid_balanced_accuracy(self):
         # Test balanced accuracy over the panel
@@ -127,7 +160,12 @@ class TestMetrics(unittest.TestCase):
         self.assertEqual(balanced_accuracy, expected_result, "regression_balanced_accuracy should return the same value as sklearn.metrics.balanced_accuracy_score, when applied over time periods")
 
     def test_types_panel_significance_probability(self):
-        pass
+        with self.assertRaises(TypeError):
+            panel_significance_probability("self.regressor_true", self.regressor_predictions)
+        with self.assertRaises(TypeError):
+            panel_significance_probability(self.regressor_true.reset_index(), self.regressor_predictions)
+        with self.assertRaises(ValueError):
+            panel_significance_probability(self.regressor_true, self.regressor_predictions[:-1])
 
     def test_valid_panel_significance_probability(self):
         map_result = panel_significance_probability(self.regressor_true, self.regressor_predictions)
@@ -136,7 +174,23 @@ class TestMetrics(unittest.TestCase):
         self.assertLessEqual(map_result, 1, "panel_significance_probability should return a value less or equal to one")
 
     def test_types_binary_sharpe_ratio(self):
-        pass
+        # y_true
+        with self.assertRaises(TypeError):
+            sharpe_ratio("hello", self.regressor_predictions)
+        with self.assertRaises(TypeError):
+            sharpe_ratio(np.zeros(len(self.regressor_predictions)), self.regressor_predictions)
+        with self.assertRaises(ValueError):
+            sharpe_ratio(self.regressor_predictions.reset_index(drop=True), self.regressor_predictions)
+        # y_pred
+        with self.assertRaises(TypeError):
+            sharpe_ratio(self.regressor_true, "hello")
+        with self.assertRaises(ValueError):
+            sharpe_ratio(self.regressor_true, self.regressor_predictions.head(5))
+        # type 
+        with self.assertRaises(ValueError):
+            sharpe_ratio(self.regressor_true, self.regressor_predictions, type = "hello")
+        with self.assertRaises(TypeError):
+            sharpe_ratio(self.regressor_true, self.regressor_predictions, type = 1)
 
     def test_valid_binary_sharpe_ratio(self):
         # Test sharpe ratio over the panel
@@ -166,7 +220,23 @@ class TestMetrics(unittest.TestCase):
         self.assertEqual(sharpe, expected_result, "sharpe_ratio should return the same value as the ratio of the mean of the portfolio returns to the standard deviation of the portfolio returns, when applied over time periods")
 
     def test_types_binary_sortino_ratio(self):
-        pass
+        # y_true
+        with self.assertRaises(TypeError):
+            sortino_ratio("hello", self.regressor_predictions)
+        with self.assertRaises(TypeError):
+            sortino_ratio(np.zeros(len(self.regressor_predictions)), self.regressor_predictions)
+        with self.assertRaises(ValueError):
+            sortino_ratio(self.regressor_predictions.reset_index(drop=True), self.regressor_predictions)
+        # y_pred
+        with self.assertRaises(TypeError):
+            sortino_ratio(self.regressor_true, "hello")
+        with self.assertRaises(ValueError):
+            sortino_ratio(self.regressor_true, self.regressor_predictions.head(5))
+        # type 
+        with self.assertRaises(ValueError):
+            sortino_ratio(self.regressor_true, self.regressor_predictions, type = "hello")
+        with self.assertRaises(TypeError):
+            sortino_ratio(self.regressor_true, self.regressor_predictions, type = 1)
 
     def test_valid_binary_sortino_ratio(self):
         # Test sortino ratio over the panel
@@ -194,7 +264,51 @@ class TestMetrics(unittest.TestCase):
         expected_result = np.mean(sortinos)
 
     def test_types_correlation_coefficient(self):
-        pass
+        # y_true
+        with self.assertRaises(TypeError):
+            correlation_coefficient("hello", self.regressor_predictions)
+        with self.assertRaises(TypeError):
+            correlation_coefficient("hello", self.regressor_predictions, correlation_type="spearman")
+        with self.assertRaises(TypeError):
+            correlation_coefficient("hello", self.regressor_predictions, correlation_type="kendall")
+        with self.assertRaises(TypeError):
+            correlation_coefficient(np.zeros(len(self.regressor_predictions)), self.regressor_predictions)
+        with self.assertRaises(TypeError):
+            correlation_coefficient(np.zeros(len(self.regressor_predictions)), self.regressor_predictions, correlation_type="spearman")
+        with self.assertRaises(TypeError):
+            correlation_coefficient(np.zeros(len(self.regressor_predictions)), self.regressor_predictions, correlation_type="kendall")
+        with self.assertRaises(ValueError):
+            correlation_coefficient(self.regressor_predictions.reset_index(drop=True), self.regressor_predictions)
+        with self.assertRaises(ValueError):
+            correlation_coefficient(self.regressor_predictions.reset_index(drop=True), self.regressor_predictions, correlation_type="spearman")
+        with self.assertRaises(ValueError):    
+            correlation_coefficient(self.regressor_predictions.reset_index(drop=True), self.regressor_predictions, correlation_type="kendall")
+        # y_pred
+        with self.assertRaises(TypeError):
+            correlation_coefficient(self.regressor_true, "hello")
+        with self.assertRaises(TypeError):
+            correlation_coefficient(self.regressor_true, "hello", correlation_type="spearman")
+        with self.assertRaises(TypeError):
+            correlation_coefficient(self.regressor_true, "hello", correlation_type="kendall")
+        with self.assertRaises(ValueError):
+            correlation_coefficient(self.regressor_true, self.regressor_predictions.head(5))
+        with self.assertRaises(ValueError):
+            correlation_coefficient(self.regressor_true, self.regressor_predictions.head(5), correlation_type="spearman")
+        with self.assertRaises(ValueError):
+            correlation_coefficient(self.regressor_true, self.regressor_predictions.head(5), correlation_type="kendall")
+        # type 
+        with self.assertRaises(ValueError):
+            correlation_coefficient(self.regressor_true, self.regressor_predictions, type = "hello")
+        with self.assertRaises(ValueError):
+            correlation_coefficient(self.regressor_true, self.regressor_predictions, type = "hello", correlation_type="spearman")
+        with self.assertRaises(ValueError):
+            correlation_coefficient(self.regressor_true, self.regressor_predictions, type = "hello", correlation_type="kendall")
+        with self.assertRaises(TypeError):
+            correlation_coefficient(self.regressor_true, self.regressor_predictions, type = 1)
+        with self.assertRaises(TypeError):
+            correlation_coefficient(self.regressor_true, self.regressor_predictions, type = 1, correlation_type="spearman")
+        with self.assertRaises(TypeError):
+            correlation_coefficient(self.regressor_true, self.regressor_predictions, type = 1, correlation_type="kendall")
 
     def test_valid_correlation_coefficient(self):
         # Test correlation coefficients over the panel

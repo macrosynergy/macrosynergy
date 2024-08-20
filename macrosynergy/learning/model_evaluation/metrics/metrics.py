@@ -547,6 +547,8 @@ def _check_metric_params(
         raise ValueError("y_true inner index must be datetime")
     
     # y_pred
+    if not isinstance(y_pred, (np.ndarray, pd.Series)):
+        raise TypeError("y_pred must be either a numpy array or pandas series")
     if len(y_true) != len(y_pred):
         raise ValueError("y_true and y_pred must have the same length")
     
