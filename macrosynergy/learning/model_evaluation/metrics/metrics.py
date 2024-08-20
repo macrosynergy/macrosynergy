@@ -38,19 +38,19 @@ def regression_accuracy(
     Notes
     -----
     Accuracy can be calculated over the whole panel, considering all samples irrespective
-    of cross-section or time period. It can be beneficial, however, to compute accuracies
-    for each cross-section and average them, or equivalently for each time period.
+    of cross-section or time period. It can be beneficial, however, to estimate the 
+    expected accuracy for a cross-section or time period instead.
     
-    When type = "cross_section", the reported accuracy is the mean accuray across
-    cross-sections, reflecting the ability of a model to be effective across all
-    cross-sections in the panel.
+    When type = "cross_section", the returned accuracy is the mean accuracy across
+    cross-sections, an empirical estimate of the expected accuracy for a cross-section
+    of interest.
     
-    When type = "time_periods", the reported accuracy is the mean accuracy across time
-    periods, reflecting the ability of a model to be effective across all
-    time periods/rebalancing dates in the panel.
+    When type = "time_periods", the returned accuracy is the mean accuracy across time
+    periods, an empirical estimate of the expected accuracy for a time period of interest.
     """
     if type == "panel":
         return accuracy_score(y_true < 0, y_pred < 0)
+    
     elif type == "cross_section":
         accuracies = []
         unique_cross_sections = y_true.index.get_level_values(0).unique()
@@ -63,6 +63,7 @@ def regression_accuracy(
                 )
             )
         return np.mean(accuracies)
+    
     elif type == "time_periods":
         accuracies = []
         unique_time_periods = y_true.index.get_level_values(1).unique()
@@ -107,19 +108,19 @@ def regression_balanced_accuracy(
     -----
     Balanced accuracy can be calculated over the whole panel, considering all samples
     irrespective of cross-section or time period. It can be beneficial, however, to
-    compute balanced accuracies for each cross-section and average them, or equivalently
-    for each time period.
+    estimate expected balanced accuracy for a cross-section or time period instead.
     
     When type = "cross_section", the returned balanced accuracy score is
     the mean balanced accuracy across cross-sections, an empirical estimate of the expected
-    out-of-sample balanced accuracy for a cross-section.
+    balanced accuracy for a cross-section of interest.
     
     When type = "time_periods", the returned balanced accuracy score is the mean balanced
-    accuracy across time periods, an empirical estimate of the expected out-of-sample 
-    balanced accuracy for a time period/rebalancing date.
+    accuracy across time periods, an empirical estimate of the expected
+    balanced accuracy for a time period of interest.
     """
     if type == "panel":
         return balanced_accuracy_score(y_true < 0, y_pred < 0)
+    
     elif type == "cross-section":
         balanced_accuracies = []
         unique_cross_sections = y_true.index.get_level_values(0).unique()
@@ -132,6 +133,7 @@ def regression_balanced_accuracy(
                 )
             )
         return np.mean(balanced_accuracies)
+    
     elif type == "time_periods":
         balanced_accuracies = []
         unique_time_periods = y_true.index.get_level_values(1).unique()
@@ -144,8 +146,6 @@ def regression_balanced_accuracy(
                 )
             )
         return np.mean(balanced_accuracies)
-    else:
-        raise NotImplementedError("Invalid type. Options are 'panel', 'cross_section' and 'time_periods'.")
     
 def panel_significance_probability(
     y_true,
@@ -286,9 +286,6 @@ def sharpe_ratio(
             sharpe_ratios.append(sharpe_ratio)
         
         return np.mean(sharpe_ratios)
-    
-    else:
-        raise NotImplementedError("Invalid type. Options are 'panel', 'cross_section' and 'time_periods'.")
 
 def sortino_ratio(
     y_true,
@@ -348,6 +345,7 @@ def sortino_ratio(
             sortino_ratio = average_return / denominator
 
         return sortino_ratio
+    
     elif type == "cross_section":
         sortino_ratios = []
         unique_cross_sections = y_true.index.get_level_values(0).unique()
@@ -366,6 +364,7 @@ def sortino_ratio(
             sortino_ratios.append(sortino_ratio)
         
         return np.mean(sortino_ratios)
+    
     elif type == "time_periods":
         sortino_ratios = []
         unique_time_periods = y_true.index.get_level_values(1).unique()
@@ -384,8 +383,6 @@ def sortino_ratio(
             sortino_ratios.append(sortino_ratio)
         
         return np.mean(sortino_ratios)
-    else:
-        raise NotImplementedError("Invalid type. Options are 'panel', 'cross_section' and 'time_periods'.")
 
 def correlation_coefficient(
     y_true, 
@@ -437,6 +434,7 @@ def correlation_coefficient(
             raise ValueError("Invalid correlation type. Options are 'pearson', 'spearman' and 'kendall'.")
         
         return correlation
+    
     elif type == "cross_section":
         correlations = []
         unique_cross_sections = y_true.index.get_level_values(0).unique()
@@ -453,6 +451,7 @@ def correlation_coefficient(
             correlations.append(correlation)
         
         return np.mean(correlations)
+    
     elif type == "time_periods":
         correlations = []
         unique_time_periods = y_true.index.get_level_values(1).unique()
@@ -467,4 +466,5 @@ def correlation_coefficient(
             else:
                 raise ValueError("Invalid correlation type. Options are 'pearson', 'spearman' and 'kendall'.")
             correlations.append(correlation)
+
         return np.mean(correlations)
