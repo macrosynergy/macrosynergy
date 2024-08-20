@@ -4,6 +4,7 @@ from .metrics import (
     panel_significance_probability,
     sharpe_ratio,
     sortino_ratio,
+    correlation_coefficient,
 )
 
 from .scorers import (
@@ -17,4 +18,5 @@ __all__ = [
     "neg_mean_abs_corr",
     "sharpe_ratio",
     "sortino_ratio",
+    "correlation_coefficient",
 ]

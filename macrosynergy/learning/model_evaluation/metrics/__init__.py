@@ -4,6 +4,7 @@ from .metrics import (
     panel_significance_probability,
     sharpe_ratio,
     sortino_ratio,
+    correlation_coefficient,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "panel_significance_probability",
     "sharpe_ratio",
     "sortino_ratio",
+    "correlation_coefficient",
 ]
