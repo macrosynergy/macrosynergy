@@ -53,7 +53,7 @@ def neg_mean_abs_corr(
     `BetaEstimator` class in the `macrosynergy.learning` subpackage.
     """
     # Obtain key information 
-    market_returns = X_test.copy() 
+    market_returns = X_test.iloc[:,0].copy() 
     contract_returns = y_test.copy()
     unique_cross_sections = X_test.index.get_level_values(0).unique()
     estimated_coefs = estimator.coefs_

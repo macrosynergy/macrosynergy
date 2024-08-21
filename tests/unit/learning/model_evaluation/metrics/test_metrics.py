@@ -321,13 +321,21 @@ class TestMetrics(unittest.TestCase):
         sortino_result = sortino_ratio(self.regressor_true, self.regressor_predictions)
         self.assertIsInstance(sortino_result, float, "sortino_ratio should return a float")
         portfolio_returns = np.where(self.regressor_predictions > 0, self.regressor_true, - self.regressor_true)
-        self.assertEqual(sortino_result, np.mean(portfolio_returns) / np.std(portfolio_returns[portfolio_returns < 0]), "sortino_ratio should return the same value as the ratio of the mean of the portfolio returns to the standard deviation of the negative portfolio returns")
+        numerator = np.mean(portfolio_returns)
+        denominator = np.std(portfolio_returns[portfolio_returns < 0])
+        if denominator == 0 or np.isnan(denominator):
+            denominator = 1
+        self.assertEqual(sortino_result, numerator / denominator, "sortino_ratio should return the same value as the ratio of the mean of the portfolio returns to the standard deviation of the negative portfolio returns")
         # Test sortino ratio over cross-sections
         unique_cross_sections = self.regressor_true.index.get_level_values(0).unique()
         sortinos = []
         for cross_section in unique_cross_sections:
             portfolio_returns = np.where(self.regressor_predictions.loc[cross_section] > 0, self.regressor_true.loc[cross_section], - self.regressor_true.loc[cross_section])
-            sortino = np.mean(portfolio_returns) / np.std(portfolio_returns[portfolio_returns < 0])
+            numerator = np.mean(portfolio_returns)
+            denominator = np.std(portfolio_returns[portfolio_returns < 0])
+            if denominator == 0 or np.isnan(denominator):
+                denominator = 1
+            sortino = numerator / denominator
             sortinos.append(sortino)
         expected_result = np.mean(sortinos)
         sortino = sortino_ratio(self.regressor_true, self.regressor_predictions, type = "cross_section")
@@ -337,9 +345,15 @@ class TestMetrics(unittest.TestCase):
         sortinos = []
         for date in unique_dates:
             portfolio_returns = np.where(self.regressor_predictions[self.regressor_predictions.index.get_level_values(1) == date] > 0, self.regressor_true[self.regressor_true.index.get_level_values(1) == date], - self.regressor_true[self.regressor_true.index.get_level_values(1) == date])
-            sortino = np.mean(portfolio_returns) / np.std(portfolio_returns[portfolio_returns < 0])
+            numerator = np.mean(portfolio_returns)
+            denominator = np.std(portfolio_returns[portfolio_returns < 0])
+            if denominator == 0 or np.isnan(denominator):
+                denominator = 1
+            sortino = numerator / denominator
             sortinos.append(sortino)
         expected_result = np.mean(sortinos)
+        sortino = sortino_ratio(self.regressor_true, self.regressor_predictions, type = "time_periods")
+        self.assertEqual(sortino, expected_result, "sortino_ratio should return the same value as the ratio of the mean of the portfolio returns to the standard deviation of the negative portfolio returns, when applied over time periods")
 
     @parameterized.expand([None, 1, 3, 5.1])
     def test_valid_general_sortino_ratio(self, thresh):
