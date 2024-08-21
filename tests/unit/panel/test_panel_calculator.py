@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
 import pandas as pd
+
 from tests.simulate import make_qdf
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.panel.panel_calculator import panel_calculator, _check_calcs
@@ -295,6 +296,7 @@ class TestAll(unittest.TestCase):
                     blacklist=self.blacklist,
                 )
 
+                w = [x for x in w if issubclass(x.category, UserWarning)]
                 self.assertEqual(len(w), len(expected_nan_series))
                 ticks_found: Set = set(results["cid"] + "_" + results["xcat"])
                 ticks_orig: Set = set(test_df["cid"] + "_" + test_df["xcat"])
