@@ -6,6 +6,9 @@ import scipy.stats as stats
 from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
+    r2_score,
+    mean_absolute_error,
+    mean_absolute_percentage_error,
 )
 from macrosynergy.learning import (
     panel_significance_probability,
@@ -14,6 +17,7 @@ from macrosynergy.learning import (
     sharpe_ratio,
     sortino_ratio,
     correlation_coefficient,
+    create_panel_metric,
 )
 
 from parameterized import parameterized
@@ -492,3 +496,76 @@ class TestMetrics(unittest.TestCase):
         self.assertEqual(spearman, expected_spearman, "correlation_coefficient should return the same value as scipy.stats.spearmanr, when applied over time periods")
         self.assertEqual(kendall, expected_kendall, "correlation_coefficient should return the same value as scipy.stats.kendalltau, when applied over time periods")
 
+    def test_types_create_panel_metric(self):
+        # y_true
+        with self.assertRaises(TypeError):
+            create_panel_metric("hello", self.regressor_predictions, r2_score)
+        with self.assertRaises(TypeError):
+            create_panel_metric(np.zeros(len(self.regressor_predictions)), self.regressor_predictions, r2_score)
+        with self.assertRaises(ValueError):
+            create_panel_metric(self.regressor_predictions.reset_index(drop=True), self.regressor_predictions, r2_score)
+        # y_pred
+        with self.assertRaises(TypeError):
+            create_panel_metric(self.regressor_true, "hello", r2_score)
+        with self.assertRaises(ValueError):
+            create_panel_metric(self.regressor_true, self.regressor_predictions.head(5), r2_score)
+        # metric
+        with self.assertRaises(TypeError):
+            create_panel_metric(self.regressor_true, self.regressor_predictions, "hello")
+        with self.assertRaises(ValueError):
+            create_panel_metric(self.regressor_true, self.regressor_predictions, np.mean)
+        # type
+        with self.assertRaises(TypeError):
+            create_panel_metric(self.regressor_true, self.regressor_predictions, r2_score, type = 1)
+        with self.assertRaises(ValueError):
+            create_panel_metric(self.regressor_true, self.regressor_predictions, r2_score, type = "siu")
+
+    @parameterized.expand([r2_score, mean_absolute_error, mean_absolute_percentage_error])
+    def test_valid_create_panel_metric_regr(self, metric):
+        # Test metrics over the panel
+        metric_result = create_panel_metric(self.regressor_true, self.regressor_predictions, metric)
+        expected_result = metric(self.regressor_true, self.regressor_predictions)
+        self.assertEqual(metric_result, expected_result, "create_panel_metric should return the same value as the metric function passed as argument")
+        # Test metrics over cross-sections
+        unique_cross_sections = self.regressor_true.index.get_level_values(0).unique()
+        metrics = []
+        for cross_section in unique_cross_sections:
+            metric_value = metric(self.regressor_true.loc[cross_section], self.regressor_predictions.loc[cross_section])
+            metrics.append(metric_value)
+        expected_result = np.mean(metrics)
+        metric_result = create_panel_metric(self.regressor_true, self.regressor_predictions, metric, type = "cross_section")
+        self.assertEqual(metric_result, expected_result, "create_panel_metric should return the same value as the metric function passed as argument, when applied over cross-sections")
+        # Test metrics over time
+        unique_dates = self.regressor_true.index.get_level_values(1).unique()
+        metrics = []
+        for date in unique_dates:
+            metric_value = metric(self.regressor_true[self.regressor_true.index.get_level_values(1) == date], self.regressor_predictions[self.regressor_predictions.index.get_level_values(1) == date])
+            metrics.append(metric_value)
+        expected_result = np.mean(metrics)
+        metric_result = create_panel_metric(self.regressor_true, self.regressor_predictions, metric, type = "time_periods")
+        self.assertEqual(metric_result, expected_result, "create_panel_metric should return the same value as the metric function passed as argument, when applied over time periods")
+
+    @parameterized.expand([accuracy_score, balanced_accuracy_score])
+    def test_valid_create_panel_metric_clf(self, metric):
+        # Test metrics over the panel
+        metric_result = create_panel_metric(self.classifier_true, self.classifier_predictions, metric)
+        expected_result = metric(self.classifier_true, self.classifier_predictions)
+        self.assertEqual(metric_result, expected_result, "create_panel_metric should return the same value as the metric function passed as argument")
+        # Test metrics over cross-sections
+        unique_cross_sections = self.classifier_true.index.get_level_values(0).unique()
+        metrics = []
+        for cross_section in unique_cross_sections:
+            metric_value = metric(self.classifier_true.loc[cross_section], self.classifier_predictions.loc[cross_section])
+            metrics.append(metric_value)
+        expected_result = np.mean(metrics)
+        metric_result = create_panel_metric(self.classifier_true, self.classifier_predictions, metric, type = "cross_section")
+        self.assertEqual(metric_result, expected_result, "create_panel_metric should return the same value as the metric function passed as argument, when applied over cross-sections")
+        # Test metrics over time
+        unique_dates = self.classifier_true.index.get_level_values(1).unique()
+        metrics = []
+        for date in unique_dates:
+            metric_value = metric(self.classifier_true[self.classifier_true.index.get_level_values(1) == date], self.classifier_predictions[self.classifier_predictions.index.get_level_values(1) == date])
+            metrics.append(metric_value)
+        expected_result = np.mean(metrics)
+        metric_result = create_panel_metric(self.classifier_true, self.classifier_predictions, metric, type = "time_periods")
+        self.assertEqual(metric_result, expected_result, "create_panel_metric should return the same value as the metric function passed as argument, when applied over time periods")

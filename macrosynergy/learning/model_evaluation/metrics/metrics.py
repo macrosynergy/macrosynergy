@@ -1,7 +1,7 @@
 """
 Scikit-learn compatible performance metrics for model evaluation.
 """
-
+import inspect
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
@@ -53,7 +53,8 @@ def create_panel_metric(
     if not callable(sklearn_metric):
         raise TypeError("sklearn_metric must be a callable")
     # check sklearn_metric has y_true and y_pred as arguments
-    if not all(arg in sklearn_metric.__code__.co_varnames for arg in ["y_true", "y_pred"]):
+    metric_args = inspect.signature(sklearn_metric).parameters 
+    if not all(arg in metric_args for arg in ["y_true", "y_pred"]):
         raise ValueError("sklearn_metric must accept y_true and y_pred as arguments")
     
     if type == "panel":
