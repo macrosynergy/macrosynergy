@@ -3,7 +3,7 @@ Tools to produce, visualise and use walk-forward validation splits across panels
 """
 
 import datetime
-from typing import Optional, List, Tuple, Iterable
+from typing import Optional, Tuple, Iterable, List
 
 import numpy as np
 import pandas as pd
@@ -12,10 +12,7 @@ import seaborn as sns
 
 from sklearn.model_selection import (
     BaseCrossValidator,
-    GridSearchCV,
-    cross_validate,
 )
-from sklearn.linear_model import Lasso, LinearRegression
 
 
 class BasePanelSplit(BaseCrossValidator):
@@ -381,26 +378,27 @@ class RollingKFoldPanelSplit(BasePanelSplit):
 class ExpandingFrequencyPanelSplit(BasePanelSplit):
     """
     Class for the production of paired training and test splits, created over a panel 
-    of countries. ExpandingFrequencyPanelSplit differs from ExpandingIncrementPanelSplit by
-    specifying the frequency of training set expansion as well as the test set forward
+    of countries. ExpandingFrequencyPanelSplit differs from ExpandingIncrementPanelSplit
+    by specifying the frequency of training set expansion as well as the test set forward
     frequency. 
 
-    As with ExpandingIncrementPanelSplit, the first training set is determined by the parameters
-    'min_cids' and 'min_periods', defined below. This set comprises at least 'min_periods' time
-    periods for at least 'min_cids' cross-sections. However, this set is subsequently adjusted 
-    depending on the training interval frequency. The associated test set immediately follows the
-    adjusted initial training set and is determined by grouping all dates within the specified
-    test set frequency. For instance, if the test frequency is "Q", the available dates that 
-    cover the subsequent quarter are grouped together to form the test set. 
+    As with ExpandingIncrementPanelSplit, the first training set is determined by the
+    parameters 'min_cids' and 'min_periods', defined below. This set comprises at least
+    'min_periods' time periods for at least 'min_cids' cross-sections. However, this set
+    is subsequently adjusted depending on the training interval frequency. The associated
+    test set immediately follows the adjusted initial training set and is determined by
+    grouping all dates within the specified test set frequency. For instance, if the test
+    frequency is "Q", the available dates that cover the subsequent quarter are grouped
+    together to form the test set. 
 
     Subsequent training sets are created by expanding the previous training set by the 
-    smallest number of dates to cover the training frequency. As before, each test set immediately
-    follows its associated training set and is determined in the same manner as the initial test set.
+    smallest number of dates to cover the training frequency. As before, each test set
+    immediately follows its associated training set and is determined in the same manner
+    as the initial test set.
 
-    We also provide a parameter 'max_periods',
-    which allows the user to roll the training set forward as opposed to expanding it.
-    If the number of time periods in the training set exceeds 'max_periods', the earliest
-    time periods are truncated.
+    We also provide a parameter 'max_periods', which allows the user to roll the training
+    set forward as opposed to expanding it. If the number of time periods in the training
+    set exceeds 'max_periods', the earliest time periods are truncated.
 
     This splitter can be employed, in addition to standard use, to reflect a pipeline
     through time in a real-world setting. This is especially the case when
@@ -412,8 +410,8 @@ class ExpandingFrequencyPanelSplit(BasePanelSplit):
       and the API might change without any deprecation cycle.
 
     :param <str> expansion_freq: frequency of training set expansion. For a given native
-        dataset frequency, the training sets expand by the smallest number of dates to cover
-        this frequency. Default is "D".
+        dataset frequency, the training sets expand by the smallest number of dates to
+        cover this frequency. Default is "D".
     :param <str> test_freq: frequency forward of each training set for the unique dates in
         each test set to cover. Default is "D".
     :param <int> min_cids: minimum number of cross-sections required for the initial
@@ -434,8 +432,14 @@ class ExpandingFrequencyPanelSplit(BasePanelSplit):
         max_periods: Optional[int] = None,
     ):
         # Input checks
-        self._check_init_params(expansion_freq, test_freq, min_cids, min_periods, max_periods)
-
+        self._check_init_params(
+            expansion_freq,
+            test_freq,
+            min_cids,
+            min_periods,
+            max_periods,
+        )
+        
         self.expansion_freq: str = expansion_freq
         self.test_freq: str = test_freq
         self.min_cids: int = min_cids
@@ -813,6 +817,10 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
     import macrosynergy.management as msm
+
+    from sklearn.model_selection import cross_validate, GridSearchCV
+    from sklearn.linear_model import LinearRegression, Lasso
+
 
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
