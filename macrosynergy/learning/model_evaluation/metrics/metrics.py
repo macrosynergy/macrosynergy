@@ -10,7 +10,69 @@ from linearmodels.panel import RandomEffects
 
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 
+def create_panel_metric(
+    y_true,
+    y_pred,
+    sklearn_metric,
+    type="panel",
+):
+    """
+    Evaluation with a scikit-learn metric, respecting the panel structure.
 
+    Parameters
+    ----------
+    
+    y_true : pd.Series of shape (n_samples,)
+        True regression labels.
+    y_pred : array-like of shape (n_samples,)
+        Predicted regression labels.
+    sklearn_metric : callable
+        A scikit-learn metric function. This function must accept two arguments, `y_true`
+        and `y_pred`, which have the same meaning as the arguments passed to this function.
+    type : str, default="panel"
+        The panel dimension over which to compute the metric. Options are "panel",
+        "cross_section" and "time_periods".
+
+    Returns
+    -------
+    metric : float
+        The computed metric.
+
+    Notes
+    -----
+    This function is a wrapper around a scikit-learn metric, allowing it to be
+    evaluated over different panel axes. For instance, the :math:`R^2` metric can be
+    evaluated over the whole panel, across cross-sections or across time periods. Instead
+    of re-implementing every scikit-learn metric so that evaluation over panel axes is 
+    possible, the `create_panel_metric` function allows any scikit-learn metric to be
+    evaluated over different panel axes.
+    """
+    # Checks 
+    _check_metric_params(y_true, y_pred, type)
+
+    if not callable(sklearn_metric):
+        raise TypeError("sklearn_metric must be a callable")
+    # check sklearn_metric has y_true and y_pred as arguments
+    if not all(arg in sklearn_metric.__code__.co_varnames for arg in ["y_true", "y_pred"]):
+        raise ValueError("sklearn_metric must accept y_true and y_pred as arguments")
+    
+    if type == "panel":
+        return sklearn_metric(y_true, y_pred)
+    elif type == "cross_section":
+        metrics = []
+        unique_cross_sections = y_true.index.get_level_values(0).unique()
+        for cross_section in unique_cross_sections:
+            cross_section_mask = y_true.index.get_level_values(0) == cross_section
+            metrics.append(sklearn_metric(y_true.values[cross_section_mask], y_pred[cross_section_mask]))
+        return np.mean(metrics)
+    elif type == "time_periods":
+        metrics = []
+        unique_time_periods = y_true.index.get_level_values(1).unique()
+        for time_period in unique_time_periods:
+            time_period_mask = y_true.index.get_level_values(1) == time_period
+            metrics.append(sklearn_metric(y_true.values[time_period_mask], y_pred[time_period_mask]))
+        return np.mean(metrics)
+    
 def regression_accuracy(
     y_true,
     y_pred,
@@ -588,7 +650,6 @@ def correlation_coefficient(
             correlations.append(correlation)
 
         return np.mean(correlations)
-
 
 def _check_metric_params(
     y_true,

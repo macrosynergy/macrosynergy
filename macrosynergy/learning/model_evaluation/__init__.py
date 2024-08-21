@@ -5,6 +5,7 @@ from .metrics import (
     sharpe_ratio,
     sortino_ratio,
     correlation_coefficient,
+    create_panel_metric,
 )
 
 from .scorers import (
@@ -19,4 +20,5 @@ __all__ = [
     "sharpe_ratio",
     "sortino_ratio",
     "correlation_coefficient",
+    "create_panel_metric",
 ]
