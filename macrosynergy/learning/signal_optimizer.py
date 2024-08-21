@@ -999,15 +999,21 @@ class SignalOptimizer:
     def feature_selection_heatmap(
         self,
         name: str,
+        remove_blanks: bool = True,
         title: Optional[str] = None,
+        cap: Optional[int] = None,
         figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
     ):
         """
         Method to visualise the selected features in a scikit-learn pipeline.
 
         :param <str> name: Name of the prediction model.
+        :param <bool> remove_blanks: Whether to remove features from the heatmap that were
+            never selected. Default is True.
         :param <Optional[str]> title: Title of the heatmap. Default is None. This creates
             a figure title of the form "Model Selection Heatmap for {name}".
+        :param <int> cap: Maximum number of features to display. Default is None. The chosen
+            features are the 'cap' most frequently occurring in the pipeline.
         :param <Optional[Tuple[Union[int, float], Union[int, float]]]> figsize: Tuple of
             floats or ints denoting the figure size. Default is (12, 8).
 
@@ -1027,6 +1033,16 @@ class SignalOptimizer:
             .set_index("real_date")
         )
 
+        # Sort dataframe columns in descending order of the number of times they were selected
+        ftr_count = selected_ftrs.sum().sort_values(ascending=False)
+        if remove_blanks:
+            ftr_count = ftr_count[ftr_count > 0]
+        if cap is not None:
+            ftr_count = ftr_count.head(cap)
+
+        reindexed_columns = ftr_count.index
+        selected_ftrs = selected_ftrs[reindexed_columns]
+        
         # Create the heatmap
         plt.figure(figsize=figsize)
         if np.all(selected_ftrs == 1):
@@ -1112,6 +1128,7 @@ class SignalOptimizer:
         ]
 
         unique_models = chosen_models.model_hparam_id.unique()
+        unique_models = sorted(unique_models, key=lambda x: -model_counts[x])
         unique_dates = chosen_models.real_date.unique()
 
         # Fill in binary matrix denoting the selected model at each time
@@ -1368,6 +1385,11 @@ class SignalOptimizer:
         ftrcoef_df = ftrcoef_df.set_index("real_date")
         ftrcoef_df = ftrcoef_df.iloc[:, 1:]
 
+        # Sort dataframe columns in ascending order of the number of Na values in the columns
+        na_count = ftrcoef_df.isna().sum().sort_values()
+        reindexed_columns = na_count.index
+        ftrcoef_df = ftrcoef_df[reindexed_columns]
+        
         if ftrs is not None:
             ftrcoef_df = ftrcoef_df[ftrs]
         else:
@@ -1456,6 +1478,7 @@ class SignalOptimizer:
         name: str,
         ftrs: List[str] = None,
         title: str = None,
+        cap: Optional[int] = None,
         ftrs_renamed: dict = None,
         figsize=(10, 6),
     ):
@@ -1471,6 +1494,9 @@ class SignalOptimizer:
         :param <Optional[List]> ftrs: List of feature names to plot. Default is None.
         :param <Optional[str]> title: Title of the plot. Default is None. This creates
             a figure title of the form "Stacked bar plot of model coefficients: {name}".
+        :param <int> cap: Maximum number of features to display. Default is None. The chosen
+            features are the 'cap' most frequently occurring in the pipeline. This cannot
+            exceed 10.
         :param <Optional[dict]> ftrs_renamed: Dictionary to rename the feature names for
             visualisation in the plot legend. Default is None, which uses the original
             feature names.
@@ -1541,14 +1567,30 @@ class SignalOptimizer:
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
+        if cap is not None:
+            if not isinstance(cap, int):
+                raise TypeError("The cap argument must be an integer.")
+            if cap <= 0:
+                raise ValueError("The cap argument must be greater than zero.")
+            if cap > 10:
+                raise ValueError("The cap argument must be no greater than 10.")
 
         # Set the style
         plt.style.use("seaborn-v0_8-darkgrid")
 
         # Reshape dataframe for plotting
         ftrcoef_df = self.get_ftr_coefficients(name)
-        ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
+        years = ftrcoef_df["real_date"].dt.year
+        years.name = "year"
         ftrcoef_df.drop(columns=["real_date", "name"], inplace=True)
+
+        # Sort dataframe columns in ascending order of the number of Na values in the columns
+        na_count = ftrcoef_df.isna().sum().sort_values()
+        reindexed_columns = na_count.index
+        ftrcoef_df = ftrcoef_df[reindexed_columns]
+        if cap is not None:
+            ftrcoef_df = ftrcoef_df.T.head(cap).T
+        ftrcoef_df = pd.concat((ftrcoef_df, years), axis=1)
 
         # Define colour map
         default_cycle_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"][:10]
@@ -1733,7 +1775,7 @@ if __name__ == "__main__":
     models = {
         "OLS": Pipeline(
             [
-                ("selector", MapSelector(threshold=0.2)),
+                ("selector", MapSelector(threshold=0.3)),
                 ("model", LinearRegression(fit_intercept=True)),
             ]
         ),
@@ -1787,7 +1829,7 @@ if __name__ == "__main__":
     models = {
         "OLS": Pipeline(
             [
-                # ("selector", MapSelector(threshold=0.2)),
+                ("selector", MapSelector(threshold=0.2)),
                 ("model", LADRegressionSystem(fit_intercept=True)),
             ]
         ),
