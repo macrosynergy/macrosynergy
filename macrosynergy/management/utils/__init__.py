@@ -38,6 +38,7 @@ from .df_utils import (
     quarters_btwn_dates,
     get_eops,
     get_sops,
+    merge_categories,
 )
 
 from .sparse import (
@@ -95,6 +96,7 @@ __all__ = [
     "quarters_btwn_dates",
     "get_eops",
     "get_sops",
+    "merge_categories",
     # Sparse Indicators
     "create_delta_data",
     "calculate_score_on_sparse_indicator",

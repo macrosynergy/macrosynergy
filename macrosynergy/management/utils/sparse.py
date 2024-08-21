@@ -1,5 +1,6 @@
 from typing import Dict, List, Any, Union, Optional, Callable, Tuple
 from numbers import Number
+import json
 import warnings
 import pandas as pd
 import numpy as np
@@ -9,6 +10,7 @@ from macrosynergy.management.utils import (
     concat_single_metric_qdfs,
     get_cid,
     get_xcat,
+    is_valid_iso_date,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 
@@ -258,6 +260,7 @@ def calculate_score_on_sparse_indicator(
     iis: bool = False,
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
+    volatility_forecast: bool = True,
 ) -> Dict[str, pd.DataFrame]:
     """Calculate score on sparse indicator
 
@@ -279,8 +282,9 @@ def calculate_score_on_sparse_indicator(
 
     :param <Callable> custom_method: A custom method to use for calculating the standard
         deviation. Must have the signature `custom_method(s: pd.Series, **kwargs) -> pd.Series`.
-
     :param <Dict> custom_method_kwargs: Keyword arguments to pass to the custom method.
+    :param <bool> volatility_forecast: If True (default), the volatility forecast is shifted
+        one period forward to align with the information state changes.
 
     :return: A dictionary of DataFrames with the changes in the information state for each ticker.
     """
@@ -313,7 +317,7 @@ def calculate_score_on_sparse_indicator(
         columns = [kk for kk in v.columns if kk != "std"]
         v = pd.merge(
             left=v[columns],
-            right=result.to_frame("std"),
+            right=result.to_frame("std").shift(periods=int(volatility_forecast)),
             how="left",
             left_index=True,
             right_index=True,
@@ -364,7 +368,7 @@ def infer_frequency(df: QuantamentalDataFrame) -> pd.Series:
     :return: A Series with the inferred frequency for each ticker in the QuantamentalDataFrame.
     """
     if not isinstance(df, QuantamentalDataFrame):
-        raise ValueError("`df` must be a QuantamentalDataFrame")
+        raise TypeError("`df` must be a QuantamentalDataFrame")
     if not "eop_lag" in df.columns:
         raise ValueError("`df` must contain an `eop_lag` column")
 
@@ -474,11 +478,11 @@ def sparse_to_dense(
     """
 
     # TODO store real_date min and max in object...
+    # Note: default behaviour includes both start and end dates
     dtrange = pd.date_range(
         start=min_period,
         end=max_period,
         freq="B",
-        inclusive="both",
     )
 
     tdf = _get_metric_df_from_isc(isc=isc, metric=value_column, date_range=dtrange)
@@ -580,7 +584,12 @@ def temporal_aggregator_period(
     :param <str> postfix: A postfix to append to the xcat column. Default is "_NCSUM".
     :return: A DataFrame with the aggregated values.
     """
-    dt_range = pd.date_range(start=start, end=end, freq="B", inclusive="both")
+    # Note: default behaviour includes both start and end dates
+    dt_range = pd.date_range(
+        start=start,
+        end=end,
+        freq="B",
+    )
     tdf: pd.DataFrame = _get_metric_df_from_isc(
         isc=isc,
         metric="zscore_norm_squared",
@@ -624,6 +633,7 @@ def _calculate_score_on_sparse_indicator_for_class(
     iis: bool = False,
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
+    volatility_forecast: bool = True,
 ):
     """
     Calculate score on sparse indicator for a class.
@@ -632,10 +642,10 @@ def _calculate_score_on_sparse_indicator_for_class(
     """
     assert isinstance(
         cls, InformationStateChanges
-    ), "cls must be an InformationStateChanges object"
+    ), "`cls` must be an `InformationStateChanges` object"
     assert hasattr(cls, "isc_dict") and isinstance(
         cls.isc_dict, dict
-    ), "InformationStateChanges object not initialized"
+    ), "`InformationStateChanges` object not initialized"
 
     curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
     if custom_method is not None:
@@ -647,23 +657,19 @@ def _calculate_score_on_sparse_indicator_for_class(
     else:
         if not hasattr(VolatilityEstimationMethods, std):
             raise ValueError(CALC_SCORE_CUSTOM_METHOD_ERR_MSG.format(std=std))
-        # curr_method = getattr(StandardDeviationMethod, std)
         curr_method = VolatilityEstimationMethods[std]
 
     method_kwargs: Dict[str, Any] = dict(
         min_periods=min_periods, halflife=halflife, **custom_method_kwargs
     )
-    # if not 0, then use all versions
     for key, v in cls.isc_dict.items():
         mask_rel = (v["version"] == 0) if isc_version == 0 else (v["version"] >= 0)
         s = v.loc[mask_rel, "diff"]
-
         result: pd.Series = curr_method(s, **method_kwargs)
-
         columns = [kk for kk in v.columns if kk != "std"]
         v = pd.merge(
             left=v[columns],
-            right=result.to_frame("std"),
+            right=result.to_frame("std").shift(periods=int(volatility_forecast)),
             how="left",
             left_index=True,
             right_index=True,
@@ -775,6 +781,104 @@ class InformationStateChanges(object):
             metrics=metrics,
         )
 
+    def to_dict(
+        self, ticker: str
+    ) -> Dict[
+        str, Union[List[Tuple[str, float, str, float]], Tuple[str, str, str], str]
+    ]:
+        data = [
+            (f"{index:%Y-%m-%d}", row.value, f"{row.eop:%Y-%m-%d}", row.grading)
+            for index, row in self[ticker][["value", "eop", "grading"]].iterrows()
+        ]
+
+        columns = ("real_date", "value", "eop", "grading")
+        return_dict = {
+            "data": data,
+            "columns": columns,
+            "last_real_date": f"{self._max_period:%Y-%m-%d}",
+            "ticker": ticker,
+        }
+        return return_dict
+
+    def to_json(self, ticker: str) -> str:
+        return json.dumps(self.to_dict(ticker))
+
+    def get_releases(
+        self,
+        from_date: Optional[Union[pd.Timestamp, str]] = pd.Timestamp.today().normalize()
+        - pd.offsets.BDay(1),
+        to_date: Optional[Union[pd.Timestamp, str]] = pd.Timestamp.today().normalize(),
+        excl_xcats: List[str] = None,
+        latest_only: bool = True,
+    ) -> pd.DataFrame:
+        """
+        Get the latest releases for the InformationStateChanges object.
+
+        :param <pd.Timestamp> from_date: The start date of the period to get releases for.
+        :param <pd.Timestamp> to_date: The end date of the period to get releases for.
+        :param <List[str]> excl_xcats: A list of xcats to exclude from the releases.
+        :param <bool> latest_only: If True, only the latest release for each ticker is
+            returned. Default is True.
+        :return: A DataFrame with the latest releases for each ticker. If `latest_only` is
+            False, all releases within the date range are returned.
+        """
+
+        if excl_xcats is not None:
+            excl_xcat_err = "`excl_xcats` must be a list of strings"
+            if not isinstance(excl_xcats, list):
+                raise TypeError(excl_xcat_err)
+            if not all(isinstance(x, str) for x in excl_xcats):
+                raise TypeError(excl_xcat_err)
+        else:
+            excl_xcats = []
+
+        if not isinstance(latest_only, bool):
+            raise ValueError("`latest_only` must be a boolean")
+
+        dt_err = "`{varname}` must be a `pd.Timestamp` or an ISO formatted date"
+        for var_name in ["from_date", "to_date"]:
+            if not isinstance(eval(var_name), (pd.Timestamp, str, type(None))):
+                raise TypeError(dt_err.format(varname=var_name))
+            if isinstance(eval(var_name), str):
+                is_valid_iso_date(eval(var_name))
+
+        if from_date is None:
+            from_date = self._min_period
+        elif isinstance(from_date, str):
+            from_date = pd.Timestamp(from_date)
+        if to_date is None:
+            to_date = self._max_period
+        elif isinstance(to_date, str):
+            to_date = pd.Timestamp(to_date)
+
+        if from_date > to_date:
+            from_date, to_date = to_date, from_date
+            warnings.warn("`from_date` is greater than `to_date`. Swapping the dates.")
+
+        dfs_list = []
+        for k, v in self.items():
+            if get_xcat(k) in excl_xcats:
+                continue
+            s: pd.DataFrame = v.copy()
+            s = s[(s.index >= from_date) & (s.index <= to_date)]
+            s["ticker"] = k
+            if latest_only and not s.empty:
+                s = s.loc[[s.last_valid_index()]]
+
+            dfs_list.append(s.reset_index())
+
+        rel = (
+            pd.concat(dfs_list, axis=0)
+            .sort_values(by=["real_date", "eop", "ticker"])
+            .rename(columns={"diff": "change"})
+            .reset_index(drop=True)
+        )
+
+        if latest_only:
+            return rel.set_index("ticker")
+        else:
+            return rel
+
     def temporal_aggregator_period(
         self,
         winsorise: int = 10,
@@ -788,9 +892,6 @@ class InformationStateChanges(object):
         :param <pd.Timestamp> start: The start date of the period to aggregate.
         :param <pd.Timestamp> end: The end date of the period to aggregate.
         :return: A DataFrame with the aggregated values.
-
-
-
         """
         return temporal_aggregator_period(
             isc=self.isc_dict,
@@ -808,6 +909,7 @@ class InformationStateChanges(object):
         iis: bool = False,
         custom_method: Optional[Callable] = None,
         custom_method_kwargs: Dict = {},
+        volatility_forecast: bool = True,
     ):
         """
         Calculate score on sparse indicator for the InformationStateChanges object.
@@ -828,8 +930,9 @@ class InformationStateChanges(object):
         :param <Callable> custom_method: A custom method to use for calculating the standard
             deviation. Must have the signature `custom_method(s: pd.Series, **kwargs) -> pd.Series`.
         :param <Dict> custom_method_kwargs: Keyword arguments to pass to the custom method.
-
-
+        :param <bool> volatility_forecast: If True (default), the volatility forecast is shifted
+            one period forward to align with the information state changes.
+        :return: None
         """
 
         _calculate_score_on_sparse_indicator_for_class(
@@ -841,4 +944,6 @@ class InformationStateChanges(object):
             iis=iis,
             custom_method=custom_method,
             custom_method_kwargs=custom_method_kwargs,
+            volatility_forecast=volatility_forecast,
         )
+        return self
