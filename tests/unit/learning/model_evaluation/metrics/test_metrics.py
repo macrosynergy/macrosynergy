@@ -16,6 +16,8 @@ from macrosynergy.learning import (
     correlation_coefficient,
 )
 
+from parameterized import parameterized
+
 class TestMetrics(unittest.TestCase):
     def setUp(self):
         cids = ["AUD", "CAD", "GBP", "USD"]
@@ -192,6 +194,35 @@ class TestMetrics(unittest.TestCase):
         with self.assertRaises(TypeError):
             sharpe_ratio(self.regressor_true, self.regressor_predictions, type = 1)
 
+    def test_types_general_sharpe_ratio(self):
+        # y_true
+        with self.assertRaises(TypeError):
+            sharpe_ratio("hello", self.regressor_predictions, binary = False)
+        with self.assertRaises(TypeError):
+            sharpe_ratio(np.zeros(len(self.regressor_predictions)), self.regressor_predictions, binary = False)
+        with self.assertRaises(ValueError):
+            sharpe_ratio(self.regressor_predictions.reset_index(drop=True), self.regressor_predictions, binary = False)
+        # y_pred
+        with self.assertRaises(TypeError):
+            sharpe_ratio(self.regressor_true, "hello", binary = False)
+        with self.assertRaises(ValueError):
+            sharpe_ratio(self.regressor_true, self.regressor_predictions.head(5), binary = False)
+        # type 
+        with self.assertRaises(ValueError):
+            sharpe_ratio(self.regressor_true, self.regressor_predictions, type = "hello", binary = False)
+        with self.assertRaises(TypeError):
+            sharpe_ratio(self.regressor_true, self.regressor_predictions, type = 1, binary = False)
+        # binary
+        with self.assertRaises(TypeError):
+            sharpe_ratio(self.regressor_true, self.regressor_predictions, binary = "hello")
+        # thresh
+        with self.assertRaises(TypeError):
+            sharpe_ratio(self.regressor_true, self.regressor_predictions, thresh = "hello", binary = True)
+        with self.assertRaises(ValueError):
+            sharpe_ratio(self.regressor_true, self.regressor_predictions, thresh = -1, binary = True)
+        with self.assertRaises(ValueError):
+            sharpe_ratio(self.regressor_true, self.regressor_predictions, thresh = 0, binary = True)
+
     def test_valid_binary_sharpe_ratio(self):
         # Test sharpe ratio over the panel
         sharpe_result = sharpe_ratio(self.regressor_true, self.regressor_predictions)
@@ -217,6 +248,49 @@ class TestMetrics(unittest.TestCase):
             sharpes.append(sharpe)
         expected_result = np.mean(sharpes)
         sharpe = sharpe_ratio(self.regressor_true, self.regressor_predictions, type = "time_periods")
+        self.assertEqual(sharpe, expected_result, "sharpe_ratio should return the same value as the ratio of the mean of the portfolio returns to the standard deviation of the portfolio returns, when applied over time periods")
+
+    @parameterized.expand([None, 1, 3, 5.1])
+    def test_valid_general_sharpe_ratio(self, thresh):
+        # Calculate portfolio weights
+        if thresh is not None:
+            portfolio_returns = (self.regressor_predictions / self.regressor_predictions.groupby(level=1).transform("std")).clip(-thresh, thresh) * self.regressor_true
+        else:
+            portfolio_returns = (self.regressor_predictions / self.regressor_predictions.groupby(level=1).transform("std")) * self.regressor_true
+        # Test sharpe ratio over the panel
+        sharpe_result = sharpe_ratio(self.regressor_true, self.regressor_predictions, binary = False, thresh=thresh)
+        self.assertIsInstance(sharpe_result, float, "sharpe_ratio should return a float")
+        numerator = np.mean(portfolio_returns)
+        denominator = np.std(portfolio_returns)
+        if denominator == 0 or np.isnan(denominator):
+            denominator = 1
+        self.assertEqual(sharpe_result, numerator / denominator, "sharpe_ratio should return the same value as the ratio of the mean of the portfolio returns to the standard deviation of the portfolio returns")
+        # Test sharpe ratio over cross-sections
+        unique_cross_sections = self.regressor_true.index.get_level_values(0).unique()
+        sharpes = []
+        for cross_section in unique_cross_sections:
+            sharpe = np.mean(portfolio_returns.loc[cross_section]) / np.std(portfolio_returns.loc[cross_section])
+            numerator = np.mean(portfolio_returns.loc[cross_section])
+            denominator = np.std(portfolio_returns.loc[cross_section])
+            if denominator == 0 or np.isnan(denominator):
+                denominator = 1
+            sharpe = numerator / denominator
+            sharpes.append(sharpe)
+        expected_result = np.mean(sharpes)
+        sharpe = sharpe_ratio(self.regressor_true, self.regressor_predictions, type = "cross_section", binary = False, thresh=thresh)
+        self.assertEqual(sharpe, expected_result, "sharpe_ratio should return the same value as the ratio of the mean of the portfolio returns to the standard deviation of the portfolio returns, when applied over cross-sections")
+        # Test sharpe ratio over time
+        unique_dates = self.regressor_true.index.get_level_values(1).unique()
+        sharpes = []
+        for date in unique_dates:
+            numerator = np.mean(portfolio_returns[portfolio_returns.index.get_level_values(1) == date])
+            denominator = np.std(portfolio_returns[portfolio_returns.index.get_level_values(1) == date])
+            if denominator == 0 or np.isnan(denominator):
+                denominator = 1
+            sharpe = numerator / denominator
+            sharpes.append(sharpe)
+        expected_result = np.mean(sharpes)
+        sharpe = sharpe_ratio(self.regressor_true, self.regressor_predictions, type = "time_periods", binary = False, thresh=thresh)
         self.assertEqual(sharpe, expected_result, "sharpe_ratio should return the same value as the ratio of the mean of the portfolio returns to the standard deviation of the portfolio returns, when applied over time periods")
 
     def test_types_binary_sortino_ratio(self):
@@ -262,6 +336,48 @@ class TestMetrics(unittest.TestCase):
             sortino = np.mean(portfolio_returns) / np.std(portfolio_returns[portfolio_returns < 0])
             sortinos.append(sortino)
         expected_result = np.mean(sortinos)
+
+    @parameterized.expand([None, 1, 3, 5.1])
+    def test_valid_general_sortino_ratio(self, thresh):
+        # Calculate portfolio weights
+        if thresh is not None:
+            portfolio_returns = (self.regressor_predictions / self.regressor_predictions.groupby(level=1).transform("std")).clip(-thresh, thresh) * self.regressor_true
+        else:
+            portfolio_returns = (self.regressor_predictions / self.regressor_predictions.groupby(level=1).transform("std")) * self.regressor_true
+        # Test sortino ratio over the panel
+        sortino_result = sortino_ratio(self.regressor_true, self.regressor_predictions, binary = False, thresh=thresh)
+        self.assertIsInstance(sortino_result, float, "sortino_ratio should return a float")
+        numerator = np.mean(portfolio_returns)
+        denominator = np.std(portfolio_returns[portfolio_returns < 0])
+        if denominator == 0 or np.isnan(denominator):
+            denominator = 1
+        self.assertEqual(sortino_result, numerator / denominator, "sortino_ratio should return the same value as the ratio of the mean of the portfolio returns to the downside deviation of the portfolio returns")
+        # Test sortino ratio over cross-sections
+        unique_cross_sections = self.regressor_true.index.get_level_values(0).unique()
+        sortinos = []
+        for cross_section in unique_cross_sections:
+            numerator = np.mean(portfolio_returns.loc[cross_section])
+            denominator = np.std(portfolio_returns.loc[cross_section][portfolio_returns.loc[cross_section] < 0])
+            if denominator == 0 or np.isnan(denominator):
+                denominator = 1
+            sortino = numerator / denominator
+            sortinos.append(sortino)
+        expected_result = np.mean(sortinos)
+        sortino = sortino_ratio(self.regressor_true, self.regressor_predictions, type = "cross_section", binary = False, thresh=thresh)
+        self.assertEqual(sortino, expected_result, "sortino_ratio should return the same value as the ratio of the mean of the portfolio returns to the standard deviation of the portfolio returns, when applied over cross-sections")
+        # Test sortino ratio over time
+        unique_dates = self.regressor_true.index.get_level_values(1).unique()
+        sortinos = []
+        for date in unique_dates:
+            numerator = np.mean(portfolio_returns[portfolio_returns.index.get_level_values(1) == date])
+            denominator = np.std(portfolio_returns[portfolio_returns.index.get_level_values(1) == date][portfolio_returns[portfolio_returns.index.get_level_values(1) == date] < 0])
+            if denominator == 0 or np.isnan(denominator):
+                denominator = 1
+            sortino = numerator / denominator
+            sortinos.append(sortino)
+        expected_result = np.mean(sortinos)
+        sortino = sortino_ratio(self.regressor_true, self.regressor_predictions, type = "time_periods", binary = False, thresh=thresh)
+        self.assertEqual(sortino, expected_result, "sortino_ratio should return the same value as the ratio of the mean of the portfolio returns to the standard deviation of the portfolio returns, when applied over time periods")
 
     def test_types_correlation_coefficient(self):
         # y_true
