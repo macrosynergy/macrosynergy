@@ -422,7 +422,7 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
                 np.diag(
                     XtX_inv
                     * np.sum(np.square(residuals))
-                    / (X.shape[0] - X.shape[1])
+                    / (X_new.shape[0] - X_new.shape[1])
                 )
             )
 
@@ -631,7 +631,7 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
                 np.diag(
                     XtX_inv
                     * np.sum(np.square(residuals))
-                    / (X.shape[0] - X.shape[1])
+                    / (X_new.shape[0] - X_new.shape[1])
                 )
             )
 
