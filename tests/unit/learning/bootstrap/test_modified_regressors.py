@@ -527,3 +527,60 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
 
         np.testing.assert_array_almost_equal(mswls.coef_, coef, decimal=3)
         self.assertAlmostEqual(mswls.intercept_, intercept, places=3)
+
+    @parameterized.expand(itertools.product([True, False], [True, False], [12, 24, 36, 60]))
+    def test_valid_fit_white(self, fit_intercept, positive, half_life):
+        # First check that setting no analytic method works as expected
+        mswls = ModifiedTimeWeightedLinearRegression(
+            method="analytic",
+            fit_intercept=fit_intercept,
+            positive=positive,
+            half_life=half_life,
+            analytic_method="White"
+        )
+        try:
+            mswls.fit(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(
+                f"Failed to fit ModifiedTimeWeightedLinearRegression with parameters: fit_intercept={fit_intercept}, positive={positive}, method=analytic. Error: {e}."
+            )
+
+        # Determine analytical expression for standard errors and check that the two align
+        model = TimeWeightedLinearRegression(fit_intercept=fit_intercept, positive=positive, half_life = half_life).fit(X=self.X, y=self.y)
+        if fit_intercept:
+            X_new = np.column_stack((np.ones(len(self.X)), self.X.values))
+        else:
+            X_new = self.X.values
+
+        W = np.diag(np.sqrt(model.sample_weights))
+
+        # Rescale X
+        X_new = W @ X_new
+
+        predictions = model.predict(self.X)
+        residuals = (self.y - predictions).to_numpy()
+        XtX_inv = np.linalg.inv(X_new.T @ X_new)
+
+        # Determine white standard errors
+        leverages = np.sum((X_new @ XtX_inv) * X_new, axis=1)
+        weights = 1 / (1 - leverages) ** 2
+        residuals_squared = np.square(residuals)
+        weighted_residuals_squared = weights * residuals_squared
+        Omega = X_new.T * weighted_residuals_squared @ X_new
+        cov_matrix = XtX_inv @ Omega @ XtX_inv
+        se = np.sqrt(np.diag(cov_matrix))
+
+
+        if fit_intercept:
+            coef_se = se[1:]
+            intercept_se = se[0]
+        else:
+            coef_se = se
+            intercept_se = 0
+
+        # Adjust the coefficients and intercepts by the standard errors
+        coef = model.coef_ / (coef_se + 0.01)
+        intercept = model.intercept_ / (intercept_se + 0.01)
+
+        np.testing.assert_array_almost_equal(mswls.coef_, coef, decimal=3)
+        self.assertAlmostEqual(mswls.intercept_, intercept, places=3)
