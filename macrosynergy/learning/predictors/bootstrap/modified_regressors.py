@@ -4,7 +4,12 @@ import datetime
 
 from sklearn.linear_model import LinearRegression
 from sklearn.base import RegressorMixin, BaseEstimator, clone
+
 from macrosynergy.learning.predictors.bootstrap import BasePanelBootstrap
+from macrosynergy.learning.predictors.weighted_regressors import (
+    SignWeightedLinearRegression,
+    TimeWeightedLinearRegression,
+)
 
 from abc import ABC, abstractmethod
 from typing import Union, Optional
@@ -445,6 +450,7 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
 
         # Adjust the coefficients and intercepts by the standard errors
         coef = model.coef_ / (coef_se + self.error_offset)
+                              
         intercept = model.intercept_ / (intercept_se + self.error_offset)
 
         return intercept, coef
@@ -458,7 +464,214 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
             )
 
         return self
+    
+class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
+    def __init__(
+        self,
+        method: str,
+        fit_intercept: bool = True,
+        positive: bool = False,
+        error_offset: float = 1e-2,
+        bootstrap_method: str = "panel",
+        bootstrap_iters: int = 1000,
+        resample_ratio: Union[float, int] = 1,
+        analytic_method: Optional[str] = None,
+    ):
+        self.fit_intercept = fit_intercept
+        self.positive = positive
 
+        super().__init__(
+            model=SignWeightedLinearRegression(
+                fit_intercept=self.fit_intercept, positive=self.positive
+            ),
+            method=method,
+            error_offset=error_offset,
+            bootstrap_method=bootstrap_method,
+            bootstrap_iters=bootstrap_iters,
+            resample_ratio=resample_ratio,
+            analytic_method=analytic_method,
+        )
+
+    def adjust_analytical_se(
+        self,
+        model: RegressorMixin,
+        X: pd.DataFrame,
+        y: Union[pd.DataFrame, pd.Series],
+        analytic_method: Optional[str],
+    ):
+        # Checks
+        if analytic_method is not None:
+            if not isinstance(analytic_method, str):
+                raise TypeError("analytic_method must be a string.")
+            if analytic_method not in ["White"]:
+                raise ValueError("analytic_method must be 'White'.")
+            
+        if self.fit_intercept:
+            X_new = np.column_stack((np.ones(len(X)), X.values))
+        else:
+            X_new = X.values
+
+        # Get model weights
+        weights = model.sample_weights
+        # Rescale features and targets by the sign-weighted linear regression sample weights
+        X_new = np.sqrt(weights[:, np.newaxis]) * X_new
+        y_new = np.sqrt(weights) * y
+
+        # Calculate the standard errors
+        predictions = model.predict(X)
+        residuals = (y - predictions).to_numpy()
+        XtX_inv = np.linalg.inv(X_new.T @ X_new)
+        if analytic_method is None:
+            se = np.sqrt(
+                np.diag(
+                    XtX_inv
+                    * np.sum(np.square(residuals))
+                    / (X_new.shape[0] - X_new.shape[1])
+                )
+            )
+
+        elif analytic_method == "White":
+            # Implement HC3
+            leverages = np.sum((X_new @ XtX_inv) * X_new, axis=1)
+            weights = 1 / (1 - leverages) ** 2
+            residuals_squared = np.square(residuals)
+            weighted_residuals_squared = weights * residuals_squared
+            Omega = X_new.T * weighted_residuals_squared @ X_new
+            cov_matrix = XtX_inv @ Omega @ XtX_inv
+            se = np.sqrt(np.diag(cov_matrix))
+
+        else:
+            raise NotImplementedError(
+                "Currently, only the standard and White standard errors are implemented"
+            )
+        
+        if self.fit_intercept:
+            coef_se = se[1:]
+            intercept_se = se[0]
+        else:
+            coef_se = se
+            intercept_se = 0
+
+        # Adjust the coefficients and intercepts by the standard errors
+        coef = model.coef_ / (coef_se + self.error_offset)
+        intercept = model.intercept_ / (intercept_se + self.error_offset)
+
+        return intercept, coef
+
+    def set_params(self, **params):
+        super().set_params(**params)
+        if "fit_intercept" in params or "positive" in params:
+            # Re-initialize the SignWeightedLinearRegression instance with updated parameters
+            self.model = SignWeightedLinearRegression(
+                fit_intercept=self.fit_intercept, positive=self.positive
+            )
+
+        return self
+    
+class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
+    def __init__(
+        self,
+        method: str,
+        fit_intercept: bool = True,
+        positive: bool = False,
+        half_life: int = 252,
+        error_offset: float = 1e-2,
+        bootstrap_method: str = "panel",
+        bootstrap_iters: int = 1000,
+        resample_ratio: Union[float, int] = 1,
+        analytic_method: Optional[str] = None,
+    ):
+        self.fit_intercept = fit_intercept
+        self.positive = positive
+        self.half_life = half_life
+
+        super().__init__(
+            model=TimeWeightedLinearRegression(
+                fit_intercept=self.fit_intercept, positive=self.positive, half_life=self.half_life
+            ),
+            method=method,
+            error_offset=error_offset,
+            bootstrap_method=bootstrap_method,
+            bootstrap_iters=bootstrap_iters,
+            resample_ratio=resample_ratio,
+            analytic_method=analytic_method,
+        )
+
+    def adjust_analytical_se(
+        self,
+        model: RegressorMixin,
+        X: pd.DataFrame,
+        y: Union[pd.DataFrame, pd.Series],
+        analytic_method: Optional[str],
+    ):
+        # Checks
+        if analytic_method is not None:
+            if not isinstance(analytic_method, str):
+                raise TypeError("analytic_method must be a string.")
+            if analytic_method not in ["White"]:
+                raise ValueError("analytic_method must be 'White'.")
+            
+        if self.fit_intercept:
+            X_new = np.column_stack((np.ones(len(X)), X.values))
+        else:
+            X_new = X.values
+
+        # Get model weights
+        weights = model.sample_weights
+        # Rescale features and targets by the sign-weighted linear regression sample weights
+        X_new = np.sqrt(weights[:, np.newaxis]) * X_new
+        y_new = np.sqrt(weights) * y
+
+        # Calculate the standard errors
+        predictions = model.predict(X)
+        residuals = (y - predictions).to_numpy()
+        XtX_inv = np.linalg.inv(X_new.T @ X_new)
+        if analytic_method is None:
+            se = np.sqrt(
+                np.diag(
+                    XtX_inv
+                    * np.sum(np.square(residuals))
+                    / (X.shape[0] - X.shape[1])
+                )
+            )
+
+        elif analytic_method == "White":
+            # Implement HC3
+            leverages = np.sum((X_new @ XtX_inv) * X_new, axis=1)
+            weights = 1 / (1 - leverages) ** 2
+            residuals_squared = np.square(residuals)
+            weighted_residuals_squared = weights * residuals_squared
+            Omega = X_new.T * weighted_residuals_squared @ X_new
+            cov_matrix = XtX_inv @ Omega @ XtX_inv
+            se = np.sqrt(np.diag(cov_matrix))
+
+        else:
+            raise NotImplementedError(
+                "Currently, only the standard and White standard errors are implemented"
+            )
+        
+        if self.fit_intercept:
+            coef_se = se[1:]
+            intercept_se = se[0]
+        else:
+            coef_se = se
+            intercept_se = 0
+
+        # Adjust the coefficients and intercepts by the standard errors
+        coef = model.coef_ / (coef_se + self.error_offset)
+        intercept = model.intercept_ / (intercept_se + self.error_offset)
+
+        return intercept, coef
+
+    def set_params(self, **params):
+        super().set_params(**params)
+        if "fit_intercept" in params or "positive" in params:
+            # Re-initialize the SignWeightedLinearRegression instance with updated parameters
+            self.model = SignWeightedLinearRegression(
+                fit_intercept=self.fit_intercept, positive=self.positive
+            )
+
+        return self
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
