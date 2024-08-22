@@ -477,6 +477,37 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
         resample_ratio: Union[float, int] = 1,
         analytic_method: Optional[str] = None,
     ):
+        """
+        Custom class to train a SWLS linear regression model with coefficients modified
+        by estimated standard errors to account for statistical precision of the
+        estimates.
+
+        :param <str> method: The method used to modify the coefficients. Accepted values
+            are "analytic" and "bootstrap".
+        :param <bool> fit_intercept: Whether to fit an intercept term in the model.
+            Default is True.
+        :param <bool> positive: Whether to constrain the coefficients to be positive.
+            Default is False.
+        :param <float> error_offset: A small offset to add to the standard errors to
+            prevent division by zero in the case of very small standard errors. Default
+            value is 1e-2.
+        :param <str> bootstrap_method: The bootstrap method used to modify the coefficients.
+            Accepted values are "panel", "period", "cross", "cross_per_period"
+            and "period_per_cross". Default value is "panel".
+        :param <int> bootstrap_iters: The number of bootstrap iterations to perform in
+            order to determine the standard errors of the model parameters under the bootstrap
+            approach. Default value is 1000.
+        :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
+            in each bootstrap dataset. This is a fraction of the quantity of the panel
+            component to be resampled. Default value is 1.
+        :param <Optional[str]> analytic_method: The analytic method used to calculate
+            standard errors. Expressions for analytic standard errors are expected to be
+            written within the method `adjust_analytical_se` and this parameter can be
+            passed into `adjust_analyical_se` for an alternative analytic standard error
+            estimate, for instance White's estimator. Default value is None.
+
+        :return None
+        """
         self.fit_intercept = fit_intercept
         self.positive = positive
 
@@ -499,6 +530,26 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
         y: Union[pd.DataFrame, pd.Series],
         analytic_method: Optional[str],
     ):
+        """
+        Method to adjust the coefficients of the linear model by an analytical
+        standard error expression. The default is to use the standard error estimate
+        obtained through assuming multivariate normality of the model errors as well as
+        heteroskedasticity and zero mean. If `analytic_method` is "White", the White
+        estimator is used to estimate the standard errors.
+
+        :param <RegressorMixin> model: The underlying linear model to be modified. This
+            model must have `coef_` and `intercept_` attributes, in accordance with
+            standard `scikit-learn` conventions.
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+        :param <Optional[str]> analytic_method: The analytic method used to calculate
+            standard errors. If None, the default method is used. Currently, the only
+            alternative we offer is White's estimator, which requires "White" to be
+            specified. Default value is None.
+
+        :return <float>, <np.ndarray>: The adjusted intercept and coefficients.
+        """
         # Checks
         if analytic_method is not None:
             if not isinstance(analytic_method, str):
@@ -581,6 +632,39 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
         resample_ratio: Union[float, int] = 1,
         analytic_method: Optional[str] = None,
     ):
+        """
+        Custom class to train a TWLS linear regression model with coefficients modified
+        by estimated standard errors to account for statistical precision of the
+        estimates.
+
+        :param <str> method: The method used to modify the coefficients. Accepted values
+            are "analytic" and "bootstrap".
+        :param <bool> fit_intercept: Whether to fit an intercept term in the model.
+            Default is True.
+        :param <bool> positive: Whether to constrain the coefficients to be positive.
+            Default is False.
+        :param <int> half_life: The half-life of the exponential weighting function
+            used to calculate the sample weights. Default value is 252.
+        :param <float> error_offset: A small offset to add to the standard errors to
+            prevent division by zero in the case of very small standard errors. Default
+            value is 1e-2.
+        :param <str> bootstrap_method: The bootstrap method used to modify the coefficients.
+            Accepted values are "panel", "period", "cross", "cross_per_period"
+            and "period_per_cross". Default value is "panel".
+        :param <int> bootstrap_iters: The number of bootstrap iterations to perform in
+            order to determine the standard errors of the model parameters under the bootstrap
+            approach. Default value is 1000.
+        :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
+            in each bootstrap dataset. This is a fraction of the quantity of the panel
+            component to be resampled. Default value is 1.
+        :param <Optional[str]> analytic_method: The analytic method used to calculate
+            standard errors. Expressions for analytic standard errors are expected to be
+            written within the method `adjust_analytical_se` and this parameter can be
+            passed into `adjust_analyical_se` for an alternative analytic standard error
+            estimate, for instance White's estimator. Default value is None.
+
+        :return None
+        """
         self.fit_intercept = fit_intercept
         self.positive = positive
         self.half_life = half_life
@@ -604,6 +688,26 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
         y: Union[pd.DataFrame, pd.Series],
         analytic_method: Optional[str],
     ):
+        """
+        Method to adjust the coefficients of the linear model by an analytical
+        standard error expression. The default is to use the standard error estimate
+        obtained through assuming multivariate normality of the model errors as well as
+        heteroskedasticity and zero mean. If `analytic_method` is "White", the White
+        estimator is used to estimate the standard errors.
+
+        :param <RegressorMixin> model: The underlying linear model to be modified. This
+            model must have `coef_` and `intercept_` attributes, in accordance with
+            standard `scikit-learn` conventions.
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+        :param <Optional[str]> analytic_method: The analytic method used to calculate
+            standard errors. If None, the default method is used. Currently, the only
+            alternative we offer is White's estimator, which requires "White" to be
+            specified. Default value is None.
+
+        :return <float>, <np.ndarray>: The adjusted intercept and coefficients.
+        """
         # Checks
         if analytic_method is not None:
             if not isinstance(analytic_method, str):
@@ -665,10 +769,10 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
 
     def set_params(self, **params):
         super().set_params(**params)
-        if "fit_intercept" in params or "positive" in params:
+        if "fit_intercept" in params or "positive" in params or "half_life" in params:
             # Re-initialize the SignWeightedLinearRegression instance with updated parameters
-            self.model = SignWeightedLinearRegression(
-                fit_intercept=self.fit_intercept, positive=self.positive
+            self.model = TimeWeightedLinearRegression(
+                fit_intercept=self.fit_intercept, positive=self.positive, half_life=self.half_life
             )
 
         return self
