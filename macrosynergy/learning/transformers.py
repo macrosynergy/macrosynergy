@@ -9,7 +9,7 @@ import datetime
 
 import scipy.stats as stats
 
-from sklearn.linear_model import Lasso, ElasticNet
+from sklearn.linear_model import Lasso, ElasticNet, Lars
 from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
 from sklearn.feature_selection import SelectorMixin
 from sklearn.exceptions import NotFittedError
@@ -22,6 +22,73 @@ from typing import Union, Any, Optional
 
 import warnings
 
+class LarsSelector(BaseEstimator, SelectorMixin):
+    def __init__(self, fit_intercept = True, n_factors = 10):
+        """
+        Statistical feature selection using LARS.  
+
+        :param <bool> fit_intercept: Whether to fit an intercept term in the model.
+        :param <int> n_factors: Number of factors to select. 
+        """
+        # Checks 
+        if not isinstance(fit_intercept, bool):
+            raise TypeError("'fit_intercept' must be a boolean.")
+        if not isinstance(n_factors, int):
+            raise TypeError("'n_factors' must be an integer.")
+        if n_factors <= 0:
+            raise ValueError("'n_factors' must be a positive integer.")
+        
+        # Attributes
+        self.fit_intercept = fit_intercept
+        self.n_factors = n_factors
+
+    def fit(self, X, y):
+        """
+        Fit method for LARS to obtain the selected features.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.Series,pd.DataFrame]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+        """
+        self.feature_names_in_ = X.columns
+
+        # First scale the features
+        X = (X - X.mean()) / X.std()
+
+        # Fit the model
+        lars = Lars(fit_intercept = self.fit_intercept, n_nonzero_coefs = self.n_factors).fit(X.values, y.values.reshape(-1, 1))
+        coefs = lars.coef_
+        self.mask = [True if coef != 0 else False for coef in coefs]
+
+        return self
+    
+    def transform(self, X):
+        """
+        Transform method to return only the selected features of the dataframe.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+
+        :return <pd.DataFrame>: Pandas dataframe of input features selected based
+            on the LARS' feature selection capabilities.
+        """
+        return X.loc[:, self.mask]
+    
+    def _get_support_mask(self):
+        """
+        Private method to return a boolean mask of the features selected for the Pandas dataframe.
+        """
+        return self.mask
+    
+    def get_feature_names_out(self):
+        """
+        Method to mask feature names according to selected features.
+        """
+        if self.feature_names_in_ is None:
+            raise NotFittedError(
+                "The LarsSelector selector has not been fitted. Please fit the selector before calling get_feature_names_out()."
+            )
+
+        return self.feature_names_in_[self.get_support(indices=False)]
 
 class ENetSelector(BaseEstimator, SelectorMixin):
     def __init__(
