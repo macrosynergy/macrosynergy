@@ -5,57 +5,32 @@ Scikit-learn compatible feature selection classes.
 import numpy as np
 import pandas as pd
 
-from sklearn.base import BaseEstimator, SelectorMixin
+from sklearn.linear_model import LassoLars, ElasticNet, lars_path
 
+from macrosynergy.learning.transformers.selectors import BasePanelSelector
+from macrosynergy.learning.transformers.transformers import PanelStandardScaler
 from abc import ABC, abstractmethod
 
-class BasePanelSelector(SelectorMixin, BaseEstimator, ABC):
+
+class LassoSelector(BasePanelSelector):
     """
-    Base class for statistical feature selection over a panel. 
+    Feature selection using the LASSO. 
     """
-    def __init__(self):
-        self.feature_names_in_ = None
+    def __init__(self, fit_intercept = True, n_factors = 10, positive = False):
+        self.n_factors = n_factors
+        self.fit_intercept = fit_intercept
+        self.positive = positive
 
-    def fit(self, X, y = None):
-        # Checks
-        self._check_fit_params(X, y)
+        super().__init__()
 
-        self.feature_names_in_ = np.array(X.columns)
-        self.n = X.shape[0]
-        self.p = X.shape[1]
-
-        self.selected_ftr_idxs = self._select_features(X, y)
-
-    @abstractmethod
     def _select_features(self, X, y):
-        """
-        Determines column indices of X to be selected.
-        """
-        pass
+        # First scale the features for fair feature comparison
+        X = PanelStandardScaler().fit_transform(X).copy()
+        
+        # Compute the LARS path for Lasso
+        # coefs_path is a matrix of shape (n_features, n_alphas)
+        _, _, coefs_path = lars_path(X.to_numpy(), y.to_numpy(), method='lasso')
 
-    def _get_support_mask(self):
-        """
-        Return a boolean mask of the features selected for the Pandas dataframe.
-        """
-        mask = np.zeros(self.p, dtype=bool)
-        mask[self.selected_ftr_idxs] = True
-        return mask
-    
-    def get_support(self, indices=False):
-        """
-        Return a mask, or integer index, of the features selected for the Pandas dataframe.
-        """
-        if self.feature_names_in_ is None:
-            raise NotFittedError(
-                "The Elastic Net selector has not been fitted. Please fit the selector before calling get_support()."
-            )
-        if not isinstance(indices, (bool, np.bool_)):
-            raise ValueError("The 'indices' parameter must be a boolean.")
-        if indices:
-            return self.selected_ftr_idxs
-        else:
-            mask = self._get_support_mask()
-            return mask
-
-    def transform(self, X):
-        pass
+        column_indices = np.where(coefs_path[:,self.n_factors] != 0)[0]
+        
+        return self
