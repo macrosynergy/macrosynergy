@@ -1,5 +1,5 @@
 """
-Scikit-learn compatible feature selection classes.
+Base class for a panel feature selection module.
 """
 
 import numpy as np
