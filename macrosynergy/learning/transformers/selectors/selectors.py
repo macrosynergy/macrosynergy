@@ -33,4 +33,4 @@ class LassoSelector(BasePanelSelector):
 
         column_indices = np.where(coefs_path[:,self.n_factors] != 0)[0]
         
-        return self
+        return column_indices
