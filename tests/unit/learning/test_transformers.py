@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import unittest
+import itertools
 from parameterized import parameterized
 
 from macrosynergy.learning import (
@@ -18,7 +19,7 @@ from statsmodels.regression.mixed_linear_model import MixedLM
 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.feature_selection import SelectFromModel
-from sklearn.linear_model import Lasso
+from sklearn.linear_model import Lasso, Lars
 
 from sklearn.exceptions import NotFittedError
 
@@ -93,14 +94,43 @@ class TestLarsSelector(unittest.TestCase):
         self.assertEqual(selector.fit_intercept, True)
         self.assertEqual(selector.n_factors, 3)
 
-
-
     def test_types_fit(self):
-        pass
+        # Test that non dataframe X raises TypeError
+        with self.assertRaises(TypeError):
+            selector = LarsSelector(n_factors = 5, fit_intercept=False)
+            selector.fit("X", self.y)
+        # Test that non dataframe or series y raises TypeError
+        with self.assertRaises(TypeError):
+            selector = LarsSelector(n_factors = 5, fit_intercept=True)
+            selector.fit(self.X, "y")
+        # Test that a dataframe of targets with multiple columns raises ValueError
+        with self.assertRaises(ValueError):
+            selector = LarsSelector(n_factors = 5, fit_intercept=True)
+            selector.fit(self.X, self.X)
+        # Test that a value error is raised if the X index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector = LarsSelector(n_factors = 5, fit_intercept=True)
+            selector.fit(self.X.reset_index(), self.y)
+        # Test that a value error is raised if the y index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector = LarsSelector(n_factors = 5, fit_intercept=True)
+            selector.fit(self.X, self.y.reset_index())
 
-    def test_valid_fit(self):
-        pass
-
+    @parameterized.expand(itertools.product([True, False], [1, 5, 10]))
+    def test_valid_fit(self, fit_intercept, n_factors):
+        # Test that the fit() method runs without raising an exception
+        selector = LarsSelector(fit_intercept=fit_intercept, n_factors=n_factors)
+        try:
+            selector.fit(self.X, self.y)
+        except Exception as e:
+            self.fail(f"Fit method for the LarsSelector raised an exception: {e}")
+        self.assertTrue(np.all(selector.feature_names_in_ == np.array(self.X.columns)))
+        # Check the correct number of factors are selected
+        lars = Lars(fit_intercept=fit_intercept, n_nonzero_coefs=n_factors)
+        lars.fit(self.X, self.y)
+        chosen_ftrs = [i for i in range(len(lars.coef_)) if lars.coef_[i] != 0]
+        self.assertTrue(np.all(self.X.columns[chosen_ftrs] == selector.get_feature_names_out()))
+        
     def test_types_transform(self):
         pass
 
