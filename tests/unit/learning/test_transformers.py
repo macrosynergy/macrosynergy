@@ -132,10 +132,32 @@ class TestLarsSelector(unittest.TestCase):
         self.assertTrue(np.all(self.X.columns[chosen_ftrs] == selector.get_feature_names_out()))
         
     def test_types_transform(self):
-        pass
+        # Test that non np.ndarray X or dataframe raises TypeError
+        with self.assertRaises(TypeError):
+            selector = LarsSelector(n_factors=5, fit_intercept=False)
+            selector.fit(self.X, self.y)
+            selector.transform("X")
+        # Test that if the input is a dataframe, then so is the output
+        selector = LarsSelector(n_factors=5, fit_intercept=False)
+        selector.fit(self.X, self.y)
+        X_transformed = selector.transform(self.X)
+        self.assertIsInstance(X_transformed, pd.DataFrame)
+        # Check that X_transformed has the same index as X
+        self.assertTrue(np.all(X_transformed.index == self.X.index))
+        # Test that value error is raised if the X index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector.transform(self.X.reset_index())
+        # Test that a value error is raised if the number of columns in X doesn't match
+        # the number of columns in the seen training dataframe
+        with self.assertRaises(ValueError):
+            selector.transform(self.X.drop(columns="CPI"))
 
-    def test_valid_transform(self):
-        pass
+    @parameterized.expand(itertools.product([True, False], [1, 5, 10]))
+    def test_valid_transform(self, fit_intercept, n_factors):
+        selector = LarsSelector(fit_intercept=fit_intercept, n_factors=n_factors).fit(self.X, self.y)
+        X_transformed = selector.transform(self.X)
+        X_transformed_columns = sorted(X_transformed.columns)
+        self.assertTrue(np.all(X_transformed_columns == sorted(selector.get_feature_names_out())))
 
 class TestLassoSelector(unittest.TestCase):
     @classmethod

@@ -84,8 +84,10 @@ class LarsSelector(BaseEstimator, SelectorMixin):
                 "match."
             )
         
-        # Store the names of the features
+        # Store the names of the features and dataframe dimensions
         self.feature_names_in_ = X.columns
+        self.n = len(X)
+        self.p = X.shape[1]
 
         # Standardise the features for fair comparison
         X = ((X - X.mean()) / X.std()).copy()
@@ -108,6 +110,31 @@ class LarsSelector(BaseEstimator, SelectorMixin):
         :return <pd.DataFrame>: Pandas dataframe of input features selected based
             on LARS' feature selection capabilities.
         """
+        # checks
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError(
+                "Input feature matrix for the LARS selector must be a pandas dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas dataframe."
+            )
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not X.shape[-1] == self.p:
+            raise ValueError(
+                "The number of columns of the dataframe to be transformed, X, doesn't "
+                "match the number of columns of the training dataframe."
+            )
+        if sum(self.mask) == 0:
+            # Then no features were selected
+            # Then at the given time, no trading decisions can be made based on these features
+            warnings.warn(
+                "No features were selected. At the given time, no trading decisions can be made based on these features.",
+                RuntimeWarning,
+            )
+            return X.iloc[:, :0]
+        
         return X.loc[:, self.mask]
     
     def _get_support_mask(self):
