@@ -23,11 +23,11 @@ from typing import Union, Any, Optional
 import warnings
 
 class LarsSelector(BaseEstimator, SelectorMixin):
-    def __init__(self, fit_intercept = True, n_factors = 10):
+    def __init__(self, fit_intercept = False, n_factors = 10):
         """
         Statistical feature selection using LARS.  
 
-        :param <bool> fit_intercept: Whether to fit an intercept term in the model.
+        :param <bool> fit_intercept: Whether to fit an intercept term in the LARS model.
         :param <int> n_factors: Number of factors to select. 
         """
         # Checks 
@@ -50,14 +50,51 @@ class LarsSelector(BaseEstimator, SelectorMixin):
         :param <Union[pd.Series,pd.DataFrame]> y: Pandas series or dataframe of targets
             associated with each sample in X.
         """
+        # Checks 
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError(
+                "Input feature matrix for the LARS selector must be a pandas dataframe. ",
+                "If used as part of an sklearn pipeline, ensure that previous steps ",
+                "return a pandas dataframe."
+            )
+        if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
+            raise TypeError(
+                "Target vector for the LARS selector must be a pandas series or dataframe. ",
+                "If used as part of an sklearn pipeline, ensure that previous steps ",
+                "return a pandas series or dataframe."
+            )
+        if isinstance(y, pd.DataFrame):
+            if y.shape[1] != 1:
+                raise ValueError(
+                    "The target dataframe must have only one column. If used as part of ",
+                    "an sklearn pipeline, ensure that previous steps return a pandas ",
+                    "series or dataframe."
+                )
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of y must be datetime.date.")
+        if not X.index.equals(y.index):
+            raise ValueError(
+                "The indices of the input dataframe X and the output dataframe y don't "
+                "match."
+            )
+        
+        # Store the names of the features
         self.feature_names_in_ = X.columns
 
-        # First scale the features
-        X = (X - X.mean()) / X.std()
+        # Standardise the features for fair comparison
+        X = ((X - X.mean()) / X.std()).copy()
 
         # Fit the model
-        lars = Lars(fit_intercept = self.fit_intercept, n_nonzero_coefs = self.n_factors).fit(X.values, y.values.reshape(-1, 1))
+        lars = Lars(fit_intercept = self.fit_intercept, n_nonzero_coefs = self.n_factors)
+        lars.fit(X.values, y.values.reshape(-1, 1))
         coefs = lars.coef_
+
         self.mask = [True if coef != 0 else False for coef in coefs]
 
         return self
@@ -69,13 +106,14 @@ class LarsSelector(BaseEstimator, SelectorMixin):
         :param <pd.DataFrame> X: Pandas dataframe of input features.
 
         :return <pd.DataFrame>: Pandas dataframe of input features selected based
-            on the LARS' feature selection capabilities.
+            on LARS' feature selection capabilities.
         """
         return X.loc[:, self.mask]
     
     def _get_support_mask(self):
         """
-        Private method to return a boolean mask of the features selected for the Pandas dataframe.
+        Private method to return a boolean mask of the features selected for the Pandas
+        dataframe.
         """
         return self.mask
     
@@ -85,7 +123,8 @@ class LarsSelector(BaseEstimator, SelectorMixin):
         """
         if self.feature_names_in_ is None:
             raise NotFittedError(
-                "The LarsSelector selector has not been fitted. Please fit the selector before calling get_feature_names_out()."
+                "The LarsSelector selector has not been fitted. Please fit the selector ",
+                "before calling get_feature_names_out()."
             )
 
         return self.feature_names_in_[self.get_support(indices=False)]
