@@ -5,6 +5,7 @@ from parameterized import parameterized
 
 from macrosynergy.learning import (
     LassoSelector,
+    LarsSelector,
     MapSelector,
     FeatureAverager,
     PanelMinMaxScaler,
@@ -24,6 +25,87 @@ from sklearn.exceptions import NotFittedError
 import scipy.stats as stats
 from linearmodels.panel import RandomEffects
 
+class TestLarsSelector(unittest.TestCase):
+    @classmethod
+    def setUpClass(self):
+        # Generate data with true linear relationship
+        cids = ["AUD", "CAD", "GBP", "USD"]
+        xcats = ["XR", "CPI", "GROWTH", "RIR"]
+
+        df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
+        df_cids.loc["AUD"] = ["2012-01-01", "2020-12-31"]
+        df_cids.loc["CAD"] = ["2013-01-01", "2020-12-31"]
+        df_cids.loc["GBP"] = ["2010-01-01", "2020-12-31"]
+        df_cids.loc["USD"] = ["2010-01-01", "2020-12-31"]
+
+        tuples = []
+
+        for cid in cids:
+            # get list of all eligible dates
+            sdate = df_cids.loc[cid]["earliest"]
+            edate = df_cids.loc[cid]["latest"]
+            all_days = pd.date_range(sdate, edate)
+            work_days = all_days[all_days.weekday < 5]
+            for work_day in work_days:
+                tuples.append((cid, work_day))
+
+        n_samples = len(tuples)
+        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
+        labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
+        df = pd.DataFrame(
+            data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
+            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
+            columns=xcats,
+            dtype=np.float32,
+        )
+
+        self.X = df.drop(columns="XR")
+        self.y = df["XR"]
+
+    def test_types_init(self):
+        # Test that non bool fit_intercept raises a TypeError
+        with self.assertRaises(TypeError):
+            selector = LarsSelector(fit_intercept = 2)
+        # Test that non_integer n_factors raises a TypeError
+        with self.assertRaises(TypeError):
+            selector = LarsSelector(n_factors = 2.5)
+        # Test that non positive n_factors raises a ValueError
+        with self.assertRaises(ValueError):
+            selector = LarsSelector(n_factors = -1)
+        with self.assertRaises(ValueError):
+            selector = LarsSelector(n_factors = 0)
+
+    def test_valid_init(self):
+        # Check successful instantiation of the LarsSelector class
+        try:
+            selector = LarsSelector()
+        except Exception as e:
+            self.fail(f"Instantiation of the LarsSelector class raised an exception: {e}")
+        self.assertIsInstance(selector, LarsSelector)
+        self.assertEqual(selector.fit_intercept, False)
+        self.assertEqual(selector.n_factors, 10)
+        # Check with a different hyperparameter configuration
+        try:
+            selector = LarsSelector(fit_intercept = True, n_factors=3)
+        except Exception as e:
+            self.fail(f"Instantiation of the LarsSelector class raised an exception: {e}")
+        self.assertIsInstance(selector, LarsSelector)
+        self.assertEqual(selector.fit_intercept, True)
+        self.assertEqual(selector.n_factors, 3)
+
+
+
+    def test_types_fit(self):
+        pass
+
+    def test_valid_fit(self):
+        pass
+
+    def test_types_transform(self):
+        pass
+
+    def test_valid_transform(self):
+        pass
 
 class TestLassoSelector(unittest.TestCase):
     @classmethod
