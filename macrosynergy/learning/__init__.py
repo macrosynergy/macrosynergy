@@ -10,6 +10,7 @@ from .panel_time_series_split import (
 from .cv_tools import panel_cv_scores
 from .transformers import (
     LassoSelector,
+    LarsSelector,
     MapSelector,
     ENetSelector,
     ZnScoreAverager,
@@ -62,6 +63,7 @@ __all__ = [
     # transformers
     "FeatureAverager",
     "LassoSelector",
+    "LarsSelector",
     "MapSelector",
     "ENetSelector",
     "PanelMinMaxScaler",
