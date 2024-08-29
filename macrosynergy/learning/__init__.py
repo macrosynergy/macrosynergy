@@ -8,11 +8,14 @@ from .panel_time_series_split import (
     BasePanelSplit,
 )
 from .cv_tools import panel_cv_scores
-from .transformers import (
+
+from .preprocessing import (
     LassoSelector,
     LarsSelector,
     MapSelector,
     ENetSelector,
+)
+from .transformers import (
     ZnScoreAverager,
     PanelMinMaxScaler,
     PanelStandardScaler,
@@ -60,12 +63,13 @@ __all__ = [
     "BasePanelSplit",
     # cv_tools
     "panel_cv_scores",
-    # transformers
-    "FeatureAverager",
+    # preprocessing
     "LassoSelector",
     "LarsSelector",
     "MapSelector",
     "ENetSelector",
+    # transformers
+    "FeatureAverager",
     "PanelMinMaxScaler",
     "PanelStandardScaler",
     "ZnScoreAverager",
