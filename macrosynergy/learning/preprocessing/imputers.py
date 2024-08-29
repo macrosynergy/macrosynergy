@@ -13,7 +13,12 @@ def impute_panel(df, xcats: list, threshold: float = 0.5):
     :param <list> xcats: the list of categories to be imputed
     :param <float> threshold: the fraction of available cross-sections at each date
 
-    :return <pd.DataFrame>: the imputed long-format panel dataset 
+    :return <pd.DataFrame>: the imputed long-format panel dataset
+
+    .. note::
+
+      This class is still **experimental**: the predictions
+      and the API might change without any deprecation cycle.
     """
     # Checks 
     if not isinstance(df, pd.DataFrame):
