@@ -14,13 +14,12 @@ from .preprocessing import (
     LarsSelector,
     MapSelector,
     ENetSelector,
-)
-from .transformers import (
     ZnScoreAverager,
+    FeatureAverager,
     PanelMinMaxScaler,
     PanelStandardScaler,
-    FeatureAverager,
 )
+
 from .metrics import (
     neg_mean_abs_corr,
     panel_significance_probability,
