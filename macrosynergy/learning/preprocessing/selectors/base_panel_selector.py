@@ -9,6 +9,7 @@ import warnings
 
 from sklearn.base import BaseEstimator
 from sklearn.feature_selection import SelectorMixin
+from sklearn.exceptions import NotFittedError
 
 from abc import ABC, abstractmethod
 
@@ -90,6 +91,25 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
             return X.iloc[:, :0]
         
         return X.loc[:, self.mask]
+    
+    def _get_support_mask(self):
+        """
+        Private method to return a boolean mask of the features selected for the Pandas
+        dataframe.
+        """
+        return self.mask
+    
+    def get_feature_names_out(self):
+        """
+        Method to mask feature names according to selected features.
+        """
+        if self.feature_names_in_ is None:
+            raise NotFittedError(
+                "The selector has not been fitted. Please fit the selector ",
+                "before calling get_feature_names_out()."
+            )
+
+        return self.feature_names_in_[self.get_support(indices=False)]
     
     def _check_fit_params(self, X, y):
         """
