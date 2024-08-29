@@ -1,5 +1,9 @@
 from . import predictors
 
+from .preprocessing import (
+    impute_panel,
+)
+
 from .panel_time_series_split import (
     ExpandingKFoldPanelSplit,
     RollingKFoldPanelSplit,
@@ -52,6 +56,8 @@ from .predictors import (
 from .beta_estimator import BetaEstimator
 
 __all__ = [
+    # preprocessing
+    "impute_panel",
     # panel_time_series_split
     "ExpandingKFoldPanelSplit",
     "RollingKFoldPanelSplit",
