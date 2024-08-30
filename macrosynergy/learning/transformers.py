@@ -1,3 +1,50 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 """
 Collection of custom scikit-learn transformer classes.
 """
@@ -282,13 +329,13 @@ if __name__ == "__main__":
     X = dfd2.drop(columns=["XR"])
     y = dfd2["XR"]
 
-    selector = LassoSelector(0.2)
-    selector.fit(X, y)
-    print(selector.transform(X).columns)
+    # selector = LassoSelector(0.2)
+    # selector.fit(X, y)
+    # print(selector.transform(X).columns)
 
-    selector = MapSelector(1e-20)
-    selector.fit(X, y)
-    print(selector.transform(X).columns)
+    # selector = MapSelector(1e-20)
+    # selector.fit(X, y)
+    # print(selector.transform(X).columns)
 
     # Split X and y into training and test sets
     X_train, X_test = (
