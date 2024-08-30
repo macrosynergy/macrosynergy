@@ -1,69 +1,58 @@
 import pandas as pd
 
-from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
+from macrosynergy.learning import BasePanelScaler
 
 from typing import Any, Union
 
-class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
+class PanelMinMaxScaler(BasePanelScaler):
     """
-    Transformer class to extend scikit-learn's MinMaxScaler() to panel datasets. It is
-    intended to replicate the aforementioned class, but critically returning
-    a Pandas dataframe or series instead of a numpy array. This preserves the
-    multi-indexing in the inputs after transformation, allowing for the passing
-    of standardised features into transformers that require cross-sectional
-    and temporal knowledge.
+    Scale and translate panel features to lie within the range [0,1].
 
-    NOTE: This class is designed to replicate scikit-learn's MinMaxScaler() class.
-            It should primarily be used to satisfy the assumptions of various models.
+    Notes
+    -----
+    This class is designed to replicate scikit-learn's MinMaxScaler() class, with the
+    additional option to scale within cross-sections. Unlike the MinMaxScaler() class,
+    dataframes are always returned, preserving the multi-indexing of the inputs.
     """
 
-    def fit(self, X, y=None):
+    def extract_statistics(self, X, feature):
         """
-        Fit method to determine minimum and maximum values over a training set.
+        Determine the minimum and maximum values of a feature in the input matrix.
 
-        :param <Union[pd.DataFrame, pd.Series]> X: Pandas dataframe or series.
-        :param <Any> y: Placeholder for scikit-learn compatibility.
+        Parameters
+        ----------
+        X : pandas.DataFrame
+            The feature matrix.
+        feature : str
+            The feature to extract statistics for.
 
-        :return <PanelMinMaxScaler>: Fitted PanelMinMaxScaler object.
+        Returns
+        -------
+        statistics : list 
+            List containing the minimum and maximum values of the feature.
         """
-        # checks
-        if type(X) not in [pd.DataFrame, pd.Series]:
-            raise TypeError(
-                "'X' must be a pandas dataframe or series. If used as part of an "
-                "sklearn pipeline, ensure that previous steps return a pandas dataframe "
-                "or series."
-            )
-
-        if not isinstance(X.index, pd.MultiIndex):
-            raise ValueError("X must be multi-indexed.")
-
-        # fit
-        self.mins = X.min(axis=0)
-        self.maxs = X.max(axis=0)
-
-        return self
-
-    def transform(self, X):
+        return [X[feature].min(), X[feature].max()]
+    
+    def scale(self, X, feature, statistics):
         """
-        Transform method to standardise a panel based on the minimum and maximum values.
+        Scale the 'feature' column in the design matrix 'X' based on the minimum and
+        maximum values of the feature.
 
-        :param <Union[pd.DataFrame, pd.Series]> X: Pandas dataframe or series.
+        Parameters
+        ----------
+        X : pandas.DataFrame
+            The feature matrix.
+        feature : str
+            The feature to scale.
+        statistics : list
+            List containing the minimum and maximum values of the feature, in that order. 
 
-        :return <Union[pd.DataFrame, pd.Series]>: Standardised dataframe or series.
+        Returns
+        -------
+        X_transformed : pandas.Series
+            The scaled feature.
         """
-        # checks
-        if type(X) not in [pd.DataFrame, pd.Series]:
-            raise TypeError(
-                "'X' must be a pandas dataframe or series. If used as part of an "
-                "sklearn pipeline, ensure that previous steps return a pandas dataframe "
-                "or series."
-            )
-
-        # transform
-        calc = (X - self.mins) / (self.maxs - self.mins)
-
-        return calc
-
+        return (X[feature] - statistics[0]) / (statistics[1] - statistics[0])
 
 class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
     def __init__(self, with_mean: bool = True, with_std: bool = True):

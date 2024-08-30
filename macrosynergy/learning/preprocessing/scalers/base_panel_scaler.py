@@ -41,17 +41,19 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
         # Checks 
         self._check_fit_params(X, y)
 
-        # learn relevant training set quantities
-        statistics: dict = {}
+        # Set up hash table for storing statistics
+        unique_cross_sections = X.index.get_level_values(0).unique()
+        statistics: dict = {cross_section : {feature_name : None for feature_name in X.columns} for cross_section in unique_cross_sections}
+        statistics["panel"] = {feature_name : None for feature_name in X.columns}
 
-        if self.type == "cross_section":
-            # Get unique training cross-sections
-            unique_cross_sections = X.index.get_level_values(0).unique()
-            for cross_section in unique_cross_sections:
-                    statistics[cross_section] = self.extract_statistics(X.xs(cross_section))
-        
-        # Add statistics over the panel to the dictionary
-        statistics["panel"] = self.extract_statistics(X)
+        # Extract statistics for each feature
+        for feature in X.columns:
+            if self.type == "cross_section":
+                # Get unique training cross-sections
+                unique_cross_sections = X.index.get_level_values(0).unique()
+                for cross_section in unique_cross_sections:
+                    statistics[cross_section][feature] = self.extract_statistics(X.loc[cross_section, feature])
+            statistics["panel"][feature] = self.extract_statistics(X[feature])
 
         return self
 
@@ -73,21 +75,27 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
         self._check_transform_params(X)
 
         # Transform the data
-        if self.type == "cross_section":
-            # Get unique cross-sections
-            unique_cross_sections = X.index.get_level_values(0).unique()
-            # Scale each cross-section based on stored cross sectional statistics in abstract method
-            # If the cross-section is not in the statistics dictionary, use the panel statistics
-            X_transformed = pd.concat(
-                [
-                    self.scale(X.loc[cross_section], self.statistics.get(cross_section, self.statistics["panel"]))
-                    for cross_section in unique_cross_sections
-                ],
-                axis=0,
-            )
-        else:
-            # Scale the panel based on stored panel statistics in abstract method
-            X_transformed = self.scale(X, self.statistics["panel"])
+        unique_cross_sections = X.index.get_level_values(0).unique()
+        scaled_columns = []
+        for feature in X.columns:
+            if self.type == "cross_section":
+                # Scale each cross-section based on stored cross sectional statistics in abstract method
+                # If the cross-section is not in the statistics dictionary, use the panel statistics
+                X_transformed = pd.concat(
+                    [
+                        self.scale(X.loc[cross_section], feature, self.statistics.get(cross_section, self.statistics["panel"])[feature])
+                        for cross_section in unique_cross_sections
+                    ],
+                    axis=0,
+                )
+            else:
+                # Scale the panel based on stored panel statistics in abstract method
+                X_transformed = self.scale(X, feature, self.statistics["panel"][feature])
+            # Add transformed column to list
+            scaled_columns.append(X_transformed)
+
+        # Concatenate the transformed columns
+        X_transformed = pd.concat(scaled_columns, axis=1)
 
         return X_transformed
 
