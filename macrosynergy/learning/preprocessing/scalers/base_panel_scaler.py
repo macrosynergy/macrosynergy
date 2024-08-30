@@ -43,8 +43,8 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
 
         # Set up hash table for storing statistics
         unique_cross_sections = X.index.get_level_values(0).unique()
-        statistics: dict = {cross_section : {feature_name : None for feature_name in X.columns} for cross_section in unique_cross_sections}
-        statistics["panel"] = {feature_name : None for feature_name in X.columns}
+        self.statistics: dict = {cross_section : {feature_name : None for feature_name in X.columns} for cross_section in unique_cross_sections}
+        self.statistics["panel"] = {feature_name : None for feature_name in X.columns}
 
         # Extract statistics for each feature
         for feature in X.columns:
@@ -52,8 +52,8 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
                 # Get unique training cross-sections
                 unique_cross_sections = X.index.get_level_values(0).unique()
                 for cross_section in unique_cross_sections:
-                    statistics[cross_section][feature] = self.extract_statistics(X.loc[cross_section, feature])
-            statistics["panel"][feature] = self.extract_statistics(X[feature])
+                    self.statistics[cross_section][feature] = self.extract_statistics(X.loc[cross_section], feature)
+            self.statistics["panel"][feature] = self.extract_statistics(X, feature)
 
         return self
 
@@ -100,14 +100,14 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
         return X_transformed
 
     @abstractmethod
-    def extract_statistics(self, X):
+    def extract_statistics(self, X, feature):
         """
         Determine the relevant statistics for feature scaling.
         """
         pass
 
     @abstractmethod
-    def scale(self, X, statistics):
+    def scale(self, X, feature, statistics):
         """
         Scale the input data based on the relevant statistics.
         """

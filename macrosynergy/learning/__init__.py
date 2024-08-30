@@ -9,6 +9,9 @@ from .panel_time_series_split import (
 )
 from .cv_tools import panel_cv_scores
 
+from .preprocessing.scalers import BasePanelScaler
+from.preprocessing.selectors import BasePanelSelector
+
 from .preprocessing import (
     LassoSelector,
     LarsSelector,
@@ -18,7 +21,6 @@ from .preprocessing import (
     FeatureAverager,
     PanelMinMaxScaler,
     PanelStandardScaler,
-    BasePanelScaler,
 )
 
 from .metrics import (
@@ -64,12 +66,13 @@ __all__ = [
     # cv_tools
     "panel_cv_scores",
     # preprocessing
+    "BasePanelSelector",
     "LassoSelector",
     "LarsSelector",
     "MapSelector",
     "ENetSelector",
-    "BasePanelScaler",
     # transformers
+    "BasePanelScaler",
     "FeatureAverager",
     "PanelMinMaxScaler",
     "PanelStandardScaler",

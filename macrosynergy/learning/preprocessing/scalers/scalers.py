@@ -1,6 +1,6 @@
 import pandas as pd
 
-from macrosynergy.learning import BasePanelScaler
+from macrosynergy.learning.preprocessing.scalers import BasePanelScaler
 
 from typing import Any, Union
 
@@ -60,6 +60,9 @@ class PanelStandardScaler(BasePanelScaler):
 
     Parameters
     ----------
+    type : str, default="panel"
+        The panel dimension over which the scaling is applied. Options are 
+        "panel" and "cross_section".
     with_mean : bool, default=True
         Whether to centre the data before scaling.
     with_std : bool, default=True
@@ -71,7 +74,7 @@ class PanelStandardScaler(BasePanelScaler):
     additional option to scale within cross-sections. Unlike the StandardScaler() class,
     dataframes are always returned, preserving the multi-indexing of the inputs.
     """
-    def __init__(self, with_mean = True, with_std = True):
+    def __init__(self, type = "panel", with_mean = True, with_std = True):
         # Checks
         if not isinstance(with_mean, bool):
             raise TypeError("'with_mean' must be a boolean.")
@@ -81,6 +84,8 @@ class PanelStandardScaler(BasePanelScaler):
         # Attributes
         self.with_mean = with_mean
         self.with_std = with_std
+
+        super().__init__(type=type)
 
     def extract_statistics(self, X, feature):
         """
