@@ -8,6 +8,7 @@ from .selectors import (
 from .scalers import (
     PanelMinMaxScaler,
     PanelStandardScaler,
+    BasePanelScaler,
 )
 
 from .transformers import (
@@ -24,6 +25,7 @@ __all__ = [
     # scalers
     "PanelMinMaxScaler",
     "PanelStandardScaler",
+    "BasePanelScaler",
     # transformers
     "FeatureAverager",
     "ZnScoreAverager",

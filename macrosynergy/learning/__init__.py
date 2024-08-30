@@ -18,6 +18,7 @@ from .preprocessing import (
     FeatureAverager,
     PanelMinMaxScaler,
     PanelStandardScaler,
+    BasePanelScaler,
 )
 
 from .metrics import (
@@ -67,6 +68,7 @@ __all__ = [
     "LarsSelector",
     "MapSelector",
     "ENetSelector",
+    "BasePanelScaler",
     # transformers
     "FeatureAverager",
     "PanelMinMaxScaler",
