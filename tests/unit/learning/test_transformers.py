@@ -768,8 +768,16 @@ class TestPanelMinMaxScaler(unittest.TestCase):
         except Exception as e:
             self.fail(f"Fit method for the PanelMinMaxScaler raised an exception: {e}")
 
-        self.assertTrue(np.all(scaler.mins == self.X.min(axis=0)))
-        self.assertTrue(np.all(scaler.maxs == self.X.max(axis=0)))
+        # check that the mins and maxs attributes are correctly set
+        estimated_statistics = pd.DataFrame(scaler.statistics["panel"]).T
+        true_mins = self.X.min(axis=0)
+        true_maxs = self.X.max(axis=0)
+        self.assertAlmostEqual(estimated_statistics.iloc[0, 0], true_mins[0])
+        self.assertAlmostEqual(estimated_statistics.iloc[1, 0], true_mins[1])
+        self.assertAlmostEqual(estimated_statistics.iloc[2, 0], true_mins[2])
+        self.assertAlmostEqual(estimated_statistics.iloc[0, 1], true_maxs[0])
+        self.assertAlmostEqual(estimated_statistics.iloc[1, 1], true_maxs[1])
+        self.assertAlmostEqual(estimated_statistics.iloc[2, 1], true_maxs[2])
 
     def test_types_fit(self):
         # Test that non dataframe and non series X raises TypeError
@@ -847,8 +855,6 @@ class TestPanelStandardScaler(unittest.TestCase):
         self.assertIsInstance(scaler, PanelStandardScaler)
         self.assertEqual(scaler.with_mean, with_mean)
         self.assertEqual(scaler.with_std, with_std)
-        self.assertEqual(scaler.means, None)
-        self.assertEqual(scaler.stds, None)
 
     @parameterized.expand([[False, "True"], ["False", True], ["True", "True"]])
     def test_types_init(self, with_mean, with_std):
