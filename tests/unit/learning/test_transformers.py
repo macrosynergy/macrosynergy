@@ -865,10 +865,17 @@ class TestPanelStandardScaler(unittest.TestCase):
         except Exception as e:
             self.fail(f"Fit method for the PanelMinMaxScaler raised an exception: {e}")
 
+        true_means = self.X.mean(axis=0)
+        true_stds = self.X.std(axis=0)
+        estimated_statistics = pd.DataFrame(scaler.statistics["panel"]).T
         if with_mean:
-            self.assertTrue(np.all(scaler.means == self.X.mean(axis=0)))
+            self.assertAlmostEqual(estimated_statistics.iloc[0, 0], true_means[0])
+            self.assertAlmostEqual(estimated_statistics.iloc[1, 0], true_means[1])
+            self.assertAlmostEqual(estimated_statistics.iloc[2, 0], true_means[2])
         if with_std:
-            self.assertTrue(np.all(scaler.stds == self.X.std(axis=0)))
+            self.assertAlmostEqual(estimated_statistics.iloc[0, 1], true_stds[0])
+            self.assertAlmostEqual(estimated_statistics.iloc[1, 1], true_stds[1])
+            self.assertAlmostEqual(estimated_statistics.iloc[2, 1], true_stds[2])
 
     @parameterized.expand([[False, False], [False, True], [True, False], [True, True]])
     def test_types_fit(self, with_mean, with_std):
