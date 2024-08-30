@@ -2,7 +2,7 @@ name: Test Python package on Ubuntu
 
 on:
   pull_request:
-    branches: [test, develop]
+    branches: [test, develop, v1.0.0dev]
   workflow_dispatch:
 
 jobs:
