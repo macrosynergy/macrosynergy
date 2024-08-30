@@ -1,9 +1,5 @@
 from . import predictors
 
-from .preprocessing import (
-    impute_panel,
-)
-
 from .panel_time_series_split import (
     ExpandingKFoldPanelSplit,
     RollingKFoldPanelSplit,
