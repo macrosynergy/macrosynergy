@@ -26,6 +26,8 @@ from .regressor_systems import (
 from .bootstrap import (
     ModifiedLinearRegression,
     BaseModifiedRegressor,
+    ModifiedSignWeightedLinearRegression,
+    ModifiedTimeWeightedLinearRegression,
 )
 
 __all__ = [
@@ -46,5 +48,7 @@ __all__ = [
     "LinearRegressionSystem",
     "CorrelationVolatilitySystem",
     "ModifiedLinearRegression",
+    "ModifiedSignWeightedLinearRegression",
+    "ModifiedTimeWeightedLinearRegression",
     "BaseModifiedRegressor",
 ]

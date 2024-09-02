@@ -12,11 +12,73 @@ from macrosynergy.panel import linear_composite, make_zn_scores
 
 
 class ScoreVisualisers:
+    """
+    Class to visualize the scores and linear composite of specified categories and 
+    cross-sections.
+    
+    Parameters
+    :param <pd.DataFrame> df: A standardized JPMaQS with the following columns:
+        'cid', 'xcat', 'real_date', and at least one metric from -
+        'value', 'grading', 'eop_lag', or 'mop_lag'.
+    :param <List[str]> cids: A list of cross-section identifiers to select from the 
+        DataFrame. If None, all cross-sections in the frame are selected.
+    :param <List[str]> xcats: A list of category tickers to select from the DataFrame.
+        If None, all categories are selected.
+    :param <Dict[str, str]> xcat_labels: A dictionary mapping category tickers (keys) to 
+        their labels (values).
+    :param <str> xcat_comp: The name of the composite category. Default is 'Composite'.
+    :param <List[float]> weights: A list of weights for the linear composite. Default is 
+        equal weights. The length of the list must be equal to the number of categories in 
+        xcats. If weights do not add up to 1, they are normalized.
+    :param <bool> normalize_weights: If True (default), normalize weights if they do not
+        add to one.
+    :param <List[float]> signs: A list of signs in order to use both negative and 
+        positive values of categories for the linear composite. 
+        This must have the same length as weights and xcats, and correspondes to the
+        order of categories in xcats. Default is all positive.
+    :param <Dict[str, str]> blacklist: A dictionary of cross-sections (keys) and date 
+        ranges (values) that should be excluded. If one cross-section has several 
+        blacklist periods append numbers to the cross-section identifier.
+    :param <bool> complete_xcats: If True, all xcats must have data for the 
+        composite to be calculated. Default is False, which means that the composite is
+        calculate if at least one category has data.
+    :param <bool> no_zn_scores: Per default, all categories are scored before they are
+        averaged into the composite. If True, the class does not calculate scores and 
+        takes the average of the original categiries. This is useful if those are
+        already score or of similar scale.
+    :param <bool> rescore_composite: If True, the composite is re-scored to a normal
+        unit scale. Default is False.
+    :param <bool> sequential: if True (default) score parameters (neutral level and mean 
+        absolute deviation) are estimated sequentially with concurrently available 
+        information only.
+    :param <int> min_obs: the minimum number of observations required to calculate 
+        zn_scores. Default is 261. The parameter is only applicable if the “sequential” 
+        parameter is set to True. Otherwise the neutral level and the mean absolute 
+        deviation are both computed in-sample and will use the full sample.
+    :param <bool> iis: if True (default) zn-scores are also calculated for the initial 
+        sample period defined by min-obs on an in-sample basis to avoid losing history. 
+        This is irrelevant if sequential is set to False.
+    :param <str> neutral: The method to calculate the neutral score.
+        Default is ‘zero’. Alternatives are ‘mean’, ‘median’ or a number.
+    :param <float> pan_weight: The weight of panel (versus individual cross section) for 
+        calculating the z-score parameters, i.e. the neutral level and the mean absolute 
+        deviation. Default is 1, i.e. panel data are the basis for the parameters. 
+        Lowest possible value is 0, i.e. parameters are all specific to cross section.
+    :param <float> thresh: The threshold value beyond which scores are winsorized, 
+        i.e. contained at that threshold. The threshold is the maximum absolute score 
+        value that the function is allowed to produce. The minimum threshold is 1 mean 
+        absolute deviation.
+    :param <str> est_freq: the frequency at which mean absolute deviations or means are 
+        re-estimated. The options are daily, weekly, monthly & quarterly: “D”, “W”, “M”, 
+        “Q”. Default is monthly. Re-estimation is performed at period end.
+    :param <str> postfix: The string appended to category name for output; 
+        default is “_ZN”.
+    """
     def __init__(
         self,
         df: pd.DataFrame,
-        cids: List[str] = None,
         xcats: List[str] = None,
+        cids: List[str] = None,
         xcat_labels: Dict[str, str] = None,
         xcat_comp: str = "Composite",
         weights: List[float] = None,
@@ -222,16 +284,43 @@ class ScoreVisualisers:
         cmap: str = None,
         cmap_range: Tuple[float, float] = None,
     ):
+        """
+        View heatmap of the scores at the specified or latest available date.
+
+        Parameters
+        :param <List[str]> cids: A list of cross-section identifiers to select from the 
+            DataFrame. If None, all cross-sections in the frame are selected.
+        :param <List[str]> xcats: A list of category tickers to select from the DataFrame.
+            If None, all categories are selected.
+        :param <bool> transpose: If True, transpose the snapshot so cross-section 
+            identifiers are on the x-axis and category tickers are on the y-axis.
+        :param <str> date: ISO-8601 formatted date. The date of the snapshot. If None, the
+            latest date in the DataFrame is selected. Unless the date is today, then the 
+            latest date is set to the previous business day.
+        :param <bool> annot: If True, annotate the heatmap.
+        :param <str> title: The title of the heatmap.
+        :param <int> title_fontsize: The fontsize of the title.
+        :param <tuple> figsize: The size of the figure.
+        :param <dict> xcat_labels: A dictionary mapping category tickers to their labels.
+        :param <dict> xticks: A dictionary of arguments to label the x axis.
+        :param <int> round_decimals: The number of decimals to round the scores to.
+        :param <str> cmap: The colormap of the heatmap.
+        :param <tuple> cmap_range: The range of the colormap.
+        """
         cids = cids or self.cids
         xcats = xcats or self.xcats
         xcats = self._apply_postfix(xcats)
         xcat_labels = xcat_labels or self.xcat_labels
 
-        date = (
-            pd.to_datetime(date)
-            if date
-            else self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
-        )
+        if date:
+            date = pd.to_datetime(date)
+        else:
+            if self.df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
+                date = pd.Timestamp.today() - pd.tseries.offsets.BDay(1)
+            else:
+                date = self.df["real_date"].max()
+
+        date = date.strftime("%Y-%m-%d")
 
         df = self.df[
             (self.df["xcat"].isin(xcats))
@@ -265,7 +354,7 @@ class ScoreVisualisers:
         if transpose:
             dfw = dfw.transpose()
 
-        title = title or f"Snapshot for {date.strftime('%Y-%m-%d')}"
+        title = title or f"Snapshot for {date}"
 
         horizontal_divider = transpose and composite_zscore in xcats
         vertical_divider = not transpose and composite_zscore in xcats
@@ -302,6 +391,34 @@ class ScoreVisualisers:
         cmap_range: Tuple[float, float] = None,
         round_decimals: int = 2,
     ):
+        """
+        View the evolution of the scores for the specified xcat and cids.
+
+        Parameters
+        :param <str> xcat: The category to view the evolution of.
+        :param <str> freq: The frequency of the evolution. Must be 'Q', 'A', or 'BA'.
+        :param <List[str]> cids: A list of cross-section identifiers to select from the 
+            DataFrame. If None, all in the dataframe are selected.
+        :param <bool> include_latest_period: If True, include the latest period in the
+            evolution.
+        :param <bool> include_latest_day: If True, include the latest day in the 
+            evolution. If the latest date is today, then the latest date is set to the 
+            previous business day.
+        :param <str> date: ISO-8601 formatted date. The date of the snapshot. If None, the
+            latest date in the DataFrame is selected.
+        :param <str> start: ISO-8601 formatted date. Select data from this date onwards.
+            If None, all dates are selected.
+        :param <bool> transpose: If True, transpose the evolution so cross-section 
+            identifiers are on the x-axis and dates are on the y-axis.
+        :param <bool> annot: If True, annotate the heatmap.
+        :param <str> title: The title of the heatmap.
+        :param <int> title_fontsize: The fontsize of the title.
+        :param <dict> xticks: A dictionary of arguments to label the x axis.
+        :param <tuple> figsize: The size of the figure.
+        :param <int> round_decimals: The number of decimals to round the scores to.
+        :param <str> cmap: The colormap of the heatmap.
+        :param <tuple> cmap_range: The range of the colormap.
+        """
         cids = cids or self.cids
         xcat = xcat if xcat.endswith(self.postfix) else xcat + self.postfix
 
@@ -322,8 +439,12 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled.iloc[:-1]
 
         if include_latest_day:
-            latest_day = dfw.ffill().iloc[-1]
-            dfw_resampled.loc[df["real_date"].max()] = latest_day
+            if self.df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
+                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = dfw.ffill().loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)]
+                print("Latest day: ", self.df["real_date"].max() - pd.tseries.offsets.BDay(1))
+            else:
+                dfw_resampled.loc[self.df["real_date"].max()] = dfw.ffill().loc[self.df["real_date"].max()]
+                print("Latest day: ", self.df["real_date"].max())
             if freq == "Q":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
@@ -379,6 +500,33 @@ class ScoreVisualisers:
         cmap_range: Tuple[float, float] = None,
         round_decimals: int = 2,
     ):
+        """
+        View the evolution of the scores for the specified cid and xcats.
+
+        Parameters
+        :param <str> cid: The cross-section to view the evolution of.
+        :param <List[str]> xcats: A list of category tickers to select from the DataFrame.
+            If None, all are selected.
+        :param <str> freq: The frequency of the evolution. Must be 'Q', 'A', or 'BA'.
+        :param <bool> include_latest_period: If True, include the latest period in the
+            evolution.
+        :param <bool> include_latest_day: If True, include the latest day in the
+            evolution. If the latest date is today, then the latest date is set to the 
+            previous business day.
+        :param <str> start: ISO-8601 formatted date. Select data from this date onwards.
+            If None, all dates are selected.
+        :param <bool> transpose: If True, transpose the evolution so xcats are on the
+            x-axis and dates are on the y-axis.
+        :param <bool> annot: If True, annotate the heatmap.
+        :param <str> title: The title of the heatmap.
+        :param <int> title_fontsize: The fontsize of the title.
+        :param <dict> xticks: A dictionary of arguments to label the x axis.
+        :param <tuple> figsize: The size of the figure.
+        :param <dict> xcat_labels: A dictionary mapping xcats to their labels.
+        :param <int> round_decimals: The number of decimals to round the scores to.
+        :param <str> cmap: The colormap of the heatmap.
+        :param <tuple> cmap_range: The range of the colormap.
+        """
         if not isinstance(cid, str):
             raise TypeError("cid must be a string")
 
@@ -403,8 +551,12 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled.iloc[:-1]
 
         if include_latest_day:
-            latest_day = dfw.ffill().iloc[-1]
-            dfw_resampled.loc[df["real_date"].max()] = latest_day
+            if self.df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
+                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = dfw.ffill().loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)]
+                print("Latest day: ", self.df["real_date"].max() - pd.tseries.offsets.BDay(1))
+            else:
+                dfw_resampled.loc[self.df["real_date"].max()] = dfw.ffill().loc[self.df["real_date"].max()]
+                print("Latest day: ", self.df["real_date"].max())
             if freq == "Q":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
@@ -521,7 +673,6 @@ if __name__ == "__main__":
     tickers = [cid + "_" + xcat for cid in cids for xcat in xcats]
 
     start_date = "1990-01-01"
-    end_date = "2023-07-01"
 
     import os
     from macrosynergy.download import JPMaQSDownload
@@ -539,17 +690,11 @@ if __name__ == "__main__":
             show_progress=True,
         )
 
-    sv = ScoreVisualisers(df, cids=cids, xcats=xcats, xcat_labels={
-            "GGIEDGDP_NSA_ZN": "Currency reserve expansion as % of GDP",
-            "Composite_ZN": "Composite",
-            "NIIPGDP_NSA_ZN": "Monetary base expansion as % of GDP",
-            "CABGDPRATIO_NSA_12MMA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 3 months",
-            "GGOBGDPRATIO_NSA_ZN": "Intervention-driven liquidity expansion as % of GDP, diff over 6 months",
-        }, rescore_composite=True, weights=[1, 1, 1, 10])
+    sv = ScoreVisualisers(df, cids=cids, xcats=xcats, thresh=3, no_zn_scores=True, complete_xcats=False, rescore_composite=True)
 
     sv.view_snapshot(
-        cids=cids,
-        xcats=xcats,
+        cids=["USD"],
+        xcats=xcats + ["Composite"],
         transpose=True,
         figsize=(14, 12),
     )
@@ -557,7 +702,7 @@ if __name__ == "__main__":
         cid="USD",
         xcats=xcats + ["Composite"],
         freq="A",
-        transpose=False,
+        transpose=False
     )
     sv.view_score_evolution(
         xcat="GGIEDGDP_NSA",
@@ -566,4 +711,5 @@ if __name__ == "__main__":
         transpose=False,
         start="2010-01-01",
         title="AHKSJDA",
+        include_latest_day=True
     )

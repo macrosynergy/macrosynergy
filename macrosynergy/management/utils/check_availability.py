@@ -54,6 +54,8 @@ def check_availability(
         raise TypeError(f"<bool> object expected and not {type(missing_recent)}.")
 
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
+    if dfx.empty:
+        raise ValueError("No data available for the selected cross-sections and categories.")
     if start_years:
         dfs = check_startyears(dfx)
         visual_paneldates(
