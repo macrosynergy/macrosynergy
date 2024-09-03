@@ -102,43 +102,16 @@ def split_docstring(docstring: str) -> Dict[str, List[str]]:
     if current_section:
         sections.append(" ".join(current_section).strip())
 
-    # Calculate overall indentation
-    non_empty_lines = [line for line in lines if line.strip()]
-    overall_indentation = (
-        min(get_indentation(line) for line in non_empty_lines) if non_empty_lines else 0
-    )
-    if overall_indentation == 0:
-        overall_indentation = 4
-
     return dict(
         description=sections[0],
         directives=sections[1:],
-        indentation=overall_indentation,
     )
 
 
 MAX_LINE_LENGTH = 88
 
 
-def roll_description(
-    description: str, indentation: int, max_line_length: int = MAX_LINE_LENGTH
-) -> str:
-    # split the description by words, then join them back with a newline with len(line) + indentation < max_line_length
-    # each line should start with indentation number of spaces
-    words = description.split()
-    lines = []
-    current_line = chr(32) * indentation
-    for word in words:
-        if len(current_line) + len(word) + 1 < max_line_length:
-            current_line += f" {word}"
-        else:
-            lines.append(current_line)
-            current_line = chr(32) * indentation + word
-    lines.append(current_line)
-    return "\n".join(lines)
-
-
-def format_param_directive(directive: str, min_indent: int) -> str:
+def format_param_directive(directive: str) -> str:
     # e.g.: ":param <str> name: The name of the person."
     try:
         assert directive.startswith(":param")
@@ -146,35 +119,31 @@ def format_param_directive(directive: str, min_indent: int) -> str:
         typex = directive.split("<", 1)[1].split(">", 1)[0].strip()
         name, description = directive.split(">", 1)[1].split(":", 1)
         name, description = name.strip(), description.strip()
-        idt = chr(32) * (4 + min_indent)
-        description = roll_description(description, 4 + min_indent)
+        idt = chr(32) * 4
         return f"{name} : ({typex})\n{idt}{description}"
     except Exception as e:
         print(directive)
         print(e)
-        return chr(32) * (4 + min_indent) + directive
+        return directive
 
 
-def format_raises_directive(directive: str, min_indent: int) -> str:
+def format_raises_directive(directive: str) -> str:
     # e.g.: ":raises <Exception>: description"
     assert directive.startswith(":raises")
     # split by < and >
     typex = directive.split("<", 1)[1].split(">", 1)[0].strip()
     description = directive.split(">", 1)[1].split(":", 1)[1].strip()
-
-    idt = chr(32) * (4 + min_indent)
-    description = roll_description(description, 4 + min_indent)
+    idt = chr(32) * 4
     return f"{typex}\n{idt}{description}"
 
 
-def format_return_directive(directive: str, min_indent: int) -> str:
+def format_return_directive(directive: str) -> str:
     # e.g.: ":return <type>: description"
     assert directive.startswith(":return") or directive.startswith(":rtype")
     # split by < and >
     typex = directive.split("<", 1)[1].split(">", 1)[0].strip()
     description = directive.split(">", 1)[1].split(":", 1)[1].strip()
-    idt = chr(32) * (4 + min_indent)
-    description = roll_description(description, 4 + min_indent)
+    idt = chr(32) * 4
     return f"{typex}\n{idt}{description}"
 
 
@@ -200,19 +169,20 @@ def format_docstring_section(section: Dict[str, Any]) -> Dict[str, Any]:
     for directive, directives in directive_sections.items():
         if directives:
             formatted_sections[SPHINX_DIRECTIVES[directive]] = [
-                dir_func_map[directive](dirx, section["indentation"])
-                for dirx in directives
+                dir_func_map[directive](dirx) for dirx in directives
             ]
 
     # Put the description at the top
     output = ""
-    dscr = roll_description(section["description"], section["indentation"])
+    # dscr = roll_description(section["description"])
+    dscr = str(section["description"])
     if dscr:
         output += dscr + "\n\n"
 
+    # idt = chr(32) * 4
     for dirtype, dirtextlist in formatted_sections.items():
-        full_name = f"{dirtype}\n{chr(32) * section['indentation']}{'-' * len(dirtype)}"
-        output += f"{full_name}\n\n"
+        full_name = f"{dirtype}\n{'-' * len(dirtype)}"
+        output += f"{full_name}\n"
         output += "\n\n".join(dirtextlist) + "\n\n"
 
     return output
@@ -235,21 +205,22 @@ class DSParser:
             ds_info["formatted_sections"] = format_docstring_section(
                 ds_info["docstrings_sections"]
             )
+            # ds_info["indentation"] = ds_info["docstrings_sections"]["indentation"]
         self.docstrings_info
 
     def write_formatted_file(self, file_path: Optional[str] = None) -> None:
         source_lines = self.source.split("\n")
+        assert 0 == 1, "Docstrings formatted correctly. Need to fix indentation logic."
         for ds_info in self.docstrings_info:
             start_line = ds_info["start_line"]
             end_line = ds_info["end_line"]
-            # start_line should be """ and end_line should be """
-            # get the indentation from source
+            idt = chr(32) * (ds_info["indentation"])
             source_lines[start_line - 1] = (
-                chr(32) * ds_info["indentation"]
-                + '"""\n'
-                + ds_info["formatted_sections"]
+                f'{idt}"""\n' + ds_info["formatted_sections"] + f'\n{idt}"""'
             )
-            source_lines[end_line - 1] = '"""'
+            # source_lines[end_line - 1] =
+            for i in range(start_line, end_line):
+                source_lines[i] = ""
 
         if file_path is None:
             file_path = self.file_path
