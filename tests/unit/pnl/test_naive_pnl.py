@@ -826,7 +826,12 @@ class TestAll(unittest.TestCase):
             slip=1,
         )
 
-        results = results_df.data
+        if isinstance(results_df, pd.DataFrame):
+            results = results_df
+        elif isinstance(results_df, pd.io.formats.style.Styler):
+            results = results_df.data
+        else:
+            raise ValueError("results_df is not a DataFrame or Styler object.")
 
         negative_sigs = [
             sig + "_NEG" if sig_negs[sigs.index(sig)] else sig for sig in sigs

@@ -10,6 +10,7 @@ from .panel_time_series_split import (
 from .cv_tools import panel_cv_scores
 from .transformers import (
     LassoSelector,
+    LarsSelector,
     MapSelector,
     ENetSelector,
     ZnScoreAverager,
@@ -43,6 +44,8 @@ from .predictors import (
     LinearRegressionSystem,
     CorrelationVolatilitySystem,
     ModifiedLinearRegression,
+    ModifiedSignWeightedLinearRegression,
+    ModifiedTimeWeightedLinearRegression,
     BaseModifiedRegressor,
 )
 
@@ -60,6 +63,7 @@ __all__ = [
     # transformers
     "FeatureAverager",
     "LassoSelector",
+    "LarsSelector",
     "MapSelector",
     "ENetSelector",
     "PanelMinMaxScaler",
@@ -83,6 +87,8 @@ __all__ = [
     "SignWeightedLinearRegression",
     "TimeWeightedLinearRegression",
     "ModifiedLinearRegression",
+    "ModifiedSignWeightedLinearRegression",
+    "ModifiedTimeWeightedLinearRegression",
     "BaseModifiedRegressor",
     # market beta estimation
     "BetaEstimator",
