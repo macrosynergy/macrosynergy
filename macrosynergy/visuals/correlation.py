@@ -38,6 +38,8 @@ def view_correlation(
     show: bool = True,
     xcat_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     xcat_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    cbar_shrink: Union[float, int] = 0.5,
+    cbar_fontsize: int = 12,
     **kwargs: Any,
 ):
     """
@@ -93,6 +95,8 @@ def view_correlation(
         A list should be in the same order as xcats, a dictionary should map
         from each xcat to its label.
     :param xcat_secondary_labels: optional list or dictionary of labels for xcats_secondary.
+    :param <Union[float, int]> cbar_shrink: shrinkage factor of the color bar. Default is 0.5.
+    :param <int> cbar_fontsize: font size of the color bar. Default is 12.
     :param **kwargs: Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
     N.B:. The function displays the heatmap of a correlation matrix across categories or
@@ -109,6 +113,13 @@ def view_correlation(
 
     if max_color is not None:
         assert isinstance(max_color, float), "Parameter max_color must be type <float>."
+
+    if not isinstance(cbar_shrink, (int, float)):
+        raise ValueError(
+            "The parameter `cbar_shrink` must be of type <int> or <float>."
+        )
+    if not isinstance(cbar_fontsize, int):
+        raise ValueError("The parameter `cbar_fontsize` must be of type <int>.")
 
     min_color = None if max_color is None else -max_color
     mask = None
@@ -251,11 +262,14 @@ def view_correlation(
                 vmax=max_color,
                 square=False,
                 linewidths=0.5,
-                cbar_kws={"shrink": 0.5},
+                cbar_kws={"shrink": cbar_shrink},
                 xticklabels=True,
                 yticklabels=True,
                 **kwargs,
             )
+
+            cbar = ax.collections[0].colorbar
+            cbar.ax.tick_params(labelsize=cbar_fontsize)
 
     ax.set(xlabel=xlabel, ylabel=ylabel)
     ax.set_title(title, fontsize=title_fontsize)
