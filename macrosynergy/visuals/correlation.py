@@ -32,6 +32,8 @@ def view_correlation(
     lags_secondary: Optional[dict] = None,
     title: str = None,
     size: Tuple[float] = (14, 8),
+    title_fontsize: int = 20,
+    fontsize: int = 14,
     max_color: float = None,
     show: bool = True,
     xcat_labels: Optional[Union[List[str], Dict[str, str]]] = None,
@@ -80,10 +82,13 @@ def view_correlation(
     :param <str> title: chart heading. If none is given, a default title is used.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
         is (14, 8).
+    :param <int> title_fontsize: font size of the title. Default is 20.
+    :param <int> fontsize: font size of the title. Default is 14.
     :param <float> max_color: maximum values of positive/negative correlation
         coefficients for color scale. Default is none. If a value is given it applies
         symmetrically to positive and negative values.
-    :param <bool> show: if True the figure will be displayed. Default is True.
+    :param <bool> show: if True the figure will be displayed, else the axis object is returned.
+        Default is True.
     :param xcat_labels: optional list or dictionary of labels for xcats.
         A list should be in the same order as xcats, a dictionary should map
         from each xcat to its label.
@@ -235,7 +240,6 @@ def view_correlation(
 
     ax: plt.Axes
     fig, ax = plt.subplots(figsize=size)
-
     with sns.axes_style("white"):
         with sns.axes_style("ticks"):
             sns.heatmap(
@@ -248,14 +252,23 @@ def view_correlation(
                 square=False,
                 linewidths=0.5,
                 cbar_kws={"shrink": 0.5},
+                xticklabels=True,
+                yticklabels=True,
                 **kwargs,
             )
 
     ax.set(xlabel=xlabel, ylabel=ylabel)
-    ax.set_title(title, fontsize=14)
+    ax.set_title(title, fontsize=title_fontsize)
 
+    ax.tick_params(axis="x", labelsize=fontsize)
+    ax.tick_params(axis="y", labelsize=fontsize)
+
+    plt.tight_layout()
     if show:
         plt.show()
+        return
+    else:
+        return ax
 
 
 def _parse_xcat_labels(xcats: List[str], xcat_labels: Union[List[str], Dict[str, str]]):
