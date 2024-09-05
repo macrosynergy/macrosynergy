@@ -712,6 +712,24 @@ class TestInformationStateChanges(unittest.TestCase):
             dfb = isc_test[ticker].sort_index()
             self.assertTrue((dfa["std"]).equals(dfb["std"].shift(periods=1)))
 
+    def test_from_isc_df(self):
+        qdf = get_long_format_data(
+            end="2012-01-01", cids=["USD"], xcats=["GDP"], num_freqs=1
+        )
+        isc_min: InformationStateChanges = InformationStateChanges.from_qdf(
+            qdf, norm=False
+        )
+        isc_min.calculate_score()
+        tickers = list(isc_min.keys())
+        assert len(tickers) == 1
+        test_ticker = tickers[0]
+        new_isc: InformationStateChanges = InformationStateChanges.from_isc_df(
+            df=isc_min[test_ticker],
+            ticker=test_ticker,
+        )
+
+        self.assertTrue(isc_min == new_isc)
+
 
 if __name__ == "__main__":
     unittest.main()
