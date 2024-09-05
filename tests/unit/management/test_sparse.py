@@ -546,7 +546,7 @@ class TestInformationStateChanges(unittest.TestCase):
 
     def test_get_releases(self):
         qdf = get_long_format_data(end="2012-01-01")
-        isc_obj = InformationStateChanges.from_qdf(qdf)
+        isc_obj: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
         from_date = "2010-01-01"
         to_date = "2010-10-01"
         res = isc_obj.get_releases(
@@ -609,11 +609,11 @@ class TestInformationStateChanges(unittest.TestCase):
             .reset_index(drop=True)
         )
 
-        isc_obj = InformationStateChanges.from_qdf(qdf)
+        isc_obj: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
         res = isc_obj.get_releases()
-        
+
         # Ensure compatibility with Pandas 1.3.5
-        unique_dates = res['real_date'].unique()
+        unique_dates = res["real_date"].unique()
         timestamp_list = [pd.Timestamp(date) for date in unique_dates]
 
         self.assertTrue(set(res.index) == set(random_tickers))
@@ -661,11 +661,11 @@ class TestInformationStateChanges(unittest.TestCase):
             .reset_index(drop=True)
         )
 
-        isc_obj = InformationStateChanges.from_qdf(qdf)
+        isc_obj: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
         res = isc_obj.get_releases(excl_xcats=excl_xcats)
 
         # Ensure compatibility with Pandas 1.3.5
-        unique_dates = res['real_date'].unique()
+        unique_dates = res["real_date"].unique()
         timestamp_list = [pd.Timestamp(date) for date in unique_dates]
 
         self.assertTrue(set(get_xcat(list(set(res.index)))) == set(selected_xcats))
