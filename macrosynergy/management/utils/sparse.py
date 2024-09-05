@@ -823,6 +823,20 @@ class InformationStateChanges(object):
         new_isc.isc_dict = {**self.isc_dict, **other.isc_dict}
         return new_isc
 
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, InformationStateChanges):
+            return False
+        same_keys = set(self.keys()) == set(value.keys())
+        if not same_keys:
+            return False
+        for k in self.keys():
+            same_df = (self[k].sort_index()).equals(value[k].sort_index())
+            if not same_df:
+                return False
+
+        assert same_keys and same_df
+        return True
+
     def keys(self):
         """
         A list of tickers in the InformationStateChanges object.
