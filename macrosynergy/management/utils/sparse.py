@@ -858,10 +858,11 @@ class InformationStateChanges(object):
             method.
         :return: An InformationStateChanges object.
         """
-
         isc: InformationStateChanges = cls(
-            min_period=qdf["real_date"].min(), max_period=qdf["real_date"].max()
+            min_period=qdf["real_date"].min(),
+            max_period=qdf["real_date"].max(),
         )
+
         isc_dict, density_stats_df = create_delta_data(qdf, return_density_stats=True)
 
         isc.isc_dict = isc_dict
@@ -869,7 +870,6 @@ class InformationStateChanges(object):
 
         if norm:
             isc.calculate_score(**kwargs)
-
         return isc
 
     @classmethod
