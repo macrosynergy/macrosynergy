@@ -83,21 +83,27 @@ def _load_isc_from_df(
         raise ValueError("`df` must be a DataFrame")
     if not isinstance(ticker, str):
         raise ValueError("`ticker` must be a string")
-    if not set([value_column, eop_column, grading_column, real_date_column]).issubset(
-        df.columns
-    ):
+    if df.index.name == real_date_column:
+        df = df.reset_index()
+
+    all_cols_present = set(
+        [value_column, eop_column, grading_column, real_date_column]
+    ).issubset(df.columns)
+
+    if not (all_cols_present):
         dx = {
-            var_str: eval(var_str)
-            for var_str in [
-                "value_column",
-                "eop_column",
-                "grading_column",
-                "real_date_column",
+            var_str: var_val
+            for var_str, var_val in [
+                ("value_column", value_column),
+                ("eop_column", eop_column),
+                ("grading_column", grading_column),
+                ("real_date_column", real_date_column),
             ]
         }
         raise ValueError(
             "`df` must contain columns specified in `value_column`, `eop_column`,"
-            f" `grading_column` and `real_date_column`.\n"
+            " `grading_column` and `real_date_column`, or have an index named with the value"
+            " of `real_date_column`.\n"
             f"Args: {dx}"
             f"Columns: {df.columns}"
         )
