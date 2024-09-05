@@ -908,7 +908,7 @@ class InformationStateChanges(object):
         density_stats_df = _get_diff_density_stats_from_df(isc_df)
         minx = isc_df["value"].first_valid_index()
         maxx = isc_df["value"].last_valid_index()
-        isc = cls(min_period=minx, max_period=maxx)
+        isc: InformationStateChanges = cls(min_period=minx, max_period=maxx)
         setattr(isc, "isc_dict", isc_dict)
         setattr(isc, "density_stats_df", density_stats_df)
         assert isinstance(isc, InformationStateChanges)
