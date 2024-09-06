@@ -70,6 +70,96 @@ def _get_diff_data(
     return df_temp
 
 
+def _load_isc_from_df(
+    df: pd.DataFrame,
+    ticker: str,
+    value_column: str = "value",
+    eop_column: str = "eop",
+    grading_column: str = "grading",
+    real_date_column: str = "real_date",
+) -> pd.DataFrame:
+
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("`df` must be a DataFrame")
+    if not isinstance(ticker, str):
+        raise ValueError("`ticker` must be a string")
+    if df.index.name == real_date_column:
+        df = df.reset_index()
+
+    all_cols_present = set(
+        [value_column, eop_column, grading_column, real_date_column]
+    ).issubset(df.columns)
+
+    if not (all_cols_present):
+        dx = {
+            var_str: var_val
+            for var_str, var_val in [
+                ("value_column", value_column),
+                ("eop_column", eop_column),
+                ("grading_column", grading_column),
+                ("real_date_column", real_date_column),
+            ]
+        }
+        raise ValueError(
+            "`df` must contain columns specified in `value_column`, `eop_column`,"
+            " `grading_column` and `real_date_column`, or have an index named with the value"
+            " of `real_date_column`.\n"
+            f"Args: {dx}"
+            f"Columns: {df.columns}"
+        )
+    df_temp = (
+        df[[real_date_column, value_column, eop_column, grading_column]]
+        .copy()
+        .sort_index()
+        .reset_index()
+    )
+    df_temp["count"] = df_temp.index
+    df_temp = pd.merge(
+        left=df_temp,
+        right=df_temp.groupby([eop_column], as_index=False)["count"].min(),
+        on=[eop_column],
+        how="outer",
+        suffixes=(None, "_min"),
+    )
+
+    # force all columns to be float
+    df_temp[value_column] = df_temp[value_column].astype(dtype="float64")
+    df_temp[grading_column] = df_temp[grading_column].astype(dtype="float64")
+
+    df_temp["version"] = df_temp["count"] - df_temp["count_min"]
+    df_temp["diff"] = df_temp[value_column].diff(periods=1)
+    df_temp = df_temp.set_index(real_date_column)[
+        [value_column, eop_column, "version", grading_column, "diff"]
+    ]
+
+    if any(df_temp[grading_column] > 3):
+        df_temp[grading_column] = df_temp[grading_column].astype(dtype="float64") / 10.0
+    if any(1 > df_temp[grading_column]) or any(df_temp[grading_column] > 3):
+        raise ValueError(
+            "Grading values must be between 1.0 and 3.0 (incl.),"
+            " or integers between 10 and 30"
+        )
+
+    return df_temp
+
+
+def _get_diff_density_stats_from_df(
+    isc_df: pd.DataFrame,
+) -> Dict[str, Union[float, str]]:
+    """
+    Get the density stats for a given ticker from a DataFrame with the changes in the
+    information state.
+
+    :param <pd.DataFrame> isc_df: A DataFrame with the changes in the information state.
+    :return: A dictionary with the density stats.
+    """
+    diff_mask = isc_df["diff"].abs() > 1e-12
+    diff_density = 100 * diff_mask.sum() / (~isc_df["value"].isna()).sum()
+    fvi, lvi = isc_df["value"].first_valid_index(), isc_df["value"].last_valid_index()
+    dtrange_str = f"{fvi.strftime('%Y-%m-%d')} : {lvi.strftime('%Y-%m-%d')}"
+    return {"diff_density": diff_density, "date_range": dtrange_str}
+
+
 def _get_diff_density_stats(
     diff_mask: pd.Series, val_series: pd.Series, fvi: pd.Timestamp, lvi: pd.Timestamp
 ) -> Dict[str, Union[float, str]]:
@@ -701,7 +791,7 @@ class InformationStateChanges(object):
         self._min_period: pd.Timestamp = min_period
         self._max_period: pd.Timestamp = max_period
 
-    def __getitem__(self, item):
+    def __getitem__(self, item) -> pd.DataFrame:
         return self.isc_dict[item]
 
     def __setitem__(self, key, value):
@@ -712,6 +802,40 @@ class InformationStateChanges(object):
 
     def __repr__(self):
         return repr(self.isc_dict)
+
+    def __add__(self, other):
+        if not isinstance(other, InformationStateChanges):
+            raise TypeError(
+                "Unsupported operand type(s) for +: 'InformationStateChanges' and {}".format(
+                    type(other)
+                )
+            )
+        new_isc = InformationStateChanges(
+            min_period=self._min_period, max_period=self._max_period
+        )
+        sameticks = sorted(set(self.keys()).intersection(set(other.keys())))
+        if len(sameticks) > 0:
+            raise ValueError(
+                "Tickers overlap between the two "
+                "InformationStateChanges, cannot overwrite data.\n"
+                "Overlap: {}".format(sameticks)
+            )
+        new_isc.isc_dict = {**self.isc_dict, **other.isc_dict}
+        return new_isc
+
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, InformationStateChanges):
+            return False
+        same_keys = set(self.keys()) == set(value.keys())
+        if not same_keys:
+            return False
+        for k in self.keys():
+            same_df = (self[k].sort_index()).equals(value[k].sort_index())
+            if not same_df:
+                return False
+
+        assert same_keys and same_df
+        return True
 
     def keys(self):
         """
@@ -733,7 +857,10 @@ class InformationStateChanges(object):
 
     @classmethod
     def from_qdf(
-        cls, qdf: QuantamentalDataFrame, norm: bool = True, **kwargs
+        cls: "InformationStateChanges",
+        qdf: QuantamentalDataFrame,
+        norm: bool = True,
+        **kwargs,
     ) -> "InformationStateChanges":
         """
         Create an InformationStateChanges object from a QuantamentalDataFrame.
@@ -745,12 +872,61 @@ class InformationStateChanges(object):
             method.
         :return: An InformationStateChanges object.
         """
+        isc: InformationStateChanges = cls(
+            min_period=qdf["real_date"].min(),
+            max_period=qdf["real_date"].max(),
+        )
 
-        isc = cls(min_period=qdf["real_date"].min(), max_period=qdf["real_date"].max())
         isc_dict, density_stats_df = create_delta_data(qdf, return_density_stats=True)
 
         isc.isc_dict = isc_dict
         isc.density_stats_df = density_stats_df
+
+        if norm:
+            isc.calculate_score(**kwargs)
+        return isc
+
+    @classmethod
+    def from_isc_df(
+        cls: "InformationStateChanges",
+        df: pd.DataFrame,
+        ticker: str,
+        value_column: str = "value",
+        eop_column: str = "eop",
+        grading_column: str = "grading",
+        real_date_column: str = "real_date",
+        norm: bool = True,
+        **kwargs,
+    ) -> "InformationStateChanges":
+        """
+        Create an InformationStateChanges object from a DataFrame.
+
+        :param <pd.DataFrame> df: The DataFrame to create the InformationStateChanges object from.
+        :param <str> ticker: The ticker to create the InformationStateChanges object for.
+        :param <str> value_column: The name of the column to use as the value.
+        :param <str> eop_column: The name of the column to use as the end of period date.
+        :param <str> grading_column: The name of the column to use as the grading.
+        :param <str> real_date_column: The name of the column to use as the real date.
+        :return: An InformationStateChanges object.
+        """
+
+        isc_df: pd.DataFrame = _load_isc_from_df(
+            df=df,
+            ticker=ticker,
+            value_column=value_column,
+            eop_column=eop_column,
+            grading_column=grading_column,
+            real_date_column=real_date_column,
+        )
+        isc_dict = {ticker: isc_df}
+        density_stats_df = _get_diff_density_stats_from_df(isc_df)
+        minx = isc_df["value"].first_valid_index()
+        maxx = isc_df["value"].last_valid_index()
+        isc: InformationStateChanges = cls(min_period=minx, max_period=maxx)
+        setattr(isc, "isc_dict", isc_dict)
+        setattr(isc, "density_stats_df", density_stats_df)
+        assert isinstance(isc, InformationStateChanges)
+        assert len(isc.isc_dict) == 1
 
         if norm:
             isc.calculate_score(**kwargs)
@@ -947,3 +1123,15 @@ class InformationStateChanges(object):
             volatility_forecast=volatility_forecast,
         )
         return self
+
+
+if __name__ == "__main__":
+
+    df = pd.read_csv(
+        "data/isc.csv",
+        parse_dates=["real_date", "eop"],
+        date_format="%Y%m%d",
+    )
+    ticker = "TRY_CTOT_NSA_PI"
+    isc = InformationStateChanges.from_isc_df(df, ticker=ticker, iis=True)
+    print(isc)
