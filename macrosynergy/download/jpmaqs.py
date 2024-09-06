@@ -1256,7 +1256,7 @@ class JPMaQSDownload(DataQueryInterface):
 
 
 def custom_download(
-    tickers, download_func: callable, metrics=["value"], start_date=None, end_date=None
+    tickers, download_func, metrics=["value"], start_date=None, end_date=None
 ):
     """
     Custom download function to download data for a list of tickers using a custom download function.
