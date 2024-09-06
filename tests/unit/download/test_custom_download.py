@@ -4,7 +4,7 @@ from macrosynergy.download import custom_download
 import pandas as pd
 
 
-def download_func(expressions, start_date=None, end_date=None):
+def download_func(expressions, startDate=None, endDate=None):
     data = {}
     for expr in expressions:
         ticker, metric = expr.split(",")[1], expr.split(",")[2].strip(")")
