@@ -1281,9 +1281,9 @@ def custom_download(
         df_store = []
         for idx in range(0, len(expressions) + 1, step_size):
             df_chunk = download_func(
-                expressions=expressions[idx: idx + step_size],
-                start_date=start_date,
-                end_date=end_date,
+                expressions[idx: idx + step_size],
+                startDate=start_date,
+                endDate=end_date,
             )
             df_chunk = df_chunk.dropna(axis=1, how="all")
             df_store.append(df_chunk)
