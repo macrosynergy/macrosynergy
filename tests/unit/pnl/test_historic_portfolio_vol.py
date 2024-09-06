@@ -9,6 +9,7 @@ from unittest import mock
 import warnings
 from macrosynergy.pnl.historic_portfolio_volatility import (
     historic_portfolio_vol,
+    unstack_covariances,
     _hist_vol,
     _calculate_portfolio_volatility,
     flat_weights_arr,
@@ -21,6 +22,7 @@ from macrosynergy.pnl.historic_portfolio_volatility import (
     _check_missing_data,
     _check_frequency,
     _check_input_arguments,
+    _get_first_usable_date,
     RETURN_SERIES_XCAT,
 )
 from macrosynergy.management.utils import (
@@ -290,7 +292,21 @@ class TestArgChecks(unittest.TestCase):
 
 
 class TestMisc(unittest.TestCase):
-    def setUp(self): ...
+    def setUp(self):
+        data = {
+            "real_date": [
+                "2022-01-01",
+                "2022-01-01",
+                "2022-01-01",
+                "2022-01-02",
+                "2022-01-02",
+                "2022-01-02",
+            ],
+            "fid1": ["A", "A", "B", "A", "B", "B"],
+            "fid2": ["A", "B", "B", "A", "A", "B"],
+            "value": [1.0, 0.5, 1.0, 1.0, 0.8, 1.0],
+        }
+        self.vcv_df = pd.DataFrame(data)
 
     def tearDown(self): ...
 
@@ -354,13 +370,43 @@ class TestMisc(unittest.TestCase):
             res_mock = _downsample_returns_mock(piv_df, freq)
             self.assertTrue(res.equals(res_mock))
 
+    def test_unstack_covariances_no_fillna(self):
+        result = unstack_covariances(self.vcv_df, fillna=False)
+
+        expected_result = {
+            "2022-01-01": pd.DataFrame(
+                {"A": {"A": 1.0, "B": 0.5}, "B": {"A": None, "B": 1.0}}
+            ),
+            "2022-01-02": pd.DataFrame(
+                {"A": {"A": 1.0, "B": None}, "B": {"A": 0.8, "B": 1.0}}
+            ),
+        }
+
+        for dt in result:
+            self.assertTrue(result[dt].equals(expected_result[dt]))
+
+    def test_unstack_covariances_with_fillna(self):
+        result = unstack_covariances(self.vcv_df, fillna=True)
+
+        expected_result = {
+            "2022-01-01": pd.DataFrame(
+                {"A": {"A": 1.0, "B": 0.5}, "B": {"A": 0.5, "B": 1.0}}
+            ),
+            "2022-01-02": pd.DataFrame(
+                {"A": {"A": 1.0, "B": 0.8}, "B": {"A": 0.8, "B": 1.0}}
+            ),
+        }
+
+        for dt in result:
+            self.assertTrue(result[dt].equals(expected_result[dt]))
+
 
 class TestCalculatePortfolioVolatility(unittest.TestCase):
     def setUp(self):
         mkdf_args = dict(
-            cids=["USD", "EUR", "GBP", "JPY", "CHF"],
+            cids=["USD", "EUR", "GBP", "JPY", "CHF", "HUF"],
             xcats=["EQ"],
-            start="2020-01-01",
+            start="2010-01-01",
             end="2021-01-01",
         )
         _dft = make_test_df(**mkdf_args)
@@ -429,9 +475,28 @@ class TestCalculatePortfolioVolatility(unittest.TestCase):
     def test_calls(self):
         # test that estimate_variance_covariance is called N times
         rebal_dates = self.expected_rebal_dates(
-            self.good_args["pivot_returns"].index, self.good_args["rebal_freq"]
+            self.good_args["pivot_signals"].index, self.good_args["rebal_freq"]
         )
-        _call_count = len(self.good_args["est_freqs"]) * len(rebal_dates)
+        rebal_dates
+        fsts = _get_first_usable_date(
+            pivot_returns=self.good_args["pivot_returns"],
+            pivot_signals=self.good_args["pivot_signals"],
+            est_freqs=self.good_args["est_freqs"],
+            lback_periods=self.good_args["lback_periods"],
+            nan_tolerance=self.good_args["nan_tolerance"],
+            rebal_dates=rebal_dates,
+        )
+        # excl_dt_count = sum(
+        #     [len(fsts[fsts <= rd].index.tolist()) > 0 for rd in rebal_dates]
+        # )
+        # _call_count = len(self.good_args["est_freqs"]) * (
+        #     len(rebal_dates) - excl_dt_count
+        # )
+        _call_count = 0
+        for rd in rebal_dates:
+            if len(fsts[fsts <= rd].index.tolist()) > 0:
+                for freq in self.good_args["est_freqs"]:
+                    _call_count += 1
 
         with mock.patch(
             "macrosynergy.pnl.historic_portfolio_volatility.estimate_variance_covariance",
@@ -604,6 +669,10 @@ class TestHistVolEntrypoint(unittest.TestCase):
         # test raises TypeError with start=123
         with self.assertRaises(TypeError):
             historic_portfolio_vol(**{**all_args, "start": 123})
+
+        for argx, inpx in zip(["start", "end"], ["5006-59-01", "2024-14-14"]):
+            with self.assertRaises(ValueError):
+                historic_portfolio_vol(**{**all_args, argx: inpx})
 
 
 if __name__ == "__main__":

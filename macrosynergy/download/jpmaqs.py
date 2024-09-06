@@ -14,10 +14,16 @@ import warnings
 from timeit import default_timer as timer
 from typing import Dict, List, Optional, Tuple, Union, Any, Generator
 import itertools
+import joblib
+from tqdm import tqdm
 
 import pandas as pd
 
-from macrosynergy.download.dataquery import DataQueryInterface, API_DELAY_PARAM
+from macrosynergy.download.dataquery import (
+    JPMAQS_GROUP_ID,
+    DataQueryInterface,
+    API_DELAY_PARAM,
+)
 from macrosynergy.download.exceptions import InvalidDataframeError
 from macrosynergy.management.utils import is_valid_iso_date, concat_single_metric_qdfs
 from macrosynergy.management.constants import JPMAQS_METRICS
@@ -400,6 +406,109 @@ def validate_downloaded_df(
             print(log_str)
 
     return True
+
+
+def _get_expressions_from_qdf_csv(file_path: str) -> List[str]:
+    ticker = os.path.basename(file_path).split(".")[0]
+    with open(file_path, "r", encoding="utf-8") as f:
+        headers = f.readline().strip().split(",")
+
+        assert len(set(headers)) == len(headers), f"Duplicate headers in {file_path}"
+        metrics = set(headers) - set(["real_date"])
+        return [f"DB(JPMAQS,{ticker},{metric})" for metric in metrics]
+
+
+def _get_expressions_from_wide_csv(file_path: str) -> List[str]:
+    with open(file_path, "r", encoding="utf-8") as f:
+        headers = f.readline().strip().split(",")
+        assert len(set(headers)) == len(headers), f"Duplicate headers in {file_path}"
+        expression = list(set(headers) - set(["real_date"]))
+        return expression
+
+
+def _get_expressions_from_json(file_path: str) -> List[str]:
+    with open(file_path, "r", encoding="utf-8") as f:
+        return [_get_expr(json.load(f))]
+
+
+def get_expressions_from_file(
+    file_path: str, as_dataframe: bool = True, dataframe_format: str = "qdf"
+) -> List[str]:
+    """
+    Loads the expressions found in a downloaded timeseries file (either JSON or CSV).
+
+    :param <str> file_path: path to the file.
+    :param <bool> as_dataframe: whether to load the file as a dataframe.
+    :param <str> dataframe_format: the format of the dataframe. Must be one of 'qdf' or 'wide'.
+    :return <List[str]>: list of expressions found in the file.
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File {file_path} does not exist.")
+
+    if not as_dataframe:
+        return _get_expressions_from_json(file_path)
+
+    if not dataframe_format in ["qdf", "wide"]:
+        raise ValueError("`dataframe_format` must be one of 'qdf' or 'wide'.")
+
+    if dataframe_format == "qdf":
+        return _get_expressions_from_qdf_csv(file_path)
+    elif dataframe_format == "wide":
+        return _get_expressions_from_wide_csv(file_path)
+
+
+def validate_downloaded_data(
+    path: str,
+    expected_expressions: List[str],
+    as_dataframe: bool = True,
+    dataframe_format: str = "qdf",
+    show_progress: bool = True,
+) -> List[str]:
+    """
+    Validate the downloaded data in the provided path.
+
+    :param <str> path: path to the downloaded data.
+    :param <list[str]> expected_expressions: list of expressions that were expected
+        to be downloaded.
+    :param <bool> as_dataframe: whether to load the files as dataframes.
+    :param <str> dataframe_format: the format of the dataframe. Must be one of 'qdf' or 'wide'.
+    :param <bool> show_progress: whether to show a progress bar.
+    :return <list[str]>: list of expressions that are missing from the downloaded data.
+    """
+    if not os.path.isdir(path):
+        raise ValueError(f"Path {path} does not exist.")
+
+    ext = "csv" if as_dataframe else "json"
+    files = glob.glob(f"{path}/**/*.{ext}", recursive=True)
+
+    def get_expression_func(
+        file_path: str, as_dataframe=as_dataframe, dataframe_format=dataframe_format
+    ) -> List[str]:
+        return get_expressions_from_file(
+            file_path, as_dataframe=as_dataframe, dataframe_format=dataframe_format
+        )
+
+    all_exprs = []
+    all_exprs = joblib.Parallel(n_jobs=-1)(
+        joblib.delayed(get_expression_func)(file_path)
+        for file_path in tqdm(
+            files,
+            desc="Validating downloaded data",
+            disable=not show_progress,
+        )
+    )
+    # join all the lists of expressions
+    all_exprs = list(itertools.chain.from_iterable(all_exprs))
+
+    missing_exprs = sorted(set(expected_expressions) - set(all_exprs))
+
+    if len(missing_exprs) > 0:
+        logger.critical(
+            f"Some expressions are missing from the downloaded data. "
+            f"Missing expressions: {missing_exprs}"
+        )
+
+    return missing_exprs
 
 
 class JPMaQSDownload(DataQueryInterface):
@@ -799,8 +908,13 @@ class JPMaQSDownload(DataQueryInterface):
 
         return ts_list
 
-    def download_data(self, *args, **kwargs):
-        return super().download_data(*args, **kwargs)
+    def get_catalogue(
+        self,
+        group_id: str = JPMAQS_GROUP_ID,
+        page_size: int = 1000,
+        verbose: bool = True,
+    ) -> List[str]:
+        return super().get_catalogue(group_id, page_size, verbose)
 
     def download_all_to_disk(
         self,
@@ -818,6 +932,29 @@ class JPMaQSDownload(DataQueryInterface):
     ) -> None:
         """
         Downloads all JPMaQS data to disk.
+
+        :param <str> path: path to the directory where the data will be saved.
+        :param <Optional[List[str]> expressions: Default is None, meaning all expressions
+            in the JPMaQS catalogue will be downloaded. If provided, only the expressions
+            in the list will be downloaded.
+        :param <bool> as_dataframe: Default is True, meaning the data will be saved as a
+            DataFrame (either in the Quantamental Data Format ('qdf') or wide format ('wide')).
+            If False, the data will be saved as JSON files, with one expression per file.
+        :param <str> dataframe_format: Default is 'qdf'. If `as_dataframe` is True, this
+            parameter specifies the format of the DataFrame. Must be one of 'qdf' or 'wide'.
+        :param <bool> show_progress: Default is True, meaning the progress of the download
+            will be displayed. If False, the progress will not be displayed.
+        :param <float> delay_param: Default is 0.2 seconds (fastest allowed by DataQuery API).
+            The delay parameter to use when making requests to the DataQuery API. Ideally, this
+            should not be changed.
+        :param <int> batch_size: Default is None, meaning the batch size will be set to the
+            default size (20). If provided, this parameter specifies the number of expressions
+            to download in each batch.
+        :param <int> retry: Default is 3, meaning the download will be retried 3 times for
+            any expressions that fail to download. If set to 0, no retries will be attempted.
+        :param <bool> overwrite: Default is True, meaning the data will be overwritten if it
+            already exists. If False, the data will not be overwritten.
+        :param <dict> kwargs: any other keyword arguments.
         """
         save_path: Optional[str] = None
         if path == "":
@@ -897,8 +1034,13 @@ class JPMaQSDownload(DataQueryInterface):
 
         logger.info(f"Downloaded {len(d_exprs)} expressions.")
 
-        # get the diff between the expressions and the downloaded expressions
-        unavailable_expressions = list(set(expressions) - set(d_exprs))
+        unavailable_expressions = validate_downloaded_data(
+            path=save_path,
+            expected_expressions=expressions,
+            as_dataframe=as_dataframe,
+            dataframe_format=dataframe_format,
+            show_progress=show_progress,
+        )
 
         if len(unavailable_expressions) > 0:
             if retry > 0:

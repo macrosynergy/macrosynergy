@@ -1,6 +1,7 @@
-from typing import Dict, List, Any, Union, Optional, Callable
+from typing import Dict, List, Any, Union, Optional, Callable, Tuple
 from numbers import Number
-
+import json
+import warnings
 import pandas as pd
 import numpy as np
 from macrosynergy.management.utils import (
@@ -9,50 +10,44 @@ from macrosynergy.management.utils import (
     concat_single_metric_qdfs,
     get_cid,
     get_xcat,
+    is_valid_iso_date,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 
-import warnings
-
 
 def _get_diff_data(
-    ticker: str,
-    p_value: pd.DataFrame,
-    p_eop: pd.DataFrame,
-    p_grading: pd.DataFrame,
+    diff_mask: pd.Series,
+    val_series: pd.Series,
+    eop_series: pd.Series,
+    grading_series: pd.Series,
+    fvi: pd.Timestamp,
 ) -> pd.DataFrame:
     """
-    Get the diff data for a given ticker from wide/pivoted dataframes (`ticker_df`) of
+    Get the diff data for a given ticker from wide/pivoted DataFrames (`ticker_df`) of
     metrics `value`, `eop_lag` and `grading`.
 
-    :param <str> ticker: The ticker to get the diff data for.
-    :param <pd.DataFrame> p_value: The pivoted DataFrame of the `value` metric.
-    :param <pd.DataFrame> p_eop: The pivoted DataFrame of the `eop_lag` metric.
-    :param <pd.DataFrame> p_grading: The pivoted DataFrame of the `grading` metric.
+    :param <pd.Series> diff_mask: A boolean mask indicating where the value has changed.
+    :param <pd.Series> val_series: The value series.
+    :param <pd.Series> eop_series: The end-of-period lag series.
+    :param <pd.Series> grading_series: The grading series.
+    :param <pd.Timestamp> fvi: The first valid index (fvi) for the ticker.
+    :return: A DataFrame with the diff data.
+    :rtype: pd.DataFrame
     """
-
-    # calculate basic density stats
-    diff_mask = p_value.diff(axis=0).abs() > 0.0
-    diff_density = 100 * diff_mask[ticker].sum() / (~p_value[ticker].isna()).sum()
-    fvi = p_value[ticker].first_valid_index().strftime("%Y-%m-%d")
-    lvi = p_value[ticker].last_valid_index().strftime("%Y-%m-%d")
-    dtrange_str = f"{fvi} : {lvi}"
-    ddict = {
-        "diff_density": diff_density,
-        "date_range": dtrange_str,
-    }
-
-    dates = p_value[ticker].index[diff_mask[ticker]]
+    # get the first index as well
+    dates = val_series.index[diff_mask].union([fvi])
 
     # create the diff dataframe
-    df_temp = pd.concat(
+    df_temp: pd.DataFrame = pd.concat(
         (
-            p_value.loc[dates, ticker].to_frame("value"),
-            p_eop.loc[dates, ticker].to_frame("eop_lag"),
-            p_grading.loc[dates, ticker].to_frame("grading"),
+            val_series.loc[dates].to_frame("value"),
+            eop_series.loc[dates].to_frame("eop_lag"),
+            grading_series.loc[dates].to_frame("grading"),
         ),
         axis=1,
+        ignore_index=False,
     )
+
     df_temp["eop"] = df_temp.index - pd.to_timedelta(df_temp["eop_lag"], unit="D")
     df_temp["release"] = df_temp["eop_lag"].diff(periods=1) < 0
 
@@ -72,7 +67,23 @@ def _get_diff_data(
         ["value", "eop", "version", "grading", "diff"]
     ]
 
-    return df_temp, ddict
+    return df_temp
+
+
+def _get_diff_density_stats(
+    diff_mask: pd.Series, val_series: pd.Series, fvi: pd.Timestamp, lvi: pd.Timestamp
+) -> Dict[str, Union[float, str]]:
+    """
+    Get the density stats for a given ticker from a boolean mask indicating where the value
+    has changed and the value series.
+
+    :param <pd.Series> diff_mask: A boolean mask indicating where the value has changed.
+    :param <pd.Series> val_series: The value series.
+    :return: A dictionary with the density stats.
+    """
+    diff_density: Number = 100 * diff_mask.sum() / (~val_series.isna()).sum()
+    dtrange_str = f"{fvi.strftime('%Y-%m-%d')} : {lvi.strftime('%Y-%m-%d')}"
+    return {"diff_density": diff_density, "date_range": dtrange_str}
 
 
 def create_delta_data(
@@ -92,25 +103,44 @@ def create_delta_data(
         raise ValueError("`df` must be a QuantamentalDataFrame")
     if not isinstance(return_density_stats, bool):
         raise ValueError("`return_density_stats` must be a boolean")
-    # split into value, eop and grading
-    p_value = qdf_to_ticker_df(df, value_column="value")
-    p_eop = qdf_to_ticker_df(df, value_column="eop_lag")
+    if "value" not in df.columns:
+        raise ValueError("`df` must contain a `value` column")
+    if "eop_lag" not in df.columns:
+        df["eop_lag"] = np.nan
     if "grading" not in df.columns:
         df["grading"] = np.nan
-    p_grading = qdf_to_ticker_df(df, value_column="grading")
-    assert set(p_value.columns) == set(p_eop.columns) == set(p_grading.columns)
+
+    values_df = qdf_to_ticker_df(df, value_column="value")
+    eop_df = qdf_to_ticker_df(df, value_column="eop_lag")
+    grading_df = qdf_to_ticker_df(df, value_column="grading")
+    assert set(values_df.columns) == set(eop_df.columns) == set(grading_df.columns)
+    all_tickers: List[str] = values_df.columns.tolist()
+
+    # get the first valid index for each column
+    fvi_series: pd.Series = values_df.apply(lambda x: x.first_valid_index())
+    lvi_series: pd.Series = values_df.apply(lambda x: x.last_valid_index())
 
     # create dicts to store the dataframes and density stats
     isc_dict: Dict[str, Any] = {}
-    density_stats: Dict[str, Dict[str, Any]] = {}
-    for ticker in p_value.columns:
-        df_temp, ddict = _get_diff_data(
-            ticker=ticker,
-            p_value=p_value,
-            p_eop=p_eop,
-            p_grading=p_grading,
+    # density_stats: Dict[str, Dict[str, Any]] = {}
+
+    diff_mask = values_df.diff(axis=0).abs() > 1e-12
+    density_stats: Dict[str, Dict[str, Union[float, str]]] = {}
+
+    for ticker in all_tickers:
+        isc_dict[ticker] = _get_diff_data(
+            diff_mask=diff_mask[ticker],
+            val_series=values_df[ticker],
+            eop_series=eop_df[ticker],
+            grading_series=grading_df[ticker],
+            fvi=fvi_series[ticker],
         )
-        isc_dict[ticker], density_stats[ticker] = df_temp, ddict
+        density_stats[ticker] = _get_diff_density_stats(
+            diff_mask=diff_mask[ticker],
+            val_series=values_df[ticker],
+            fvi=fvi_series[ticker],
+            lvi=lvi_series[ticker],
+        )
 
     # flatten the density stats
     _dstats_flat = [
@@ -230,6 +260,7 @@ def calculate_score_on_sparse_indicator(
     iis: bool = False,
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
+    volatility_forecast: bool = True,
 ) -> Dict[str, pd.DataFrame]:
     """Calculate score on sparse indicator
 
@@ -251,8 +282,9 @@ def calculate_score_on_sparse_indicator(
 
     :param <Callable> custom_method: A custom method to use for calculating the standard
         deviation. Must have the signature `custom_method(s: pd.Series, **kwargs) -> pd.Series`.
-
     :param <Dict> custom_method_kwargs: Keyword arguments to pass to the custom method.
+    :param <bool> volatility_forecast: If True (default), the volatility forecast is shifted
+        one period forward to align with the information state changes.
 
     :return: A dictionary of DataFrames with the changes in the information state for each ticker.
     """
@@ -285,7 +317,7 @@ def calculate_score_on_sparse_indicator(
         columns = [kk for kk in v.columns if kk != "std"]
         v = pd.merge(
             left=v[columns],
-            right=result.to_frame("std"),
+            right=result.to_frame("std").shift(periods=int(volatility_forecast)),
             how="left",
             left_index=True,
             right_index=True,
@@ -319,13 +351,7 @@ def _infer_frequency_timeseries(eop_lag_series: pd.Series) -> Optional[str]:
     most_common_period = periods.mode().values[0]
 
     # Define ranges for different frequencies
-    freqs = {
-        "D": 1,  
-        "W": 7,  
-        "M": 30, 
-        "Q": 91, 
-        "A": 365 
-    }
+    freqs = {"D": 1, "W": 7, "M": 30, "Q": 91, "A": 365}
     # 10% tolerance for frequency ranges
     for freq, freq_range in freqs.items():
         rng = (1 - 0.1) * freq_range, (1 + 0.1) * freq_range
@@ -342,7 +368,7 @@ def infer_frequency(df: QuantamentalDataFrame) -> pd.Series:
     :return: A Series with the inferred frequency for each ticker in the QuantamentalDataFrame.
     """
     if not isinstance(df, QuantamentalDataFrame):
-        raise ValueError("`df` must be a QuantamentalDataFrame")
+        raise TypeError("`df` must be a QuantamentalDataFrame")
     if not "eop_lag" in df.columns:
         raise ValueError("`df` must contain an `eop_lag` column")
 
@@ -467,7 +493,6 @@ def sparse_to_dense(
         wdf = _get_metric_df_from_isc(
             isc=isc, metric=metric_name, date_range=dtrange, fill="ffill"
         )
-        # if wdf.empty or wdf.isna().all().all()
         if wdf.empty or wdf.isna().all().all():
             dfs = [
                 pd.DataFrame(index=dtrange)
@@ -492,14 +517,6 @@ def sparse_to_dense(
 
     if postfix:
         qdf["xcat"] += postfix
-
-    tickers = (qdf["cid"] + "_" + qdf["xcat"]).unique().tolist()
-    for cid, xcat in zip(get_cid(tickers), get_xcat(tickers)):
-        mask = (qdf["cid"] == cid) & (qdf["xcat"] == xcat)
-        min_date = qdf.loc[mask, "real_date"].min()
-        # assert qdf.loc[mask & (qdf["real_date"] == min_date), "value"].isna().all()
-        if qdf.loc[mask & (qdf["real_date"] == min_date)].isna().any().any():
-            qdf = qdf[~mask | (qdf["real_date"] != min_date)]
 
     return qdf
 
@@ -611,6 +628,7 @@ def _calculate_score_on_sparse_indicator_for_class(
     iis: bool = False,
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
+    volatility_forecast: bool = True,
 ):
     """
     Calculate score on sparse indicator for a class.
@@ -619,10 +637,10 @@ def _calculate_score_on_sparse_indicator_for_class(
     """
     assert isinstance(
         cls, InformationStateChanges
-    ), "cls must be an InformationStateChanges object"
+    ), "`cls` must be an `InformationStateChanges` object"
     assert hasattr(cls, "isc_dict") and isinstance(
         cls.isc_dict, dict
-    ), "InformationStateChanges object not initialized"
+    ), "`InformationStateChanges` object not initialized"
 
     curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
     if custom_method is not None:
@@ -634,23 +652,19 @@ def _calculate_score_on_sparse_indicator_for_class(
     else:
         if not hasattr(VolatilityEstimationMethods, std):
             raise ValueError(CALC_SCORE_CUSTOM_METHOD_ERR_MSG.format(std=std))
-        # curr_method = getattr(StandardDeviationMethod, std)
         curr_method = VolatilityEstimationMethods[std]
 
     method_kwargs: Dict[str, Any] = dict(
         min_periods=min_periods, halflife=halflife, **custom_method_kwargs
     )
-    # if not 0, then use all versions
     for key, v in cls.isc_dict.items():
         mask_rel = (v["version"] == 0) if isc_version == 0 else (v["version"] >= 0)
         s = v.loc[mask_rel, "diff"]
-
         result: pd.Series = curr_method(s, **method_kwargs)
-
         columns = [kk for kk in v.columns if kk != "std"]
         v = pd.merge(
             left=v[columns],
-            right=result.to_frame("std"),
+            right=result.to_frame("std").shift(periods=int(volatility_forecast)),
             how="left",
             left_index=True,
             right_index=True,
@@ -762,6 +776,104 @@ class InformationStateChanges(object):
             metrics=metrics,
         )
 
+    def to_dict(
+        self, ticker: str
+    ) -> Dict[
+        str, Union[List[Tuple[str, float, str, float]], Tuple[str, str, str], str]
+    ]:
+        data = [
+            (f"{index:%Y-%m-%d}", row.value, f"{row.eop:%Y-%m-%d}", row.grading)
+            for index, row in self[ticker][["value", "eop", "grading"]].iterrows()
+        ]
+
+        columns = ("real_date", "value", "eop", "grading")
+        return_dict = {
+            "data": data,
+            "columns": columns,
+            "last_real_date": f"{self._max_period:%Y-%m-%d}",
+            "ticker": ticker,
+        }
+        return return_dict
+
+    def to_json(self, ticker: str) -> str:
+        return json.dumps(self.to_dict(ticker))
+
+    def get_releases(
+        self,
+        from_date: Optional[Union[pd.Timestamp, str]] = pd.Timestamp.today().normalize()
+        - pd.offsets.BDay(1),
+        to_date: Optional[Union[pd.Timestamp, str]] = pd.Timestamp.today().normalize(),
+        excl_xcats: List[str] = None,
+        latest_only: bool = True,
+    ) -> pd.DataFrame:
+        """
+        Get the latest releases for the InformationStateChanges object.
+
+        :param <pd.Timestamp> from_date: The start date of the period to get releases for.
+        :param <pd.Timestamp> to_date: The end date of the period to get releases for.
+        :param <List[str]> excl_xcats: A list of xcats to exclude from the releases.
+        :param <bool> latest_only: If True, only the latest release for each ticker is
+            returned. Default is True.
+        :return: A DataFrame with the latest releases for each ticker. If `latest_only` is
+            False, all releases within the date range are returned.
+        """
+
+        if excl_xcats is not None:
+            excl_xcat_err = "`excl_xcats` must be a list of strings"
+            if not isinstance(excl_xcats, list):
+                raise TypeError(excl_xcat_err)
+            if not all(isinstance(x, str) for x in excl_xcats):
+                raise TypeError(excl_xcat_err)
+        else:
+            excl_xcats = []
+
+        if not isinstance(latest_only, bool):
+            raise ValueError("`latest_only` must be a boolean")
+
+        dt_err = "`{varname}` must be a `pd.Timestamp` or an ISO formatted date"
+        for var_name in ["from_date", "to_date"]:
+            if not isinstance(eval(var_name), (pd.Timestamp, str, type(None))):
+                raise TypeError(dt_err.format(varname=var_name))
+            if isinstance(eval(var_name), str):
+                is_valid_iso_date(eval(var_name))
+
+        if from_date is None:
+            from_date = self._min_period
+        elif isinstance(from_date, str):
+            from_date = pd.Timestamp(from_date)
+        if to_date is None:
+            to_date = self._max_period
+        elif isinstance(to_date, str):
+            to_date = pd.Timestamp(to_date)
+
+        if from_date > to_date:
+            from_date, to_date = to_date, from_date
+            warnings.warn("`from_date` is greater than `to_date`. Swapping the dates.")
+
+        dfs_list = []
+        for k, v in self.items():
+            if get_xcat(k) in excl_xcats:
+                continue
+            s: pd.DataFrame = v.copy()
+            s = s[(s.index >= from_date) & (s.index <= to_date)]
+            s["ticker"] = k
+            if latest_only and not s.empty:
+                s = s.loc[[s.last_valid_index()]]
+
+            dfs_list.append(s.reset_index())
+
+        rel = (
+            pd.concat(dfs_list, axis=0)
+            .sort_values(by=["real_date", "eop", "ticker"])
+            .rename(columns={"diff": "change"})
+            .reset_index(drop=True)
+        )
+
+        if latest_only:
+            return rel.set_index("ticker")
+        else:
+            return rel
+
     def temporal_aggregator_period(
         self,
         winsorise: int = 10,
@@ -775,9 +887,6 @@ class InformationStateChanges(object):
         :param <pd.Timestamp> start: The start date of the period to aggregate.
         :param <pd.Timestamp> end: The end date of the period to aggregate.
         :return: A DataFrame with the aggregated values.
-
-
-
         """
         return temporal_aggregator_period(
             isc=self.isc_dict,
@@ -795,6 +904,7 @@ class InformationStateChanges(object):
         iis: bool = False,
         custom_method: Optional[Callable] = None,
         custom_method_kwargs: Dict = {},
+        volatility_forecast: bool = True,
     ):
         """
         Calculate score on sparse indicator for the InformationStateChanges object.
@@ -815,8 +925,9 @@ class InformationStateChanges(object):
         :param <Callable> custom_method: A custom method to use for calculating the standard
             deviation. Must have the signature `custom_method(s: pd.Series, **kwargs) -> pd.Series`.
         :param <Dict> custom_method_kwargs: Keyword arguments to pass to the custom method.
-
-
+        :param <bool> volatility_forecast: If True (default), the volatility forecast is shifted
+            one period forward to align with the information state changes.
+        :return: None
         """
 
         _calculate_score_on_sparse_indicator_for_class(
@@ -828,4 +939,6 @@ class InformationStateChanges(object):
             iis=iis,
             custom_method=custom_method,
             custom_method_kwargs=custom_method_kwargs,
+            volatility_forecast=volatility_forecast,
         )
+        return self
