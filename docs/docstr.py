@@ -330,7 +330,3 @@ if __name__ == "__main__":
         format_python_file(file_path)
     else:
         format_python_files(args.dir)
-
-if __name__ == "__main__":
-    file_path = "macrosynergy/download/dataquery.py"
-    format_python_file(file_path)
