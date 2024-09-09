@@ -589,7 +589,7 @@ class BetaEstimator:
             evaluated. Default is None, which evaluates all hedged returns within the class instance.
         :param <Optional[Union[str, List[str]]> cids: String or list of strings denoting the cross-sections to evaluate.
             Default is None, which evaluates all cross-sections within the class instance.
-        :param <Union[str, List[str]> correlation_types: String or list of strings denoting the types of correlations
+        :param <Union[str, List[str] correlation_types: String or list of strings denoting the types of correlations
             to calculate. Options are "pearson", "spearman" and "kendall". If None, all three
             are calculated. Default is "pearson".
         :param <Optional[str]> title: Title for the correlation table. If None, the default
