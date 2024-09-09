@@ -378,7 +378,9 @@ def format_python_files(root_dir: str = "./macrosynergy", applyfmt=False):
 
     all_files = [file for file in all_files if file not in learning_files]
     for file in all_files:
-        if os.path.basename(file) in ["__init__.py", "compat.py"]:
+        if (os.path.basename(file) in ["__init__.py", "compat.py"]) or (
+            os.path.basename(file).endswith("_fmt.py")
+        ):
             continue
 
         print(f"Formatting docstrings in {file}")
