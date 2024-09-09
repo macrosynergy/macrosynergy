@@ -318,6 +318,9 @@ def format_python_files(root_dir: str = "./macrosynergy"):
     if os.path.exists(f"{root_dir}/learning"):
         learning_files = glob.glob(f"{root_dir}/learning/**/*.py", recursive=True)
 
+    learning_files = list(map(os.path.normpath, learning_files))
+    all_files = list(map(os.path.normpath, all_files))
+
     all_files = [file for file in all_files if file not in learning_files]
     for file in all_files:
         if os.path.basename(file) in ["__init__.py", "compat.py"]:
