@@ -310,7 +310,7 @@ def check_valid_python_content(content: str) -> bool:
         return False
 
 
-def format_python_file(file_path: str):
+def format_python_file(file_path: str, applyfmt=False):
     """
     Formats the docstrings in the given python file.
     :param <str> file_path: The path to the python file.
@@ -325,6 +325,11 @@ def format_python_file(file_path: str):
 
     if not check_valid_python_content(content):
         print(f"{colorama.Fore.RED}Error in formatting docstrings in {file_path}")
+    else:
+        # write the formatted content back to the file
+        if applyfmt:
+            with open(file_path, "w") as file:
+                file.write(content)
 
     # delete the formatted file
     os.remove(out_path)
