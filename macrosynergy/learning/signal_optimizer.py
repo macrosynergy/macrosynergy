@@ -1002,6 +1002,7 @@ class SignalOptimizer:
         remove_blanks: bool = True,
         title: Optional[str] = None,
         cap: Optional[int] = None,
+        ftrs_renamed: dict = None,
         figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
     ):
         """
@@ -1014,6 +1015,9 @@ class SignalOptimizer:
             a figure title of the form "Model Selection Heatmap for {name}".
         :param <int> cap: Maximum number of features to display. Default is None. The chosen
             features are the 'cap' most frequently occurring in the pipeline.
+        :param <Optional[dict]> ftrs_renamed: Dictionary to rename the feature names for
+            visualisation in the plot axis. Default is None, which uses the original
+            feature names.
         :param <Optional[Tuple[Union[int, float], Union[int, float]]]> figsize: Tuple of
             floats or ints denoting the figure size. Default is (12, 8).
 
@@ -1022,7 +1026,7 @@ class SignalOptimizer:
         the learning process and used for signal generation, as a binary heatmap.
         """
         # Checks
-        self._checks_feature_selection_heatmap(name=name, title=title, figsize=figsize)
+        self._checks_feature_selection_heatmap(name=name, title=title, ftrs_renamed = ftrs_renamed, figsize=figsize)
 
         # Get the selected features for the specified pipeline to visualise selection.
         selected_ftrs = self.get_selected_features(name=name)
@@ -1042,6 +1046,8 @@ class SignalOptimizer:
 
         reindexed_columns = ftr_count.index
         selected_ftrs = selected_ftrs[reindexed_columns]
+        if ftrs_renamed is not None:
+            selected_ftrs.rename(columns=ftrs_renamed, inplace=True)
         
         # Create the heatmap
         plt.figure(figsize=figsize)
@@ -1056,6 +1062,7 @@ class SignalOptimizer:
         self,
         name: str,
         title: Optional[str] = None,
+        ftrs_renamed: Optional[dict] = None,
         figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
     ):
         if not isinstance(name, str):
@@ -1080,6 +1087,24 @@ class SignalOptimizer:
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
+        if ftrs_renamed is not None:
+            if not isinstance(ftrs_renamed, dict):
+                raise TypeError("The ftrs_renamed argument must be a dictionary.")
+            for key, value in ftrs_renamed.items():
+                if not isinstance(key, str):
+                    raise TypeError(
+                        "The keys of the ftrs_renamed dictionary must be strings."
+                    )
+                if not isinstance(value, str):
+                    raise TypeError(
+                        "The values of the ftrs_renamed dictionary must be strings."
+                    )
+                if key not in self.X.columns:
+                    raise ValueError(
+                        f"""The key {key} in the ftrs_renamed dictionary is not a feature 
+                        in the pipeline {name}.
+                        """
+                    )
 
     def models_heatmap(
         self,
@@ -1817,7 +1842,7 @@ if __name__ == "__main__":
     so.coefs_stackedbarplot("test", ftrs_renamed={"CRY": "carry", "GROWTH": "growth"})
     so.coefs_timeplot("test")
     so.feature_selection_heatmap(
-        "test", title="Feature selection heatmap for pipeline: test"
+        "test", title="Feature selection heatmap for pipeline: test", ftrs_renamed={"CRY": "carry", "GROWTH": "growth"}
     )
     so.intercepts_timeplot("test")
     so.nsplits_timeplot("test")
