@@ -2,6 +2,7 @@
 Function for visualising the `eop_lag`, `mop_lag` or `grading` metrics for a given
 set of cross sections and extended categories.
 """
+
 import pandas as pd
 
 from typing import List, Tuple, Optional

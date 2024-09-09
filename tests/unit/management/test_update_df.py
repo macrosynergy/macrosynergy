@@ -438,5 +438,6 @@ class TestAll(unittest.TestCase):
         result_df = update_df(test_df, test_df)
         self.assertTrue(test_df.equals(self.dfd))
 
+
 if __name__ == "__main__":
     unittest.main()

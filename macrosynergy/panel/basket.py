@@ -2,6 +2,7 @@
 Basket class for calculating the returns and carries of baskets 
 of financial contracts using various weighting methods.
 """
+
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -491,7 +492,7 @@ class Basket(object):
                 returns.
             [4] "values": weights proportionate to a panel of values of exogenous weight
                 category.
-            [5] "inv_values": weights are inversely proportionate to of values of 
+            [5] "inv_values": weights are inversely proportionate to of values of
                 exogenous weight category.
         :param <List[float]> weights: single list of weights corresponding to the base
             tickers in `contracts` argument. This is only relevant for the fixed weight
