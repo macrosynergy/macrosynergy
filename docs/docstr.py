@@ -292,7 +292,8 @@ class DSParser:
             source_lines[start_line] = out_dstring
 
         # remove the None lines
-        source_lines = list(filter(None, source_lines))
+        rmlines = lambda lines: [line for line in lines if line is not None]
+        source_lines = rmlines(source_lines)
 
         return source_lines
 
