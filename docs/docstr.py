@@ -248,7 +248,7 @@ class DSParser:
             # ds_info["indentation"] = ds_info["docstrings_sections"]["indentation"]
         self.docstrings_info
 
-    def write_formatted_file(self, file_path: Optional[str] = None) -> None:
+    def format_content(self) -> None:
         source_lines = self.source.split("\n")
         for ds_info in self.docstrings_info:
             start_line = ds_info["start_line"] - 1
@@ -257,13 +257,16 @@ class DSParser:
             formatted_sections: str = ds_info["formatted_sections"]
 
             ref_lines = source_lines[start_line:end_line]
-
-            while not (
-                source_lines[start_line:end_line][-1]
-                .strip()
-                .endswith(tuple(['"""', "'''"]))
-            ):
-                end_line += 1
+            # if the start and end line are the same, then the docstring is on one line
+            if len(ref_lines) > 2:
+                while not (
+                    source_lines[start_line:end_line][-1]
+                    .strip()
+                    .endswith(tuple(['"""', "'''"]))
+                ):
+                    end_line += 1
+            else:
+                print(f"Docstring on one line: {self.file_path}")
 
             for ix, line in enumerate(source_lines[start_line:end_line]):
                 source_lines[start_line + ix] = None
@@ -275,10 +278,22 @@ class DSParser:
         # remove the None lines
         source_lines = list(filter(None, source_lines))
 
+        return source_lines
+
+    def write_formatted_file(self, file_path: Optional[str] = None) -> None:
+        source_lines = self.format_content()
         if file_path is None:
             file_path = self.file_path
         with open(file_path, "w") as file:
             file.write("\n".join(source_lines))
+
+
+def check_valid_python_content(content: str) -> bool:
+    try:
+        ast.parse(content)
+        return True
+    except SyntaxError:
+        return False
 
 
 def format_python_file(file_path: str):
@@ -287,9 +302,10 @@ def format_python_file(file_path: str):
     :param <str> file_path: The path to the python file.
     """
     last_dot = file_path.rfind(".")
-    # out_path = file_path[:last_dot] + "_fmt" + file_path[last_dot:]
     out_path = file_path
+    out_path = file_path[:last_dot] + "_fmt" + file_path[last_dot:]
     DSParser(file_path).write_formatted_file(file_path=out_path)
+    #
 
 
 def format_python_files(root_dir: str = "./macrosynergy"):
@@ -306,6 +322,7 @@ def format_python_files(root_dir: str = "./macrosynergy"):
     for file in all_files:
         if os.path.basename(file) in ["__init__.py", "compat.py"]:
             continue
+
         print(f"Formatting docstrings in {file}")
 
         format_python_file(file)
