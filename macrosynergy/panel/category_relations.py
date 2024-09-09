@@ -647,7 +647,7 @@ class CategoryRelations(object):
             )
             assert n_cids > 1, error_cids
 
-            # “Wrap” the column variable at this width, so that the column facets span
+            # "Wrap" the column variable at this width, so that the column facets span
             # multiple rows. Used to determine the number of grids on each row.
             dict_coln = {2: 2, 5: 3, 8: 4, 30: 5}
 

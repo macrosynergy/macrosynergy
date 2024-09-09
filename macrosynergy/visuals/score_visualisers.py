@@ -52,14 +52,14 @@ class ScoreVisualisers:
         absolute deviation) are estimated sequentially with concurrently available
         information only.
     :param <int> min_obs: the minimum number of observations required to calculate
-        zn_scores. Default is 261. The parameter is only applicable if the “sequential”
+        zn_scores. Default is 261. The parameter is only applicable if the "sequential"
         parameter is set to True. Otherwise the neutral level and the mean absolute
         deviation are both computed in-sample and will use the full sample.
     :param <bool> iis: if True (default) zn-scores are also calculated for the initial
         sample period defined by min-obs on an in-sample basis to avoid losing history.
         This is irrelevant if sequential is set to False.
     :param <str> neutral: The method to calculate the neutral score.
-        Default is ‘zero’. Alternatives are ‘mean’, ‘median’ or a number.
+        Default is 'zero'. Alternatives are 'mean', 'median' or a number.
     :param <float> pan_weight: The weight of panel (versus individual cross section) for
         calculating the z-score parameters, i.e. the neutral level and the mean absolute
         deviation. Default is 1, i.e. panel data are the basis for the parameters.
@@ -69,10 +69,10 @@ class ScoreVisualisers:
         value that the function is allowed to produce. The minimum threshold is 1 mean
         absolute deviation.
     :param <str> est_freq: the frequency at which mean absolute deviations or means are
-        re-estimated. The options are daily, weekly, monthly & quarterly: “D”, “W”, “M”,
-        “Q”. Default is monthly. Re-estimation is performed at period end.
+        re-estimated. The options are daily, weekly, monthly & quarterly: "D", "W", "M",
+        "Q". Default is monthly. Re-estimation is performed at period end.
     :param <str> postfix: The string appended to category name for output;
-        default is “_ZN”.
+        default is "_ZN".
     """
 
     def __init__(
