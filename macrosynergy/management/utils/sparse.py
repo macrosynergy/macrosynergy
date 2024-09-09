@@ -32,7 +32,6 @@ def _get_diff_data(
     :param <pd.Series> grading_series: The grading series.
     :param <pd.Timestamp> fvi: The first valid index (fvi) for the ticker.
     :return <pd.DataFrame>: A DataFrame with the diff data.
-    :rtype: pd.DataFrame
     """
     # get the first index as well
     dates = val_series.index[diff_mask].union([fvi])
