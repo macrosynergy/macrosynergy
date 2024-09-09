@@ -59,8 +59,8 @@ def deconstruct_expression(
 
     :return <list[str]>: list of cid, xcat, and metric.
 
-    :raises TypeError: if `expression` is not a string or a list of strings.
-    :raises ValueError: if `expression` is an empty list.
+    :raises <TypeError>: if `expression` is not a string or a list of strings.
+    :raises <ValueError>: if `expression` is an empty list.
     """
     if not isinstance(expression, (str, list)):
         raise TypeError("`expression` must be a string or a list of strings.")
