@@ -33,7 +33,7 @@ certificate store by running the following in your Python environment:
    import certifi
    print(certifi.where())
 
-Here’s a link to `ZScaler’s official documentation and
+Here's a link to `ZScaler's official documentation and
 FAQs <https://help.zscaler.com/zia/adding-custom-certificate-application-specific-trust-store>`__
 on how to add certificates to application specific trust stores.
 
@@ -61,5 +61,5 @@ Contributing or creating a pull request
 ---------------------------------------
 
 Currently, we do not allow a pull request to be created by users outside
-of the Macrosynergy team. If you’d like to contribute, please create a
+of the Macrosynergy team. If you'd like to contribute, please create a
 fork of the repository, and create a pull request from your fork.
