@@ -279,8 +279,8 @@ class DSParser:
                 ):
                     end_line += 1
             else:
-                end_line += 1
                 print(f"Docstring on one line: {self.file_path}")
+                continue
 
             for ix, line in enumerate(source_lines[start_line:end_line]):
                 source_lines[start_line + ix] = None
