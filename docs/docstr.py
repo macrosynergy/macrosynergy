@@ -204,7 +204,7 @@ def format_docstring_section(
                 )
 
             if ix < len(dirtextlist) - 1:
-                dtext += "\n\n"
+                dtext += "\n"
 
             new_ds += dtext
         output += new_ds + "\n\n"
@@ -388,12 +388,13 @@ if __name__ == "__main__":
         "--test",
         action="store_true",
         help="Run the doctests in this file.",
+        # default=True,
     )
 
     args = parser.parse_args()
 
     if args.test:
         file_path = "macrosynergy/download/dataquery.py"
-        format_python_file(file_path)
+        format_python_file(file_path, applyfmt=True)
     else:
-        format_python_files(args.dir, applyfmt=False)
+        format_python_files(args.dir, applyfmt=True)
