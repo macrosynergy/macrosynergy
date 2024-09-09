@@ -5,6 +5,8 @@ import textwrap
 import argparse
 import os
 import colorama
+import black
+
 
 colorama.init(autoreset=True)
 
@@ -328,8 +330,11 @@ def format_python_file(file_path: str, applyfmt=False):
     else:
         # write the formatted content back to the file
         if applyfmt:
+            format_content = black.format_file_contents(
+                content, fast=False, mode=black.FileMode()
+            )
             with open(file_path, "w") as file:
-                file.write(content)
+                file.write(format_content)
 
     # delete the formatted file
     os.remove(out_path)
@@ -380,4 +385,4 @@ if __name__ == "__main__":
         file_path = "macrosynergy/download/dataquery.py"
         format_python_file(file_path)
     else:
-        format_python_files(args.dir, applyfmt=False)
+        format_python_files(args.dir, applyfmt=True)
