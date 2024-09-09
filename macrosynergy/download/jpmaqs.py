@@ -676,8 +676,6 @@ class JPMaQSDownload(DataQueryInterface):
     ) -> bool:
         """Validate the arguments passed to the download function.
 
-        :params:  -- see `macrosynergy.download.jpmaqs.JPMaQSDownload.download()`.
-
         :return <bool>: True if valid.
 
         :raises <TypeError>: If any of the arguments are not of the correct type.

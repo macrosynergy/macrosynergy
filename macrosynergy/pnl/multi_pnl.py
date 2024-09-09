@@ -26,8 +26,8 @@ class MultiPnL:
         """
         Add a NaivePnL object.
 
-        :param pnl: NaivePnL object.
-        :param pnl_xcats: List of PnLs to add from the NaivePnL object.
+        :param <NaivePnL> pnl: NaivePnL object.
+        :param <List[str]> pnl_xcats: List of PnLs to add from the NaivePnL object.
         """
         self._validate_pnl(pnl, pnl_xcats)
 
@@ -54,11 +54,11 @@ class MultiPnL:
         """
         Combine PnLs with optional weighting.
 
-        :param pnl_xcats: List of PnLs to combine. Must be in the format 'xcat/return' and
-            added using `add_pnl()`.
-        :param composite_pnl_xcat: xcat for the combined PnL.
-        :param weights: Weights for each PnL, by default None. Must be in the format
-            {'xcat': weight} or {'xcat/return': weight}.
+        :param <List[str]> pnl_xcats: List of PnLs to combine. Must be in the format 
+            'xcat/return' and added using `add_pnl()`.
+        :param <str> composite_pnl_xcat: xcat for the combined PnL.
+        :param <Optional[Dict[str, float]]> weights: Weights for each PnL, by default None.
+            Must be in the format {'xcat': weight} or {'xcat/return': weight}.
         """
         self._check_pnls_added(min_pnls=2)
         for i, pnl_xcat in enumerate(pnl_xcats):
@@ -128,9 +128,9 @@ class MultiPnL:
         """
         Creates a plot of PnLs
 
-        :param pnl_xcats: List of PnLs to plot. If None, all PnLs are plotted.
+        :param <List[str]> pnl_xcats: List of PnLs to plot. If None, all PnLs are plotted.
             Must be in the format 'xcat', or 'xcat/return_xcat'.
-        :param title: Title of the plot.
+        :param <str> title: Title of the plot.
         """
         self._check_pnls_added()
 
@@ -161,7 +161,7 @@ class MultiPnL:
         """
         Evaluate individual and composite PnLs.
 
-        :param pnl_xcats: List of PnLs to evaluate. If None, all PnLs are evaluated.
+        :param <List[str]> pnl_xcats: List of PnLs to evaluate. If None, all PnLs are evaluated.
             Must be in the format 'xcat', or 'xcat/return_xcat'.
         """
         self._check_pnls_added()
@@ -236,7 +236,7 @@ class MultiPnL:
         """
         Returns a DataFrame with PnLs.
 
-        :param pnl_xcats: List of PnLs to return. If None, all PnLs are returned.
+        :param <List[str]> pnl_xcats: List of PnLs to return. If None, all PnLs are returned.
             Must be in the format 'xcat', or 'xcat/return_xcat'.
         """
         if self.pnls_df is None:
