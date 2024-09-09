@@ -4,6 +4,9 @@ import glob
 import textwrap
 import argparse
 import os
+import colorama
+
+colorama.init(autoreset=True)
 
 
 def read_python_file(file_path: str) -> str:
@@ -305,7 +308,15 @@ def format_python_file(file_path: str):
     out_path = file_path
     out_path = file_path[:last_dot] + "_fmt" + file_path[last_dot:]
     DSParser(file_path).write_formatted_file(file_path=out_path)
-    #
+    # read the file content
+    with open(out_path, "r") as file:
+        content = file.read()
+
+    if not check_valid_python_content(content):
+        print(f"{colorama.Fore.RED}Error in formatting docstrings in {file_path}")
+
+    # delete the formatted file
+    os.remove(out_path)
 
 
 def format_python_files(root_dir: str = "./macrosynergy"):
