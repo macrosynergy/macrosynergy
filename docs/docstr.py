@@ -18,6 +18,8 @@ def read_python_file(file_path: str) -> str:
 
 MAX_LINE_LENGTH = 88
 
+TEMPFILE_SUFFIX = "_fmttemp"
+
 
 class DocstringVisitor(ast.NodeVisitor):
     def __init__(self) -> None:
@@ -343,7 +345,7 @@ def format_python_file(file_path: str, applyfmt=False):
     """
     last_dot = file_path.rfind(".")
     out_path = file_path
-    out_path = file_path[:last_dot] + "_fmt" + file_path[last_dot:]
+    out_path = file_path[:last_dot] + TEMPFILE_SUFFIX + file_path[last_dot:]
     DSParser(file_path).write_formatted_file(file_path=out_path)
     # read the file content
     with open(out_path, "r") as file:
@@ -379,7 +381,7 @@ def format_python_files(root_dir: str = "./macrosynergy", applyfmt=False):
     all_files = [file for file in all_files if file not in learning_files]
     for file in all_files:
         if (os.path.basename(file) in ["__init__.py", "compat.py"]) or (
-            os.path.basename(file).endswith("_fmt.py")
+            os.path.basename(file).split(".")[0].endswith(TEMPFILE_SUFFIX)
         ):
             continue
 
