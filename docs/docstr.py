@@ -331,9 +331,7 @@ def format_python_file(file_path: str, applyfmt=False):
     else:
         # write the formatted content back to the file
         if applyfmt:
-            format_content = black.format_file_contents(
-                content, fast=False, mode=black.FileMode()
-            )
+            format_content = black.format_str(content, mode=black.Mode())
             with open(file_path, "w") as file:
                 file.write(format_content)
 
