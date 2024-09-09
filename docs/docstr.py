@@ -6,7 +6,7 @@ import argparse
 import os
 import colorama
 import black
-
+from pathlib import Path
 
 colorama.init(autoreset=True)
 
@@ -313,6 +313,29 @@ def check_valid_python_content(content: str) -> bool:
         return False
 
 
+def format_file_with_black(filename):
+    file_path = Path(filename)
+
+    # Read the original content of the file
+    original_content = file_path.read_text()
+
+    # Format the content using black
+    try:
+        formatted_content = black.format_str(original_content, mode=black.Mode())
+    except black.NothingChanged:
+        # If nothing changed, skip saving
+        print(f"No changes needed for {filename}")
+        return
+
+    # Check if there are changes
+    if original_content != formatted_content:
+        # Save the formatted content back to the file
+        file_path.write_text(formatted_content)
+        print(f"Formatted and saved {filename}")
+    else:
+        print(f"No changes detected in {filename}")
+
+
 def format_python_file(file_path: str, applyfmt=False):
     """
     Formats the docstrings in the given python file.
@@ -331,11 +354,10 @@ def format_python_file(file_path: str, applyfmt=False):
     else:
         # write the formatted content back to the file
         if applyfmt:
-            format_content = black.format_file_contents(
-                content, fast=False, mode=black.FileMode()
-            )
+            format_file_with_black(out_path)
             with open(file_path, "w") as file:
-                file.write(format_content)
+                with open(out_path, "r") as out_file:
+                    file.write(out_file.read())
 
     # delete the formatted file
     os.remove(out_path)
