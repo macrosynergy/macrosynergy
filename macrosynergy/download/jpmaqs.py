@@ -25,7 +25,11 @@ from macrosynergy.download.dataquery import (
     API_DELAY_PARAM,
 )
 from macrosynergy.download.exceptions import InvalidDataframeError
-from macrosynergy.management.utils import is_valid_iso_date, concat_single_metric_qdfs, ticker_df_to_qdf
+from macrosynergy.management.utils import (
+    is_valid_iso_date,
+    concat_single_metric_qdfs,
+    ticker_df_to_qdf,
+)
 from macrosynergy.management.constants import JPMAQS_METRICS
 from macrosynergy.management.types import QuantamentalDataFrame
 
@@ -1281,7 +1285,7 @@ def custom_download(
         df_store = []
         for idx in range(0, len(expressions) + 1, step_size):
             df_chunk = download_func(
-                expressions[idx: idx + step_size],
+                expressions[idx : idx + step_size],
                 startDate=start_date,
                 endDate=end_date,
             )

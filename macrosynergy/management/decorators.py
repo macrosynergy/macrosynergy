@@ -18,6 +18,7 @@ from typing import (
 )
 
 from macrosynergy import PYTHON_3_8_OR_LATER
+
 if PYTHON_3_8_OR_LATER:
     from typing import get_args, get_origin
 else:

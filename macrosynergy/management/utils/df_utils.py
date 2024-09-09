@@ -1028,9 +1028,12 @@ def get_eops(
         direction=direction,
     )
 
-def merge_categories(df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: List[str] = None):
+
+def merge_categories(
+    df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: List[str] = None
+):
     """
-    Merges categories of different preferences into a single one, with the most preferred 
+    Merges categories of different preferences into a single one, with the most preferred
     being used first and others substituted in order.
 
     :param <pd.DataFrame> df: standardized JPMaQS DataFrame with the necessary columns
@@ -1063,29 +1066,43 @@ def merge_categories(df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: Li
     if not set(cids).issubset(df["cid"].unique()):
         raise ValueError("The cross sections must be present in the DataFrame.")
 
-    unique_dates = df['real_date'].unique()
+    unique_dates = df["real_date"].unique()
     real_dates = [pd.Timestamp(date) for date in unique_dates]
 
     def _get_values_for_xcat(real_dates, xcat_index, cid):
 
-        values = df[(df["real_date"].isin(real_dates)) & (df["xcat"] == xcats[xcat_index]) & (df["cid"] == cid)]
+        values = df[
+            (df["real_date"].isin(real_dates))
+            & (df["xcat"] == xcats[xcat_index])
+            & (df["cid"] == cid)
+        ]
         if not real_dates == list(values["real_date"].unique()):
             if xcat_index + 1 >= len(xcats):
                 return values
-            values = update_df(values, _get_values_for_xcat(list(set(real_dates) - set(values["real_date"].unique())), xcat_index + 1, cid))
+            values = update_df(
+                values,
+                _get_values_for_xcat(
+                    list(set(real_dates) - set(values["real_date"].unique())),
+                    xcat_index + 1,
+                    cid,
+                ),
+            )
 
         values.loc[:, "xcat"] = new_xcat
         return values
-    
+
     result_df = None
 
     for cid in cids:
         if result_df is None:
             result_df = _get_values_for_xcat(real_dates, 0, cid)
         else:
-            result_df = update_df(result_df, _get_values_for_xcat(real_dates, xcat_index=0, cid=cid))
+            result_df = update_df(
+                result_df, _get_values_for_xcat(real_dates, xcat_index=0, cid=cid)
+            )
 
     return result_df.sort_values(by=IDX_COLS_SORT_ORDER).reset_index(drop=True)
+
 
 def get_sops(
     dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,

@@ -336,7 +336,11 @@ class NaivePnL:
         for varx, name, typex in (
             (sig, "sig", str),
             (sig_op, "sig_op", str),
-            (sig_add, "sig_add", (Number)), # testing for number instead of (float, int)
+            (
+                sig_add,
+                "sig_add",
+                (Number),
+            ),  # testing for number instead of (float, int)
             (sig_neg, "sig_neg", bool),
             (pnl_name, "pnl_name", (str, type(None))),
             (rebal_freq, "rebal_freq", str),
