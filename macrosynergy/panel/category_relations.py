@@ -561,9 +561,13 @@ class CategoryRelations(object):
         # If "separator" is type Integer, the scatter plot is split across two
         # time-periods where the divisor is the received year.
         if size is None:
-            size = (3, 3) if separator == "cids" else (12, 8) 
+            size = (3, 3) if separator == "cids" else (12, 8)
         else:
-            if not isinstance(size, tuple) or len(size) != 2 or not all(isinstance(i, (int, float)) for i in size):
+            if (
+                not isinstance(size, tuple)
+                or len(size) != 2
+                or not all(isinstance(i, (int, float)) for i in size)
+            ):
                 raise TypeError("size must be a tuple of ints/floats.")
 
         if isinstance(separator, int):
@@ -661,7 +665,13 @@ class CategoryRelations(object):
             facet_height = size[1]  # height of each facet in inches
             facet_aspect = size[0] / size[1]  # aspect ratio of each facet
 
-            fg = sns.FacetGrid(data=dfx_copy, col="cid", col_wrap=ncol, height=facet_height, aspect=facet_aspect)
+            fg = sns.FacetGrid(
+                data=dfx_copy,
+                col="cid",
+                col_wrap=ncol,
+                height=facet_height,
+                aspect=facet_aspect,
+            )
             fg.map(
                 sns.regplot,
                 self.xcats[0],
@@ -708,7 +718,9 @@ class CategoryRelations(object):
 
             assert isinstance(single_chart, bool)
 
-            if coef_box == "upper right": # Since otherwise this overlaps with cid legend
+            if (
+                coef_box == "upper right"
+            ):  # Since otherwise this overlaps with cid legend
                 coef_box = "upper left"
 
             dfx_copy = dfx.reset_index()
@@ -735,7 +747,7 @@ class CategoryRelations(object):
                 fit_reg=fit_reg,
                 scatter=False,  # Do not plot scatter points in regplot
                 line_kws={"lw": 1, "color": "black"},
-                ax=ax
+                ax=ax,
             )
 
             # Color code the scatter points by cid
@@ -744,9 +756,9 @@ class CategoryRelations(object):
                 ax.scatter(
                     dfx_i[self.xcats[0]],
                     dfx_i[self.xcats[1]],
-                    label=f'{cid}',
+                    label=f"{cid}",
                     s=30,
-                    alpha=0.5
+                    alpha=0.5,
                 )
 
             if coef_box is not None:

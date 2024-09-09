@@ -315,17 +315,17 @@ class MultiPnL:
                 raise ValueError(f"{pnl_xcat} has not been added with add_pnl() yet.")
             else:
                 return pnl_xcat
-            
+
     def _check_xcat_labels(self, pnl_xcats, xcat_labels):
         if isinstance(xcat_labels, dict):
             xcat_labels = {
-                    self._infer_return_by_xcat(k): v for k, v in xcat_labels.items()
-                }
+                self._infer_return_by_xcat(k): v for k, v in xcat_labels.items()
+            }
         elif isinstance(xcat_labels, list):
             if len(pnl_xcats) != len(xcat_labels):
                 raise ValueError(
-                        "If using a list, the number of labels must match the number of PnLs."
-                    )
+                    "If using a list, the number of labels must match the number of PnLs."
+                )
             xcat_labels = dict(zip(pnl_xcats, xcat_labels))
         else:
             raise ValueError("xcat_labels must be a list or a dictionary.")
