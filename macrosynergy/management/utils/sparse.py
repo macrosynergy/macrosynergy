@@ -376,7 +376,8 @@ def calculate_score_on_sparse_indicator(
     :param <bool> volatility_forecast: If True (default), the volatility forecast is shifted
         one period forward to align with the information state changes.
 
-    :return A dictionary of DataFrames with the changes in the information state for each ticker.
+    :return <Dict[str, pd.DataFrame]>: A dictionary of DataFrames with the changes in the
+        information state for each ticker.
     """
     # Operations on a per key in data dictionary
 
