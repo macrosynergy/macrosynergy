@@ -335,7 +335,7 @@ def format_python_file(file_path: str, applyfmt=False):
     os.remove(out_path)
 
 
-def format_python_files(root_dir: str = "./macrosynergy"):
+def format_python_files(root_dir: str = "./macrosynergy", applyfmt=False):
     """
     Formats the docstrings in all python files in the given directory.
     :param <str> root_dir: The root directory to search for python files.
@@ -355,7 +355,7 @@ def format_python_files(root_dir: str = "./macrosynergy"):
 
         print(f"Formatting docstrings in {file}")
 
-        format_python_file(file)
+        format_python_file(file, applyfmt=applyfmt)
 
 
 if __name__ == "__main__":
@@ -380,4 +380,4 @@ if __name__ == "__main__":
         file_path = "macrosynergy/download/dataquery.py"
         format_python_file(file_path)
     else:
-        format_python_files(args.dir)
+        format_python_files(args.dir, applyfmt=False)
