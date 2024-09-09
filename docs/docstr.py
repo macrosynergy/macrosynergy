@@ -1,8 +1,8 @@
 import ast
 from typing import List, Dict, Any, Tuple, Optional
 import glob
-import json
 import textwrap
+import argparse
 
 
 def read_python_file(file_path: str) -> str:
@@ -286,7 +286,8 @@ def format_python_file(file_path: str):
     :param <str> file_path: The path to the python file.
     """
     last_dot = file_path.rfind(".")
-    out_path = file_path[:last_dot] + "_fmt" + file_path[last_dot:]
+    # out_path = file_path[:last_dot] + "_fmt" + file_path[last_dot:]
+    out_path = file_path
     DSParser(file_path).write_formatted_file(file_path=out_path)
 
 
@@ -299,19 +300,30 @@ def format_python_files(root_dir: str):
         format_python_file(file)
 
 
-# if __name__ == "__main__":
-#     parser = argparse.ArgumentParser(description="Format docstrings in python files.")
-#     parser.add_argument(
-#         "-d",
-#         "--dir",
-#         type=str,
-#         help="The root directory to search for python files.",
-#         # required=True,
-#         default="macrosynergy",
-#     )
-#     args = parser.parse_args()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Format docstrings in python files.")
+    parser.add_argument(
+        "-d",
+        "--dir",
+        type=str,
+        help="The root directory to search for python files.",
+        # required=True,
+        default="./macrosynergy",
+    )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Run the doctests in this file.",
+    )
 
-#     format_python_files(args.dir)
+    args = parser.parse_args()
+
+    # if test mode, use macrosynergy/download/dataquery.py
+    if args.test:
+        file_path = "macrosynergy/download/dataquery.py"
+        format_python_file(file_path)
+    else:
+        format_python_files(args.dir)
 
 if __name__ == "__main__":
     file_path = "macrosynergy/download/dataquery.py"
