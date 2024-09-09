@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Tuple, Optional
 import glob
 import textwrap
 import argparse
+import os
 
 
 def read_python_file(file_path: str) -> str:
@@ -291,12 +292,18 @@ def format_python_file(file_path: str):
     DSParser(file_path).write_formatted_file(file_path=out_path)
 
 
-def format_python_files(root_dir: str):
+def format_python_files(root_dir: str = "./macrosynergy"):
     """
     Formats the docstrings in all python files in the given directory.
     :param <str> root_dir: The root directory to search for python files.
     """
-    for file in glob.glob(f"{root_dir}/**/*.py", recursive=True):
+    all_files = glob.glob(f"{root_dir}/**/*.py", recursive=True)
+    learning_files = []
+    if os.path.exists(f"{root_dir}/learning"):
+        learning_files = glob.glob(f"{root_dir}/learning/**/*.py", recursive=True)
+
+    all_files = [file for file in all_files if file not in learning_files]
+    for file in all_files:
         format_python_file(file)
 
 
@@ -318,7 +325,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # if test mode, use macrosynergy/download/dataquery.py
     if args.test:
         file_path = "macrosynergy/download/dataquery.py"
         format_python_file(file_path)
