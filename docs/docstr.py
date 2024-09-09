@@ -121,22 +121,6 @@ def split_docstring(docstring: str) -> Dict[str, List[str]]:
 MAX_LINE_LENGTH = 88
 
 
-# def format_param_directive(directive: str) -> str:
-#     # e.g.: ":param <str> name: The name of the person."
-#     try:
-#         assert directive.startswith(":param")
-#         # split by < and >
-#         typex = directive.split("<", 1)[1].split(">", 1)[0].strip()
-#         name, description = directive.split(">", 1)[1].split(":", 1)
-#         name, description = name.strip(), description.strip()
-#         idt = chr(32) * 4
-#         return f"{name} : {typex}\n{idt}{description}"
-#     except Exception as e:
-#         print(directive)
-#         print(e)
-#         return directive
-
-
 def format_param_directive(directive: str) -> str:
     assert directive.startswith(":param")
     # split by < and >
