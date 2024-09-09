@@ -2,6 +2,7 @@ import ast
 from typing import List, Dict, Any, Tuple, Optional
 import glob
 import json
+import textwrap
 
 
 def read_python_file(file_path: str) -> str:
@@ -37,6 +38,9 @@ class DocstringVisitor(ast.NodeVisitor):
             end_line = start_line + len(docstring.split("\n")) + 1
             # NOTE: this may break if the docstring is at the very end of the file with no newline
             # however, this case does not seem to exist in the current codebase
+            # get the indentation of the docstring by checking start_line-1
+            indentation = node.body[0].col_offset
+
             self.docstrings_info.append(
                 {
                     "type": type(node).__name__,
@@ -44,15 +48,13 @@ class DocstringVisitor(ast.NodeVisitor):
                     "start_line": start_line,
                     "end_line": end_line,
                     "docstring": docstring,
+                    "indentation": indentation,
                 }
             )
 
 
-def get_docstring_info(file_path: str) -> List[Dict[str, Any]]:
-    with open(file_path, "r") as file:
-        source = file.read()
-
-    tree = ast.parse(source)
+def get_docstring_info(source_str: str) -> List[Dict[str, Any]]:
+    tree = ast.parse(source_str)
     visitor = DocstringVisitor()
     visitor.visit(tree)
     return visitor.docstrings_info
@@ -120,7 +122,7 @@ def format_param_directive(directive: str) -> str:
         name, description = directive.split(">", 1)[1].split(":", 1)
         name, description = name.strip(), description.strip()
         idt = chr(32) * 4
-        return f"{name} : ({typex})\n{idt}{description}"
+        return f"{name} : {typex}\n{idt}{description}"
     except Exception as e:
         print(directive)
         print(e)
@@ -147,7 +149,9 @@ def format_return_directive(directive: str) -> str:
     return f"{typex}\n{idt}{description}"
 
 
-def format_docstring_section(section: Dict[str, Any]) -> Dict[str, Any]:
+def format_docstring_section(
+    section: Dict[str, Any], idt_level: int = 4
+) -> Dict[str, Any]:
     dir_func_map = {
         "param": format_param_directive,
         "raises": format_raises_directive,
@@ -177,15 +181,50 @@ def format_docstring_section(section: Dict[str, Any]) -> Dict[str, Any]:
     # dscr = roll_description(section["description"])
     dscr = str(section["description"])
     if dscr:
+        # output += dscr + "\n\n"
+        dscr = text_wrap(dscr, idt=idt_level)
         output += dscr + "\n\n"
 
     # idt = chr(32) * 4
     for dirtype, dirtextlist in formatted_sections.items():
-        full_name = f"{dirtype}\n{'-' * len(dirtype)}"
-        output += f"{full_name}\n"
-        output += "\n\n".join(dirtextlist) + "\n\n"
 
+        new_ds = f"{dirtype}\n{'-' * len(dirtype)}\n"
+        new_ds = text_wrap(new_ds, idt=idt_level) + "\n"
+
+        for ix, dirtext in enumerate(dirtextlist):
+            dtext = text_wrap(dirtext, idt=idt_level)
+            if len(dtext.splitlines()) > 2:
+                split_dtext = dtext.splitlines()
+                apt_idt = chr(32) * get_indentation(dtext.splitlines()[1])
+
+                dtext = "\n".join(
+                    [split_dtext[0]] + [apt_idt + x.lstrip() for x in split_dtext[1:]]
+                )
+
+            if ix < len(dirtextlist) - 1:
+                dtext += "\n\n"
+
+            new_ds += dtext
+        output += new_ds + "\n\n"
+
+    output = output.rstrip()
     return output
+
+
+def text_wrap(text: str, max_line_length: int = MAX_LINE_LENGTH, idt: int = 4) -> str:
+    indent = " " * idt
+    paragraphs = text.splitlines()
+    wrapped_paragraphs = [
+        textwrap.fill(
+            paragraph,
+            width=max_line_length,
+            initial_indent=indent,
+            subsequent_indent=indent,
+        )
+        for paragraph in paragraphs
+    ]
+    wrapped_text = "\n".join(wrapped_paragraphs)
+    return wrapped_text
 
 
 class DSParser:
@@ -198,29 +237,42 @@ class DSParser:
 
     def read_python_file(self) -> None:
         self.source = read_python_file(self.file_path)
-        self.docstrings_info = get_docstring_info(self.file_path)
+        self.docstrings_info = get_docstring_info(source_str=self.source)
         for ds_info in self.docstrings_info:
             docstring = ds_info["docstring"]
             ds_info["docstrings_sections"] = split_docstring(docstring)
             ds_info["formatted_sections"] = format_docstring_section(
-                ds_info["docstrings_sections"]
+                section=ds_info["docstrings_sections"], idt_level=ds_info["indentation"]
             )
             # ds_info["indentation"] = ds_info["docstrings_sections"]["indentation"]
         self.docstrings_info
 
     def write_formatted_file(self, file_path: Optional[str] = None) -> None:
         source_lines = self.source.split("\n")
-        assert 0 == 1, "Docstrings formatted correctly. Need to fix indentation logic."
         for ds_info in self.docstrings_info:
-            start_line = ds_info["start_line"]
-            end_line = ds_info["end_line"]
-            idt = chr(32) * (ds_info["indentation"])
-            source_lines[start_line - 1] = (
-                f'{idt}"""\n' + ds_info["formatted_sections"] + f'\n{idt}"""'
-            )
-            # source_lines[end_line - 1] =
-            for i in range(start_line, end_line):
-                source_lines[i] = ""
+            start_line = ds_info["start_line"] - 1
+            end_line = ds_info["end_line"] - 1
+            indentation: str = ds_info["indentation"] * " "
+            formatted_sections: str = ds_info["formatted_sections"]
+
+            ref_lines = source_lines[start_line:end_line]
+
+            while not (
+                source_lines[start_line:end_line][-1]
+                .strip()
+                .endswith(tuple(['"""', "'''"]))
+            ):
+                end_line += 1
+
+            for ix, line in enumerate(source_lines[start_line:end_line]):
+                source_lines[start_line + ix] = None
+
+            # at the start line, write the new docstring
+            out_dstring = f'{indentation}"""\n{formatted_sections}\n{indentation}"""\n'
+            source_lines[start_line] = out_dstring
+
+        # remove the None lines
+        source_lines = list(filter(None, source_lines))
 
         if file_path is None:
             file_path = self.file_path
