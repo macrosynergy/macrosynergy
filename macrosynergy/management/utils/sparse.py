@@ -428,7 +428,8 @@ def _infer_frequency_timeseries(eop_lag_series: pd.Series) -> Optional[str]:
     Infer the frequency of a time series based on the pattern of eop_lag values,
     considering resets to 0 to detect period ends.
     :param <pd.Series> eop_lag_series: A Series of eop_lag values.
-    :return The inferred frequency of the time series. One of "D", "W", "M", "Q" or "A".
+    :return <Optional[str]>: The inferred frequency of the time series. One of "D", "W",
+        "M", "Q" or "A".
     """
     # Identify resets to 0 which indicate the end of a period
     reset_indices = eop_lag_series[eop_lag_series == 0].index
@@ -999,8 +1000,8 @@ class InformationStateChanges(object):
         :param <List[str]> excl_xcats: A list of xcats to exclude from the releases.
         :param <bool> latest_only: If True, only the latest release for each ticker is
             returned. Default is True.
-        :return A DataFrame with the latest releases for each ticker. If `latest_only` is
-            False, all releases within the date range are returned.
+        :return <pd.DataFrame>: A DataFrame with the latest releases for each ticker. If
+            `latest_only` is False, all releases within the date range are returned.
         """
 
         if excl_xcats is not None:
