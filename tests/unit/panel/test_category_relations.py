@@ -696,9 +696,9 @@ class TestAll(unittest.TestCase):
                 ylab="Return",
                 coef_box=2,
                 ncol=5,
-                prob_est="WRONG"
+                prob_est="WRONG",
             )
-        
+
         with self.assertRaises(TypeError):
             cr.reg_scatter(
                 labels=True,
@@ -707,7 +707,7 @@ class TestAll(unittest.TestCase):
                 xlab="Carry",
                 ylab="Return",
                 ncol=5,
-                ax=1
+                ax=1,
             )
 
         with self.assertRaises(ValueError):
@@ -718,7 +718,7 @@ class TestAll(unittest.TestCase):
                 xlab="Carry",
                 ylab="Return",
                 ncol=5,
-                coef_box_font_size="WRONG"
+                coef_box_font_size="WRONG",
             )
 
         with self.assertRaises(ValueError):
@@ -729,7 +729,7 @@ class TestAll(unittest.TestCase):
                 xlab="Carry",
                 ylab="Return",
                 ncol=5,
-                coef_box_font_size=-1
+                coef_box_font_size=-1,
             )
 
         with self.assertRaises(TypeError):
@@ -740,18 +740,7 @@ class TestAll(unittest.TestCase):
                 xlab="Carry",
                 ylab="Return",
                 ncol=5,
-                size=("1", 7)
-            )
-        
-        with self.assertRaises(TypeError):
-            cr.reg_scatter(
-                labels=True,
-                separator=2010,
-                title="Carry and Return",
-                xlab="Carry",
-                ylab="Return",
-                ncol=5,
-                size=8
+                size=("1", 7),
             )
 
         with self.assertRaises(TypeError):
@@ -762,7 +751,18 @@ class TestAll(unittest.TestCase):
                 xlab="Carry",
                 ylab="Return",
                 ncol=5,
-                size=(1, 7, 33)
+                size=8,
+            )
+
+        with self.assertRaises(TypeError):
+            cr.reg_scatter(
+                labels=True,
+                separator=2010,
+                title="Carry and Return",
+                xlab="Carry",
+                ylab="Return",
+                ncol=5,
+                size=(1, 7, 33),
             )
 
 

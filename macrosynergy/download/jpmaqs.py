@@ -25,7 +25,11 @@ from macrosynergy.download.dataquery import (
     API_DELAY_PARAM,
 )
 from macrosynergy.download.exceptions import InvalidDataframeError
-from macrosynergy.management.utils import is_valid_iso_date, concat_single_metric_qdfs, ticker_df_to_qdf
+from macrosynergy.management.utils import (
+    is_valid_iso_date,
+    concat_single_metric_qdfs,
+    ticker_df_to_qdf,
+)
 from macrosynergy.management.constants import JPMAQS_METRICS
 from macrosynergy.management.types import QuantamentalDataFrame
 
@@ -55,8 +59,8 @@ def deconstruct_expression(
 
     :return <list[str]>: list of cid, xcat, and metric.
 
-    :raises TypeError: if `expression` is not a string or a list of strings.
-    :raises ValueError: if `expression` is an empty list.
+    :raises <TypeError>: if `expression` is not a string or a list of strings.
+    :raises <ValueError>: if `expression` is an empty list.
     """
     if not isinstance(expression, (str, list)):
         raise TypeError("`expression` must be a string or a list of strings.")
@@ -672,8 +676,6 @@ class JPMaQSDownload(DataQueryInterface):
     ) -> bool:
         """Validate the arguments passed to the download function.
 
-        :params:  -- see `macrosynergy.download.jpmaqs.JPMaQSDownload.download()`.
-
         :return <bool>: True if valid.
 
         :raises <TypeError>: If any of the arguments are not of the correct type.
@@ -1281,7 +1283,7 @@ def custom_download(
         df_store = []
         for idx in range(0, len(expressions) + 1, step_size):
             df_chunk = download_func(
-                expressions[idx: idx + step_size],
+                expressions[idx : idx + step_size],
                 startDate=start_date,
                 endDate=end_date,
             )

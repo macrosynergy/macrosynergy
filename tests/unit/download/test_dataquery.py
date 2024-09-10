@@ -135,7 +135,6 @@ class TestRequestWrapper(unittest.TestCase):
             with self.assertRaises(InvalidResponseError):
                 validate_response(response, user_id=user_id)
 
-
     def test_request_wrapper(self):
         warnings.filterwarnings("ignore", category=UserWarning, module="logger")
         curr_logger_level: int = logging.getLogger().getEffectiveLevel()

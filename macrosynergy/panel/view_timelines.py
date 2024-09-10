@@ -1,6 +1,7 @@
 """
 Functionality to visualize time series data as line charts.
 """
+
 import numpy as np
 import pandas as pd
 from typing import List, Tuple, Optional
@@ -153,7 +154,7 @@ if __name__ == "__main__":
         cids=cids[0],
         size=(10, 5),
         title="AUD Return and Carry",
-        aspect=3
+        aspect=3,
     )
 
     view_timelines(
@@ -164,7 +165,7 @@ if __name__ == "__main__":
         title_adj=0.8,
         xcat_labels=["Return", "Carry", "Inflation"],
         title="AUD Return, Carry & Inflation",
-        aspect=3
+        aspect=3,
     )
 
     view_timelines(dfd, xcats=["CRY"], cids=cids, ncol=4, title="Carry", cs_mean=True)
