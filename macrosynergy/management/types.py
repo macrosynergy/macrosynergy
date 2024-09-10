@@ -24,6 +24,18 @@ class NoneType(metaclass=NoneTypeMeta):
     pass
 
 
+class SubscriptableMeta(type):
+    """
+    Convenience metaclass to allow subscripting of methods on a class.
+    """
+
+    def __getitem__(cls, item):
+        if hasattr(cls, item) and callable(getattr(cls, item)):
+            return getattr(cls, item)
+        else:
+            raise KeyError(f"{item} is not a valid method name")
+
+
 class ArgValidationMeta(type):
     def __new__(cls, name, bases, dct: dict):
         for key, value in dct.items():
