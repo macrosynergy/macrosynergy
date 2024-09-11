@@ -2,8 +2,6 @@
 Base class for sequential learning over a panel.
 """
 
-import os
-import warnings
 import numpy as np
 import pandas as pd
 
@@ -11,9 +9,10 @@ from macrosynergy.management import categories_df
 
 from tqdm.auto import tqdm 
 
+import warnings
 from abc import ABC, abstractmethod
 from joblib import Parallel, delayed
-categories_df()
+
 class BasePanelLearner(ABC):
     def __init__(
         self,
@@ -25,6 +24,7 @@ class BasePanelLearner(ABC):
         blacklist = None,
         freq = "M",
         lag = 1,
+        # slip?
         xcat_aggs = ["last", "sum"],
     ):
         """
@@ -99,7 +99,7 @@ class BasePanelLearner(ABC):
         self.unique_date_levels = sorted(self.date_levels.unique())
         self.unique_xs_levels = sorted(self.xs_levels.unique())
 
-        # Create initial dataframes to store relevant quantities from the learning process
+        # Create initial dataframe to store model selection data from the learning process
         self.chosen_models = pd.DataFrame(
             columns=["real_date", "name", "model_type", "hparams", "n_splits_used"]
         )
@@ -108,7 +108,7 @@ class BasePanelLearner(ABC):
         self,
         name,
         outer_splitter,
-        inner_splitters, # Either BaseCrossValidator or list
+        inner_splitters,
         models,
         hyperparameters,
         scorers,
@@ -207,8 +207,8 @@ class BasePanelLearner(ABC):
         Worker function for parallel processing of the learning process.
         """
         # Train-test split
-        X_train, X_test = self.X.values[train_idx, :], self.X.values[test_idx, :]
-        y_train, y_test = self.y.values[train_idx], self.y.values[test_idx]
+        X_train, X_test = self.X.iloc[train_idx, :], self.X.iloc[test_idx, :]
+        y_train, y_test = self.y.iloc[train_idx], self.y.iloc[test_idx]
 
         # Determine correct timestamps of test set forecasts
         # First get test index information
@@ -337,6 +337,69 @@ class BasePanelLearner(ABC):
             modelchoice_data,
             other_data,
         )
+    
+    def _model_search(
+        self,
+        X_train,
+        y_train,
+        inner_splitters,
+        models,
+        hyperparameters,
+        scorers,
+        search_type,
+        n_iter,
+        splits_dictionary,
+        cv_summary,
+        n_jobs_inner,
+    ):
+        """
+        TODO later
+        """
+        optim_name = None
+        optim_model = None
+        optim_score = - np.inf
+        optim_params = None
+
+        for model_name, model in models.items():
+            # Depending on the search type, find the best hyperparameters
+            if search_type == "grid":
+                # TODO: n_jobs_inner later
+                optim_score, optim_params = self._grid_search(
+                    X_train=X_train,
+                    y_train=y_train,
+                    model=model,
+                    inner_splitters=inner_splitters,
+                    hyperparameters=hyperparameters[model_name],
+                    scorers=scorers,
+                    splits_dictionary=splits_dictionary,
+                    cv_summary=cv_summary,
+                ) 
+            elif search_type == "prior":
+                optim_score, optim_params = self._random_search(
+                    X_train=X_train,
+                    y_train=y_train,
+                    model=model,
+                    inner_splitters=inner_splitters,
+                    hyperparameters=hyperparameters[model_name],
+                    scorers=scorers,
+                    splits_dictionary=splits_dictionary,
+                    cv_summary=cv_summary,
+                    n_iter=n_iter,
+                ) 
+            elif search_type == "bayes":
+                optim_score, optim_params = self._bayes_search(
+                    X_train=X_train,
+                    y_train=y_train,
+                    model=model,
+                    inner_splitters=inner_splitters,
+                    hyperparameters=hyperparameters[model_name],
+                    scorers=scorers,
+                    splits_dictionary=splits_dictionary,
+                    cv_summary=cv_summary,
+                    n_iter=n_iter,
+                ) 
+            else:
+                raise NotImplementedError(f"Search type {search_type} is not implemented.")
     
     @abstractmethod
     def store_quantamental_data(self, model, X_train, y_train, X_test, y_test):
