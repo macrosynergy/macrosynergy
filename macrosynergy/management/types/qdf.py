@@ -6,23 +6,6 @@ from typing import List, Optional
 import pandas as pd
 
 
-class NoneTypeMeta(type):
-    """
-    MetaClass to support type checks for `None`.
-    """
-
-    def __instancecheck__(cls, instance):
-        return instance is None or isinstance(instance, type(None))
-
-
-class NoneType(metaclass=NoneTypeMeta):
-    """
-    Custom class definition for a NoneType that supports type checks for `None`.
-    """
-
-    pass
-
-
 class QuantamentalDataFrameMeta(type):
     """
     MetaClass to support type checks for `QuantamentalDataFrame`.
@@ -85,3 +68,31 @@ class QuantamentalDataFrame(pd.DataFrame, metaclass=QuantamentalDataFrameMeta):
             ):
                 raise TypeError("Input must be a QuantamentalDataFrame (pd.DataFrame).")
         super().__init__(df)
+
+    def is_categorical(self) -> bool:
+        """
+        Returns True if the QuantamentalDataFrame is categorical.
+        """
+        strcols = list(set(QuantamentalDataFrame.IndexCols) - {"real_date"})
+
+        for col in strcols:
+            if col in self.columns:
+                if not self[col].dtype.name == "category":
+                    return False
+
+        return True
+
+    def to_categorical(self) -> pd.DataFrame:
+        """
+        Converts the QuantamentalDataFrame to a categorical DataFrame.
+        """
+        if not isinstance(self, QuantamentalDataFrame):
+            raise TypeError("Input must be a QuantamentalDataFrame (pd.DataFrame).")
+
+        strcols = list(set(QuantamentalDataFrame.IndexCols) - {"real_date"})
+
+        for col in strcols:
+            if col in self.columns:
+                self[col] = self[col].astype("category")
+
+        return self

@@ -24,7 +24,8 @@ if PYTHON_3_8_OR_LATER:
 else:
     from typing_extensions import get_args, get_origin
 from inspect import signature
-from macrosynergy.management.types import NoneType
+
+# from macrosynergy.management.types import NoneType
 import pandas as pd
 import numpy as np
 from packaging import version
@@ -239,7 +240,7 @@ def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
         for i, et in enumerate(expected_types):
             if str(et).startswith("typing."):
                 expected_types[i] = str(et).replace("typing.", "")
-            if et is NoneType:
+            if et is type(None):
                 expected_types[i] = "None"
 
         ret_string = (
