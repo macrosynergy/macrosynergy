@@ -7,11 +7,12 @@ import pandas as pd
 
 from macrosynergy.management import categories_df
 
-from tqdm.auto import tqdm 
+from sklearn.model_selection import GridSearchCV
 
 import warnings
 from abc import ABC, abstractmethod
 from joblib import Parallel, delayed
+from tqdm.auto import tqdm 
 
 class BasePanelLearner(ABC):
     def __init__(
@@ -234,7 +235,7 @@ class BasePanelLearner(ABC):
             [test_xs_levels, mapped_dates], names=["cid", "real_date"]
         )
 
-        optim_name, optim_model, optim_score, optim_params, n_splits = (
+        optim_name, optim_model, optim_score, optim_params = ( # n_splits?
             self._model_search(
                 X_train=X_train,
                 y_train=y_train,
@@ -364,7 +365,7 @@ class BasePanelLearner(ABC):
             # Depending on the search type, find the best hyperparameters
             if search_type == "grid":
                 # TODO: n_jobs_inner later
-                optim_score, optim_params = self._grid_search(
+                score, params = self._grid_search(
                     X_train=X_train,
                     y_train=y_train,
                     model=model,
@@ -375,7 +376,7 @@ class BasePanelLearner(ABC):
                     cv_summary=cv_summary,
                 ) 
             elif search_type == "prior":
-                optim_score, optim_params = self._random_search(
+                score, params = self._random_search(
                     X_train=X_train,
                     y_train=y_train,
                     model=model,
@@ -387,7 +388,7 @@ class BasePanelLearner(ABC):
                     n_iter=n_iter,
                 ) 
             elif search_type == "bayes":
-                optim_score, optim_params = self._bayes_search(
+                score, params = self._bayes_search(
                     X_train=X_train,
                     y_train=y_train,
                     model=model,
@@ -400,6 +401,64 @@ class BasePanelLearner(ABC):
                 ) 
             else:
                 raise NotImplementedError(f"Search type {search_type} is not implemented.")
+            
+            # Update optimal model if necessary
+            if score > optim_score:
+                optim_name = model_name
+                optim_model = model
+                optim_score = score
+                optim_params = params
+
+        return optim_name, optim_model, optim_score, optim_params
+    
+    def _grid_search(
+        self,
+        X_train,
+        y_train,
+        model,
+        inner_splitters,
+        hyperparameters,
+        scorers,
+        splits_dictionary,
+        cv_summary,
+        n_jobs_inner,
+    ):
+        """
+        Run a grid search for 'model' with the hyperparameters in the dictionary 'hyperparameters'.
+        Repeat for all inner splitters in inner_splitters and average the scores. Use
+        cv_summary method to summarise the scores by median, mean or custom function.
+        """
+        for inner_splitter in inner_splitters:
+            gs = GridSearchCV(
+                estimator = model,
+                param_grid = hyperparameters,
+                scoring = scorers,
+                n_jobs = n_jobs_inner,
+                refit = False,
+                cv = inner_splitter,
+            )
+            gs.fit(X_train, y_train)
+            results = gs.cv_results_
+            scaled_scores = {param_idx: [] for param_idx in range(len(results['params']))}
+
+            for scorer in scorers:
+                scorer_name = scorer.__name__
+                scorer_key = f"mean_test_{scorer_name}" # TODO: use cv_summary here
+                scorer_values = results[scorer_key]
+
+                # min-max scale scores over folds
+                scaler = MinMaxScaler()
+                scaled_values = scaler.fit_transform(scorer_values.reshape(-1, 1)).flatten()
+
+                # Store scaled scores for each hyparam combination
+                for idx, score in enumerate(scaled_values):
+                    scaled_scores[idx].append(score)
+
+            # Average scores across metrics
+            averaged_scores = {idx: np.mean(scores) for idx, scores in scaled_scores.items()}
+
+
+        
     
     @abstractmethod
     def store_quantamental_data(self, model, X_train, y_train, X_test, y_test):
