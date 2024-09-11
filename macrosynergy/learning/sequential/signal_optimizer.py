@@ -85,7 +85,7 @@ class SignalOptimizer(BasePanelLearner):
         """
         Determine forecasts and store relevant quantities over time. 
         """
-        # First create pandas series to store the forecasts
+        # First create pandas dataframes to store the forecasts
         forecasts_df = pd.DataFrame(
             index = self.forecast_idxs,
             columns = [name],
@@ -229,6 +229,3 @@ class SignalOptimizer(BasePanelLearner):
             ),
             axis=0,
         ).astype(ftr_selection_types)
-
-    
-
