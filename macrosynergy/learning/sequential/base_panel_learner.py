@@ -269,39 +269,104 @@ class BasePanelLearner(ABC):
             other_data = None
 
         else:
-            # Then a model was selected
+            # # Then a model was selected
+            # optim_model.fit(X_train, y_train)
+
+            # # If optim_model has a create_signal method, use it otherwise use predict
+            # if hasattr(optim_model, "create_signal"):
+            #     if callable(getattr(optim_model, "create_signal")):
+            #         preds: np.ndarray = optim_model.create_signal(X_test)
+            #     else:
+            #         preds: np.ndarray = optim_model.predict(X_test)
+            # else:
+            #     preds: np.ndarray = optim_model.predict(X_test)
+
+            # prediction_data = [name, test_index, preds]
+
+            # # Store model choice information
+            # modelchoice_data = [
+            #     self.date_levels[train_idx],
+            #     name,
+            #     optim_name,
+            #     optim_params,
+            #     int(n_splits),
+            # ]
+
+            # # Store other information - inherited classes can specify this method to store coefficients, intercepts etc if needed
+            # other_data: List[List] = self._extract_model_info(
+            #     name,
+            #     self.date_levels[train_idx],
+            #     optim_model,
+            # )
             optim_model.fit(X_train, y_train)
 
-            # If optim_model has a create_signal method, use it otherwise use predict
-            if hasattr(optim_model, "create_signal"):
-                if callable(getattr(optim_model, "create_signal")):
-                    preds: np.ndarray = optim_model.create_signal(X_test)
-                else:
-                    preds: np.ndarray = optim_model.predict(X_test)
-            else:
-                preds: np.ndarray = optim_model.predict(X_test)
-
-            prediction_data = [name, test_index, preds]
-
-            # Store model choice information
-            modelchoice_data = [
-                self.date_levels[train_idx],
-                name,
-                optim_name,
-                optim_params,
-                int(n_splits),
-            ]
-
-            # Store other information - inherited classes can specify this method to store coefficients, intercepts etc if needed
-            other_data: List[List] = self._extract_model_info(
-                name,
-                self.date_levels[train_idx],
-                optim_model,
+            # Store quantamental data
+            quantamental_data: dict = self.store_quantamental_data(
+                model = optim_model,
+                X_train = X_train,
+                y_train = y_train,
+                X_test = X_test,
+                y_test = y_test,
             )
 
+            # Store model selection data
+            modelchoice_data: dict = self.store_modelchoice_data(
+                optimal_model = optim_model,
+                optimal_model_name = optim_name,
+                optimal_model_score = optim_score,
+                optimal_model_params = optim_params,
+                n_splits = n_splits,
+                X_train = X_train,
+                y_train = y_train,
+                X_test = X_test,
+                y_test = y_test,
+            )
+
+            # Store other data
+            other_data: dict = self.store_other_data(
+                optimal_model = optim_model,
+                X_train = X_train,
+                y_train = y_train,
+                X_test = X_test,
+                y_test = y_test,
+            )
+
+
         return (
-            prediction_data,
+            quantamental_data,
             modelchoice_data,
             other_data,
         )
+    
+    @abstractmethod
+    def store_quantamental_data(self, model, X_train, y_train, X_test, y_test):
+        """
+        Abstract method for storing quantamental data.
+        """
+        pass
+
+    @abstractmethod
+    def store_modelchoice_data(
+        self,
+        optimal_model,
+        optimal_model_name,
+        optimal_model_score,
+        optimal_model_params,
+        n_splits,
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+    ):
+        """
+        Abstract method for storing model choice data.
+        """
+        pass
+
+    @abstractmethod
+    def store_other_data(self, optimal_model, X_train, y_train, X_test, y_test):
+        """
+        Abstract method for storing other data.
+        """
+        pass
         
