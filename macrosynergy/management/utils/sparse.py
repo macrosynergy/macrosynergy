@@ -860,7 +860,7 @@ class InformationStateChanges(object):
     @classmethod
     def from_qdf(
         cls: "InformationStateChanges",
-        qdf: QuantamentalDataFrame,
+        df: QuantamentalDataFrame,
         norm: bool = True,
         **kwargs,
     ) -> "InformationStateChanges":
@@ -875,11 +875,11 @@ class InformationStateChanges(object):
         :return <InformationStateChanges>: An InformationStateChanges object.
         """
         isc: InformationStateChanges = cls(
-            min_period=qdf["real_date"].min(),
-            max_period=qdf["real_date"].max(),
+            min_period=df["real_date"].min(),
+            max_period=df["real_date"].max(),
         )
 
-        isc_dict, density_stats_df = create_delta_data(qdf, return_density_stats=True)
+        isc_dict, density_stats_df = create_delta_data(df, return_density_stats=True)
 
         isc.isc_dict = isc_dict
         isc.density_stats_df = density_stats_df
