@@ -54,5 +54,3 @@ class QuantamentalDataFrameBase(pd.DataFrame, metaclass=QuantamentalDataFrameMet
     IndexCols: List[str] = ["real_date", "cid", "xcat"]
     _StrIndexCols: List[str] = ["cid", "xcat"]
 
-    # def __init__(self, *args, **kwargs):
-    #     raise NotImplementedError("This class is not meant to be instantiated.")
