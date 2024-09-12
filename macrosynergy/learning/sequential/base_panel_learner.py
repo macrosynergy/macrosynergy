@@ -8,6 +8,7 @@ import pandas as pd
 from macrosynergy.management import categories_df
 
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+from sklearn.preprocessing import MinMaxScaler
 
 import warnings
 from abc import ABC, abstractmethod
@@ -404,6 +405,41 @@ class BasePanelLearner(ABC):
                 optim_params = search_object.best_params_
 
         return optim_name, optim_model, optim_score, optim_params
+    
+    def _model_selection(self, cv_results, cv_summary):
+        """
+        Determine index of best estimator in a scikit-learn cv_results summary dictionary,
+        as well as a cv_summary function indicating how to summarize the cross-validation
+        scores across folds. 
+
+        For each hyperparameter choice, determine test metrics for each cv fold. Transform
+        these scores by min-max scaling for each metric. Then, for each hyperparameter choice,
+        average the different metrics for each fold, resulting in a single score for each
+        fold. Finally, cv_summary is applied to these scores to determine the best hyperparameter
+        choice.
+        """
+        cv_results = pd.DataFrame(cv_results)
+        metric_columns = [col for col in cv_results.columns if col.startswith('split') and 'test' in col]
+        scaler = MinMaxScaler()
+        cv_results[metric_columns] = scaler.fit_transform(cv_results[metric_columns])
+
+        # Now obtain average scores for each fold
+        split_nums = np.array([int(str[str.find("_")-1]) for str in metric_columns])
+        for split in range(max(split_nums) + 1):
+            split_num_idxs = np.where(split_nums == split)[0]
+            cv_results[f"split{split}_avg"] = cv_results[metric_columns].iloc[:, split_num_idxs].mean(axis=1)
+    
+        # Now apply cv_summary to the average scores
+        if cv_summary == "mean":
+            cv_results['final_score'] = cv_results.iloc[:,-max(split_nums)-1:].mean(axis=1)
+        elif cv_summary == "median":
+            cv_results['final_score'] = cv_results.iloc[:,-max(split_nums)-1:].median(axis=1)
+        else:
+            # Then cv results is a callable function that inputs a vector of fold scores and outputs a single value
+            cv_results['final_score'] = cv_results.iloc[:,-max(split_nums)-1:].apply(cv_summary, axis=1)
+
+        # Return index of best estimator
+        return cv_results['final_score'].idxmax()
     
     @abstractmethod
     def store_quantamental_data(self, model, X_train, y_train, X_test, y_test):
