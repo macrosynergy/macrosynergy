@@ -25,7 +25,6 @@ else:
     from typing_extensions import get_args, get_origin
 from inspect import signature
 
-# from macrosynergy.management.types import NoneType
 import pandas as pd
 import numpy as np
 from packaging import version
