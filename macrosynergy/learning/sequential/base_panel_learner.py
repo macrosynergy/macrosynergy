@@ -7,12 +7,13 @@ import pandas as pd
 
 from macrosynergy.management import categories_df
 
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 
 import warnings
 from abc import ABC, abstractmethod
 from joblib import Parallel, delayed
 from tqdm.auto import tqdm 
+from functools import partial
 
 class BasePanelLearner(ABC):
     def __init__(
@@ -361,104 +362,48 @@ class BasePanelLearner(ABC):
         optim_score = - np.inf
         optim_params = None
 
+        cv_scores = {f"splitter_{idx+1}" : {f"scorer_{idx2 + 1}" : []} for idx in range(len(inner_splitters)) for idx2 in range(len(scorers))}
+
+        cv_splits = sum([list(splitter.split(X=X_train, y=y_train)) for splitter in inner_splitters])
         for model_name, model in models.items():
-            # Depending on the search type, find the best hyperparameters
+            # For each model, find the optimal hyperparameters 
             if search_type == "grid":
-                # TODO: n_jobs_inner later
-                score, params = self._grid_search(
-                    X_train=X_train,
-                    y_train=y_train,
-                    model=model,
-                    inner_splitters=inner_splitters,
-                    hyperparameters=hyperparameters[model_name],
-                    scorers=scorers,
-                    splits_dictionary=splits_dictionary,
-                    cv_summary=cv_summary,
-                ) 
+                search_object = GridSearchCV(
+                    estimator = model,
+                    param_grid = hyperparameters[model_name],
+                    scoring = scorers,
+                    n_jobs = n_jobs_inner,
+                    refit = partial(self._model_selection, cv_summary = cv_summary),
+                    cv = cv_splits,
+                )
             elif search_type == "prior":
-                score, params = self._random_search(
-                    X_train=X_train,
-                    y_train=y_train,
-                    model=model,
-                    inner_splitters=inner_splitters,
-                    hyperparameters=hyperparameters[model_name],
-                    scorers=scorers,
-                    splits_dictionary=splits_dictionary,
-                    cv_summary=cv_summary,
+                search_type = RandomizedSearchCV(
+                    estimator = model,
+                    param_distributions = hyperparameters[model_name],
                     n_iter=n_iter,
-                ) 
-            elif search_type == "bayes":
-                score, params = self._bayes_search(
-                    X_train=X_train,
-                    y_train=y_train,
-                    model=model,
-                    inner_splitters=inner_splitters,
-                    hyperparameters=hyperparameters[model_name],
-                    scorers=scorers,
-                    splits_dictionary=splits_dictionary,
-                    cv_summary=cv_summary,
-                    n_iter=n_iter,
-                ) 
+                    scoring = scorers,
+                    n_jobs = n_jobs_inner,
+                    refit = partial(self._model_selection, cv_summary = cv_summary),
+                    cv = cv_splits,
+                )
             else:
                 raise NotImplementedError(f"Search type {search_type} is not implemented.")
             
-            # Update optimal model if necessary
+            try:
+                search_object.fit(X_train, y_train)
+            except Exception as e:
+                warnings.warn(
+                    f"Error running a hyperparameter search for {model_name}: {e}",
+                    RuntimeWarning,
+                )
+            score = search_object.best_score_
             if score > optim_score:
                 optim_name = model_name
-                optim_model = model
+                optim_model = search_object.best_estimator_
                 optim_score = score
-                optim_params = params
+                optim_params = search_object.best_params_
 
         return optim_name, optim_model, optim_score, optim_params
-    
-    def _grid_search(
-        self,
-        X_train,
-        y_train,
-        model,
-        inner_splitters,
-        hyperparameters,
-        scorers,
-        splits_dictionary,
-        cv_summary,
-        n_jobs_inner,
-    ):
-        """
-        Run a grid search for 'model' with the hyperparameters in the dictionary 'hyperparameters'.
-        Repeat for all inner splitters in inner_splitters and average the scores. Use
-        cv_summary method to summarise the scores by median, mean or custom function.
-        """
-        for inner_splitter in inner_splitters:
-            gs = GridSearchCV(
-                estimator = model,
-                param_grid = hyperparameters,
-                scoring = scorers,
-                n_jobs = n_jobs_inner,
-                refit = False,
-                cv = inner_splitter,
-            )
-            gs.fit(X_train, y_train)
-            results = gs.cv_results_
-            scaled_scores = {param_idx: [] for param_idx in range(len(results['params']))}
-
-            for scorer in scorers:
-                scorer_name = scorer.__name__
-                scorer_key = f"mean_test_{scorer_name}" # TODO: use cv_summary here
-                scorer_values = results[scorer_key]
-
-                # min-max scale scores over folds
-                scaler = MinMaxScaler()
-                scaled_values = scaler.fit_transform(scorer_values.reshape(-1, 1)).flatten()
-
-                # Store scaled scores for each hyparam combination
-                for idx, score in enumerate(scaled_values):
-                    scaled_scores[idx].append(score)
-
-            # Average scores across metrics
-            averaged_scores = {idx: np.mean(scores) for idx, scores in scaled_scores.items()}
-
-
-        
     
     @abstractmethod
     def store_quantamental_data(self, model, X_train, y_train, X_test, y_test):
