@@ -363,9 +363,9 @@ class BasePanelLearner(ABC):
         optim_score = - np.inf
         optim_params = None
 
-        cv_scores = {f"splitter_{idx+1}" : {f"scorer_{idx2 + 1}" : []} for idx in range(len(inner_splitters)) for idx2 in range(len(scorers))}
-
-        cv_splits = sum([list(splitter.split(X=X_train, y=y_train)) for splitter in inner_splitters])
+        cv_splits = []
+        for splitter in inner_splitters:
+            cv_splits.extend(list(splitter.split(X=X_train, y=y_train)))
         for model_name, model in models.items():
             # For each model, find the optimal hyperparameters 
             if search_type == "grid":

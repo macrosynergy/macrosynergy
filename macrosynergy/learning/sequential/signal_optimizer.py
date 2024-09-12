@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from macrosynergy.learning import ExpandingIncrementPanelSplit
-from .base_panel_learner import BasePanelLearner
+from macrosynergy.learning.sequential import BasePanelLearner
 
 class SignalOptimizer(BasePanelLearner):
     """
@@ -229,3 +229,82 @@ class SignalOptimizer(BasePanelLearner):
             ),
             axis=0,
         ).astype(ftr_selection_types)
+
+    def store_quantamental_data(self, model, X_train, y_train, X_test, y_test):
+        pass 
+
+    def store_modelchoice_data(self, model, model_choice, n_splits_used):
+        pass
+
+    def store_other_data(self, ftr_coefficients, intercepts, selected_ftrs):
+        pass
+
+
+if __name__ == "__main__":
+    from sklearn.linear_model import LinearRegression
+    from sklearn.metrics import make_scorer, r2_score
+
+    import macrosynergy.management as msm
+    from macrosynergy.learning import regression_balanced_accuracy, ExpandingKFoldPanelSplit, RollingKFoldPanelSplit
+    from macrosynergy.management.simulate import make_qdf
+
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2001-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd["grading"] = np.ones(dfd.shape[0])
+    black = {
+        "GBP": (
+            pd.Timestamp(year=2009, month=1, day=1),
+            pd.Timestamp(year=2012, month=6, day=30),
+        ),
+        "CAD": (
+            pd.Timestamp(year=2015, month=1, day=1),
+            pd.Timestamp(year=2100, month=1, day=1),
+        ),
+    }
+
+    so = SignalOptimizer(
+        df = dfd,
+        xcats = ["CRY", "GROWTH", "INFL", "XR"],
+        cids = cids,
+        blacklist = black,
+    )
+
+    so.calculate_predictions(
+        name = "LR",
+        models = {
+            "LR": LinearRegression(),
+        },
+        hyperparameters = {
+            "LR": {"fit_intercept": [True, False]},
+        },
+        scorers = {
+            "r2": make_scorer(r2_score),
+            "bac": make_scorer(regression_balanced_accuracy),
+        },
+        inner_splitters = [ExpandingKFoldPanelSplit(n_splits = 5), RollingKFoldPanelSplit(n_splits = 5)],
+        search_type = "grid",
+        cv_summary = "median",
+        min_cids = 4,
+        min_periods = 36,
+        test_size = 1,
+        n_jobs_outer=1,
+        n_jobs_inner=1,
+    )
+    
