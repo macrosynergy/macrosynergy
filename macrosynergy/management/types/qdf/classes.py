@@ -2,11 +2,11 @@
 Module hosting custom types and meta-classes for use across the package.
 """
 
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict, Iterable, Mapping, Union
 import pandas as pd
 import warnings
 
-from .methods import change_column_format, reduce_df, update_df
+from .methods import change_column_format, reduce_df, update_df, apply_blacklist
 from .base import QuantamentalDataFrameBase
 
 
@@ -14,16 +14,9 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
     """
     ## Type extension of `pd.DataFrame` for Quantamental DataFrames.
 
-    Class definition for a QuantamentalDataFrame that supports type checks for
-    `QuantamentalDataFrame`.
-    Returns True if the instance is a `pd.DataFrame` with the standard Quantamental
-    DataFrame columns ("cid", "xcat", "real_date") and at least one additional column.
-    It also checks if the "real_date" column is a datetime type.
-
     Usage:
-    >>> df: pd.DataFrame = make_test_df()
-    >>> isinstance(df, QuantamentalDataFrame)
-    True
+    >>> df: pd.DataFrame = load_data()
+    >>> qdf = QuantamentalDataFrame(df)
     """
 
     IndexCols: List[str] = ["real_date", "cid", "xcat"]
@@ -65,3 +58,37 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
 
         """
         return change_column_format(self, cols=self._StrIndexCols, dtype=str)
+
+    def reduce_df(
+        self,
+        cids: Optional[Iterable[str]] = None,
+        xcats: Optional[Iterable[str]] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        blacklist: Mapping[str, Iterable[Union[str, pd.Timestamp]]] = None,
+        inplace: bool = False,
+    ) -> "QuantamentalDataFrame":
+        """
+        Filter DataFrame by `cids`, `xcats`, `tickers`, and `start` & `end` dates.
+        """
+        r = reduce_df(
+            df=self, cids=cids, xcats=xcats, start=start, end=end, blacklist=blacklist
+        )
+        if inplace:
+            self = r
+            return
+        return r
+
+    def apply_blacklist(
+        self,
+        blacklist: Mapping[str, Iterable[Union[str, pd.Timestamp]]],
+        inplace: bool = False,
+    ):
+        """
+        Apply a blacklist to the QuantamentalDataFrame.
+        """
+        r = apply_blacklist(df=self, blacklist=blacklist)
+        if inplace:
+            self = r
+            return
+        return r

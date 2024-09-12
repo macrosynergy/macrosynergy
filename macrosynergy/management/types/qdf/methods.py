@@ -113,15 +113,10 @@ def reduce_df(
         )
     else:
         cids_in_df = df["cid"].unique()
+        cids = sorted(c for c in cids if c in cids_in_df)
 
-    cids = sorted(c for c in cids if c in cids_in_df)
-
-    df = df.loc[
-        (df["real_date"] >= start)
-        & (df["real_date"] <= end)
-        & (df["cid"].isin(cids))
-        & (df["xcat"].isin(xcats))
-    ]
+    df = df[df["xcat"].isin(xcats)]
+    df = df[df["cid"].isin(cids)]
 
     xcats_found = sorted(set(df["xcat"].unique()))
     cids_found = sorted(set(df["cid"].unique()))

@@ -4,7 +4,6 @@ Module hosting custom types and meta-classes for use across the package.
 
 from typing import List, Optional, Any
 import pandas as pd
-import warnings
 
 
 class QuantamentalDataFrameMeta(type):
@@ -53,4 +52,3 @@ class QuantamentalDataFrameBase(pd.DataFrame, metaclass=QuantamentalDataFrameMet
 
     IndexCols: List[str] = ["real_date", "cid", "xcat"]
     _StrIndexCols: List[str] = ["cid", "xcat"]
-
