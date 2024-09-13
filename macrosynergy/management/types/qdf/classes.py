@@ -2,17 +2,24 @@
 Module hosting custom types and meta-classes for use across the package.
 """
 
-from typing import List, Optional, Any, Dict, Iterable, Mapping, Union
+from typing import List, Optional, Any, Dict, Mapping, Union, Callable, Sequence
+
 import pandas as pd
 import warnings
 
-from .methods import change_column_format, reduce_df, update_df, apply_blacklist
+from .methods import (
+    change_column_format,
+    reduce_df,
+    update_df,
+    apply_blacklist,
+    pivot_df,
+)
 from .base import QuantamentalDataFrameBase
 
 
 class QuantamentalDataFrame(QuantamentalDataFrameBase):
     """
-    ## Type extension of `pd.DataFrame` for Quantamental DataFrames.
+    Type extension of `pd.DataFrame` for Quantamental DataFrames.
 
     Usage:
     >>> df: pd.DataFrame = load_data()
@@ -61,34 +68,72 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
 
     def reduce_df(
         self,
-        cids: Optional[Iterable[str]] = None,
-        xcats: Optional[Iterable[str]] = None,
+        cids: Optional[Sequence[str]] = None,
+        xcats: Optional[Sequence[str]] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
-        blacklist: Mapping[str, Iterable[Union[str, pd.Timestamp]]] = None,
+        blacklist: Mapping[str, Sequence[Union[str, pd.Timestamp]]] = None,
         inplace: bool = False,
     ) -> "QuantamentalDataFrame":
         """
         Filter DataFrame by `cids`, `xcats`, `tickers`, and `start` & `end` dates.
         """
-        r = reduce_df(
-            df=self, cids=cids, xcats=xcats, start=start, end=end, blacklist=blacklist
+        func = reduce_df
+        return self._inplaceoperation(
+            method=func,
+            inplace=inplace,
+            df=self,
+            cids=cids,
+            xcats=xcats,
+            start=start,
+            end=end,
+            blacklist=blacklist,
         )
-        if inplace:
-            self = r
-            return
-        return r
 
     def apply_blacklist(
         self,
-        blacklist: Mapping[str, Iterable[Union[str, pd.Timestamp]]],
+        blacklist: Mapping[str, Sequence[Union[str, pd.Timestamp]]],
         inplace: bool = False,
     ):
         """
         Apply a blacklist to the QuantamentalDataFrame.
         """
-        r = apply_blacklist(df=self, blacklist=blacklist)
-        if inplace:
-            self = r
-            return
-        return r
+        func = apply_blacklist
+        return self._inplaceoperation(
+            method=func,
+            inplace=inplace,
+            df=self,
+            blacklist=blacklist,
+        )
+
+    def update_df(
+        self,
+        df: pd.DataFrame,
+        inplace: bool = False,
+    ) -> "QuantamentalDataFrame":
+        """
+        Update the QuantamentalDataFrame with a new DataFrame.
+        """
+        func = update_df
+        return self._inplaceoperation(
+            method=func,
+            inplace=inplace,
+            df=self,
+            new_df=df,
+        )
+
+    def pivot_df(
+        self,
+        value_column: str = "value",
+        inplace: bool = False,
+    ) -> "QuantamentalDataFrame":
+        """
+        Pivot the QuantamentalDataFrame.
+        """
+        func = pivot_df
+        return self._inplaceoperation(
+            method=func,
+            inplace=inplace,
+            df=self,
+            value_column=value_column,
+        )
