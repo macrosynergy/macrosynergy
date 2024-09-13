@@ -12,7 +12,7 @@ from .methods import (
     reduce_df,
     update_df,
     apply_blacklist,
-    pivot_df,
+    qdf_to_wide_df,
 )
 from .base import QuantamentalDataFrameBase
 
@@ -122,18 +122,11 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             new_df=df,
         )
 
-    def pivot_df(
+    def to_wide(
         self,
         value_column: str = "value",
-        inplace: bool = False,
     ) -> "QuantamentalDataFrame":
         """
         Pivot the QuantamentalDataFrame.
         """
-        func = pivot_df
-        return self._inplaceoperation(
-            method=func,
-            inplace=inplace,
-            df=self,
-            value_column=value_column,
-        )
+        return qdf_to_wide_df(self, value_column=value_column)

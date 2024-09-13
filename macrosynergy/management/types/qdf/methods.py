@@ -130,7 +130,7 @@ def reduce_df(
 def update_df(): ...
 
 
-def pivot_df(
+def qdf_to_wide_df(
     df: QuantamentalDataFrameBase,
     value_column: str = "value",
 ) -> pd.DataFrame:
