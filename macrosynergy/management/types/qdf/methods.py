@@ -65,7 +65,7 @@ def apply_blacklist(
             )
         ]
 
-    return df
+    return df.reset_index(drop=True)
 
 
 def reduce_df(
@@ -120,11 +120,11 @@ def reduce_df(
 
     xcats_found = sorted(set(df["xcat"].unique()))
     cids_found = sorted(set(df["cid"].unique()))
-
+    df = df.drop_duplicates().reset_index(drop=True)
     if out_all:
-        return df.drop_duplicates(), xcats_found, cids_found
+        return df, xcats_found, cids_found
     else:
-        return df.drop_duplicates()
+        return df
 
 
 def update_df(): ...
