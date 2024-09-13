@@ -91,13 +91,14 @@ def view_correlation(
         symmetrically to positive and negative values.
     :param <bool> show: if True the figure will be displayed, else the axis object is returned.
         Default is True.
-    :param xcat_labels: optional list or dictionary of labels for xcats.
-        A list should be in the same order as xcats, a dictionary should map
-        from each xcat to its label.
-    :param xcat_secondary_labels: optional list or dictionary of labels for xcats_secondary.
+    :param <Optional[Union[List[str], Dict[str, str]]]> xcat_labels: optional list or 
+        dictionary of labels for xcats. A list should be in the same order as xcats, a 
+        dictionary should map from each xcat to its label.
+    :param <Optional[Union[List[str], Dict[str, str]]]> xcat_secondary_labels: optional 
+        list or dictionary of labels for xcats_secondary.
     :param <Union[float, int]> cbar_shrink: shrinkage factor of the color bar. Default is 0.5.
     :param <int> cbar_fontsize: font size of the color bar. Default is 12.
-    :param **kwargs: Arbitrary keyword arguments that are passed to seaborn.heatmap.
+    :param <Dict> **kwargs: Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
     N.B:. The function displays the heatmap of a correlation matrix across categories or
     cross-sections (depending on which parameter has received multiple elements).
@@ -289,8 +290,8 @@ def _parse_xcat_labels(xcats: List[str], xcat_labels: Union[List[str], Dict[str,
     """
     Parse xcat labels for correlation plot.
 
-    :param xcats: extended categories to be correlated.
-    :param xcat_labels: optional list or dictionary of
+    :param <List[str]> xcats: extended categories to be correlated.
+    :param <Union[List[str], Dict[str, str]]> xcat_labels: optional list or dictionary of
         labels for the extended categories.
     """
     labels_dict = {}

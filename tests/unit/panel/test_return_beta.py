@@ -17,6 +17,7 @@ from macrosynergy.panel.return_beta import (
 )
 from macrosynergy.management.utils import reduce_df
 
+
 class TestAll(unittest.TestCase):
     def setUp(self) -> None:
         # Emerging Market Asian countries.
@@ -107,7 +108,7 @@ class TestAll(unittest.TestCase):
                     benchmark_return=f"{self.cids[0]}_{self.xcats[0]}",
                     start="2010-01-01",
                 )
-        
+
     def test_date_alignment(self):
         """
         Firstly, return_beta.py will potentially use a single asset to hedge a panel

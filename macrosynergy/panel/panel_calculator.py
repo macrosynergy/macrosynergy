@@ -101,7 +101,7 @@ def panel_calculator(
     start: str = None,
     end: str = None,
     blacklist: dict = None,
-    external_func: dict = None
+    external_func: dict = None,
 ) -> pd.DataFrame:
     """
     Calculates new data panels through operations on existing panels.
@@ -260,6 +260,7 @@ def _check_calcs(formulas: List[str]):
                     + "Arithmetic operators and parentheses must be separated by spaces."
                 )
 
+
 def _replace_zeros(df: pd.DataFrame):
     """
     Replace zeros with NaNs in the dataframe.
@@ -276,6 +277,8 @@ def _replace_zeros(df: pd.DataFrame):
         return df
 
     return df
+
+
 if __name__ == "__main__":
     cids = ["AUD", "CAD", "GBP", "USD", "NZD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]

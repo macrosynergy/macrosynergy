@@ -17,12 +17,12 @@ def expanding_mean_with_nan(
     Computes a rolling median of a vector of floats and returns the results. NaNs will be
     consumed.
 
-    :param <QuantamentalDataFrame> dfw: "wide" dataframe with time index and 
+    :param <QuantamentalDataFrame> dfw: "wide" dataframe with time index and
         cross-sections as columns.
     :param <bool> absolute: if True, the rolling mean will be computed on the magnitude
         of each value. Default is False.
 
-    :return <List[float] ret: a list containing the median values. The number of computed
+    :return <List[float]> ret: a list containing the median values. The number of computed
         median values held inside the list will correspond to the number of timestamps
         the series is defined over.
     """

@@ -2,6 +2,7 @@
 Functions for visualizing data grading and blacklisted periods from a quantamental 
 DataFrame.
 """
+
 from typing import List, Tuple
 
 import numpy as np
@@ -25,7 +26,7 @@ def view_grades(
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
         'cid', 'xcat', 'real_date' and 'grading'.
-    :param List[str] xcats: extended categorys to be checked on.
+    :param <List[str]> xcats: extended categorys to be checked on.
     :param <List[str]> cids: cross sections to visualize. Default is all in  DataFrame.
     :param <str> start: earliest date in ISO format. Default is earliest available.
     :param <str> end: latest date in ISO format. Default is latest available.
@@ -55,7 +56,7 @@ def view_grades(
     if title is None:
         sdate = df["real_date"].min().strftime("%Y-%m-%d")
         title = f"Average grade of vintages since {sdate}"
-        
+
     heatmap.plot_metric(
         x_axis_column="cid",
         y_axis_column="xcat",
