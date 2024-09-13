@@ -2,20 +2,20 @@
 Module hosting custom types and meta-classes for use across the package.
 """
 
-from typing import List, Optional, Any
+from typing import List, Any, Callable
 import pandas as pd
 
 
 class QuantamentalDataFrameMeta(type):
     """
-    MetaClass to support type checks for `QuantamentalDataFrame`.
+    Metaclass to support type checks for `QuantamentalDataFrame`.
     """
 
     IndexCols: List[str] = ["real_date", "cid", "xcat"]
     _StrIndexCols: List[str] = ["cid", "xcat"]
 
     def __instancecheck__(cls, instance):
-        IDX_COLS = QuantamentalDataFrameBase.IndexCols
+        IDX_COLS = QuantamentalDataFrameMeta.IndexCols
         result: bool = True
         try:
             # the try except offers a safety net in case the instance is not a
@@ -45,10 +45,27 @@ class QuantamentalDataFrameMeta(type):
 
 class QuantamentalDataFrameBase(pd.DataFrame, metaclass=QuantamentalDataFrameMeta):
     """
-    ## Base class to to extend `pd.DataFrame` for Quantamental DataFrames.
+    Base class to to extend `pd.DataFrame` for Quantamental DataFrames.
 
     This class is a parent class to macrosynergy.types.QuantamentalDataFrame.
     """
 
     IndexCols: List[str] = ["real_date", "cid", "xcat"]
     _StrIndexCols: List[str] = ["cid", "xcat"]
+
+    def _inplaceoperation(
+        self,
+        method: Callable[..., Any],
+        inplace: bool = False,
+        *args,
+        **kwargs,
+    ):
+        """
+        Helper method to perform inplace operations.
+        """
+        r = method(*args, **kwargs)
+        if inplace:
+            self.__init__(r)
+            return None
+        else:
+            return r
