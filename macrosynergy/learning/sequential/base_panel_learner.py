@@ -276,7 +276,7 @@ class BasePanelLearner(ABC):
                 name,
                 None,  # Model selected
                 None,  # Hyperparameters selected
-                int(n_splits),
+                [inner_splitter.n_splits for inner_splitter in inner_splitters_adj],
             ]
             other_data = None
 
@@ -327,7 +327,7 @@ class BasePanelLearner(ABC):
                 optimal_model_name = optim_name,
                 optimal_model_score = optim_score,
                 optimal_model_params = optim_params,
-                n_splits = n_splits,
+                n_splits = [inner_splitter.n_splits for inner_splitter in inner_splitters_adj],
                 X_train = X_train,
                 y_train = y_train,
                 X_test = X_test,
