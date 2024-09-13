@@ -118,7 +118,7 @@ class BasePanelLearner(ABC):
         search_type = "grid",
         cv_summary = "mean", # can be mean, median or lambda function on fold scores. 
         n_iter = 100, # number of iterations for random or bayes
-        split_dictionary=None,  # Dictionary of {real_dates: n_splits} or {real_dates: list[n_splits}} if multiple splitters
+        split_functions = None,
         n_jobs_outer = -1,
         n_jobs_inner = 1,
         #strategy_eval_periods = None,
@@ -151,11 +151,10 @@ class BasePanelLearner(ABC):
             that takes a list of scores and returns a single value.
         n_iter : int
             Number of iterations for random or bayesian hyperparameter optimization.
-        split_dictionary : dict, optional
-            Dictionary of changepoints for the number of cross-validation splits. 
-            Each key is a date at which the number of splits changes, and the value can be 
-            either an integer or a list of integers. If a list, the length should match
-            the number of inner splitters. Default is None.
+        split_functions : callable or list, optional
+            Callable or list of callables for determining the number of cross-validation
+            splits to add to the initial number  as a function of the number of iterations passed in the 
+            sequential learning process. Default is None. 
         n_jobs_outer : int, optional
             Number of jobs to run in parallel for the outer loop. Default is -1.
         n_jobs_inner : int, optional
@@ -166,7 +165,7 @@ class BasePanelLearner(ABC):
 
         # Determine all outer splits and run the learning process in parallel
         train_test_splits = list(outer_splitter.split(self.X, self.y))
-
+        
         # Return list of results 
         optim_results = tqdm(
             Parallel(n_jobs=n_jobs_outer, return_as="generator")(
@@ -181,10 +180,14 @@ class BasePanelLearner(ABC):
                     cv_summary=cv_summary,
                     search_type=search_type,
                     n_iter=n_iter,
-                    splits_dictionary=split_dictionary,
+                    n_splits_add = (
+                        [np.ceil(split_function(iteration)) for idx, split_function in enumerate(split_functions)]
+                        if split_functions is not None
+                        else None
+                    ),
                     n_jobs_inner=n_jobs_inner,
                 )
-                for idx, (train_idx, test_idx) in enumerate(train_test_splits)
+                for iteration, (train_idx, test_idx) in enumerate(train_test_splits)
             ),
             total=len(train_test_splits),
         )
@@ -203,7 +206,7 @@ class BasePanelLearner(ABC):
         cv_summary,
         search_type,
         n_iter,
-        splits_dictionary,
+        n_splits_add,
         n_jobs_inner,
     ):
         """
@@ -237,17 +240,23 @@ class BasePanelLearner(ABC):
             [test_xs_levels, mapped_dates], names=["cid", "real_date"]
         )
 
-        optim_name, optim_model, optim_score, optim_params = ( # n_splits?
+        if n_splits_add is not None:
+            inner_splitters_adj = [inner_splitter for inner_splitter in inner_splitters]
+            for idx, inner_splitter in enumerate(inner_splitters_adj):
+                inner_splitter.n_splits += n_splits_add[idx]
+        else:
+            inner_splitters_adj = inner_splitters
+
+        optim_name, optim_model, optim_score, optim_params = (
             self._model_search(
                 X_train=X_train,
                 y_train=y_train,
-                inner_splitters=inner_splitters,
+                inner_splitters=inner_splitters_adj,
                 models=models,
                 hyperparameters=hyperparameters,
                 scorers=scorers,
                 search_type=search_type,
                 n_iter=n_iter,
-                splits_dictionary=splits_dictionary,
                 cv_summary=cv_summary,
                 n_jobs_inner=n_jobs_inner,
             )
