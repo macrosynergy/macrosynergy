@@ -148,9 +148,7 @@ class TestAll(unittest.TestCase):
         end: str = "2001-01-01"
 
         ## Test Case 1a - Testing non-normalized weights
-        dfd = make_test_df(
-            cids=all_cids, xcats=all_xcats, start=start, end=end
-        )
+        dfd = make_test_df(cids=all_cids, xcats=all_xcats, start=start, end=end)
         # set all values to 1
         dfd["value"] = 1
 
@@ -193,9 +191,7 @@ class TestAll(unittest.TestCase):
 
         ## Test Case 2a & b - Testing nan logic
         _end: str = "2000-02-01"
-        dfd = make_test_df(
-            cids=all_cids, xcats=all_xcats, start=start, end=_end
-        )
+        dfd = make_test_df(cids=all_cids, xcats=all_xcats, start=start, end=_end)
         dfd["value"] = 1
 
         # make 2000-01-17 for all CAD and AUD values a nan
@@ -221,9 +217,7 @@ class TestAll(unittest.TestCase):
         _xcats: List[str] = ["XR", "CRY", "INFL"]
         weights: List[str] = [1, 2, 4]
         _end: str = "2000-02-01"
-        dfd = make_test_df(
-            cids=all_cids, xcats=all_xcats, start=start, end=_end
-        )
+        dfd = make_test_df(cids=all_cids, xcats=all_xcats, start=start, end=_end)
         dfd["value"] = 1
 
         # make 2000-01-17 for CAD and AUD XR values a nan
@@ -474,7 +468,7 @@ class TestAll(unittest.TestCase):
         rdf: pd.DataFrame = linear_composite(
             df=dfd, cids=_cids, xcats=_xcat, complete_cids=True, weights=_weights
         )
-                
+
         # check that all the dates in the input are there in the output, cast to pd.Timestamp
         self.assertTrue(
             set(rdf["real_date"].unique().tolist())

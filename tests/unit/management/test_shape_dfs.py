@@ -119,7 +119,6 @@ class TestAll(unittest.TestCase):
         dfd_x = reduce_df(self.dfd, xcats=["XR"], cids=self.cids, blacklist=black)
         self.assertTrue(test_df.equals(self.dfd))
 
-
     def test_categories_df_conversion(self):
         dfc = categories_df(
             self.dfd,

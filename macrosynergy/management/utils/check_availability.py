@@ -55,7 +55,9 @@ def check_availability(
 
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
     if dfx.empty:
-        raise ValueError("No data available for the selected cross-sections and categories.")
+        raise ValueError(
+            "No data available for the selected cross-sections and categories."
+        )
     if start_years:
         dfs = check_startyears(dfx)
         visual_paneldates(
