@@ -17,7 +17,7 @@ PYTHON_VERSION = sys.version_info
 PYTHON_3_8_OR_LATER = PYTHON_VERSION >= (3, 8)
 
 from . import visuals, download, panel, pnl, management, signal
-
+from . import learning
 if PYTHON_3_8_OR_LATER:
     from . import learning
 

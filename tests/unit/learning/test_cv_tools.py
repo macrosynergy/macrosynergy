@@ -113,7 +113,7 @@ class TestAll(unittest.TestCase):
             "neg_mae": make_scorer(mean_absolute_error, greater_is_better=False),
             "neg_mse": make_scorer(mean_squared_error, greater_is_better=False),
         }
-        output = panel_cv_scores(X=self.X, y=self.y, splitter=self.splitter, estimators=self.estimators, scoring=scoring)
+        output = panel_cv_scores(X=self.X, y=self.y, splitter=self.splitter, estimators=self.estimators, scoring=scoring, n_jobs=1)
         self.assertIsInstance(output, pd.DataFrame)
         self.assertEqual(output.shape[0], 4)
         self.assertEqual(output.shape[1], 2)
@@ -121,7 +121,7 @@ class TestAll(unittest.TestCase):
             "neg_mae": make_scorer(mean_absolute_error, greater_is_better=False),
             "neg_mse": make_scorer(mean_squared_error, greater_is_better=False),
         }
-        output = panel_cv_scores(X=self.X, y=self.y, splitter=self.splitter, estimators=self.estimators, scoring=scoring,show_std=True)
+        output = panel_cv_scores(X=self.X, y=self.y, splitter=self.splitter, estimators=self.estimators, scoring=scoring,show_std=True, n_jobs=1)
         self.assertIsInstance(output, pd.DataFrame)
         self.assertEqual(output.shape[0], 8)
         self.assertEqual(output.shape[1], 2)
@@ -129,7 +129,7 @@ class TestAll(unittest.TestCase):
             "neg_mae": make_scorer(mean_absolute_error, greater_is_better=False),
             "neg_mse": make_scorer(mean_squared_error, greater_is_better=False),
         }
-        output = panel_cv_scores(X=self.X, y=self.y, splitter=self.splitter, estimators=self.estimators, scoring=scoring,show_longbias=False)
+        output = panel_cv_scores(X=self.X, y=self.y, splitter=self.splitter, estimators=self.estimators, scoring=scoring,show_longbias=False, n_jobs=1)
         self.assertIsInstance(output, pd.DataFrame)
         self.assertEqual(output.shape[0], 2)
         self.assertEqual(output.shape[1], 2)
@@ -137,7 +137,7 @@ class TestAll(unittest.TestCase):
             "neg_mae": make_scorer(mean_absolute_error, greater_is_better=False),
             "neg_mse": make_scorer(mean_squared_error, greater_is_better=False),
         }
-        output = panel_cv_scores(X=self.X, y=self.y, splitter=self.splitter, estimators=self.estimators, scoring=scoring,show_longbias=False, show_std=True)
+        output = panel_cv_scores(X=self.X, y=self.y, splitter=self.splitter, estimators=self.estimators, scoring=scoring,show_longbias=False, show_std=True, n_jobs=1)
         self.assertIsInstance(output, pd.DataFrame)
         self.assertEqual(output.shape[0], 4)
         self.assertEqual(output.shape[1], 2)
