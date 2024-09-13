@@ -128,3 +128,36 @@ def reduce_df(
 
 
 def update_df(): ...
+
+
+def pivot_df(
+    df: QuantamentalDataFrameBase,
+    value_column: str = "value",
+) -> pd.DataFrame:
+    """
+    Pivot the DataFrame to a wide format with memory efficiency.
+    """
+    # Ensure inputs are of the correct type and exist in the DataFrame
+    if not isinstance(df, QuantamentalDataFrameBase):
+        raise TypeError("`df` must be a QuantamentalDataFrame.")
+    if not isinstance(value_column, str):
+        raise TypeError("`value_column` must be a string.")
+    if value_column not in df.columns:
+        raise ValueError(f"Column '{value_column}' not found in DataFrame.")
+
+    # Leverage categorical data to avoid extensive data copying
+    cid_labels = df["cid"].cat.categories[df["cid"].cat.codes]
+    xcat_labels = df["xcat"].cat.categories[df["xcat"].cat.codes]
+
+    # Create the 'ticker' column directly without separate temporary structures
+    df["ticker"] = pd.Categorical(
+        [f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)],
+        categories=pd.Categorical(
+            [f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)]
+        ).categories,
+    )
+
+    # Perform the pivot directly within the assignment to reduce memory footprint
+    return df.pivot(
+        index="real_date", columns="ticker", values=value_column
+    ).rename_axis(None, axis=1)
