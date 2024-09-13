@@ -301,7 +301,7 @@ class BasePanelLearner(ABC):
             #     self.date_levels[train_idx],
             #     optim_model,
             # )
-            optim_model.fit(X_train, y_train)
+            #optim_model.fit(X_train, y_train)
 
             # Store quantamental data
             quantamental_data: dict = self.store_quantamental_data(
@@ -374,7 +374,7 @@ class BasePanelLearner(ABC):
                     param_grid = hyperparameters[model_name],
                     scoring = scorers,
                     n_jobs = n_jobs_inner,
-                    refit = partial(self._model_selection, cv_summary = cv_summary),
+                    refit = partial(self._model_selection, cv_summary = cv_summary, scorers = scorers),
                     cv = cv_splits,
                 )
             elif search_type == "prior":
@@ -384,7 +384,7 @@ class BasePanelLearner(ABC):
                     n_iter=n_iter,
                     scoring = scorers,
                     n_jobs = n_jobs_inner,
-                    refit = partial(self._model_selection, cv_summary = cv_summary),
+                    refit = partial(self._model_selection, cv_summary = cv_summary, scorers = scorers),
                     cv = cv_splits,
                 )
             else:
@@ -397,7 +397,7 @@ class BasePanelLearner(ABC):
                     f"Error running a hyperparameter search for {model_name}: {e}",
                     RuntimeWarning,
                 )
-            score = search_object.best_score_
+            score = self._model_selection(search_object.cv_results_, cv_summary, scorers, return_index = False)
             if score > optim_score:
                 optim_name = model_name
                 optim_model = search_object.best_estimator_
@@ -406,7 +406,7 @@ class BasePanelLearner(ABC):
 
         return optim_name, optim_model, optim_score, optim_params
     
-    def _model_selection(self, cv_results, cv_summary):
+    def _model_selection(self, cv_results, cv_summary, scorers, return_index = True):
         """
         Determine index of best estimator in a scikit-learn cv_results summary dictionary,
         as well as a cv_summary function indicating how to summarize the cross-validation
@@ -420,26 +420,32 @@ class BasePanelLearner(ABC):
         """
         cv_results = pd.DataFrame(cv_results)
         metric_columns = [col for col in cv_results.columns if col.startswith('split') and 'test' in col]
-        scaler = MinMaxScaler()
-        cv_results[metric_columns] = scaler.fit_transform(cv_results[metric_columns])
 
-        # Now obtain average scores for each fold
-        split_nums = np.array([int(str[str.find("_")-1]) for str in metric_columns])
-        for split in range(max(split_nums) + 1):
-            split_num_idxs = np.where(split_nums == split)[0]
-            cv_results[f"split{split}_avg"] = cv_results[metric_columns].iloc[:, split_num_idxs].mean(axis=1)
-    
-        # Now apply cv_summary to the average scores
-        if cv_summary == "mean":
-            cv_results['final_score'] = cv_results.iloc[:,-max(split_nums)-1:].mean(axis=1)
-        elif cv_summary == "median":
-            cv_results['final_score'] = cv_results.iloc[:,-max(split_nums)-1:].median(axis=1)
-        else:
-            # Then cv results is a callable function that inputs a vector of fold scores and outputs a single value
-            cv_results['final_score'] = cv_results.iloc[:,-max(split_nums)-1:].apply(cv_summary, axis=1)
+        # For each metric, summarise the scores across folds for each hyperparameter choice
+        # using cv_summary
+        for scorer in scorers.keys():
+            # Extract the test scores for each fold for that scorer
+            scorer_columns = [col for col in metric_columns if scorer in col]
+            if cv_summary == "mean":
+                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].mean(axis=1)
+            elif cv_summary == "median":
+                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].median(axis=1)
+            else:
+                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].apply(cv_summary, axis=1)
+
+        # Now apply min-max scaling to the summary scores
+        scaler = MinMaxScaler()
+        summary_cols = [f"{scorer}_summary" for scorer in scorers.keys()]
+        cv_results[summary_cols] = scaler.fit_transform(cv_results[summary_cols]) 
+
+        # Now average the summary scores for each scorer
+        cv_results['final_score'] = cv_results[summary_cols].mean(axis=1)
 
         # Return index of best estimator
-        return cv_results['final_score'].idxmax()
+        if return_index:
+            return cv_results['final_score'].idxmax()
+        else:
+            return cv_results['final_score'].max()
     
     @abstractmethod
     def store_quantamental_data(self, model, X_train, y_train, X_test, y_test):
