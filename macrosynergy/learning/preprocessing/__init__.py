@@ -1,4 +1,5 @@
 from .selectors import (
+    BasePanelSelector,
     LarsSelector,
     LassoSelector,
     ENetSelector,
@@ -6,6 +7,7 @@ from .selectors import (
 )
 
 from .scalers import (
+    BasePanelScaler,
     PanelMinMaxScaler,
     PanelStandardScaler,
 )

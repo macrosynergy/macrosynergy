@@ -1,6 +1,6 @@
 import pandas as pd
 
-from macrosynergy.learning.preprocessing.scalers import BasePanelScaler
+from base_panel_scaler import BasePanelScaler
 
 from typing import Any, Union
 
