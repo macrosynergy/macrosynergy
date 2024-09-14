@@ -1,6 +1,7 @@
 """
 Base class for feature selection on panel data.
 """
+
 import numpy as np
 import pandas as pd
 
@@ -139,15 +140,19 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
                 raise ValueError(
                     "The target dataframe must have only one column. If used as part of ",
                     "an sklearn pipeline, ensure that previous steps return a pandas ",
-                    "series or dataframe."
+                    "series or single-column dataframe."
                 )
-        if not isinstance(X.index, pd.MultiIndex):
-            raise ValueError("X must be multi-indexed.")
-        if not isinstance(y.index, pd.MultiIndex):
-            raise ValueError("y must be multi-indexed.")
-        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+        if not X.index.nlevels == 2:
+            raise ValueError("X must be multi-indexed with two levels.")
+        if not y.index.nlevels == 2:
+            raise ValueError("y must be multi-indexed with two levels.")
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not y.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of y must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
-        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+        if not y.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of y must be datetime.date.")
         if not X.index.equals(y.index):
             raise ValueError(
@@ -170,10 +175,13 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas dataframe."
             )
-        if not isinstance(X.index, pd.MultiIndex):
-            raise ValueError("X must be multi-indexed.")
-        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+        if not X.index.nlevels == 2:
+            raise ValueError("X must be multi-indexed with two levels.")
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
+    
         if not X.shape[-1] == self.p:
             raise ValueError(
                 "The number of columns of the dataframe to be transformed, X, doesn't "
