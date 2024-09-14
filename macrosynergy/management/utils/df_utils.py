@@ -157,6 +157,9 @@ def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFr
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
 
+    if type(df) is QuantamentalDataFrame:
+        return df.to_wide(value_column=value_column)
+
     if not isinstance(value_column, str):
         raise TypeError("Argument `value_column` must be a string.")
 
@@ -518,6 +521,20 @@ def reduce_df(
     :return <pd.Dataframe>: reduced DataFrame that also removes duplicates or
         (for out_all True) DataFrame and available and selected xcats and cids.
     """
+
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("Argument `df` must be a standardised Quantamental DataFrame.")
+    
+    if type(df) is QuantamentalDataFrame:
+        return df.reduce_df(
+            cids=cids,
+            xcats=xcats,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            out_all=out_all,
+            intersect=intersect,
+        )
 
     if xcats is not None:
         if not isinstance(xcats, list):
