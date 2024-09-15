@@ -82,6 +82,8 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         start: Optional[str] = None,
         end: Optional[str] = None,
         blacklist: Mapping[str, Sequence[Union[str, pd.Timestamp]]] = None,
+        out_all: bool = False,
+        intersect: bool = False,
         inplace: bool = False,
     ) -> "QuantamentalDataFrame":
         """
@@ -97,6 +99,8 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             start=start,
             end=end,
             blacklist=blacklist,
+            out_all=out_all,
+            intersect=intersect,
         )
 
     def apply_blacklist(
