@@ -174,7 +174,9 @@ def linear_composite_xcat_agg(
 def _populate_missing_xcat_series(
     df: QuantamentalDataFrame,
 ) -> QuantamentalDataFrame:
-
+    """
+    Populate missing xcat series with NaNs
+    """
     found_cids: List[str] = df["cid"].unique().tolist()
     found_xcats: List[str] = df["xcat"].unique().tolist()
     found_xcats_set: Set[str] = set(found_xcats)
@@ -198,8 +200,14 @@ def _populate_missing_xcat_series(
 
 
 def _check_df_for_missing_cid_data(
-    df: QuantamentalDataFrame, weights: Union[str, List[float]], signs: List[float]
+    df: QuantamentalDataFrame,
+    weights: Union[str, List[float]],
+    signs: List[float],
 ) -> QuantamentalDataFrame:
+    """
+    Check the DataFrame for missing `cid` data and drop them if necessary and return the
+    DataFrame with the missing `cid` data dropped.
+    """
     found_cids: List[str] = df["cid"].unique().tolist()
     found_xcats: List[str] = df["xcat"].unique().tolist()
     found_xcats_set: Set[str] = set(found_xcats)
@@ -237,9 +245,9 @@ def _check_df_for_missing_cid_data(
             "No `cids` have complete `xcat` data required for the calculation."
         )
 
-    _xcat: str = list(
-        set(found_xcats) - {weights if isinstance(weights, str) else ""}
-    )[0]
+    _xcat: str = list(set(found_xcats) - {weights if isinstance(weights, str) else ""})[
+        0
+    ]
 
     return df, found_cids, _xcat
 
@@ -259,7 +267,9 @@ def _check_args(
     new_xcat="NEW",
     new_cid="GLB",
 ):
-    """Check the arguments of linear_composite()"""
+    """
+    Check the arguments of linear_composite()
+    """
 
     # df check
     if not isinstance(df, QuantamentalDataFrame):
@@ -383,6 +393,7 @@ def _check_args(
     if blacklist is not None:
         if not isinstance(blacklist, dict):
             raise TypeError("`blacklist` must be a dictionary.")
+
     return (
         df,
         xcats,
