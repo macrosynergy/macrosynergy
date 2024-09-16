@@ -52,3 +52,4 @@ class QuantamentalDataFrameBase(pd.DataFrame, metaclass=QuantamentalDataFrameMet
 
     IndexCols: List[str] = ["real_date", "cid", "xcat"]
     _StrIndexCols: List[str] = ["cid", "xcat"]
+    IndexColsSortOrder = ["cid", "xcat", "real_date"]
