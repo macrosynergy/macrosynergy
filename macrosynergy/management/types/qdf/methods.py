@@ -166,7 +166,71 @@ def reduce_df(
         return df
 
 
-def update_df(): ...
+def update_df(
+    df: QuantamentalDataFrameBase,
+    df_add: QuantamentalDataFrameBase,
+    xcat_replace: bool = False,
+) -> QuantamentalDataFrameBase:
+    """
+    Append a standard DataFrame to a standard base DataFrame with ticker replacement on
+    the intersection.
+    """
+    if not isinstance(df, QuantamentalDataFrameBase):
+        raise TypeError("`df` must be a QuantamentalDataFrame.")
+    if not isinstance(df_add, QuantamentalDataFrameBase):
+        raise TypeError("`df_add` must be a QuantamentalDataFrame.")
+    if not isinstance(xcat_replace, bool):
+        raise TypeError("`xcat_replace` must be a boolean.")
+
+    if xcat_replace:
+        df = update_categories(df=df, df_add=df_add)
+    else:
+        df = update_tickers(df=df, df_add=df_add)
+    _sortorder = QuantamentalDataFrameBase.IndexColsSortOrder
+    return df.sort_values(_sortorder).reset_index(drop=True)
+
+
+def update_tickers(
+    df: pd.DataFrame,
+    df_add: pd.DataFrame,
+):
+    """
+    Method used to update aggregate DataFrame on a ticker level.
+    """
+    df = pd.concat([df, df_add], axis=0, ignore_index=True)
+    df = df.drop_duplicates(
+        subset=QuantamentalDataFrameBase.IndexCols,
+        keep="last",
+    ).reset_index(drop=True)
+    return df
+
+
+def update_categories(
+    df: QuantamentalDataFrameBase,
+    df_add: QuantamentalDataFrameBase,
+) -> QuantamentalDataFrameBase:
+    """
+    Method used to update the DataFrame on the category level.
+    """
+    if not isinstance(df, QuantamentalDataFrameBase):
+        raise TypeError("`df` must be a QuantamentalDataFrame.")
+    if not isinstance(df_add, QuantamentalDataFrameBase):
+        raise TypeError("`df_add` must be a QuantamentalDataFrame.")
+
+    incumbent_categories = list(df["xcat"].unique())
+    new_categories = list(df_add["xcat"].unique())
+
+    append_condition = set(incumbent_categories) | set(new_categories)
+    intersect = list(set(incumbent_categories).intersection(set(new_categories)))
+
+    if len(append_condition) == len(incumbent_categories + new_categories):
+        df = pd.concat([df, df_add], axis=0, ignore_index=True)
+
+    else:
+        df = df[~df["xcat"].isin(intersect)]
+        df = pd.concat([df, df_add], axis=0, ignore_index=True)
+    _sortorder = QuantamentalDataFrameBase.IndexColsSortOrder
+    return df.sort_values(_sortorder).reset_index(drop=True)
 
 
 def qdf_to_wide_df(
