@@ -360,7 +360,6 @@ class BasePanelLearner(ABC):
         scorers,
         search_type,
         n_iter,
-        splits_dictionary,
         cv_summary,
         n_jobs_inner,
     ):
