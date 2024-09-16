@@ -61,7 +61,7 @@ from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
 from sklearn.feature_selection import SelectorMixin
 from sklearn.exceptions import NotFittedError
 
-from statsmodels.tools.tools import add_constant
+# from statsmodels.tools.tools import add_constant
 
 from linearmodels.panel import RandomEffects
 

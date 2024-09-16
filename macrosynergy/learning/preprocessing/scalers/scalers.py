@@ -1,8 +1,11 @@
 import pandas as pd
 
-from base_panel_scaler import BasePanelScaler
+from macrosynergy.learning.preprocessing.scalers.base_panel_scaler import (
+    BasePanelScaler,
+)
 
 from typing import Any, Union
+
 
 class PanelMinMaxScaler(BasePanelScaler):
     """
@@ -28,11 +31,11 @@ class PanelMinMaxScaler(BasePanelScaler):
 
         Returns
         -------
-        statistics : list 
+        statistics : list
             List containing the minimum and maximum values of the feature.
         """
         return [X[feature].min(), X[feature].max()]
-    
+
     def scale(self, X, feature, statistics):
         """
         Scale the 'feature' column in the design matrix 'X' based on the minimum and
@@ -45,7 +48,7 @@ class PanelMinMaxScaler(BasePanelScaler):
         feature : str
             The feature to scale.
         statistics : list
-            List containing the minimum and maximum values of the feature, in that order. 
+            List containing the minimum and maximum values of the feature, in that order.
 
         Returns
         -------
@@ -54,6 +57,7 @@ class PanelMinMaxScaler(BasePanelScaler):
         """
         return (X[feature] - statistics[0]) / (statistics[1] - statistics[0])
 
+
 class PanelStandardScaler(BasePanelScaler):
     """
     Scale and translate panel features to have zero mean and unit variance.
@@ -61,7 +65,7 @@ class PanelStandardScaler(BasePanelScaler):
     Parameters
     ----------
     type : str, default="panel"
-        The panel dimension over which the scaling is applied. Options are 
+        The panel dimension over which the scaling is applied. Options are
         "panel" and "cross_section".
     with_mean : bool, default=True
         Whether to centre the data before scaling.
@@ -74,7 +78,8 @@ class PanelStandardScaler(BasePanelScaler):
     additional option to scale within cross-sections. Unlike the StandardScaler() class,
     dataframes are always returned, preserving the multi-indexing of the inputs.
     """
-    def __init__(self, type = "panel", with_mean = True, with_std = True):
+
+    def __init__(self, type="panel", with_mean=True, with_std=True):
         # Checks
         if not isinstance(with_mean, bool):
             raise TypeError("'with_mean' must be a boolean.")
@@ -101,11 +106,11 @@ class PanelStandardScaler(BasePanelScaler):
 
         Returns
         -------
-        statistics : list 
+        statistics : list
             List containing the mean and standard deviation of values of the feature.
         """
         return [X[feature].mean(), X[feature].std()]
-    
+
     def scale(self, X, feature, statistics):
         """
         Scale the 'feature' column in the design matrix 'X' based on the mean and
@@ -119,7 +124,7 @@ class PanelStandardScaler(BasePanelScaler):
             The feature to scale.
         statistics : list
             List containing the mean and standard deviation of values of the feature,
-            in that order. 
+            in that order.
 
         Returns
         -------

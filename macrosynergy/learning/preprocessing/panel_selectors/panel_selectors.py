@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import scipy.stats as stats 
+import scipy.stats as stats
 
 import datetime
 import warnings
@@ -8,16 +8,23 @@ import warnings
 from sklearn.linear_model import Lars, lasso_path, lars_path, enet_path
 from sklearn.exceptions import NotFittedError
 
-from statsmodels.api import add_constant
+from statsmodels.tools.tools import add_constant
+
+# import statsmodels.api as api
 from linearmodels.panel import RandomEffects
 
-from base_panel_selector import BasePanelSelector
+from macrosynergy.learning.preprocessing.panel_selectors.base_panel_selector import (
+    BasePanelSelector,
+)
 from typing import Union
 
+
+# class BasePanelSelector:
+#     pass
 class LarsSelector(BasePanelSelector):
-    def __init__(self, n_factors = 10, fit_intercept = False):
+    def __init__(self, n_factors=10, fit_intercept=False):
         """
-        Statistical feature selection using LARS.  
+        Statistical feature selection using LARS.
 
         Parameters
         ----------
@@ -26,14 +33,14 @@ class LarsSelector(BasePanelSelector):
         fit_intercept : bool, default=False
             Whether to fit an intercept term in the LARS model.
         """
-        # Checks 
+        # Checks
         if not isinstance(fit_intercept, bool):
             raise TypeError("'fit_intercept' must be a boolean.")
         if not isinstance(n_factors, int):
             raise TypeError("'n_factors' must be an integer.")
         if n_factors <= 0:
             raise ValueError("'n_factors' must be a positive integer.")
-        
+
         # Attributes
         self.fit_intercept = fit_intercept
         self.n_factors = n_factors
@@ -49,16 +56,17 @@ class LarsSelector(BasePanelSelector):
         y : pandas.Series or pandas.DataFrame
             The target vector.
         """
-        lars = Lars(fit_intercept = self.fit_intercept, n_nonzero_coefs = self.n_factors)
+        lars = Lars(fit_intercept=self.fit_intercept, n_nonzero_coefs=self.n_factors)
         lars.fit(X.values, y.values.reshape(-1, 1))
         coefs = lars.coef_
 
         return [True if coef != 0 else False for coef in coefs]
-    
+
+
 class LassoSelector(BasePanelSelector):
-    def __init__(self, n_factors = 10, positive = False, use_lars = False):
+    def __init__(self, n_factors=10, positive=False, use_lars=False):
         """
-        Statistical feature selection with the LASSO. 
+        Statistical feature selection with the LASSO.
 
         Parameters
         ----------
@@ -78,7 +86,7 @@ class LassoSelector(BasePanelSelector):
             raise TypeError("'positive' must be a boolean.")
         if not isinstance(use_lars, bool):
             raise TypeError("'use_lars' must be a boolean.")
-        
+
         # Attributes
         self.n_factors = n_factors
         self.positive = positive
@@ -97,18 +105,26 @@ class LassoSelector(BasePanelSelector):
         """
         # Obtain coefficient paths with dimensions (n_features, n_alphas)
         if self.use_lars:
-            _, _, coefs_path = lars_path(X.values, y.values.reshape(-1, 1), positive = self.positive, method='lasso')
+            _, _, coefs_path = lars_path(
+                X.values,
+                y.values.reshape(-1, 1),
+                positive=self.positive,
+                method="lasso",
+            )
         else:
-            _, _, coefs_path = lasso_path(X.values, y.values.reshape(-1, 1), positive = self.positive)
+            _, _, coefs_path = lasso_path(
+                X.values, y.values.reshape(-1, 1), positive=self.positive
+            )
 
-        mask = (coefs_path[:,self.n_factors] != 0)
+        mask = coefs_path[:, self.n_factors] != 0
 
         return mask
-    
+
+
 class ENetSelector(BasePanelSelector):
-    def __init__(self, n_factors = 10, positive = False, l1_ratio = 0.5):
+    def __init__(self, n_factors=10, positive=False, l1_ratio=0.5):
         """
-        Statistical feature selection with Elastic Net. 
+        Statistical feature selection with Elastic Net.
 
         Parameters
         ----------
@@ -130,7 +146,7 @@ class ENetSelector(BasePanelSelector):
             raise TypeError("'l1_ratio' must be a float.")
         if (l1_ratio <= 0) or (l1_ratio > 1):
             raise ValueError("'l1_ratio' must be in the range (0, 1].")
-        
+
         # Attributes
         self.n_factors = n_factors
         self.positive = positive
@@ -147,14 +163,20 @@ class ENetSelector(BasePanelSelector):
         y : pandas.Series or pandas.DataFrame
             The target vector.
         """
-        _, _, coefs_path = enet_path(X.values, y.values.reshape(-1, 1), positive = self.positive, l1_ratio = self.l1_ratio)
+        _, _, coefs_path = enet_path(
+            X.values,
+            y.values.reshape(-1, 1),
+            positive=self.positive,
+            l1_ratio=self.l1_ratio,
+        )
 
-        mask = (coefs_path[:,self.n_factors] != 0)
+        mask = coefs_path[:, self.n_factors] != 0
 
         return mask
-    
+
+
 class MapSelector(BasePanelSelector):
-    def __init__(self, significance_level = 0.05, positive = False):
+    def __init__(self, significance_level=0.05, positive=False):
         """
         Univariate statistical feature selection using the Macrosynergy panel test.
 
@@ -168,9 +190,7 @@ class MapSelector(BasePanelSelector):
         if type(significance_level) != float:
             raise TypeError("The significance_level must be a float.")
         if (significance_level <= 0) or (significance_level >= 1):
-            raise ValueError(
-                "The significance_level must be in between 0 and 1."
-            )
+            raise ValueError("The significance_level must be in between 0 and 1.")
         if not isinstance(positive, (bool, np.bool_)):
             raise TypeError("The 'positive' parameter must be a boolean.")
 
@@ -220,7 +240,8 @@ class MapSelector(BasePanelSelector):
                 mask.append(False)
 
         return np.array(mask)
-    
+
+
 if __name__ == "__main__":
     import macrosynergy.management as msm
     from macrosynergy.management.simulate import make_qdf
@@ -262,7 +283,9 @@ if __name__ == "__main__":
     train = msm.categories_df(
         df=dfd, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
     ).dropna()
-    train = train[train.index.get_level_values(1) >= pd.Timestamp(year=2005,month=8,day=1)]
+    train = train[
+        train.index.get_level_values(1) >= pd.Timestamp(year=2005, month=8, day=1)
+    ]
 
     X_train = train.drop(columns=["XR"])
     y_train = train["XR"]
@@ -271,7 +294,7 @@ if __name__ == "__main__":
     )
 
     # LARS selector
-    lars = LarsSelector(n_factors = 5).fit(X_train, y_train)
+    lars = LarsSelector(n_factors=5).fit(X_train, y_train)
     print(f"LARS 5-factors, no intercept: {lars.get_feature_names_out()}")
-    lars = LarsSelector(n_factors = 5, fit_intercept = True).fit(X_train, y_train)
+    lars = LarsSelector(n_factors=5, fit_intercept=True).fit(X_train, y_train)
     print(f"LARS 5-factors, with intercept: {lars.get_feature_names_out()}")

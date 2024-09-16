@@ -7,6 +7,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 
 from typing import Any, Optional
 
+
 class FeatureAverager(BaseEstimator, TransformerMixin):
     def __init__(self, use_signs: Optional[bool] = False):
         """

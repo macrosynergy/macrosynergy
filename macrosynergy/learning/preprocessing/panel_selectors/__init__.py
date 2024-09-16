@@ -1,5 +1,5 @@
 from .base_panel_selector import BasePanelSelector
-from .selectors import (
+from .panel_selectors import (
     LarsSelector,
     LassoSelector,
     ENetSelector,

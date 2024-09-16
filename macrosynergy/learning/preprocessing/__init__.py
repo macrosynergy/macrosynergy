@@ -1,4 +1,4 @@
-from .selectors import (
+from .panel_selectors import (
     BasePanelSelector,
     LarsSelector,
     LassoSelector,
