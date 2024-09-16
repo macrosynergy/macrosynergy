@@ -26,9 +26,6 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
     >>> qdf = QuantamentalDataFrame(df)
     """
 
-    IndexCols: List[str] = ["real_date", "cid", "xcat"]
-    _StrIndexCols: List[str] = ["cid", "xcat"]
-
     def __init__(self, df: Optional[pd.DataFrame] = None, categorical: bool = True):
         if df is not None:
             if not (
