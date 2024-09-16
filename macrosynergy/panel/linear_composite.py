@@ -171,6 +171,31 @@ def linear_composite_xcat_agg(
     return out_df
 
 
+def _populate_missing_xcat_series(
+    df: QuantamentalDataFrame,
+) -> QuantamentalDataFrame:
+
+    found_cids: List[str] = df["cid"].unique().tolist()
+    found_xcats: List[str] = df["xcat"].unique().tolist()
+    found_xcats_set: Set[str] = set(found_xcats)
+    dt_range: pd.DatetimeIndex = pd.to_datetime(df["real_date"].unique())
+    wrn_msg: str = (
+        "{cidx} does not have complete xcat data for {missing_xcats}."
+        " These will be filled with NaNs for the calculation."
+    )
+
+    for cidx in found_cids:
+        missing_xcats = list(
+            found_xcats_set - set(df.loc[df["cid"] == cidx, "xcat"].unique())
+        )
+        if missing_xcats:
+            warnings.warn(wrn_msg.format(cidx=cidx, missing_xcats=missing_xcats))
+            for xc in missing_xcats:
+                dct = {"cid": cidx, "xcat": xc, "real_date": dt_range, "value": np.NaN}
+                df = pd.concat([df, pd.DataFrame(data=dct)])
+
+    return df
+
 
 def _check_args(
     df: QuantamentalDataFrame,
@@ -457,36 +482,7 @@ def linear_composite(
         )
 
     if _xcat_agg:
-        found_cids: List[str] = df["cid"].unique().tolist()
-        found_xcats: List[str] = df["xcat"].unique().tolist()
-
-        for icid, cidx in enumerate(found_cids):
-            missing_xcats: List[str] = list(
-                set(found_xcats) - set(df.loc[df["cid"] == cidx, "xcat"].unique())
-            )
-            if missing_xcats:
-                # warn the user, and put in the dates with NaNs
-                warnings.warn(
-                    f"`cid` {cidx} does not have complete `xcat` data for "
-                    f"{missing_xcats}."
-                    " These will be filled with NaNs for the calculation."
-                )
-                # artificially add the missing xcats
-                dt_range: pd.DatetimeIndex = pd.to_datetime(df["real_date"].unique())
-                for xc in missing_xcats:
-                    df = pd.concat(
-                        [
-                            df,
-                            pd.DataFrame(
-                                data={
-                                    "cid": cidx,
-                                    "xcat": xc,
-                                    "real_date": dt_range,
-                                    "value": np.NaN,
-                                }
-                            ),
-                        ]
-                    )
+        df = _populate_missing_xcat_series(df)
 
         return linear_composite_xcat_agg(
             df=df,
