@@ -4,12 +4,12 @@ Implementation of linear_composite() function as a module.
 
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Union, Optional, Tuple, Type
+from typing import List, Dict, Union, Optional, Tuple, Type, Set
 import warnings
 
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.utils import reduce_df, is_valid_iso_date
 from macrosynergy.management.simulate import make_test_df
-from macrosynergy.management.utils import is_valid_iso_date
+from macrosynergy.management.types import QuantamentalDataFrame
 
 listtypes: Tuple[Type, ...] = (list, np.ndarray, pd.Series, tuple)
 
