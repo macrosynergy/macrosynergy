@@ -197,6 +197,53 @@ def _populate_missing_xcat_series(
     return df
 
 
+def _check_df_for_missing_cid_data(
+    df: QuantamentalDataFrame, weights: Union[str, List[float]], signs: List[float]
+) -> QuantamentalDataFrame:
+    found_cids: List[str] = df["cid"].unique().tolist()
+    found_xcats: List[str] = df["xcat"].unique().tolist()
+    found_xcats_set: Set[str] = set(found_xcats)
+    wrn_msg: str = (
+        "`cid` {cidx} does not have complete `xcat` data for {missing_xcats}."
+        " These will be dropped from the calculation."
+    )
+    if isinstance(weights, str):
+        if not (
+            (weights in found_xcats) and (len((set(found_xcats) - {weights})) == 1)
+        ):
+            raise ValueError(
+                f"Weight category {weights} not found in `df`."
+                f" Available categories are {found_xcats}."
+            )
+
+    ctr = 0
+    for cidx in found_cids.copy():  # copy to allow modification of `cids`
+        missing_xcats = list(
+            found_xcats_set - set(df.loc[df["cid"] == cidx, "xcat"].unique())
+        )
+        if missing_xcats:
+            found_cids.pop(ctr)
+            signs.pop(ctr)
+            if isinstance(weights, list):
+                weights.pop(ctr)
+            # drop from df
+            df = df.loc[df["cid"] != cidx, :]
+            warnings.warn(wrn_msg.format(cidx=cidx, missing_xcats=missing_xcats))
+        else:
+            ctr += 1
+
+    if len(found_cids) == 0:
+        raise ValueError(
+            "No `cids` have complete `xcat` data required for the calculation."
+        )
+
+    _xcat: str = list(
+        set(found_xcats) - {weights if isinstance(weights, str) else ""}
+    )[0]
+
+    return df, found_cids, _xcat
+
+
 def _check_args(
     df: QuantamentalDataFrame,
     xcats: Union[str, List[str]],
@@ -495,46 +542,9 @@ def linear_composite(
         )
 
     else:  # mode == "cid_agg" -- single xcat
-        found_cids: List[str] = df["cid"].unique().tolist()
-        found_xcats: List[str] = df["xcat"].unique().tolist()
-        if isinstance(weights, str):
-            # one of the found_xcats must be the weights, and there should be only one
-            # more
-            assert (weights in found_xcats) and len(
-                (set(found_xcats) - {weights})
-            ) == 1, (
-                "When using a category-string as `weights`"
-                " it must be present in `df` and there must be only one other `xcat`."
-            )
-
-        ctr = 0
-        for cidx in cids.copy():  # copy to allow modification of `cids`
-            missing_xcats: List[str] = list(
-                set(found_xcats) - set(df.loc[df["cid"] == cidx, "xcat"].unique())
-            )
-            if missing_xcats:
-                cids.pop(ctr)
-                signs.pop(ctr)
-                if isinstance(weights, list):
-                    weights.pop(ctr)
-                # drop from df
-                df = df.loc[df["cid"] != cidx, :]
-                warnings.warn(
-                    f"`cid` {cidx} does not have complete `xcat` data for "
-                    f"{missing_xcats}."
-                    " It will be dropped from dataframe."
-                )
-            else:
-                ctr += 1
-
-        if len(cids) == 0:
-            raise ValueError(
-                "No `cids` have complete `xcat` data required for the calculation."
-            )
-
-        _xcat: str = list(
-            set(found_xcats) - {weights if isinstance(weights, str) else ""}
-        )[0]
+        df, cids, _xcat = _check_df_for_missing_cid_data(
+            df=df, weights=weights, signs=signs
+        )
 
         return linear_composite_cid_agg(
             df=df,
