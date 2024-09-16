@@ -13,6 +13,7 @@ from .methods import (
     update_df,
     apply_blacklist,
     qdf_to_wide_df,
+    check_is_categorical,
 )
 from .base import QuantamentalDataFrameBase
 
@@ -33,7 +34,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             ):
                 raise TypeError("Input must be a QuantamentalDataFrame (pd.DataFrame).")
         super().__init__(df)
-
+        self.InitializedAsCategorical = check_is_categorical(self)
         if categorical:
             self.to_categorical()
 
@@ -42,9 +43,9 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
     ):
         result = method(*args, **kwargs)
         if inplace:
-            self.__init__(result)
+            self.__init__(result, categorical=self.InitializedAsCategorical)
             return self
-        return QuantamentalDataFrame(result)
+        return QuantamentalDataFrame(result, categorical=self.InitializedAsCategorical)
 
     def is_categorical(self) -> bool:
         """
