@@ -21,8 +21,8 @@ from .preprocessing import (
     FeatureAverager,
     PanelMinMaxScaler,
     PanelStandardScaler,
-    # BasePanelScaler,
-    # BasePanelSelector,
+    BasePanelScaler,
+    BasePanelSelector,
 )
 
 from .metrics import (
@@ -68,13 +68,13 @@ __all__ = [
     # cv_tools
     "panel_cv_scores",
     # preprocessing
-    # "BasePanelSelector",
+    "BasePanelSelector",
     "LassoSelector",
     "LarsSelector",
     "MapSelector",
     "ENetSelector",
     # transformers
-    # "BasePanelScaler",
+    "BasePanelScaler",
     "FeatureAverager",
     "PanelMinMaxScaler",
     "PanelStandardScaler",
