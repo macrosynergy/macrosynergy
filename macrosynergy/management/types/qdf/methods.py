@@ -1,5 +1,5 @@
 """
-Module hosting custom types and meta-classes for use across the package.
+Module hosting custom types and meta-classes for use with Quantamental DataFrames.
 """
 
 from typing import List, Optional, Any, Dict, Iterable, Mapping, Union
