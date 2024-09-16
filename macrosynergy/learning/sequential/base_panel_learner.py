@@ -89,7 +89,7 @@ class BasePanelLearner(ABC):
             freq = self.freq,
             lag = self.lag,
             xcat_aggs = self.xcat_aggs,
-        ).dropna() 
+        ).dropna().sort_index()
 
         # Create X and y
         self.X = df_long.iloc[:, :-1]
@@ -221,12 +221,12 @@ class BasePanelLearner(ABC):
         test_index = self.index[test_idx]
         test_xs_levels = self.xs_levels[test_idx]
         test_date_levels = self.date_levels[test_idx]
-        sorted_date_levels = sorted(test_date_levels.unique())
+        sorted_test_date_levels = sorted(test_date_levels.unique())
 
         # Since the features lag behind the targets, the dates need to be adjusted
         # by the lag applied.
         locs: np.ndarray = (
-            np.searchsorted(self.date_levels, sorted_date_levels, side="left")
+            np.searchsorted(self.date_levels, sorted_test_date_levels, side="left")
             - self.lag
         )
         adj_test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
@@ -324,6 +324,7 @@ class BasePanelLearner(ABC):
                 y_train = y_train,
                 X_test = X_test,
                 y_test = y_test,
+                timestamp = adj_test_date_levels.min(),
             )
 
             # Store quantamental data
@@ -334,6 +335,7 @@ class BasePanelLearner(ABC):
                 y_train = y_train,
                 X_test = X_test,
                 y_test = y_test,
+                adjusted_test_index = test_index,
             )
 
             # Store other data
@@ -344,6 +346,7 @@ class BasePanelLearner(ABC):
                 y_train = y_train,
                 X_test = X_test,
                 y_test = y_test,
+                timestamp = adj_test_date_levels.min(),
             )
 
 
@@ -459,7 +462,7 @@ class BasePanelLearner(ABC):
             return cv_results['final_score'].max()
     
     @abstractmethod
-    def store_quantamental_data(self, pipeline_name, model, X_train, y_train, X_test, y_test):
+    def store_quantamental_data(self, pipeline_name, model, X_train, y_train, X_test, y_test, adjusted_test_index):
         """
         Abstract method for storing quantamental data.
         """
@@ -477,11 +480,11 @@ class BasePanelLearner(ABC):
         y_train,
         X_test,
         y_test,
+        timestamp,
     ):
         """
         Store model selection information for training set (X_train, y_train) 
         """
-        timestamp = self.date_levels[X_test.index].min()
         if optimal_model is not None:
             optim_name = optimal_model_name
             optim_score = optimal_model_score

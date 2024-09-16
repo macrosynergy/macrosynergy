@@ -9,6 +9,9 @@ import pandas as pd
 from macrosynergy.learning import ExpandingIncrementPanelSplit
 from macrosynergy.learning.sequential import BasePanelLearner
 
+from sklearn.pipeline import Pipeline
+from sklearn.feature_selection import SelectorMixin
+
 class SignalOptimizer(BasePanelLearner):
     """
     Class for sequential optimization of return forecasts based on panels of quantamental
@@ -34,6 +37,7 @@ class SignalOptimizer(BasePanelLearner):
         lag = 1,
         xcat_aggs = ["last", "sum"],
     ):
+        # Run checks and necessary dataframe massaging
         super().__init__(
             df = df,
             xcats = xcats,
@@ -133,7 +137,7 @@ class SignalOptimizer(BasePanelLearner):
             ftr_selection_data.append(other_data["selected_ftrs"])
 
         # Create quantamental dataframe of forecasts
-        for idx, forecasts in prediction_data:
+        for pipeline_name, idx, forecasts in prediction_data:
             forecasts_df.loc[idx, name] = forecasts
 
         forecasts_df = forecasts_df.groupby(level = 0).ffill()
@@ -149,7 +153,7 @@ class SignalOptimizer(BasePanelLearner):
         forecasts_df_long = pd.melt(
             frame = forecasts_df.reset_index(),
             id_vars = ["cid", "real_date"],
-            value_vars = "xcat",
+            var_name = "xcat",
         )
         self.preds = pd.concat((self.preds, forecasts_df_long), axis=0).astype(
             {
@@ -161,25 +165,25 @@ class SignalOptimizer(BasePanelLearner):
         )
 
         # Store model selection data
-        model_df_long = pd.DataFrame(
-            columns = self.chosen_models.columns,
-            data = modelchoice_data,
-        )
-        self.chosen_models = pd.concat(
-            (
-                self.chosen_models,
-                model_df_long,
-            ),
-            axis=0,
-        ).astype(
-            {
-                "real_date": "datetime64[ns]",
-                "name": "object",
-                "model_type": "object",
-                "hparams": "object",
-                "n_splits_used": "int",
-            }
-        )
+        # model_df_long = pd.DataFrame(
+        #     columns = self.chosen_models.columns,
+        #     data = modelchoice_data,
+        # )
+        # self.chosen_models = pd.concat(
+        #     (
+        #         self.chosen_models,
+        #         model_df_long,
+        #     ),
+        #     axis=0,
+        # ).astype(
+        #     {
+        #         "real_date": "datetime64[ns]",
+        #         "name": "object",
+        #         "model_type": "object",
+        #         "hparams": "object",
+        #         "n_splits_used": "int",
+        #     }
+        # )
 
         # Store feature coefficients
         coef_df_long = pd.DataFrame(
@@ -230,21 +234,21 @@ class SignalOptimizer(BasePanelLearner):
             axis=0,
         ).astype(ftr_selection_types)
 
-    def store_quantamental_data(self, pipeline_name, model, X_train, y_train, X_test, y_test):
+    def store_quantamental_data(self, pipeline_name, model, X_train, y_train, X_test, y_test, adjusted_test_index):
         if model is not None:
             if hasattr(model, "create_signal"):
                 if callable(getattr(model, "create_signal")):
-                preds = model.create_signal(X_test)
+                    preds = model.create_signal(X_test)
             else:
                 preds = model.predict(X_test)
         else:
             preds = np.zeros(X_test.shape[0])
             
-        prediction_data = [pipeline_name, X_test.index, preds]
+        prediction_data = [pipeline_name, adjusted_test_index, preds]
 
-        return {"model_choice": prediction_data}
+        return {"predictions": prediction_data}
 
-    def store_other_data(self, optimal_model, X_train, y_train, X_test, y_test):
+    def store_other_data(self, pipeline_name, optimal_model, X_train, y_train, X_test, y_test, timestamp):
         feature_names = np.array(X_train.columns)
         if isinstance(optimal_model, Pipeline):
             final_estimator = optimal_model[-1]
@@ -260,18 +264,18 @@ class SignalOptimizer(BasePanelLearner):
                 coefs = np.array(final_estimator.coef_)
             elif len(final_estimator.coef_.shape) == 2:
                 if final_estimator.coef_.shape[0] != 1:
-                    coefs = np.array([np.nan for _ in range(X_train_i.shape[1])])
+                    coefs = np.array([np.nan for _ in range(X_train.shape[1])])
                 else:
                     coefs = np.array(final_estimator.coef_).squeeze()
             else:
-                coefs = np.array([np.nan for _ in range(X_train_i.shape[1])])
+                coefs = np.array([np.nan for _ in range(X_train.shape[1])])
         else:
-            coefs = np.array([np.nan for _ in range(X_train_i.shape[1])])
+            coefs = np.array([np.nan for _ in range(X_train.shape[1])])
 
-        coef_ftr_map = {ftr: coef for ftr, coef in zip(ftr_names, coefs)}
+        coef_ftr_map = {ftr: coef for ftr, coef in zip(feature_names, coefs)}
         coefs = [
             coef_ftr_map[ftr] if ftr in coef_ftr_map else np.nan
-            for ftr in X_train_i.columns
+            for ftr in X_train.columns
         ]
         if hasattr(final_estimator, "intercept_"):
             if isinstance(final_estimator.intercept_, np.ndarray):
@@ -287,24 +291,25 @@ class SignalOptimizer(BasePanelLearner):
             intercepts = np.nan
 
         # Get feature selection information
-        if len(ftr_names) == X_train_i.shape[1]:
+        if len(feature_names) == X_train.shape[1]:
             # Then all features were selected
-            ftr_selection_data = [test_date_levels.date[0], name] + [
-                1 for _ in ftr_names
+            ftr_selection_data = [timestamp, pipeline_name] + [
+                1 for _ in feature_names
             ]
         else:
             # Then some features were excluded
-            ftr_selection_data = [test_date_levels.date[0], name] + [
-                1 if name in ftr_names else 0 for name in np.array(X_train_i.columns)
+            ftr_selection_data = [timestamp, pipeline_name] + [
+                1 if name in feature_names else 0 for name in np.array(X_train.columns)
             ]
 
         # Store data
-        timestamp = self.date_levels[X_test.index].min()
         other_data = {
             "ftr_coefficients": [timestamp, pipeline_name] + coefs,
             "intercepts": [timestamp, pipeline_name, intercepts],
             "selected_ftrs": ftr_selection_data,
         }
+
+        return other_data
 
 
 if __name__ == "__main__":
@@ -371,7 +376,7 @@ if __name__ == "__main__":
         min_cids = 4,
         min_periods = 36,
         test_size = 1,
-        n_jobs_outer=1,
+        n_jobs_outer=-1,
         n_jobs_inner=1,
     )
     
