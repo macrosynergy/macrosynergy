@@ -32,6 +32,45 @@ def change_column_format(
     return df
 
 
+def check_is_categorical(df: QuantamentalDataFrameBase) -> bool:
+    if not isinstance(df, QuantamentalDataFrameBase):
+        raise TypeError("`df` must be a Quantamental DataFrame.")
+    for colx in df._StrIndexCols:
+        if not df[colx].dtype.name == "category":
+            return False
+    return True
+
+
+def _get_tickers_series(
+    df: QuantamentalDataFrameBase,
+    cid_column: str = "cid",
+    xcat_column: str = "xcat",
+) -> List[str]:
+    """
+    Get the list of tickers from the DataFrame.
+    """
+    # check if the columns are in the dataframe and are categorical
+    if cid_column not in df.columns:
+        raise ValueError(f"Column '{cid_column}' not found in DataFrame.")
+    if xcat_column not in df.columns:
+        raise ValueError(f"Column '{xcat_column}' not found in DataFrame.")
+
+    if not check_is_categorical(df):
+        return df[cid_column] + "_" + df[xcat_column]
+
+    cid_labels = df["cid"].cat.categories[df["cid"].cat.codes]
+    xcat_labels = df["xcat"].cat.categories[df["xcat"].cat.codes]
+
+    ticker_series = pd.Categorical(
+        [f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)],
+        categories=pd.Categorical(
+            [f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)]
+        ).categories,
+    )
+
+    return ticker_series
+
+
 def apply_blacklist(
     df: QuantamentalDataFrameBase,
     blacklist: Mapping[str, Iterable[Union[str, pd.Timestamp]]],
@@ -145,19 +184,23 @@ def qdf_to_wide_df(
     if value_column not in df.columns:
         raise ValueError(f"Column '{value_column}' not found in DataFrame.")
 
-    # Leverage categorical data to avoid extensive data copying
-    cid_labels = df["cid"].cat.categories[df["cid"].cat.codes]
-    xcat_labels = df["xcat"].cat.categories[df["xcat"].cat.codes]
-
-    # Create the 'ticker' column directly without separate temporary structures
-    df["ticker"] = pd.Categorical(
-        [f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)],
-        categories=pd.Categorical(
-            [f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)]
-        ).categories,
-    )
+    df["ticker"] = _get_tickers_series(df)
 
     # Perform the pivot directly within the assignment to reduce memory footprint
     return df.pivot(
         index="real_date", columns="ticker", values=value_column
     ).rename_axis(None, axis=1)
+
+
+def add_ticker_column(
+    df: QuantamentalDataFrameBase,
+) -> List[str]:
+    """
+    Get the list of tickers from the DataFrame.
+    """
+    if not isinstance(df, QuantamentalDataFrameBase):
+        raise TypeError("`df` must be a pandas DataFrame.")
+
+    df["ticker"] = _get_tickers_series(df)
+
+    return df
