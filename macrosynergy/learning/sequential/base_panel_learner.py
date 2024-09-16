@@ -65,7 +65,7 @@ class BasePanelLearner(ABC):
             target category. Default is ["last", "sum"].
         """
         # Checks
-        #self._check_init(df, xcats, cids, start, end, blacklist, freq, lag, xcat_aggs)
+        self._check_init(df, xcats, cids, start, end, blacklist, freq, lag, xcat_aggs)
 
         # Attributes
         self.df = df
@@ -503,4 +503,114 @@ class BasePanelLearner(ABC):
         Abstract method for storing other data.
         """
         pass
+
+    def _check_init(
+        self,
+        df,
+        xcats, 
+        cids,
+        start,
+        end,
+        blacklist,
+        freq,
+        lag,
+        xcat_aggs,
+    ):
+        """
+        Checks for the constructor. 
+        """
+        # Dataframe checks
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("df must be a pandas DataFrame.")
+        if not set(["cid", "xcat", "real_date", "value"]).issubset(df.columns):
+            raise ValueError("df must have columns 'cid', 'xcat', 'real_date' and 'value'.")
+        if len(df) < 1:
+            raise ValueError("df must not be empty")
+        
+        # categories checks
+        if not isinstance(xcats, list):
+            raise TypeError("xcats must be a list.")
+        if len(xcats) < 2:
+            raise ValueError("xcats must have at least two elements.")
+        if not all(isinstance(xcat, str) for xcat in xcats):
+            raise TypeError("All elements in xcats must be strings.")
+        for xcat in xcats:
+            if xcat not in df["xcat"].unique():
+                raise ValueError(f"{xcat} not in the dataframe.")
+            
+        # cids checks
+        if cids is not None:
+            if not isinstance(cids, list):
+                raise TypeError("cids must be a list.")
+            if not all(isinstance(cid, str) for cid in cids):
+                raise TypeError("All elements in cids must be strings.")
+            for cid in cids:
+                if cid not in df["cid"].unique():
+                    raise ValueError(f"{cid} not in the dataframe.")
+                
+        # start checks
+        if start is not None:
+            if not isinstance(start, str):
+                raise TypeError("start must be a string.")
+            try:
+                pd.to_datetime(start)
+            except ValueError:
+                raise ValueError("start must be in ISO 8601 format.")
+            
+        # end checks
+        if end is not None:
+            if not isinstance(end, str):
+                raise TypeError("end must be a string.")
+            try:
+                pd.to_datetime(end)
+            except ValueError:
+                raise ValueError("end must be in ISO 8601 format.")
+            
+        # blacklist checks
+        if blacklist is not None:
+            if not isinstance(blacklist, dict):
+                raise TypeError("The blacklist argument must be a dictionary.")
+            for key, value in blacklist.items():
+                # check keys are strings
+                if not isinstance(key, str):
+                    raise TypeError(
+                        "The keys of the blacklist argument must be strings."
+                    )
+                # check values of tuples of length two
+                if not isinstance(value, tuple):
+                    raise TypeError(
+                        "The values of the blacklist argument must be tuples."
+                    )
+                if len(value) != 2:
+                    raise ValueError(
+                        "The values of the blacklist argument must be tuples of length "
+                        "two."
+                    )
+                # ensure each of the dates in the dictionary are timestamps
+                for date in value:
+                    if not isinstance(date, pd.Timestamp):
+                        raise TypeError(
+                            "The values of the blacklist argument must be tuples of "
+                            "pandas Timestamps."
+                        )
+                    
+        # freq checks
+        if not isinstance(freq, str):
+            raise TypeError("freq must be a string.")
+        if freq not in ["D", "W", "M", "Q", "Y"]:
+            raise ValueError("freq must be one of 'D', 'W', 'M', 'Q' or 'Y'.")
+        
+        # lag checks
+        if not isinstance(lag, int):
+            raise TypeError("lag must be an integer.")
+        if lag < 0:
+            raise ValueError("lag must be non-negative.")
+        
+        # xcat_aggs checks
+        if not isinstance(xcat_aggs, list):
+            raise TypeError("xcat_aggs must be a list.")
+        if len(xcat_aggs) != 2:
+            raise ValueError("xcat_aggs must have exactly two elements.")
+
+
         
