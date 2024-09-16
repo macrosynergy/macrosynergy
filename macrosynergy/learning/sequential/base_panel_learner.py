@@ -312,17 +312,9 @@ class BasePanelLearner(ABC):
             # )
             #optim_model.fit(X_train, y_train)
 
-            # Store quantamental data
-            quantamental_data: dict = self.store_quantamental_data(
-                model = optim_model,
-                X_train = X_train,
-                y_train = y_train,
-                X_test = X_test,
-                y_test = y_test,
-            )
-
             # Store model selection data
             modelchoice_data: dict = self.store_modelchoice_data(
+                pipeline_name = name,
                 optimal_model = optim_model,
                 optimal_model_name = optim_name,
                 optimal_model_score = optim_score,
@@ -334,8 +326,19 @@ class BasePanelLearner(ABC):
                 y_test = y_test,
             )
 
+            # Store quantamental data
+            quantamental_data: dict = self.store_quantamental_data(
+                pipeline_name = name,
+                model = optim_model,
+                X_train = X_train,
+                y_train = y_train,
+                X_test = X_test,
+                y_test = y_test,
+            )
+
             # Store other data
             other_data: dict = self.store_other_data(
+                pipeline_name = name,
                 optimal_model = optim_model,
                 X_train = X_train,
                 y_train = y_train,
@@ -456,15 +459,15 @@ class BasePanelLearner(ABC):
             return cv_results['final_score'].max()
     
     @abstractmethod
-    def store_quantamental_data(self, model, X_train, y_train, X_test, y_test):
+    def store_quantamental_data(self, pipeline_name, model, X_train, y_train, X_test, y_test):
         """
         Abstract method for storing quantamental data.
         """
         pass
 
-    @abstractmethod
     def store_modelchoice_data(
         self,
+        pipeline_name,
         optimal_model,
         optimal_model_name,
         optimal_model_score,
@@ -476,9 +479,23 @@ class BasePanelLearner(ABC):
         y_test,
     ):
         """
-        Abstract method for storing model choice data.
+        Store model selection information for training set (X_train, y_train) 
         """
-        pass
+        timestamp = self.date_levels[X_test.index].min()
+        if optimal_model is not None:
+            optim_name = optimal_model_name
+            optim_score = optimal_model_score
+            optim_params = optimal_model_params
+        else:
+
+            optim_name = "None",
+            optim_score = - np.inf,
+            optim_params = {}, 
+
+        data = [timestamp, pipeline_name, optim_name, optim_score, optim_params]
+        data.extend(n_splits)
+
+        return {"model_choice": data}
 
     @abstractmethod
     def store_other_data(self, optimal_model, X_train, y_train, X_test, y_test):

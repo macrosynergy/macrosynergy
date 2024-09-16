@@ -230,14 +230,81 @@ class SignalOptimizer(BasePanelLearner):
             axis=0,
         ).astype(ftr_selection_types)
 
-    def store_quantamental_data(self, model, X_train, y_train, X_test, y_test):
-        pass 
+    def store_quantamental_data(self, pipeline_name, model, X_train, y_train, X_test, y_test):
+        if model is not None:
+            if hasattr(model, "create_signal"):
+                if callable(getattr(model, "create_signal")):
+                preds = model.create_signal(X_test)
+            else:
+                preds = model.predict(X_test)
+        else:
+            preds = np.zeros(X_test.shape[0])
+            
+        prediction_data = [pipeline_name, X_test.index, preds]
 
-    def store_modelchoice_data(self, model, model_choice, n_splits_used):
-        pass
+        return {"model_choice": prediction_data}
 
-    def store_other_data(self, ftr_coefficients, intercepts, selected_ftrs):
-        pass
+    def store_other_data(self, optimal_model, X_train, y_train, X_test, y_test):
+        feature_names = np.array(X_train.columns)
+        if isinstance(optimal_model, Pipeline):
+            final_estimator = optimal_model[-1]
+            for _, transformer in reversed(optimal_model.steps):
+                if isinstance(transformer, SelectorMixin):
+                    feature_names = transformer.get_feature_names_out()
+                    break
+        else:
+            final_estimator = optimal_model
+        
+        if hasattr(final_estimator, "coef_"):
+            if len(final_estimator.coef_.shape) == 1:
+                coefs = np.array(final_estimator.coef_)
+            elif len(final_estimator.coef_.shape) == 2:
+                if final_estimator.coef_.shape[0] != 1:
+                    coefs = np.array([np.nan for _ in range(X_train_i.shape[1])])
+                else:
+                    coefs = np.array(final_estimator.coef_).squeeze()
+            else:
+                coefs = np.array([np.nan for _ in range(X_train_i.shape[1])])
+        else:
+            coefs = np.array([np.nan for _ in range(X_train_i.shape[1])])
+
+        coef_ftr_map = {ftr: coef for ftr, coef in zip(ftr_names, coefs)}
+        coefs = [
+            coef_ftr_map[ftr] if ftr in coef_ftr_map else np.nan
+            for ftr in X_train_i.columns
+        ]
+        if hasattr(final_estimator, "intercept_"):
+            if isinstance(final_estimator.intercept_, np.ndarray):
+                # Store the intercept if it has length one
+                if len(final_estimator.intercept_) == 1:
+                    intercepts = final_estimator.intercept_[0]
+                else:
+                    intercepts = np.nan
+            else:
+                # The intercept will be a float/integer
+                intercepts = final_estimator.intercept_
+        else:
+            intercepts = np.nan
+
+        # Get feature selection information
+        if len(ftr_names) == X_train_i.shape[1]:
+            # Then all features were selected
+            ftr_selection_data = [test_date_levels.date[0], name] + [
+                1 for _ in ftr_names
+            ]
+        else:
+            # Then some features were excluded
+            ftr_selection_data = [test_date_levels.date[0], name] + [
+                1 if name in ftr_names else 0 for name in np.array(X_train_i.columns)
+            ]
+
+        # Store data
+        timestamp = self.date_levels[X_test.index].min()
+        other_data = {
+            "ftr_coefficients": [timestamp, pipeline_name] + coefs,
+            "intercepts": [timestamp, pipeline_name, intercepts],
+            "selected_ftrs": ftr_selection_data,
+        }
 
 
 if __name__ == "__main__":
