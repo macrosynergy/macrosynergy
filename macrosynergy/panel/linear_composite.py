@@ -272,8 +272,12 @@ def _check_args(
     """
 
     # df check
-    if not isinstance(df, QuantamentalDataFrame):
-        raise ValueError("`df` must be a standardized Quantamental DataFrame.")
+    if (
+        (not isinstance(df, QuantamentalDataFrame))
+        or ("value" not in df.columns)
+        or (df["value"].isna().all())
+    ):
+        raise TypeError("`df` must be a standardized Quantamental DataFrame.")
     # copy df to avoid side effects
     df: pd.DataFrame = df.copy()
 

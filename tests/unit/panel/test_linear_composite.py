@@ -49,6 +49,8 @@ class TestAll(unittest.TestCase):
             {"cids": 1},
             {"weights": pd.DataFrame()},
             {"weights": [1, 2, "bar"]},
+            {"df": pd.DataFrame()},
+            {"df": self.dfd.assign(value=np.NaN)},
         ]
         for case in type_error_cases:
             argsx: Dict[str, Any] = base_args.copy()
@@ -58,8 +60,6 @@ class TestAll(unittest.TestCase):
 
         # value error cases
         value_error_cases: List[Dict[str, Any]] = [
-            {"df": pd.DataFrame()},
-            {"df": self.dfd.assign(value=np.NaN)},
             {"start": 1},
             {"end": 1},
             {"xcats": ["foo"]},
