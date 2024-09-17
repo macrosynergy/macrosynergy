@@ -66,10 +66,8 @@ def make_blacklist(
     dates = df_pivot.index
     cids_df = list(df_pivot.columns)
 
-    if nan_black:  # replace NaNs
-        df_pivot = df_pivot.fillna(1)
-    else:
-        df_pivot = df_pivot.fillna(0)
+    # replace NaNs
+    df_pivot[df_pivot.isna()] = int(nan_black)  # 1 if nan_black else 0
 
     dates_dict = {}
     for cid in cids_df:
