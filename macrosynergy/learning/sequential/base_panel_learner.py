@@ -4,6 +4,8 @@ Base class for sequential learning over a panel.
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from macrosynergy.management import categories_df
 from macrosynergy.learning import (
@@ -577,6 +579,113 @@ class BasePanelLearner(ABC):
         """
         pass
 
+    def get_optimal_models(
+        self, name = None
+    ):
+        """
+        Returns the sequences of optimal models for one or more processes.
+
+        Parameters
+        ----------
+        name : str or list, optional
+            Label of sequential optimization process. Default is all stored in the class
+            instance.
+
+        Returns
+        -------
+        return : pd.DataFrame
+            Pandas dataframe of the optimal models and hyperparameters selected at each
+            retraining date. 
+        """
+        if name is None:
+            return self.chosen_models
+        else:
+            if isinstance(name, str):
+                name = [name]
+            elif not isinstance(name, list):
+                raise TypeError(
+                    "The process name must be a string or a list of strings."
+                )
+
+            for n in name:
+                if n not in self.chosen_models.name.unique():
+                    raise ValueError(
+                        f"""The process name '{n}' is not in the list of already-run
+                        pipelines. Please check the name carefully. If correct, please run 
+                        calculate_predictions() first.
+                        """
+                    )
+            return self.chosen_models[self.chosen_models.name.isin(name)]
+        
+    def models_heatmap(
+        self,
+        name,
+        title = None,
+        cap = 5,
+        figsize = (12, 8),
+    ):
+        """
+        Visualized optimal models used for signal calculation.
+
+        Parameters
+        ----------
+        name : str
+            Name of the sequential optimization pipeline.
+        title : str, optional
+            Title of the heatmap. Default is None. This creates a figure title of the form
+            "Model Selection Heatmap for {name}".
+        cap : int, optional
+            Maximum number of models to display. Default (and limit) is 5. The chosen
+            models are the 'cap' most frequently occurring in the pipeline.
+        figsize : tuple, optional
+            Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        
+        Notes
+        -----
+        This method displays the models selected at each date in time over the span
+        of the sequential learning process. A binary heatmap is used to visualise
+        the model selection process.
+        """
+        # Checks
+        self._checks_models_heatmap(name=name, title=title, cap=cap, figsize=figsize)
+
+        # Get the chosen models for the specified pipeline to visualise selection.
+        chosen_models = self.get_optimal_models(name = name).sort_values(by = "real_date")
+        chosen_models["model_hparam_id"] = chosen_models.apply(
+            lambda row: (
+                row["model_type"]
+                if row["hparams"] == {}
+                else f"{row['model_type']}_"
+                + "_".join([f"{key}={value}" for key, value in row["hparams"].items()])
+            ),
+            axis=1,
+        )
+        chosen_models["real_date"] = chosen_models["real_date"].dt.date
+        model_counts = chosen_models.model_hparam_id.value_counts()
+        chosen_models = chosen_models[
+            chosen_models.model_hparam_id.isin(model_counts.index[:cap])
+        ]
+
+        unique_models = chosen_models.model_hparam_id.unique()
+        unique_models = sorted(unique_models, key=lambda x: -model_counts[x])
+        unique_dates = chosen_models.real_date.unique()
+
+        # Fill in binary matrix denoting the selected model at each time
+        binary_matrix = pd.DataFrame(0, index=unique_models, columns=unique_dates)
+        for _, row in chosen_models.iterrows():
+            model_id = row["model_hparam_id"]
+            date = row["real_date"]
+            binary_matrix.at[model_id, date] = 1
+
+        # Display the heatmap.
+        plt.figure(figsize=figsize)
+        if binary_matrix.shape[0] == 1:
+            sns.heatmap(binary_matrix, cmap="binary_r", cbar=False)
+        else:
+            sns.heatmap(binary_matrix, cmap="binary", cbar=False)
+        plt.title(title)
+        plt.show()
+
     def _check_init(
         self,
         df,
@@ -890,3 +999,46 @@ class BasePanelLearner(ABC):
             n_jobs_outer,
             n_jobs_inner,
         )
+    
+    def _checks_models_heatmap(
+        self,
+        name,
+        title = None,
+        cap = 5,
+        figsize = (12, 8),
+    ):
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.chosen_models.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
+        if not isinstance(cap, int):
+            raise TypeError("The cap must be an integer.")
+        if cap <= 0:
+            raise ValueError("The cap must be greater than zero.")
+        if cap > 20:
+            warnings.warn(
+                f"The maximum number of models to display is 20. The cap has been set to "
+                "20.",
+                RuntimeWarning,
+            )
+            cap = 20
+
+        if title is None:
+            title = f"Model Selection Heatmap for {name}"
+        if not isinstance(title, str):
+            raise TypeError("The figure title must be a string.")
+
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, (int, float)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
