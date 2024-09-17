@@ -6,8 +6,11 @@ import numpy as np
 import pandas as pd
 
 from macrosynergy.management import categories_df
+from macrosynergy.learning import ExpandingFrequencyPanelSplit, ExpandingIncrementPanelSplit, BasePanelSplit
 
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+from sklearn.base import BaseEstimator
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
 
 import warnings
@@ -161,7 +164,7 @@ class BasePanelLearner(ABC):
             Number of jobs to run in parallel for the inner loop. Default is 1.
         """
         # Checks 
-        #self._check_run(name, outer_splitter, inner_splitters, models, hyperparameters, scorers, search_type, cv_summary, n_iter, split_dictionary, n_jobs_outer, n_jobs_inner)
+        self._check_run(name, outer_splitter, inner_splitters, models, hyperparameters, scorers, search_type, cv_summary, n_iter, split_functions, n_jobs_outer, n_jobs_inner)
 
         # Determine all outer splits and run the learning process in parallel
         train_test_splits = list(outer_splitter.split(self.X, self.y))
@@ -225,20 +228,20 @@ class BasePanelLearner(ABC):
 
         # Since the features lag behind the targets, the dates need to be adjusted
         # by the lag applied.
-        locs: np.ndarray = (
-            np.searchsorted(self.date_levels, sorted_test_date_levels, side="left")
-            - self.lag
-        )
-        adj_test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
-            [self.date_levels[i] if i >= 0 else pd.NaT for i in locs]
-        )
-
-        # Now formulate correct index
-        date_map = dict(zip(test_date_levels, adj_test_date_levels))
-        mapped_dates = test_date_levels.map(date_map)
-        test_index = pd.MultiIndex.from_arrays(
-            [test_xs_levels, mapped_dates], names=["cid", "real_date"]
-        )
+        if self.lag != 0:
+            locs: np.ndarray = (
+                np.searchsorted(self.date_levels, sorted_test_date_levels, side="left")
+                - self.lag
+            )
+            adj_test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
+                [self.date_levels[i] if i >= 0 else pd.NaT for i in locs]
+            )
+            # Now formulate correct index
+            date_map = dict(zip(test_date_levels, adj_test_date_levels))
+            mapped_dates = test_date_levels.map(date_map)
+            test_index = pd.MultiIndex.from_arrays(
+                [test_xs_levels, mapped_dates], names=["cid", "real_date"]
+            )
 
         if n_splits_add is not None:
             inner_splitters_adj = [inner_splitter for inner_splitter in inner_splitters]
@@ -614,6 +617,166 @@ class BasePanelLearner(ABC):
             raise TypeError("xcat_aggs must be a list.")
         if len(xcat_aggs) != 2:
             raise ValueError("xcat_aggs must have exactly two elements.")
+        
+    def _check_run(self, name, outer_splitter, inner_splitters, models, hyperparameters, scorers, search_type, cv_summary, n_iter, split_functions, n_jobs_outer, n_jobs_inner):
+        # name 
+        if not isinstance(name, str):
+            raise TypeError("name must be a string.")
+        
+        # outer splitter
+        # TODO: come back and change to WalkForwardPanelSplit
+        if not isinstance(outer_splitter, (ExpandingFrequencyPanelSplit, ExpandingIncrementPanelSplit)):
+            raise TypeError("outer_splitter must be an instance of ExpandingFrequencyPanelSplit or ExpandingIncrementPanelSplit.")
+        
+        # inner splitter
+        if not isinstance(inner_splitters, list):
+            if not isinstance(inner_splitters, BasePanelSplit):
+                raise TypeError("inner splitter must be a panel cross-validator subclassing BasePanelSplit.")
+            inner_splitters = [inner_splitters]
+        else:
+            for inner_splitter in inner_splitters:
+                if not isinstance(inner_splitter, BasePanelSplit):
+                    raise TypeError("inner splitter must be a list of panel cross-validator subclassing BasePanelSplit.")
+        
+        # models
+        if models == {}:
+            raise ValueError("The models dictionary cannot be empty.")
+        if not isinstance(models, dict):
+            raise TypeError("The models argument must be a dictionary.")
+        for key in models.keys():
+            if not isinstance(key, str):
+                raise TypeError("The keys of the models dictionary must be strings.")
+            if not isinstance(models[key], (BaseEstimator, Pipeline)):
+                raise TypeError(
+                    "The values of the models dictionary must be sklearn predictors or "
+                    "pipelines."
+                )
+            
+        # hyperparameters
+        if not isinstance(hyperparameters, dict):
+            raise TypeError("The hyperparameters argument must be a dictionary.")
+        for pipe_name, pipe_params in hyperparameters.items():
+            if not isinstance(pipe_name, str):
+                raise TypeError(
+                    "The keys of the hyperparameters dictionary must be strings."
+                )
+            if not isinstance(pipe_params, dict):
+                raise TypeError(
+                    "The values of the hyperparameters dictionary must be dictionaries."
+                )
+            if pipe_params != {}:
+                for hparam_key, hparam_values in pipe_params.items():
+                    if not isinstance(hparam_key, str):
+                        raise TypeError(
+                            "The keys of the inner hyperparameters dictionaries must be "
+                            "strings."
+                        )
+                    if hyperparameters == "grid":
+                        if not isinstance(hparam_values, list):
+                            raise TypeError(
+                                "The values of the inner hyperparameters dictionaries must be "
+                                "lists if hparam_type is 'grid'."
+                            )
+                        if len(hparam_values) == 0:
+                            raise ValueError(
+                                "The values of the inner hyperparameters dictionaries cannot be "
+                                "empty lists."
+                            )
+                    elif hyperparameters == "random":
+                        # hparam_values must either be a list or a scipy.stats distribution
+                        # create typeerror
+                        if isinstance(hparam_values, list):
+                            if len(hparam_values) == 0:
+                                raise ValueError(
+                                    "The values of the inner hyperparameters dictionaries cannot "
+                                    "be empty lists."
+                                )
+                        else:
+                            if not hasattr(hparam_values, "rvs"):
+                                raise ValueError(
+                                    "Invalid random hyperparameter search dictionary element "
+                                    f"for hyperparameter {hparam_key}. The dictionary values "
+                                    "must be scipy.stats distributions."
+                                )
+        # Check that the keys of the hyperparameter grid match those in the models dict
+        if sorted(hyperparameters.keys()) != sorted(models.keys()):
+            raise ValueError(
+                "The keys in the hyperparameter grid must match those in the models "
+                "dictionary."
+            )
+        
+        # scorers
+        if not isinstance(scorers, list):
+            if not callable(scorers):
+                raise TypeError("scorers must be a callable scoring function.")
+            scorers = [scorers]
+        else:
+            for scorer in scorers:
+                if not callable(scorer):
+                    raise TypeError("scorers must be a list of callable scoring functions.")
+                
+        # search_type
+        if not isinstance(search_type, str):
+            raise TypeError("search_type must be a string.")
+        if search_type not in ["grid", "prior", "bayes"]:
+            raise ValueError("search_type must be one of 'grid', 'prior' or 'bayes'.")
+        
+        # cv_summary
+        if not isinstance(cv_summary, (str, callable)):
+            raise TypeError("cv_summary must be a string or a callable.")
+        if isinstance(cv_summary, str):
+            if cv_summary not in ["mean", "median"]:
+                raise ValueError("cv_summary must be one of 'mean' or 'median'.")
+        else:
+            try:
+                test_summary = cv_summary([1, 2, 3])
+            except Exception as e:
+                raise TypeError(
+                    "cv_summary must be a function that takes a list of scores and returns "
+                    "a single value. Check the validity of cv_summary."
+                )
+            if not isinstance(test_summary, (int, float, np.int_, np.float_)):
+                raise TypeError(
+                    "cv_summary must be a function that takes a list of scores and returns "
+                    "a single value. Check whether the output of cv_summary is a number."
+                )
+            
+        # n_iter
+        if search_type == "random":
+            if type(n_iter) != int:
+                raise TypeError("The n_iter argument must be an integer.")
+            if n_iter < 1:
+                raise ValueError("The n_iter argument must be greater than zero.")
+            
+        # split_functions
+        if split_functions is not None:
+            if not isinstance(split_functions, list):
+                if not callable(split_functions):
+                    raise TypeError("split_functions must be a callable.")
+                split_functions = [split_functions]
+            if len(split_functions) != len(inner_splitters):
+                raise ValueError(
+                    "The length of the split_functions list must be the same as the length "
+                    "of the inner_splitters list. If some splitters require no adjustment,"
+                    "then None elements should be included in the split_functions list."
+                )
+            for split_function in split_functions:
+                if not callable(split_function):
+                    raise TypeError("split_functions must be a list of callables.")
+                
+        # n_jobs_outer
+        if not isinstance(n_jobs_outer, int):
+            raise TypeError("n_jobs_outer must be an integer.")
+        if n_jobs_outer < 1:
+            if n_jobs_outer != -1:
+                raise ValueError("n_jobs_outer must be greater than zero or equal to -1.")
+            
+        # n_jobs_inner
+        if not isinstance(n_jobs_inner, int):
+            raise TypeError("n_jobs_inner must be an integer.")
+        if n_jobs_inner < 1:
+            if n_jobs_inner != -1:
+                raise ValueError("n_jobs_inner must be greater than zero or equal to -1.")
 
 
         
