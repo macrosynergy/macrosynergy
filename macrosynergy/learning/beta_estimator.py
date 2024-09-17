@@ -14,7 +14,8 @@ from sklearn.ensemble import VotingRegressor
 
 from collections import defaultdict
 from tqdm.auto import tqdm
-#from tqdm import tqdm
+
+# from tqdm import tqdm
 
 from macrosynergy.learning import (
     BasePanelSplit,
@@ -362,12 +363,8 @@ class BetaEstimator:
         min_periods: int = 252,
         est_freq: str = "D",
         use_variance_correction: bool = False,
-        initial_n_splits: Optional[
-            Union[int, np.int_]
-        ] = None,
-        threshold_n_periods: Optional[
-            Union[int, np.int_]
-        ] = None,
+        initial_n_splits: Optional[Union[int, np.int_]] = None,
+        threshold_n_periods: Optional[Union[int, np.int_]] = None,
         hparam_type: str = "grid",
         n_iter: Optional[int] = 10,
         n_jobs_outer: Optional[int] = -1,
@@ -479,28 +476,29 @@ class BetaEstimator:
         train_test_splits = list(outer_splitter.split(X=self.X, y=self.y))
 
         results = Parallel(n_jobs=n_jobs_outer)(
-                delayed(self._worker)(
-                    train_idx=train_idx,
-                    test_idx=test_idx,
-                    beta_xcat=beta_xcat,
-                    hedged_return_xcat=hedged_return_xcat,
-                    inner_splitter=inner_splitter,
-                    models=models,
-                    scorer=scorer,
-                    hparam_grid=hparam_grid,
-                    hparam_type=hparam_type,
-                    n_iter=n_iter,
-                    use_variance_correction=use_variance_correction,
-                    initial_n_splits=initial_n_splits,
-                    nsplits_add=(
-                        np.floor(idx / threshold_n_periods)
-                        if initial_n_splits
-                        else None
-                    ),
-                    n_jobs_inner=n_jobs_inner,
-                )
-                for idx, (train_idx, test_idx) in tqdm(enumerate(train_test_splits),total=len(train_test_splits),)
+            delayed(self._worker)(
+                train_idx=train_idx,
+                test_idx=test_idx,
+                beta_xcat=beta_xcat,
+                hedged_return_xcat=hedged_return_xcat,
+                inner_splitter=inner_splitter,
+                models=models,
+                scorer=scorer,
+                hparam_grid=hparam_grid,
+                hparam_type=hparam_type,
+                n_iter=n_iter,
+                use_variance_correction=use_variance_correction,
+                initial_n_splits=initial_n_splits,
+                nsplits_add=(
+                    np.floor(idx / threshold_n_periods) if initial_n_splits else None
+                ),
+                n_jobs_inner=n_jobs_inner,
             )
+            for idx, (train_idx, test_idx) in tqdm(
+                enumerate(train_test_splits),
+                total=len(train_test_splits),
+            )
+        )
 
         for beta_data, hedged_data, model_data in results:
             if beta_data != []:
@@ -576,7 +574,7 @@ class BetaEstimator:
         freqs: Optional[Union[str, List[str]]] = "M",
     ):
         """
-        Method to determine and display a table of average absolute correlations between 
+        Method to determine and display a table of average absolute correlations between
         the benchmark return and the computed hedged returns within the class instance, over
         all cross-sections in the panel. Additionally, the correlation table displays the
         same results for the unhedged return specified in the class instance for comparison
@@ -598,12 +596,12 @@ class BetaEstimator:
         :param <Optional[str]> end: String in ISO format. Default is None.
         :param <Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]> blacklist: Dictionary of tuples of start and end
             dates to exclude from the evaluation. Default is None.
-        :param <Optional[Union[str, List[str]]> freqs: Letters denoting all frequencies 
+        :param <Optional[Union[str, List[str]]> freqs: Letters denoting all frequencies
             at which the series may be sampled. This must be a selection of "D", "W", "M", "Q"
             and "A". Default is "M". Each return series will always be summed over the sample
             period.
         """
-        # Checks 
+        # Checks
         self._checks_evaluate_hedged_returns(
             correlation_types=correlation_types,
             hedged_rets=hedged_rets,
@@ -631,7 +629,7 @@ class BetaEstimator:
             freqs = [freqs]
 
         # Construct a quantamental dataframe comprising specified hedged returns as well
-        # as the unhedged returns and the benchmark return specified in the class instance 
+        # as the unhedged returns and the benchmark return specified in the class instance
         hedged_df = self.hedged_returns[
             (self.hedged_returns["xcat"].isin(hedged_rets))
             & (self.hedged_returns["cid"].isin(cids))
@@ -640,7 +638,8 @@ class BetaEstimator:
             (self.df["xcat"] == self.xcat) & (self.df["cid"].isin(cids))
         ]
         benchmark_df = self.df[
-            (self.df["xcat"] == self.benchmark_xcat) & (self.df["cid"] == self.benchmark_cid)
+            (self.df["xcat"] == self.benchmark_xcat)
+            & (self.df["cid"] == self.benchmark_cid)
         ]
         combined_df = pd.concat([hedged_df, unhedged_df], axis=0)
 
@@ -672,7 +671,7 @@ class BetaEstimator:
         Xy_long_freq = []
         for freq in freqs:
             Xy_long = categories_df(
-                df=dfx, 
+                df=dfx,
                 xcats=hedged_rets + [self.xcat, self.benchmark_xcat],
                 cids=[f"{cid}v{self.benchmark_cid}" for cid in cids],
                 start=start,
@@ -700,9 +699,16 @@ class BetaEstimator:
                     )
                 df_rows.append(calculated_correlations)
         # Create underlying dataframe to store the results
-        multiindex = pd.MultiIndex.from_product([[self.benchmark_return], hedged_rets + [self.xcat], freqs], names=["benchmark return", "return category", "frequency"])
-        corr_df = pd.DataFrame(columns=["|" + correlation + "|" for correlation in correlation_types], index=multiindex, data=df_rows)
-        
+        multiindex = pd.MultiIndex.from_product(
+            [[self.benchmark_return], hedged_rets + [self.xcat], freqs],
+            names=["benchmark return", "return category", "frequency"],
+        )
+        corr_df = pd.DataFrame(
+            columns=["|" + correlation + "|" for correlation in correlation_types],
+            index=multiindex,
+            data=df_rows,
+        )
+
         return corr_df
 
     def _worker(
@@ -771,7 +777,7 @@ class BetaEstimator:
                     RuntimeWarning,
                 )
                 continue
-            #if not hasattr(search_object, "best_score_"):
+            # if not hasattr(search_object, "best_score_"):
             #    # Then the grid search failed completely
             #    warnings.warn(
             #        f"No model was selected at time {training_time}. Hence, no beta can be estimated."
@@ -871,14 +877,13 @@ class BetaEstimator:
         ]
 
         return list_hedged_returns
-    
+
     def _get_mean_abs_corrs(
         self,
         xcat: str,
         cids: str,
         df: pd.DataFrame,
         correlation: pd.DataFrame,
-
     ):
         """
         Private helper method to calculate the mean absolute correlation between a column
@@ -894,12 +899,12 @@ class BetaEstimator:
 
         def calculate_correlation(group):
             return abs(group[xcat].corr(group[self.benchmark_xcat], method=correlation))
-       
+
         # Calculate the mean absolute correlation over all cross sections
         mean_abs_corr = df_subset.groupby("cid").apply(calculate_correlation).mean()
 
         return mean_abs_corr
-    
+
     def _checks_evaluate_hedged_returns(
         self,
         correlation_types: Union[str, List[str]],
@@ -911,16 +916,28 @@ class BetaEstimator:
         freqs: Optional[Union[str, List[str]]],
     ):
         # correlation_types checks
-        if (correlation_types is not None) and (not isinstance(correlation_types, (str, list))):
+        if (correlation_types is not None) and (
+            not isinstance(correlation_types, (str, list))
+        ):
             raise TypeError("correlation_types must be a string or a list of strings.")
         if isinstance(correlation_types, list):
-            if not all(isinstance(correlation_type, str) for correlation_type in correlation_types):
+            if not all(
+                isinstance(correlation_type, str)
+                for correlation_type in correlation_types
+            ):
                 raise TypeError("All elements in correlation_types must be strings.")
-            if not all(correlation_type in ["pearson", "spearman", "kendall"] for correlation_type in correlation_types):
-                raise ValueError("All elements in correlation_types must be one of 'pearson', 'spearman' or 'kendall'.")
+            if not all(
+                correlation_type in ["pearson", "spearman", "kendall"]
+                for correlation_type in correlation_types
+            ):
+                raise ValueError(
+                    "All elements in correlation_types must be one of 'pearson', 'spearman' or 'kendall'."
+                )
         else:
             if correlation_types not in ["pearson", "spearman", "kendall"]:
-                raise ValueError("correlation_types must be one of 'pearson', 'spearman' or 'kendall'.")
+                raise ValueError(
+                    "correlation_types must be one of 'pearson', 'spearman' or 'kendall'."
+                )
 
         # hedged_rets checks
         if hedged_rets is not None:
@@ -929,7 +946,10 @@ class BetaEstimator:
             if isinstance(hedged_rets, list):
                 if not all(isinstance(hedged_ret, str) for hedged_ret in hedged_rets):
                     raise TypeError("All elements in hedged_rets must be strings.")
-                if not all(hedged_ret in self.hedged_returns["xcat"].unique() for hedged_ret in hedged_rets):
+                if not all(
+                    hedged_ret in self.hedged_returns["xcat"].unique()
+                    for hedged_ret in hedged_rets
+                ):
                     raise ValueError(
                         "All hedged_rets must be valid hedged return categories within the class instance."
                     )
@@ -947,10 +967,14 @@ class BetaEstimator:
                 if not all(isinstance(cid, str) for cid in cids):
                     raise TypeError("All elements in cids must be strings.")
                 if not all(cid in self.cids for cid in cids):
-                    raise ValueError("All cids must be valid cross-section identifiers within the class instance.")
+                    raise ValueError(
+                        "All cids must be valid cross-section identifiers within the class instance."
+                    )
             else:
                 if cids not in self.cids:
-                    raise ValueError("cids must be a valid cross-section identifier within the class instance.")
+                    raise ValueError(
+                        "cids must be a valid cross-section identifier within the class instance."
+                    )
 
         # start checks
         if start is not None:
@@ -998,11 +1022,12 @@ class BetaEstimator:
                 if not all(isinstance(freq, str) for freq in freqs):
                     raise TypeError("All elements in freqs must be strings.")
                 if not all(freq in ["D", "W", "M", "Q"] for freq in freqs):
-                    raise ValueError("All elements in freqs must be one of 'D', 'W', 'M' or 'Q'.")
+                    raise ValueError(
+                        "All elements in freqs must be one of 'D', 'W', 'M' or 'Q'."
+                    )
             else:
                 if freqs not in ["D", "W", "M", "Q"]:
                     raise ValueError("freqs must be one of 'D', 'W', 'M' or 'Q'.")
-                
 
     def models_heatmap(
         self,
@@ -1296,7 +1321,11 @@ class BetaEstimator:
 
 if __name__ == "__main__":
     from metrics import neg_mean_abs_corr
-    from predictors import LADRegressionSystem, LinearRegressionSystem, CorrelationVolatilitySystem
+    from predictors import (
+        LADRegressionSystem,
+        LinearRegressionSystem,
+        CorrelationVolatilitySystem,
+    )
     from sklearn.ensemble import VotingRegressor
     from macrosynergy.management.simulate import make_qdf
 
@@ -1331,19 +1360,17 @@ if __name__ == "__main__":
     models = {
         "LR": LADRegressionSystem(min_xs_samples=21 * 3),
     }
-    hparam_grid = {
-        "LR": {"fit_intercept": [True, False], "positive": [True, False]}
-    }
+    hparam_grid = {"LR": {"fit_intercept": [True, False], "positive": [True, False]}}
 
     scorer = neg_mean_abs_corr
 
     be.estimate_beta(
         beta_xcat="BETA_NSA",
         hedged_return_xcat="HEDGED_RETURN_NSA",
-        inner_splitter=ExpandingKFoldPanelSplit(n_splits = 5),
+        inner_splitter=ExpandingKFoldPanelSplit(n_splits=5),
         scorer=scorer,
-        models = models,
-        hparam_grid = hparam_grid,
+        models=models,
+        hparam_grid=hparam_grid,
         min_cids=1,
         min_periods=21 * 12,
         est_freq="Q",
@@ -1371,7 +1398,7 @@ if __name__ == "__main__":
     }
 
     hparam_grid = {
-        "VOTE" : {
+        "VOTE": {
             "LR1__roll": [21, 21 * 3, 21 * 6, 21 * 12],
             "LR2__roll": [3, 6, 9, 12],
         },
@@ -1382,10 +1409,10 @@ if __name__ == "__main__":
     be.estimate_beta(
         beta_xcat="BETA_NSA",
         hedged_return_xcat="HEDGED_RETURN_NSA",
-        inner_splitter=ExpandingKFoldPanelSplit(n_splits = 5),
+        inner_splitter=ExpandingKFoldPanelSplit(n_splits=5),
         scorer=neg_mean_abs_corr,
-        models = models,
-        hparam_grid = hparam_grid,
+        models=models,
+        hparam_grid=hparam_grid,
         min_cids=1,
         min_periods=21 * 12,
         est_freq="Q",
