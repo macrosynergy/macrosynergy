@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import math
 import datetime as dt
+from typing import List
 
 
 class VintageData:
@@ -153,7 +154,7 @@ class VintageData:
 
         seas_factors = self.seasonal / np.std(linear_scale)
         seas_factors *= linear_scale
-
+        df_rels: List[pd.DataFrame] = []
         for i, eop_date in enumerate(eop_dates):
             v = vin_lengths[i]
             if i > 0:
@@ -188,7 +189,9 @@ class VintageData:
                         "value": values,
                     }
                 )
-                df_gr1 = pd.concat([df_gr1, df_rel], ignore_index=True)
+                df_rels.append(df_rel)
+
+        df_gr1 = pd.concat(df_rels, ignore_index=True)
 
         df_gr1["grading"] = 1
         return self.add_ticker_parts(df_gr1)
