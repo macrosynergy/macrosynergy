@@ -262,7 +262,6 @@ class VintageData:
         df_gr2["release_date"] = data
         df_gr2["observation_date"] = eop_arr
         df_gr2["ticker"] = self.ticker
-        print(df_gr2)
 
         return self.add_ticker_parts(df_gr2)
 
