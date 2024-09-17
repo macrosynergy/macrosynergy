@@ -380,10 +380,10 @@ def downsample_df_on_real_date(
             raise ValueError(
                 "`agg` must be one of 'mean', 'median', 'min', 'max', 'first', 'last'"
             )
-
+    non_groupby_columns = list(set(df.columns) - set(groupby_columns) - {"real_date"})
     return (
         df.set_index("real_date")
-        .groupby(groupby_columns)
+        .groupby(groupby_columns)[non_groupby_columns]
         .resample(freq)
         .agg(agg, **RESAMPLE_NUMERIC_ONLY)
         .reset_index()
