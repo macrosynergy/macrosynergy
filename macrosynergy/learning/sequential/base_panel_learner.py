@@ -6,7 +6,11 @@ import numpy as np
 import pandas as pd
 
 from macrosynergy.management import categories_df
-from macrosynergy.learning import ExpandingFrequencyPanelSplit, ExpandingIncrementPanelSplit, BasePanelSplit
+from macrosynergy.learning import (
+    ExpandingFrequencyPanelSplit,
+    ExpandingIncrementPanelSplit,
+    BasePanelSplit,
+)
 
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.base import BaseEstimator
@@ -16,22 +20,23 @@ from sklearn.preprocessing import MinMaxScaler
 import warnings
 from abc import ABC, abstractmethod
 from joblib import Parallel, delayed
-from tqdm.auto import tqdm 
+from tqdm.auto import tqdm
 from functools import partial
+
 
 class BasePanelLearner(ABC):
     def __init__(
         self,
         df,
         xcats,
-        cids = None,
-        start = None,
-        end = None,
-        blacklist = None,
-        freq = "M",
-        lag = 1,
+        cids=None,
+        start=None,
+        end=None,
+        blacklist=None,
+        freq="M",
+        lag=1,
         # slip?
-        xcat_aggs = ["last", "sum"],
+        xcat_aggs=["last", "sum"],
     ):
         """
         Initialize a sequential learning process over a panel.
@@ -42,11 +47,11 @@ class BasePanelLearner(ABC):
             Standardized daily quantamental dataframe with the four columns: "cid",
             "xcat", "real_date" and "value".
         xcats : list
-            List of xcats to be used in the learning process. The last category in the 
-            list is the dependent variable, and all preceding categories are the 
-            independent variables in a supervised learning framework. 
+            List of xcats to be used in the learning process. The last category in the
+            list is the dependent variable, and all preceding categories are the
+            independent variables in a supervised learning framework.
         cids : list, optional
-            Cross-sections to be included. Default is all in the dataframe. 
+            Cross-sections to be included. Default is all in the dataframe.
         start : str, optional
             Start date for considered data in subsequent analysis in ISO 8601 format.
             Default is None i.e. the earliest date in the dataframe.
@@ -55,7 +60,7 @@ class BasePanelLearner(ABC):
             Default is None i.e. the latest date in the dataframe.
         blacklist : list, optional
             Blacklisting dictionary specifying date ranges for which cross-sectional
-            information should be excluded. The keys are cross-sections and the values 
+            information should be excluded. The keys are cross-sections and the values
             are tuples of start and end dates in ISO 8601 format. Default is None.
         freq : str, optional
             Frequency of the data. Default is "M" for monthly.
@@ -81,18 +86,22 @@ class BasePanelLearner(ABC):
         self.lag = lag
         self.xcat_aggs = xcat_aggs
 
-        # Create long-format dataframe 
-        df_long = categories_df(
-            df = self.df,
-            xcats = self.xcats,
-            cids = self.cids,
-            start = self.start,
-            end = self.end,
-            blacklist = self.blacklist,
-            freq = self.freq,
-            lag = self.lag,
-            xcat_aggs = self.xcat_aggs,
-        ).dropna().sort_index()
+        # Create long-format dataframe
+        df_long = (
+            categories_df(
+                df=self.df,
+                xcats=self.xcats,
+                cids=self.cids,
+                start=self.start,
+                end=self.end,
+                blacklist=self.blacklist,
+                freq=self.freq,
+                lag=self.lag,
+                xcat_aggs=self.xcat_aggs,
+            )
+            .dropna()
+            .sort_index()
+        )
 
         # Create X and y
         self.X = df_long.iloc[:, :-1]
@@ -118,13 +127,13 @@ class BasePanelLearner(ABC):
         models,
         hyperparameters,
         scorers,
-        search_type = "grid",
-        cv_summary = "mean", # can be mean, median or lambda function on fold scores. 
-        n_iter = 100, # number of iterations for random or bayes
-        split_functions = None,
-        n_jobs_outer = -1,
-        n_jobs_inner = 1,
-        #strategy_eval_periods = None,
+        search_type="grid",
+        cv_summary="mean",  # can be mean, median or lambda function on fold scores.
+        n_iter=100,  # number of iterations for random or bayes
+        split_functions=None,
+        n_jobs_outer=-1,
+        n_jobs_inner=1,
+        # strategy_eval_periods = None,
     ):
         """
         Run a learning process over a panel.
@@ -137,7 +146,7 @@ class BasePanelLearner(ABC):
             Outer splitter for the learning process.
         inner_splitters : BaseCrossValidator or list
             Inner splitters for the learning process. If an instance of BaseCrossValidator,
-            then this is used for cross-validation. If a list, then each splitter is used 
+            then this is used for cross-validation. If a list, then each splitter is used
             before the results for each are averaged.
         models : dict
             Dictionary of model names and compatible `scikit-learn` model objects.
@@ -156,20 +165,46 @@ class BasePanelLearner(ABC):
             Number of iterations for random or bayesian hyperparameter optimization.
         split_functions : callable or list, optional
             Callable or list of callables for determining the number of cross-validation
-            splits to add to the initial number  as a function of the number of iterations passed in the 
-            sequential learning process. Default is None. 
+            splits to add to the initial number  as a function of the number of iterations passed in the
+            sequential learning process. Default is None.
         n_jobs_outer : int, optional
             Number of jobs to run in parallel for the outer loop. Default is -1.
         n_jobs_inner : int, optional
             Number of jobs to run in parallel for the inner loop. Default is 1.
         """
-        # Checks 
-        self._check_run(name, outer_splitter, inner_splitters, models, hyperparameters, scorers, search_type, cv_summary, n_iter, split_functions, n_jobs_outer, n_jobs_inner)
+        # Checks
+        (
+            name,
+            outer_splitter,
+            inner_splitters,
+            models,
+            hyperparameters,
+            scorers,
+            search_type,
+            cv_summary,
+            n_iter,
+            split_functions,
+            n_jobs_outer,
+            n_jobs_inner,
+        ) = self._check_run(
+            name,
+            outer_splitter,
+            inner_splitters,
+            models,
+            hyperparameters,
+            scorers,
+            search_type,
+            cv_summary,
+            n_iter,
+            split_functions,
+            n_jobs_outer,
+            n_jobs_inner,
+        )
 
         # Determine all outer splits and run the learning process in parallel
         train_test_splits = list(outer_splitter.split(self.X, self.y))
-        
-        # Return list of results 
+
+        # Return list of results
         optim_results = tqdm(
             Parallel(n_jobs=n_jobs_outer, return_as="generator")(
                 delayed(self._worker)(
@@ -183,8 +218,11 @@ class BasePanelLearner(ABC):
                     cv_summary=cv_summary,
                     search_type=search_type,
                     n_iter=n_iter,
-                    n_splits_add = (
-                        [np.ceil(split_function(iteration)) for idx, split_function in enumerate(split_functions)]
+                    n_splits_add=(
+                        [
+                            np.ceil(split_function(iteration))
+                            for idx, split_function in enumerate(split_functions)
+                        ]
                         if split_functions is not None
                         else None
                     ),
@@ -196,7 +234,7 @@ class BasePanelLearner(ABC):
         )
 
         return optim_results
-    
+
     def _worker(
         self,
         name,
@@ -250,19 +288,17 @@ class BasePanelLearner(ABC):
         else:
             inner_splitters_adj = inner_splitters
 
-        optim_name, optim_model, optim_score, optim_params = (
-            self._model_search(
-                X_train=X_train,
-                y_train=y_train,
-                inner_splitters=inner_splitters_adj,
-                models=models,
-                hyperparameters=hyperparameters,
-                scorers=scorers,
-                search_type=search_type,
-                n_iter=n_iter,
-                cv_summary=cv_summary,
-                n_jobs_inner=n_jobs_inner,
-            )
+        optim_name, optim_model, optim_score, optim_params = self._model_search(
+            X_train=X_train,
+            y_train=y_train,
+            inner_splitters=inner_splitters_adj,
+            models=models,
+            hyperparameters=hyperparameters,
+            scorers=scorers,
+            search_type=search_type,
+            n_iter=n_iter,
+            cv_summary=cv_summary,
+            n_jobs_inner=n_jobs_inner,
         )
 
         # Handle case where no model was selected
@@ -313,52 +349,53 @@ class BasePanelLearner(ABC):
             #     self.date_levels[train_idx],
             #     optim_model,
             # )
-            #optim_model.fit(X_train, y_train)
+            # optim_model.fit(X_train, y_train)
 
             # Store model selection data
             modelchoice_data: dict = self.store_modelchoice_data(
-                pipeline_name = name,
-                optimal_model = optim_model,
-                optimal_model_name = optim_name,
-                optimal_model_score = optim_score,
-                optimal_model_params = optim_params,
-                n_splits = [inner_splitter.n_splits for inner_splitter in inner_splitters_adj],
-                X_train = X_train,
-                y_train = y_train,
-                X_test = X_test,
-                y_test = y_test,
-                timestamp = adj_test_date_levels.min(),
+                pipeline_name=name,
+                optimal_model=optim_model,
+                optimal_model_name=optim_name,
+                optimal_model_score=optim_score,
+                optimal_model_params=optim_params,
+                n_splits=[
+                    inner_splitter.n_splits for inner_splitter in inner_splitters_adj
+                ],
+                X_train=X_train,
+                y_train=y_train,
+                X_test=X_test,
+                y_test=y_test,
+                timestamp=adj_test_date_levels.min(),
             )
 
             # Store quantamental data
             quantamental_data: dict = self.store_quantamental_data(
-                pipeline_name = name,
-                model = optim_model,
-                X_train = X_train,
-                y_train = y_train,
-                X_test = X_test,
-                y_test = y_test,
-                adjusted_test_index = test_index,
+                pipeline_name=name,
+                model=optim_model,
+                X_train=X_train,
+                y_train=y_train,
+                X_test=X_test,
+                y_test=y_test,
+                adjusted_test_index=test_index,
             )
 
             # Store other data
             other_data: dict = self.store_other_data(
-                pipeline_name = name,
-                optimal_model = optim_model,
-                X_train = X_train,
-                y_train = y_train,
-                X_test = X_test,
-                y_test = y_test,
-                timestamp = adj_test_date_levels.min(),
+                pipeline_name=name,
+                optimal_model=optim_model,
+                X_train=X_train,
+                y_train=y_train,
+                X_test=X_test,
+                y_test=y_test,
+                timestamp=adj_test_date_levels.min(),
             )
-
 
         return (
             quantamental_data,
             modelchoice_data,
             other_data,
         )
-    
+
     def _model_search(
         self,
         X_train,
@@ -377,36 +414,42 @@ class BasePanelLearner(ABC):
         """
         optim_name = None
         optim_model = None
-        optim_score = - np.inf
+        optim_score = -np.inf
         optim_params = None
 
         cv_splits = []
         for splitter in inner_splitters:
             cv_splits.extend(list(splitter.split(X=X_train, y=y_train)))
         for model_name, model in models.items():
-            # For each model, find the optimal hyperparameters 
+            # For each model, find the optimal hyperparameters
             if search_type == "grid":
                 search_object = GridSearchCV(
-                    estimator = model,
-                    param_grid = hyperparameters[model_name],
-                    scoring = scorers,
-                    n_jobs = n_jobs_inner,
-                    refit = partial(self._model_selection, cv_summary = cv_summary, scorers = scorers),
-                    cv = cv_splits,
+                    estimator=model,
+                    param_grid=hyperparameters[model_name],
+                    scoring=scorers,
+                    n_jobs=n_jobs_inner,
+                    refit=partial(
+                        self._model_selection, cv_summary=cv_summary, scorers=scorers
+                    ),
+                    cv=cv_splits,
                 )
             elif search_type == "prior":
                 search_type = RandomizedSearchCV(
-                    estimator = model,
-                    param_distributions = hyperparameters[model_name],
+                    estimator=model,
+                    param_distributions=hyperparameters[model_name],
                     n_iter=n_iter,
-                    scoring = scorers,
-                    n_jobs = n_jobs_inner,
-                    refit = partial(self._model_selection, cv_summary = cv_summary, scorers = scorers),
-                    cv = cv_splits,
+                    scoring=scorers,
+                    n_jobs=n_jobs_inner,
+                    refit=partial(
+                        self._model_selection, cv_summary=cv_summary, scorers=scorers
+                    ),
+                    cv=cv_splits,
                 )
             else:
-                raise NotImplementedError(f"Search type {search_type} is not implemented.")
-            
+                raise NotImplementedError(
+                    f"Search type {search_type} is not implemented."
+                )
+
             try:
                 search_object.fit(X_train, y_train)
             except Exception as e:
@@ -414,7 +457,9 @@ class BasePanelLearner(ABC):
                     f"Error running a hyperparameter search for {model_name}: {e}",
                     RuntimeWarning,
                 )
-            score = self._model_selection(search_object.cv_results_, cv_summary, scorers, return_index = False)
+            score = self._model_selection(
+                search_object.cv_results_, cv_summary, scorers, return_index=False
+            )
             if score > optim_score:
                 optim_name = model_name
                 optim_model = search_object.best_estimator_
@@ -422,12 +467,12 @@ class BasePanelLearner(ABC):
                 optim_params = search_object.best_params_
 
         return optim_name, optim_model, optim_score, optim_params
-    
-    def _model_selection(self, cv_results, cv_summary, scorers, return_index = True):
+
+    def _model_selection(self, cv_results, cv_summary, scorers, return_index=True):
         """
         Determine index of best estimator in a scikit-learn cv_results summary dictionary,
         as well as a cv_summary function indicating how to summarize the cross-validation
-        scores across folds. 
+        scores across folds.
 
         For each hyperparameter choice, determine test metrics for each cv fold. Transform
         these scores by min-max scaling for each metric. Then, for each hyperparameter choice,
@@ -436,7 +481,11 @@ class BasePanelLearner(ABC):
         choice.
         """
         cv_results = pd.DataFrame(cv_results)
-        metric_columns = [col for col in cv_results.columns if col.startswith('split') and 'test' in col]
+        metric_columns = [
+            col
+            for col in cv_results.columns
+            if col.startswith("split") and "test" in col
+        ]
 
         # For each metric, summarise the scores across folds for each hyperparameter choice
         # using cv_summary
@@ -444,28 +493,43 @@ class BasePanelLearner(ABC):
             # Extract the test scores for each fold for that scorer
             scorer_columns = [col for col in metric_columns if scorer in col]
             if cv_summary == "mean":
-                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].mean(axis=1)
+                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].mean(
+                    axis=1
+                )
             elif cv_summary == "median":
-                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].median(axis=1)
+                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].median(
+                    axis=1
+                )
             else:
-                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].apply(cv_summary, axis=1)
+                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].apply(
+                    cv_summary, axis=1
+                )
 
         # Now apply min-max scaling to the summary scores
         scaler = MinMaxScaler()
         summary_cols = [f"{scorer}_summary" for scorer in scorers.keys()]
-        cv_results[summary_cols] = scaler.fit_transform(cv_results[summary_cols]) 
+        cv_results[summary_cols] = scaler.fit_transform(cv_results[summary_cols])
 
         # Now average the summary scores for each scorer
-        cv_results['final_score'] = cv_results[summary_cols].mean(axis=1)
+        cv_results["final_score"] = cv_results[summary_cols].mean(axis=1)
 
         # Return index of best estimator
         if return_index:
-            return cv_results['final_score'].idxmax()
+            return cv_results["final_score"].idxmax()
         else:
-            return cv_results['final_score'].max()
-    
+            return cv_results["final_score"].max()
+
     @abstractmethod
-    def store_quantamental_data(self, pipeline_name, model, X_train, y_train, X_test, y_test, adjusted_test_index):
+    def store_quantamental_data(
+        self,
+        pipeline_name,
+        model,
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        adjusted_test_index,
+    ):
         """
         Abstract method for storing quantamental data.
         """
@@ -486,7 +550,7 @@ class BasePanelLearner(ABC):
         timestamp,
     ):
         """
-        Store model selection information for training set (X_train, y_train) 
+        Store model selection information for training set (X_train, y_train)
         """
         if optimal_model is not None:
             optim_name = optimal_model_name
@@ -494,9 +558,9 @@ class BasePanelLearner(ABC):
             optim_params = optimal_model_params
         else:
 
-            optim_name = "None",
-            optim_score = - np.inf,
-            optim_params = {}, 
+            optim_name = ("None",)
+            optim_score = (-np.inf,)
+            optim_params = ({},)
 
         data = [timestamp, pipeline_name, optim_name, optim_score, optim_params]
         data.extend(n_splits)
@@ -513,7 +577,7 @@ class BasePanelLearner(ABC):
     def _check_init(
         self,
         df,
-        xcats, 
+        xcats,
         cids,
         start,
         end,
@@ -523,16 +587,18 @@ class BasePanelLearner(ABC):
         xcat_aggs,
     ):
         """
-        Checks for the constructor. 
+        Checks for the constructor.
         """
         # Dataframe checks
         if not isinstance(df, pd.DataFrame):
             raise TypeError("df must be a pandas DataFrame.")
         if not set(["cid", "xcat", "real_date", "value"]).issubset(df.columns):
-            raise ValueError("df must have columns 'cid', 'xcat', 'real_date' and 'value'.")
+            raise ValueError(
+                "df must have columns 'cid', 'xcat', 'real_date' and 'value'."
+            )
         if len(df) < 1:
             raise ValueError("df must not be empty")
-        
+
         # categories checks
         if not isinstance(xcats, list):
             raise TypeError("xcats must be a list.")
@@ -543,7 +609,7 @@ class BasePanelLearner(ABC):
         for xcat in xcats:
             if xcat not in df["xcat"].unique():
                 raise ValueError(f"{xcat} not in the dataframe.")
-            
+
         # cids checks
         if cids is not None:
             if not isinstance(cids, list):
@@ -553,7 +619,7 @@ class BasePanelLearner(ABC):
             for cid in cids:
                 if cid not in df["cid"].unique():
                     raise ValueError(f"{cid} not in the dataframe.")
-                
+
         # start checks
         if start is not None:
             if not isinstance(start, str):
@@ -562,7 +628,7 @@ class BasePanelLearner(ABC):
                 pd.to_datetime(start)
             except ValueError:
                 raise ValueError("start must be in ISO 8601 format.")
-            
+
         # end checks
         if end is not None:
             if not isinstance(end, str):
@@ -571,7 +637,7 @@ class BasePanelLearner(ABC):
                 pd.to_datetime(end)
             except ValueError:
                 raise ValueError("end must be in ISO 8601 format.")
-            
+
         # blacklist checks
         if blacklist is not None:
             if not isinstance(blacklist, dict):
@@ -599,45 +665,67 @@ class BasePanelLearner(ABC):
                             "The values of the blacklist argument must be tuples of "
                             "pandas Timestamps."
                         )
-                    
+
         # freq checks
         if not isinstance(freq, str):
             raise TypeError("freq must be a string.")
         if freq not in ["D", "W", "M", "Q", "Y"]:
             raise ValueError("freq must be one of 'D', 'W', 'M', 'Q' or 'Y'.")
-        
+
         # lag checks
         if not isinstance(lag, int):
             raise TypeError("lag must be an integer.")
         if lag < 0:
             raise ValueError("lag must be non-negative.")
-        
+
         # xcat_aggs checks
         if not isinstance(xcat_aggs, list):
             raise TypeError("xcat_aggs must be a list.")
         if len(xcat_aggs) != 2:
             raise ValueError("xcat_aggs must have exactly two elements.")
-        
-    def _check_run(self, name, outer_splitter, inner_splitters, models, hyperparameters, scorers, search_type, cv_summary, n_iter, split_functions, n_jobs_outer, n_jobs_inner):
-        # name 
+
+    def _check_run(
+        self,
+        name,
+        outer_splitter,
+        inner_splitters,
+        models,
+        hyperparameters,
+        scorers,
+        search_type,
+        cv_summary,
+        n_iter,
+        split_functions,
+        n_jobs_outer,
+        n_jobs_inner,
+    ):
+        # name
         if not isinstance(name, str):
             raise TypeError("name must be a string.")
-        
+
         # outer splitter
         # TODO: come back and change to WalkForwardPanelSplit
-        if not isinstance(outer_splitter, (ExpandingFrequencyPanelSplit, ExpandingIncrementPanelSplit)):
-            raise TypeError("outer_splitter must be an instance of ExpandingFrequencyPanelSplit or ExpandingIncrementPanelSplit.")
-        
+        if not isinstance(
+            outer_splitter, (ExpandingFrequencyPanelSplit, ExpandingIncrementPanelSplit)
+        ):
+            raise TypeError(
+                "outer_splitter must be an instance of ExpandingFrequencyPanelSplit or ExpandingIncrementPanelSplit."
+            )
+
         # inner splitter
         if not isinstance(inner_splitters, list):
             if not isinstance(inner_splitters, BasePanelSplit):
-                raise TypeError("inner splitter must be a panel cross-validator subclassing BasePanelSplit.")
+                raise TypeError(
+                    "inner splitter must be a panel cross-validator subclassing BasePanelSplit."
+                )
             inner_splitters = [inner_splitters]
         else:
             for inner_splitter in inner_splitters:
                 if not isinstance(inner_splitter, BasePanelSplit):
-                    raise TypeError("inner splitter must be a list of panel cross-validator subclassing BasePanelSplit.")
-        
+                    raise TypeError(
+                        "inner splitter must be a list of panel cross-validator subclassing BasePanelSplit."
+                    )
+
         # models
         if models == {}:
             raise ValueError("The models dictionary cannot be empty.")
@@ -651,7 +739,7 @@ class BasePanelLearner(ABC):
                     "The values of the models dictionary must be sklearn predictors or "
                     "pipelines."
                 )
-            
+
         # hyperparameters
         if not isinstance(hyperparameters, dict):
             raise TypeError("The hyperparameters argument must be a dictionary.")
@@ -704,7 +792,7 @@ class BasePanelLearner(ABC):
                 "The keys in the hyperparameter grid must match those in the models "
                 "dictionary."
             )
-        
+
         # scorers
         if not isinstance(scorers, list):
             if not callable(scorers):
@@ -713,14 +801,16 @@ class BasePanelLearner(ABC):
         else:
             for scorer in scorers:
                 if not callable(scorer):
-                    raise TypeError("scorers must be a list of callable scoring functions.")
-                
+                    raise TypeError(
+                        "scorers must be a list of callable scoring functions."
+                    )
+
         # search_type
         if not isinstance(search_type, str):
             raise TypeError("search_type must be a string.")
         if search_type not in ["grid", "prior", "bayes"]:
             raise ValueError("search_type must be one of 'grid', 'prior' or 'bayes'.")
-        
+
         # cv_summary
         if not isinstance(cv_summary, (str, callable)):
             raise TypeError("cv_summary must be a string or a callable.")
@@ -740,14 +830,14 @@ class BasePanelLearner(ABC):
                     "cv_summary must be a function that takes a list of scores and returns "
                     "a single value. Check whether the output of cv_summary is a number."
                 )
-            
+
         # n_iter
         if search_type == "random":
             if type(n_iter) != int:
                 raise TypeError("The n_iter argument must be an integer.")
             if n_iter < 1:
                 raise ValueError("The n_iter argument must be greater than zero.")
-            
+
         # split_functions
         if split_functions is not None:
             if not isinstance(split_functions, list):
@@ -763,20 +853,36 @@ class BasePanelLearner(ABC):
             for split_function in split_functions:
                 if not callable(split_function):
                     raise TypeError("split_functions must be a list of callables.")
-                
+
         # n_jobs_outer
         if not isinstance(n_jobs_outer, int):
             raise TypeError("n_jobs_outer must be an integer.")
         if n_jobs_outer < 1:
             if n_jobs_outer != -1:
-                raise ValueError("n_jobs_outer must be greater than zero or equal to -1.")
-            
+                raise ValueError(
+                    "n_jobs_outer must be greater than zero or equal to -1."
+                )
+
         # n_jobs_inner
         if not isinstance(n_jobs_inner, int):
             raise TypeError("n_jobs_inner must be an integer.")
         if n_jobs_inner < 1:
             if n_jobs_inner != -1:
-                raise ValueError("n_jobs_inner must be greater than zero or equal to -1.")
+                raise ValueError(
+                    "n_jobs_inner must be greater than zero or equal to -1."
+                )
 
-
-        
+        return (
+            name,
+            outer_splitter,
+            inner_splitters,
+            models,
+            hyperparameters,
+            scorers,
+            search_type,
+            cv_summary,
+            n_iter,
+            split_functions,
+            n_jobs_outer,
+            n_jobs_inner,
+        )
