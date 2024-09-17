@@ -116,7 +116,7 @@ class BasePanelLearner(ABC):
 
         # Create initial dataframe to store model selection data from the learning process
         self.chosen_models = pd.DataFrame(
-            columns=["real_date", "name", "model_type", "hparams", "n_splits_used"]
+            columns=["real_date", "name", "model_type", "score", "hparams", "n_splits_used"]
         )
 
     def run(
@@ -280,6 +280,8 @@ class BasePanelLearner(ABC):
             test_index = pd.MultiIndex.from_arrays(
                 [test_xs_levels, mapped_dates], names=["cid", "real_date"]
             )
+        else:
+            adj_test_date_levels = test_date_levels
 
         # TODO: amend for compatibility with dictionaries
         if n_splits_add is not None:
@@ -382,13 +384,11 @@ class BasePanelLearner(ABC):
 
             # Store other data
             other_data: dict = self.store_other_data(
-                pipeline_name=name,
                 optimal_model=optim_model,
                 X_train=X_train,
                 y_train=y_train,
                 X_test=X_test,
                 y_test=y_test,
-                timestamp=adj_test_date_levels.min(),
             )
 
         return (
@@ -495,13 +495,14 @@ class BasePanelLearner(ABC):
             scorer_columns = [col for col in metric_columns if scorer in col]
             if cv_summary == "mean":
                 cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].mean(
-                    axis=1
+                    axis=1,
                 )
             elif cv_summary == "median":
                 cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].median(
                     axis=1
                 )
             else:
+                # TODO: handle NAs?
                 cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].apply(
                     cv_summary, axis=1
                 )
