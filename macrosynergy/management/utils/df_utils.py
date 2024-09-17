@@ -450,6 +450,16 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     :param <pd.DataFrame> df_add: DataFrame with the latest values.
 
     """
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("The base DataFrame must be a Quantamental Dataframe.")
+    if not isinstance(df_add, QuantamentalDataFrame):
+        raise TypeError("The added DataFrame must be a Quantamental Dataframe.")
+
+    if df.empty:
+        return df_add
+    if df_add.empty:
+        return df
+
     df = pd.concat([df, df_add], axis=0, ignore_index=True)
 
     df = df.drop_duplicates(
