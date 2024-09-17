@@ -713,18 +713,21 @@ class BasePanelLearner(ABC):
             )
 
         # inner splitter
-        if not isinstance(inner_splitters, list):
-            if not isinstance(inner_splitters, BasePanelSplit):
+        if not isinstance(inner_splitters, dict):
+            raise TypeError(
+                "inner splitters should be specified as a dictionary"
+            )
+        
+        for names in inner_splitters.keys():
+            if not isinstance(names, str):
                 raise TypeError(
-                    "inner splitter must be a panel cross-validator subclassing BasePanelSplit."
+                    "The keys of the inner splitters dictionary must be strings."
                 )
-            inner_splitters = [inner_splitters]
-        else:
-            for inner_splitter in inner_splitters:
-                if not isinstance(inner_splitter, BasePanelSplit):
-                    raise TypeError(
-                        "inner splitter must be a list of panel cross-validator subclassing BasePanelSplit."
-                    )
+            # TODO: Experiment allowing general BaseCrossValidator instances
+            if not isinstance(inner_splitters[names], BasePanelSplit):
+                raise TypeError(
+                    "The values of the inner splitters dictionary must be instances of BasePanelSplit."
+                )
 
         # models
         if models == {}:
@@ -794,16 +797,15 @@ class BasePanelLearner(ABC):
             )
 
         # scorers
-        if not isinstance(scorers, list):
-            if not callable(scorers):
-                raise TypeError("scorers must be a callable scoring function.")
-            scorers = [scorers]
-        else:
-            for scorer in scorers:
-                if not callable(scorer):
-                    raise TypeError(
-                        "scorers must be a list of callable scoring functions."
-                    )
+        if not isinstance(scorers, dict):
+            raise TypeError("scorers must be a dictionary.")
+        for key in scorers.keys():
+            if not isinstance(key, str):
+                raise TypeError("The keys of the scorers dictionary must be strings.")
+            if not callable(scorers[key]):
+                raise TypeError(
+                    "The values of the scorers dictionary must be callable scoring functions."
+                )
 
         # search_type
         if not isinstance(search_type, str):
@@ -840,19 +842,18 @@ class BasePanelLearner(ABC):
 
         # split_functions
         if split_functions is not None:
-            if not isinstance(split_functions, list):
-                if not callable(split_functions):
-                    raise TypeError("split_functions must be a callable.")
-                split_functions = [split_functions]
-            if len(split_functions) != len(inner_splitters):
+            if not isinstance(split_functions, dict):
+                raise TypeError("split_functions must be a dictionary.")
+            if len(set(split_functions.keys()).intersection(set(inner_splitters.keys()))) != len(inner_splitters):
                 raise ValueError(
-                    "The length of the split_functions list must be the same as the length "
-                    "of the inner_splitters list. If some splitters require no adjustment,"
-                    "then None elements should be included in the split_functions list."
+                    "The keys of the split_functions dictionary must match the keys of the inner_splitters dictionary."
                 )
-            for split_function in split_functions:
-                if not callable(split_function):
-                    raise TypeError("split_functions must be a list of callables.")
+            for key in split_functions.keys():
+                if not isinstance(key, str):
+                    raise TypeError("The keys of the split_functions dictionary must be strings.")
+                if split_functions[key] is not None:
+                    if not callable(split_functions[key]):
+                        raise TypeError("The values of the split_functions dictionary must be callables or None.")
 
         # n_jobs_outer
         if not isinstance(n_jobs_outer, int):
