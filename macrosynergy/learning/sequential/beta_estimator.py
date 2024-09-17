@@ -241,7 +241,7 @@ class BetaEstimator(BasePanelLearner):
         ]
         return {"betas": betas_list, "hedged_returns": hedged_returns_data}
 
-    def store_other_data(self, optimal_model, X_train, y_train, X_test, y_test):
+    def store_other_data(self, pipeline_name, optimal_model, X_train, y_train, X_test, y_test, timestamp):
         pass
 
 
@@ -306,11 +306,11 @@ if __name__ == "__main__":
         n_jobs_inner=1,
     )
 
-    be.models_heatmap(beta_xcat="BETA_NSA")
+    be.models_heatmap(name="BETA_NSA")
 
-    evaluation_df = be.evaluate_hedged_returns(
-        correlation_types=["pearson", "spearman", "kendall"],
-        freqs=["W", "M", "Q"],
-    )
+    # evaluation_df = be.evaluate_hedged_returns(
+    #     correlation_types=["pearson", "spearman", "kendall"],
+    #     freqs=["W", "M", "Q"],
+    # )
 
-    print(evaluation_df)
+    # print(evaluation_df)
