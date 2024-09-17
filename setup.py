@@ -6,8 +6,8 @@ import subprocess
 import warnings
 
 
-# if sys.version_info[:2] < (3, 7):
-#     raise RuntimeError("Python version >= 3.8 required.")
+if sys.version_info[:2] < (3, 7):
+    raise RuntimeError("Python version >= 3.8 required.")
 
 MAJOR = 0
 MINOR = 1

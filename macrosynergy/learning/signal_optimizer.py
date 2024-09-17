@@ -1403,7 +1403,7 @@ class SignalOptimizer:
                 )
 
         # Set the style
-        plt.style.use("darkgrid")
+        sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
         ftrcoef_df = self.get_ftr_coefficients(name)
@@ -1482,7 +1482,7 @@ class SignalOptimizer:
                 )
 
         # Set the style
-        plt.style.use("darkgrid")
+        sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
         intercepts_df = intercepts_df.set_index("real_date")
@@ -1601,7 +1601,7 @@ class SignalOptimizer:
                 raise ValueError("The cap argument must be no greater than 10.")
 
         # Set the style
-        plt.style.use("darkgrid")
+        sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
         ftrcoef_df = self.get_ftr_coefficients(name)
@@ -1719,7 +1719,7 @@ class SignalOptimizer:
                 )
 
         # Set the style
-        plt.style.use("darkgrid")
+        sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
         models_df = models_df.set_index("real_date").sort_index()
