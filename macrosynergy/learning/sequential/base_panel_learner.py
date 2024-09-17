@@ -281,8 +281,9 @@ class BasePanelLearner(ABC):
                 [test_xs_levels, mapped_dates], names=["cid", "real_date"]
             )
 
+        # TODO: amend for compatibility with dictionaries
         if n_splits_add is not None:
-            inner_splitters_adj = [inner_splitter for inner_splitter in inner_splitters]
+            inner_splitters_adj = inner_splitters.copy()
             for idx, inner_splitter in enumerate(inner_splitters_adj):
                 inner_splitter.n_splits += n_splits_add[idx]
         else:
@@ -315,7 +316,7 @@ class BasePanelLearner(ABC):
                 name,
                 None,  # Model selected
                 None,  # Hyperparameters selected
-                [inner_splitter.n_splits for inner_splitter in inner_splitters_adj],
+                [inner_splitter.n_splits for inner_splitter in inner_splitters_adj.values],
             ]
             other_data = None
 
@@ -359,7 +360,7 @@ class BasePanelLearner(ABC):
                 optimal_model_score=optim_score,
                 optimal_model_params=optim_params,
                 n_splits=[
-                    inner_splitter.n_splits for inner_splitter in inner_splitters_adj
+                    inner_splitter.n_splits for inner_splitter in inner_splitters_adj.values()
                 ],
                 X_train=X_train,
                 y_train=y_train,
@@ -418,7 +419,7 @@ class BasePanelLearner(ABC):
         optim_params = None
 
         cv_splits = []
-        for splitter in inner_splitters:
+        for splitter in inner_splitters.values():
             cv_splits.extend(list(splitter.split(X=X_train, y=y_train)))
         for model_name, model in models.items():
             # For each model, find the optimal hyperparameters
@@ -514,6 +515,7 @@ class BasePanelLearner(ABC):
         cv_results["final_score"] = cv_results[summary_cols].mean(axis=1)
 
         # Return index of best estimator
+        # TODO: handle case where multiple hyperparameter choices have the same score
         if return_index:
             return cv_results["final_score"].idxmax()
         else:
