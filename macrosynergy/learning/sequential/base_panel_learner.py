@@ -386,11 +386,13 @@ class BasePanelLearner(ABC):
 
             # Store other data
             other_data: dict = self.store_other_data(
+                pipeline_name=name,
                 optimal_model=optim_model,
                 X_train=X_train,
                 y_train=y_train,
                 X_test=X_test,
                 y_test=y_test,
+                timestamp=adj_test_date_levels.min(),
             )
 
         return (
@@ -568,12 +570,12 @@ class BasePanelLearner(ABC):
             optim_params = ({},)
 
         data = [timestamp, pipeline_name, optim_name, optim_score, optim_params]
-        data.extend(n_splits)
+        data.append(np.sum(n_splits))
 
         return {"model_choice": data}
 
     @abstractmethod
-    def store_other_data(self, optimal_model, X_train, y_train, X_test, y_test):
+    def store_other_data(self, pipeline_name, optimal_model, X_train, y_train, X_test, y_test, timestamp):
         """
         Abstract method for storing other data.
         """

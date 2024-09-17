@@ -165,25 +165,26 @@ class SignalOptimizer(BasePanelLearner):
         )
 
         # Store model selection data
-        # model_df_long = pd.DataFrame(
-        #     columns = self.chosen_models.columns,
-        #     data = modelchoice_data,
-        # )
-        # self.chosen_models = pd.concat(
-        #     (
-        #         self.chosen_models,
-        #         model_df_long,
-        #     ),
-        #     axis=0,
-        # ).astype(
-        #     {
-        #         "real_date": "datetime64[ns]",
-        #         "name": "object",
-        #         "model_type": "object",
-        #         "hparams": "object",
-        #         "n_splits_used": "int",
-        #     }
-        # )
+        model_df_long = pd.DataFrame(
+            columns = self.chosen_models.columns,
+            data = modelchoice_data,
+        )
+        self.chosen_models = pd.concat(
+            (
+                self.chosen_models,
+                model_df_long,
+            ),
+            axis=0,
+        ).astype(
+            {
+                "real_date": "datetime64[ns]",
+                "name": "object",
+                "model_type": "object",
+                "score": "float32",
+                "hparams": "object",
+                "n_splits_used": "int",
+            }
+        )
 
         # Store feature coefficients
         coef_df_long = pd.DataFrame(
@@ -364,7 +365,7 @@ if __name__ == "__main__":
             "LR": LinearRegression(),
         },
         hyperparameters = {
-            "LR": {"fit_intercept": [True, False]},
+            "LR": {"fit_intercept": [True, False], "positive": [True, False]},
         },
         scorers = {
             "r2": make_scorer(r2_score),
@@ -382,3 +383,5 @@ if __name__ == "__main__":
         n_jobs_outer=-1,
         n_jobs_inner=1,
     )
+
+    so.models_heatmap(name = "LR")
