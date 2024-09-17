@@ -1,5 +1,5 @@
 import numpy as np
-import pandas as pd 
+import pandas as pd
 
 from pandas.testing import assert_frame_equal, assert_series_equal
 
@@ -15,6 +15,7 @@ from macrosynergy.learning.beta_estimator import BetaEstimator
 import unittest
 
 from parameterized import parameterized
+
 
 class TestBetaEstimator(unittest.TestCase):
     @classmethod
@@ -42,7 +43,7 @@ class TestBetaEstimator(unittest.TestCase):
         self.benchmark_return = "USD_BENCH_XR"
 
         self.be = BetaEstimator(
-            df = self.dfd,
+            df=self.dfd,
             xcat=self.xcat,
             cids=self.cids,
             benchmark_return=self.benchmark_return,
@@ -60,16 +61,17 @@ class TestBetaEstimator(unittest.TestCase):
             hparam_grid={
                 "OLS": {"fit_intercept": [True, False]},
             },
-            min_cids = 1,
-            min_periods = 21 * 12,
+            min_cids=1,
+            min_periods=21 * 12,
             est_freq="M",
             use_variance_correction=False,
+            n_jobs_outer=1,
         )
 
     def test_valid_init(self):
         # Check class attributes are correctly initialised
         be = BetaEstimator(
-            df = self.dfd,
+            df=self.dfd,
             xcat=self.xcat,
             cids=self.cids,
             benchmark_return=self.benchmark_return,
@@ -79,8 +81,13 @@ class TestBetaEstimator(unittest.TestCase):
         self.assertEqual(be.cids, self.cids)
         self.assertEqual(be.benchmark_return, self.benchmark_return)
 
-        assert_frame_equal(be.betas, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]))
-        assert_frame_equal(be.hedged_returns, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]))
+        assert_frame_equal(
+            be.betas, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
+        )
+        assert_frame_equal(
+            be.hedged_returns,
+            pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]),
+        )
         assert_frame_equal(
             be.chosen_models,
             pd.DataFrame(
@@ -90,7 +97,7 @@ class TestBetaEstimator(unittest.TestCase):
 
         # Check the format of final long format dataframes
         self.assertIsInstance(be.X, pd.Series)
-        self.assertTrue(be.X.name == self.benchmark_return.split("_",maxsplit=1)[1])
+        self.assertTrue(be.X.name == self.benchmark_return.split("_", maxsplit=1)[1])
         self.assertTrue(be.X.index.names == ["cid", "real_date"])
         self.assertIsInstance(be.X.index, pd.MultiIndex)
 
@@ -104,36 +111,45 @@ class TestBetaEstimator(unittest.TestCase):
         dfd["ticker"] = dfd["cid"] + "_" + dfd["xcat"]
         dfx = pd.DataFrame(columns=["real_date", "cid", "xcat", "value"])
         for cid in self.cids:
-            dfd_portion = dfd[(dfd.ticker == cid + "_" + self.xcat) | (dfd.ticker == self.benchmark_return)]
-            dfd_portion["cid"] = f"{cid}v{self.benchmark_return.split('_', maxsplit=1)[0]}"
+            dfd_portion = dfd[
+                (dfd.ticker == cid + "_" + self.xcat)
+                | (dfd.ticker == self.benchmark_return)
+            ]
+            dfd_portion["cid"] = (
+                f"{cid}v{self.benchmark_return.split('_', maxsplit=1)[0]}"
+            )
             dfx = pd.concat([dfx, dfd_portion[["real_date", "cid", "xcat", "value"]]])
 
-        dfx_long = dfx.pivot(index=["cid", "real_date"], columns="xcat", values="value").dropna()
+        dfx_long = dfx.pivot(
+            index=["cid", "real_date"], columns="xcat", values="value"
+        ).dropna()
         X = dfx_long[self.benchmark_return.split("_", maxsplit=1)[1]]
         y = dfx_long[self.xcat]
 
-        assert_series_equal(be.X, dfx_long[self.benchmark_return.split("_", maxsplit=1)[1]])
+        assert_series_equal(
+            be.X, dfx_long[self.benchmark_return.split("_", maxsplit=1)[1]]
+        )
         assert_series_equal(be.y, dfx_long[self.xcat])
 
     def test_types_init(self):
         # dataframe df
         with self.assertRaises(TypeError):
             be = BetaEstimator(
-                df = "not a dataframe",
+                df="not a dataframe",
                 xcat=self.xcat,
                 cids=self.cids,
                 benchmark_return=self.benchmark_return,
             )
         with self.assertRaises(ValueError):
             be = BetaEstimator(
-                df = self.dfd.iloc[:,:-1],
+                df=self.dfd.iloc[:, :-1],
                 xcat=self.xcat,
                 cids=self.cids,
                 benchmark_return=self.benchmark_return,
             )
         with self.assertRaises(ValueError):
             be = BetaEstimator(
-                df = self.dfd[self.dfd.xcat != self.xcat],
+                df=self.dfd[self.dfd.xcat != self.xcat],
                 xcat=self.xcat,
                 cids=self.cids,
                 benchmark_return=self.benchmark_return,
@@ -141,14 +157,14 @@ class TestBetaEstimator(unittest.TestCase):
         # xcat
         with self.assertRaises(TypeError):
             be = BetaEstimator(
-                df = self.dfd,
+                df=self.dfd,
                 xcat=1,
                 cids=self.cids,
                 benchmark_return=self.benchmark_return,
             )
         with self.assertRaises(ValueError):
             be = BetaEstimator(
-                df = self.dfd,
+                df=self.dfd,
                 xcat="not a valid xcat",
                 cids=self.cids,
                 benchmark_return=self.benchmark_return,
@@ -156,28 +172,28 @@ class TestBetaEstimator(unittest.TestCase):
         # cids
         with self.assertRaises(TypeError):
             be = BetaEstimator(
-                df = self.dfd,
+                df=self.dfd,
                 xcat=self.xcat,
                 cids="not a list",
                 benchmark_return=self.benchmark_return,
             )
         with self.assertRaises(ValueError):
             be = BetaEstimator(
-                df = self.dfd,
+                df=self.dfd,
                 xcat=self.xcat,
                 cids=self.cids + ["not a valid cid"],
                 benchmark_return=self.benchmark_return,
             )
         with self.assertRaises(ValueError):
             be = BetaEstimator(
-                df = self.dfd,
+                df=self.dfd,
                 xcat=self.xcat,
                 cids=["not a valid cid"],
                 benchmark_return=self.benchmark_return,
             )
         with self.assertRaises(ValueError):
             be = BetaEstimator(
-                df = self.dfd,
+                df=self.dfd,
                 xcat=self.xcat,
                 cids=self.cids + ["not a valid cid"],
                 benchmark_return=self.benchmark_return,
@@ -185,21 +201,21 @@ class TestBetaEstimator(unittest.TestCase):
         # benchmark_return
         with self.assertRaises(TypeError):
             be = BetaEstimator(
-                df = self.dfd,
+                df=self.dfd,
                 xcat=self.xcat,
                 cids=self.cids,
                 benchmark_return=1,
             )
         with self.assertRaises(ValueError):
             be = BetaEstimator(
-                df = self.dfd,
+                df=self.dfd,
                 xcat=self.xcat,
                 cids=self.cids,
                 benchmark_return="not a valid benchmark_return",
             )
         with self.assertRaises(ValueError):
             be = BetaEstimator(
-                df = self.dfd,
+                df=self.dfd,
                 xcat=self.xcat,
                 cids=self.cids,
                 benchmark_return="GLB_DRBXR_NSA",
@@ -209,13 +225,36 @@ class TestBetaEstimator(unittest.TestCase):
         # Test the broad method
         # Betas dataframe
         self.assertIsInstance(self.be.betas, pd.DataFrame)
-        self.assertTrue(self.be.betas.columns.tolist() == ["cid", "real_date", "xcat", "value"])
+        self.assertTrue(
+            self.be.betas.columns.tolist() == ["cid", "real_date", "xcat", "value"]
+        )
         self.assertTrue("BETA_NSA" in self.be.betas.xcat.unique())
-        self.assertTrue(sorted(self.be.betas[self.be.betas.xcat == "BETA_NSA"].cid.unique()) == self.cids)
-        self.assertTrue(all(~self.be.betas[self.be.betas.xcat == "BETA_NSA"].value.isna()))
+        self.assertTrue(
+            sorted(self.be.betas[self.be.betas.xcat == "BETA_NSA"].cid.unique())
+            == self.cids
+        )
+        self.assertTrue(
+            all(~self.be.betas[self.be.betas.xcat == "BETA_NSA"].value.isna())
+        )
         # Hedged returns dataframe
         self.assertIsInstance(self.be.hedged_returns, pd.DataFrame)
-        self.assertTrue(self.be.hedged_returns.columns.tolist() == ["cid", "real_date", "xcat", "value"])
+        self.assertTrue(
+            self.be.hedged_returns.columns.tolist()
+            == ["cid", "real_date", "xcat", "value"]
+        )
         self.assertTrue("HEDGED_RETURN_NSA" in self.be.hedged_returns.xcat.unique())
-        self.assertTrue(sorted(self.be.hedged_returns[self.be.hedged_returns.xcat == "HEDGED_RETURN_NSA"].cid.unique()) == self.cids)
-        self.assertTrue(all(~self.be.hedged_returns[self.be.hedged_returns.xcat == "HEDGED_RETURN_NSA"].value.isna()))
+        self.assertTrue(
+            sorted(
+                self.be.hedged_returns[
+                    self.be.hedged_returns.xcat == "HEDGED_RETURN_NSA"
+                ].cid.unique()
+            )
+            == self.cids
+        )
+        self.assertTrue(
+            all(
+                ~self.be.hedged_returns[
+                    self.be.hedged_returns.xcat == "HEDGED_RETURN_NSA"
+                ].value.isna()
+            )
+        )
