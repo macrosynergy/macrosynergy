@@ -370,7 +370,10 @@ if __name__ == "__main__":
             "r2": make_scorer(r2_score),
             "bac": make_scorer(regression_balanced_accuracy),
         },
-        inner_splitters = [ExpandingKFoldPanelSplit(n_splits = 5), RollingKFoldPanelSplit(n_splits = 5)],
+        inner_splitters = {
+            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits = 5),
+            "RollingKFold": RollingKFoldPanelSplit(n_splits = 5),
+        },
         search_type = "grid",
         cv_summary = "median",
         min_cids = 4,
