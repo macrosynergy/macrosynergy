@@ -328,7 +328,8 @@ def apply_slip(
     slip: int = slip.__neg__()
 
     filtered_df = df[df["ticker"].isin(sel_tickers)]
-    filtered_df.loc[:, metrics] = filtered_df.loc[:, metrics].astype(float)
+    for col in metrics:
+        filtered_df[col] = filtered_df[col].astype(float)
     filtered_df.loc[:, metrics] = filtered_df.groupby("ticker")[metrics].shift(slip)
 
     df.loc[df["ticker"].isin(sel_tickers), metrics] = filtered_df[metrics]
@@ -430,11 +431,6 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     all_cols = df_cols.union(df_add_cols)
     if all_cols != df_cols and all_cols != df_add_cols:
         raise ValueError(error_message)
-
-    if df.empty:
-        return df_add
-    elif df_add.empty:
-        return df
 
     if not xcat_replace:
         df = update_tickers(df, df_add)
