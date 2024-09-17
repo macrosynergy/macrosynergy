@@ -51,6 +51,12 @@ class TestAll(unittest.TestCase):
             {"weights": [1, 2, "bar"]},
             {"df": pd.DataFrame()},
             {"df": self.dfd.assign(value=np.NaN)},
+            {"normalize_weights": "foo"},
+            {"complete_cids": "foo"},
+            {"complete_xcats": "foo"},
+            {"new_cid": 1},
+            {"new_xcat": 1},
+            {"blacklist": 1},
         ]
         for case in type_error_cases:
             argsx: Dict[str, Any] = base_args.copy()
@@ -474,7 +480,9 @@ class TestAll(unittest.TestCase):
             set(rdf["real_date"].unique().tolist())
             == set(dfd["real_date"].unique().tolist())
         )
-        interesting_dates: List[str] = ["2000-01-17", "2000-01-18", "2000-01-19"]
+        interesting_dates: List[pd.Timestamp] = [
+            pd.to_datetime(x) for x in ["2000-01-17", "2000-01-18", "2000-01-19"]
+        ]
         # with complete_cids=True, 2000-01-17 to 2000-01-19 should be nan
         self.assertTrue(
             rdf[rdf["real_date"].isin(interesting_dates)]["value"].isna().all()
@@ -495,7 +503,9 @@ class TestAll(unittest.TestCase):
         )
 
         self.assertTrue(
-            rdf[rdf["real_date"].isin(["2000-01-19"])]["value"].isna().all()
+            rdf[rdf["real_date"].isin([pd.Timestamp("2000-01-19")])]["value"]
+            .isna()
+            .all()
         )
 
         self.assertTrue(
@@ -507,11 +517,13 @@ class TestAll(unittest.TestCase):
 
         # value on 2000-01-17 should be 4:
         self.assertTrue(
-            rdf[rdf["real_date"].isin(["2000-01-17"])]["value"].values[0] == 4
+            rdf[rdf["real_date"].isin([pd.Timestamp("2000-01-17")])]["value"].values[0]
+            == 4
         )
         # value on 2000-01-18 should be 3
         self.assertTrue(
-            rdf[rdf["real_date"].isin(["2000-01-18"])]["value"].values[0] == 3
+            rdf[rdf["real_date"].isin([pd.Timestamp("2000-01-18")])]["value"].values[0]
+            == 3
         )
 
         ## Testing category-weights
@@ -539,11 +551,17 @@ class TestAll(unittest.TestCase):
 
         # value on 2000-01-17 should be 30:
         self.assertTrue(
-            rdf[rdf["real_date"].isin(["2000-01-17"])]["value"].values[0] == 30
+            rdf[rdf["real_date"].isin([pd.Timestamp("2000-01-17")])]["value"].values[0]
+            == 30
         )
         # all else should be 3
         self.assertTrue(
-            np.all(rdf[~rdf["real_date"].isin(["2000-01-17"])]["value"].values == 3)
+            np.all(
+                rdf[~rdf["real_date"].isin([pd.Timestamp("2000-01-17")])][
+                    "value"
+                ].values
+                == 3
+            )
         )
         self.assertTrue(rdf["cid"].unique().tolist() == ["GLB"])
         self.assertTrue(rdf["xcat"].unique().tolist() == ["XR"])
