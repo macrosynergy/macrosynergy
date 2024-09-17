@@ -6,12 +6,18 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Union, Optional, Tuple, Type, Set
 import warnings
-
+from packaging import version
 from macrosynergy.management.utils import reduce_df, is_valid_iso_date
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.types import QuantamentalDataFrame
 
 listtypes: Tuple[Type, ...] = (list, np.ndarray, pd.Series, tuple)
+
+PD_FUTURE_STACK = (
+    dict(future_stack=True)
+    if version.parse(pd.__version__) > version.parse("2.1.0")
+    else dict(dropna=False)
+)
 
 
 def _linear_composite_basic(
@@ -105,8 +111,8 @@ def linear_composite_cid_agg(
     # so that we have the same set of dates and same set of CIDs -- thank you
     # @mikiinterfiore
     weights_df = (
-        weights_df.stack(dropna=False)
-        .reindex(data_df.stack(dropna=False).index)
+        weights_df.stack(**PD_FUTURE_STACK)
+        .reindex(data_df.stack(**PD_FUTURE_STACK).index)
         .unstack(1)
     )
 
