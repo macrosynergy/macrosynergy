@@ -9,6 +9,7 @@ from typing import List
 from itertools import groupby
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.simulate import make_qdf_black, make_qdf
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def startend(dti, start, length):
@@ -26,7 +27,7 @@ def startend(dti, start, length):
 
 
 def make_blacklist(
-    df: pd.DataFrame,
+    df: QuantamentalDataFrame,
     xcat: str,
     cids: List[str] = None,
     start: str = None,
@@ -37,7 +38,7 @@ def make_blacklist(
     Converts binary category of standardized dataframe into a standardized dictionary
     that can serve as a blacklist for cross-sections in further analyses
 
-    :param <pd.Dataframe> df: standardized DataFrame with following columns:
+    :param <QuantamentalDataFrame> df: standardized DataFrame with following columns:
         'cid', 'xcat', 'real_date' and 'value'.
     :param <str> xcat: category with binary values, where 1 means blacklisting and 0
         means not blacklisting.
@@ -56,11 +57,16 @@ def make_blacklist(
         keys (i.e. TRY_1, TRY_2, etc.)
     """
 
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("df must be a standardized quantamental dataframe")
+
     dfd = reduce_df(df=df, xcats=[xcat], cids=cids, start=start, end=end)
-    assert all(
-        np.isin(dfd.value.dropna().unique(), [0, 1])
-    ), "blacklist values must all be 0/1"
+
+    if "value" not in dfd.columns:
+        raise ValueError("`value` column not found in df")
+
+    if not all(np.isin(dfd["value"].dropna().unique(), [0, 1])):
+        raise ValueError("blacklist values must all be 0/1")
 
     df_pivot = dfd.pivot(index="real_date", columns="cid", values="value")
     dates = df_pivot.index
