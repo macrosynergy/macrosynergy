@@ -8,8 +8,7 @@ import pandas as pd
 
 from macrosynergy.management import categories_df, reduce_df, update_df
 from macrosynergy.learning import ExpandingFrequencyPanelSplit
-
-from .base_panel_learner import BasePanelLearner
+from macrosynergy.learning.sequential import BasePanelLearner
 
 class BetaEstimator(BasePanelLearner):
     """
@@ -64,12 +63,20 @@ class BetaEstimator(BasePanelLearner):
         super().__init__(
             df = dfx,
             xcats = xcats + [benchmark_xcat] if isinstance(xcats, list) else [xcats, benchmark_xcat],
-            cids = dfx["cid"].unique(),
+            cids = list(dfx["cid"].unique()),
             start = start,
             end = end,
             blacklist = None,
             freq = "D",
             lag = 0,
+        )
+
+        # Create forecast dataframe index 
+        min_date = min(self.unique_date_levels)
+        max_date = max(self.unique_date_levels)
+        forecast_date_levels = pd.date_range(start=min_date, end=max_date, freq="B")
+        self.forecast_idxs = pd.MultiIndex.from_product(
+            [self.unique_xs_levels, forecast_date_levels], names=["cid", "real_date"]
         )
 
         # Create initial dataframes to store estimated betas and OOS hedged returns
@@ -92,7 +99,7 @@ class BetaEstimator(BasePanelLearner):
         min_periods = 12 * 3,
         est_freq = "D",
         max_periods = None,
-        split_dictionary = None,
+        split_functions = None,
         n_iter = None,
         n_jobs_outer = -1,
         n_jobs_inner = 1,
@@ -126,7 +133,7 @@ class BetaEstimator(BasePanelLearner):
             scorers = scorers,
             search_type = search_type,
             cv_summary = cv_summary,
-            split_dictionary = split_dictionary,
+            split_functions = split_functions,
             n_iter = n_iter,
             n_jobs_outer = n_jobs_outer,
             n_jobs_inner = n_jobs_inner,
@@ -202,3 +209,80 @@ class BetaEstimator(BasePanelLearner):
                 "n_splits_used": "int",
             }
         )
+
+    def store_quantamental_data(self, pipeline_name, model, X_train, y_train, X_test, y_test, adjusted_test_index):
+        pass
+
+    def store_other_data(self, optimal_model, X_train, y_train, X_test, y_test):
+        pass
+
+
+if __name__ == "__main__":
+    from macrosynergy.learning import (
+        LinearRegressionSystem,
+        ExpandingKFoldPanelSplit,
+        neg_mean_abs_corr,
+    )
+    from macrosynergy.management.simulate import make_qdf
+
+    # Simulate a panel dataset of benchmark and contract returns
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["BENCH_XR", "CONTRACT_XR"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["BENCH_XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CONTRACT_XR"] = ["2001-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+
+    # Initialize the BetaEstimator object
+    # Use for the benchmark return: USD_BENCH_XR.
+    be = BetaEstimator(
+        df=dfd,
+        xcats="CONTRACT_XR",
+        benchmark_return="USD_BENCH_XR",
+        cids=cids,
+    )
+
+    models = {
+        "LR": LinearRegressionSystem(min_xs_samples=21 * 3),
+    }
+    hparam_grid = {
+        "LR": {"fit_intercept": [True, False], "positive": [True, False]}
+    }
+
+    scorer = neg_mean_abs_corr
+
+    be.estimate_beta(
+        beta_xcat="BETA_NSA",
+        hedged_return_xcat="HEDGED_RETURN_NSA",
+        models = models,
+        hyperparameters = hparam_grid,
+        scorers = scorer,
+        inner_splitters = ExpandingKFoldPanelSplit(n_splits = 5),
+        search_type = "grid",
+        cv_summary = "median",
+        min_cids=1,
+        min_periods=21 * 12,
+        est_freq="Q",
+        n_jobs_outer=1,
+        n_jobs_inner=1,
+    )
+
+    be.models_heatmap(beta_xcat="BETA_NSA")
+
+    evaluation_df = be.evaluate_hedged_returns(
+        correlation_types=["pearson", "spearman", "kendall"],
+        freqs=["W", "M", "Q"],
+    )
+
+    print(evaluation_df)
