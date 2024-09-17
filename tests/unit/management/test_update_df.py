@@ -435,8 +435,17 @@ class TestAll(unittest.TestCase):
 
     def test_update_df_preserves_original(self):
         test_df = self.dfd.copy()
-        result_df = update_df(test_df, test_df)
+        _ = update_df(test_df, test_df)
         self.assertTrue(test_df.equals(self.dfd))
+
+    def test_update_df_empty_df(self):
+        test_df = self.dfd.copy()
+        empty_df = pd.DataFrame(columns=test_df.columns)
+        result_df = update_df(test_df, empty_df)
+        self.assertTrue(test_df.equals(result_df))
+
+        result_df = update_df(empty_df, test_df)
+        self.assertTrue(test_df.equals(result_df))
 
 
 if __name__ == "__main__":
