@@ -386,13 +386,11 @@ def _check_args(
     if not isinstance(complete_cids, bool):
         raise TypeError("`complete_cids` must be a boolean.")
 
-    if new_xcat is None:
-        if not isinstance(new_xcat, str):
-            raise TypeError("`new_xcat` must be a string.")
+    if not isinstance(new_xcat, str):
+        raise TypeError("`new_xcat` must be a string.")
 
-    if new_cid is None:
-        if not isinstance(new_cid, str):
-            raise TypeError("`new_cid` must be a string.")
+    if not isinstance(new_cid, str):
+        raise TypeError("`new_cid` must be a string.")
 
     if blacklist is not None:
         if not isinstance(blacklist, dict):
