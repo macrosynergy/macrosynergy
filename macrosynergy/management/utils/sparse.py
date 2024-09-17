@@ -1,4 +1,5 @@
 from typing import Dict, List, Any, Union, Optional, Callable, Tuple
+from collections.abc import KeysView, ValuesView, ItemsView
 from numbers import Number
 import json
 import warnings
@@ -781,6 +782,18 @@ class InformationStateChanges(object):
     Initialize using the `from_qdf` class method to create an `InformationStateChanges`
     object from a `QuantamentalDataFrame`. The `calculate_score` method can be used to
     calculate scores for the information state changes.
+
+    :param <pd.Timestamp> min_period: The minimum period to include in the
+        InformationStateChanges object.
+    :param <pd.Timestamp> max_period: The maximum period to include in the
+        InformationStateChanges object.
+
+    .. note::
+
+        Instantiate using the `from_qdf` or `from_isc_df` class methods.
+
+        This class is subscriptable, i.e. `isc["ticker"]` will return the DataFrame
+        for the given ticker.
     """
 
     def __init__(
@@ -839,28 +852,36 @@ class InformationStateChanges(object):
         assert same_keys and same_df
         return True
 
-    def keys(self):
+    def keys(self) -> KeysView:
         """
         A list of tickers in the InformationStateChanges object.
+
+        :return <KeysView>: A view of the tickers in the InformationStateChanges object.
         """
         return self.isc_dict.keys()
 
-    def values(self):
+    def values(self) -> ValuesView:
         """
         Extract the DataFrames from the InformationStateChanges object.
+
+        :return <ValuesView>: A view of the DataFrames in the InformationStateChanges
+            object.
         """
         return self.isc_dict.values()
 
-    def items(self):
+    def items(self) -> ItemsView:
         """
         Iterate through (ticker, DataFrame) pairs in the InformationStateChanges object.
+
+        :return <ItemsView>: A view of the (ticker, DataFrame) pairs in the
+            InformationStateChanges object.
         """
         return self.isc_dict.items()
 
     @classmethod
     def from_qdf(
         cls: "InformationStateChanges",
-        qdf: QuantamentalDataFrame,
+        df: QuantamentalDataFrame,
         norm: bool = True,
         **kwargs,
     ) -> "InformationStateChanges":
@@ -870,16 +891,16 @@ class InformationStateChanges(object):
         :param <QuantamentalDataFrame> qdf: The QuantamentalDataFrame to create the
             InformationStateChanges object from.
         :param <bool> norm: If True, calculate the score for the information state changes.
-        :param <**kwargs>: Additional keyword arguments to pass to the `calculate_score`
-            method.
+        :param <Any> **kwargs: Additional keyword arguments to pass to the `calculate_score`
+            Please refer to `InformationStateChanges.calculate_score()` for more information.
         :return <InformationStateChanges>: An InformationStateChanges object.
         """
         isc: InformationStateChanges = cls(
-            min_period=qdf["real_date"].min(),
-            max_period=qdf["real_date"].max(),
+            min_period=df["real_date"].min(),
+            max_period=df["real_date"].max(),
         )
 
-        isc_dict, density_stats_df = create_delta_data(qdf, return_density_stats=True)
+        isc_dict, density_stats_df = create_delta_data(df, return_density_stats=True)
 
         isc.isc_dict = isc_dict
         isc.density_stats_df = density_stats_df
@@ -910,8 +931,8 @@ class InformationStateChanges(object):
         :param <str> grading_column: The name of the column to use as the grading.
         :param <str> real_date_column: The name of the column to use as the real date.
         :param <bool> norm: If True, calculate the score for the information state changes.
-        :param <**kwargs>: Additional keyword arguments to pass to the `calculate_score`
-            method.
+        :param <Any> **kwargs: Additional keyword arguments to pass to the `calculate_score`
+            Please refer to `InformationStateChanges.calculate_score()` for more information.
         :return <InformationStateChanges>: An InformationStateChanges object.
         """
 
