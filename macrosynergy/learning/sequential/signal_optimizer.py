@@ -1,8 +1,7 @@
 """
-Class to calculate sequentially-optimized forecasts based on panels of features. 
-TODO: find a nicer way of writing this docstring
+Class to determine and store sequentially-optimized panel forecasts based on statistical
+learning. 
 """
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -15,7 +14,6 @@ from macrosynergy.learning.sequential import BasePanelLearner
 from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import SelectorMixin
 
-
 class SignalOptimizer(BasePanelLearner):
     """
     Class for sequential optimization of return forecasts based on panels of quantamental
@@ -23,13 +21,64 @@ class SignalOptimizer(BasePanelLearner):
 
     Parameters
     ----------
-    TODO
-
+    df : pd.DataFrame
+        Daily quantamental dataframe in JPMaQS format containing a panel of features, as 
+        well as a panel of returns.
+    xcats : list
+        List comprising feature names, with the last element being the response variable
+        name. The features and the response variable must be categories in the dataframe.
+    cids : list, optional
+        List of cross-section identifiers for consideration in the panel. Default is None,
+        in which case all cross-sections in `df` are considered.
+    start : str, optional
+        Start date for considered data in subsequent analysis in ISO 8601 format.
+        Default is None i.e. the earliest date in the dataframe.
+    end : str, optional
+        End date for considered data in subsequent analysis in ISO 8601 format.
+        Default is None i.e. the latest date in the dataframe.
+    blacklist : list, optional
+        Blacklisting dictionary specifying date ranges for which cross-sectional
+        information should be excluded. The keys are cross-sections and the values
+        are tuples of start and end dates in ISO 8601 format. Default is None.
+    freq : str, optional
+        Frequency of the analysis. Default is "M" for monthly.
+    lag : int, optional
+        Number of periods to lag the response variable. Default is 1.
+    xcat_aggs : list, optional
+        List of aggregation functions to apply to the features, used when `freq` is not 
+        `D`. Default is ["last", "sum"].
+    
     Notes
     -----
-    TODO
-    """
+    The `SignalOptimizer` class is used to predict the response variable, usually an asset
+    class return panel, based on a panel of features that are lagged by a specified number
+    of periods. This is done in a sequential manner, by specifying the size of an initial
+    training set, choosing an optimal model out of a provided collection (with associated
+    hyperparameters), forecasting the (possibly) forward return panel, and then expanding
+    the training set to include the previously forward realized returns. The process 
+    continues until the end of the dataset is reached.
 
+    In addition to storing the forecasts, this class also stores useful information for 
+    analysis such as the models selected at each point in time, the feature coefficients
+    and intercepts (where relevant) of selected models, as well as the features 
+    selected by any feature selection modules.
+
+    Model and hyperparameter selection is performed by cross-validation. Given a
+    collection of models and associated hyperparameters to choose from, an HPO is run
+    - currently only grid search and random search are supported - to determine the
+    optimal choice. This is done by providing a collection of `scikit-learn` compatible 
+    scoring functions, as well as a collection of `scikit-learn` compatible cross-validation
+    splitters. At each point in time, the cross-validation folds are the union of the folds
+    produced by each splitter provided. Each scorer is evaluated on each test fold and 
+    summarised across test folds by either the mean, median or through a custom function
+    provided by the user. This results in multiple scores for each model and hyperparameter
+    combination. In order to make a final choice, a composite score for each model and
+    hyperparameter combination is calculated by adjusting scores for each scorer by the 
+    minimum and maximum scores across all models and hyperparameters, for that scorer. 
+    This makes scores across scorers comparable, so that the average score across adjusted
+    scores can be used as a meaningful estimate of each model's generalization ability. 
+    The optimal model is the one with the largest composite score. 
+    """
     def __init__(
         self,
         df,
