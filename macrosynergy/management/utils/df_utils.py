@@ -434,6 +434,11 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     if all_cols != df_cols and all_cols != df_add_cols:
         raise ValueError(error_message)
 
+    if df.empty:
+        return df_add
+    elif df_add.empty:
+        return df
+
     if not xcat_replace:
         df = update_tickers(df, df_add)
 
