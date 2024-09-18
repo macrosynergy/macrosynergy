@@ -5,12 +5,16 @@ TODO: find a nicer way of writing this docstring
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import seaborn as sns
 
 from macrosynergy.learning import ExpandingIncrementPanelSplit
 from macrosynergy.learning.sequential import BasePanelLearner
 
 from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import SelectorMixin
+
 
 class SignalOptimizer(BasePanelLearner):
     """
@@ -19,38 +23,39 @@ class SignalOptimizer(BasePanelLearner):
 
     Parameters
     ----------
-    TODO 
+    TODO
 
     Notes
     -----
     TODO
     """
+
     def __init__(
         self,
         df,
         xcats,
-        cids = None,
-        start = None,
-        end = None,
-        blacklist = None,
-        freq = "M",
-        lag = 1,
-        xcat_aggs = ["last", "sum"],
+        cids=None,
+        start=None,
+        end=None,
+        blacklist=None,
+        freq="M",
+        lag=1,
+        xcat_aggs=["last", "sum"],
     ):
         # Run checks and necessary dataframe massaging
         super().__init__(
-            df = df,
-            xcats = xcats,
-            cids = cids,
-            start = start,
-            end = end,
-            blacklist = blacklist,
-            freq = freq,
-            lag = lag,
-            xcat_aggs = xcat_aggs,
+            df=df,
+            xcats=xcats,
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            freq=freq,
+            lag=lag,
+            xcat_aggs=xcat_aggs,
         )
 
-        # Create forecast dataframe index 
+        # Create forecast dataframe index
         min_date = min(self.unique_date_levels)
         max_date = max(self.unique_date_levels)
         forecast_date_levels = pd.date_range(start=min_date, end=max_date, freq="B")
@@ -63,7 +68,9 @@ class SignalOptimizer(BasePanelLearner):
         self.ftr_coefficients = pd.DataFrame(
             columns=["real_date", "name"] + list(self.X.columns)
         )
-        self.intercepts = pd.DataFrame(columns=["real_date", "name", "intercepts"]) # TODO: look at merging into ftr_coefficients
+        self.intercepts = pd.DataFrame(
+            columns=["real_date", "name", "intercepts"]
+        )  # TODO: look at merging into ftr_coefficients
         self.selected_ftrs = pd.DataFrame(
             columns=["real_date", "name"] + list(self.X.columns)
         )
@@ -73,52 +80,49 @@ class SignalOptimizer(BasePanelLearner):
         name,
         models,
         hyperparameters,
-        scorers, # TODO: make optional if no hyperparameters present. Then can skip hparam search
+        scorers,  # TODO: make optional if no hyperparameters present. Then can skip hparam search
         inner_splitters,
-        search_type = "grid",
-        cv_summary = "mean",
-        min_cids = 4,
-        min_periods = 12 * 3,
-        test_size = 1,
-        max_periods = None,
-        split_functions = None,
-        n_iter = None,
-        n_jobs_outer = -1,
-        n_jobs_inner = 1,
+        search_type="grid",
+        cv_summary="mean",
+        min_cids=4,
+        min_periods=12 * 3,
+        test_size=1,
+        max_periods=None,
+        split_functions=None,
+        n_iter=None,
+        n_jobs_outer=-1,
+        n_jobs_inner=1,
     ):
         """
-        Determine forecasts and store relevant quantities over time. 
+        Determine forecasts and store relevant quantities over time.
         """
         # First create pandas dataframes to store the forecasts
         forecasts_df = pd.DataFrame(
-            index = self.forecast_idxs,
-            columns = [name],
-            data = np.nan,
-            dtype = "float32"
+            index=self.forecast_idxs, columns=[name], data=np.nan, dtype="float32"
         )
 
         # Set up outer splitter
         outer_splitter = ExpandingIncrementPanelSplit(
-            train_intervals = test_size,
-            test_size = test_size,
-            min_cids = min_cids,
-            min_periods = min_periods,
-            max_periods = max_periods,
+            train_intervals=test_size,
+            test_size=test_size,
+            min_cids=min_cids,
+            min_periods=min_periods,
+            max_periods=max_periods,
         )
 
         results = self.run(
-            name = name,
-            outer_splitter = outer_splitter,
-            inner_splitters = inner_splitters,
-            models = models,
-            hyperparameters = hyperparameters,
-            scorers = scorers,
-            search_type = search_type,
-            cv_summary = cv_summary,
-            split_functions = split_functions,
-            n_iter = n_iter,
-            n_jobs_outer = n_jobs_outer,
-            n_jobs_inner = n_jobs_inner, 
+            name=name,
+            outer_splitter=outer_splitter,
+            inner_splitters=inner_splitters,
+            models=models,
+            hyperparameters=hyperparameters,
+            scorers=scorers,
+            search_type=search_type,
+            cv_summary=cv_summary,
+            split_functions=split_functions,
+            n_iter=n_iter,
+            n_jobs_outer=n_jobs_outer,
+            n_jobs_inner=n_jobs_inner,
         )
 
         # Collect results from the worker
@@ -140,7 +144,7 @@ class SignalOptimizer(BasePanelLearner):
         for pipeline_name, idx, forecasts in prediction_data:
             forecasts_df.loc[idx, name] = forecasts
 
-        forecasts_df = forecasts_df.groupby(level = 0).ffill()
+        forecasts_df = forecasts_df.groupby(level=0).ffill()
 
         if self.blacklist is not None:
             for cross_section, periods in self.blacklist.items():
@@ -151,9 +155,9 @@ class SignalOptimizer(BasePanelLearner):
                     ] = np.nan
 
         forecasts_df_long = pd.melt(
-            frame = forecasts_df.reset_index(),
-            id_vars = ["cid", "real_date"],
-            var_name = "xcat",
+            frame=forecasts_df.reset_index(),
+            id_vars=["cid", "real_date"],
+            var_name="xcat",
         )
         self.preds = pd.concat((self.preds, forecasts_df_long), axis=0).astype(
             {
@@ -166,8 +170,8 @@ class SignalOptimizer(BasePanelLearner):
 
         # Store model selection data
         model_df_long = pd.DataFrame(
-            columns = self.chosen_models.columns,
-            data = modelchoice_data,
+            columns=self.chosen_models.columns,
+            data=modelchoice_data,
         )
         self.chosen_models = pd.concat(
             (
@@ -235,7 +239,16 @@ class SignalOptimizer(BasePanelLearner):
             axis=0,
         ).astype(ftr_selection_types)
 
-    def store_quantamental_data(self, pipeline_name, model, X_train, y_train, X_test, y_test, adjusted_test_index):
+    def store_quantamental_data(
+        self,
+        pipeline_name,
+        model,
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        adjusted_test_index,
+    ):
         if model is not None:
             if hasattr(model, "create_signal"):
                 if callable(getattr(model, "create_signal")):
@@ -244,12 +257,14 @@ class SignalOptimizer(BasePanelLearner):
                 preds = model.predict(X_test)
         else:
             preds = np.zeros(X_test.shape[0])
-            
+
         prediction_data = [pipeline_name, adjusted_test_index, preds]
 
         return {"predictions": prediction_data}
 
-    def store_other_data(self, pipeline_name, optimal_model, X_train, y_train, X_test, y_test, timestamp):
+    def store_other_data(
+        self, pipeline_name, optimal_model, X_train, y_train, X_test, y_test, timestamp
+    ):
         feature_names = np.array(X_train.columns)
         if isinstance(optimal_model, Pipeline):
             final_estimator = optimal_model[-1]
@@ -259,7 +274,7 @@ class SignalOptimizer(BasePanelLearner):
                     break
         else:
             final_estimator = optimal_model
-        
+
         if hasattr(final_estimator, "coef_"):
             if len(final_estimator.coef_.shape) == 1:
                 coefs = np.array(final_estimator.coef_)
@@ -294,9 +309,7 @@ class SignalOptimizer(BasePanelLearner):
         # Get feature selection information
         if len(feature_names) == X_train.shape[1]:
             # Then all features were selected
-            ftr_selection_data = [timestamp, pipeline_name] + [
-                1 for _ in feature_names
-            ]
+            ftr_selection_data = [timestamp, pipeline_name] + [1 for _ in feature_names]
         else:
             # Then some features were excluded
             ftr_selection_data = [timestamp, pipeline_name] + [
@@ -312,13 +325,679 @@ class SignalOptimizer(BasePanelLearner):
 
         return other_data
 
+    def get_optimized_signals(self, name=None):
+        """
+        Returns optimized signals for one or more processes
+
+        Parameters
+        ----------
+        name : str or list, optional
+            Label(s) of signal optimization process(es). Default is all stored in the class
+            instance.
+
+        Returns
+        -------
+        pd.DataFrame
+            Pandas dataframe in JPMaQS format of working daily predictions.
+        """
+        if name is None:
+            return self.preds
+        else:
+            if isinstance(name, str):
+                name = [name]
+            elif not isinstance(name, list):
+                raise TypeError(
+                    "The process name must be a string or a list of strings."
+                )
+
+            for n in name:
+                if n not in self.preds.xcat.unique():
+                    raise ValueError(
+                        f"""The process name '{n}' is not in the list of already-run
+                        pipelines. Please check the name carefully. If correct, please run 
+                        calculate_predictions() first.
+                        """
+                    )
+            return self.preds[self.preds.xcat.isin(name)]
+
+    def get_selected_features(self, name=None):
+        """
+        Returns the selected features over time for one or more processes.
+
+        Parameters
+        ----------
+        name: str or list, optional
+            Label(s) of signal optimization process(es). Default is all stored in the class
+            instance.
+
+        Returns
+        -------
+        pd.DataFrame
+            Pandas dataframe of the selected features at each retraining date.
+        """
+        if name is None:
+            return self.selected_ftrs
+        else:
+            if isinstance(name, str):
+                name = [name]
+            elif not isinstance(name, list):
+                raise TypeError(
+                    "The process name must be a string or a list of strings."
+                )
+
+            for n in name:
+                if n not in self.selected_ftrs.name.unique():
+                    raise ValueError(
+                        f"""The process name '{n}' is not in the list of already-run
+                        pipelines. Please check the name carefully. If correct, please run 
+                        calculate_predictions() first.
+                        """
+                    )
+            return self.selected_ftrs[self.selected_ftrs.name.isin(name)]
+
+    def get_ftr_coefficients(self, name=None):
+        """
+        Returns feature coefficients for a given pipeline.
+
+        Parameters
+        ----------
+        name: str or list, optional
+            Label(s) of signal optimization process(es). Default is all stored in the
+            class instance.
+
+        Returns
+        -------
+        pd.DataFrame
+            Pandas dataframe of the feature coefficients, if available, learnt at each
+            retraining date for a given pipeline.
+        """
+        if name is None:
+            return self.ftr_coefficients
+        else:
+            if isinstance(name, str):
+                name = [name]
+            elif not isinstance(name, list):
+                raise TypeError(
+                    "The process name must be a string or a list of strings."
+                )
+
+            for n in name:
+                if n not in self.ftr_coefficients.name.unique():
+                    raise ValueError(
+                        f"""The process name '{n}' is not in the list of already-run
+                        pipelines. Please check the name carefully. If correct, please run 
+                        calculate_predictions() first.
+                        """
+                    )
+            return self.ftr_coefficients[
+                self.ftr_coefficients.name.isin(name)
+            ].sort_values(by="real_date")
+
+    def get_intercepts(self, name=None):
+        """
+        Returns intercepts for a given pipeline.
+
+        Parameters
+        ----------
+        name: str or list, optional
+            Label(s) of signal optimization process(es). Default is all stored in the
+            class instance.
+
+        Returns
+        -------
+        pd.DataFrame
+            Pandas dataframe of the intercepts, if available, learnt at each retraining
+            date for a given pipeline.
+        """
+        if name is None:
+            return self.intercepts
+        else:
+            if isinstance(name, str):
+                name = [name]
+            elif not isinstance(name, list):
+                raise TypeError(
+                    "The process name must be a string or a list of strings."
+                )
+
+            for n in name:
+                if n not in self.intercepts.name.unique():
+                    raise ValueError(
+                        f"""The process name '{n}' is not in the list of already-run
+                        pipelines. Please check the name carefully. If correct, please run 
+                        calculate_predictions() first.
+                        """
+                    )
+            return self.intercepts[self.intercepts.name.isin(name)].sort_values(
+                by="real_date"
+            )
+
+    def feature_selection_heatmap(
+        self,
+        name,
+        remove_blanks=True,
+        title=None,
+        cap=None,
+        ftrs_renamed=None,
+        figsize=(12, 8),
+    ):
+        """
+        Visualise the features chosen by the final selector in a scikit-learn pipeline
+        over time, for a given signal optimization process that has been run.
+
+        Parameters
+        ----------
+        name : str
+            Name of the previously run signal optimization process.
+        remove_blanks : bool, optional
+            Whether to remove features from the heatmap that were never selected. Default
+            is True.
+        title : str, optional
+            Title of the heatmap. Default is None. This creates a figure title of the form
+            "Model Selection Heatmap for {name}".
+        cap : int, optional
+            Maximum number of features to display. Default is None. The chosen features
+            are the 'cap' most frequently occurring in the pipeline.
+        ftrs_renamed : dict, optional
+            Dictionary to rename the feature names for visualisation in the plot axis.
+            Default is None, which uses the original feature names.
+        figsize : tuple of floats or ints, optional
+            Tuple of floats or ints denoting the figure size. Default is (12, 8).
+
+        Notes
+        -----
+        This method displays the features selected by the final selector in a scikit-learn
+        pipeline over time, for a given signal optimization process that has been run.
+        This information is contained within a binary heatmap.
+        This does not take into account inherent feature selection within the predictor.
+        """
+        # Checks
+        self._checks_feature_selection_heatmap(
+            name=name, title=title, ftrs_renamed=ftrs_renamed, figsize=figsize
+        )
+
+        # Get the selected features for the specified pipeline to visualise selection.
+        selected_ftrs = self.get_selected_features(name=name)
+        selected_ftrs["real_date"] = selected_ftrs["real_date"].dt.date
+        selected_ftrs = (
+            selected_ftrs.sort_values(by="real_date")
+            .drop(columns=["name"])
+            .set_index("real_date")
+        )
+
+        # Sort dataframe columns in descending order of the number of times they were selected
+        ftr_count = selected_ftrs.sum().sort_values(ascending=False)
+        if remove_blanks:
+            ftr_count = ftr_count[ftr_count > 0]
+        if cap is not None:
+            ftr_count = ftr_count.head(cap)
+
+        reindexed_columns = ftr_count.index
+        selected_ftrs = selected_ftrs[reindexed_columns]
+        if ftrs_renamed is not None:
+            selected_ftrs.rename(columns=ftrs_renamed, inplace=True)
+
+        # Create the heatmap
+        plt.figure(figsize=figsize)
+        if np.all(selected_ftrs == 1):
+            sns.heatmap(selected_ftrs.T, cmap="binary_r", cbar=False)
+        else:
+            sns.heatmap(selected_ftrs.T, cmap="binary", cbar=False)
+        plt.title(title)
+        plt.show()
+
+    def _checks_feature_selection_heatmap(
+        self,
+        name: str,
+        title=None,
+        ftrs_renamed=None,
+        figsize=(12, 8),
+    ):
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.selected_ftrs.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
+        if title is None:
+            title = f"Feature Selection Heatmap for {name}"
+        if not isinstance(title, str):
+            raise TypeError("The figure title must be a string.")
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, (int, float)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
+        if ftrs_renamed is not None:
+            if not isinstance(ftrs_renamed, dict):
+                raise TypeError("The ftrs_renamed argument must be a dictionary.")
+            for key, value in ftrs_renamed.items():
+                if not isinstance(key, str):
+                    raise TypeError(
+                        "The keys of the ftrs_renamed dictionary must be strings."
+                    )
+                if not isinstance(value, str):
+                    raise TypeError(
+                        "The values of the ftrs_renamed dictionary must be strings."
+                    )
+                if key not in self.X.columns:
+                    raise ValueError(
+                        f"""The key {key} in the ftrs_renamed dictionary is not a feature 
+                        in the pipeline {name}.
+                        """
+                    )
+                
+    def coefs_timeplot(
+        self,
+        name,
+        ftrs = None,
+        title = None,
+        ftrs_renamed = None,
+        figsize = (10, 6),
+    ):
+        """
+        Visualise time series of feature coefficients for a given pipeline, when
+        available. 
+        
+        Parameters
+        ----------
+        name : str
+            Name of the previously run signal optimization process.
+        ftrs : list, optional
+            List of feature names to plot. Default is None.
+        title : str, optional
+            Title of the plot. Default is None. This creates a figure title of the form
+            "Feature coefficients for pipeline: {name}".
+        ftrs_renamed : dict, optional
+            Dictionary to rename the feature names for visualisation in the plot legend.
+            Default is None, which uses the original feature names.
+        figsize : tuple of floats or ints, optional
+            Tuple of floats or ints denoting the figure size. Default is (10, 6).
+        
+        Notes
+        -----
+        This method displays the time series of feature coefficients for a given pipeline,
+        when available. This information is contained within a line plot. The default
+        behaviour is to plot the first 10 features in the order specified during training.
+        If more than 10 features were involved in the learning procedure, the default is
+        to plot the first 10 features. By specifying a `ftrs` list (which can be no longer
+        than 10 elements in length), this default behaviour can be overridden.
+        """
+        # Checks
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.ftr_coefficients.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
+        ftrcoef_df = self.get_ftr_coefficients(name)
+        if ftrcoef_df.iloc[:, 2:].isna().all().all():
+            raise ValueError(
+                f"""There are no non-NA coefficients for the pipeline {name}.
+                Cannot display a time series plot.
+                """
+            )
+        if ftrs is not None:
+            if not isinstance(ftrs, list):
+                raise TypeError("The ftrs argument must be a list.")
+            if len(ftrs) > 10:
+                raise ValueError(
+                    "The ftrs list must be no longer than 10 elements in length."
+                )
+            for ftr in ftrs:
+                if not isinstance(ftr, str):
+                    raise TypeError("The elements of the ftrs list must be strings.")
+                if ftr not in ftrcoef_df.columns:
+                    raise ValueError(
+                        f"""The feature {ftr} is not in the list of feature coefficients 
+                        for the pipeline {name}.
+                        """
+                    )
+        if not isinstance(title, str) and title is not None:
+            raise TypeError("The title must be a string.")
+        if ftrs_renamed is not None:
+            if not isinstance(ftrs_renamed, dict):
+                raise TypeError("The ftrs_renamed argument must be a dictionary.")
+            for key, value in ftrs_renamed.items():
+                if not isinstance(key, str):
+                    raise TypeError(
+                        "The keys of the ftrs_renamed dictionary must be strings."
+                    )
+                if not isinstance(value, str):
+                    raise TypeError(
+                        "The values of the ftrs_renamed dictionary must be strings."
+                    )
+                if key not in self.X.columns:
+                    raise ValueError(
+                        f"""The key {key} in the ftrs_renamed dictionary is not a feature 
+                        in the pipeline {name}.
+                        """
+                    )
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, (int, float, np.int_, np.float_)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
+
+        # Set the style
+        plt.style.use("seaborn-v0_8-darkgrid")
+
+        # Reshape dataframe for plotting
+        ftrcoef_df = self.get_ftr_coefficients(name)
+        ftrcoef_df = ftrcoef_df.set_index("real_date")
+        ftrcoef_df = ftrcoef_df.iloc[:, 1:]
+
+        # Sort dataframe columns in ascending order of the number of Na values in the columns
+        na_count = ftrcoef_df.isna().sum().sort_values()
+        reindexed_columns = na_count.index
+        ftrcoef_df = ftrcoef_df[reindexed_columns]
+        
+        if ftrs is not None:
+            ftrcoef_df = ftrcoef_df[ftrs]
+        else:
+            if ftrcoef_df.shape[1] > 11:
+                ftrcoef_df = pd.concat(
+                    (ftrcoef_df.iloc[:, :10], ftrcoef_df.iloc[:, -1]), axis=1
+                )
+
+        # Create time series plot
+        fig, ax = plt.subplots()
+        if ftrs_renamed is not None:
+            ftrcoef_df.rename(columns=ftrs_renamed).plot(ax=ax, figsize=figsize)
+        else:
+            ftrcoef_df.plot(ax=ax, figsize=figsize)
+
+        if title is not None:
+            plt.title(title)
+        else:
+            plt.title(f"Feature coefficients for pipeline: {name}")
+
+        plt.show()
+
+    def intercepts_timeplot(self, name, title=None, figsize=(10, 6)):
+        """
+        Visualise time series of intercepts for a given pipeline, when available.
+
+        Parameters
+        ----------
+        name : str
+            Name of the previously run signal optimization process.
+        title : str, optional
+            Title of the plot. Default is None. This creates a figure title of the form
+            "Intercepts for pipeline: {name}".
+        figsize : tuple of floats or ints, optional
+            Tuple of floats or ints denoting the figure size. Default is (10, 6).
+
+        Notes
+        -----
+        This method displays the time series of intercepts for a given pipeline, when
+        available. This information is contained within a line plot.
+        """
+        # Checks
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.intercepts.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
+        intercepts_df = self.get_intercepts(name)
+
+        # TODO: the next line will be made redundament once the signal optimiser checks for this
+        # and removes any pipelines with all NaN intercepts
+        if intercepts_df.iloc[:, 2:].isna().all().all():
+            raise ValueError(
+                f"""There are no non-NA intercepts for the pipeline {name}.
+                Cannot display a time series plot.
+                """
+            )
+        if not isinstance(title, str) and title is not None:
+            raise TypeError("The title must be a string.")
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, (int, float)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
+
+        # Set the style
+        plt.style.use("seaborn-v0_8-darkgrid")
+
+        # Reshape dataframe for plotting
+        intercepts_df = intercepts_df.set_index("real_date")
+        intercepts_df = intercepts_df.iloc[:, 1]
+
+        # Create time series plot
+        fig, ax = plt.subplots()
+        intercepts_df.plot(ax=ax, figsize=figsize)
+        if title is not None:
+            plt.title(title)
+        else:
+            plt.title(f"Intercepts for pipeline: {name}")
+
+        plt.show()
+
+    def coefs_stackedbarplot(
+        self,
+        name,
+        ftrs = None,
+        title = None,
+        cap = None,
+        ftrs_renamed = None,
+        figsize = (10, 6),
+    ):
+        """
+        Visualise feature coefficients for a given pipeline in a stacked bar plot. 
+
+        Parameters
+        ----------
+        name : str
+            Name of the previously run signal optimization process.
+        ftrs : list, optional
+            List of feature names to plot. Default is None.
+        title : str, optional
+            Title of the plot. Default is None. This creates a figure title of the form
+            "Stacked bar plot of model coefficients: {name}".
+        cap : int, optional
+            Maximum number of features to display. Default is None. The chosen features
+            are the 'cap' most frequently occurring in the pipeline. This cannot exceed 
+            10.
+        ftrs_renamed : dict, optional
+            Dictionary to rename the feature names for visualisation in the plot legend.
+            Default is None, which uses the original feature names.
+        figsize : tuple of floats or ints, optional
+            Tuple of floats or ints denoting the figure size. Default is (10, 6).
+
+        Notes
+        -----
+        This method displays the average feature coefficients for a given pipeline in each
+        calendar year, when available. This information is contained within a stacked bar
+        plot. The default behaviour is to plot the first 10 features in the order specified
+        during training. If more than 10 features were involved in the learning procedure,
+        the default is to plot the first 10 features. By specifying a `ftrs` list (which
+        can be no longer than 10 elements in length), this default behaviour can be
+        overridden.
+        """
+        # Checks
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.ftr_coefficients.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
+        ftrcoef_df = self.get_ftr_coefficients(name)
+        if ftrcoef_df.iloc[:, 2:].isna().all().all():
+            raise ValueError(
+                f"""There are no non-NA coefficients for the pipeline {name}.
+                Cannot display a stacked bar plot.
+                """
+            )
+        if ftrs is not None:
+            if not isinstance(ftrs, list):
+                raise TypeError("The ftrs argument must be a list.")
+            if len(ftrs) > 10:
+                raise ValueError(
+                    "The ftrs list must be no longer than 10 elements in length."
+                )
+            for ftr in ftrs:
+                if not isinstance(ftr, str):
+                    raise TypeError("The elements of the ftrs list must be strings.")
+                if ftr not in ftrcoef_df.columns:
+                    raise ValueError(
+                        f"""The feature {ftr} is not in the list of feature coefficients 
+                        for the pipeline {name}.
+                        """
+                    )
+
+        if not isinstance(title, str) and title is not None:
+            raise TypeError("The title must be a string.")
+        if ftrs_renamed is not None:
+            if not isinstance(ftrs_renamed, dict):
+                raise TypeError("The ftrs_renamed argument must be a dictionary.")
+            for key, value in ftrs_renamed.items():
+                if not isinstance(key, str):
+                    raise TypeError(
+                        "The keys of the ftrs_renamed dictionary must be strings."
+                    )
+                if not isinstance(value, str):
+                    raise TypeError(
+                        "The values of the ftrs_renamed dictionary must be strings."
+                    )
+                if key not in self.X.columns:
+                    raise ValueError(
+                        f"""The key {key} in the ftrs_renamed dictionary is not a feature 
+                        in the pipeline {name}.
+                        """
+                    )
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, (int, float, np.int_, np.float_)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
+        if cap is not None:
+            if not isinstance(cap, int):
+                raise TypeError("The cap argument must be an integer.")
+            if cap <= 0:
+                raise ValueError("The cap argument must be greater than zero.")
+            if cap > 10:
+                raise ValueError("The cap argument must be no greater than 10.")
+
+        # Set the style
+        plt.style.use("seaborn-v0_8-darkgrid")
+
+        # Reshape dataframe for plotting
+        ftrcoef_df = self.get_ftr_coefficients(name)
+        years = ftrcoef_df["real_date"].dt.year
+        years.name = "year"
+        ftrcoef_df.drop(columns=["real_date", "name"], inplace=True)
+
+        # Sort dataframe columns in ascending order of the number of Na values in the columns
+        na_count = ftrcoef_df.isna().sum().sort_values()
+        reindexed_columns = na_count.index
+        ftrcoef_df = ftrcoef_df[reindexed_columns]
+        if cap is not None:
+            ftrcoef_df = ftrcoef_df.T.head(cap).T
+        ftrcoef_df = pd.concat((ftrcoef_df, years), axis=1)
+
+        # Define colour map
+        default_cycle_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"][:10]
+        cmap = mcolors.LinearSegmentedColormap.from_list(
+            "default_cycle", default_cycle_colors
+        )
+
+        # Handle case where there are more than 10 features
+        if ftrs is not None:
+            ftrcoef_df = ftrcoef_df[ftrs + ["year"]]
+        else:
+            if ftrcoef_df.shape[1] > 11:
+                ftrcoef_df = pd.concat(
+                    (ftrcoef_df.iloc[:, :10], ftrcoef_df.iloc[:, -1]), axis=1
+                )
+
+        # Average the coefficients for each year and separate into positive and negative values
+        if ftrs_renamed is not None:
+            ftrcoef_df.rename(columns=ftrs_renamed, inplace=True)
+
+        avg_coefs = ftrcoef_df.groupby("year").mean()
+        pos_coefs = avg_coefs.clip(lower=0)
+        neg_coefs = avg_coefs.clip(upper=0)
+
+        # Create stacked bar plot
+        if pos_coefs.sum().any():
+            ax = pos_coefs.plot(
+                kind="bar", stacked=True, figsize=figsize, colormap=cmap, alpha=0.75
+            )
+        if neg_coefs.sum().any():
+            neg_coefs.plot(
+                kind="bar",
+                stacked=True,
+                figsize=figsize,
+                colormap=cmap,
+                alpha=0.75,
+                ax=ax,
+            )
+
+        # Display, title, axis labels
+        if title is None:
+            plt.title(f"Stacked bar plot of model coefficients: {name}")
+        else:
+            plt.title(title)
+
+        plt.xlabel("Year")
+        plt.ylabel("Average Coefficient Value")
+        plt.axhline(0, color="black", linewidth=0.8)  # Adds a line at zero
+
+        # Configure legend
+        handles, labels = plt.gca().get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        plt.legend(
+            by_label.values(),
+            by_label.keys(),
+            title="Coefficients",
+            bbox_to_anchor=(1.05, 1),
+            loc="upper left",
+        )
+
+        # Display plot
+        plt.tight_layout()
+        plt.show()
+
 
 if __name__ == "__main__":
     from sklearn.linear_model import LinearRegression
     from sklearn.metrics import make_scorer, r2_score
 
     import macrosynergy.management as msm
-    from macrosynergy.learning import regression_balanced_accuracy, ExpandingKFoldPanelSplit, RollingKFoldPanelSplit
+    from macrosynergy.learning import (
+        regression_balanced_accuracy,
+        ExpandingKFoldPanelSplit,
+        RollingKFoldPanelSplit,
+    )
     from macrosynergy.management.simulate import make_qdf
 
     cids = ["AUD", "CAD", "GBP", "USD"]
@@ -353,35 +1032,39 @@ if __name__ == "__main__":
     }
 
     so = SignalOptimizer(
-        df = dfd,
-        xcats = ["CRY", "GROWTH", "INFL", "XR"],
-        cids = cids,
-        blacklist = black,
+        df=dfd,
+        xcats=["CRY", "GROWTH", "INFL", "XR"],
+        cids=cids,
+        blacklist=black,
     )
 
     so.calculate_predictions(
-        name = "LR",
-        models = {
+        name="LR",
+        models={
             "LR": LinearRegression(),
         },
-        hyperparameters = {
+        hyperparameters={
             "LR": {"fit_intercept": [True, False], "positive": [True, False]},
         },
-        scorers = {
+        scorers={
             "r2": make_scorer(r2_score),
             "bac": make_scorer(regression_balanced_accuracy),
         },
-        inner_splitters = {
-            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits = 5),
-            "RollingKFold": RollingKFoldPanelSplit(n_splits = 5),
+        inner_splitters={
+            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
+            "RollingKFold": RollingKFoldPanelSplit(n_splits=5),
         },
-        search_type = "grid",
-        cv_summary = "median",
-        min_cids = 4,
-        min_periods = 36,
-        test_size = 1,
+        search_type="grid",
+        cv_summary="median",
+        min_cids=4,
+        min_periods=36,
+        test_size=1,
         n_jobs_outer=-1,
         n_jobs_inner=1,
     )
 
-    so.models_heatmap(name = "LR")
+    so.models_heatmap(name="LR")
+    so.feature_selection_heatmap(name="LR")
+    so.coefs_timeplot(name="LR")
+    so.intercepts_timeplot(name="LR")
+    so.coefs_stackedbarplot(name="LR")
