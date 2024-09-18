@@ -6,13 +6,18 @@ The functionality allows applying mathematical operations on time-series data.
 
 import numpy as np
 import pandas as pd
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df
-from macrosynergy.management.utils import drop_nan_series
+from macrosynergy.management.utils import (
+    reduce_df,
+    drop_nan_series,
+    concat_single_metric_qdfs,
+    ticker_df_to_qdf,
+)
 from macrosynergy import PYTHON_3_8_OR_LATER
 import re
 import random
+import gc
 
 
 def time_series_check(formula: str, index: int):
@@ -221,19 +226,37 @@ def panel_calculator(
             exec(f"{single} = dfw")
 
     # F. Calculate the panels and collect.
-    df_out: pd.DataFrame
+    # df_out: pd.DataFrame
+    # dfs_out: List[pd.DataFrame] = []
+    df_out: Union[pd.DataFrame, List[pd.DataFrame]] = []
     for new_xcat, formula in ops.items():
         dfw_add = eval(formula)
-        df_add = pd.melt(dfw_add.reset_index(), id_vars=["real_date"]).rename(
-            {"variable": "cid"}, axis=1
-        )
-        df_add["xcat"] = new_xcat
-        if new_xcat == list(ops.keys())[0]:
-            df_out = df_add[cols]
-        else:
-            df_out = pd.concat([df_out, df_add[cols]], axis=0, ignore_index=True)
+        df_out.append(dfw_add)
         dfw_add = _replace_zeros(df=dfw_add)
         exec(f"{new_xcat} = dfw_add")
+
+        # df_add = pd.melt(dfw_add.reset_index(), id_vars=["real_date"]).rename(
+        #     {"variable": "cid"}, axis=1
+        # )
+        # dfs_out.append(dfw_add)
+        # df_add["xcat"] = new_xcat
+        # if new_xcat == list(ops.keys())[0]:
+        #     df_out = df_add[cols]
+        # else:
+        #     df_out = pd.concat([df_out, df_add[cols]], axis=0, ignore_index=True)
+        # dfw_add = _replace_zeros(df=dfw_add)
+        # exec(f"{new_xcat} = dfw_add")
+
+    # gc.collect()
+
+    assert isinstance(df_out, list) and all(
+        isinstance(dfo, pd.DataFrame) for dfo in df_out
+    ), "`df_out` must be a list of DataFrames."
+    for dfo, xcat in zip(df_out, ops.keys()):
+        dfo.columns = [f"{col}_{xcat}" for col in dfo.columns]
+
+    df_out = ticker_df_to_qdf(pd.concat(df_out, axis=1))
+    gc.collect()
 
     if df_out.isna().any().any():
         df_out = drop_nan_series(df=df_out, raise_warning=True)
@@ -272,9 +295,6 @@ def _replace_zeros(df: pd.DataFrame):
     if not PYTHON_3_8_OR_LATER:
         for col in df.columns:
             df[col] = df[col].replace(0, np.nan)
-        return df
-    else:
-        return df
 
     return df
 
@@ -318,17 +338,18 @@ if __name__ == "__main__":
 
     # First testcase.
 
-    f1 = "NEW_VAR1 = GROWTH - iEUR_INFL"
-    formulas = [f1]
-    cidx = ["AUD", "CAD"]
-    df_calc = panel_calculator(
-        df=dfd, calcs=formulas, cids=cidx, start=start, end=end, blacklist=black
-    )
-    # Second testcase: EUR is not passed in as one of the cross-sections in "cids"
+    # f1 = "NEW_VAR1 = GROWTH - iEUR_INFL"
+    # formulas = [f1]
+    # cidx = ["AUD", "CAD"]
+    # df_calc = panel_calculator(
+    #     df=dfd, calcs=formulas, cids=cidx, start=start, end=end, blacklist=black
+    # )
+    # # Second testcase: EUR is not passed in as one of the cross-sections in "cids"
     # parameter but is defined in the dataframe. Therefore, code will not break.
     cids = ["AUD", "CAD", "GBP", "USD", "NZD"]
     formula = "NEW1 = XR - iUSD_XR"
     formula_2 = "NEW2 = GROWTH - iEUR_INFL"
+    formula
     formulas = [formula, formula_2]
     df_calc = panel_calculator(
         df=dfd, calcs=formulas, cids=cids, start=start, end=end, blacklist=black
