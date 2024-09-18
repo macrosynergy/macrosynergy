@@ -119,7 +119,7 @@ class SignalOptimizer(BasePanelLearner):
         )
         self.intercepts = pd.DataFrame(
             columns=["real_date", "name", "intercepts"]
-        )  # TODO: look at merging into ftr_coefficients
+        )
         self.selected_ftrs = pd.DataFrame(
             columns=["real_date", "name"] + list(self.X.columns)
         )
@@ -129,7 +129,7 @@ class SignalOptimizer(BasePanelLearner):
         name,
         models,
         hyperparameters,
-        scorers,  # TODO: make optional if no hyperparameters present. Then can skip hparam search
+        scorers,
         inner_splitters,
         search_type="grid",
         cv_summary="mean",
@@ -144,6 +144,62 @@ class SignalOptimizer(BasePanelLearner):
     ):
         """
         Determine forecasts and store relevant quantities over time.
+
+        Parameters
+        ----------
+        name : str
+            Name of the signal optimization process.
+        models : dict
+            Dictionary of models to choose from. The keys are model names and the values
+            are scikit-learn compatible models.
+        hyperparameters : dict
+            Dictionary of hyperparameters to choose from. The keys are model names and
+            the values are hyperparameter dictionaries for the corresponding model. The
+            keys must match with those provided in `models`.
+        scorers : dict
+            Dictionary of scoring functions to use in the hyperparameter optimization
+            process. The keys are scorer names and the values are scikit-learn compatible
+            scoring functions. 
+        inner_splitters : dict
+            Dictionary of inner splitters to use in the hyperparameter optimization
+            process. The keys are splitter names and the values are scikit-learn compatible
+            cross-validator objects.
+        search_type : str, optional
+            Type of hyperparameter optimization to perform. Default is "grid". Options are
+            "grid" and "prior".
+        cv_summary : str or callable, optional
+            Summary function to use to combine scores across cross-validation folds.
+            Default is "mean". Options are "mean", "median" or a callable function.
+        min_cids : int, optional
+            Minimum number of cross-sections required for the initial
+            training set. Default is 4.
+        min_periods : int, optional
+            Minimum number of periods required for the initial training set, in units of
+            the frequency `freq` specified in the constructor. Default is 36.
+        test_size : int, optional
+            Number of periods to pass before retraining a selected model. Default is 1.
+        max_periods : int, optional
+            Maximum length of each training set in units of the frequency `freq` specified
+            in the constructor. Default is None, in which case the sequential optimization
+            uses expanding training sets, as opposed to rolling windows.
+        split_functions : dict, optional
+            Dict of callables for determining the number of cross-validation
+            splits to add to the initial number as a function of the number of iterations
+            passed in the sequential learning process. Default is None. The keys must 
+            correspond to the keys in `inner_splitters` and should be set to None for any
+            splitters that do not require splitter adjustment.
+        n_iter : int, optional
+            Number of iterations to run in random hyperparameter search. Default is None.
+        n_jobs_outer : int, optional
+            Number of jobs to run in parallel for the outer sequential loop. Default is -1.
+            It is advised for n_jobs_inner * n_jobs_outer (replacing -1 with the number of 
+            available cores) to be less than or equal to the number of available cores on
+            the machine.
+        n_jobs_inner : int, optional
+            Number of jobs to run in parallel for the inner loop. Default is 1. 
+            It is advised for n_jobs_inner * n_jobs_outer (replacing -1 with the number of 
+            available cores) to be less than or equal to the number of available cores on
+            the machine.
         """
         # First create pandas dataframes to store the forecasts
         forecasts_df = pd.DataFrame(
@@ -1108,7 +1164,7 @@ if __name__ == "__main__":
         min_cids=4,
         min_periods=36,
         test_size=1,
-        n_jobs_outer=-1,
+        n_jobs_outer=1,
         n_jobs_inner=1,
     )
 
