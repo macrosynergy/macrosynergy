@@ -37,7 +37,6 @@ class BasePanelLearner(ABC):
         blacklist=None,
         freq="M",
         lag=1,
-        # slip?
         xcat_aggs=["last", "sum"],
     ):
         """
