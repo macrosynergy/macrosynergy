@@ -14,6 +14,7 @@ from .view_grades import heatmap_grades
 from .view_ranges import view_ranges
 from .view_timelines import view_timelines
 from .view_metrics import view_metrics
+from .imputers import impute_panel
 
 __all__ = [
     "Basket",
@@ -28,6 +29,7 @@ __all__ = [
     "make_relative_category",
     "make_zn_scores",
     "panel_calculator",
+    "impute_panel",
     "correl_matrix",
     "heatmap_grades",
     "view_ranges",

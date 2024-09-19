@@ -346,7 +346,7 @@ def linear_composite(
             warnings.warn(
                 "`signs` must be a list of +1s or -1s. "
                 "`signs` will be coerced to +1s/-1s. "
-                "(i.e. signs ← abs(signs) / signs)"
+                "(i.e. signs = abs(signs) / signs)"
             )
 
             signs: List[float] = [abs(x) / x for x in signs]

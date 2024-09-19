@@ -546,7 +546,7 @@ class TestInformationStateChanges(unittest.TestCase):
 
     def test_get_releases(self):
         qdf = get_long_format_data(end="2012-01-01")
-        isc_obj = InformationStateChanges.from_qdf(qdf)
+        isc_obj: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
         from_date = "2010-01-01"
         to_date = "2010-10-01"
         res = isc_obj.get_releases(
@@ -609,11 +609,11 @@ class TestInformationStateChanges(unittest.TestCase):
             .reset_index(drop=True)
         )
 
-        isc_obj = InformationStateChanges.from_qdf(qdf)
+        isc_obj: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
         res = isc_obj.get_releases()
-        
+
         # Ensure compatibility with Pandas 1.3.5
-        unique_dates = res['real_date'].unique()
+        unique_dates = res["real_date"].unique()
         timestamp_list = [pd.Timestamp(date) for date in unique_dates]
 
         self.assertTrue(set(res.index) == set(random_tickers))
@@ -661,11 +661,11 @@ class TestInformationStateChanges(unittest.TestCase):
             .reset_index(drop=True)
         )
 
-        isc_obj = InformationStateChanges.from_qdf(qdf)
+        isc_obj: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
         res = isc_obj.get_releases(excl_xcats=excl_xcats)
 
         # Ensure compatibility with Pandas 1.3.5
-        unique_dates = res['real_date'].unique()
+        unique_dates = res["real_date"].unique()
         timestamp_list = [pd.Timestamp(date) for date in unique_dates]
 
         self.assertTrue(set(get_xcat(list(set(res.index)))) == set(selected_xcats))
@@ -711,6 +711,24 @@ class TestInformationStateChanges(unittest.TestCase):
             dfa = isc[ticker].sort_index()
             dfb = isc_test[ticker].sort_index()
             self.assertTrue((dfa["std"]).equals(dfb["std"].shift(periods=1)))
+
+    def test_from_isc_df(self):
+        qdf = get_long_format_data(
+            end="2012-01-01", cids=["USD"], xcats=["GDP"], num_freqs=1
+        )
+        isc_min: InformationStateChanges = InformationStateChanges.from_qdf(
+            qdf, norm=False
+        )
+        isc_min.calculate_score()
+        tickers = list(isc_min.keys())
+        assert len(tickers) == 1
+        test_ticker = tickers[0]
+        new_isc: InformationStateChanges = InformationStateChanges.from_isc_df(
+            df=isc_min[test_ticker],
+            ticker=test_ticker,
+        )
+
+        self.assertTrue(isc_min == new_isc)
 
 
 if __name__ == "__main__":

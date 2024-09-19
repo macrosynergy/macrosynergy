@@ -449,8 +449,6 @@ def validate_download_args(
     """
     Validate the arguments passed to the `download_data()` method.
 
-    :params : -- see `download_data()` method.
-
     :return <bool>: True if all arguments are valid.
 
     :raises <TypeError>: if any of the arguments are of the wrong type.
@@ -558,8 +556,8 @@ class DataQueryInterface(object):
     :param <str> token_url: token URL for the DataQuery API. Defaults to OAUTH_TOKEN_URL.
     :param <bool> suppress_warnings: whether to suppress warnings. Defaults to True.
 
-    :param custom_auth: custom authentication object. When specified oauth must be False
-        and the object must have a get_auth method. Defaults to None.
+    :param <Any> custom_auth: custom authentication object. When specified oauth must be 
+        False and the object must have a get_auth method. Defaults to None.
 
     :return <DataQueryInterface>: DataQueryInterface object.
 

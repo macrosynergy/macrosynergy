@@ -8,7 +8,7 @@ What is the Academy?
 
 The Macro Quantamental Academy is a free educational resource designed
 to complement the use and application of the J.P. Morgan Macrosynergy
-Quantamental System or ‘JPMaQS’. Access to JPMaQS macro quantamental
+Quantamental System or 'JPMaQS'. Access to JPMaQS macro quantamental
 indicators requires a licence from J.P. Morgan and is subject to
 separate terms and conditions provided by J.P. Morgan.
 

@@ -28,7 +28,7 @@ def multiple_reg_scatter(
     separator=None,
     single_chart=False,
     subplot_titles=None,
-    color_cids=False
+    color_cids=False,
 ):
     """
     Visualize the results of a multiple regression analysis across categories.
@@ -48,7 +48,7 @@ def multiple_reg_scatter(
     :param <bool> reg_robust: if True (default is False) robust standard errors are used.
     :param <str> coef_box: if not None, a box with the coefficients of the regression is
         displayed. Default is None.
-    :param <int> coef_box_font_size: font size of the coefficients box. Default is 12. If 
+    :param <int> coef_box_font_size: font size of the coefficients box. Default is 12. If
         set to 0 it automatically sets the fontsize according to matplotlib.
     :param <str> prob_est: method to estimate the probability. Default is 'pool'.
     :param <int> separator: allows categorizing the scatter analysis by
@@ -111,9 +111,7 @@ def multiple_reg_scatter(
 
         width = (figsize[0] // ncol) * 6
 
-        wrapped_title = "\n".join(
-            textwrap.wrap(subplot_title, width=width)
-        )
+        wrapped_title = "\n".join(textwrap.wrap(subplot_title, width=width))
         cat_rel.reg_scatter(
             title=wrapped_title,
             labels=False,
@@ -129,7 +127,7 @@ def multiple_reg_scatter(
             single_chart=single_chart,
             separator=separator,
             ax=ax,
-            single_scatter=single_scatter
+            single_scatter=single_scatter,
         )
 
     plt.subplots_adjust(top=title_yadj - 0.01)
@@ -274,7 +272,7 @@ if __name__ == "__main__":
         ncol=3,
         nrow=2,
         coef_box="upper right",
-        color_cids=True
+        color_cids=True,
     )
 
     multiple_reg_scatter(

@@ -94,8 +94,10 @@ class Test_All(unittest.TestCase):
         self.assertEqual(unique_ticker[0], "USD_INDX_SA")
 
     def test_make_graded(self):
-        graded: pd.DataFrame = self.vins_m.make_graded(grading=[3, 2.1, 1], upgrades=[12, 24])
-        
+        graded: pd.DataFrame = self.vins_m.make_graded(
+            grading=[3, 2.1, 1], upgrades=[12, 24]
+        )
+
         min_release_date = graded["release_date"].min().strftime("%Y-%m-%d")
         max_release_date = graded["release_date"].max().strftime("%Y-%m-%d")
 
@@ -147,6 +149,7 @@ class Test_All(unittest.TestCase):
                 added_dates=6,
                 freq="M",
             ).make_grade1()
+
 
 if __name__ == "__main__":
     unittest.main()

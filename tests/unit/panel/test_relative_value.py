@@ -11,9 +11,7 @@ import warnings
 
 
 class TestAll(unittest.TestCase):
-    
-    
-    
+
     def setUp(self) -> None:
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD"]
         self.xcats: List[str] = ["XR", "CRY", "GROWTH", "INFL"]
@@ -52,7 +50,7 @@ class TestAll(unittest.TestCase):
         }
 
         self.blacklist: Dict[str, List[str]] = black
-        
+
     def tearDown(self) -> None:
         return super().tearDown()
 
