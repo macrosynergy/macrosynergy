@@ -1,5 +1,5 @@
 """
-Base class for a cross-validation splitter for panel data.
+Base classes for panel cross-validation splitters.
 """
 
 from typing import List, Tuple
@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import datetime
 
 from sklearn.model_selection import (
     BaseCrossValidator,
@@ -312,3 +313,305 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                 raise ValueError("The input data must have string outer index representing panel cross-sections.")
             if X.index.get_level_values(1).dtype != "datetime64[ns]":
                 raise ValueError("The input data must have datetime inner index representing timestamps as datetime64[ns].")
+            
+# class WalkForwardPanelSplit(BasePanelSplit, ABC):
+#     """
+#     Base class for a generic walk-forward panel cross-validator.
+
+#     Provides train/test indices to split a panel into train/test sets. Following an
+#     initial training set construction, a forward test set is created. The training and
+#     test set pair evolves over time by walking forward through the panel.
+
+#     Parameters
+#     ----------
+#     min_cids : int
+#         Minimum number of cross-sections required for the first training set.
+#         Either start_date or (min_cids, min_periods) must be provided.
+#         If both are provided, start_date takes precedence.
+#     min_periods : int
+#         Minimum number of time periods required for the first training set. Either
+#         start_date or (min_cids, min_periods) must be provided. If both are
+#         provided, start_date takes precedence.
+#     min_xcats : Optional[int]
+#         Minimum number of features required in the first training set. Default is None,
+#         in which case only samples where all features are present are considered.
+#     start_date : Optional[str]
+#         The targeted final date in the initial training set in ISO 8601 format. When
+#         min_xcats is not None, the largest date out of start_date and the first date
+#         at which min_xcats features are available is used. Otherwise, start_date is used.
+#         Default is None. Either start_date or (min_cids, min_periods) must be provided.
+#         If both are provided, start_date takes precedence.
+#     max_periods : Optional[int]
+#         The maximum number of time periods in each training set. If the maximum is
+#         exceeded, the earliest periods are cut off. This effectively creates rolling
+#         training sets. Default is None.
+#     """
+
+#     def __init__(
+#         self,
+#         min_cids,
+#         min_periods,
+#         min_xcats=None,
+#         start_date=None,
+#         max_periods=None,
+#     ):
+#         # Checks
+#         self._check_wf_params(
+#             min_cids=min_cids,
+#             min_periods=min_periods,
+#             min_xcats=min_xcats,
+#             start_date=start_date,
+#             max_periods=max_periods,
+#         )
+
+#         # Attributes
+#         self.min_cids = min_cids
+#         self.min_periods = min_periods
+#         self.min_xcats = min_xcats
+#         self.start_date = pd.Timestamp(start_date) if start_date else None
+#         self.max_periods = max_periods
+
+#     def _check_wf_params(
+#         self, min_cids, min_periods, min_xcats, start_date, max_periods
+#     ):
+#         """
+#         Type and value checks for the class initialisation parameters.
+
+#         Parameters
+#         ----------
+#         min_cids : int
+#             Minimum number of cross-sections required for the first training set.
+#         min_periods : int
+#             Minimum number of time periods required for the first training set.
+#         min_xcats : Optional[int]
+#             Minimum number of features required in the first training set.
+#         start_date : Optional[str]
+#             The targeted final date in the initial training set in ISO 8601 format.
+#         max_periods : Optional[int]
+#             The maximum number of time periods in each training set.
+#         """
+#         # min_cids
+#         if not isinstance(min_cids, int):
+#             raise TypeError(f"min_cids must be an integer. Got {type(min_cids)}.")
+#         if min_cids < 1:
+#             raise ValueError(
+#                 f"min_cids must be an integer greater than 0. Got {min_cids}."
+#             )
+#         # min_periods
+#         if not isinstance(min_periods, int):
+#             raise TypeError(f"min_periods must be an integer. Got {type(min_periods)}.")
+#         if min_periods < 1:
+#             raise ValueError(
+#                 f"min_periods must be an integer greater than 0. Got {min_periods}."
+#             )
+#         # min_xcats
+#         if min_xcats is not None and not isinstance(min_xcats, int):
+#             raise TypeError(f"min_xcats must be an integer. Got {type(min_xcats)}.")
+#         if min_xcats is not None and min_xcats < 1:
+#             raise ValueError(
+#                 f"min_xcats must be an integer greater than 0. Got {min_xcats}."
+#             )
+#         # start_date
+#         if start_date is not None and not isinstance(start_date, str):
+#             raise TypeError(f"start_date must be a string. Got {type(start_date)}.")
+#         if start_date is not None:
+#             try:
+#                 datetime.datetime.fromisoformat(start_date)
+#             except ValueError:
+#                 raise ValueError(
+#                     f"start_date must be in ISO 8601 format. Got {start_date}."
+#                 )
+#         # max_periods
+#         if max_periods is not None and not isinstance(max_periods, int):
+#             raise TypeError(f"max_periods must be an integer. Got {type(max_periods)}.")
+#         if max_periods is not None and max_periods < 1:
+#             raise ValueError(
+#                 f"max_periods must be an integer greater than 0. Got {max_periods}."
+#             )
+        
+#     def _check_split_params(self, X, y, groups):
+#         """
+#         Type and value checks for the `split()` method parameters.
+
+#         Parameters
+#         ----------
+#         X : pd.DataFrame
+#             Pandas dataframe of features, multi-indexed by (cross-section, date). The
+#             dates must be in datetime format. Otherwise the dataframe must be in wide
+#             format: each feature is a column.
+
+#         y : Union[pd.DataFrame, pd.Series]
+#             Pandas dataframe or series of a target variable, multi-indexed by
+#             (cross-section, date). The dates must be in datetime format. If a dataframe
+#             is provided, the target variable must be the sole column.
+
+#         groups : None
+#             Ignored. Exists for compatibility with scikit-learn.
+#         """
+#         # X
+#         if not isinstance(X.index, pd.MultiIndex):
+#             raise ValueError("X must be multi-indexed.")
+#         if not pd.api.types.is_datetime64_any_dtype(X.index.get_level_values(1)):
+#             raise ValueError(
+#                 f"The dates in X must be datetime objects. Got {X.index.get_level_values(1).dtype} instead."
+#             )
+#         # y
+#         if not isinstance(y.index, pd.MultiIndex):
+#             raise ValueError("y must be multi-indexed.")
+#         if not pd.api.types.is_datetime64_any_dtype(y.index.get_level_values(1)):
+#             raise ValueError(
+#                 f"The dates in y must be datetime objects. Got {y.index.get_level_values(1).dtype} instead."
+#             )
+#         if not X.index.equals(y.index):
+#             raise ValueError(
+#                 "The indices of the input dataframe X and the output dataframe y don't"
+#                 "match."
+#             )
+#         # groups
+#         if groups is not None:
+#             raise ValueError("groups is not supported by this splitter.")
+        
+class KFoldPanelSplit(BasePanelSplit, ABC):
+    def __init__(self, n_splits = 5, min_nsplits = 2):
+        # Checks
+        if not isinstance(n_splits, int):
+            raise TypeError(f"n_splits must be an integer. Got {type(n_splits)}.")
+        if n_splits < min_nsplits:
+            raise ValueError(
+                f"Cannot have number of splits less than {min_nsplits}. Got n_splits = {n_splits}."
+            )
+        
+        # Attributes
+        self.n_splits = n_splits
+
+    def split(self, X, y, groups=None):
+        """
+        Generate indices to split data into training and test sets.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Pandas dataframe of features, multi-indexed by (cross-section, date). The
+            dates must be in datetime format. Otherwise the dataframe must be in wide
+            format: each feature is a column.
+
+        y : Union[pd.DataFrame, pd.Series]
+            Pandas dataframe or series of a target variable, multi-indexed by
+            (cross-section, date). The dates must be in datetime format. If a dataframe
+            is provided, the target variable must be the sole column.
+
+        groups : None
+            Ignored. Exists for compatibility with scikit-learn.
+
+        Yields
+        ------
+        train : np.ndarray
+            The training set indices for that split.
+
+        test : np.ndarray
+            The testing set indices for that split.
+        """
+        # Checks
+        self._check_split_params(X, y, groups)
+
+        # Store necessary quantities
+        Xy = pd.concat([X, y], axis=1)
+        Xy.dropna(inplace=True)
+        dates = Xy.index.get_level_values(1)
+        unique_dates = dates.unique().sort_values()
+
+        # Calculate splits 
+        splits = self._determine_splits(unique_dates, self.n_splits)
+
+        # Yield splits
+        for idx, split in enumerate(splits):
+            yield self._get_split_indicies(idx, split, Xy, dates, unique_dates)
+
+    @abstractmethod
+    def _determine_splits(self, unique_dates, n_splits):
+        """
+        Determine panel splits based on the sorted collection of unique dates and the
+        number of splits specified by the user.
+
+        Parameters
+        ----------
+        unique_dates : pd.DatetimeIndex
+            Sorted collection of unique dates in the panel.
+        n_splits : int
+            Number of splits to generate.
+
+        Returns
+        -------
+        splits : list of np.ndarray
+            List of numpy arrays denoting dates in each split.
+        """
+        pass
+
+    @abstractmethod
+    def _get_split_indicies(self, idx, split, Xy, dates, unique_dates):
+        """
+        Determine the training and test set indices for a given split.
+
+        Parameters
+        ----------
+        idx : int
+            Index of the current split.
+        split : np.ndarray
+            Numpy array of dates to induce the split.
+        Xy : pd.DataFrame
+            Combined dataframe of the features and the target variable.
+        dates : pd.DatetimeIndex
+            DatetimeIndex of all dates in the panel.
+        unique_dates : pd.DatetimeIndex
+            Sorted collection of unique dates in the panel.
+
+        Returns
+        -------
+        train : np.ndarray
+            The training set indices for that split.
+        test : np.ndarray
+            The testing set indices for that split.
+        """
+        pass
+
+    def _check_split_params(self, X, y, groups):
+        """
+        Splitter input checks.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Pandas dataframe of features, multi-indexed by (cross-section, date). The
+            dates must be in datetime format. Otherwise the dataframe must be in wide
+            format: each feature is a column.
+
+        y : Union[pd.DataFrame, pd.Series]
+            Pandas dataframe or series of a target variable, multi-indexed by
+            (cross-section, date). The dates must be in datetime format. If a dataframe
+            is provided, the target variable must be the sole column.
+
+        groups : None
+            Ignored. Exists for compatibility with scikit-learn.
+        """
+        # X
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not pd.api.types.is_datetime64_any_dtype(X.index.get_level_values(1)):
+            raise ValueError(
+                f"The dates in X must be datetime objects. Got {X.index.get_level_values(1).dtype} instead."
+            )
+        # y
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed.")
+        if not pd.api.types.is_datetime64_any_dtype(y.index.get_level_values(1)):
+            raise ValueError(
+                f"The dates in y must be datetime objects. Got {y.index.get_level_values(1).dtype} instead."
+            )
+        if not X.index.equals(y.index):
+            raise ValueError(
+                "The indices of the input dataframe X and the output dataframe y don't"
+                "match."
+            )
+        # groups
+        if groups is not None:
+            raise ValueError("groups is not supported by this splitter.")
