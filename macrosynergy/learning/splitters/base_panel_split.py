@@ -147,7 +147,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                 raise ValueError("figsize must contain only positive integers.")
 
         # Obtain relevant data
-        Xy: pd.DataFrame = self._combine_Xy(X, y)
+        Xy: pd.DataFrame = pd.concat([X, y], axis=1).dropna()
         cross_sections = np.array(sorted(Xy.index.get_level_values(0).unique()))
         real_dates = Xy.index.get_level_values(1).unique().sort_values()
 
@@ -188,11 +188,11 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         for cs_idx, cs in enumerate(cross_sections):
             for idx, split_idx in enumerate(split_idxs):
                 # Get the dates in the training and test sets for the given cross-section.
-                cs_train_dates: pd.DatetimeIndex = X.iloc[splits[split_idx][0]][
-                    X.iloc[splits[split_idx][0]].index.get_level_values(0) == cs
+                cs_train_dates: pd.DatetimeIndex = Xy.iloc[splits[split_idx][0]][
+                    Xy.iloc[splits[split_idx][0]].index.get_level_values(0) == cs
                 ].index.get_level_values(1)
-                cs_test_dates: pd.DatetimeIndex = X.iloc[splits[split_idx][1]][
-                    X.iloc[splits[split_idx][1]].index.get_level_values(0) == cs
+                cs_test_dates: pd.DatetimeIndex = Xy.iloc[splits[split_idx][1]][
+                    Xy.iloc[splits[split_idx][1]].index.get_level_values(0) == cs
                 ].index.get_level_values(1)
 
                 xranges_train: List[Tuple[pd.Timestamp, pd.Timedelta]] = (
@@ -247,30 +247,6 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         plt.legend(frameon=True)
         plt.tight_layout()
         plt.show()
-
-    @abstractmethod
-    def _combine_Xy(self, X, y):
-        """
-        Combine the features and target variable into a single dataframe. This is
-        dependent on the specific splitter implementation and, consequently, the
-        implementation of the constructor.
-
-        Parameters
-        ----------
-        X : pd.DataFrame
-            Pandas dataframe of features/quantamental indicators, multi-indexed by
-            (cross-section, date). The dates must be in datetime format. The
-            dataframe must be in wide format: each feature is a column.
-        y : pd.DataFrame
-            Pandas dataframe of target variable, multi-indexed by (cross-section, date).
-            The dates must be in datetime format.
-
-        Returns
-        -------
-        Xy : pd.DataFrame
-            Combined dataframe of the features and the target variable.
-        """
-        pass
 
     def _check_Xy(self, X, y):
         """
@@ -525,7 +501,33 @@ class KFoldPanelSplit(BasePanelSplit, ABC):
 
         # Yield splits
         for idx, split in enumerate(splits):
-            yield self._get_split_indicies(idx, split, Xy, dates, unique_dates)
+            yield self._get_split_indicies(idx, split, splits, Xy, dates, unique_dates)
+
+    def _combine_Xy(self, X, y):
+        """
+        Combine the features and target variable into a single dataframe for subsequent
+        processing.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Pandas dataframe of features/quantamental indicators, multi-indexed by
+            (cross-section, date). The dates must be in datetime format. The
+            dataframe must be in wide format: each feature is a column.
+        y : pd.DataFrame
+            Pandas dataframe of target variable, multi-indexed by (cross-section, date).
+            The dates must be in datetime format.
+
+        Returns
+        -------
+        Xy : pd.DataFrame
+            Combined dataframe of the features and the target variable.
+        """
+        # Drop samples with a missing target variable
+        Xy = pd.concat([X, y], axis=1)
+        Xy.dropna(inplace=True)
+
+        return Xy
 
     @abstractmethod
     def _determine_splits(self, unique_dates, n_splits):
