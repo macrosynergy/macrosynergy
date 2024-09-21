@@ -500,8 +500,8 @@ class KFoldPanelSplit(BasePanelSplit, ABC):
         splits = self._determine_splits(unique_dates, self.n_splits)
 
         # Yield splits
-        for idx, split in enumerate(splits):
-            yield self._get_split_indicies(idx, split, splits, Xy, dates, unique_dates)
+        for n_split in range(self.n_splits):
+            yield self._get_split_indicies(n_split, splits, Xy, dates, unique_dates)
 
     @abstractmethod
     def _determine_splits(self, unique_dates, n_splits):

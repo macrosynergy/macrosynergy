@@ -30,10 +30,10 @@ class ExpandingKFoldPanelSplit(KFoldPanelSplit):
     def _determine_splits(self, unique_dates, n_splits):
         return np.array_split(unique_dates, n_splits + 1)
 
-    def _get_split_indicies(self, idx, split, splits, Xy, dates, unique_dates):
-        train_split = np.concatenate(splits[:idx+1])
+    def _get_split_indicies(self, n_split, splits, Xy, dates, unique_dates):
+        train_split = np.concatenate(splits[:n_split+1])
         train_indices = np.where(dates.isin(train_split))[0]
-        test_indices = np.where(dates.isin(split))[0]
+        test_indices = np.where(dates.isin(splits[n_split + 1]))[0]
 
         return train_indices, test_indices
     
@@ -61,9 +61,9 @@ class RollingKFoldPanelSplit(KFoldPanelSplit):
     def _determine_splits(self, unique_dates, n_splits):
         return np.array_split(unique_dates, n_splits)
     
-    def _get_split_indicies(self, idx, split, splits, Xy, dates, unique_dates):
-        test_split = split
-        train_split = np.concatenate(splits[:idx] + splits[idx+1:])
+    def _get_split_indicies(self, n_split, splits, Xy, dates, unique_dates):
+        test_split = splits[n_split]
+        train_split = np.concatenate(splits[:n_split] + splits[n_split+1:])
         train_indices = np.where(dates.isin(train_split))[0]
         test_indices = np.where(dates.isin(test_split))[0]
 
@@ -110,8 +110,8 @@ class RecencyKFoldPanelSplit(KFoldPanelSplit):
     def _determine_splits(self, unique_dates, n_splits):
         return np.array_split(unique_dates[-n_splits * self.n_periods:], n_splits)
     
-    def _get_split_indicies(self, idx, split, splits, Xy, dates, unique_dates):
-        test_split = np.array(split, dtype=np.datetime64)
+    def _get_split_indicies(self, n_split, splits, Xy, dates, unique_dates):
+        test_split = np.array(splits[n_split], dtype=np.datetime64)
         train_split = unique_dates[unique_dates < test_split[0]]
 
         train_indices = np.where(dates.isin(train_split))[0]
