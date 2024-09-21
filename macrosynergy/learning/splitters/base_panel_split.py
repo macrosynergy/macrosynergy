@@ -530,10 +530,10 @@ class KFoldPanelSplit(BasePanelSplit, ABC):
 
         Parameters
         ----------
-        idx : int
+        n_split : int
             Index of the current split.
-        split : np.ndarray
-            Numpy array of dates to induce the split.
+        splits : list of np.ndarray
+            List of numpy arrays denoting dates in each split.
         Xy : pd.DataFrame
             Combined dataframe of the features and the target variable.
         dates : pd.DatetimeIndex

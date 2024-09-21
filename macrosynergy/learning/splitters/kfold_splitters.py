@@ -5,7 +5,7 @@ Panel K-Fold cross-validator classes.
 import numpy as np
 import pandas as pd
 
-from macrosynergy.learning.splitters import BasePanelSplit, KFoldPanelSplit
+from macrosynergy.learning.splitters import KFoldPanelSplit
 
 class ExpandingKFoldPanelSplit(KFoldPanelSplit):
     """
@@ -28,9 +28,48 @@ class ExpandingKFoldPanelSplit(KFoldPanelSplit):
     is the 'i+1'th interval.
     """
     def _determine_splits(self, unique_dates, n_splits):
+        """
+        Determine panel time period splits based on the sorted collection of unique dates and the
+        number of splits specified by the user.
+
+        Parameters
+        ----------
+        unique_dates : pd.DatetimeIndex
+            Sorted collection of unique dates in the panel.
+        n_splits : int
+            Number of splits to generate.
+
+        Returns
+        -------
+        splits : list of np.ndarray
+            List of numpy arrays denoting dates in each split.
+        """
         return np.array_split(unique_dates, n_splits + 1)
 
     def _get_split_indicies(self, n_split, splits, Xy, dates, unique_dates):
+        """
+        Determine the training and test set indices for a given split.
+
+        Parameters
+        ----------
+        n_split : int
+            Index of the current split.
+        splits : list of np.ndarray
+            List of numpy arrays denoting dates in each split.
+        Xy : pd.DataFrame
+            Combined dataframe of the features and the target variable.
+        dates : pd.DatetimeIndex
+            DatetimeIndex of all dates in the panel.
+        unique_dates : pd.DatetimeIndex
+            Sorted collection of unique dates in the panel.
+
+        Returns
+        -------
+        train : np.ndarray
+            The training set indices for that split.
+        test : np.ndarray
+            The testing set indices for that split.
+        """
         train_split = np.concatenate(splits[:n_split+1])
         train_indices = np.where(dates.isin(train_split))[0]
         test_indices = np.where(dates.isin(splits[n_split + 1]))[0]
@@ -59,9 +98,48 @@ class RollingKFoldPanelSplit(KFoldPanelSplit):
     """
 
     def _determine_splits(self, unique_dates, n_splits):
+        """
+        Determine panel time period splits based on the sorted collection of unique dates and the
+        number of splits specified by the user.
+
+        Parameters
+        ----------
+        unique_dates : pd.DatetimeIndex
+            Sorted collection of unique dates in the panel.
+        n_splits : int
+            Number of splits to generate.
+
+        Returns
+        -------
+        splits : list of np.ndarray
+            List of numpy arrays denoting dates in each split.
+        """
         return np.array_split(unique_dates, n_splits)
     
     def _get_split_indicies(self, n_split, splits, Xy, dates, unique_dates):
+        """
+        Determine the training and test set indices for a given split.
+
+        Parameters
+        ----------
+        n_split : int
+            Index of the current split.
+        splits : list of np.ndarray
+            List of numpy arrays denoting dates in each split.
+        Xy : pd.DataFrame
+            Combined dataframe of the features and the target variable.
+        dates : pd.DatetimeIndex
+            DatetimeIndex of all dates in the panel.
+        unique_dates : pd.DatetimeIndex
+            Sorted collection of unique dates in the panel.
+
+        Returns
+        -------
+        train : np.ndarray
+            The training set indices for that split.
+        test : np.ndarray
+            The testing set indices for that split.
+        """
         test_split = splits[n_split]
         train_split = np.concatenate(splits[:n_split] + splits[n_split+1:])
         train_indices = np.where(dates.isin(train_split))[0]
@@ -108,9 +186,48 @@ class RecencyKFoldPanelSplit(KFoldPanelSplit):
         self.n_periods = n_periods
 
     def _determine_splits(self, unique_dates, n_splits):
+        """
+        Determine panel time period splits based on the sorted collection of unique dates and the
+        number of splits specified by the user.
+
+        Parameters
+        ----------
+        unique_dates : pd.DatetimeIndex
+            Sorted collection of unique dates in the panel.
+        n_splits : int
+            Number of splits to generate.
+
+        Returns
+        -------
+        splits : list of np.ndarray
+            List of numpy arrays denoting dates in each split.
+        """
         return np.array_split(unique_dates[-n_splits * self.n_periods:], n_splits)
     
     def _get_split_indicies(self, n_split, splits, Xy, dates, unique_dates):
+        """
+        Determine the training and test set indices for a given split.
+
+        Parameters
+        ----------
+        n_split : int
+            Index of the current split.
+        splits : list of np.ndarray
+            List of numpy arrays denoting dates in each split.
+        Xy : pd.DataFrame
+            Combined dataframe of the features and the target variable.
+        dates : pd.DatetimeIndex
+            DatetimeIndex of all dates in the panel.
+        unique_dates : pd.DatetimeIndex
+            Sorted collection of unique dates in the panel.
+
+        Returns
+        -------
+        train : np.ndarray
+            The training set indices for that split.
+        test : np.ndarray
+            The testing set indices for that split.
+        """
         test_split = np.array(splits[n_split], dtype=np.datetime64)
         train_split = unique_dates[unique_dates < test_split[0]]
 
