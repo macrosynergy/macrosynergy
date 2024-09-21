@@ -503,32 +503,6 @@ class KFoldPanelSplit(BasePanelSplit, ABC):
         for idx, split in enumerate(splits):
             yield self._get_split_indicies(idx, split, splits, Xy, dates, unique_dates)
 
-    def _combine_Xy(self, X, y):
-        """
-        Combine the features and target variable into a single dataframe for subsequent
-        processing.
-
-        Parameters
-        ----------
-        X : pd.DataFrame
-            Pandas dataframe of features/quantamental indicators, multi-indexed by
-            (cross-section, date). The dates must be in datetime format. The
-            dataframe must be in wide format: each feature is a column.
-        y : pd.DataFrame
-            Pandas dataframe of target variable, multi-indexed by (cross-section, date).
-            The dates must be in datetime format.
-
-        Returns
-        -------
-        Xy : pd.DataFrame
-            Combined dataframe of the features and the target variable.
-        """
-        # Drop samples with a missing target variable
-        Xy = pd.concat([X, y], axis=1)
-        Xy.dropna(inplace=True)
-
-        return Xy
-
     @abstractmethod
     def _determine_splits(self, unique_dates, n_splits):
         """
