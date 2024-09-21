@@ -524,7 +524,7 @@ class KFoldPanelSplit(BasePanelSplit, ABC):
         pass
 
     @abstractmethod
-    def _get_split_indicies(self, idx, split, Xy, dates, unique_dates):
+    def _get_split_indicies(self, idx, split, splits, Xy, dates, unique_dates):
         """
         Determine the training and test set indices for a given split.
 
