@@ -508,95 +508,95 @@ class TestAll(unittest.TestCase):
             weight_meth="equal", max_weight=0.6, basket_name="GLB_EQUAL"
         )
 
-        # baskets = basket_2.dict_retcry
-        # basket_names = list(baskets.keys())
-        # self.assertTrue(next(iter(basket_names)) == "GLB_EQUAL")
+        baskets = basket_2.dict_retcry
+        basket_names = list(baskets.keys())
+        self.assertTrue(next(iter(basket_names)) == "GLB_EQUAL")
 
-        # # Secondly, test the dimensions of the concatenated dataframe.
-        # # The returned dataframe should have the same number of rows given the basket
-        # # return sums all contracts on each timestamp.
-        # no_rets = len(self.dfw_ret.index)
-        # no_cry = 0
-        # for carry in self.dfw_cry:
-        #     assert isinstance(carry, pd.DataFrame)
-        #     no_cry += len(carry.index)
-        # no_rows = no_rets + no_cry
-        # self.assertTrue(no_rows == basket_2.dict_retcry["GLB_EQUAL"].shape[0])
+        # Secondly, test the dimensions of the concatenated dataframe.
+        # The returned dataframe should have the same number of rows given the basket
+        # return sums all contracts on each timestamp.
+        no_rets = len(self.dfw_ret.index)
+        no_cry = 0
+        for carry in self.dfw_cry:
+            assert isinstance(carry, pd.DataFrame)
+            no_cry += len(carry.index)
+        no_rows = no_rets + no_cry
+        self.assertTrue(no_rows == basket_2.dict_retcry["GLB_EQUAL"].shape[0])
 
-        # basket_2.make_basket(
-        #     weight_meth="invsd",
-        #     lback_meth="ma",
-        #     lback_periods=21,
-        #     max_weight=0.55,
-        #     remove_zeros=True,
-        #     basket_name="GLB_INVERSE",
-        # )
-        # weights = [1 / 6, 1 / 12, 1 / 12, 1 / 6, 1 / 2]
-        # basket_2.make_basket(
-        #     weight_meth="fixed",
-        #     weights=weights,
-        #     max_weight=0.55,
-        #     basket_name="GLB_FIXED",
-        # )
-        # basket_keys = basket_2.dict_retcry.keys()
-        # for b in basket_keys:
-        #     self.assertTrue(b in ["GLB_EQUAL", "GLB_INVERSE", "GLB_FIXED"])
-        # weight_keys = basket_2.dict_wgs.keys()
-        # self.assertTrue(list(weight_keys) == list(basket_keys))
+        basket_2.make_basket(
+            weight_meth="invsd",
+            lback_meth="ma",
+            lback_periods=21,
+            max_weight=0.55,
+            remove_zeros=True,
+            basket_name="GLB_INVERSE",
+        )
+        weights = [1 / 6, 1 / 12, 1 / 12, 1 / 6, 1 / 2]
+        basket_2.make_basket(
+            weight_meth="fixed",
+            weights=weights,
+            max_weight=0.55,
+            basket_name="GLB_FIXED",
+        )
+        basket_keys = basket_2.dict_retcry.keys()
+        for b in basket_keys:
+            self.assertTrue(b in ["GLB_EQUAL", "GLB_INVERSE", "GLB_FIXED"])
+        weight_keys = basket_2.dict_wgs.keys()
+        self.assertTrue(list(weight_keys) == list(basket_keys))
 
-        # # Confirm the computed basket calculations are as expected.
-        # # To test the basket performance, choose an arbitrary index and isolate the
-        # # corresponding rows in the weight dataframe and contract returns dataframe, and
-        # # subsequently complete the manual calculation.
-        # dfw_ret = self.dfw_ret
-        # basket_2 = Basket(
-        #     df=self.dfd,
-        #     contracts=self.contracts,
-        #     ret="XR_NSA",
-        #     cry=["CRY_NSA", "CRR_NSA"],
-        #     blacklist=self.black,
-        #     ewgts="WBASE_NSA",
-        # )
-        # basket_2.make_basket(
-        #     weight_meth="equal", max_weight=0.45, basket_name="GLB_EQUAL"
-        # )
-        # dfw_wgs = basket_2.dict_wgs["GLB_EQUAL"]
-        # basket_df = basket_2.dict_retcry["GLB_EQUAL"]
-        # basket_df_dates = basket_df["real_date"].to_numpy()
+        # Confirm the computed basket calculations are as expected.
+        # To test the basket performance, choose an arbitrary index and isolate the
+        # corresponding rows in the weight dataframe and contract returns dataframe, and
+        # subsequently complete the manual calculation.
+        dfw_ret = self.dfw_ret
+        basket_2 = Basket(
+            df=self.dfd,
+            contracts=self.contracts,
+            ret="XR_NSA",
+            cry=["CRY_NSA", "CRR_NSA"],
+            blacklist=self.black,
+            ewgts="WBASE_NSA",
+        )
+        basket_2.make_basket(
+            weight_meth="equal", max_weight=0.45, basket_name="GLB_EQUAL"
+        )
+        dfw_wgs = basket_2.dict_wgs["GLB_EQUAL"]
+        basket_df = basket_2.dict_retcry["GLB_EQUAL"]
+        basket_df_dates = basket_df["real_date"].to_numpy()
 
-        # random_index_date = dfw_ret.index[1017]
-        # index = np.where(basket_df_dates == random_index_date)
-        # index_xr = index[0][0]
-        # assert index_xr == 1017
+        random_index_date = dfw_ret.index[1017]
+        index = np.where(basket_df_dates == random_index_date)
+        index_xr = index[0][0]
+        assert index_xr == 1017
 
-        # weight_row = dfw_wgs.loc[random_index_date]
-        # weight_row = weight_row.sort_index(axis=0)
-        # w_row_array = weight_row.to_numpy()
+        weight_row = dfw_wgs.loc[random_index_date]
+        weight_row = weight_row.sort_index(axis=0)
+        w_row_array = weight_row.to_numpy()
 
-        # return_row = dfw_ret.loc[random_index_date]
-        # return_row = return_row.sort_index(axis=0)
+        return_row = dfw_ret.loc[random_index_date]
+        return_row = return_row.sort_index(axis=0)
 
-        # manual_calculation = return_row.multiply(w_row_array).sum(axis=0)
-        # manual_value = round(manual_calculation, 5)
-        # # Test on the return category: 'XR_NSA'.
-        # basket_xr = basket_df[basket_df["ticker"] == "GLB_EQUAL_XR_NSA"]
-        # basket_value = round(basket_xr.iloc[index_xr]["value"], 5)
-        # self.assertTrue(manual_value == basket_value)
+        manual_calculation = return_row.multiply(w_row_array).sum(axis=0)
+        manual_value = round(manual_calculation, 5)
+        # Test on the return category: 'XR_NSA'.
+        basket_xr = basket_df[basket_df["ticker"] == "GLB_EQUAL_XR_NSA"]
+        basket_value = round(basket_xr.iloc[index_xr]["value"], 5)
+        self.assertTrue(manual_value == basket_value)
 
-        # # Complete the same logic for a carry category.
-        # dfw_cry = self.dfw_cry
-        # # List of dataframes. Extract the first dataframe corresponding to the category
-        # # CRY_NSA.
-        # assert isinstance(dfw_cry, list)
+        # Complete the same logic for a carry category.
+        dfw_cry = self.dfw_cry
+        # List of dataframes. Extract the first dataframe corresponding to the category
+        # CRY_NSA.
+        assert isinstance(dfw_cry, list)
 
-        # dfw_cry = dfw_cry[0]
-        # carry_row = dfw_cry.loc[random_index_date].to_numpy()
-        # # Account for the different column names across the two dataframes.
-        # manual_value = round(np.sum(carry_row * weight_row.to_numpy()), 5)
-        # basket_cry = basket_df[basket_df["ticker"] == "GLB_EQUAL_CRY_NSA"]
-        # index_cry = np.where(basket_cry["real_date"] == random_index_date)[0][0]
-        # basket_value = round(basket_cry.iloc[index_cry]["value"], 5)
-        # self.assertTrue(manual_value == basket_value)
+        dfw_cry = dfw_cry[0]
+        carry_row = dfw_cry.loc[random_index_date].to_numpy()
+        # Account for the different column names across the two dataframes.
+        manual_value = round(np.sum(carry_row * weight_row.to_numpy()), 5)
+        basket_cry = basket_df[basket_df["ticker"] == "GLB_EQUAL_CRY_NSA"]
+        index_cry = np.where(basket_cry["real_date"] == random_index_date)[0][0]
+        basket_value = round(basket_cry.iloc[index_cry]["value"], 5)
+        self.assertTrue(manual_value == basket_value)
 
     def test_weight_visualiser(self):
         # Will exclusively test the assert statements in the method. The various
