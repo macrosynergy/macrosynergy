@@ -119,7 +119,7 @@ def drop_nan_series(
     if not column in df.columns:
         raise ValueError(f"Column {column} not present in DataFrame.")
 
-    if not df["value"].isna().any():
+    if not df[column].isna().any():
         return df
 
     if not isinstance(raise_warning, bool):
@@ -129,7 +129,7 @@ def drop_nan_series(
     for cd, xc in df_orig.groupby(["cid", "xcat"]).groups:
         sel_series: pd.Series = df_orig[
             (df_orig["cid"] == cd) & (df_orig["xcat"] == xc)
-        ]["value"]
+        ][column]
         if sel_series.isna().all():
             if raise_warning:
                 warnings.warn(
