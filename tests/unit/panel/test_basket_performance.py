@@ -689,6 +689,7 @@ class TestAll(unittest.TestCase):
             blacklist=self.black,
             ewgts=None,
         )
+
         # catch warnings
         with warnings.catch_warnings(record=True) as wc:
 
