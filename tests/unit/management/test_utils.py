@@ -33,6 +33,7 @@ from macrosynergy.management.utils import (
 )
 from macrosynergy.management.constants import FREQUENCY_MAP
 from macrosynergy.management.utils.math import expanding_mean_with_nan
+from macrosynergy.management.utils.core import USE_NEW_DATE_FREQ
 from tests.simulate import make_qdf
 from tests.unit.download.mock_helpers import mock_request_wrapper
 
@@ -873,6 +874,10 @@ class TestFunctions(unittest.TestCase):
 
     def test_map_to_business_day_frequency(self):
         fm_copy = FREQUENCY_MAP.copy()
+        if USE_NEW_DATE_FREQ:
+            fm_copy["M"] = "BME"
+            fm_copy["Q"] = "BQE"
+
         for k in fm_copy.keys():
             self.assertEqual(
                 _map_to_business_day_frequency(k), fm_copy[k], f"Failed for {k}"

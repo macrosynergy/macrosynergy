@@ -177,7 +177,7 @@ def _map_to_business_day_frequency(freq: str, valid_freqs: List[str] = None) -> 
     if freq in FREQUENCY_MAP.values():
         freq = list(FREQUENCY_MAP.keys())[list(FREQUENCY_MAP.values()).index(freq)]
 
-    if freq not in valid_freqs:
+    if freq not in valid_freqs and not ((freq in ["BME", "BQE"]) and USE_NEW_DATE_FREQ):
         raise ValueError(
             f"Frequency must be one of {valid_freqs}, but received {freq}."
         )
@@ -185,6 +185,8 @@ def _map_to_business_day_frequency(freq: str, valid_freqs: List[str] = None) -> 
     if USE_NEW_DATE_FREQ:
         if freq in ["M", "Q"]:
             return FREQUENCY_MAP[freq] + "E"
+        if freq in ["BME", "BQE"]:
+            return freq
 
     return FREQUENCY_MAP[freq]
 
