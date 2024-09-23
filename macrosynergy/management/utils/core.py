@@ -15,6 +15,8 @@ from packaging import version
 
 from macrosynergy.management.constants import FREQUENCY_MAP
 
+USE_NEW_DATE_FREQ = version.parse(pd.__version__) > version.parse("2.1.4")
+
 
 @overload
 def get_cid(ticker: str) -> str: ...
@@ -179,6 +181,10 @@ def _map_to_business_day_frequency(freq: str, valid_freqs: List[str] = None) -> 
         raise ValueError(
             f"Frequency must be one of {valid_freqs}, but received {freq}."
         )
+
+    if USE_NEW_DATE_FREQ:
+        if freq in ["M", "Q"]:
+            return FREQUENCY_MAP[freq] + "E"
 
     return FREQUENCY_MAP[freq]
 
