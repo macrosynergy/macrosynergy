@@ -689,24 +689,27 @@ class TestAll(unittest.TestCase):
             blacklist=self.black,
             ewgts=None,
         )
-        basket_1.make_basket(
-            weight_meth="equal", max_weight=0.45, basket_name="GLB_EQUAL"
-        )
-        basket_1.make_basket(
-            weight_meth="invsd",
-            lback_meth="ma",
-            lback_periods=21,
-            max_weight=0.55,
-            remove_zeros=True,
-            basket_name="GLB_INVERSE",
-        )
-        weights = [1 / 6, 1 / 12, 1 / 12, 1 / 6, 1 / 2]
-        basket_1.make_basket(
-            weight_meth="fixed",
-            weights=weights,
-            max_weight=0.55,
-            basket_name="GLB_FIXED",
-        )
+        # catch warnings
+        with warnings.catch_warnings(record=True) as wc:
+
+            basket_1.make_basket(
+                weight_meth="equal", max_weight=0.45, basket_name="GLB_EQUAL"
+            )
+            basket_1.make_basket(
+                weight_meth="invsd",
+                lback_meth="ma",
+                lback_periods=21,
+                max_weight=0.55,
+                remove_zeros=True,
+                basket_name="GLB_INVERSE",
+            )
+            weights = [1 / 6, 1 / 12, 1 / 12, 1 / 6, 1 / 2]
+            basket_1.make_basket(
+                weight_meth="fixed",
+                weights=weights,
+                max_weight=0.55,
+                basket_name="GLB_FIXED",
+            )
 
         # Test the feature that if a basket_name is not specified by the user, default
         # is equal to None, then all of the computed baskets will be returned. In this
