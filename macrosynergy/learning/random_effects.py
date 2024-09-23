@@ -16,8 +16,8 @@ class RandomEffects(BaseEstimator):
     A custom sklearn estimator that fits a random effects model using linearmodels.
     """
 
-    def __init__(self, group_col, add_constant=True):
-        self.add_constant = add_constant
+    def __init__(self, group_col="real_date", fit_intercept=True):
+        self.fit_intercept = fit_intercept
         self.group_col = group_col
 
     def fit(self, X, y):
@@ -31,9 +31,6 @@ class RandomEffects(BaseEstimator):
         y : array-like, shape (n_samples,)
             Target values.
         """
-        # Check that X and y have correct shape
-        # X, y = check_X_y(X, y, accept_pd_dataframe=True)
-
         if isinstance(y, pd.Series):
             y = y.to_frame()
         if isinstance(X, pd.Series):
@@ -47,7 +44,7 @@ class RandomEffects(BaseEstimator):
         if self.group_col not in X.index.names:
             raise ValueError(f"Group column '{self.group_col}' not found in X's index.")
 
-        if self.add_constant:
+        if self.fit_intercept:
             X = add_constant(X)
 
         # Fit the random effects model
@@ -57,8 +54,8 @@ class RandomEffects(BaseEstimator):
 
     def _fit(self, df_x, df_y):
 
-        y_demeaned = self.demean(df_y)
-        x_demeaned = self.demean(df_x)
+        y_demeaned = self._demean(df_y)
+        x_demeaned = self._demean(df_x)
 
         # Fixed Effect Estimation
         params, ssr, _, _ = np.linalg.lstsq(x_demeaned, y_demeaned, rcond=None)
@@ -116,14 +113,14 @@ class RandomEffects(BaseEstimator):
         idiosyncratic = pd.DataFrame(eps, index, ["idiosyncratic"])
         residual_ss = float(np.squeeze(eps.T @ eps))
 
-        if self.add_constant:
+        if self.fit_intercept:
             y = y - y.mean(0)
 
         total_ss = float(np.squeeze(y.T @ y))
         r2 = 1 - residual_ss / total_ss
 
         self.set_params(
-            coef_=params,
+            coef_=params.reshape(-1),
             fitted=fitted,
             effects=effects,
             idiosyncratic=idiosyncratic,
@@ -131,6 +128,11 @@ class RandomEffects(BaseEstimator):
             r2=r2,
             sigma2_residuals=sigma2_e,
             sigma2_effects=sigma2_a,
+            theta=theta,
+            residuals=eps,
+            residual_ss=residual_ss,
+            total_ss=total_ss,
+            nobs=nobs,
         )
 
     def get_params(self):
@@ -143,9 +145,13 @@ class RandomEffects(BaseEstimator):
             setattr(self, key, value)
         return self
 
-    def demean(self, df):
+    def _demean(self, df):
         mu = df.groupby(level=self.group_col).transform("mean")
-        return (df - mu + df.mean(0)).to_numpy()
+        df_demeaned = df - mu
+        if self.fit_intercept:
+            return (df_demeaned + df.mean(0)).to_numpy()
+        else:
+            return df_demeaned.to_numpy()
 
     def _s2(self, eps, _nobs, _scale=1.0):
         return _scale * float(np.squeeze(eps.T @ eps)) / _nobs
@@ -210,10 +216,10 @@ if __name__ == "__main__":
         # # as opposed to the cross-section
         # print(ftr)
 
-        # rem = RandomEffects(group_col="real_date", add_constant=False)
-        # rem.fit(ftr, y)
+        rem = RandomEffects(group_col="real_date", fit_intercept=True)
+        rem.fit(ftr, y)
 
-        # ftr = add_constant(ftr)
+        ftr = add_constant(ftr)
         re = lm_RandomEffects(y.swaplevel(), ftr.swaplevel()).fit()
         print(ftr)
         # est = re.params[col]
