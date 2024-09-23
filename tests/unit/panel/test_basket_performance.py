@@ -532,12 +532,14 @@ class TestAll(unittest.TestCase):
             basket_name="GLB_INVERSE",
         )
         weights = [1 / 6, 1 / 12, 1 / 12, 1 / 6, 1 / 2]
-        basket_2.make_basket(
-            weight_meth="fixed",
-            weights=weights,
-            max_weight=0.55,
-            basket_name="GLB_FIXED",
-        )
+
+        with warnings.catch_warnings(record=True) as wc:
+            basket_2.make_basket(
+                weight_meth="fixed",
+                weights=weights,
+                max_weight=0.55,
+                basket_name="GLB_FIXED",
+            )
         basket_keys = basket_2.dict_retcry.keys()
         for b in basket_keys:
             self.assertTrue(b in ["GLB_EQUAL", "GLB_INVERSE", "GLB_FIXED"])
