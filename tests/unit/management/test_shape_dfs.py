@@ -4,7 +4,11 @@ import numpy as np
 import pandas as pd
 from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY
 from tests.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df, categories_df
+from macrosynergy.management.utils import (
+    reduce_df,
+    categories_df,
+    _map_to_business_day_frequency,
+)
 from math import ceil, floor
 from datetime import timedelta
 from pandas.tseries.offsets import BMonthEnd
@@ -282,12 +286,13 @@ class TestAll(unittest.TestCase):
             self.dfd["real_date"].dt.month.isin([10, 11, 12])
         )
         filt2 = (self.dfd["cid"] == "AUD") & (self.dfd["xcat"] == "XR")
+        _freq = _map_to_business_day_frequency("M")
         x1 = round(
             float(
                 np.mean(
                     self.dfd[filt1 & filt2]
                     .set_index("real_date")
-                    .resample("M")
+                    .resample(_freq)
                     .mean(**RESAMPLE_NUMERIC_ONLY)
                 )
             ),
@@ -384,8 +389,8 @@ class TestAll(unittest.TestCase):
         # value will be removed.
         earliest_date = min(self.dfd["real_date"])
         last_date = max(self.dfd["real_date"])
-
-        dates = pd.date_range(start=earliest_date, end=last_date, freq="M")
+        _freq = _map_to_business_day_frequency("M")
+        dates = pd.date_range(start=earliest_date, end=last_date, freq=_freq)
         # Reduce to a single cross-section.
         index = dfc.loc["AUD", :].index
 
