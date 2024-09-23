@@ -540,6 +540,10 @@ class TestAll(unittest.TestCase):
                 max_weight=0.55,
                 basket_name="GLB_FIXED",
             )
+            # should be 1568 runtime warnings
+            self.assertTrue(len(wc) == 1568)
+            self.assertTrue(all(issubclass(w.category, RuntimeWarning) for w in wc))
+
         basket_keys = basket_2.dict_retcry.keys()
         for b in basket_keys:
             self.assertTrue(b in ["GLB_EQUAL", "GLB_INVERSE", "GLB_FIXED"])
