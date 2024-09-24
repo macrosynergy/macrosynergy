@@ -3,6 +3,7 @@ from typing import List, Optional, Tuple
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+
 def view_table(
     df: pd.DataFrame,
     title: Optional[str] = None,

@@ -2,6 +2,7 @@
 Basket class for calculating the returns and carries of baskets 
 of financial contracts using various weighting methods.
 """
+
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -35,7 +36,7 @@ class Basket(object):
     :param <dict> blacklist: cross-sections with date ranges that should be excluded
         from the DataFrame. If one cross-section has several blacklist periods append
         numbers to the cross-section code.
-    :param List[str] ewgts: one or more postfixes that may identify exogenous weight
+    :param <List[str]> ewgts: one or more postfixes that may identify exogenous weight
         categories. Similar to return postfixes they are appended to base tickers.
 
     N.B.: Each instance of the class will update associated standardised DataFrames,
@@ -491,7 +492,7 @@ class Basket(object):
                 returns.
             [4] "values": weights proportionate to a panel of values of exogenous weight
                 category.
-            [5] "inv_values": weights are inversely proportionate to of values of 
+            [5] "inv_values": weights are inversely proportionate to of values of
                 exogenous weight category.
         :param <List[float]> weights: single list of weights corresponding to the base
             tickers in `contracts` argument. This is only relevant for the fixed weight

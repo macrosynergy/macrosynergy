@@ -56,11 +56,11 @@ def view_ranges(
         # If there is more than 2 xcats we need to move the legend further down by a
         # factor of 0.05 for each additional xcat.
         legend_bbox_to_anchor = (0.5, -0.15 - 0.05 * (len(xcats) - 2))
-        legend_loc = 'upper center'
+        legend_loc = "upper center"
 
     if legend_loc is None:
-        legend_loc = 'upper center'
-    
+        legend_loc = "upper center"
+
     msv.view_ranges(
         df=df,
         xcats=xcats,
@@ -98,7 +98,6 @@ if __name__ == "__main__":
     df_xcats.loc["CRY",] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
     df_xcats.loc["INFL",] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
     df_xcats.loc["GROWTH",] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
-
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 

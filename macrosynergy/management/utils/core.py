@@ -299,7 +299,7 @@ def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type
     :param <Any> match_type: If not None, the function will look for
         a key that matches the search parameters and has
         the specified type. Default is None.
-    :return Any: The value associated with the key, or None if the key
+    :return <Any>: The value associated with the key, or None if the key
         is not found.
     """
     if not isinstance(d, dict):

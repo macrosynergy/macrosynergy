@@ -248,6 +248,7 @@ def _find_missing_in_df(df: pd.DataFrame, col_name: str, values: List, param_nam
 
     return missing
 
+
 def _validate_Xy_learning(X: pd.DataFrame, y: Union[pd.DataFrame, pd.Series]):
     """
     Validates the expected long-format inputs and targets expected for the learning
