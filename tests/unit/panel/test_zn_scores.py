@@ -591,14 +591,14 @@ class TestAll(unittest.TestCase):
             r_xcat: str = "CRY"
             self.dfd.loc[
                 (self.dfd["cid"] == r_cid) & (self.dfd["xcat"] == r_xcat), "value"
-            ]: float = pd.NA
+            ] = pd.NA
             dfr: pd.DataFrame = make_zn_scores(
                 df=self.dfd,
                 xcat=r_xcat,
                 cids=self.cids,
                 start="2010-01-01",
             )
-            dfr["xcat"]: pd.Series = dfr["xcat"].str.replace("ZN", "")
+            dfr["xcat"] = dfr["xcat"].str.replace("ZN", "")
             self.assertEqual(dfr["xcat"].unique()[0], r_xcat)
             self.assertFalse(r_cid in dfr["cid"].unique())
             warnings.resetwarnings()
