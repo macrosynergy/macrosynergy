@@ -3,6 +3,7 @@ from typing import Any, Optional, Union
 import numpy as np
 import pandas as pd
 from linearmodels.panel import RandomEffects as lm_RandomEffects, PanelOLS, PooledOLS
+import scipy.stats as stats
 from sklearn.base import BaseEstimator
 from statsmodels.tools.tools import add_constant
 
@@ -31,6 +32,7 @@ class RandomEffects(BaseEstimator):
         self.group_col = group_col
 
         self.params = None
+        self.std_errors = None
         self.coef_ = None
         self.intercept_ = None
         self.fitted = None
@@ -89,7 +91,7 @@ class RandomEffects(BaseEstimator):
         alpha = np.asarray(ybar.values) - np.asarray(xbar.values) @ params
 
         # Estimate variances
-        nobs = df_y.shape[0]
+        nobs = float(df_y.shape[0])
         neffects = alpha.shape[0]
         nvars = df_x.shape[1]
 
@@ -118,11 +120,11 @@ class RandomEffects(BaseEstimator):
         y = y - ybar.values
         x = x - xbar.values
 
-        params, ssr, _, _ = np.linalg.lstsq(x, y, rcond=None)
+        params, residual_ss, _, _ = np.linalg.lstsq(x, y, rcond=None)
         eps = y - x @ params
 
         # Covariance estimation
-        cov_matrix = self._cov(x, ssr, nobs)
+        cov_matrix = self._cov(x, residual_ss, nobs)
 
         index = df_y.index
         fitted = pd.DataFrame(df_x.values @ params, index, ["fitted_values"])
@@ -132,7 +134,6 @@ class RandomEffects(BaseEstimator):
             ["estimated_effects"],
         )
         idiosyncratic = pd.DataFrame(eps, index, ["idiosyncratic"])
-        residual_ss = float(np.squeeze(eps.T @ eps))
 
         if self.fit_intercept:
             y = y - y.mean(0)
@@ -140,13 +141,17 @@ class RandomEffects(BaseEstimator):
         total_ss = float(np.squeeze(y.T @ y))
         r2 = 1 - residual_ss / total_ss
         
-        self.params = pd.Series(params.reshape(-1), index=df_x.columns)
+        self.features = df_x.columns
+        self.params = pd.Series(params.reshape(-1), index=self.features, name="params")
+        self.std_errors = pd.Series(np.sqrt(np.diag(cov_matrix)), index=self.features, name="std_error")
 
         # For sklearn compatibility
         if self.fit_intercept:
             self.intercept_ = self.params["const"]
             self.coef_ = self.params.drop("const").values.reshape(-1)
-
+        else:
+            self.intercept_ = 0
+            self.coef_ = self.params.values.reshape(-1)
         self.fitted = fitted
         self.effects = effects
         self.idiosyncratic = idiosyncratic
@@ -218,7 +223,16 @@ class RandomEffects(BaseEstimator):
             raise ValueError(f"Group column '{self.group_col}' not found in index.")
         
         return df
-        
+    
+    @property
+    def pvals(self):
+        """
+        Compute the p-values for the parameter estimates.
+        """
+        zstat = self.params / self.std_errors
+        pvals = 2 * (1 - stats.norm.cdf(np.abs(zstat)))
+        return pd.Series(pvals, index=self.features, name="pvals")
+
 
 if __name__ == "__main__":
 
@@ -269,9 +283,9 @@ if __name__ == "__main__":
     # Keep significant features
     for col in feature_names_in_[:1]:
         ftr = X[col].copy()
-        ftr = add_constant(ftr)
+        # ftr = add_constant(ftr)
 
-        rem = RandomEffects(group_col="real_date", fit_intercept=False)
+        rem = RandomEffects(group_col="real_date", fit_intercept=True)
         rem.fit(ftr, y)
 
         ftr = ftr.rename(xs_codes, level=0, inplace=False).copy()
@@ -282,7 +296,3 @@ if __name__ == "__main__":
         # est = re.params[col]
         # zstat = est / re.std_errors[col]
         # pval = 2 * (1 - stats.norm.cdf(zstat))
-        # print(ftr)
-        # # ftr.groupby(level=1).transform("mean")
-        # y, ybar = random_effects(y, ftr)
-        # break

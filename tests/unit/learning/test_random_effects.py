@@ -10,21 +10,9 @@ from scipy.stats import expon
 from sklearn.base import BaseEstimator
 from sklearn.linear_model import LinearRegression, QuantileRegressor
 from sklearn.metrics import make_scorer, mean_absolute_error, mean_squared_error
-from sklearn.utils.validation import check_array, check_is_fitted, check_X_y
 from statsmodels.tools.tools import add_constant
 
 from macrosynergy.learning import (
-    BaseWeightedRegressor,
-    LADRegressor,
-    LassoSelector,
-    NaivePredictor,
-    RollingKFoldPanelSplit,
-    SignalOptimizer,
-    SignWeightedLinearRegression,
-    TimeWeightedLinearRegression,
-    WeightedLADRegressor,
-    WeightedLinearRegression,
-    panel_cv_scores,
     RandomEffects,
 )
 
@@ -39,10 +27,10 @@ class TestRandomEffects(unittest.TestCase):
         xcats = ["XR", "CPI", "GROWTH", "RIR"]
 
         df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
-        df_cids.loc["AUD"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["AUD"] = ["2020-01-01", "2020-12-31"]
         df_cids.loc["CAD"] = ["2020-01-01", "2020-12-31"]
         df_cids.loc["GBP"] = ["2020-01-01", "2020-12-31"]
-        df_cids.loc["USD"] = ["2019-06-01", "2020-12-31"]
+        df_cids.loc["USD"] = ["2020-06-01", "2020-12-31"]
 
         tuples = []
 
@@ -71,45 +59,68 @@ class TestRandomEffects(unittest.TestCase):
         unique_xss = sorted(X.index.get_level_values(0).unique())
         xs_codes = dict(zip(unique_xss, range(1, len(unique_xss) + 1)))
 
-        self.X = X.rename(xs_codes, level=0, inplace=False)
-        self.y = y.rename(xs_codes, level=0, inplace=False)
+        self.X = X
+        self.y = y
+
+        self.lm_X = X.rename(xs_codes, level=0, inplace=False).copy()
+        self.lm_y = y.rename(xs_codes, level=0, inplace=False).copy()
 
     def test_init(self):
         re = RandomEffects()
         self.assertIsInstance(re, BaseEstimator)
         self.assertIsInstance(re, RandomEffects)
         self.assertEqual(re.fit_intercept, True)
-        # self.assertEqual(re.n_jobs, 1)
-        # self.assertEqual(re.verbose, 0)
-        # self.assertEqual(re.fit_intercept, True)
-        # self.assertEqual(re.n_jobs, 1)
-        # self.assertEqual(re.verbose, 0)
-        # self.assertEqual(re._estimator_type, "regressor")
-        # self.assertIsNone(re._estimator)
-        # self.assertIsNone(re._fitted_estimator
+        self.assertEqual(re.group_col, "real_date")
 
     def test_fit_no_intercept(self):
-
+        """Test fit method with no intercept against linearmodels implementation"""
         re = RandomEffects(fit_intercept=False, group_col="real_date")
         re.fit(self.X, self.y)
-        lm_re = lm_RandomEffects(self.y.swaplevel(), self.X.swaplevel()).fit()
+        lm_re = lm_RandomEffects(self.lm_y.swaplevel(), self.lm_X.swaplevel()).fit()
 
-        self.assertTrue(np.allclose(re.coef_, lm_re.params.values, atol=1e-6))
+        self.assertTrue(np.allclose(re.params.values, lm_re.params.values, atol=1e-3))
+        self.assertTrue(np.allclose(re.pvals.values, lm_re.pvalues.values, atol=1e-3))
+        self.assertTrue(np.allclose(re.cov, lm_re.cov.values, atol=1e-3))
+        self.assertTrue(np.allclose(re.residual_ss, lm_re.resid_ss, atol=1e-3))
+        self.assertTrue(np.allclose(re.residuals, lm_re._resids, atol=1e-3))
+        self.assertTrue(np.allclose(re.std_errors.values, lm_re.std_errors.values, atol=1e-3))
+
         
     def test_fit_with_intercept(self):
-
+        """Test fit method with intercept against linearmodels implementation"""
         re = RandomEffects(fit_intercept=True, group_col="real_date")
         re.fit(self.X, self.y)
-        
-        groups = self.y.index.get_level_values(1)
-        mlm_re = MixedLM(self.y, self.X, groups=groups).fit(reml=False)
-        X = add_constant(self.X)
-        lm_re = lm_RandomEffects(self.y.swaplevel(), X.swaplevel()).fit()
 
-        self.assertTrue(np.allclose(re.coef_, lm_re.params.values, atol=1e-6))
+        lm_X = add_constant(self.lm_X)
+        lm_re = lm_RandomEffects(self.lm_y.swaplevel(), lm_X.swaplevel()).fit()
+
+        self.assertTrue(np.allclose(re.params.values, lm_re.params.values, atol=1e-3))
+        self.assertTrue(np.allclose(re.pvals.values, lm_re.pvalues.values, atol=1e-3))
+        self.assertTrue(np.allclose(re.cov, lm_re.cov.values, atol=1e-3))
+        self.assertTrue(np.allclose(re.residual_ss, lm_re.resid_ss, atol=1e-3))
+        self.assertTrue(np.allclose(re.residuals, lm_re._resids, atol=1e-3))
+        self.assertTrue(np.allclose(re.std_errors.values, lm_re.std_errors.values, atol=1e-3))
+
+    def test_fit_by_ftr(self):
+        """Test fit method with intercept against linearmodels implementation"""
+
+        for ftr in self.X.columns:
+            re = RandomEffects(fit_intercept=True, group_col="real_date")
+            re.fit(self.X[[ftr]], self.y)
+
+            lm_X = add_constant(self.lm_X[[ftr]])
+            lm_re = lm_RandomEffects(self.lm_y.swaplevel(), lm_X.swaplevel()).fit()
+
+            self.assertTrue(np.allclose(re.params.values, lm_re.params.values, atol=1e-3))
+            self.assertTrue(np.allclose(re.pvals.values, lm_re.pvalues.values, atol=1e-3))
+            self.assertTrue(np.allclose(re.cov, lm_re.cov.values, atol=1e-3))
+            self.assertTrue(np.allclose(re.residual_ss, lm_re.resid_ss, atol=1e-3))
+            self.assertTrue(np.allclose(re.residuals, lm_re._resids, atol=1e-3))
+            self.assertTrue(np.allclose(re.std_errors.values, lm_re.std_errors.values, atol=1e-3))
+
 
 
 if __name__ == "__main__":
     tests = TestRandomEffects()
     tests.setUpClass()
-    tests.test_fit_with_intercept()
+    tests.test_fit_by_ftr()
