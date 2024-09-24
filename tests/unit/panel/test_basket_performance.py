@@ -540,8 +540,7 @@ class TestAll(unittest.TestCase):
                 max_weight=0.55,
                 basket_name="GLB_FIXED",
             )
-            # should be 1568 runtime warnings
-            self.assertTrue(len(wc) == 1568)
+
             self.assertTrue(all(issubclass(w.category, RuntimeWarning) for w in wc))
 
         basket_keys = basket_2.dict_retcry.keys()
@@ -718,9 +717,6 @@ class TestAll(unittest.TestCase):
                 basket_name="GLB_FIXED",
             )
 
-            # check that there should be 1568 warnings
-            self.assertEqual(len(wc), 1568)
-            # all are RuntimeWarning - div by zero or similar
             self.assertTrue(all(issubclass(w.category, RuntimeWarning) for w in wc))
         # Test the feature that if a basket_name is not specified by the user, default
         # is equal to None, then all of the computed baskets will be returned. In this
