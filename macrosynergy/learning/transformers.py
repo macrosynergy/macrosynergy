@@ -10,9 +10,9 @@ import datetime
 from scipy.sparse._csr import csr_matrix
 import scipy.stats as stats
 
-from sklearn.linear_model import Lasso, ElasticNet, Lars
+from sklearn.linear_model import Lasso, ElasticNet
 from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
-from sklearn.feature_selection import SelectorMixin, SelectFromModel
+from sklearn.feature_selection import SelectorMixin
 from sklearn.exceptions import NotFittedError
 
 from statsmodels.tools.tools import add_constant
@@ -358,26 +358,6 @@ class LassoSelector(BaseEstimator, SelectorMixin):
             return X.iloc[:, :0]
 
         return X.iloc[:, self.selected_ftr_idxs]
-
-
-class LarsSelector(SelectFromModel):
-
-    def __init__(self, fit_intercept=True):
-        self.fit_intercept = fit_intercept
-        super().__init__(Lars(fit_intercept=self.fit_intercept))
-
-    def transform(self, X):
-        mask = self.get_support()
-        if not mask.any():
-            warnings.warn(
-                (
-                    "No features were selected: either the data is"
-                    " too noisy or the selection test too strict."
-                ),
-                UserWarning,
-            )
-            return X.iloc[:, :0]
-        return X.iloc[:, mask]
 
 
 class MapSelector(BaseEstimator, SelectorMixin):
@@ -965,32 +945,28 @@ if __name__ == "__main__":
     X = dfd2.drop(columns=["XR"])
     y = dfd2["XR"]
 
-    # selector = LassoSelector(0.2)
-    # selector.fit(X, y)
-    # print(selector.transform(X).columns)
-    
-    # selector = LarsSelector(fit_intercept=False)
-    # selector.fit(X, y)
-    # print(selector.transform(X).columns)
+    selector = LassoSelector(0.2)
+    selector.fit(X, y)
+    print(selector.transform(X).columns)
 
     selector = MapSelector(1e-20)
     selector.fit(X, y)
     print(selector.transform(X).columns)
 
-    # # Split X and y into training and test sets
-    # X_train, X_test = (
-    #     X[X.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
-    #     X[X.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
-    # )
-    # y_train, y_test = (
-    #     y[y.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
-    #     y[y.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
-    # )
+    # Split X and y into training and test sets
+    X_train, X_test = (
+        X[X.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
+        X[X.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
+    )
+    y_train, y_test = (
+        y[y.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
+        y[y.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
+    )
 
-    # selector = ZnScoreAverager(neutral="zero", use_signs=False)
-    # selector.fit(X_train, y_train)
-    # print(selector.transform(X_test))
+    selector = ZnScoreAverager(neutral="zero", use_signs=False)
+    selector.fit(X_train, y_train)
+    print(selector.transform(X_test))
 
-    # selector = ZnScoreAverager(neutral="zero")
-    # selector.fit(X_train, y_train)
-    # print(selector.transform(X_test))
+    selector = ZnScoreAverager(neutral="zero")
+    selector.fit(X_train, y_train)
+    print(selector.transform(X_test))

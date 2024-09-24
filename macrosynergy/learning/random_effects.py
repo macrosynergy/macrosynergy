@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 from linearmodels.panel import RandomEffects as lm_RandomEffects, PanelOLS, PooledOLS
 from sklearn.base import BaseEstimator
-from sklearn.utils.validation import check_array, check_is_fitted, check_X_y
 from statsmodels.tools.tools import add_constant
 
 import macrosynergy.management as msm
@@ -16,60 +15,82 @@ class RandomEffects(BaseEstimator):
     A custom sklearn estimator that fits a random effects model using linearmodels.
     """
 
-    def __init__(self, group_col="real_date", fit_intercept=True):
+    def __init__(self, group_col: str ="real_date", fit_intercept: bool = True):
+        """
+        Initialize the RandomEffects estimator.
+
+        :param group_col: The column of a Pandas MultiIndexed DataFrame to group by.
+        :param fit_intercept: Whether to fit an intercept term.
+        """
+        if not isinstance(group_col, str):
+            raise ValueError("group_col must be a string.")
+        if not isinstance(fit_intercept, bool):
+            raise ValueError("fit_intercept must be a boolean.")
+        
         self.fit_intercept = fit_intercept
         self.group_col = group_col
 
-    def fit(self, X, y):
+        self.params = None
+        self.coef_ = None
+        self.intercept_ = None
+        self.fitted = None
+        self.effects = None
+        self.idiosyncratic = None
+        self.cov = None
+        self.r2 = None
+        self.sigma2_residuals = None
+        self.sigma2_effects = None
+        self.theta = None
+        self.residuals = None
+        self.residual_ss = None
+        self.total_ss = None
+        self.nobs = None
+
+    def fit(self, X: pd.DataFrame, y: pd.DataFrame):
         """
         Fit the random effects model.
 
-        Parameters
-        ----------
-        X : pandas DataFrame, shape (n_samples, n_features)
-            Training data, including the group column.
-        y : array-like, shape (n_samples,)
-            Target values.
+        :param X: Pandas DataFrame of features with a multiIndex
+            containing the group column.
+        :param y: Pandas DataFrame of target values with the same index
+            as X.
+
+        :return: The fitted estimator.
         """
-        if isinstance(y, pd.Series):
-            y = y.to_frame()
-        if isinstance(X, pd.Series):
-            X = X.to_frame()
 
-        # Ensure X is a DataFrame
-        if not isinstance(X, pd.DataFrame):
-            raise ValueError("X must be a pandas DataFrame.")
-
-        # Check if group_col exists in X
-        if self.group_col not in X.index.names:
-            raise ValueError(f"Group column '{self.group_col}' not found in X's index.")
-
+        X, y = self.check_X_y(X, y)
+        
         if self.fit_intercept:
             X = add_constant(X)
 
-        # Fit the random effects model
         self._fit(X, y)
 
         return self
 
     def _fit(self, df_x, df_y):
+        """
+        Fit the random effects model.
+
+        :param df_x: Pandas DataFrame of features.
+        :param df_y: Pandas DataFrame of target values.
+        """
 
         y_demeaned = self._demean(df_y)
         x_demeaned = self._demean(df_x)
 
         # Fixed Effect Estimation
-        params, ssr, _, _ = np.linalg.lstsq(x_demeaned, y_demeaned, rcond=None)
-        eps = y_demeaned - x_demeaned @ params
+        params, _, _, _ = np.linalg.lstsq(x_demeaned, y_demeaned, rcond=None)
+        eps = y_demeaned.to_numpy() - x_demeaned.to_numpy() @ params
 
         # Between Estimation
         xbar = df_x.groupby(level=self.group_col).mean()
         ybar = df_y.groupby(level=self.group_col).mean()
         params, ssr, _, _ = np.linalg.lstsq(xbar, ybar, rcond=None)
-        u = np.asarray(ybar.values) - np.asarray(xbar.values) @ params
+        alpha = np.asarray(ybar.values) - np.asarray(xbar.values) @ params
 
         # Estimate variances
         nobs = df_y.shape[0]
-        neffects = u.shape[0]
+        neffects = alpha.shape[0]
         nvars = df_x.shape[1]
 
         # Idiosyncratic variance
@@ -101,7 +122,7 @@ class RandomEffects(BaseEstimator):
         eps = y - x @ params
 
         # Covariance estimation
-        cov_matrix = self._cov(x, eps, nobs)
+        cov_matrix = self._cov(x, ssr, nobs)
 
         index = df_y.index
         fitted = pd.DataFrame(df_x.values @ params, index, ["fitted_values"])
@@ -118,49 +139,86 @@ class RandomEffects(BaseEstimator):
 
         total_ss = float(np.squeeze(y.T @ y))
         r2 = 1 - residual_ss / total_ss
+        
+        self.params = pd.Series(params.reshape(-1), index=df_x.columns)
 
-        self.set_params(
-            coef_=params.reshape(-1),
-            fitted=fitted,
-            effects=effects,
-            idiosyncratic=idiosyncratic,
-            cov=cov_matrix,
-            r2=r2,
-            sigma2_residuals=sigma2_e,
-            sigma2_effects=sigma2_a,
-            theta=theta,
-            residuals=eps,
-            residual_ss=residual_ss,
-            total_ss=total_ss,
-            nobs=nobs,
-        )
+        # For sklearn compatibility
+        if self.fit_intercept:
+            self.intercept_ = self.params["const"]
+            self.coef_ = self.params.drop("const").values.reshape(-1)
 
-    def get_params(self):
-        """Get parameters for this estimator."""
-        return {"group_col": self.group_col}
+        self.fitted = fitted
+        self.effects = effects
+        self.idiosyncratic = idiosyncratic
+        self.cov = cov_matrix
+        self.r2 = r2
+        self.sigma2_residuals = sigma2_e
+        self.sigma2_effects = sigma2_a
+        self.theta = theta
+        self.residuals = eps
+        self.residual_ss = residual_ss
+        self.total_ss = total_ss
+        self.nobs = nobs
 
-    def set_params(self, **params):
-        """Set parameters for this estimator."""
-        for key, value in params.items():
-            setattr(self, key, value)
-        return self
+    def _demean(self, df: pd.DataFrame):
+        """
+        Demean the groups as specified by self.group_col.
 
-    def _demean(self, df):
+        Note: If the model is fit with an intercept, the grand mean
+            is added back to the demeaned DataFrame.
+
+        :param df: Pandas DataFrame with `self.group_col` as a level in
+            its multiIndex.
+        """
         mu = df.groupby(level=self.group_col).transform("mean")
         df_demeaned = df - mu
         if self.fit_intercept:
-            return (df_demeaned + df.mean(0)).to_numpy()
+            return (df_demeaned + df.mean(0))
         else:
-            return df_demeaned.to_numpy()
+            return df_demeaned
 
-    def _s2(self, eps, _nobs, _scale=1.0):
-        return _scale * float(np.squeeze(eps.T @ eps)) / _nobs
+    def _cov(self, x: np.ndarray, ssr: np.ndarray, nobs: int):
+        """
+        Compute the covariance matrix of the parameter estimates.
 
-    def _cov(self, x, eps, _nobs):
-        s2 = self._s2(eps, _nobs)
+        :param x: The design matrix.
+        :param ssr: The sum of squared residuals.
+        :param nobs: The number of observations.
+        """
+        s2 = float(ssr) / nobs
         cov = s2 * np.linalg.inv(x.T @ x)
         return cov
+    
+    def check_X_y(self, X, y):
 
+        X = self._df_checks(X)
+        y = self._df_checks(y)
+
+        if not (X.index == y.index).all():
+            raise ValueError("Index of X and y must be the same.")
+        
+        return X, y
+
+    def _df_checks(self, df: pd.DataFrame):
+        """
+        Perform checks on the DataFrame input.
+        
+        :param df: The DataFrame to check.
+        """
+        if isinstance(df, pd.Series):
+            df = df.to_frame()
+
+        if not isinstance(df, pd.DataFrame):
+            raise ValueError("Input must be a pandas DataFrame.")
+        
+        if not isinstance(df.index, pd.MultiIndex):
+            raise ValueError("DataFrame must have a MultiIndex.")
+
+        if self.group_col not in df.index.names:
+            raise ValueError(f"Group column '{self.group_col}' not found in index.")
+        
+        return df
+        
 
 if __name__ == "__main__":
 
@@ -204,23 +262,22 @@ if __name__ == "__main__":
     unique_xss = sorted(X.index.get_level_values(0).unique())
     xs_codes = dict(zip(unique_xss, range(1, len(unique_xss) + 1)))
 
-    X = X.rename(xs_codes, level=0, inplace=False).copy()
-    y = y.rename(xs_codes, level=0, inplace=False).copy()
+    # X = X.rename(xs_codes, level=0, inplace=False).copy()
+    # y = y.rename(xs_codes, level=0, inplace=False).copy()
 
     # For each column, obtain Wald test p-value
     # Keep significant features
     for col in feature_names_in_[:1]:
         ftr = X[col].copy()
-        # ftr = add_constant(ftr)
-        # # Swap levels so that random effects are placed on each time period,
-        # # as opposed to the cross-section
-        # print(ftr)
+        ftr = add_constant(ftr)
 
-        rem = RandomEffects(group_col="real_date", fit_intercept=True)
+        rem = RandomEffects(group_col="real_date", fit_intercept=False)
         rem.fit(ftr, y)
 
+        ftr = ftr.rename(xs_codes, level=0, inplace=False).copy()
+        y2 = y.rename(xs_codes, level=0, inplace=False).copy()
         ftr = add_constant(ftr)
-        re = lm_RandomEffects(y.swaplevel(), ftr.swaplevel()).fit()
+        re = lm_RandomEffects(y2.swaplevel(), ftr.swaplevel()).fit()
         print(ftr)
         # est = re.params[col]
         # zstat = est / re.std_errors[col]
