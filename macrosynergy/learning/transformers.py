@@ -7,9 +7,6 @@ import pandas as pd
 
 import datetime
 
-from scipy.sparse._csr import csr_matrix
-import scipy.stats as stats
-
 from sklearn.linear_model import Lasso, ElasticNet
 from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
 from sklearn.feature_selection import SelectorMixin
