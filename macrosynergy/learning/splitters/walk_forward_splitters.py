@@ -2,15 +2,12 @@
 Classes for incremental expanding panel cross-validators. 
 """
 
-import datetime
-from typing import Optional, List
-
 import numpy as np
 import pandas as pd
 
-from base_panel_split import BasePanelSplit, WalkForwardPanelSplit
+from typing import List
 
-from abc import ABC
+from base_panel_split import WalkForwardPanelSplit
 
 class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
     """
