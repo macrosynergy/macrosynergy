@@ -22,9 +22,9 @@ class RandomEffects(BaseEstimator):
         :param fit_intercept: Whether to fit an intercept term.
         """
         if not isinstance(group_col, str):
-            raise ValueError("group_col must be a string.")
+            raise TypeError("group_col must be a string.")
         if not isinstance(fit_intercept, bool):
-            raise ValueError("fit_intercept must be a boolean.")
+            raise TypeError("fit_intercept must be a boolean.")
         
         self.fit_intercept = fit_intercept
         self.group_col = group_col
@@ -212,7 +212,7 @@ class RandomEffects(BaseEstimator):
             df = df.to_frame()
 
         if not isinstance(df, pd.DataFrame):
-            raise ValueError("Input must be a pandas DataFrame.")
+            raise TypeError("Input must be a pandas DataFrame.")
         
         if not isinstance(df.index, pd.MultiIndex):
             raise ValueError("DataFrame must have a MultiIndex.")

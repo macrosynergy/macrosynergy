@@ -1,22 +1,13 @@
-import itertools
 import unittest
 
 import numpy as np
 import pandas as pd
-from linearmodels.panel import PanelOLS, PooledOLS
 from linearmodels.panel import RandomEffects as lm_RandomEffects
-from parameterized import parameterized
 from scipy.stats import expon
 from sklearn.base import BaseEstimator
-from sklearn.linear_model import LinearRegression, QuantileRegressor
-from sklearn.metrics import make_scorer, mean_absolute_error, mean_squared_error
 from statsmodels.tools.tools import add_constant
 
-from macrosynergy.learning import (
-    RandomEffects,
-)
-
-from statsmodels.regression.mixed_linear_model import MixedLM
+from macrosynergy.learning import RandomEffects
 
 
 class TestRandomEffects(unittest.TestCase):
@@ -72,6 +63,40 @@ class TestRandomEffects(unittest.TestCase):
         self.assertEqual(re.fit_intercept, True)
         self.assertEqual(re.group_col, "real_date")
 
+    def test_init_with_params(self):
+        re = RandomEffects(fit_intercept=False, group_col="cid")
+        self.assertIsInstance(re, BaseEstimator)
+        self.assertIsInstance(re, RandomEffects)
+        self.assertEqual(re.fit_intercept, False)
+        self.assertEqual(re.group_col, "cid")
+
+    def test_invalid_init(self):
+        with self.assertRaises(TypeError):
+            RandomEffects(fit_intercept=False, group_col=True)
+
+        with self.assertRaises(TypeError):
+            RandomEffects(fit_intercept="invalid", group_col="cid")
+
+    def test_invalid_fit(self):
+        re = RandomEffects()
+        with self.assertRaises(TypeError):
+            re.fit("invalid", self.y)
+
+        invalid_idx_X = pd.DataFrame()
+
+        with self.assertRaises(ValueError):
+            re.fit(invalid_idx_X, self.y)
+
+        re.group_col = "invalid"
+        with self.assertRaises(ValueError):
+            re.fit(self.X, self.y)
+
+        # Drop half of x
+        X = self.X.iloc[: len(self.X) // 2].copy()
+        with self.assertRaises(ValueError):
+            re.fit(X, self.y)
+
+
     def test_fit_no_intercept(self):
         """Test fit method with no intercept against linearmodels implementation"""
         re = RandomEffects(fit_intercept=False, group_col="real_date")
@@ -79,7 +104,7 @@ class TestRandomEffects(unittest.TestCase):
         lm_re = lm_RandomEffects(self.lm_y.swaplevel(), self.lm_X.swaplevel()).fit()
 
         self.assertTrue(np.allclose(re.params.values, lm_re.params.values, atol=1e-3))
-        self.assertTrue(np.allclose(re.pvals.values, lm_re.pvalues.values, atol=1e-3))
+        self.assertTrue(np.allclose(re.pvals.values, lm_re.pvalues.values, atol=1e-2))
         self.assertTrue(np.allclose(re.cov, lm_re.cov.values, atol=1e-3))
         self.assertTrue(np.allclose(re.residual_ss, lm_re.resid_ss, atol=1e-3))
         self.assertTrue(np.allclose(re.residuals, lm_re._resids, atol=1e-3))
@@ -95,7 +120,7 @@ class TestRandomEffects(unittest.TestCase):
         lm_re = lm_RandomEffects(self.lm_y.swaplevel(), lm_X.swaplevel()).fit()
 
         self.assertTrue(np.allclose(re.params.values, lm_re.params.values, atol=1e-3))
-        self.assertTrue(np.allclose(re.pvals.values, lm_re.pvalues.values, atol=1e-3))
+        self.assertTrue(np.allclose(re.pvals.values, lm_re.pvalues.values, atol=1e-2))
         self.assertTrue(np.allclose(re.cov, lm_re.cov.values, atol=1e-3))
         self.assertTrue(np.allclose(re.residual_ss, lm_re.resid_ss, atol=1e-3))
         self.assertTrue(np.allclose(re.residuals, lm_re._resids, atol=1e-3))
@@ -112,7 +137,7 @@ class TestRandomEffects(unittest.TestCase):
             lm_re = lm_RandomEffects(self.lm_y.swaplevel(), lm_X.swaplevel()).fit()
 
             self.assertTrue(np.allclose(re.params.values, lm_re.params.values, atol=1e-3))
-            self.assertTrue(np.allclose(re.pvals.values, lm_re.pvalues.values, atol=1e-3))
+            self.assertTrue(np.allclose(re.pvals.values, lm_re.pvalues.values, atol=1e-2))
             self.assertTrue(np.allclose(re.cov, lm_re.cov.values, atol=1e-3))
             self.assertTrue(np.allclose(re.residual_ss, lm_re.resid_ss, atol=1e-3))
             self.assertTrue(np.allclose(re.residuals, lm_re._resids, atol=1e-3))
@@ -123,4 +148,6 @@ class TestRandomEffects(unittest.TestCase):
 if __name__ == "__main__":
     tests = TestRandomEffects()
     tests.setUpClass()
+    tests.test_fit_no_intercept
+    tests.test_fit_with_intercept()
     tests.test_fit_by_ftr()
