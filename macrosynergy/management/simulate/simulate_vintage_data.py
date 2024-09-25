@@ -111,10 +111,10 @@ class VintageData:
 
         :param <List[pd.Timestamps]> obs_dates: observation dates for the series.
         :param <List[float]> seas_factors: seasonal factors.
-        :param <List[float> values: existing values that have not been seasonally
+        :param <List[float]> values: existing values that have not been seasonally
             adjusted.
 
-        :return <List[float] values: returns a list of values which have been adjusted
+        :return <List[float]>: returns a list of values which have been adjusted
             seasonally
         """
         if self.freq == "W":

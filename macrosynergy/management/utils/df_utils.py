@@ -17,7 +17,11 @@ from macrosynergy.management.utils.core import (
     _map_to_business_day_frequency,
     is_valid_iso_date,
 )
+from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY
 import functools
+
+IDX_COLS_SORT_ORDER = ["cid", "xcat", "real_date"]
+
 
 def standardise_dataframe(
     df: pd.DataFrame, verbose: bool = False
@@ -71,7 +75,7 @@ def standardise_dataframe(
     # sort by cid, xcat and real_date to allow viewing stacked timeseries easily
     df = (
         df.drop_duplicates(subset=idx_cols, keep="last")
-        .sort_values(by=["cid", "xcat", "real_date"])
+        .sort_values(by=IDX_COLS_SORT_ORDER)
         .reset_index(drop=True)
     )
 
@@ -115,7 +119,7 @@ def drop_nan_series(
     if not column in df.columns:
         raise ValueError(f"Column {column} not present in DataFrame.")
 
-    if not df["value"].isna().any():
+    if not df[column].isna().any():
         return df
 
     if not isinstance(raise_warning, bool):
@@ -125,7 +129,7 @@ def drop_nan_series(
     for cd, xc in df_orig.groupby(["cid", "xcat"]).groups:
         sel_series: pd.Series = df_orig[
             (df_orig["cid"] == cd) & (df_orig["xcat"] == xc)
-        ]["value"]
+        ][column]
         if sel_series.isna().all():
             if raise_warning:
                 warnings.warn(
@@ -380,7 +384,7 @@ def downsample_df_on_real_date(
         df.set_index("real_date")
         .groupby(groupby_columns)
         .resample(freq)
-        .agg(agg, numeric_only=True)
+        .agg(agg, **RESAMPLE_NUMERIC_ONLY)
         .reset_index()
     )
 
@@ -427,6 +431,11 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     if all_cols != df_cols and all_cols != df_add_cols:
         raise ValueError(error_message)
 
+    if df.empty:
+        return df_add
+    elif df_add.empty:
+        return df
+
     if not xcat_replace:
         df = update_tickers(df, df_add)
 
@@ -434,7 +443,7 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
         df = update_categories(df, df_add)
 
     # sort same as in `standardise_dataframe`
-    return df.sort_values(by=["real_date", "cid", "xcat"]).reset_index(drop=True)
+    return df.sort_values(by=IDX_COLS_SORT_ORDER).reset_index(drop=True)
 
 
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
@@ -1024,9 +1033,12 @@ def get_eops(
         direction=direction,
     )
 
-def merge_categories(df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: List[str] = None):
+
+def merge_categories(
+    df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: List[str] = None
+):
     """
-    Merges categories of different preferences into a single one, with the most preferred 
+    Merges categories of different preferences into a single one, with the most preferred
     being used first and others substituted in order.
 
     :param <pd.DataFrame> df: standardized JPMaQS DataFrame with the necessary columns
@@ -1059,28 +1071,43 @@ def merge_categories(df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: Li
     if not set(cids).issubset(df["cid"].unique()):
         raise ValueError("The cross sections must be present in the DataFrame.")
 
-    real_dates = list(df["real_date"].unique())
+    unique_dates = df["real_date"].unique()
+    real_dates = [pd.Timestamp(date) for date in unique_dates]
 
     def _get_values_for_xcat(real_dates, xcat_index, cid):
 
-        values = df[(df["real_date"].isin(real_dates)) & (df["xcat"] == xcats[xcat_index]) & (df["cid"] == cid)]
+        values = df[
+            (df["real_date"].isin(real_dates))
+            & (df["xcat"] == xcats[xcat_index])
+            & (df["cid"] == cid)
+        ]
         if not real_dates == list(values["real_date"].unique()):
             if xcat_index + 1 >= len(xcats):
                 return values
-            values = update_df(values, _get_values_for_xcat(list(set(real_dates) - set(values["real_date"].unique())), xcat_index + 1, cid))
+            values = update_df(
+                values,
+                _get_values_for_xcat(
+                    list(set(real_dates) - set(values["real_date"].unique())),
+                    xcat_index + 1,
+                    cid,
+                ),
+            )
 
         values.loc[:, "xcat"] = new_xcat
         return values
-    
+
     result_df = None
 
     for cid in cids:
         if result_df is None:
             result_df = _get_values_for_xcat(real_dates, 0, cid)
         else:
-            result_df = update_df(result_df, _get_values_for_xcat(real_dates, xcat_index=0, cid=cid))
+            result_df = update_df(
+                result_df, _get_values_for_xcat(real_dates, xcat_index=0, cid=cid)
+            )
 
-    return result_df
+    return result_df.sort_values(by=IDX_COLS_SORT_ORDER).reset_index(drop=True)
+
 
 def get_sops(
     dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,

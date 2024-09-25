@@ -14,22 +14,20 @@ def get_version(test: bool = False):
         assert r.ok, f"Incorrect: {r.status_code}, {r.text}"
         js = r.json()
 
-    return js['info']['version']
+    return js["info"]["version"]
 
 
 class TestPyPIVersionNumber(unittest.TestCase):
     def test_version_number_test_pypi(self):
         # test for TestPyPI version number
         self.assertGreaterEqual(
-            version.parse(__version__),
-            version.parse(get_version(test=True))
+            version.parse(__version__), version.parse(get_version(test=True))
         )
 
     def test_version_number_pypi(self):
         # test for PyPI version number
         self.assertGreater(
-            version.parse(__version__),
-            version.parse(get_version(test=False))
+            version.parse(__version__), version.parse(get_version(test=False))
         )
 
 

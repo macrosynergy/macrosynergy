@@ -2,6 +2,7 @@ import unittest
 import random
 import numpy as np
 import pandas as pd
+from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY
 from tests.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df, categories_df
 from math import ceil, floor
@@ -117,7 +118,6 @@ class TestAll(unittest.TestCase):
         test_df = self.dfd.copy()
         dfd_x = reduce_df(self.dfd, xcats=["XR"], cids=self.cids, blacklist=black)
         self.assertTrue(test_df.equals(self.dfd))
-
 
     def test_categories_df_conversion(self):
         dfc = categories_df(
@@ -288,7 +288,7 @@ class TestAll(unittest.TestCase):
                     self.dfd[filt1 & filt2]
                     .set_index("real_date")
                     .resample("M")
-                    .mean(numeric_only=True)
+                    .mean(**RESAMPLE_NUMERIC_ONLY)
                 )
             ),
             10,

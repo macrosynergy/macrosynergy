@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
+from macrosynergy import PYTHON_3_8_OR_LATER
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df, update_df
 from macrosynergy.panel.make_zn_scores import make_zn_scores
@@ -335,7 +336,11 @@ class NaivePnL:
         for varx, name, typex in (
             (sig, "sig", str),
             (sig_op, "sig_op", str),
-            (sig_add, "sig_add", (Number)), # testing for number instead of (float, int)
+            (
+                sig_add,
+                "sig_add",
+                (Number),
+            ),  # testing for number instead of (float, int)
             (sig_neg, "sig_neg", bool),
             (pnl_name, "pnl_name", (str, type(None))),
             (rebal_freq, "rebal_freq", str),
@@ -1156,20 +1161,20 @@ def create_results_dataframe(
     :param <str> title: title of the DataFrame.
     :param <pd.DataFrame> df: DataFrame with the data.
     :param <str> ret: name of the return signal.
-    :param <Union[str, List[str] sigs: name of the comparative signal(s).
-    :param <Union[str, List[str] cids: name of the cross-section(s).
-    :param <Union[str, List[str] sig_ops: operation(s) to be applied to the signal(s).
-    :param <Union[float, List[float] sig_adds: value(s) to be added to the signal(s).
-    :param <Union[str, List[str] neutrals: neutralization method(s) to be applied.
-    :param <Union[float, List[float] threshs: threshold(s) to be applied to the signal(s).
+    :param <Union[str, List[str]> sigs: name of the comparative signal(s).
+    :param <Union[str, List[str]> cids: name of the cross-section(s).
+    :param <Union[str, List[str]> sig_ops: operation(s) to be applied to the signal(s).
+    :param <Union[float, List[float]> sig_adds: value(s) to be added to the signal(s).
+    :param <Union[str, List[str]> neutrals: neutralization method(s) to be applied.
+    :param <Union[float, List[float]> threshs: threshold(s) to be applied to the signal(s).
     :param <str> bm: name of the benchmark signal.
-    :param <Union[bool, List[bool] sig_negs: whether the signal(s) should be negated.
+    :param <Union[bool, List[bool]> sig_negs: whether the signal(s) should be negated.
     :param <bool> cosp: whether the signals should be cross-sectionally standardized.
     :param <str> start: start date of the analysis.
     :param <str> end: end date of the analysis.
     :param <dict> blacklist: dictionary with the blacklisted dates.
-    :param <Union[str, List[str] freqs: frequency of the rebalancing.
-    :param <Union[str, List[str] agg_sigs: aggregation method(s) for the signal(s).
+    :param <Union[str, List[str]> freqs: frequency of the rebalancing.
+    :param <Union[str, List[str]> agg_sigs: aggregation method(s) for the signal(s).
     :param <dict> sigs_renamed: dictionary with the renamed signals.
     :param <int> fwin: frequency of the rolling window.
     :param <int> slip: slippage to be applied to the PnLs.
@@ -1309,18 +1314,19 @@ def create_results_dataframe(
     if sigs_renamed:
         res_df.rename(index=sigs_renamed, inplace=True)
 
-    res_df = (
-        res_df.style.format("{:.3f}")
-        .set_caption(title)
-        .set_table_styles(
-            [
-                {
-                    "selector": "caption",
-                    "props": [("text-align", "center"), ("font-weight", "bold")],
-                }
-            ]
+    if PYTHON_3_8_OR_LATER:
+        res_df = (
+            res_df.style.format("{:.3f}")
+            .set_caption(title)
+            .set_table_styles(
+                [
+                    {
+                        "selector": "caption",
+                        "props": [("text-align", "center"), ("font-weight", "bold")],
+                    }
+                ]
+            )
         )
-    )
 
     return res_df
 

@@ -546,7 +546,7 @@ class TestInformationStateChanges(unittest.TestCase):
 
     def test_get_releases(self):
         qdf = get_long_format_data(end="2012-01-01")
-        isc_obj = InformationStateChanges.from_qdf(qdf)
+        isc_obj: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
         from_date = "2010-01-01"
         to_date = "2010-10-01"
         res = isc_obj.get_releases(
@@ -609,11 +609,15 @@ class TestInformationStateChanges(unittest.TestCase):
             .reset_index(drop=True)
         )
 
-        isc_obj = InformationStateChanges.from_qdf(qdf)
+        isc_obj: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
         res = isc_obj.get_releases()
 
+        # Ensure compatibility with Pandas 1.3.5
+        unique_dates = res["real_date"].unique()
+        timestamp_list = [pd.Timestamp(date) for date in unique_dates]
+
         self.assertTrue(set(res.index) == set(random_tickers))
-        self.assertTrue(res["real_date"].unique().tolist() == [_lbd])
+        self.assertTrue(timestamp_list == [_lbd])
 
         ## try with release calendar
         res = isc_obj.get_releases(latest_only=False, from_date=_tmin3)
@@ -657,17 +661,74 @@ class TestInformationStateChanges(unittest.TestCase):
             .reset_index(drop=True)
         )
 
-        isc_obj = InformationStateChanges.from_qdf(qdf)
+        isc_obj: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
         res = isc_obj.get_releases(excl_xcats=excl_xcats)
 
+        # Ensure compatibility with Pandas 1.3.5
+        unique_dates = res["real_date"].unique()
+        timestamp_list = [pd.Timestamp(date) for date in unique_dates]
+
         self.assertTrue(set(get_xcat(list(set(res.index)))) == set(selected_xcats))
-        self.assertTrue(res["real_date"].unique().tolist() == [_lbd])
+        self.assertTrue(timestamp_list == [_lbd])
 
         with self.assertRaises(TypeError):
             isc_obj.get_releases(excl_xcats="banana")
 
         with self.assertRaises(TypeError):
             isc_obj.get_releases(excl_xcats=[1])
+
+    def test_calc_score_vol_forecast(self):
+        qdf = get_long_format_data(end="2012-01-01")
+
+        # check that roundtrip remains the same
+        qdfa = (
+            InformationStateChanges.from_qdf(qdf)
+            .calculate_score(volatility_forecast=True)
+            .to_qdf()
+        ).sort_index()
+
+        qdfb = (
+            InformationStateChanges.from_qdf(qdf)
+            .calculate_score(volatility_forecast=False)
+            .to_qdf()
+        ).sort_index()
+
+        self.assertTrue(qdfa.equals(qdfb))
+
+        ## Test the actual std in the information state changes
+
+        isc = InformationStateChanges.from_qdf(qdf).calculate_score(
+            volatility_forecast=True, min_periods=1
+        )
+
+        isc_test = InformationStateChanges.from_qdf(qdf).calculate_score(
+            volatility_forecast=False, min_periods=1
+        )
+
+        self.assertTrue(set(isc.keys()) == set(isc_test.keys()))
+
+        for ticker in isc.keys():
+            dfa = isc[ticker].sort_index()
+            dfb = isc_test[ticker].sort_index()
+            self.assertTrue((dfa["std"]).equals(dfb["std"].shift(periods=1)))
+
+    def test_from_isc_df(self):
+        qdf = get_long_format_data(
+            end="2012-01-01", cids=["USD"], xcats=["GDP"], num_freqs=1
+        )
+        isc_min: InformationStateChanges = InformationStateChanges.from_qdf(
+            qdf, norm=False
+        )
+        isc_min.calculate_score()
+        tickers = list(isc_min.keys())
+        assert len(tickers) == 1
+        test_ticker = tickers[0]
+        new_isc: InformationStateChanges = InformationStateChanges.from_isc_df(
+            df=isc_min[test_ticker],
+            ticker=test_ticker,
+        )
+
+        self.assertTrue(isc_min == new_isc)
 
 
 if __name__ == "__main__":

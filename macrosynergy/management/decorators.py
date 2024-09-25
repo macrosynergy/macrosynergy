@@ -15,9 +15,14 @@ from typing import (
     Tuple,
     Type,
     Union,
-    get_args,
-    get_origin,
 )
+
+from macrosynergy import PYTHON_3_8_OR_LATER
+
+if PYTHON_3_8_OR_LATER:
+    from typing import get_args, get_origin
+else:
+    from typing_extensions import get_args, get_origin
 from inspect import signature
 from macrosynergy.management.types import NoneType
 import pandas as pd

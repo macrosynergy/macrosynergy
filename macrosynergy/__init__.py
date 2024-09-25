@@ -10,7 +10,18 @@ except ModuleNotFoundError:
     __version__ = FULLVERSION
     __git_revision__ = GIT_REVISION
 
-from . import visuals, download, panel, pnl, management, signal, learning
+import sys
+
+# Define constants based on the Python version
+PYTHON_VERSION = sys.version_info
+PYTHON_3_8_OR_LATER = PYTHON_VERSION >= (3, 8)
+
+from . import visuals, download, panel, pnl, management, signal
+
+if PYTHON_3_8_OR_LATER:
+    from . import learning
+
+
 from .management.utils import check_package_version
 
 __all__ = [
@@ -21,7 +32,8 @@ __all__ = [
     "management",
     "signal",
     "learning",
-    "check_package_version"
+    "check_package_version",
+    "PYTHON_3_8_OR_LATER",
 ]
 
 __name__ = ["__version__"]

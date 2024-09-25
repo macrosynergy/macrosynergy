@@ -78,11 +78,12 @@ def correl_matrix(
         coefficients for color scale. Default is none. If a value is given it applies
         symmetrically to positive and negative values.
     :param <bool> show: if True the figure will be displayed. Default is True.
-    :param xcat_labels: optional list or dictionary of labels for xcats.
-        A list should be in the same order as xcats, a dictionary should map
-        from each xcat to its label.
-    :param xcat_secondary_labels: optional list or dictionary of labels for xcats_secondary.
-    :param **kwargs: Arbitrary keyword arguments that are passed to seaborn.heatmap.
+    :param <Optional[Union[List[str], Dict[str, str]]> xcat_labels: optional list or
+        dictionary of labels for xcats. A list should be in the same order as xcats, a 
+        dictionary should map from each xcat to its label.
+    :param <Optional[Union[List[str], Dict[str, str]]]> xcat_secondary_labels: optional 
+        list or dictionary of labels for xcats_secondary.
+    :param <Dict> **kwargs: Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
     N.B:. The function displays the heatmap of a correlation matrix across categories or
     cross-sections (depending on which parameter has received multiple elements).

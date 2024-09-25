@@ -402,9 +402,8 @@ class CertAuth(object):
             if not isinstance(varx, str):
                 raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
 
-        self.auth: str = base64.b64encode(
-            bytes(f"{username:s}:{password:s}", "utf-8")
-        ).decode("ascii")
+        auth_str = f"{username:s}:{password:s}"
+        self.auth: str = base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
 
         # Key and Certificate check
         for varx, namex in zip([crt, key], ["crt", "key"]):
@@ -449,8 +448,6 @@ def validate_download_args(
 ):
     """
     Validate the arguments passed to the `download_data()` method.
-
-    :params : -- see `download_data()` method.
 
     :return <bool>: True if all arguments are valid.
 
@@ -559,8 +556,8 @@ class DataQueryInterface(object):
     :param <str> token_url: token URL for the DataQuery API. Defaults to OAUTH_TOKEN_URL.
     :param <bool> suppress_warnings: whether to suppress warnings. Defaults to True.
 
-    :param custom_auth: custom authentication object. When specified oauth must be False 
-        and the object must have a get_auth method. Defaults to None.
+    :param <Any> custom_auth: custom authentication object. When specified oauth must be 
+        False and the object must have a get_auth method. Defaults to None.
 
     :return <DataQueryInterface>: DataQueryInterface object.
 
@@ -816,7 +813,7 @@ class DataQueryInterface(object):
         :param <int> page_size: the number of tickers to fetch in a single request.
             Defaults to 1000 (maximum allowed by the API).
 
-        :return <List[str]>: list of tickers in the requested group.
+        :return <List[str]>: list of all tickers in the requested group.
 
         :raises <ValueError>: if the response from the server is not valid.
         """
