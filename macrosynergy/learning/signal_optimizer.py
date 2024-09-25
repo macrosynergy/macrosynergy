@@ -27,6 +27,7 @@ from macrosynergy.learning.panel_time_series_split import (
 
 from macrosynergy.learning.predictors import LADRegressionSystem
 from macrosynergy.management.validation import _validate_Xy_learning
+from macrosynergy.compat import JOBLIB_RETURN_AS
 
 
 class SignalOptimizer:
@@ -395,7 +396,7 @@ class SignalOptimizer:
         train_test_splits = list(outer_splitter.split(X=X, y=y))
 
         results = tqdm(
-            Parallel(n_jobs=n_jobs, return_as="generator")(
+            Parallel(n_jobs=n_jobs, **JOBLIB_RETURN_AS)(
                 delayed(self._worker)(
                     train_idx=train_idx,
                     test_idx=test_idx,
