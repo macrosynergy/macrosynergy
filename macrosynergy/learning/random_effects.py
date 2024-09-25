@@ -270,27 +270,13 @@ if __name__ == "__main__":
     ftrs = []
     feature_names_in_ = np.array(X.columns)
 
-    # Convert cross-sections to numeric codes for compatibility with RandomEffects
-    unique_xss = sorted(X.index.get_level_values(0).unique())
-    xs_codes = dict(zip(unique_xss, range(1, len(unique_xss) + 1)))
-
-    # X = X.rename(xs_codes, level=0, inplace=False).copy()
-    # y = y.rename(xs_codes, level=0, inplace=False).copy()
-
-    # For each column, obtain Wald test p-value
     # Keep significant features
     for col in feature_names_in_[:1]:
         ftr = X[col].copy()
-        # ftr = add_constant(ftr)
 
         rem = RandomEffects(group_col="real_date", fit_intercept=True)
         rem.fit(ftr, y)
 
-        ftr = ftr.rename(xs_codes, level=0, inplace=False).copy()
-        y2 = y.rename(xs_codes, level=0, inplace=False).copy()
-        ftr = add_constant(ftr)
-        re = lm_RandomEffects(y2.swaplevel(), ftr.swaplevel()).fit()
-        print(ftr)
-        # est = re.params[col]
-        # zstat = est / re.std_errors[col]
-        # pval = 2 * (1 - stats.norm.cdf(zstat))
+        print(rem.params)
+        print(rem.pvals)
+        
