@@ -1,8 +1,6 @@
-from typing import Any, Optional, Union
-
+from typing import Union
 import numpy as np
 import pandas as pd
-from linearmodels.panel import RandomEffects as lm_RandomEffects, PanelOLS, PooledOLS
 import scipy.stats as stats
 from sklearn.base import BaseEstimator
 from statsmodels.tools.tools import add_constant
@@ -13,7 +11,7 @@ from macrosynergy.management import make_qdf
 
 class RandomEffects(BaseEstimator):
     """
-    A custom sklearn estimator that fits a random effects model using linearmodels.
+    A custom sklearn estimator that fits a random effects model.
     """
 
     def __init__(self, group_col: str ="real_date", fit_intercept: bool = True):
@@ -48,13 +46,13 @@ class RandomEffects(BaseEstimator):
         self.total_ss = None
         self.nobs = None
 
-    def fit(self, X: pd.DataFrame, y: pd.DataFrame):
+    def fit(self, X: Union[pd.DataFrame, pd.Series], y: Union[pd.DataFrame, pd.Series]):
         """
         Fit the random effects model.
 
-        :param X: Pandas DataFrame of features with a multiIndex
+        :param X: Pandas DataFrame or Series of features with a multiIndex
             containing the group column.
-        :param y: Pandas DataFrame of target values with the same index
+        :param y: Pandas DataFrame or Series of target values with the same index
             as X.
 
         :return: The fitted estimator.
@@ -69,7 +67,7 @@ class RandomEffects(BaseEstimator):
 
         return self
 
-    def _fit(self, df_x, df_y):
+    def _fit(self, df_x: pd.DataFrame, df_y: pd.DataFrame):
         """
         Fit the random effects model.
 
@@ -194,7 +192,7 @@ class RandomEffects(BaseEstimator):
         cov = s2 * np.linalg.inv(x.T @ x)
         return cov
     
-    def check_X_y(self, X, y):
+    def check_X_y(self, X: Union[pd.DataFrame, pd.Series], y: Union[pd.DataFrame, pd.Series]):
 
         X = self._df_checks(X)
         y = self._df_checks(y)
@@ -204,7 +202,7 @@ class RandomEffects(BaseEstimator):
         
         return X, y
 
-    def _df_checks(self, df: pd.DataFrame):
+    def _df_checks(self, df: Union[pd.DataFrame, pd.Series]):
         """
         Perform checks on the DataFrame input.
         
