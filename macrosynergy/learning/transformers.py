@@ -8,13 +8,11 @@ from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
-import scipy.stats as stats
 from linearmodels.panel import RandomEffects
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.exceptions import NotFittedError
 from sklearn.feature_selection import SelectorMixin
 from sklearn.linear_model import ElasticNet, Lars, Lasso
-from statsmodels.tools.tools import add_constant
 
 from macrosynergy.compat import OneToOneFeatureMixin
 

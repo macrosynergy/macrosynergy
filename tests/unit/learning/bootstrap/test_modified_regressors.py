@@ -113,32 +113,29 @@ class TestBaseModifiedRegressor(unittest.TestCase):
         with self.assertRaises(TypeError):
             BaseModifiedRegressor(model=LogisticRegression())
 
+        lr = LinearRegression()
         # method
         with self.assertRaises(TypeError):
-            BaseModifiedRegressor(model=LinearRegression(), method=1)
+            BaseModifiedRegressor(model=lr, method=1)
         with self.assertRaises(ValueError):
-            BaseModifiedRegressor(model=LinearRegression(), method="invalid_method")
+            BaseModifiedRegressor(model=lr, method="invalid_method")
 
         # error_offset
         with self.assertRaises(TypeError):
             BaseModifiedRegressor(
-                model=LinearRegression(),
+                model=lr,
                 method="analytic",
                 error_offset="invalid_offset",
             )
         with self.assertRaises(ValueError):
-            BaseModifiedRegressor(
-                model=LinearRegression(), method="analytic", error_offset=-1
-            )
+            BaseModifiedRegressor(model=lr, method="analytic", error_offset=-1)
 
         # bootstrap_method
         with self.assertRaises(TypeError):
-            BaseModifiedRegressor(
-                model=LinearRegression(), method="bootstrap", bootstrap_method=1
-            )
+            BaseModifiedRegressor(model=lr, method="bootstrap", bootstrap_method=1)
         with self.assertRaises(ValueError):
             BaseModifiedRegressor(
-                model=LinearRegression(),
+                model=lr,
                 method="bootstrap",
                 bootstrap_method="invalid_method",
             )
@@ -146,46 +143,38 @@ class TestBaseModifiedRegressor(unittest.TestCase):
         # bootstrap_iters
         with self.assertRaises(TypeError):
             BaseModifiedRegressor(
-                model=LinearRegression(),
+                model=lr,
                 method="bootstrap",
                 bootstrap_iters="invalid_iters",
             )
         with self.assertRaises(ValueError):
-            BaseModifiedRegressor(
-                model=LinearRegression(), method="bootstrap", bootstrap_iters=-1
-            )
+            BaseModifiedRegressor(model=lr, method="bootstrap", bootstrap_iters=-1)
 
         # resample_ratio
         with self.assertRaises(TypeError):
             BaseModifiedRegressor(
-                model=LinearRegression(),
+                model=lr,
                 method="bootstrap",
                 resample_ratio="invalid_ratio",
             )
         with self.assertRaises(ValueError):
-            BaseModifiedRegressor(
-                model=LinearRegression(), method="bootstrap", resample_ratio=-1
-            )
+            BaseModifiedRegressor(model=lr, method="bootstrap", resample_ratio=-1)
         with self.assertRaises(ValueError):
-            BaseModifiedRegressor(
-                model=LinearRegression(), method="bootstrap", resample_ratio=1.1
-            )
+            BaseModifiedRegressor(model=lr, method="bootstrap", resample_ratio=1.1)
 
         # max_features
         with self.assertRaises(NotImplementedError):
-            BaseModifiedRegressor(
-                model=LinearRegression(), method="bootstrap", max_features=1
-            )
+            BaseModifiedRegressor(model=lr, method="bootstrap", max_features=1)
 
         # analytic_method
         with self.assertRaises(TypeError):
-            BaseModifiedRegressor(
-                model=LinearRegression(), method="analytic", analytic_method=1
-            )
+            BaseModifiedRegressor(model=lr, method="analytic", analytic_method=1)
 
     def test_types_fit(self):
+
+        lr = LinearRegression()
         bmr = BaseModifiedRegressor(
-            model=LinearRegression(),
+            model=lr,
             method="analytic",
         )
 
