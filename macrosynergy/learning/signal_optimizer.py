@@ -23,7 +23,7 @@ from macrosynergy.learning.splitters import (
     RollingKFoldPanelSplit,
     ExpandingKFoldPanelSplit,
 )
-from macrosynergy.learning.splitters.base_panel_split import BasePanelSplit
+from macrosynergy.learning.splitters.base_splitters import BasePanelSplit
 
 from macrosynergy.learning.predictors import LADRegressionSystem
 from macrosynergy.management.validation import _validate_Xy_learning

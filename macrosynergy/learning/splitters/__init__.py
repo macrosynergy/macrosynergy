@@ -1,4 +1,4 @@
-from .base_panel_split import BasePanelSplit, KFoldPanelSplit, WalkForwardPanelSplit
+from .base_splitters import BasePanelSplit, KFoldPanelSplit, WalkForwardPanelSplit
 from .kfold_splitters import ExpandingKFoldPanelSplit, RollingKFoldPanelSplit, RecencyKFoldPanelSplit
 from .walk_forward_splitters import ExpandingIncrementPanelSplit, ExpandingFrequencyPanelSplit
 

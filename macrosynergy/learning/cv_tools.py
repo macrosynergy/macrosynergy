@@ -10,7 +10,7 @@ import datetime
 from typing import Union, Optional, Dict
 
 from macrosynergy.learning import ExpandingKFoldPanelSplit
-from macrosynergy.learning.splitters.base_panel_split import BasePanelSplit
+from macrosynergy.learning.splitters.base_splitters import BasePanelSplit
 
 from sklearn.model_selection import cross_validate
 from sklearn.metrics import make_scorer
