@@ -14,9 +14,7 @@ from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
 from sklearn.feature_selection import SelectorMixin
 from sklearn.exceptions import NotFittedError
 
-from statsmodels.tools.tools import add_constant
-
-from linearmodels.panel import RandomEffects
+from macrosynergy.learning.random_effects import RandomEffects
 
 from typing import Union, Any, Optional
 
@@ -565,27 +563,16 @@ class MapSelector(BaseEstimator, SelectorMixin):
         self.ftrs = []
         self.feature_names_in_ = np.array(X.columns)
 
-        # Convert cross-sections to numeric codes for compatibility with RandomEffects
-        unique_xss = sorted(X.index.get_level_values(0).unique())
-        xs_codes = dict(zip(unique_xss, range(1, len(unique_xss) + 1)))
-
-        X = X.rename(xs_codes, level=0, inplace=False).copy()
-        y = y.rename(xs_codes, level=0, inplace=False).copy()
-
         # For each column, obtain Wald test p-value
         # Keep significant features
         for col in self.feature_names_in_:
             ftr = X[col]
-            ftr = add_constant(ftr)
-            # Swap levels so that random effects are placed on each time period,
-            # as opposed to the cross-section
-            re = RandomEffects(y.swaplevel(), ftr.swaplevel()).fit()
-            est = re.params[col]
-            zstat = est / re.std_errors[col]
-            pval = 2 * (1 - stats.norm.cdf(zstat))
+
+            re = RandomEffects(fit_intercept=True).fit(ftr, y)
+            pval = re.pvals[col]
             if pval < self.threshold:
                 if self.positive:
-                    if est > 0:
+                    if re.params[col] > 0:
                         self.ftrs.append(col)
                 else:
                     self.ftrs.append(col)
