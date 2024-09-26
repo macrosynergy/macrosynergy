@@ -23,6 +23,5 @@ Submodules
 
    macrosynergy.management.constants
    macrosynergy.management.decorators
-   macrosynergy.management.dq
    macrosynergy.management.types
    macrosynergy.management.validation

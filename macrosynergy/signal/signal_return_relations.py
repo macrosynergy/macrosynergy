@@ -34,7 +34,9 @@ class SignalReturnRelations:
     :param <str, List[str]> sigs: list of signal categories to be considered for which
         detailed relational statistics can be calculated.
     :param <bool, List[bool]> sig_neg: if set to True puts the signal in negative terms
-        for all analysis. Default is False.
+        for all analysis. If more than one signal is tested, `sig_neg` must be a
+        same-order list of the same length as the signals, containing a True for each
+        signal that needs to be put in negative terms. Default is False.
     :param <bool> cosp: If True the comparative statistics are calculated only for the
         "communal sample periods", i.e. periods and cross-sections that have values
         for all compared signals. Default is False.
