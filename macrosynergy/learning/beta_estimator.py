@@ -22,6 +22,7 @@ from macrosynergy.learning import (
     ExpandingKFoldPanelSplit,
     neg_mean_abs_corr,
 )
+from macrosynergy.learning.splitters.base_panel_split import BasePanelSplit
 from macrosynergy.management import categories_df, reduce_df, update_df
 
 
