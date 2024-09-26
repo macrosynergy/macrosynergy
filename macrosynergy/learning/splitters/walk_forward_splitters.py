@@ -7,7 +7,7 @@ import pandas as pd
 
 from typing import List
 
-from base_panel_split import WalkForwardPanelSplit
+from macrosynergy.learning.splitters.base_panel_split import WalkForwardPanelSplit
 
 class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
     """

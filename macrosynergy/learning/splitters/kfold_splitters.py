@@ -5,7 +5,7 @@ Panel K-Fold cross-validator classes.
 import numpy as np
 import pandas as pd
 
-from macrosynergy.learning.splitters import KFoldPanelSplit
+from macrosynergy.learning.splitters.base_panel_split import KFoldPanelSplit
 
 class ExpandingKFoldPanelSplit(KFoldPanelSplit):
     """
