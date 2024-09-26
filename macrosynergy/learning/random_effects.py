@@ -14,7 +14,7 @@ class RandomEffects(BaseEstimator):
     A custom sklearn estimator that fits a random effects model.
     """
 
-    def __init__(self, group_col: str ="real_date", fit_intercept: bool = True):
+    def __init__(self, group_col: str = "real_date", fit_intercept: bool = True):
         """
         Initialize the RandomEffects estimator.
 
@@ -25,7 +25,7 @@ class RandomEffects(BaseEstimator):
             raise TypeError("group_col must be a string.")
         if not isinstance(fit_intercept, bool):
             raise TypeError("fit_intercept must be a boolean.")
-        
+
         self.fit_intercept = fit_intercept
         self.group_col = group_col
 
@@ -59,7 +59,7 @@ class RandomEffects(BaseEstimator):
         """
 
         X, y = self.check_X_y(X, y)
-        
+
         if self.fit_intercept:
             X = add_constant(X)
 
@@ -138,10 +138,12 @@ class RandomEffects(BaseEstimator):
 
         total_ss = float(np.squeeze(y.T @ y))
         r2 = 1 - residual_ss / total_ss
-        
+
         self.features = df_x.columns
         self.params = pd.Series(params.reshape(-1), index=self.features, name="params")
-        self.std_errors = pd.Series(np.sqrt(np.diag(cov_matrix)), index=self.features, name="std_error")
+        self.std_errors = pd.Series(
+            np.sqrt(np.diag(cov_matrix)), index=self.features, name="std_error"
+        )
 
         # For sklearn compatibility
         if self.fit_intercept:
@@ -176,7 +178,7 @@ class RandomEffects(BaseEstimator):
         mu = df.groupby(level=self.group_col).transform("mean")
         df_demeaned = df - mu
         if self.fit_intercept:
-            return (df_demeaned + df.mean(0))
+            return df_demeaned + df.mean(0)
         else:
             return df_demeaned
 
@@ -188,24 +190,26 @@ class RandomEffects(BaseEstimator):
         :param ssr: The sum of squared residuals.
         :param nobs: The number of observations.
         """
-        s2 = float(ssr) / nobs
+        s2 = float(ssr.item()) / nobs
         cov = s2 * np.linalg.inv(x.T @ x)
         return cov
-    
-    def check_X_y(self, X: Union[pd.DataFrame, pd.Series], y: Union[pd.DataFrame, pd.Series]):
+
+    def check_X_y(
+        self, X: Union[pd.DataFrame, pd.Series], y: Union[pd.DataFrame, pd.Series]
+    ):
 
         X = self._df_checks(X)
         y = self._df_checks(y)
 
         if not (X.index == y.index).all():
             raise ValueError("Index of X and y must be the same.")
-        
+
         return X, y
 
     def _df_checks(self, df: Union[pd.DataFrame, pd.Series]):
         """
         Perform checks on the DataFrame input.
-        
+
         :param df: The DataFrame to check.
         """
         if isinstance(df, pd.Series):
@@ -213,15 +217,15 @@ class RandomEffects(BaseEstimator):
 
         if not isinstance(df, pd.DataFrame):
             raise TypeError("Input must be a pandas DataFrame.")
-        
+
         if not isinstance(df.index, pd.MultiIndex):
             raise ValueError("DataFrame must have a MultiIndex.")
 
         if self.group_col not in df.index.names:
             raise ValueError(f"Group column '{self.group_col}' not found in index.")
-        
+
         return df
-    
+
     @property
     def pvals(self):
         """
@@ -279,4 +283,3 @@ if __name__ == "__main__":
 
         print(rem.params)
         print(rem.pvals)
-        
