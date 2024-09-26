@@ -18,7 +18,6 @@ from tqdm.auto import tqdm
 # from tqdm import tqdm
 
 from macrosynergy.learning import (
-    BasePanelSplit,
     ExpandingFrequencyPanelSplit,
     ExpandingKFoldPanelSplit,
     neg_mean_abs_corr,
