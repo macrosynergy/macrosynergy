@@ -2,23 +2,22 @@
 Collection of custom scikit-learn transformer classes.
 """
 
+import datetime
+import warnings
+from typing import Any, Optional, Union
+
 import numpy as np
 import pandas as pd
-
-import datetime
-
-import scipy.stats as stats
-
-from sklearn.linear_model import Lasso, ElasticNet, Lars
-from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
-from sklearn.feature_selection import SelectorMixin
+from linearmodels.panel import RandomEffects
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.exceptions import NotFittedError
+from sklearn.feature_selection import SelectorMixin
+from sklearn.linear_model import ElasticNet, Lars, Lasso
+
+from macrosynergy.compat import OneToOneFeatureMixin
 
 from macrosynergy.learning.random_effects import RandomEffects
 
-from typing import Union, Any, Optional
-
-import warnings
 
 class LarsSelector(BaseEstimator, SelectorMixin):
     def __init__(self, fit_intercept = False, n_factors = 10):
@@ -1030,8 +1029,8 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
 
 
 if __name__ == "__main__":
-    from macrosynergy.management import make_qdf
     import macrosynergy.management as msm
+    from macrosynergy.management import make_qdf
 
     np.random.seed(1)
 
