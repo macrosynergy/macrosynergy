@@ -540,8 +540,8 @@ class TestAll(unittest.TestCase):
                 max_weight=0.55,
                 basket_name="GLB_FIXED",
             )
-
-            self.assertTrue(all(issubclass(w.category, RuntimeWarning) for w in wc))
+            wlist = [w for w in wc if issubclass(w.category, RuntimeWarning)]
+            self.assertTrue(len(wlist) > 0)
 
         basket_keys = basket_2.dict_retcry.keys()
         for b in basket_keys:
@@ -716,8 +716,9 @@ class TestAll(unittest.TestCase):
                 max_weight=0.55,
                 basket_name="GLB_FIXED",
             )
+            wlist = [w for w in wc if issubclass(w.category, RuntimeWarning)]
+            self.assertTrue(len(wlist) > 0)
 
-            self.assertTrue(all(issubclass(w.category, RuntimeWarning) for w in wc))
         # Test the feature that if a basket_name is not specified by the user, default
         # is equal to None, then all of the computed baskets will be returned. In this
         # instance that would involve: "GLB_EQUAL", "GLB_INVERSE" & "GLB_FIXED".
