@@ -296,15 +296,15 @@ class TestAll(unittest.TestCase):
                     blacklist=self.blacklist,
                 )
 
-                w = [x for x in w if issubclass(x.category, UserWarning)]
-                self.assertEqual(len(w), len(expected_nan_series))
+                wlist = [x for x in w if issubclass(x.category, UserWarning)]
                 ticks_found: Set = set(results["cid"] + "_" + results["xcat"])
                 ticks_orig: Set = set(test_df["cid"] + "_" + test_df["xcat"])
                 self.assertTrue(len(ticks_found) < len(ticks_orig))
                 for m_series in expected_nan_series:
                     self.assertNotIn(m_series, ticks_found)
 
-                for warning, m_series in zip(w, expected_nan_series):
+                expc_warnings = len(expected_nan_series)
+                for warning, m_series in zip(wlist, expected_nan_series):
                     self.assertEqual(warning.category, UserWarning)
                     self.assertIn(
                         (
@@ -313,9 +313,9 @@ class TestAll(unittest.TestCase):
                         ),
                         str(warning.message),
                     )
+                    expc_warnings -= 1
+                self.assertEqual(expc_warnings, 0)
 
-        # the paranoid programmer's check - to be removed later
-        self.assertEqual(loopvar, test_repeats - 1)
         warnings.resetwarnings()
 
     def test_panel_calculator_time_series(self):
