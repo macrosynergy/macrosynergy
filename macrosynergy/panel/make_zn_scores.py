@@ -372,7 +372,7 @@ if __name__ == "__main__":
         iis=True,
         neutral="mean",
         pan_weight=0.75,
-        min_obs=10000,
+        min_obs=261,
         est_freq="m",
     )
     print(dfzm)
