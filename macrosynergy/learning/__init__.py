@@ -1,11 +1,11 @@
 from . import predictors
 
-from .panel_time_series_split import (
+from .splitters import (
     ExpandingKFoldPanelSplit,
     RollingKFoldPanelSplit,
+    RecencyKFoldPanelSplit,
     ExpandingIncrementPanelSplit,
     ExpandingFrequencyPanelSplit,
-    BasePanelSplit,
 )
 from .cv_tools import panel_cv_scores
 from .transformers import (
@@ -52,9 +52,10 @@ from .predictors import (
 from .beta_estimator import BetaEstimator
 
 __all__ = [
-    # panel_time_series_split
+    # splitters
     "ExpandingKFoldPanelSplit",
     "RollingKFoldPanelSplit",
+    "RecencyKFoldPanelSplit",
     "ExpandingIncrementPanelSplit",
     "ExpandingFrequencyPanelSplit",
     "BasePanelSplit",
