@@ -1,27 +1,28 @@
-import datetime
+import numpy as np
+import pandas as pd
+
+from sklearn.base import BaseEstimator, RegressorMixin
+from scipy.optimize import minimize
+
 import numbers
 import warnings
 from functools import partial
-from typing import Union
-
-import numpy as np
-import pandas as pd
-from scipy.optimize import minimize
-from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.exceptions import ConvergenceWarning
 
 
 class LADRegressor(BaseEstimator, RegressorMixin):
     def __init__(
         self,
-        fit_intercept = True,
-        positive = False,
-        alpha = 0,
-        shrinkage_type = "l1",
-        tol = None,
+        fit_intercept=True,
+        positive=False,
+        alpha=0,
+        shrinkage_type="l1",
+        tol=None,
+        maxiter=None,
     ):
-        """
+        r"""
         Linear regression with L1 loss.
-        
+
         Parameters
         ----------
         fit_intercept : bool, default=True
@@ -32,17 +33,21 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         alpha: float, default=0
             Shrinkage hyperparameter.
         shrinkage_type: str, default="l1"
-            Type of shrinkage regularization to perform. 
+            Type of shrinkage regularization to perform.
         tol: float, default=None
             Tolerance for convergence of the learning algorithm (SLSQP).
             This is passed into the 'tol' parameter of the scipy.optimize.minimize
             function.
+        maxiter: int, default=None
+            Maximum number of iterations for the learning algorithm (SLSQP).
+            This is passed into the 'maxiter' key of the options dictionary in the
+            scipy.optimize.minimize function.
 
         Notes
         -----
         A dependent variable is modelled as a linear combination of the input features.
         The weights associated with each feature (and the intercept) are determined by
-        finding the weights that minimise the average absolute model residuals. 
+        finding the weights that minimise the average absolute model residuals.
 
         If `alpha` is positive, then shrinkage-based regularization is applied to the
         non-intercept model coefficients. The type of shrinkage is determined by the
@@ -65,7 +70,9 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             - :math:`alpha` is the regularization hyperparameter.
         """
         # Checks
-        self._check_init_params(fit_intercept, positive, alpha, shrinkage_type, tol)
+        self._check_init_params(
+            fit_intercept, positive, alpha, shrinkage_type, tol, maxiter
+        )
 
         # Initialise
         self.fit_intercept = fit_intercept
@@ -73,6 +80,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         self.alpha = alpha
         self.shrinkage_type = shrinkage_type
         self.tol = tol
+        self.maxiter = maxiter
 
         # Set values of quantities to learn to None
         self.coef_ = None
@@ -85,7 +93,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         sample_weight: np.ndarray = None,
     ):
         """
-        Learn LAD regression model parameters. 
+        Learn LAD regression model parameters.
 
         Parameters
         ----------
@@ -111,19 +119,27 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         # Optimization bounds
         if self.positive:
             if self.fit_intercept:
-                bounds = [(None, None)] + [(0, None)] * (n_cols-1) 
+                bounds = [(None, None)] + [(0, None)] * (n_cols - 1)
             else:
                 bounds = [(0, None)] * n_cols
         else:
-            bounds = [(None, None)] * n_cols 
+            bounds = [(None, None)] * n_cols
 
         # Optimisation
         init_weights = np.zeros(n_cols)
         optim_results = minimize(
             fun=partial(
                 self._l1_loss,
-                X=X,
-                y=y,
+                X=(X if isinstance(X, np.ndarray) else X.values),
+                y=(
+                    y
+                    if isinstance(y, np.ndarray)
+                    else (
+                        y.values
+                        if isinstance(y, pd.DataFrame)
+                        else y.values.reshape(-1, 1)
+                    )
+                ),
                 sample_weight=sample_weight,
                 alpha=self.alpha,
                 shrinkage_type=self.shrinkage_type,
@@ -132,19 +148,25 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             method="SLSQP",
             bounds=bounds,
             tol=self.tol,
+            options=(None if self.maxiter is None else {"maxiter": self.maxiter}),
         )
 
+        # Handle optimization results
         if not optim_results.success:
-            raise RuntimeError(
-                "LADRegressor optimization failed to converge. "
+            warnings.warn(
+                "LAD regression failed to converge. Try increasing the number of "
+                "iterations or decreasing the tolerance level. The "
+                "scipy.optimize.minimize message is: {}".format(optim_results.message),
+                ConvergenceWarning,
             )
 
+            return self
+
         if self.fit_intercept:
-            # Then store the intercept and feature weights
             self.intercept_ = optim_results.x[0]
             self.coef_ = optim_results.x[1:]
         else:
-            self.intercept_ = None
+            self.intercept_ = 0.0
             self.coef_ = optim_results.x
 
         return self
@@ -162,13 +184,33 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         -------
         y_pred : np.ndarray
             Numpy array of predictions.
+
+        Notes
+        -----
+        If the model learning algorithm failed to converge, the predict method will return
+        an array of zeros. This has the interpretation of no buy/sell signal being
+        triggered based on this model.
         """
         # Checks
         if not isinstance(X, (pd.DataFrame, np.ndarray)):
             raise TypeError(
-                "Input feature matrix for the LADRegressor must be either a pandas dataframe "
-                "or numpy array. If used as part of an sklearn pipeline, ensure that previous steps "
-                "return a pandas dataframe."
+                "Input feature matrix for the LADRegressor must be either a pandas "
+                "dataframe or numpy array. If used as part of an sklearn pipeline, ensure "
+                "that previous steps return a pandas dataframe or numpy array."
+            )
+        if isinstance(X, np.ndarray):
+            if X.ndim != 2:
+                raise ValueError(
+                    "When the input feature matrix for LADRegressor forecasts is a numpy "
+                    "array, it must have two dimensions. If used as part of an sklearn "
+                    "pipeline, ensure that previous steps return a two-dimensional data "
+                    "structure."
+                )
+
+        if X.shape[1] != len(self.coef_):
+            raise ValueError(
+                "The number of features in the input feature matrix must match the number "
+                "of model coefficients."
             )
 
         # Predict
@@ -185,20 +227,20 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         weights,
         X,
         y,
-        sample_weight = None,
+        sample_weight=None,
         alpha: float = 0,
         shrinkage_type: str = "l1",
     ):
         """
         Determine L1 loss induced by 'weights'.
-        
+
         Parameters
         ----------
         weights : np.ndarray
             LADRegressor model coefficients to be optimised.
-        X : pd.DataFrame or np.ndarray
+        X : np.ndarray
             Input features.
-        y : pd.DataFrame or pd.Series or np.ndarray
+        y : np.ndarray
             Targets associated with each sample in X.
         sample_weight : np.ndarray, default=None
             Sample weights to create a weighted LAD regression model.
@@ -215,10 +257,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         if sample_weight is None:
             sample_weight = np.ones(X.shape[0])
 
-        if isinstance(y, pd.DataFrame):
-            raw_residuals = y.iloc[:, 0] - X.dot(weights)
-        else:  # y is a series
-            raw_residuals = y - X.dot(weights)
+        raw_residuals = y - X @ weights
         abs_residuals = np.abs(raw_residuals)
         weighted_abs_residuals = abs_residuals * sample_weight
 
@@ -228,17 +267,23 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                     l1_norm = np.sum(np.abs(weights[1:]))
                 else:
                     l1_norm = np.sum(np.abs(weights))
-                return np.mean(weighted_abs_residuals) + 2 * X.shape[0] * alpha * l1_norm
+                return (
+                    np.mean(weighted_abs_residuals) + 2 * X.shape[0] * alpha * l1_norm
+                )
             elif shrinkage_type == "l2":
                 if self.fit_intercept:
                     l2_norm = np.sum(weights[1:] ** 2)
                 else:
-                    l2_norm = np.sum(weights ** 2)
-                return np.mean(weighted_abs_residuals) + 2 * X.shape[0] * alpha * l2_norm
+                    l2_norm = np.sum(weights**2)
+                return (
+                    np.mean(weighted_abs_residuals) + 2 * X.shape[0] * alpha * l2_norm
+                )
 
         return np.mean(weighted_abs_residuals)
-    
-    def _check_init_params(self, fit_intercept, positive, alpha, shrinkage_type, tol):
+
+    def _check_init_params(
+        self, fit_intercept, positive, alpha, shrinkage_type, tol, maxiter
+    ):
         """
         Checks for constructor parameters.
         """
@@ -266,6 +311,12 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 raise TypeError("The tol parameter must be numeric.")
             if tol < 0:
                 raise ValueError("The tol parameter must be non-negative.")
+        # maxiter
+        if maxiter is not None:
+            if not isinstance(maxiter, int):
+                raise TypeError("The maxiter parameter must be an integer.")
+            if maxiter <= 0:
+                raise ValueError("The maxiter parameter must be positive.")
 
     def _check_fit_params(self, X, y, sample_weight):
         """
@@ -274,29 +325,33 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         # X
         if not isinstance(X, (pd.DataFrame, np.ndarray)):
             raise TypeError(
-                "Input feature matrix for the LADRegressor must be a pandas dataframe or numpy array."
+                "Input feature matrix for the LADRegressor must be a pandas dataframe or "
+                "numpy array."
             )
         # y
         if not isinstance(y, (pd.Series, pd.DataFrame, np.ndarray)):
             raise TypeError(
-                "Dependent variable for the LADRegressor must be a pandas series, dataframe or numpy array."
+                "Dependent variable for the LADRegressor must be a pandas series, "
+                "dataframe or numpy array."
             )
         if isinstance(y, pd.DataFrame):
             if y.shape[1] != 1:
                 raise ValueError(
-                    "The dependent variable dataframe must have only one column. If used as part of "
-                    "an sklearn pipeline, ensure that previous steps return a pandas "
-                    "series or dataframe."
+                    "The dependent variable dataframe must have only one column. If used "
+                    "as part of an sklearn pipeline, ensure that previous steps return "
+                    "a pandas series or dataframe."
                 )
         elif isinstance(y, np.ndarray):
             if y.ndim != 1:
                 raise ValueError(
-                    "The dependent variable numpy array must be 1D. If the dependent variable is 2D, "
-                    "please either flatten the array or double check the contents of `y`."
+                    "The dependent variable numpy array must be 1D. If the dependent "
+                    "variable is 2D, please either flatten the array or double check the "
+                    "contents of `y`."
                 )
         if len(X) != len(y):
             raise ValueError(
-                "The number of samples in the input feature matrix must match the number of samples in the dependent variable."
+                "The number of samples in the input feature matrix must match the number "
+                "of samples in the dependent variable."
             )
 
         # sample_weight
@@ -320,5 +375,58 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                     )
             if len(sample_weight) != X.shape[0]:
                 raise ValueError(
-                    "The number of sample weights must match the number of samples in the input feature matrix."
+                    "The number of sample weights must match the number of samples in the "
+                    "input feature matrix."
                 )
+
+
+if __name__ == "__main__":
+    import macrosynergy.management as msm
+    from macrosynergy.management.simulate import make_qdf
+
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+
+    """Example: Unbalanced panel """
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd["grading"] = np.ones(dfd.shape[0])
+    black = {
+        "GBP": (
+            pd.Timestamp(year=2009, month=1, day=1),
+            pd.Timestamp(year=2012, month=6, day=30),
+        ),
+        "CAD": (
+            pd.Timestamp(year=2015, month=1, day=1),
+            pd.Timestamp(year=2100, month=1, day=1),
+        ),
+    }
+
+    train = msm.categories_df(
+        df=dfd, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
+    ).dropna()
+
+    X_train = train.drop(columns=["XR"])
+    y_train = train["XR"]
+
+    # Fit model
+    model = LADRegressor(
+        fit_intercept=True, positive=False, alpha=1, shrinkage_type="l1"
+    )
+    model.fit(X_train, y_train)
+    print(f"Intercept: {model.intercept_}, Coefficients: {model.coef_}")
