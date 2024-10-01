@@ -15,7 +15,7 @@ jobs:
 
       - id: set-matrix
         run: |
-          FOLDERS=$(ls -d tests/unit/*/ | grep -v 'learning' | sed 's|tests/unit/||' | sed 's|/||' | jq -R -s -c 'split("\n")[:-1]')
+          FOLDERS=$(ls -d tests/unit/*/ | sed 's|tests/unit/||' | sed 's|/||' | jq -R -s -c 'split("\n")[:-1]')
           echo "Matrix: $FOLDERS"
           echo "::set-output name=matrix::$FOLDERS"
 
@@ -44,7 +44,7 @@ jobs:
 
       - name: Test with pytest for ${{ matrix.folder }}
         run: |
-          python -m pytest --ignore=./tests/unit/learning ./tests/unit/${{ matrix.folder }}
+          python -m pytest ./tests/unit/${{ matrix.folder }}
 
   run-unit-tests-success:
     needs: run-unit-tests
