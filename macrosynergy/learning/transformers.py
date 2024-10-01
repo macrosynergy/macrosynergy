@@ -8,7 +8,6 @@ from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
-from linearmodels.panel import RandomEffects
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.exceptions import NotFittedError
 from sklearn.feature_selection import SelectorMixin
