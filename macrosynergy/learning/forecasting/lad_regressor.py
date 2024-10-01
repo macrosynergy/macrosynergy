@@ -58,7 +58,8 @@ class LADRegressor(BaseEstimator, RegressorMixin):
 
         .. math::
 
-        \underset{w, b}{\text{argmin}} \frac{1}{N} \sum_{i=1}^{N} |y_{i} - x_{i}^{T}w - b| + 2N \times \alpha \times L_{p}(w)^{p}
+        \underset{w, b}{\text{argmin}} \frac{1}{N} \sum_{i=1}^{N} |y_{i} - x_{i}^{T}w - b|
+        + 2N \times \alpha \times L_{p}(w)^{p}
 
         where:
             - N is the number of samples in the training data.
@@ -66,7 +67,8 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             - :math:`x_{i}` is the feature vector for the i-th sample.
             - :math:`w` is the vector of model coefficients.
             - :math:`b` is the model intercept.
-            - :math:`L_{p}(w)` is the :math:`L_{p}` norm of the model coefficients, where :math:`p` is 1 or 2.
+            - :math:`L_{p}(w)` is the :math:`L_{p}` norm of the model coefficients, where
+                :math:`p` is 1 or 2.
             - :math:`alpha` is the regularization hyperparameter.
         """
         # Checks
