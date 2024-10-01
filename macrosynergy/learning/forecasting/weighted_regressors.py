@@ -285,3 +285,57 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
                     "When time weighting is enabled, the target vector and input feature "
                     "matrix must have the same index."
                 )
+            
+class SignWeightedRegressor(BaseWeightedRegressor):
+
+    def __init__(
+        self,
+        model
+    ):
+        """
+        Regressor with sign-weighted sample weights.
+
+        Parameters
+        ----------
+        model : RegressorMixin
+            The underlying regression model to be trained with weighted samples.
+
+        Notes
+        -----
+        By weighting the contribution of different training samples based on the
+        sign of the label, the model is encouraged to learn equally from both positive
+        and negative return samples, irrespective of class imbalance. If there are more
+        positive targets than negative targets in the training set, then the negative
+        target samples are given a higher weight in the model training process. The
+        opposite is true if there are more negative targets than positive targets.
+        """
+
+        super().__init__(model, sign_weighted=True, time_weighted=False)
+
+
+class TimeWeightedRegressor(BaseWeightedRegressor):
+    def __init__(
+        self,
+        model,
+        half_life,
+    ):
+        """
+        Regressor with time-weighted sample weights.
+
+        Parameters
+        ----------
+        model : RegressorMixin
+            The underlying regression model to be trained with weighted samples.
+        half_life : numbers.Number
+            Half-life of the exponential decay function used to calculate the time weights.
+
+        Notes
+        -----
+        By weighting the contribution of different training samples based on the
+        timestamp, the model is encouraged to prioritise newer information. The half-life
+        denotes the number of time periods in units of the native data frequency for the
+        weight attributed to the most recent sample to decay by half.
+        """
+        super().__init__(
+            model, sign_weighted=False, time_weighted=True, half_life=half_life
+        )
