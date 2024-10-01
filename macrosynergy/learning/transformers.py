@@ -2,25 +2,22 @@
 Collection of custom scikit-learn transformer classes.
 """
 
+import datetime
+import warnings
+from typing import Any, Optional, Union
+
 import numpy as np
 import pandas as pd
-
-import datetime
-
-import scipy.stats as stats
-
-from sklearn.linear_model import Lasso, ElasticNet, Lars
-from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
-from sklearn.feature_selection import SelectorMixin
-from sklearn.exceptions import NotFittedError
-
-from statsmodels.tools.tools import add_constant
-
 from linearmodels.panel import RandomEffects
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.exceptions import NotFittedError
+from sklearn.feature_selection import SelectorMixin
+from sklearn.linear_model import ElasticNet, Lars, Lasso
 
-from typing import Union, Any, Optional
+from macrosynergy.compat import OneToOneFeatureMixin
 
-import warnings
+from macrosynergy.learning.random_effects import RandomEffects
+
 
 class LarsSelector(BaseEstimator, SelectorMixin):
     def __init__(self, fit_intercept = False, n_factors = 10):
@@ -565,27 +562,16 @@ class MapSelector(BaseEstimator, SelectorMixin):
         self.ftrs = []
         self.feature_names_in_ = np.array(X.columns)
 
-        # Convert cross-sections to numeric codes for compatibility with RandomEffects
-        unique_xss = sorted(X.index.get_level_values(0).unique())
-        xs_codes = dict(zip(unique_xss, range(1, len(unique_xss) + 1)))
-
-        X = X.rename(xs_codes, level=0, inplace=False).copy()
-        y = y.rename(xs_codes, level=0, inplace=False).copy()
-
         # For each column, obtain Wald test p-value
         # Keep significant features
         for col in self.feature_names_in_:
             ftr = X[col]
-            ftr = add_constant(ftr)
-            # Swap levels so that random effects are placed on each time period,
-            # as opposed to the cross-section
-            re = RandomEffects(y.swaplevel(), ftr.swaplevel()).fit()
-            est = re.params[col]
-            zstat = est / re.std_errors[col]
-            pval = 2 * (1 - stats.norm.cdf(zstat))
+
+            re = RandomEffects(fit_intercept=True).fit(ftr, y)
+            pval = re.pvals[col]
             if pval < self.threshold:
                 if self.positive:
-                    if est > 0:
+                    if re.params[col] > 0:
                         self.ftrs.append(col)
                 else:
                     self.ftrs.append(col)
@@ -1043,8 +1029,8 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
 
 
 if __name__ == "__main__":
-    from macrosynergy.management import make_qdf
     import macrosynergy.management as msm
+    from macrosynergy.management import make_qdf
 
     np.random.seed(1)
 
