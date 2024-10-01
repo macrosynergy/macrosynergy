@@ -28,6 +28,9 @@ from .metrics import (
 )
 from .signal_optimizer import SignalOptimizer
 
+from .forecasting import (
+    LADRegressor
+)
 from .predictors import (
     NaivePredictor,
     BaseWeightedRegressor,
@@ -37,7 +40,6 @@ from .predictors import (
     WeightedLADRegressor,
     SignWeightedLADRegressor,
     TimeWeightedLADRegressor,
-    LADRegressor,
     BaseRegressionSystem,
     LADRegressionSystem,
     RidgeRegressionSystem,
