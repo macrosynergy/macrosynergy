@@ -17,7 +17,7 @@ from macrosynergy.management.utils.core import (
     _map_to_business_day_frequency,
     is_valid_iso_date,
 )
-from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY
+from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY, PD_OLD_RESAMPLE
 import functools
 
 IDX_COLS_SORT_ORDER = ["cid", "xcat", "real_date"]
@@ -381,13 +381,25 @@ def downsample_df_on_real_date(
                 "`agg` must be one of 'mean', 'median', 'min', 'max', 'first', 'last'"
             )
     non_groupby_columns = list(set(df.columns) - set(groupby_columns) - {"real_date"})
-    return (
+    res = (
         df.set_index("real_date")
         .groupby(groupby_columns)[non_groupby_columns]
         .resample(freq)
-        .agg(agg, **RESAMPLE_NUMERIC_ONLY)
-        .reset_index()
     )
+    if PD_OLD_RESAMPLE:
+        # resample only if the column is numeric
+        res = res.agg(
+            {
+                col: agg
+                for col in non_groupby_columns
+                if pd.api.types.is_numeric_dtype(df[col])
+            }
+        ).reset_index()
+        res.columns = res.columns.droplevel(-1)
+    else:
+        res = res.agg(agg, **RESAMPLE_NUMERIC_ONLY).reset_index()
+
+    return res
 
 
 def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False):
