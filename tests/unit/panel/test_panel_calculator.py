@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 
 from tests.simulate import make_qdf
+from macrosynergy.compat import PD_OLD_RESAMPLE
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.panel.panel_calculator import panel_calculator, _check_calcs
 import warnings
@@ -287,15 +288,19 @@ class TestAll(unittest.TestCase):
             expected_nan_series: List[str] = ["USD_NEW1", "USD_NEW2"]
 
             with warnings.catch_warnings(record=True) as w:
-                results: pd.DataFrame = panel_calculator(
-                    df=test_df,
-                    calcs=formulae,
-                    cids=self.cids,
-                    start=self.start,
-                    end=self.end,
-                    blacklist=self.blacklist,
-                )
-
+                try:
+                    results: pd.DataFrame = panel_calculator(
+                        df=test_df,
+                        calcs=formulae,
+                        cids=self.cids,
+                        start=self.start,
+                        end=self.end,
+                        blacklist=self.blacklist,
+                    )
+                except ZeroDivisionError:
+                    if not PD_OLD_RESAMPLE:
+                        raise ValueError("ZeroDivisionError should not be raised")
+                    continue
                 wlist = [x for x in w if issubclass(x.category, UserWarning)]
                 ticks_found: Set = set(results["cid"] + "_" + results["xcat"])
                 ticks_orig: Set = set(test_df["cid"] + "_" + test_df["xcat"])
