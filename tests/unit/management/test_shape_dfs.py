@@ -2,7 +2,7 @@ import unittest
 import random
 import numpy as np
 import pandas as pd
-from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY
+from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY, PD_OLD_RESAMPLE
 from tests.simulate import make_qdf
 from macrosynergy.management.utils import (
     reduce_df,
@@ -287,17 +287,20 @@ class TestAll(unittest.TestCase):
         )
         filt2 = (self.dfd["cid"] == "AUD") & (self.dfd["xcat"] == "XR")
         _freq = _map_to_business_day_frequency("M")
-        x1 = round(
-            float(
-                np.mean(
-                    self.dfd[filt1 & filt2]
-                    .set_index("real_date")
-                    .resample(_freq)
-                    .mean(**RESAMPLE_NUMERIC_ONLY)
-                )
-            ),
-            10,
-        )
+
+        _resamp = self.dfd[filt1 & filt2].set_index("real_date").resample(_freq)
+        if PD_OLD_RESAMPLE:
+            _resamp = _resamp.agg(
+                {
+                    col: "mean"
+                    for col in self.dfd.columns
+                    if pd.api.types.is_numeric_dtype(self.dfd[col])
+                }
+            )
+        else:
+            _resamp = _resamp.mean(**RESAMPLE_NUMERIC_ONLY)
+
+        x1 = round(float(np.mean(_resamp)), 10)
 
         x2 = round(float(dfc.loc[("AUD", "2013-10-31"), "XR"]), 10)
         self.assertAlmostEqual(x1, x2)
