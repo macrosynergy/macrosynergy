@@ -13,12 +13,12 @@ from sklearn.exceptions import ConvergenceWarning
 class LADRegressor(BaseEstimator, RegressorMixin):
     def __init__(
         self,
-        fit_intercept=True,
-        positive=False,
-        alpha=0,
-        shrinkage_type="l1",
-        tol=None,
-        maxiter=None,
+        fit_intercept = True,
+        positive = False,
+        alpha = 0,
+        shrinkage_type = "l1",
+        tol = None,
+        maxiter = None,
     ):
         r"""
         Linear regression with L1 loss.

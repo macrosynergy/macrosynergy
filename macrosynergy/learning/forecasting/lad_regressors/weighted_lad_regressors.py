@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from macrosynergy.learning import LADRegressor
+from macrosynergy.learning.forecasting import LADRegressor
 from macrosynergy.learning.forecasting import SignWeightedRegressor, TimeWeightedRegressor
 from sklearn.base import BaseEstimator, RegressorMixin
 
@@ -146,6 +146,7 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
                 tol=tol,
                 maxiter=maxiter,
             ),
+            half_life = half_life
         )
 
     def set_params(self, **params):
@@ -162,3 +163,75 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
             )
         
         return self
+    
+if __name__ == "__main__":
+    import macrosynergy.management as msm
+    from macrosynergy.management.simulate import make_qdf
+
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+
+    """Example: Unbalanced panel """
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd["grading"] = np.ones(dfd.shape[0])
+    black = {
+        "GBP": (
+            pd.Timestamp(year=2009, month=1, day=1),
+            pd.Timestamp(year=2012, month=6, day=30),
+        ),
+        "CAD": (
+            pd.Timestamp(year=2015, month=1, day=1),
+            pd.Timestamp(year=2100, month=1, day=1),
+        ),
+    }
+
+    train = msm.categories_df(
+        df=dfd, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
+    ).dropna()
+
+    X_train = train.drop(columns=["XR"])
+    y_train = train["XR"]
+
+    # Fit SWLAD - no regularization
+    model = SignWeightedLADRegressor(
+        fit_intercept=True, positive=False, alpha=0, shrinkage_type="l1"
+    )
+    model.fit(X_train, y_train)
+    print(f"Intercept: {model.intercept_}, Coefficients: {model.coef_}")
+
+    # Fit SWLAD - regularization
+    model = SignWeightedLADRegressor(
+        fit_intercept=True, positive=False, alpha=1, shrinkage_type="l1"
+    )
+    model.fit(X_train, y_train)
+    print(f"Intercept: {model.intercept_}, Coefficients: {model.coef_}")
+
+    # Fit TWLAD - no regularization
+    model = TimeWeightedLADRegressor(
+        fit_intercept=True, positive=False, half_life=36, alpha=0, shrinkage_type="l1"
+    )
+    model.fit(X_train, y_train)
+    print(f"Intercept: {model.intercept_}, Coefficients: {model.coef_}")
+
+    # Fit TWLAD - regularization
+    model = TimeWeightedLADRegressor(
+        fit_intercept=True, positive=False, half_life = 36, alpha=1, shrinkage_type="l1"
+    )
+    model.fit(X_train, y_train)
+    print(f"Intercept: {model.intercept_}, Coefficients: {model.coef_}")

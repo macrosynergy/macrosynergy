@@ -1,6 +1,3 @@
-from .lad_regressor import (
-    LADRegressor,
-)
 from .weighted_regressors import (
     BaseWeightedRegressor,
     TimeWeightedRegressor,

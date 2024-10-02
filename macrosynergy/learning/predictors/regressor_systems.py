@@ -7,7 +7,7 @@ import pandas as pd
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import LinearRegression, Ridge
 
-from macrosynergy.learning.predictors import LADRegressor
+from macrosynergy.learning.forecasting import LADRegressor
 
 from macrosynergy.management.validation import _validate_Xy_learning
 

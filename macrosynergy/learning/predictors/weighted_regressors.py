@@ -6,7 +6,7 @@ import pandas as pd
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import LinearRegression
 
-from macrosynergy.learning.predictors.lad_regressor import LADRegressor
+from macrosynergy.learning.forecasting import LADRegressor
 
 
 class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
