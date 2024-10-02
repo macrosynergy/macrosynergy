@@ -6,6 +6,13 @@ from .linear_model import (
     TimeWeightedLinearRegression,
 )
 
+from .model_systems import (
+    CorrelationVolatilitySystem,
+    LADRegressionSystem,
+    LinearRegressionSystem,
+    RidgeRegressionSystem,
+)
+
 from .naive_predictors import (
     NaiveRegressor,
 )
@@ -17,4 +24,8 @@ __all__ = [
     "SignWeightedLinearRegression",
     "TimeWeightedLinearRegression",
     "NaiveRegressor",
+    "CorrelationVolatilitySystem",
+    "LADRegressionSystem",
+    "LinearRegressionSystem",
+    "RidgeRegressionSystem",
 ]
