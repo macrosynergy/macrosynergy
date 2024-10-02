@@ -4,7 +4,7 @@ import datetime
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, RegressorMixin
+from macrosynergy.learning.forecasting.model_systems import BaseRegressionSystem
 from sklearn.linear_model import LinearRegression, Ridge
 
 from macrosynergy.learning.forecasting import LADRegressor
@@ -12,386 +12,254 @@ from macrosynergy.learning.forecasting import LADRegressor
 from macrosynergy.management.validation import _validate_Xy_learning
 
 
-class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
-
-    def __init__(
-        self,
-        roll: int = None,
-        data_freq: str = "D",
-        min_xs_samples: int = 2,
-    ):
-        """
-        Base class for systems of regressors.
-
-        :param <int> roll: The lookback of the rolling window for the regression. If None,
-            the entire cross-sectional history is used for each regression. This should
-            be specified in units of the data frequency, possibly adjusted by the
-            data_freq attribute.
-        :param <str> data_freq: Training set data frequency. This is primarily
-            to be used within the context of market beta estimation in the
-            MarketBetaEstimator class in `macrosynergy.learning`. Accepted strings
-            are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
-            Default is 'D'.
-        :param <int> min_xs_samples: The minimum number of samples required in each
-            cross-section training set for a regression model to be fitted.
-        """
-        self.roll = roll
-        self.data_freq = data_freq
-        self.min_xs_samples = min_xs_samples
-
-        self.models = {}
-
-    def fit(
-        self,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
-    ):
-        """
-        Fit method to fit a regression on each cross-section, subject to
-        cross-sectional data availability.
-
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
-            associated with each sample in X.
-        """
-        # Fit checks
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError("The X argument must be a pandas DataFrame.")
-        if isinstance(y, np.ndarray):
-            # This can happen during sklearn's GridSearch when a voting regressor is used
-            y = pd.Series(y, index=X.index)
-
-        _validate_Xy_learning(X, y)
-
-        # Adjust min_xs_samples based on the frequency of the data
-        min_xs_samples = self.select_data_freq()
-
-        cross_sections = X.index.get_level_values(0).unique()
-
-        X = self._downsample_by_data_freq(X)
-        y = self._downsample_by_data_freq(y)
-
-        for section in cross_sections:
-            X_section = X[X.index.get_level_values(0) == section]
-            y_section = y[y.index.get_level_values(0) == section]
-            unique_dates = sorted(X_section.index.unique())
-            num_dates = len(unique_dates)
-            # Check if there are enough samples to fit a model
-            if not self._check_xs_dates(min_xs_samples, num_dates):
-                continue
-            # If a roll is specified, then adjust the dates accordingly
-            # Only do this if the number of dates is greater than the roll
-            if self.roll:
-                if num_dates < self.roll:
-                    continue
-                else:
-                    X_section, y_section = self.roll_dates(
-                        self.roll, X_section, y_section, unique_dates
-                    )
-            # Fit the model
-            self._fit_cross_section(section, X_section, y_section)
-
-        return self
-
-    def _fit_cross_section(self, section, X_section, y_section):
-        """
-        Fit a regression model on a single cross-section.
-        """
-        model = self.create_model()
-        model.fit(pd.DataFrame(X_section), y_section)
-        # Store model and coefficients
-        self.models[section] = model
-        self.store_model_info(section, model)
-
-    def predict(
-        self,
-        X: pd.DataFrame,
-    ):
-        """
-        Predict method to make model predictions over a panel based on the fitted
-        seemingly unrelated regression.
-
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-
-        :return <pd.Series>: Pandas series of predictions, multi-indexed by cross-section
-            and date.
-        """
-        # Checks
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError("The X argument must be a pandas DataFrame.")
-        if not isinstance(X.index, pd.MultiIndex):
-            raise ValueError("X must be multi-indexed.")
-        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
-            raise TypeError("The inner index of X must be datetime.date.")
-
-        predictions = pd.Series(index=X.index, data=np.nan)
-
-        # Check whether each test cross-section has an associated model
-        cross_sections = predictions.index.get_level_values(0).unique()
-        for idx, section in enumerate(cross_sections):
-            if section in self.models.keys():
-                # If a model exists, return the estimated OOS contract return.
-                predictions[predictions.index.get_level_values(0) == section] = (
-                    self.models[section].predict(X.xs(section, level=0)).flatten()
-                )
-
-        return predictions
-
-    def roll_dates(self, roll, X_section, y_section, unique_dates):
-        right_dates = unique_dates[-roll:]
-        mask = X_section.index.isin(right_dates)
-        X_section = X_section[mask]
-        y_section = y_section[mask]
-        return X_section, y_section
-
-    def select_data_freq(self):
-        if self.data_freq == "D":
-            min_xs_samples = self.min_xs_samples
-        elif self.data_freq == "W":
-            min_xs_samples = self.min_xs_samples // 5
-        elif self.data_freq == "M":
-            min_xs_samples = self.min_xs_samples // 21
-        elif self.data_freq == "Q":
-            min_xs_samples = self.min_xs_samples // 63
-        else:
-            raise ValueError(
-                "Invalid data frequency. Accepted values are 'D', 'W', 'M' and 'Q'."
-            )
-        return min_xs_samples
-
-    @abstractmethod
-    def store_model_info(self, section, model):
-        pass
-
-    @abstractmethod
-    def create_model(self):
-        """
-        Method use to instantiate a regression model for a given cross-section.
-
-        Must be overridden.
-        """
-        pass
-
-    def _check_xs_dates(self, min_xs_samples, num_dates):
-        if num_dates < min_xs_samples:
-            return False
-        return True
-
-    def _downsample_by_data_freq(self, df):
-        return (
-            df.groupby(
-                [
-                    pd.Grouper(level="cid"),
-                    pd.Grouper(level="real_date", freq=self.data_freq),
-                ]
-            )
-            .sum()
-            .copy()
-        )
-
-
 class LinearRegressionSystem(BaseRegressionSystem):
     """
-    Custom scikit-learn predictor class to create a linear OLS seemingly unrelated
-    regression model. This means that separate regressions are estimated for each
-    cross-section, but evaluation is performed over the panel. Consequently, the results of
-    a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
-    but the model parameters themselves may differ across cross-sections.
+    Cross-sectional system of linear regression models. 
 
-    .. note::
+    Parameters
+    ----------
+    roll : int or None, default=None
+        The lookback of the rolling window for the regression.
+    fit_intercept : bool, default=True
+        Whether to fit an intercept for each regression.
+    positive : bool, default=False
+        Whether to enforce positive coefficients for each regression.
+    data_freq : str, default='D'
+        Training set data frequency for resampling. 
+        Accepted values are 'D' for daily, 'W' for weekly, 'M' for monthly and
+        'Q' for quarterly.
+    min_xs_samples : int, default=2
+        The minimum number of samples required in each cross-section training set
+        for a regression model to be fitted.
 
-      This estimator is still **experimental** for now: the predictions
-      and the API might change without any deprecation cycle.
+    Notes
+    -----
+    Separate regression models are fit for each cross-section, but evaluation is performed
+    over the panel. Consequently, the results of a hyperparameter search will choose
+    a single set of hyperparameters for all cross-sections, but the model parameters
+    themselves may differ across cross-sections.
+
+    This estimator is primarily intended for use within the context of market beta
+    estimation, but can be plausibly used for return forecasting or other downstream tasks.
+    The `data_freq` parameter is particularly intended for cross-validating market beta
+    estimation models, since choosing the underlying data frequency is of interest in
+    quant analysis.
     """
-
     def __init__(
         self,
-        roll: int = None,
-        fit_intercept: bool = True,
-        positive: bool = False,
-        data_freq: str = "D",
-        min_xs_samples: int = 2,
+        roll = None,
+        fit_intercept = True,
+        positive = False,
+        data_freq = "D",
+        min_xs_samples = 2,
     ):
-        """
-        Initializes a rolling seemingly unrelated OLS linear regression model. Since
-        separate models are estimated for each cross-section, a minimum constraint on the
-        number of samples per cross-section, called min_xs_samples, is required for
-        sensible inference.
+        # Call the parent class constructor
+        super().__init__(roll=roll, data_freq=data_freq, min_xs_samples=min_xs_samples)
 
-        :param <int> roll: The lookback of the rolling window for the regression. If None,
-            the entire cross-sectional history is used for each regression. This should
-            be specified in units of the data frequency, possibly adjusted by the
-            data_freq attribute.
-        :param <bool> fit_intercept: Boolean indicating whether or not to fit intercepts
-            for each regression.
-        :param <bool> positive: Boolean indicating whether or not to enforce positive
-            coefficients for each regression.
-        :param <str> data_freq: Training set data frequency. This is primarily
-            to be used within the context of market beta estimation in the
-            MarketBetaEstimator class in `macrosynergy.learning`. Accepted strings
-            are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
-            Default is 'D'.
-        :param <int> min_xs_samples: The minimum number of samples required in each
-            cross-section training set for a regression model to be fitted.
-        """
-        # Checks
+        # Additional checks
         self._check_init_params(
-            roll, fit_intercept, positive, data_freq, min_xs_samples
+            fit_intercept, positive,
         )
 
-        self.roll = roll
+        # Additional attributes
         self.fit_intercept = fit_intercept
         self.positive = positive
-        self.data_freq = data_freq
-        self.min_xs_samples = min_xs_samples
 
         # Create data structures to store model information for each cross-section
         self.coefs_ = {}
         self.intercepts_ = {}
 
-        super().__init__(
-            roll=self.roll,
-            data_freq=data_freq,
-            min_xs_samples=min_xs_samples,
-        )
-
     def create_model(self):
+        """
+        Instantiate a linear regression model.
+
+        Returns
+        -------
+        LinearRegression
+            A linear regression model with the specified hyperparameters.
+        """
         return LinearRegression(
             fit_intercept=self.fit_intercept,
             positive=self.positive,
         )
 
     def store_model_info(self, section, model):
+        """
+        Store the coefficients and intercepts of a fitted linear regression model.
+
+        Parameters
+        ----------
+        section : str
+            The cross-section identifier.
+        model : LinearRegression
+            The fitted linear regression model.
+        """
         self.coefs_[section] = model.coef_[0]
         self.intercepts_[section] = model.intercept_
 
     def _check_init_params(
-        self, roll, fit_intercept, positive, data_freq, min_xs_samples
+        self, fit_intercept, positive,
     ):
-        if (roll is not None) and (not isinstance(roll, int)):
-            raise TypeError("roll must be an integer or None.")
-        if (roll is not None) and (roll <= 0):
-            raise ValueError("roll must be a positive integer.")
+        """
+        Parameter checks for the LinearRegressionSystem constructor.
+
+        Parameters
+        ----------
+        fit_intercept : bool
+            Whether to fit an intercept for each regression.
+        positive : bool
+            Whether to enforce positive coefficients for each regression.
+        """
         if not isinstance(fit_intercept, bool):
             raise TypeError("fit_intercept must be a boolean.")
         if not isinstance(positive, bool):
             raise TypeError("positive must be a boolean.")
-        if not isinstance(data_freq, str):
-            raise TypeError("data_freq must be a string.")
-        if data_freq not in ["D", "W", "M", "Q"]:
-            raise ValueError("data_freq must be one of 'D', 'W', 'M' or 'Q'.")
-        if not isinstance(min_xs_samples, int):
-            raise TypeError("min_xs_samples must be an integer.")
-        if min_xs_samples <= 0:
-            raise ValueError("min_xs_samples must be a positive integer.")
 
 
 class LADRegressionSystem(BaseRegressionSystem):
     """
-    Custom scikit-learn predictor class to create a linear LAD seemingly unrelated
-    regression model. This means that separate regressions are estimated for each
-    cross-section, but evaluation is performed over the panel. Consequently, the results of
-    a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
-    but the model parameters themselves may differ across cross-sections.
+    Cross-sectional system of LAD regression models. 
 
-    .. note::
+    Parameters
+    ----------
+    roll : int or None, default=None
+        The lookback of the rolling window for the regression.
+    fit_intercept : bool, default=True
+        Whether to fit an intercept for each regression.
+    positive : bool, default=False
+        Whether to enforce positive coefficients for each regression.
+    data_freq : str, default='D'
+        Training set data frequency for resampling. 
+        Accepted values are 'D' for daily, 'W' for weekly, 'M' for monthly and
+        'Q' for quarterly.
+    min_xs_samples : int, default=2
+        The minimum number of samples required in each cross-section training set
+        for a regression model to be fitted.
 
-      This estimator is still **experimental** for now: the predictions
-      and the API might change without any deprecation cycle.
+    Notes
+    -----
+    Separate regression models are fit for each cross-section, but evaluation is performed
+    over the panel. Consequently, the results of a hyperparameter search will choose
+    a single set of hyperparameters for all cross-sections, but the model parameters
+    themselves may differ across cross-sections.
+
+    This estimator is primarily intended for use within the context of market beta
+    estimation, but can be plausibly used for return forecasting or other downstream tasks.
+    The `data_freq` parameter is particularly intended for cross-validating market beta
+    estimation models, since choosing the underlying data frequency is of interest in
+    quant analysis.
     """
 
     def __init__(
         self,
-        roll: int = None,
-        fit_intercept: bool = True,
-        positive: bool = False,
-        data_freq: str = "D",
-        min_xs_samples: int = 2,
+        roll = None,
+        fit_intercept = True,
+        positive = False,
+        data_freq = "D",
+        min_xs_samples = 2,
     ):
-        """
-        Initializes a rolling seemingly unrelated LAD linear regression model. Since
-        separate models are estimated for each cross-section, a minimum constraint on the
-        number of samples per cross-section, called min_xs_samples, is required for
-        sensible inference.
+        # Call the parent class constructor
+        super().__init__(roll=roll, data_freq=data_freq, min_xs_samples=min_xs_samples)
 
-        :param <int> roll: The lookback of the rolling window for the regression. If None,
-            the entire cross-sectional history is used for each regression.
-        :param <bool> fit_intercept: Boolean indicating whether or not to fit intercepts
-            for each regression.
-        :param <bool> positive: Boolean indicating whether or not to enforce positive
-            coefficients for each regression.
-        :param <str> data_freq: Training set data frequency. This is primarily
-            to be used within the context of market beta estimation in the
-            MarketBetaEstimator class in `macrosynergy.learning`. Accpeted strings
-            are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
-            Default is 'D'.
-        :param <int> min_xs_samples: The minimum number of samples required in each
-            cross-section training set for a regression model to be fitted.
-        """
-        # Checks
+        # Additional checks
         self._check_init_params(
-            roll, fit_intercept, positive, data_freq, min_xs_samples
+            fit_intercept, positive,
         )
 
-        self.roll = roll
+        # Additional attributes
         self.fit_intercept = fit_intercept
         self.positive = positive
-        self.data_freq = data_freq
-        self.min_xs_samples = min_xs_samples
 
         # Create data structures to store model information for each cross-section
         self.coefs_ = {}
         self.intercepts_ = {}
 
-        super().__init__(
-            roll=roll,
-            data_freq=data_freq,
-            min_xs_samples=min_xs_samples,
-        )
-
     def create_model(self):
+        """
+        Instantiate a LAD regression model.
+
+        Returns
+        -------
+        LADRegressor
+            A LAD regression model with the specified hyperparameters.
+        """
         return LADRegressor(
             fit_intercept=self.fit_intercept,
             positive=self.positive,
         )
 
     def store_model_info(self, section, model):
+        """
+        Store the coefficients and intercepts of a fitted LAD regression model.
+
+        Parameters
+        ----------
+        section : str
+            The cross-section identifier.
+        model : LADRegressor
+            The fitted linear regression model.
+        """
         self.coefs_[section] = model.coef_[0]
         self.intercepts_[section] = model.intercept_
 
     def _check_init_params(
-        self, roll, fit_intercept, positive, data_freq, min_xs_samples
+        self, fit_intercept, positive,
     ):
-        if not isinstance(roll, int) and roll is not None:
-            raise TypeError("roll must be an integer or None.")
-        if (roll is not None) and (roll <= 0):
-            raise ValueError("roll must be a positive integer.")
+        """
+        Parameter checks for the LADRegressionSystem constructor.
+
+        Parameters
+        ----------
+        fit_intercept : bool
+            Whether to fit an intercept for each regression.
+        positive : bool
+            Whether to enforce positive coefficients for each regression.
+        """
         if not isinstance(fit_intercept, bool):
             raise TypeError("fit_intercept must be a boolean.")
         if not isinstance(positive, bool):
             raise TypeError("positive must be a boolean.")
-        if not isinstance(data_freq, str):
-            raise TypeError("data_freq must be a string.")
-        if data_freq not in ["D", "W", "M", "Q"]:
-            raise ValueError("data_freq must be one of 'D', 'W', 'M' or 'Q'.")
-        if not isinstance(min_xs_samples, int):
-            raise TypeError("min_xs_samples must be an integer.")
-        if min_xs_samples <= 0:
-            raise ValueError("min_xs_samples must be a positive integer.")
 
 
 class RidgeRegressionSystem(BaseRegressionSystem):
     """
-    Custom scikit-learn predictor class to create a seemingly unrelated ridge
-    regression model. This means that separate regressions, possibly rolling, are estimated for each
-    cross-section, but evaluation is performed over the panel. Consequently, the results of
-    a hyperparameter search will choose a single set of hyperparameters for all cross-sections,
-    but the model parameters themselves may differ across cross-sections.
+    Cross-sectional system of ridge regression models. 
 
-    .. note::
+    Parameters
+    ----------
+    roll : int or None, default=None
+        The lookback of the rolling window for the regression.
+    alpha : float, default=1.0
+        L2 regularization hyperparameter. Greater values specify stronger regularization.
+    fit_intercept : bool, default=True
+        Whether to fit an intercept for each regression.
+    positive : bool, default=False
+        Whether to enforce positive coefficients for each regression.
+    data_freq : str, default='D'
+        Training set data frequency for resampling. 
+        Accepted values are 'D' for daily, 'W' for weekly, 'M' for monthly and
+        'Q' for quarterly.
+    min_xs_samples : int, default=2
+        The minimum number of samples required in each cross-section training set
+        for a regression model to be fitted.
+    tol : float, default=1e-4
+        The tolerance for termination.
+    solver : str, default='lsqr'
+        Solver to use in the computational routines. Options are 'auto', 'svd', 'cholesky',
+        'lsqr', 'sparse_cg', 'sag', 'saga' and 'lbfgs'.
 
-      This estimator is still **experimental** for now: the predictions
-      and the API might change without any deprecation cycle.
+    Notes
+    -----
+    Separate regression models are fit for each cross-section, but evaluation is performed
+    over the panel. Consequently, the results of a hyperparameter search will choose
+    a single set of hyperparameters for all cross-sections, but the model parameters
+    themselves may differ across cross-sections.
+
+    This estimator is primarily intended for use within the context of market beta
+    estimation, but can be plausibly used for return forecasting or other downstream tasks.
+    The `data_freq` parameter is particularly intended for cross-validating market beta
+    estimation models, since choosing the underlying data frequency is of interest in
+    quant analysis.
     """
 
     def __init__(
@@ -405,43 +273,18 @@ class RidgeRegressionSystem(BaseRegressionSystem):
         tol: float = 1e-4,
         solver: str = "lsqr",
     ):
-        """
-        Initializes a rolling seemingly unrelated ridge regression model. Since
-        separate models are estimated for each cross-section, a minimum constraint on the
-        number of samples per cross-section, called min_xs_samples, is required for
-        sensible inference.
+        # Call the parent class constructor
+        super().__init__(roll=roll, data_freq=data_freq, min_xs_samples=min_xs_samples)
 
-        :param <int> roll: The lookback of the rolling window for the regression. If None,
-            the entire cross-sectional history is used for each regression.
-        :param <float> alpha: Regularization hyperparameter. Greater values specify stronger
-            regularization. This must be a value in $[0, np.inf]$. Default is 1.0.
-        :param <bool> fit_intercept: Boolean indicating whether or not to fit intercepts
-            for each regression.
-        :param <bool> positive: Boolean indicating whether or not to enforce positive
-            coefficients for each regression.
-        :param <str> data_freq: Training set data frequency. This is primarily
-            to be used within the context of market beta estimation in the
-            MarketBetaEstimator class in `macrosynergy.learning`. Accpeted strings
-            are 'D' for daily, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
-            Default is 'D'.
-        :param <int> min_xs_samples: The minimum number of samples required in each
-            cross-section training set for a regression model to be fitted.
-        :param <float> tol: The tolerance for termination. Default is 1e-4.
-        :param <str> solver: Solver to use in the computational routines. Options are
-            'auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga' and 'lbfgs'.
-            Default is 'lsqr'.
-        """
         # Checks
         self._check_init_params(
-            roll, alpha, fit_intercept, positive, data_freq, min_xs_samples, tol, solver
+            alpha, fit_intercept, positive, tol, solver,
         )
 
-        self.roll = roll
+        # Additional attributes
         self.alpha = alpha
         self.fit_intercept = fit_intercept
         self.positive = positive
-        self.data_freq = data_freq
-        self.min_xs_samples = min_xs_samples
         self.tol = tol
         self.solver = solver
 
@@ -449,13 +292,15 @@ class RidgeRegressionSystem(BaseRegressionSystem):
         self.coefs_ = {}
         self.intercepts_ = {}
 
-        super().__init__(
-            roll=roll,
-            data_freq=data_freq,
-            min_xs_samples=min_xs_samples,
-        )
-
     def create_model(self):
+        """
+        Instantiate a ridge regression model.
+
+        Returns
+        -------
+        Ridge
+            A ridge regression model with the specified hyperparameters.
+        """
         return Ridge(
             fit_intercept=self.fit_intercept,
             positive=self.positive,
@@ -465,24 +310,44 @@ class RidgeRegressionSystem(BaseRegressionSystem):
         )
 
     def store_model_info(self, section, model):
+        """
+        Store the coefficients and intercepts of a fitted ridge regression model.
+
+        Parameters
+        ----------
+        section : str
+            The cross-section identifier.
+        model : Ridge
+            The fitted ridge regression model.
+        """
         self.coefs_[section] = model.coef_[0]
         self.intercepts_[section] = model.intercept_
 
     def _check_init_params(
         self,
-        roll,
         alpha,
         fit_intercept,
         positive,
-        data_freq,
-        min_xs_samples,
         tol,
         solver,
     ):
-        if not isinstance(roll, int) and roll is not None:
-            raise TypeError("roll must be an integer or None.")
-        if roll is not None and roll <= 0:
-            raise ValueError("roll must be a positive integer.")
+        """
+        Parameter checks for the RidgeRegressionSystem constructor.
+
+        Parameters
+        ----------
+        alpha : float
+            L2 regularization hyperparameter. Greater values specify stronger
+            regularization.
+        fit_intercept : bool
+            Whether to fit an intercept for each regression.
+        positive : bool
+            Whether to enforce positive coefficients for each regression.
+        tol : float
+            The tolerance for termination.
+        solver : str
+            Solver to use in the computational routines.
+        """
         if not isinstance(alpha, (int, float)):
             raise TypeError("alpha must be either an integer or a float.")
         if alpha < 0:
@@ -491,14 +356,6 @@ class RidgeRegressionSystem(BaseRegressionSystem):
             raise TypeError("fit_intercept must be a boolean.")
         if not isinstance(positive, bool):
             raise TypeError("positive must be a boolean.")
-        if not isinstance(data_freq, str):
-            raise TypeError("data_freq must be a string.")
-        if data_freq not in ["D", "W", "M", "Q"]:
-            raise ValueError("data_freq must be one of 'D', 'W', 'M' or 'Q'.")
-        if not isinstance(min_xs_samples, int):
-            raise TypeError("min_xs_samples must be an integer.")
-        if min_xs_samples <= 0:
-            raise ValueError("min_xs_samples must be a positive integer.")
         if not isinstance(tol, (int, float)):
             raise TypeError("tol must be either an integer or a float.")
         if tol <= 0:
@@ -514,7 +371,8 @@ class RidgeRegressionSystem(BaseRegressionSystem):
             "lbfgs",
         ]:
             raise ValueError(
-                "solver must be one of 'auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga' or 'lbfgs'."
+                "solver must be one of 'auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', "
+                "'sag', 'saga' or 'lbfgs'."
             )
 
 
