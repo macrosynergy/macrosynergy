@@ -18,3 +18,5 @@ else:
     PD_FUTURE_STACK = {"dropna": False}
 
 PD_NEW_DATE_FREQ: bool = version.parse(pd.__version__) > version.parse("2.1.4")
+
+PD_OLD_RESAMPLE: bool = version.parse(pd.__version__) < version.parse("1.5.0")
