@@ -247,6 +247,12 @@ def make_zn_scores(
     dfw_zns_pan = dfw * 0
     dfw_zns_css = dfw * 0
 
+    if dfw.shape[0] < min_obs and pan_weight < 1 and pan_weight > 0:
+        raise ValueError(
+            f"The DataFrame has less than {min_obs} observations. "
+            "Please adjust the `min_obs` parameter."
+        )
+
     if pan_weight > 0:
         df_neutral = expanding_stat(
             dfw,
