@@ -259,9 +259,15 @@ class TestFunctions(unittest.TestCase):
                 self.fail("Warning raised unexpectedly")
 
         df_test: pd.DataFrame = df_orig.copy()
-        df_test.loc[
-            (df_test["cid"] == "AUD") & (df_test["xcat"].isin(["FXXR", "IR"])), "value"
-        ] = pd.NA
+
+        with warnings.catch_warnings(record=True) as w:
+            # all warnings will raise errors, this raises deprecated warning
+            # with older pd/np versions. the ignore filter is to suppress it
+            warnings.simplefilter("ignore")
+            df_test.loc[
+                (df_test["cid"] == "AUD") & (df_test["xcat"].isin(["FXXR", "IR"])),
+                "value",
+            ] = pd.NA
 
         warnings.simplefilter("always")
         with warnings.catch_warnings(record=True) as w:
@@ -1064,10 +1070,12 @@ class TestFunctions(unittest.TestCase):
                 metrics=["value"],
                 raise_error=False,
             )
-            self.assertEqual(len(w), 3)
-            for ww in w:
-                self.assertTrue(issubclass(ww.category, UserWarning))
+            efilter = (
+                "Tickers targetted for applying slip are not present in the DataFrame."
+            )
+            wlist = [_w for _w in w if efilter in str(_w.message)]
 
+            self.assertEqual(len(wlist), 3)
         warnings.resetwarnings()
 
         with self.assertRaises(ValueError):
