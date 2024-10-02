@@ -1,21 +1,20 @@
 from .linear_model import (
     LADRegressor,
+    SignWeightedLADRegressor,
+    TimeWeightedLADRegressor,
+    SignWeightedLinearRegression,
+    TimeWeightedLinearRegression,
 )
 
 from .naive_predictors import (
     NaiveRegressor,
 )
 
-from .weighted_regressors import (
-    BaseWeightedRegressor,
-    SignWeightedRegressor,
-    TimeWeightedRegressor,
-)
-
 __all__ = [
-    "BaseWeightedRegressor",
-    "SignWeightedRegressor",
-    "TimeWeightedRegressor",
     "LADRegressor",
+    "SignWeightedLADRegressor",
+    "TimeWeightedLADRegressor",
+    "SignWeightedLinearRegression",
+    "TimeWeightedLinearRegression",
     "NaiveRegressor",
 ]
