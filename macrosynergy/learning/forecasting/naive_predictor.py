@@ -65,6 +65,7 @@ class NaiveRegressor(BaseEstimator, RegressorMixin):
                 "When X is a numpy array, it must have either 1 or 2 dimensions."
             )
         
+        # Return the naive signal
         if isinstance(X, pd.DataFrame):
             return np.mean(X.values, axis=1)
         elif isinstance(X, pd.Series):
