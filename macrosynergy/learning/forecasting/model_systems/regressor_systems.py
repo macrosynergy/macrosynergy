@@ -378,16 +378,38 @@ class RidgeRegressionSystem(BaseRegressionSystem):
 
 class CorrelationVolatilitySystem(BaseRegressionSystem):
     """
-    Custom scikit-learn predictor class written specifically to estimate betas for
-    financial contracts with respect to a benchmark return series. Since an estimated beta
-    can be decomposed into correlation and volatility components, this class aims to estimate
-    these separately, allowing for different lookbacks and weighting schemes for both
-    components.
+    Cross-sectional system of correlation and volatility estimators.
 
-    .. note::
+    Parameters
+    ----------
+    correlation_lookback : int or None, default=None
+        The lookback of the rolling window for correlation estimation. 
+    correlation_type : str, default='pearson'
+        The type of correlation to be calculated. Accepted values are 'pearson', 'kendall'
+        and 'spearman'.
+    volatility_lookback : int, default=21
+        The lookback of the rolling window for volatility estimation.
+    volatility_window_type : str, default='rolling'
+        The type of window to use for the volatility calculation. Accepted values are
+        'rolling' and 'exponential'.
+    data_freq : str, default='D'
+        Training set data frequency for resampling. 
+        Accepted values are 'D' for daily, 'W' for weekly, 'M' for monthly and
+        'Q' for quarterly.
+    min_xs_samples : int, default=2
+        The minimum number of samples required in each cross-section training set
+        for a regression model to be fitted.
 
-      This estimator is still **experimental** for now: the predictions
-      and the API might change without any deprecation cycle.
+    Notes
+    -----
+    This class is specifically designed for market beta estimation based on the 
+    decomposition of the beta into correlation and volatility components in univariate
+    analysis. 
+
+    Separate estimators are fit for each cross-section, but evaluation is performed
+    over the panel. Consequently, the results of a hyperparameter search will choose
+    a single set of hyperparameters for all cross-sections, but the model parameters
+    themselves may differ across cross-sections.
     """
 
     def __init__(
@@ -399,50 +421,39 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         data_freq: str = "D",
         min_xs_samples: int = 2,
     ):
-        """
-        Initialize CorrelationVolatilitySystem class.
+        # Call the parent class constructor
+        super().__init__(roll=None, data_freq=data_freq, min_xs_samples=min_xs_samples)
 
-        :param <Optional[int]> correlation_lookback: The lookback period for the correlation
-            calculation. This should be in units of the dataset frequency, possibly
-            relating to data_freq. Default is None (use all available history).
-        :param <str> correlation_type: The type of correlation to be calculated.
-            Accepted values are 'pearson', 'kendall' and 'spearman'. Default is 'pearson'.
-        :param <int> volatility_lookback: The lookback period for the volatility
-            calculation. This should be in units of the dataset frequency,
-            possibly relating to data_freq. Default is 21.
-        :param <str> volatility_window_type: The type of window to use for the volatility
-            calculation. Accepted values are 'rolling' and 'exponential'. Default is 'rolling'.
-        :param <str> data_freq: Training set data frequency for downsampling. Default is 'D'.
-        :param <int> min_xs_samples: The minimum number of samples required in each
-            cross-section training set for a regression model to be fitted.
-        """
-        # Checks
+        # Additional checks
         self._check_init_params(
             correlation_lookback,
             correlation_type,
             volatility_lookback,
             volatility_window_type,
-            data_freq,
-            min_xs_samples,
         )
 
+        # Additional attributes
         self.correlation_lookback = correlation_lookback
         self.correlation_type = correlation_type
         self.volatility_lookback = volatility_lookback
         self.volatility_window_type = volatility_window_type
-        self.data_freq = data_freq
-        self.min_xs_samples = min_xs_samples
-
-        super().__init__(
-            roll=None,
-            data_freq=data_freq,
-            min_xs_samples=min_xs_samples,
-        )
 
         # Create data structures to store the estimated betas for each cross-section
         self.coefs_ = {}
 
     def _fit_cross_section(self, section, X_section, y_section):
+        """
+        Fit correlation and volatility estimators on a single cross-section.
+
+        Parameters
+        ----------
+        section : str
+            The identifier of the cross-section.
+        X_section : pd.DataFrame
+            Input feature matrix for the cross-section.
+        y_section : pd.Series
+            Target variable for the cross-section.
+        """
         # Estimate local standard deviations of the benchmark and contract return
         if self.volatility_window_type == "rolling":
             X_section_std = X_section[-self.volatility_lookback :].std().iloc[-1]
@@ -472,27 +483,79 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         X: pd.DataFrame,
     ):
         """
-        Predict method to make a naive zero prediction for each cross-section. This is
-        because the only use of this class is to estimate betas, which were computed
-        during the fit method, whose quality can be assessed by a custom scikit-learn metric
-        that directly access the betas without the need for a predict method.
+        Make naive zero predictions over a panel dataset.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
 
-        :return <pd.Series>: Pandas series of zero predictions, multi-indexed by cross-section
-            and date.
+        Returns
+        -------
+        predictions : pd.Series
+            Pandas series of zero predictions, multi-indexed by cross-section and date.
+
+        Notes
+        -----
+        This method outputs zero predictions for all cross-sections and dates, since the
+        CorrelationVolatilitySystem is solely used for beta estimation and no forecasting
+        is performed.
         """
+        # Checks
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError("The X argument must be a pandas DataFrame.")
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
+            raise TypeError("The inner index of X must be datetime.date.")
+        if self.n_ != X.shape[1]:
+            raise ValueError(
+                "The number of features in X does not match the number of "
+                "features in the training data."
+            )
+        
         predictions = pd.Series(index=X.index, data=0)
 
         return predictions
 
     def store_model_info(self, section, beta):
+        """
+        Store the betas induced by the correlation and volatility estimators.
+
+        Parameters
+        ----------
+        section : str
+            The cross-section identifier.
+        beta : numbers.Number
+            The beta estimate for the associated cross-section.
+        """
         self.coefs_[section] = beta
 
     def create_model(self):
+        """
+        Redundant method for the CorrelationVolatilitySystem class.
+        """
         raise NotImplementedError("This method is not implemented for this class.")
 
     def _check_xs_dates(self, min_xs_samples, num_dates):
+        """
+        Cross-sectional availability check.
+
+        Parameters
+        ----------
+        min_xs_samples : int
+            The minimum number of samples required in each cross-section training set for
+            correlation and volatility estimation.
+        num_dates : int
+            The number of unique dates in the cross-section.
+
+        Returns
+        -------
+        bool
+            True if the number of samples is sufficient, False otherwise
+        """
         if num_dates < min_xs_samples:
             return False
         # If the correlation lookback is greater than the number of available dates, skip
@@ -506,6 +569,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         # to the next cross-section
         if num_dates < self.volatility_lookback:
             return False
+        
         return True
 
     def _check_init_params(
@@ -514,9 +578,21 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         correlation_type,
         volatility_lookback,
         volatility_window_type,
-        data_freq,
-        min_xs_samples,
     ):
+        """
+        Parameter checks for the CorrelationVolatilitySystem constructor.
+
+        Parameters
+        ----------
+        correlation_lookback : int or None
+            The lookback of the rolling window for correlation estimation.
+        correlation_type : str
+            The type of correlation to be calculated.
+        volatility_lookback : int
+            The lookback of the rolling window for volatility estimation.
+        volatility_window_type : str
+            The type of window to use for the volatility calculation.
+        """
         if correlation_lookback is not None:
             if not isinstance(correlation_lookback, int):
                 raise TypeError("correlation_lookback must be an integer.")
@@ -538,14 +614,6 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             raise ValueError(
                 "volatility_window_type must be one of 'rolling' or 'exponential'."
             )
-        if not isinstance(data_freq, str):
-            raise TypeError("data_freq must be a string.")
-        if data_freq not in ["D", "W", "M", "Q"]:
-            raise ValueError("data_freq must be one of 'D', 'W', 'M' or 'Q.")
-        if not isinstance(min_xs_samples, int):
-            raise TypeError("min_xs_samples must be an integer.")
-        if min_xs_samples <= 0:
-            raise ValueError("min_xs_samples must be a positive integer.")
 
 
 if __name__ == "__main__":
