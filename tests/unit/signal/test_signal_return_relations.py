@@ -125,9 +125,10 @@ class TestAll(unittest.TestCase):
                 blacklist=self.blacklist,
             )
             # assert that the warning was raised
-            self.assertTrue(len(w) == 1)
             expc_warning = "Frequency D is repeated, dropping repeated frequency."
-            self.assertTrue(str(w[-1].message) == expc_warning)
+            wlist = [_w for _w in w if expc_warning in str(_w.message)]
+            self.assertTrue(len(wlist) == 1)
+
         self.assertEqual(srr.freqs, ["D"])
 
         with self.assertRaises(TypeError):
