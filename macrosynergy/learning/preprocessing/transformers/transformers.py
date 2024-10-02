@@ -1,73 +1,12 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-"""
-Collection of custom scikit-learn transformer classes.
-"""
-
 import numpy as np
 import pandas as pd
 
 import datetime
 
-import scipy.stats as stats
+from sklearn.base import BaseEstimator, TransformerMixin
 
-from sklearn.linear_model import Lasso, ElasticNet, Lars
-from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
-from sklearn.feature_selection import SelectorMixin
-from sklearn.exceptions import NotFittedError
+from typing import Any, Optional
 
-# from statsmodels.tools.tools import add_constant
-
-from linearmodels.panel import RandomEffects
-
-from typing import Union, Any, Optional
-
-import warnings
 
 class FeatureAverager(BaseEstimator, TransformerMixin):
     def __init__(self, use_signs: Optional[bool] = False):
@@ -291,66 +230,3 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         :return <np.ndarray>: Numpy array of expanding counts.
         """
         return X.groupby(level="real_date").count().expanding().sum().to_numpy()
-
-
-
-if __name__ == "__main__":
-    from macrosynergy.management import make_qdf
-    import macrosynergy.management as msm
-
-    np.random.seed(1)
-
-    cids = ["AUD", "CAD", "GBP", "USD"]
-    xcats = ["XR", "CRY", "GROWTH", "INFL"]
-    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
-
-    """Example: Unbalanced panel """
-
-    df_cids2 = pd.DataFrame(
-        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
-    )
-    df_cids2.loc["AUD"] = ["2012-01-01", "2020-12-31", 0, 1]
-    df_cids2.loc["CAD"] = ["2013-01-01", "2020-12-31", 0, 1]
-    df_cids2.loc["GBP"] = ["2010-01-01", "2020-12-31", 0, 1]
-    df_cids2.loc["USD"] = ["2010-01-01", "2020-12-31", 0, 1]
-
-    df_xcats2 = pd.DataFrame(index=xcats, columns=cols)
-    df_xcats2.loc["XR"] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats2.loc["CRY"] = ["2010-01-01", "2020-12-31", 1, 2, 0.95, 1]
-    df_xcats2.loc["GROWTH"] = ["2010-01-01", "2020-12-31", 1, 2, 0.9, 1]
-    df_xcats2.loc["INFL"] = ["2010-01-01", "2020-12-31", 1, 2, 0.8, 0.5]
-
-    dfd2 = make_qdf(df_cids2, df_xcats2, back_ar=0.75)
-    dfd2["grading"] = np.ones(dfd2.shape[0])
-    black = {"GBP": ["2009-01-01", "2012-06-30"], "CAD": ["2018-01-01", "2100-01-01"]}
-    dfd2 = msm.reduce_df(df=dfd2, cids=cids, xcats=xcats, blacklist=black)
-
-    dfd2 = dfd2.pivot(index=["cid", "real_date"], columns="xcat", values="value")
-    X = dfd2.drop(columns=["XR"])
-    y = dfd2["XR"]
-
-    # selector = LassoSelector(0.2)
-    # selector.fit(X, y)
-    # print(selector.transform(X).columns)
-
-    # selector = MapSelector(1e-20)
-    # selector.fit(X, y)
-    # print(selector.transform(X).columns)
-
-    # Split X and y into training and test sets
-    X_train, X_test = (
-        X[X.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
-        X[X.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
-    )
-    y_train, y_test = (
-        y[y.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
-        y[y.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
-    )
-
-    selector = ZnScoreAverager(neutral="zero", use_signs=False)
-    selector.fit(X_train, y_train)
-    print(selector.transform(X_test))
-
-    selector = ZnScoreAverager(neutral="zero")
-    selector.fit(X_train, y_train)
-    print(selector.transform(X_test))
