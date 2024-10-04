@@ -327,12 +327,10 @@ def apply_slip(
 
     slip: int = slip.__neg__()
 
-    filtered_df = df[df["ticker"].isin(sel_tickers)].copy()
     for col in metrics:
-        filtered_df[col] = filtered_df[col].astype(float)
-    filtered_df.loc[:, metrics] = filtered_df.groupby("ticker")[metrics].shift(slip)
-
-    df.loc[df["ticker"].isin(sel_tickers), metrics] = filtered_df[metrics]
+        tks_isin = df["ticker"].isin(sel_tickers)
+        df.loc[tks_isin, col] = df.loc[tks_isin, col].astype(float)
+        df.loc[tks_isin, col] = df.groupby("ticker")[col].shift(slip)
 
     df = df.drop(columns=["ticker"]).reset_index(drop=True)
     assert isinstance(df, QuantamentalDataFrame), "Failed to apply slip."
