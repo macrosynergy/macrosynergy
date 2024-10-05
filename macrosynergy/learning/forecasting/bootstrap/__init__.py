@@ -2,7 +2,7 @@ from .bootstrap import (
     BasePanelBootstrap,
 )
 
-from .modified_regressors import (
+from .base_modified_regressor import (
     BaseModifiedRegressor,
     ModifiedLinearRegression,
     ModifiedSignWeightedLinearRegression,
