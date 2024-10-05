@@ -28,9 +28,9 @@ class NaiveRegressor(BaseEstimator, RegressorMixin):
 
         Parameters
         ----------
-        X : pandas DataFrame, pandas Series or numpy array
+        X : pd.DataFrame, pd.Series or numpy array
             The input feature matrix.
-        y : pandas Series or numpy array
+        y : pd.Series or numpy array
             The target variable.
         Notes
         -----
