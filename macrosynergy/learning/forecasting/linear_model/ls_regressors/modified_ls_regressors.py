@@ -6,7 +6,7 @@ from sklearn.linear_model import LinearRegression
 from macrosynergy.learning.forecasting.bootstrap import (
     BaseModifiedRegressor,
 )
-from macrosynergy.learning.forecasting.linear_model import (
+from macrosynergy.learning.forecasting.linear_model.ls_regressors.weighted_ls_regressors import (
     SignWeightedLinearRegression,
     TimeWeightedLinearRegression,
 )

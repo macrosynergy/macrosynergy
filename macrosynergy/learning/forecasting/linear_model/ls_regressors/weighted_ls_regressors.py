@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from sklearn.linear_model import LinearRegression, Ridge, Lasso
-from macrosynergy.learning.forecasting import SignWeightedRegressor, TimeWeightedRegressor
+from macrosynergy.learning.forecasting.weighted_regressors import SignWeightedRegressor, TimeWeightedRegressor
 
 class SignWeightedLinearRegression(SignWeightedRegressor):
     def __init__(

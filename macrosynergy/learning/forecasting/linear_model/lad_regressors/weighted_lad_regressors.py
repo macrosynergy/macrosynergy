@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from macrosynergy.learning.forecasting import LADRegressor
-from macrosynergy.learning.forecasting import SignWeightedRegressor, TimeWeightedRegressor
+from macrosynergy.learning.forecasting.linear_model.lad_regressors import LADRegressor
+from macrosynergy.learning.forecasting.weighted_regressors import SignWeightedRegressor, TimeWeightedRegressor
 from sklearn.base import BaseEstimator, RegressorMixin
 
 import numbers
