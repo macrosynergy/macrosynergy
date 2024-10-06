@@ -28,9 +28,9 @@ class NaiveRegressor(BaseEstimator, RegressorMixin):
 
         Parameters
         ----------
-        X : pd.DataFrame, pd.Series or numpy array
+        X : pd.DataFrame, pd.Series or np.ndarray
             The input feature matrix.
-        y : pd.Series or numpy array
+        y : pd.DataFrame, pd.Series or np.ndarray
             The target variable.
         Notes
         -----
@@ -39,7 +39,7 @@ class NaiveRegressor(BaseEstimator, RegressorMixin):
         """
         # Checks
         if not isinstance(X, (pd.DataFrame, pd.Series, np.ndarray)):
-            raise ValueError("X must be a pandas DataFrame, pandas Series or numpy array")
+            raise TypeError("X must be a pandas DataFrame, pandas Series or numpy array")
         elif isinstance(X, np.ndarray) and ((X.ndim > 2) or (X.ndim < 1)):
             raise ValueError(
                 "When X is a numpy array, it must have either 1 or 2 dimensions."
