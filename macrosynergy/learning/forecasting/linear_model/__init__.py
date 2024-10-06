@@ -7,6 +7,9 @@ from .lad_regressors import (
 from .ls_regressors import (
     SignWeightedLinearRegression,
     TimeWeightedLinearRegression,
+    ModifiedLinearRegression,
+    ModifiedSignWeightedLinearRegression,
+    ModifiedTimeWeightedLinearRegression,
 )
 
 __all__ = [
@@ -15,4 +18,7 @@ __all__ = [
     "TimeWeightedLADRegressor",
     "SignWeightedLinearRegression",
     "TimeWeightedLinearRegression",
+    "ModifiedLinearRegression",
+    "ModifiedSignWeightedLinearRegression",
+    "ModifiedTimeWeightedLinearRegression",
 ]
