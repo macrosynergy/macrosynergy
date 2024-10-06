@@ -109,4 +109,49 @@ class TestNaiveRegressor(unittest.TestCase):
         np.testing.assert_array_equal(preds, np.mean(self.X.values, axis = 1))
 
     def test_types_predict(self):
-        pass
+        # pandas series
+        nr = NaiveRegressor().fit(self.X["CPI"], self.y)
+        with self.assertRaises(TypeError):
+            preds = nr.predict(1)
+        with self.assertRaises(TypeError):
+            preds = nr.predict("string")
+        with self.assertRaises(ValueError):
+            preds = nr.predict(self.X["CPI"].values) # Prohibit data of a different type to that seen in 'fit'
+        with self.assertRaises(ValueError):
+            preds = nr.predict(pd.DataFrame(self.X["CPI"]))
+        # numpy array - single column
+        nr = NaiveRegressor().fit(self.X["CPI"].values, self.y)
+        with self.assertRaises(TypeError):
+            preds = nr.predict(1)
+        with self.assertRaises(TypeError):
+            preds = nr.predict("string")
+        with self.assertRaises(ValueError):
+            preds = nr.predict(self.X["CPI"])
+        with self.assertRaises(ValueError):
+            preds = nr.predict(pd.DataFrame(self.X["CPI"]))
+        # pandas dataframe - single column
+        nr = NaiveRegressor().fit(pd.DataFrame(self.X["CPI"]), self.y)
+        with self.assertRaises(TypeError):
+            preds = nr.predict(1)
+        with self.assertRaises(TypeError):
+            preds = nr.predict("string")
+        with self.assertRaises(ValueError):
+            preds = nr.predict(self.X["CPI"].values)
+        with self.assertRaises(ValueError):
+            preds = nr.predict(self.X["CPI"])
+        # pandas dataframe - multiple columns
+        nr = NaiveRegressor().fit(self.X, self.y)
+        with self.assertRaises(TypeError):
+            preds = nr.predict(1)
+        with self.assertRaises(TypeError):
+            preds = nr.predict("string")
+        with self.assertRaises(ValueError):
+            preds = nr.predict(self.X.values)
+        # numpy array - multiple columns
+        nr = NaiveRegressor().fit(self.X.values, self.y)
+        with self.assertRaises(TypeError):
+            preds = nr.predict(1)
+        with self.assertRaises(TypeError):
+            preds = nr.predict("string")
+        with self.assertRaises(ValueError):
+            preds = nr.predict(self.X)
