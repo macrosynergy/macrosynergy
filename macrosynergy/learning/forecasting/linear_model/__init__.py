@@ -4,7 +4,7 @@ from .lad_regressors import (
     TimeWeightedLADRegressor,
 )
 
-from .ols_regressors import (
+from .ls_regressors import (
     SignWeightedLinearRegression,
     TimeWeightedLinearRegression,
 )

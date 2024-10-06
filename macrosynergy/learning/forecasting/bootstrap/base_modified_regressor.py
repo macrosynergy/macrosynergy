@@ -7,7 +7,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.base import RegressorMixin, BaseEstimator, clone
 
 from macrosynergy.learning.forecasting.bootstrap import BasePanelBootstrap
-from macrosynergy.learning.forecasting.linear_model.ols_regressors import (
+from macrosynergy.learning.forecasting.linear_model.ls_regressors import (
     SignWeightedLinearRegression,
     TimeWeightedLinearRegression,
 )
