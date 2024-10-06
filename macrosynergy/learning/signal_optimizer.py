@@ -25,7 +25,7 @@ from macrosynergy.learning.panel_time_series_split import (
     ExpandingKFoldPanelSplit,
 )
 
-from macrosynergy.learning.predictors import LADRegressionSystem
+from macrosynergy.learning.forecasting import LADRegressionSystem
 from macrosynergy.management.validation import _validate_Xy_learning
 
 
