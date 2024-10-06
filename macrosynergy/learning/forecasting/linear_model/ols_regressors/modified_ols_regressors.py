@@ -6,6 +6,10 @@ from sklearn.linear_model import LinearRegression
 from macrosynergy.learning.forecasting.bootstrap import (
     BaseModifiedRegressor,
 )
+from macrosynergy.learning.forecasting.linear_model import (
+    SignWeightedLinearRegression,
+    TimeWeightedLinearRegression,
+)
 
 class ModifiedLinearRegression(BaseModifiedRegressor):
     def __init__(
@@ -100,7 +104,7 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         -----
         By default, the calculated standard errors use the usual standard 
         error expression for OLS linear regression models under the assumption
-        of multivariate normality, heteroskedasticity and zero mean of the model errors.
+        of multivariate normality, homoskedasticity and zero mean of the model errors.
         If `analytic_method = "White"`, the HC3 White estimator is used. 
 
         References
@@ -183,45 +187,47 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
 class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
     def __init__(
         self,
-        method: str,
-        fit_intercept: bool = True,
-        positive: bool = False,
-        error_offset: float = 1e-2,
-        bootstrap_method: str = "panel",
-        bootstrap_iters: int = 1000,
-        resample_ratio: Union[float, int] = 1,
-        analytic_method: Optional[str] = None,
+        method,
+        fit_intercept = True,
+        positive = False,
+        error_offset = 1e-2,
+        bootstrap_method = "panel",
+        bootstrap_iters = 1000,
+        resample_ratio = 1,
+        analytic_method = None,
     ):
         """
-        Custom class to train a SWLS linear regression model with coefficients modified
-        by estimated standard errors to account for statistical precision of the
-        estimates.
+        Modified SWLS linear regression model. Estimated coefficients are divided
+        by estimated standard errors to form an auxiliary factor model.
 
-        :param <str> method: The method used to modify the coefficients. Accepted values
-            are "analytic" and "bootstrap".
-        :param <bool> fit_intercept: Whether to fit an intercept term in the model.
-            Default is True.
-        :param <bool> positive: Whether to constrain the coefficients to be positive.
-            Default is False.
-        :param <float> error_offset: A small offset to add to the standard errors to
-            prevent division by zero in the case of very small standard errors. Default
-            value is 1e-2.
-        :param <str> bootstrap_method: The bootstrap method used to modify the coefficients.
-            Accepted values are "panel", "period", "cross", "cross_per_period"
-            and "period_per_cross". Default value is "panel".
-        :param <int> bootstrap_iters: The number of bootstrap iterations to perform in
-            order to determine the standard errors of the model parameters under the bootstrap
-            approach. Default value is 1000.
-        :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
-            in each bootstrap dataset. This is a fraction of the quantity of the panel
-            component to be resampled. Default value is 1.
-        :param <Optional[str]> analytic_method: The analytic method used to calculate
-            standard errors. Expressions for analytic standard errors are expected to be
-            written within the method `adjust_analytical_se` and this parameter can be
-            passed into `adjust_analyical_se` for an alternative analytic standard error
-            estimate, for instance White's estimator. Default value is None.
-
-        :return None
+        Parameters
+        ----------
+        method : str
+            Method to modify coefficients. Accepted values are
+            "analytic" or "bootstrap".
+        fit_intercept : bool, default = True
+            Whether to fit an intercept term in the model. Default is True.
+        positive : bool, default = False
+            Whether to constrain the coefficients to be positive. Default is False.
+        error_offset : float, default = 1e-2
+            Small offset to add to estimated standard errors in order to prevent
+            small denominators during the coefficient adjustment. 
+        bootstrap_method : str, default = "panel"
+            Method used to modify coefficients, when `method = bootstrap`.
+            Accepted values are "panel", "period", "cross", "cross_per_period",
+            "period_per_cross". 
+        bootstrap_iters : int, default = 1000
+            Number of bootstrap iterations to determine standard errors, used 
+            only when `method = bootstrap`.
+        resample_ratio : numbers.Number, default = 1
+            Ratio of resampling units in each bootstrap dataset, used only
+            when `method = bootstrap`. This is a fraction of the quantity of
+            the panel component to be resampled.
+        analytic_method : str, default = None
+            The analytic method used to determine standard errors. If `method = analytic`,
+            the default standard error expressions for an OLS linear regression model 
+            are used. If `analytic_method = "White"`, the heteroskedasticity-robust
+            White estimator is used to estimate the standard errors. 
         """
         self.fit_intercept = fit_intercept
         self.positive = positive
@@ -240,30 +246,60 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
 
     def adjust_analytical_se(
         self,
-        model: RegressorMixin,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
-        analytic_method: Optional[str],
+        model,
+        X,
+        y,
+        analytic_method = None,
     ):
         """
-        Method to adjust the coefficients of the linear model by an analytical
-        standard error expression. The default is to use the standard error estimate
-        obtained through assuming multivariate normality of the model errors as well as
-        heteroskedasticity and zero mean. If `analytic_method` is "White", the White
-        estimator is used to estimate the standard errors.
+        Adjust the coefficients of the SWLS linear regression model
+        by an analytical standard error formula.
 
-        :param <RegressorMixin> model: The underlying linear model to be modified. This
-            model must have `coef_` and `intercept_` attributes, in accordance with
-            standard `scikit-learn` conventions.
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
-            associated with each sample in X.
-        :param <Optional[str]> analytic_method: The analytic method used to calculate
-            standard errors. If None, the default method is used. Currently, the only
-            alternative we offer is White's estimator, which requires "White" to be
-            specified. Default value is None.
+        Parameters
+        ----------
+        model : SignWeightedLinearRegression
+            The underlying SWLS linear regression model to be modified.
+        X : pd.DataFrame
+            Input feature matrix.
+        y : pd.DataFrame or pd.Series
+            Target vector associated with each sample in X.
+        analytic_method : str, default = None
+            The analytic method used to calculate standard errors.
 
-        :return <float>, <np.ndarray>: The adjusted intercept and coefficients.
+        Returns
+        -------
+        intercept : float
+            Adjusted intercept.
+        coef : np.ndarray
+            Adjusted coefficients.
+
+        Parameters
+        ----------
+        The analytical parameter estimates for WLS are:
+
+        .. math::
+
+        \hat{\Beta}^{\text{WLS}} = (X^{\intercal}WX)^{-1}X^{\intercal}y
+
+        where:
+            - :math: `X` is the input feature matrix, possibly with a column of
+                ones representing the choice of an intercept.
+            - :math: `W` is the positive-definite, symmetric weight matrix, a 
+                diagonal matrix with sample weights along the main diagonal.
+            - :math: `y` is the dependent variable vector. 
+
+        Since `W` is a positive-definite, symmetric matrix, it has a square root
+        equal to the diagonal matrix with square roots of the sample weights along
+        the diagonal. Hence, the WLS estimator can be rewritten as:
+
+        .. math::
+
+        \hat{\Beta}^{\text{WLS}} = ((W^{\frac{1}{2}}X}^{\intercal}(W^{\frac{1}{2}}X))^{-1}(W^{\frac{1}{2}}X)^{\intercal}(W^{\frac{1}{2}}y)
+
+        This is precisely the OLS estimator for a rescaled matrix :math: `\sim{X} = W^{\frac{1}{2}}X`
+        and a rescaled dependent variable :math: `\sim{y} = W^{\frac{1}{2}}y`.
+        Hence, the usual standard error estimate and White's estimator can be applied
+        based on a rescaling of the design matrix and associated target vector.
         """
         # Checks
         if analytic_method is not None:
@@ -325,6 +361,15 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
         return intercept, coef
 
     def set_params(self, **params):
+        """
+        Setter method to update the parameters of the
+        ModifiedSignWeightedLinearRegression.
+
+        Parameters
+        ----------
+        **params : dict
+            Dictionary of parameters to update.
+        """
         super().set_params(**params)
         if "fit_intercept" in params or "positive" in params:
             # Re-initialize the SignWeightedLinearRegression instance with updated parameters
@@ -337,48 +382,51 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
 class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
     def __init__(
         self,
-        method: str,
-        fit_intercept: bool = True,
-        positive: bool = False,
-        half_life: int = 252,
-        error_offset: float = 1e-2,
-        bootstrap_method: str = "panel",
-        bootstrap_iters: int = 1000,
-        resample_ratio: Union[float, int] = 1,
-        analytic_method: Optional[str] = None,
+        method,
+        fit_intercept = True,
+        positive = False,
+        half_life = 252,
+        error_offset = 1e-2,
+        bootstrap_method = "panel",
+        bootstrap_iters = 1000,
+        resample_ratio = 1,
+        analytic_method = None,
     ):
         """
-        Custom class to train a TWLS linear regression model with coefficients modified
-        by estimated standard errors to account for statistical precision of the
-        estimates.
+        Modified TWLS linear regression model. Estimated coefficients are divided
+        by estimated standard errors to form an auxiliary factor model.
 
-        :param <str> method: The method used to modify the coefficients. Accepted values
-            are "analytic" and "bootstrap".
-        :param <bool> fit_intercept: Whether to fit an intercept term in the model.
-            Default is True.
-        :param <bool> positive: Whether to constrain the coefficients to be positive.
-            Default is False.
-        :param <int> half_life: The half-life of the exponential weighting function
-            used to calculate the sample weights. Default value is 252.
-        :param <float> error_offset: A small offset to add to the standard errors to
-            prevent division by zero in the case of very small standard errors. Default
-            value is 1e-2.
-        :param <str> bootstrap_method: The bootstrap method used to modify the coefficients.
-            Accepted values are "panel", "period", "cross", "cross_per_period"
-            and "period_per_cross". Default value is "panel".
-        :param <int> bootstrap_iters: The number of bootstrap iterations to perform in
-            order to determine the standard errors of the model parameters under the bootstrap
-            approach. Default value is 1000.
-        :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
-            in each bootstrap dataset. This is a fraction of the quantity of the panel
-            component to be resampled. Default value is 1.
-        :param <Optional[str]> analytic_method: The analytic method used to calculate
-            standard errors. Expressions for analytic standard errors are expected to be
-            written within the method `adjust_analytical_se` and this parameter can be
-            passed into `adjust_analyical_se` for an alternative analytic standard error
-            estimate, for instance White's estimator. Default value is None.
-
-        :return None
+        Parameters
+        ----------
+        method : str
+            Method to modify coefficients. Accepted values are
+            "analytic" or "bootstrap".
+        fit_intercept : bool, default = True
+            Whether to fit an intercept term in the model. Default is True.
+        positive : bool, default = False
+            Whether to constrain the coefficients to be positive. Default is False.
+        half_life : int, default = 252
+            The half-life of the exponential weighting function
+            used to calculate the sample weights.
+        error_offset : float, default = 1e-2
+            Small offset to add to estimated standard errors in order to prevent
+            small denominators during the coefficient adjustment. 
+        bootstrap_method : str, default = "panel"
+            Method used to modify coefficients, when `method = bootstrap`.
+            Accepted values are "panel", "period", "cross", "cross_per_period",
+            "period_per_cross". 
+        bootstrap_iters : int, default = 1000
+            Number of bootstrap iterations to determine standard errors, used 
+            only when `method = bootstrap`.
+        resample_ratio : numbers.Number, default = 1
+            Ratio of resampling units in each bootstrap dataset, used only
+            when `method = bootstrap`. This is a fraction of the quantity of
+            the panel component to be resampled.
+        analytic_method : str, default = None
+            The analytic method used to determine standard errors. If `method = analytic`,
+            the default standard error expressions for an OLS linear regression model 
+            are used. If `analytic_method = "White"`, the heteroskedasticity-robust
+            White estimator is used to estimate the standard errors. 
         """
         self.fit_intercept = fit_intercept
         self.positive = positive
@@ -398,30 +446,60 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
 
     def adjust_analytical_se(
         self,
-        model: RegressorMixin,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
-        analytic_method: Optional[str],
+        model,
+        X,
+        y,
+        analytic_method,
     ):
         """
-        Method to adjust the coefficients of the linear model by an analytical
-        standard error expression. The default is to use the standard error estimate
-        obtained through assuming multivariate normality of the model errors as well as
-        heteroskedasticity and zero mean. If `analytic_method` is "White", the White
-        estimator is used to estimate the standard errors.
+        Adjust the coefficients of the TWLS linear regression model
+        by an analytical standard error formula.
 
-        :param <RegressorMixin> model: The underlying linear model to be modified. This
-            model must have `coef_` and `intercept_` attributes, in accordance with
-            standard `scikit-learn` conventions.
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
-            associated with each sample in X.
-        :param <Optional[str]> analytic_method: The analytic method used to calculate
-            standard errors. If None, the default method is used. Currently, the only
-            alternative we offer is White's estimator, which requires "White" to be
-            specified. Default value is None.
+        Parameters
+        ----------
+        model : TimeWeightedLinearRegression
+            The underlying TWLS linear regression model to be modified.
+        X : pd.DataFrame
+            Input feature matrix.
+        y : pd.DataFrame or pd.Series
+            Target vector associated with each sample in X.
+        analytic_method : str, default = None
+            The analytic method used to calculate standard errors.
 
-        :return <float>, <np.ndarray>: The adjusted intercept and coefficients.
+        Returns
+        -------
+        intercept : float
+            Adjusted intercept.
+        coef : np.ndarray
+            Adjusted coefficients.
+
+        Parameters
+        ----------
+        The analytical parameter estimates for WLS are:
+
+        .. math::
+
+        \hat{\Beta}^{\text{WLS}} = (X^{\intercal}WX)^{-1}X^{\intercal}y
+
+        where:
+            - :math: `X` is the input feature matrix, possibly with a column of
+                ones representing the choice of an intercept.
+            - :math: `W` is the positive-definite, symmetric weight matrix, a 
+                diagonal matrix with sample weights along the main diagonal.
+            - :math: `y` is the dependent variable vector. 
+
+        Since `W` is a positive-definite, symmetric matrix, it has a square root
+        equal to the diagonal matrix with square roots of the sample weights along
+        the diagonal. Hence, the WLS estimator can be rewritten as:
+
+        .. math::
+
+        \hat{\Beta}^{\text{WLS}} = ((W^{\frac{1}{2}}X}^{\intercal}(W^{\frac{1}{2}}X))^{-1}(W^{\frac{1}{2}}X)^{\intercal}(W^{\frac{1}{2}}y)
+
+        This is precisely the OLS estimator for a rescaled matrix :math: `\sim{X} = W^{\frac{1}{2}}X`
+        and a rescaled dependent variable :math: `\sim{y} = W^{\frac{1}{2}}y`.
+        Hence, the usual standard error estimate and White's estimator can be applied
+        based on a rescaling of the design matrix and associated target vector.
         """
         # Checks
         if analytic_method is not None:
@@ -483,6 +561,15 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
         return intercept, coef
 
     def set_params(self, **params):
+        """
+        Setter method to update the parameters of the
+        ModifiedTimeWeightedLinearRegression.
+
+        Parameters
+        ----------
+        **params : dict
+            Dictionary of parameters to update.
+        """
         super().set_params(**params)
         if "fit_intercept" in params or "positive" in params or "half_life" in params:
             # Re-initialize the SignWeightedLinearRegression instance with updated parameters
