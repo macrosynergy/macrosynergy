@@ -4,6 +4,9 @@ from .linear_model import (
     TimeWeightedLADRegressor,
     SignWeightedLinearRegression,
     TimeWeightedLinearRegression,
+    ModifiedLinearRegression,
+    ModifiedSignWeightedLinearRegression,
+    ModifiedTimeWeightedLinearRegression,
 )
 
 from .model_systems import (
@@ -28,4 +31,7 @@ __all__ = [
     "LADRegressionSystem",
     "LinearRegressionSystem",
     "RidgeRegressionSystem",
+    "ModifiedLinearRegression",
+    "ModifiedSignWeightedLinearRegression",
+    "ModifiedTimeWeightedLinearRegression",
 ]
