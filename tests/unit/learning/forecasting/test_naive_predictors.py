@@ -129,6 +129,8 @@ class TestNaiveRegressor(unittest.TestCase):
             preds = nr.predict(self.X["CPI"])
         with self.assertRaises(ValueError):
             preds = nr.predict(pd.DataFrame(self.X["CPI"]))
+        with self.assertRaises(ValueError):
+            preds = nr.predict(self.X.values) 
         # pandas dataframe - single column
         nr = NaiveRegressor().fit(pd.DataFrame(self.X["CPI"]), self.y)
         with self.assertRaises(TypeError):
@@ -139,6 +141,8 @@ class TestNaiveRegressor(unittest.TestCase):
             preds = nr.predict(self.X["CPI"].values)
         with self.assertRaises(ValueError):
             preds = nr.predict(self.X["CPI"])
+        with self.assertRaises(ValueError):
+            preds = nr.predict(self.X)
         # pandas dataframe - multiple columns
         nr = NaiveRegressor().fit(self.X, self.y)
         with self.assertRaises(TypeError):
@@ -147,6 +151,8 @@ class TestNaiveRegressor(unittest.TestCase):
             preds = nr.predict("string")
         with self.assertRaises(ValueError):
             preds = nr.predict(self.X.values)
+        with self.assertRaises(ValueError):
+            preds = nr.predict(pd.DataFrame(self.X["CPI"]))
         # numpy array - multiple columns
         nr = NaiveRegressor().fit(self.X.values, self.y)
         with self.assertRaises(TypeError):
@@ -155,3 +161,5 @@ class TestNaiveRegressor(unittest.TestCase):
             preds = nr.predict("string")
         with self.assertRaises(ValueError):
             preds = nr.predict(self.X)
+        with self.assertRaises(ValueError):
+            preds = nr.predict(self.X["CPI"].values)

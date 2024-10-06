@@ -79,8 +79,6 @@ class NaiveRegressor(BaseEstimator, RegressorMixin):
         
         if isinstance(X, np.ndarray) and X.ndim == 1:
             p = 1
-        elif isinstance(X, np.ndarray) and X.ndim == 2:
-            p = 2
         elif isinstance(X, pd.Series):
             p = 1
         else:
