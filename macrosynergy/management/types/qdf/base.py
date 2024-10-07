@@ -2,7 +2,7 @@
 Module hosting custom types and meta-classes for use across the package.
 """
 
-from typing import List, Any, Callable
+from typing import List
 import pandas as pd
 
 
@@ -16,11 +16,10 @@ class QuantamentalDataFrameMeta(type):
 
     def __instancecheck__(cls, instance):
         IDX_COLS = QuantamentalDataFrameMeta.IndexCols
-        result: bool = True
         try:
             # the try except offers a safety net in case the instance is not a
             # pd.DataFrame and one of the checks raises an error
-            result = result and isinstance(instance, pd.DataFrame)
+            result = isinstance(instance, pd.DataFrame)
             result = result and instance.index.name is None
             result = result and not isinstance(instance.columns, pd.MultiIndex)
             result = result and all([col in instance.columns for col in IDX_COLS])
@@ -28,10 +27,11 @@ class QuantamentalDataFrameMeta(type):
             result = result and len(instance.columns) == len(set(instance.columns))
 
             datetypestr = str(instance["real_date"].dtype)
-            _condA = datetypestr in ["datetime64[ns]", "datetime64[ms]"]
-            _condB = datetypestr.startswith("datetime64[") and datetypestr.endswith("]")
+            is_valid_dt64 = (datetypestr in ["datetime64[ns]", "datetime64[ms]"]) or (
+                datetypestr.startswith("datetime64[") and datetypestr.endswith("]")
+            )
             correct_date_type: bool = (
-                (_condA or _condB)
+                is_valid_dt64
                 or isinstance(instance["real_date"].dtype, pd.DatetimeTZDtype)
                 or instance.empty
             )
@@ -45,7 +45,7 @@ class QuantamentalDataFrameMeta(type):
 
 class QuantamentalDataFrameBase(pd.DataFrame, metaclass=QuantamentalDataFrameMeta):
     """
-    Base class to to extend `pd.DataFrame` for Quantamental DataFrames.
+    Base class to extend `pd.DataFrame` for Quantamental DataFrames.
 
     This class is a parent class to macrosynergy.types.QuantamentalDataFrame.
     """
