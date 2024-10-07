@@ -87,10 +87,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         Filter DataFrame by `cids`, `xcats`, `tickers`, and `start` & `end` dates.
         """
-        func = reduce_df
-        return self._inplaceoperation(
-            method=func,
-            inplace=inplace,
+        return reduce_df(
             df=self,
             cids=cids,
             xcats=xcats,
@@ -109,13 +106,14 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         Apply a blacklist to the QuantamentalDataFrame.
         """
-        func = apply_blacklist
-        return self._inplaceoperation(
-            method=func,
-            inplace=inplace,
-            df=self,
-            blacklist=blacklist,
-        )
+        # func = apply_blacklist
+        # return self._inplaceoperation(
+        #     method=func,
+        #     inplace=inplace,
+        #     df=self,
+        #     blacklist=blacklist,
+        # )
+        return apply_blacklist(df=self, blacklist=blacklist)
 
     def update_df(
         self,
@@ -125,13 +123,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         Update the QuantamentalDataFrame with a new DataFrame.
         """
-        func = update_df
-        return self._inplaceoperation(
-            method=func,
-            inplace=inplace,
-            df=self,
-            new_df=df,
-        )
+        return update_df(df=self, new_df=df)
 
     def to_wide(
         self,
