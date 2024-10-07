@@ -127,19 +127,23 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         else:
             bounds = [(None, None)] * n_cols
 
-        # Optimisation
-        init_weights = np.zeros(n_cols)
+        # Set initial weights
+        init_weights = (np.zeros(n_cols) if not self.fit_intercept else np.zeros(n_cols - 1))
+        if self.fit_intercept:
+            init_intercept = np.mean(y)
+            init_weights = np.concatenate(([init_intercept], init_weights))
+            
         optim_results = minimize(
             fun=partial(
                 self._l1_loss,
                 X=(X if isinstance(X, np.ndarray) else X.values),
                 y=(
-                    y
+                    y.squeeze()
                     if isinstance(y, np.ndarray)
                     else (
-                        y.values
+                        y.values.squeeze()
                         if isinstance(y, pd.DataFrame)
-                        else y.values.reshape(-1, 1)
+                        else y.values.squeeze()
                     )
                 ),
                 sample_weight=sample_weight,
