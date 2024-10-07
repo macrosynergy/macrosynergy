@@ -308,6 +308,8 @@ class TestSignWeightedLADRegression(unittest.TestCase):
         self.y_nan = self.y.copy()
         self.y_nan.iloc[0] = np.nan
 
+        self.sign_weights = SignWeightedLADRegressor()._calculate_sign_weights(self.y)
+
     def test_types_init(self):
         # fit_intercept
         self.assertRaises(TypeError, SignWeightedLADRegressor, fit_intercept=1)
@@ -374,6 +376,74 @@ class TestSignWeightedLADRegression(unittest.TestCase):
         self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y_nan)
         self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y_nan.values)
 
+    def test_valid_fit(self):
+        """Check default SWLAD fit method works as expected"""
+        lad = SignWeightedLADRegressor(fit_intercept = True)
+        try:
+            lad.fit(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(f"Default SWLAD fit method failed with exception: {e}")
+        self.assertTrue(isinstance(lad.coef_, np.ndarray))
+        self.assertTrue(len(lad.coef_) == self.X.shape[1])
+        self.assertTrue(isinstance(lad.intercept_, float))
+        self.assertTrue(lad.intercept_ != 0)
+        # Check the solution is close to QuantileRegressor from scikit-learn
+        qr = QuantileRegressor(alpha = 0, fit_intercept=True).fit(self.X, self.y, sample_weight=self.sign_weights)
+        np.testing.assert_almost_equal(lad.coef_, qr.coef_,decimal=2)
+        np.testing.assert_almost_equal(lad.intercept_, qr.intercept_,decimal=2)
+
+        """Check default SWLAD fit method works as expected with numpy arrays"""
+        lad = SignWeightedLADRegressor(fit_intercept = True)
+        try:
+            lad.fit(X=self.X.values, y=self.y.values)
+        except Exception as e:
+            self.fail(f"Default SWLADRegressor fit method failed with exception: {e}")
+        self.assertTrue(isinstance(lad.coef_, np.ndarray))
+        self.assertTrue(len(lad.coef_) == self.X.shape[1])
+        self.assertTrue(isinstance(lad.intercept_, float))
+        self.assertTrue(lad.intercept_ != 0)
+        # Check the solution is close to QuantileRegressor from scikit-learn
+        qr = QuantileRegressor(alpha = 0, fit_intercept=True).fit(self.X.values, self.y.values, sample_weight=self.sign_weights)
+        np.testing.assert_almost_equal(lad.coef_, qr.coef_,decimal=2)
+        np.testing.assert_almost_equal(lad.intercept_, qr.intercept_,decimal=2)
+
+        """Check no intercept SWLAD fit method works as expected"""
+        lad = SignWeightedLADRegressor(fit_intercept = False)
+        try:
+            lad.fit(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(f"No intercept SignWeightedLADRegressor fit method failed with exception: {e}")
+        self.assertTrue(isinstance(lad.coef_, np.ndarray))
+        self.assertTrue(len(lad.coef_) == self.X.shape[1])
+        self.assertTrue(lad.intercept_ == 0)
+        qr = QuantileRegressor(alpha = 0, fit_intercept=False).fit(self.X, self.y, sample_weight=self.sign_weights)
+        np.testing.assert_almost_equal(lad.coef_, qr.coef_,decimal=2)
+        np.testing.assert_almost_equal(lad.intercept_, qr.intercept_,decimal=2)
+
+        """Check L1 regularization SignWeightedLADRegressor fit method works as expected"""
+        lad1 = SignWeightedLADRegressor(fit_intercept = True, alpha = 1, shrinkage_type = "l1")
+        try:
+            lad1.fit(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(f"L1 regularization SignWeightedLADRegressor, alpha = 1, fit method failed with exception: {e}")
+        self.assertTrue(isinstance(lad1.coef_, np.ndarray))
+        self.assertTrue(len(lad1.coef_) == self.X.shape[1])
+        self.assertTrue(isinstance(lad1.intercept_, float))
+        self.assertTrue(lad1.intercept_ != 0)
+        qr = QuantileRegressor(alpha = 2 * self.X.shape[0], fit_intercept=True).fit(self.X, self.y, sample_weight=self.sign_weights)
+        np.testing.assert_almost_equal(lad1.coef_, qr.coef_,decimal=2)
+
+        """Check L2 regularization SignWeightedLADRegressor fit method works as expected"""
+        lad1 = SignWeightedLADRegressor(fit_intercept = True, alpha = 1, shrinkage_type = "l2")
+        try:
+            lad1.fit(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(f"L2 regularization SignWeightedLADRegressor, alpha = 1, fit method failed with exception: {e}")
+        self.assertTrue(isinstance(lad1.coef_, np.ndarray))
+        self.assertTrue(len(lad1.coef_) == self.X.shape[1])
+        self.assertTrue(isinstance(lad1.intercept_, float))
+        self.assertTrue(lad1.intercept_ != 0)
+
 class TestTimeWeightedLADRegression(unittest.TestCase):
     @classmethod
     def setUpClass(self):
@@ -414,6 +484,8 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
         self.y = df["XR"]
         self.y_nan = self.y.copy()
         self.y_nan.iloc[0] = np.nan
+
+        self.time_weights = TimeWeightedLADRegressor(half_life=12)._calculate_time_weights(self.y)
 
     def test_types_init(self):
         # fit_intercept
@@ -489,3 +561,19 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
         self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y_nan)
         self.assertRaises(TypeError, lad.fit, X=self.X, y=self.y_nan.values)
         self.assertRaises(TypeError, lad.fit, X=self.X, y=self.y.values)
+
+    def test_valid_fit(self):
+        """Check default TWLAD fit method works as expected"""
+        lad = TimeWeightedLADRegressor(fit_intercept = True, half_life = 12)
+        try:
+            lad.fit(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(f"Default TWLAD fit method failed with exception: {e}")
+        self.assertTrue(isinstance(lad.coef_, np.ndarray))
+        self.assertTrue(len(lad.coef_) == self.X.shape[1])
+        self.assertTrue(isinstance(lad.intercept_, float))
+        self.assertTrue(lad.intercept_ != 0)
+        # Check the solution is close to QuantileRegressor from scikit-learn
+        qr = QuantileRegressor(alpha = 0, fit_intercept=True).fit(self.X, self.y, self.time_weights)
+        np.testing.assert_almost_equal(lad.coef_, qr.coef_,decimal=2)
+        np.testing.assert_almost_equal(lad.intercept_, qr.intercept_,decimal=2)
