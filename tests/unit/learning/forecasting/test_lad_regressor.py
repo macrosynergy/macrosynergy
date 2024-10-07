@@ -359,6 +359,21 @@ class TestSignWeightedLADRegression(unittest.TestCase):
         self.assertEqual(lad.tol, 0.1)
         self.assertEqual(lad.maxiter, 100)
 
+    def test_types_fit(self):
+        # X
+        lad = SignWeightedLADRegressor()
+        self.assertRaises(TypeError, lad.fit, X=1, y=self.y)
+        self.assertRaises(TypeError, lad.fit, X="X", y=self.y)
+        self.assertRaises(ValueError, lad.fit, X=self.X.reset_index(), y=self.y)
+        self.assertRaises(ValueError, lad.fit, X=self.X_nan, y=self.y)
+        self.assertRaises(ValueError, lad.fit, X=self.X_nan.values, y=self.y)
+        # y
+        self.assertRaises(TypeError, lad.fit, X=self.X, y=1)
+        self.assertRaises(TypeError, lad.fit, X=self.X, y="y")
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y.reset_index())
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y_nan)
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y_nan.values)
+
 class TestTimeWeightedLADRegression(unittest.TestCase):
     @classmethod
     def setUpClass(self):
@@ -457,3 +472,20 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
         self.assertEqual(lad.shrinkage_type, "l2")
         self.assertEqual(lad.tol, 0.1)
         self.assertEqual(lad.maxiter, 100)
+
+    def test_types_fit(self):
+        # X
+        lad = TimeWeightedLADRegressor()
+        self.assertRaises(TypeError, lad.fit, X=1, y=self.y)
+        self.assertRaises(TypeError, lad.fit, X="X", y=self.y)
+        self.assertRaises(ValueError, lad.fit, X=self.X.reset_index(), y=self.y)
+        self.assertRaises(ValueError, lad.fit, X=self.X_nan, y=self.y)
+        self.assertRaises(TypeError, lad.fit, X=self.X_nan.values, y=self.y)
+        self.assertRaises(TypeError, lad.fit, X=self.X.values, y=self.y)
+        # y
+        self.assertRaises(TypeError, lad.fit, X=self.X, y=1)
+        self.assertRaises(TypeError, lad.fit, X=self.X, y="y")
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y.reset_index())
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y_nan)
+        self.assertRaises(TypeError, lad.fit, X=self.X, y=self.y_nan.values)
+        self.assertRaises(TypeError, lad.fit, X=self.X, y=self.y.values)
