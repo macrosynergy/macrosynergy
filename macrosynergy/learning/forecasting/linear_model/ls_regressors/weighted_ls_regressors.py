@@ -146,16 +146,36 @@ class TimeWeightedLinearRegression(TimeWeightedRegressor):
         of the native dataset frequency for the weight attributed to the most recent sample
         (one) to decay by half.
         """
+        # Checks
+        if not isinstance(fit_intercept, bool):
+            raise TypeError("fit_intercept must be a boolean.")
+        if not isinstance(positive, bool):
+            raise TypeError("positive must be a boolean.")
+        if not isinstance(alpha, numbers.Number) or isinstance(alpha, bool):
+            raise TypeError("alpha must be a number.")
+        if alpha < 0:
+            raise ValueError("alpha must be non-negative.")
+        if not isinstance(shrinkage_type, str):
+            raise TypeError("shrinkage_type must be a string.")
+        if shrinkage_type not in ["l1", "l2"]:
+            raise ValueError("Invalid shrinkage_type. Must be 'l1' or 'l2'.")
+        if not isinstance(half_life, numbers.Number) or isinstance(half_life, bool):
+            raise TypeError("half_life must be a number.")
+        if half_life <= 0:
+            raise ValueError("half_life must be positive.")
+        
         if alpha == 0:
             model = LinearRegression(fit_intercept=fit_intercept, positive=positive)
         elif shrinkage_type == "l1":
             model = Lasso(fit_intercept=fit_intercept, positive=positive, alpha=alpha)
         elif shrinkage_type == "l2":
             model = Ridge(fit_intercept=fit_intercept, positive=positive, alpha=alpha)
-        else:
-            raise ValueError("Invalid shrinkage_type. Must be 'l1' or 'l2'.")
         
         super().__init__(model=model, half_life=half_life)
+        self.fit_intercept = fit_intercept
+        self.positive = positive
+        self.alpha = alpha
+        self.shrinkage_type = shrinkage_type
 
     def set_params(self, **params):
         super().set_params(**params)
