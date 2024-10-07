@@ -256,7 +256,14 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, A
             )
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
-        
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise TypeError("All columns in X must be numeric.")
+        if X.isnull().values.any():
+            raise ValueError("X must not contain missing values.")
         return self.model.predict(X)
 
     def create_signal(
@@ -292,6 +299,14 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, A
             )
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise TypeError("All columns in X must be numeric.")
+        if X.isnull().values.any():
+            raise ValueError("X must not contain missing values.")
 
         return np.dot(X, self.coef_) + self.intercept_
     

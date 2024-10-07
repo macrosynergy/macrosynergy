@@ -185,7 +185,7 @@ class TestModifiedLinearRegression(unittest.TestCase):
         coef_adj = lr.coef_ / (np.sqrt(ses[:-1])+1e-2)
         np.testing.assert_array_almost_equal(mlr1.coef_, coef_adj)
         np.testing.assert_almost_equal(mlr1.intercept_, intercept_adj)
-        
+
         # ModifiedLinearRegression with HC3 errors
         mlr2 = ModifiedLinearRegression(method="analytic", error_offset=1e-2, analytic_method="White")
         mlr2.fit(self.X, self.y)
@@ -218,3 +218,37 @@ class TestModifiedLinearRegression(unittest.TestCase):
         mlr7.fit(self.X, self.y)
         self.assertIsInstance(mlr7.coef_, np.ndarray)
         self.assertIsInstance(mlr7.intercept_, numbers.Number)
+
+    def test_types_predict(self):
+        mlr = ModifiedLinearRegression(method="analytic")
+        mlr.fit(self.X, self.y)
+        # X
+        self.assertRaises(TypeError, mlr.predict, X=1)
+        self.assertRaises(TypeError, mlr.predict, X="string")
+        self.assertRaises(ValueError, mlr.predict, X=self.X_nan)
+        self.assertRaises(ValueError, mlr.predict, X=self.X_nan.reset_index())
+
+    def test_valid_predict(self):
+        mlr = ModifiedLinearRegression(method="analytic")
+        mlr.fit(self.X, self.y)
+        y_pred = mlr.predict(self.X)
+        self.assertIsInstance(y_pred, np.ndarray)
+        self.assertEqual(len(y_pred), len(self.y))
+        np.testing.assert_array_equal(y_pred, mlr.model.predict(self.X))
+
+    def test_valid_create_signal(self):
+        mlr = ModifiedLinearRegression(method="analytic")
+        mlr.fit(self.X, self.y)
+        y_pred = mlr.create_signal(self.X)
+        self.assertIsInstance(y_pred, np.ndarray)
+        self.assertEqual(len(y_pred), len(self.y))
+        np.testing.assert_array_equal(y_pred, mlr.intercept_ + np.matmul(self.X, mlr.coef_))
+
+    def test_types_create_signal(self):
+        mlr = ModifiedLinearRegression(method="analytic")
+        mlr.fit(self.X, self.y)
+        # X
+        self.assertRaises(TypeError, mlr.create_signal, X=1)
+        self.assertRaises(TypeError, mlr.create_signal, X="string")
+        self.assertRaises(ValueError, mlr.create_signal, X=self.X_nan)
+        self.assertRaises(ValueError, mlr.create_signal, X=self.X_nan.reset_index())
