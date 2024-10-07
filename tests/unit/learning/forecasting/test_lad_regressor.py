@@ -45,7 +45,11 @@ class TestLADRegressor(unittest.TestCase):
         )
 
         self.X = df.drop(columns="XR")
+        self.X_nan = self.X.copy()
+        self.X_nan["nan_col"] = np.nan
         self.y = df["XR"]
+        self.y_nan = self.y.copy()
+        self.y_nan.iloc[0] = np.nan
 
     def test_types_init(self):
         # fit_intercept
@@ -105,10 +109,14 @@ class TestLADRegressor(unittest.TestCase):
         self.assertRaises(TypeError, lad.fit, X=1, y=self.y)
         self.assertRaises(TypeError, lad.fit, X="X", y=self.y)
         self.assertRaises(ValueError, lad.fit, X=self.X.reset_index(), y=self.y)
+        self.assertRaises(ValueError, lad.fit, X=self.X_nan, y=self.y)
+        self.assertRaises(ValueError, lad.fit, X=self.X_nan.values, y=self.y)
         # y
         self.assertRaises(TypeError, lad.fit, X=self.X, y=1)
         self.assertRaises(TypeError, lad.fit, X=self.X, y="y")
         self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y.reset_index())
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y_nan)
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y_nan.values)
 
     def test_valid_fit(self):
         pass
