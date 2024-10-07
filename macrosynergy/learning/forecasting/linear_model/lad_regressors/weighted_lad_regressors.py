@@ -67,6 +67,12 @@ class SignWeightedLADRegressor(SignWeightedRegressor):
                 maxiter=maxiter,
             ),
         )
+        self.fit_intercept = fit_intercept
+        self.positive = positive
+        self.alpha = alpha
+        self.shrinkage_type = shrinkage_type
+        self.tol = tol
+        self.maxiter = maxiter
 
     def set_params(self, **params):
         super().set_params(**params)
@@ -148,6 +154,13 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
             ),
             half_life = half_life
         )
+        self.fit_intercept = fit_intercept
+        self.positive = positive
+        self.half_life = half_life
+        self.alpha = alpha
+        self.shrinkage_type = shrinkage_type
+        self.tol = tol
+        self.maxiter = maxiter
 
     def set_params(self, **params):
         super().set_params(**params)

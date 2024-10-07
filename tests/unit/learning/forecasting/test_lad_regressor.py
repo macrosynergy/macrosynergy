@@ -334,7 +334,30 @@ class TestSignWeightedLADRegression(unittest.TestCase):
         self.assertRaises(ValueError, SignWeightedLADRegressor, maxiter=-1)
 
     def test_valid_init(self):
-        pass
+        # Check defaults set correctly
+        lad = SignWeightedLADRegressor()
+        self.assertEqual(lad.fit_intercept, True)
+        self.assertEqual(lad.positive, False)
+        self.assertEqual(lad.alpha, 0)
+        self.assertEqual(lad.shrinkage_type, "l1")
+        self.assertEqual(lad.tol, None)
+        self.assertEqual(lad.maxiter, None)
+
+        # Change defaults
+        lad = SignWeightedLADRegressor(
+            fit_intercept=False,
+            positive=True,
+            alpha=0.1,
+            shrinkage_type="l2",
+            tol=0.1,
+            maxiter=100,
+        )
+        self.assertEqual(lad.fit_intercept, False)
+        self.assertEqual(lad.positive, True)
+        self.assertEqual(lad.alpha, 0.1)
+        self.assertEqual(lad.shrinkage_type, "l2")
+        self.assertEqual(lad.tol, 0.1)
+        self.assertEqual(lad.maxiter, 100)
 
 class TestTimeWeightedLADRegression(unittest.TestCase):
     @classmethod
@@ -405,3 +428,32 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
         self.assertRaises(TypeError, TimeWeightedLADRegressor, maxiter="1")
         self.assertRaises(TypeError, TimeWeightedLADRegressor, maxiter=True)
         self.assertRaises(ValueError, TimeWeightedLADRegressor, maxiter=-1)
+
+    def test_valid_init(self):
+        # Check defaults set correctly
+        lad = TimeWeightedLADRegressor()
+        self.assertEqual(lad.fit_intercept, True)
+        self.assertEqual(lad.positive, False)
+        self.assertEqual(lad.half_life, 252)
+        self.assertEqual(lad.alpha, 0)
+        self.assertEqual(lad.shrinkage_type, "l1")
+        self.assertEqual(lad.tol, None)
+        self.assertEqual(lad.maxiter, None)
+
+        # Change defaults
+        lad = TimeWeightedLADRegressor(
+            fit_intercept=False,
+            positive = True,
+            half_life=12,
+            alpha=0.1,
+            shrinkage_type="l2",
+            tol=0.1,
+            maxiter=100,
+        )
+        self.assertEqual(lad.fit_intercept, False)
+        self.assertEqual(lad.positive, True)
+        self.assertEqual(lad.half_life, 12)
+        self.assertEqual(lad.alpha, 0.1)
+        self.assertEqual(lad.shrinkage_type, "l2")
+        self.assertEqual(lad.tol, 0.1)
+        self.assertEqual(lad.maxiter, 100)
