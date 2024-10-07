@@ -35,10 +35,8 @@ def change_column_format(
 def check_is_categorical(df: QuantamentalDataFrameBase) -> bool:
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("`df` must be a Quantamental DataFrame.")
-    for col in df._StrIndexCols:
-        if not df[col].dtype.name == "category":
-            return False
-    return True
+
+    return all(df[col].dtype.name == "category" for col in df._StrIndexCols)
 
 
 def _get_tickers_series(
