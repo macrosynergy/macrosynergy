@@ -6,6 +6,8 @@ import unittest
 
 from macrosynergy.learning import (
     LADRegressor,
+    SignWeightedLADRegressor,
+    TimeWeightedLADRegressor,
 )
 from sklearn.linear_model import QuantileRegressor
 
@@ -264,3 +266,142 @@ class TestLADRegressor(unittest.TestCase):
             self.fail(f"L2 regularization LADRegressor predict method failed with exception: {e}")
         self.assertTrue(isinstance(pred, np.ndarray))
         self.assertTrue(len(pred) == self.X.shape[0])
+
+class TestSignWeightedLADRegression(unittest.TestCase):
+    @classmethod
+    def setUpClass(self):
+        # Generate data with true linear relationship
+        cids = ["AUD", "CAD", "GBP", "USD"]
+        xcats = ["XR", "CPI", "GROWTH", "RIR"]
+
+        df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
+        df_cids.loc["AUD"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["CAD"] = ["2020-01-01", "2020-12-31"]
+        df_cids.loc["GBP"] = ["2020-01-01", "2020-12-31"]
+        df_cids.loc["USD"] = ["2019-06-01", "2020-12-31"]
+
+        tuples = []
+
+        for cid in cids:
+            # get list of all eligible dates
+            sdate = df_cids.loc[cid]["earliest"]
+            edate = df_cids.loc[cid]["latest"]
+            all_days = pd.date_range(sdate, edate)
+            work_days = all_days[all_days.weekday < 5]
+            for work_day in work_days:
+                tuples.append((cid, work_day))
+
+        n_samples = len(tuples)
+        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
+        labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
+        df = pd.DataFrame(
+            data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
+            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
+            columns=xcats,
+            dtype=np.float32,
+        )
+
+        self.X = df.drop(columns="XR")
+        self.X_nan = self.X.copy()
+        self.X_nan["nan_col"] = np.nan
+        self.y = df["XR"]
+        self.y_nan = self.y.copy()
+        self.y_nan.iloc[0] = np.nan
+
+    def test_types_init(self):
+        # fit_intercept
+        self.assertRaises(TypeError, SignWeightedLADRegressor, fit_intercept=1)
+        self.assertRaises(TypeError, SignWeightedLADRegressor, fit_intercept="True")
+        # positive
+        self.assertRaises(TypeError, SignWeightedLADRegressor, positive=1)
+        self.assertRaises(TypeError, SignWeightedLADRegressor, positive="True")
+        # alpha
+        self.assertRaises(TypeError, SignWeightedLADRegressor, alpha="1")
+        self.assertRaises(TypeError, SignWeightedLADRegressor, alpha=True)
+        self.assertRaises(ValueError, SignWeightedLADRegressor, alpha=-1)
+        # shrinkage_type
+        self.assertRaises(TypeError, SignWeightedLADRegressor, shrinkage_type=1)
+        self.assertRaises(TypeError, SignWeightedLADRegressor, shrinkage_type=True)
+        self.assertRaises(ValueError, SignWeightedLADRegressor, shrinkage_type="l3")
+        self.assertRaises(ValueError, SignWeightedLADRegressor, shrinkage_type="string")
+        # tol
+        self.assertRaises(TypeError, SignWeightedLADRegressor, tol="1")
+        self.assertRaises(TypeError, SignWeightedLADRegressor, tol=True)
+        self.assertRaises(ValueError, SignWeightedLADRegressor, tol=-1)
+        # max_iter
+        self.assertRaises(TypeError, SignWeightedLADRegressor, maxiter="1")
+        self.assertRaises(TypeError, SignWeightedLADRegressor, maxiter=True)
+        self.assertRaises(ValueError, SignWeightedLADRegressor, maxiter=-1)
+
+    def test_valid_init(self):
+        pass
+
+class TestTimeWeightedLADRegression(unittest.TestCase):
+    @classmethod
+    def setUpClass(self):
+        # Generate data with true linear relationship
+        cids = ["AUD", "CAD", "GBP", "USD"]
+        xcats = ["XR", "CPI", "GROWTH", "RIR"]
+
+        df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
+        df_cids.loc["AUD"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["CAD"] = ["2020-01-01", "2020-12-31"]
+        df_cids.loc["GBP"] = ["2020-01-01", "2020-12-31"]
+        df_cids.loc["USD"] = ["2019-06-01", "2020-12-31"]
+
+        tuples = []
+
+        for cid in cids:
+            # get list of all eligible dates
+            sdate = df_cids.loc[cid]["earliest"]
+            edate = df_cids.loc[cid]["latest"]
+            all_days = pd.date_range(sdate, edate)
+            work_days = all_days[all_days.weekday < 5]
+            for work_day in work_days:
+                tuples.append((cid, work_day))
+
+        n_samples = len(tuples)
+        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
+        labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
+        df = pd.DataFrame(
+            data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
+            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
+            columns=xcats,
+            dtype=np.float32,
+        )
+
+        self.X = df.drop(columns="XR")
+        self.X_nan = self.X.copy()
+        self.X_nan["nan_col"] = np.nan
+        self.y = df["XR"]
+        self.y_nan = self.y.copy()
+        self.y_nan.iloc[0] = np.nan
+
+    def test_types_init(self):
+        # fit_intercept
+        self.assertRaises(TypeError, TimeWeightedLADRegressor, fit_intercept=1)
+        self.assertRaises(TypeError, TimeWeightedLADRegressor, fit_intercept="True")
+        # positive
+        self.assertRaises(TypeError, TimeWeightedLADRegressor, positive=1)
+        self.assertRaises(TypeError, TimeWeightedLADRegressor, positive="True")
+        # half_life
+        self.assertRaises(TypeError, TimeWeightedLADRegressor, half_life="1")
+        self.assertRaises(TypeError, TimeWeightedLADRegressor, half_life=True)
+        self.assertRaises(ValueError, TimeWeightedLADRegressor, half_life=-1)
+        # alpha
+        self.assertRaises(TypeError, TimeWeightedLADRegressor, alpha="1")
+        self.assertRaises(TypeError, TimeWeightedLADRegressor, alpha=True)
+        self.assertRaises(ValueError, TimeWeightedLADRegressor, alpha=-1)
+        # shrinkage_type
+        self.assertRaises(TypeError, TimeWeightedLADRegressor, shrinkage_type=1)
+        self.assertRaises(TypeError, TimeWeightedLADRegressor, shrinkage_type=True)
+        self.assertRaises(ValueError, TimeWeightedLADRegressor, shrinkage_type="l3")
+        self.assertRaises(ValueError, TimeWeightedLADRegressor, shrinkage_type="string")
+        # tol
+        self.assertRaises(TypeError, TimeWeightedLADRegressor, tol="1")
+        self.assertRaises(TypeError, TimeWeightedLADRegressor, tol=True)
+        self.assertRaises(ValueError, TimeWeightedLADRegressor, tol=-1)
+        # max_iter
+        self.assertRaises(TypeError, TimeWeightedLADRegressor, maxiter="1")
+        self.assertRaises(TypeError, TimeWeightedLADRegressor, maxiter=True)
+        self.assertRaises(ValueError, TimeWeightedLADRegressor, maxiter=-1)

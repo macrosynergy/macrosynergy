@@ -209,7 +209,7 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
             raise TypeError(
                 "The time_weighted parameter must be a boolean."
             )
-        if not isinstance(half_life, numbers.Number):
+        if not isinstance(half_life, numbers.Number) or isinstance(half_life, bool):
             raise TypeError(
                 "The half_life parameter must be a number."
             )
