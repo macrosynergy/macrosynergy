@@ -73,7 +73,31 @@ class TestLADRegressor(unittest.TestCase):
         self.assertRaises(ValueError, LADRegressor, maxiter=-1)
 
     def test_valid_init(self):
-        pass 
+        # Check defaults set correctly
+        lad = LADRegressor()
+        self.assertEqual(lad.fit_intercept, True)
+        self.assertEqual(lad.positive, False)
+        self.assertEqual(lad.alpha, 0)
+        self.assertEqual(lad.shrinkage_type, "l1")
+        self.assertEqual(lad.tol, None)
+        self.assertEqual(lad.maxiter, None)
+
+        # Change defaults
+        lad = LADRegressor(
+            fit_intercept=False,
+            positive=True,
+            alpha=0.1,
+            shrinkage_type="l2",
+            tol=0.1,
+            maxiter=100,
+        )
+        self.assertEqual(lad.fit_intercept, False)
+        self.assertEqual(lad.positive, True)
+        self.assertEqual(lad.alpha, 0.1)
+        self.assertEqual(lad.shrinkage_type, "l2")
+        self.assertEqual(lad.tol, 0.1)
+        self.assertEqual(lad.maxiter, 100)
+
 
     def test_types_fit(self):
         pass 
