@@ -2,7 +2,7 @@
 Module hosting custom types and meta-classes for use with Quantamental DataFrames.
 """
 
-from typing import List, Optional, Any, Dict, Iterable, Mapping, Union
+from typing import List, Optional, Any, Iterable, Mapping, Union
 import pandas as pd
 import warnings
 
