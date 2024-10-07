@@ -50,14 +50,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         Returns True if the QuantamentalDataFrame is categorical.
         """
-        strcols = list(set(QuantamentalDataFrame.IndexCols) - {"real_date"})
-
-        for col in strcols:
-            if col in self.columns:
-                if not self[col].dtype.name == "category":
-                    return False
-
-        return True
+        return check_is_categorical(self)
 
     def to_categorical(self) -> "QuantamentalDataFrame":
         """
