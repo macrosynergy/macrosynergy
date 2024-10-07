@@ -135,6 +135,21 @@ class TestLADRegressor(unittest.TestCase):
         np.testing.assert_almost_equal(lad.coef_, qr.coef_,decimal=2)
         np.testing.assert_almost_equal(lad.intercept_, qr.intercept_,decimal=2)
 
+        """Check default LADRegressor fit method works as expected with numpy arrays"""
+        lad = LADRegressor(fit_intercept = True)
+        try:
+            lad.fit(X=self.X.values, y=self.y.values)
+        except Exception as e:
+            self.fail(f"Default LADRegressor fit method failed with exception: {e}")
+        self.assertTrue(isinstance(lad.coef_, np.ndarray))
+        self.assertTrue(len(lad.coef_) == self.X.shape[1])
+        self.assertTrue(isinstance(lad.intercept_, float))
+        self.assertTrue(lad.intercept_ != 0)
+        # Check the solution is close to QuantileRegressor from scikit-learn
+        qr = QuantileRegressor(alpha = 0, fit_intercept=True).fit(self.X.values, self.y.values)
+        np.testing.assert_almost_equal(lad.coef_, qr.coef_,decimal=2)
+        np.testing.assert_almost_equal(lad.intercept_, qr.intercept_,decimal=2)
+
         """Check no intercept LADRegressor fit method works as expected"""
         lad = LADRegressor(fit_intercept = False)
         try:
@@ -202,4 +217,50 @@ class TestLADRegressor(unittest.TestCase):
         self.assertRaises(ValueError, lad.predict, X=self.X_nan.values)
 
     def test_valid_predict(self):
-        pass
+        """Check default LADRegressor predict method works as expected"""
+        lad = LADRegressor().fit(self.X, self.y)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"Default LADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])
+        lad = LADRegressor().fit(self.X.values, self.y.values)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"Default LADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])
+
+        """Check L1 regularization LADRegressor predict method works as expected"""
+        lad = LADRegressor(alpha = 1, shrinkage_type = "l1").fit(self.X, self.y)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"L1 regularization LADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])
+        lad = LADRegressor(alpha = 1, shrinkage_type = "l1").fit(self.X.values, self.y.values)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"L1 regularization LADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])
+
+        """Check L2 regularization LADRegressor predict method works as expected"""
+        lad = LADRegressor(alpha = 1, shrinkage_type = "l2").fit(self.X, self.y)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"L2 regularization LADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])
+        lad = LADRegressor(alpha = 1, shrinkage_type = "l2").fit(self.X.values, self.y.values)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"L2 regularization LADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])

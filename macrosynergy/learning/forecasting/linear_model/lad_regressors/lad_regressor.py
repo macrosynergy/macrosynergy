@@ -114,7 +114,10 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         y = y.copy()
 
         if self.fit_intercept:
-            X.insert(0, "intercept", 1)
+            if isinstance(X, pd.DataFrame):
+                X.insert(0, "intercept", 1)
+            else:
+                X = np.insert(X, 0, 1, axis=1)
 
         n_cols = X.shape[1]
 
