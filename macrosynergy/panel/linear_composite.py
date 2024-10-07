@@ -68,7 +68,7 @@ def _linear_composite_basic(
 
 
 def linear_composite_cid_agg(
-    df: pd.DataFrame,
+    df: QuantamentalDataFrame,
     xcat: str,
     cids: List[str],
     weights: Union[str, List[float]],
@@ -78,7 +78,6 @@ def linear_composite_cid_agg(
     new_cid="GLB",
 ):
     """Linear composite of various cids for a given xcat across all periods."""
-
     if isinstance(weights, str):
         weights_df: pd.DataFrame = df[(df["xcat"] == weights)].copy()
         df = df[(df["xcat"] != weights)].copy()
@@ -134,14 +133,21 @@ def linear_composite_cid_agg(
         complete=complete_cids,
         mode="cid_agg",
     )
-    out_df["cid"] = new_cid
-    out_df["xcat"] = xcat
+
+    if df.is_categorical():
+        out_df["cid"] = pd.Categorical([new_cid], categories=[new_cid], ordered=False)
+        out_df["xcat"] = pd.Categorical([xcat], categories=[xcat], ordered=False)
+    else:
+        out_df["cid"] = new_cid
+        out_df["xcat"] = xcat
+
     out_df = out_df[["cid", "xcat", "real_date", "value"]]
+
     return out_df
 
 
 def linear_composite_xcat_agg(
-    df: pd.DataFrame,
+    df: QuantamentalDataFrame,
     xcats: List[str],
     weights: List[float],
     signs: List[float],
@@ -172,7 +178,14 @@ def linear_composite_xcat_agg(
         complete=complete_xcats,
         mode="xcat_agg",
     )
-    out_df["xcat"] = new_xcat
+    if df.is_categorical():
+        out_df["xcat"] = pd.Categorical(
+            [new_xcat], categories=[new_xcat], ordered=False
+        )
+        out_df["cid"] = out_df["cid"].astype("category")
+    else:
+        out_df["xcat"] = new_xcat
+
     out_df = out_df[["cid", "xcat", "real_date", "value"]]
     return out_df
 
@@ -523,7 +536,7 @@ def linear_composite(
     )
 
     # update local variables
-
+    df = QuantamentalDataFrame(df)
     _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
 
     df: pd.DataFrame
@@ -550,7 +563,7 @@ def linear_composite(
     if _xcat_agg:
         df = _populate_missing_xcat_series(df)
 
-        return linear_composite_xcat_agg(
+        result_df: QuantamentalDataFrame = linear_composite_xcat_agg(
             df=df,
             xcats=xcats,
             weights=weights,
@@ -565,7 +578,7 @@ def linear_composite(
             df=df, weights=weights, signs=signs
         )
 
-        return linear_composite_cid_agg(
+        result_df: QuantamentalDataFrame = linear_composite_cid_agg(
             df=df,
             xcat=_xcat,
             cids=cids,
@@ -575,6 +588,8 @@ def linear_composite(
             complete_cids=complete_cids,
             new_cid=new_cid,
         )
+
+    return result_df.to_original_dtypes()
 
 
 if __name__ == "__main__":
