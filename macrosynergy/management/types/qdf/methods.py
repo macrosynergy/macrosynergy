@@ -93,9 +93,8 @@ def apply_blacklist(
     if not all([isinstance(v, (str, pd.Timestamp)) for v in blacklist.values()]):
         raise TypeError("Values of `blacklist` must be strings or pandas Timestamps.")
 
-    blist = blacklist.copy()
 
-    for key, value in blist.items():
+    for key, value in blacklist.items():
         df = df[
             ~(
                 (df["cid"] == key[:3])
@@ -119,7 +118,7 @@ def reduce_df(
 ) -> QuantamentalDataFrameBase:
     # Filter DataFrame by xcats and cids and notify about missing xcats and cids.
     """
-    Filter DataFrame by `cids`, `xcats`, `tickers`, and `start` & `end` dates.
+    Filter DataFrame by `cids`, `xcats`, and `start` & `end` dates.
     """
     if isinstance(cids, str):
         cids = [cids]
@@ -195,7 +194,7 @@ def update_tickers(
     df_add: pd.DataFrame,
 ):
     """
-    Method used to update aggregate DataFrame on a ticker level.
+    Method used to update aggregate DataFrame on the ticker level.
     """
     df = pd.concat([df, df_add], axis=0, ignore_index=True)
     df = df.drop_duplicates(
