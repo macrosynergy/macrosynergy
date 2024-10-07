@@ -100,7 +100,15 @@ class TestLADRegressor(unittest.TestCase):
 
 
     def test_types_fit(self):
-        pass 
+        # X
+        lad = LADRegressor()
+        self.assertRaises(TypeError, lad.fit, X=1, y=self.y)
+        self.assertRaises(TypeError, lad.fit, X="X", y=self.y)
+        self.assertRaises(ValueError, lad.fit, X=self.X.reset_index(), y=self.y)
+        # y
+        self.assertRaises(TypeError, lad.fit, X=self.X, y=1)
+        self.assertRaises(TypeError, lad.fit, X=self.X, y="y")
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y.reset_index())
 
     def test_valid_fit(self):
         pass

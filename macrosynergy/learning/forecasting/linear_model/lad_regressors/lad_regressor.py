@@ -324,18 +324,41 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         """
         Checks for fit method parameters.
         """
-        # X
+        # Check type of X
         if not isinstance(X, (pd.DataFrame, np.ndarray)):
             raise TypeError(
                 "Input feature matrix for the LADRegressor must be a pandas dataframe or "
                 "numpy array."
             )
-        # y
+        # Check structure of X: no missing values and all numeric
+        if isinstance(X, pd.DataFrame):
+            if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+                raise ValueError(
+                    "All columns in the input feature matrix must be numeric."
+                )
+            if X.isnull().values.any():
+                raise ValueError(
+                    "The input feature matrix for the LADRegressor must not contain any "
+                    "missing values."
+                )
+        else:
+            if not np.issubdtype(X.dtype, np.number):
+                raise ValueError(
+                    "All elements in the input feature matrix must be numeric."
+                )
+            if np.isnan(X).any():
+                raise ValueError(
+                    "The input feature matrix for the LADRegressor must not contain any "
+                    "missing values."
+                )
+
+        # Check type of y
         if not isinstance(y, (pd.Series, pd.DataFrame, np.ndarray)):
             raise TypeError(
                 "Dependent variable for the LADRegressor must be a pandas series, "
                 "dataframe or numpy array."
             )
+        # Check structure of y: single numeric column, no missing values
         if isinstance(y, pd.DataFrame):
             if y.shape[1] != 1:
                 raise ValueError(
@@ -343,13 +366,40 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                     "as part of an sklearn pipeline, ensure that previous steps return "
                     "a pandas series or dataframe."
                 )
-        elif isinstance(y, np.ndarray):
+            if not pd.api.types.is_numeric_dtype(y.iloc[:, 0]):
+                raise ValueError(
+                    "The dependent variable dataframe must contain only numeric values."
+                )
+            if y.isnull().values.any():
+                raise ValueError(
+                    "The dependent variable dataframe must not contain any missing values."
+                )
+        elif isinstance(y, pd.Series):
+            if not pd.api.types.is_numeric_dtype(y):
+                raise ValueError(
+                    "The dependent variable series must contain only numeric values."
+                )
+            if y.isnull().values.any():
+                raise ValueError(
+                    "The dependent variable series must not contain any missing values."
+                )
+        else:
             if y.ndim != 1:
                 raise ValueError(
                     "The dependent variable numpy array must be 1D. If the dependent "
                     "variable is 2D, please either flatten the array or double check the "
                     "contents of `y`."
                 )
+            if not np.issubdtype(y.dtype, np.number):
+                raise ValueError(
+                    "All elements in the dependent variable vector must be numeric."
+                )
+            if np.isnan(y).any():
+                raise ValueError(
+                    "The dependent variable for the LADRegressor must not contain any "
+                    "missing values."
+                )
+        
         if len(X) != len(y):
             raise ValueError(
                 "The number of samples in the input feature matrix must match the number "
