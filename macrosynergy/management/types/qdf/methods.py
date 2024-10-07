@@ -91,7 +91,6 @@ def apply_blacklist(
     if not all([isinstance(v, (str, pd.Timestamp)) for v in blacklist.values()]):
         raise TypeError("Values of `blacklist` must be strings or pandas Timestamps.")
 
-
     for key, value in blacklist.items():
         df = df[
             ~(
@@ -265,3 +264,40 @@ def add_ticker_column(
     df["ticker"] = _get_tickers_series(df)
 
     return df
+
+
+def qdf_from_timseries(
+    timeseries: pd.Series,
+    cid: Optional[str] = None,
+    xcat: Optional[str] = None,
+    ticker: Optional[str] = None,
+    metric: str = "value",
+) -> QuantamentalDataFrameBase:
+    """
+    Create a QuantamentalDataFrame from a time series.
+    """
+    if not isinstance(timeseries, pd.Series):
+        raise TypeError("`timeseries` must be a pandas Series.")
+    if not isinstance(metric, str):
+        raise TypeError("`metric` must be a string.")
+
+    if not isinstance(timeseries.index, pd.DatetimeIndex):
+        raise ValueError("`timeseries` must have a datetime index.")
+
+    if (cid is None) ^ (xcat is None):
+        raise ValueError("Both `cid` and `xcat` must be provided.")
+
+    if not ((cid is None) ^ (ticker is None)):
+        raise ValueError("Either provide `cid` & `xcat` or `ticker`.")
+
+    if ticker is not None:
+        cid, xcat = ticker.split("_", 1)
+
+    assert bool(cid) and bool(xcat)
+
+    df = timeseries.reset_index().rename(columns={"index": "real_date", 0: metric})
+    # assign as categorical string
+    df["cid"] = pd.Categorical([cid], categories=[cid], ordered=False)
+    df["xcat"] = pd.Categorical([xcat], categories=[xcat], ordered=False)
+
+    return QuantamentalDataFrameBase(df)
