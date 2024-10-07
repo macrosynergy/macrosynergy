@@ -13,6 +13,7 @@ from .methods import (
     apply_blacklist,
     qdf_to_wide_df,
     check_is_categorical,
+    qdf_from_timseries,
 )
 from .base import QuantamentalDataFrameBase
 
@@ -134,3 +135,14 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         Pivot the QuantamentalDataFrame.
         """
         return qdf_to_wide_df(self, value_column=value_column)
+
+    @classmethod
+    def from_timeseries(
+        cls,
+        timeseries: pd.Series,
+        ticker: str,
+    ) -> "QuantamentalDataFrame":
+        """
+        Convert a timeseries DataFrame to a QuantamentalDataFrame.
+        """
+        return qdf_from_timseries(timeseries=timeseries, ticker=ticker)
