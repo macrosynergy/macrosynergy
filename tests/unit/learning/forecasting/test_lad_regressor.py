@@ -46,3 +46,43 @@ class TestLADRegressor(unittest.TestCase):
 
         self.X = df.drop(columns="XR")
         self.y = df["XR"]
+
+    def test_types_init(self):
+        # fit_intercept
+        self.assertRaises(TypeError, LADRegressor, fit_intercept=1)
+        self.assertRaises(TypeError, LADRegressor, fit_intercept="True")
+        # positive
+        self.assertRaises(TypeError, LADRegressor, positive=1)
+        self.assertRaises(TypeError, LADRegressor, positive="True")
+        # alpha
+        self.assertRaises(TypeError, LADRegressor, alpha="1")
+        self.assertRaises(TypeError, LADRegressor, alpha=True)
+        self.assertRaises(ValueError, LADRegressor, alpha=-1)
+        # shrinkage_type
+        self.assertRaises(TypeError, LADRegressor, shrinkage_type=1)
+        self.assertRaises(TypeError, LADRegressor, shrinkage_type=True)
+        self.assertRaises(ValueError, LADRegressor, shrinkage_type="l3")
+        self.assertRaises(ValueError, LADRegressor, shrinkage_type="string")
+        # tol
+        self.assertRaises(TypeError, LADRegressor, tol="1")
+        self.assertRaises(TypeError, LADRegressor, tol=True)
+        self.assertRaises(ValueError, LADRegressor, tol=-1)
+        # max_iter
+        self.assertRaises(TypeError, LADRegressor, maxiter="1")
+        self.assertRaises(TypeError, LADRegressor, maxiter=True)
+        self.assertRaises(ValueError, LADRegressor, maxiter=-1)
+
+    def test_valid_init(self):
+        pass 
+
+    def test_types_fit(self):
+        pass 
+
+    def test_valid_fit(self):
+        pass
+
+    def test_types_predict(self):
+        pass 
+
+    def test_valid_predict(self):
+        pass

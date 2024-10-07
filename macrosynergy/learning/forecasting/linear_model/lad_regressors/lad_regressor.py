@@ -296,7 +296,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
         if not isinstance(positive, bool):
             raise TypeError("The positive parameter must be a boolean.")
         # alpha
-        if not isinstance(alpha, numbers.Number):
+        if (not isinstance(alpha, numbers.Real)) or isinstance(alpha, bool):
             raise TypeError("The alpha parameter must be numeric.")
         if alpha < 0:
             raise ValueError("The alpha parameter must be non-negative.")
@@ -309,13 +309,13 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             )
         # tol
         if tol is not None:
-            if not isinstance(tol, numbers.Number):
+            if (not isinstance(tol, numbers.Real)) or isinstance(tol, bool):
                 raise TypeError("The tol parameter must be numeric.")
             if tol < 0:
                 raise ValueError("The tol parameter must be non-negative.")
         # maxiter
         if maxiter is not None:
-            if not isinstance(maxiter, int):
+            if (not isinstance(maxiter, numbers.Real)) or isinstance(maxiter, bool):
                 raise TypeError("The maxiter parameter must be an integer.")
             if maxiter <= 0:
                 raise ValueError("The maxiter parameter must be positive.")
