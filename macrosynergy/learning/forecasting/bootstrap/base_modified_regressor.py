@@ -434,6 +434,19 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, A
                 "match."
             )
         
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise TypeError("All columns in X must be numeric.")
+        if isinstance(y, pd.DataFrame):
+            if not pd.api.types.is_numeric_dtype(y.iloc[:, 0]):
+                raise TypeError("All columns in y must be numeric.")
+        else:
+            if not pd.api.types.is_numeric_dtype(y):
+                raise TypeError("All columns in y must be numeric.")
+        if X.isnull().values.any():
+            raise ValueError("X must not contain missing values.")
+        if y.isnull().values.any():
+            raise ValueError("y must not contain missing values.")
+        
 class ModifiedLinearRegression(BaseModifiedRegressor):
     def __init__(
         self,

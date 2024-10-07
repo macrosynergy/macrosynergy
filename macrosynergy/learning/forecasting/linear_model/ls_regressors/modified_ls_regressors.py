@@ -56,6 +56,11 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
             are used. If `analytic_method = "White"`, the heteroskedasticity-robust
             White estimator is used to estimate the standard errors. 
         """
+        # Checks
+        if not isinstance(fit_intercept, bool):
+            raise TypeError("fit_intercept must be a boolean.")
+        if not isinstance(positive, bool):
+            raise TypeError("positive must be a boolean.") 
         self.fit_intercept = fit_intercept
         self.positive = positive
 
