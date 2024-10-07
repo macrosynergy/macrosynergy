@@ -10,7 +10,7 @@ import pandas as pd
 import seaborn as sns
 
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils.df_utils import update_df
+from macrosynergy.management.utils import update_df, _map_to_business_day_frequency
 from macrosynergy.pnl import NaivePnL
 
 
@@ -54,7 +54,7 @@ class MultiPnL:
         """
         Combine PnLs with optional weighting.
 
-        :param <List[str]> pnl_xcats: List of PnLs to combine. Must be in the format 
+        :param <List[str]> pnl_xcats: List of PnLs to combine. Must be in the format
             'xcat/return' and added using `add_pnl()`.
         :param <str> composite_pnl_xcat: xcat for the combined PnL.
         :param <Optional[Dict[str, float]]> weights: Weights for each PnL, by default None.
@@ -89,11 +89,12 @@ class MultiPnL:
         )
 
         # Daily change in portfolio weights due to previous returns since the last rebalancing
+        mfreq = _map_to_business_day_frequency("M")
         weights_change = (
-            (1 + raw_pnls / 100).groupby(pd.Grouper(freq="M")).cumprod()
+            (1 + raw_pnls / 100).groupby(pd.Grouper(freq=mfreq)).cumprod()
         )  # in decimals, not percentage, gross amount
         weights_change = (
-            weights_change.groupby(pd.Grouper(freq="M"))
+            weights_change.groupby(pd.Grouper(freq=mfreq))
             .shift(periods=1)
             .fillna(value=1)
         )

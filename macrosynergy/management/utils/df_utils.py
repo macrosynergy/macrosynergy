@@ -17,7 +17,7 @@ from macrosynergy.management.utils.core import (
     _map_to_business_day_frequency,
     is_valid_iso_date,
 )
-from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY
+from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY, PD_OLD_RESAMPLE
 import functools
 
 IDX_COLS_SORT_ORDER = ["cid", "xcat", "real_date"]
@@ -327,11 +327,10 @@ def apply_slip(
 
     slip: int = slip.__neg__()
 
-    filtered_df = df[df["ticker"].isin(sel_tickers)]
-    filtered_df.loc[:, metrics] = filtered_df.loc[:, metrics].astype(float)
-    filtered_df.loc[:, metrics] = filtered_df.groupby("ticker")[metrics].shift(slip)
-
-    df.loc[df["ticker"].isin(sel_tickers), metrics] = filtered_df[metrics]
+    for col in metrics:
+        tks_isin = df["ticker"].isin(sel_tickers)
+        df.loc[tks_isin, col] = df.loc[tks_isin, col].astype(float)
+        df.loc[tks_isin, col] = df.groupby("ticker")[col].shift(slip)
 
     df = df.drop(columns=["ticker"]).reset_index(drop=True)
     assert isinstance(df, QuantamentalDataFrame), "Failed to apply slip."
@@ -379,14 +378,26 @@ def downsample_df_on_real_date(
             raise ValueError(
                 "`agg` must be one of 'mean', 'median', 'min', 'max', 'first', 'last'"
             )
-
-    return (
+    non_groupby_columns = list(set(df.columns) - set(groupby_columns) - {"real_date"})
+    res = (
         df.set_index("real_date")
-        .groupby(groupby_columns)
+        .groupby(groupby_columns)[non_groupby_columns]
         .resample(freq)
-        .agg(agg, **RESAMPLE_NUMERIC_ONLY)
-        .reset_index()
     )
+    if PD_OLD_RESAMPLE:
+        # resample only if the column is numeric
+        res = res.agg(
+            {
+                col: agg
+                for col in non_groupby_columns
+                if pd.api.types.is_numeric_dtype(df[col])
+            }
+        ).reset_index()
+        res.columns = res.columns.droplevel(-1)
+    else:
+        res = res.agg(agg, **RESAMPLE_NUMERIC_ONLY).reset_index()
+
+    return res
 
 
 def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False):
@@ -431,11 +442,6 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     if all_cols != df_cols and all_cols != df_add_cols:
         raise ValueError(error_message)
 
-    if df.empty:
-        return df_add
-    elif df_add.empty:
-        return df
-
     if not xcat_replace:
         df = update_tickers(df, df_add)
 
@@ -454,6 +460,16 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     :param <pd.DataFrame> df_add: DataFrame with the latest values.
 
     """
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("The base DataFrame must be a Quantamental Dataframe.")
+    if not isinstance(df_add, QuantamentalDataFrame):
+        raise TypeError("The added DataFrame must be a Quantamental Dataframe.")
+
+    if df.empty:
+        return df_add
+    if df_add.empty:
+        return df
+
     df = pd.concat([df, df_add], axis=0, ignore_index=True)
 
     df = df.drop_duplicates(
