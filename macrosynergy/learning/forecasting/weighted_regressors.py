@@ -92,6 +92,11 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
                 "dataframe or numpy array. If used as part of an sklearn pipeline, ensure "
                 "that previous steps return a pandas dataframe or numpy array."
             )
+        if self.time_weighted and not isinstance(X, pd.DataFrame):
+            raise TypeError(
+                "When time weighting is enabled, the input feature matrix for weighted "
+                "regressors must be a pandas dataframe."
+            )
         if isinstance(X, np.ndarray):
             if X.ndim != 2:
                 raise ValueError(

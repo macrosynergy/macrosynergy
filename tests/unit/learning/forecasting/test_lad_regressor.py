@@ -542,7 +542,7 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
         self.y_nan = self.y.copy()
         self.y_nan.iloc[0] = np.nan
 
-        self.time_weights = TimeWeightedLADRegressor(half_life=12)._calculate_time_weights(self.y)
+        self.time_weights = TimeWeightedLADRegressor(half_life=24)._calculate_time_weights(self.y)
 
     def test_types_init(self):
         # fit_intercept
@@ -621,7 +621,7 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
 
     def test_valid_fit(self):
         """Check default TWLAD fit method works as expected"""
-        lad = TimeWeightedLADRegressor(fit_intercept = True, half_life = 12)
+        lad = TimeWeightedLADRegressor(fit_intercept = True, half_life = 24)
         try:
             lad.fit(X=self.X, y=self.y)
         except Exception as e:
@@ -634,3 +634,76 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
         qr = QuantileRegressor(alpha = 0, fit_intercept=True).fit(self.X, self.y, self.time_weights)
         np.testing.assert_almost_equal(lad.coef_, qr.coef_,decimal=2)
         np.testing.assert_almost_equal(lad.intercept_, qr.intercept_,decimal=2)
+
+        """Check no intercept TWLAD fit method works as expected"""
+        lad = TimeWeightedLADRegressor(fit_intercept = False, half_life = 24)
+        try:
+            lad.fit(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(f"No intercept TimeWeightedLADRegressor fit method failed with exception: {e}")
+        self.assertTrue(isinstance(lad.coef_, np.ndarray))
+        self.assertTrue(len(lad.coef_) == self.X.shape[1])
+        self.assertTrue(lad.intercept_ == 0)
+        qr = QuantileRegressor(alpha = 0, fit_intercept=False).fit(self.X, self.y, sample_weight=self.time_weights)
+        np.testing.assert_almost_equal(lad.coef_, qr.coef_,decimal=2)
+        np.testing.assert_almost_equal(lad.intercept_, qr.intercept_,decimal=2)
+
+        """Check L1 regularization TimeWeightedLADRegressor fit method works as expected"""
+        lad1 = TimeWeightedLADRegressor(fit_intercept = True, alpha = 1, shrinkage_type = "l1", half_life = 24)
+        try:
+            lad1.fit(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(f"L1 regularization TimeWeightedLADRegressor, alpha = 1, fit method failed with exception: {e}")
+        self.assertTrue(isinstance(lad1.coef_, np.ndarray))
+        self.assertTrue(len(lad1.coef_) == self.X.shape[1])
+        self.assertTrue(isinstance(lad1.intercept_, float))
+        self.assertTrue(lad1.intercept_ != 0)
+        qr = QuantileRegressor(alpha = 2 * self.X.shape[0], fit_intercept=True).fit(self.X, self.y, sample_weight=self.time_weights)
+        np.testing.assert_almost_equal(lad1.coef_, qr.coef_,decimal=2)
+        
+        """Check L2 regularization TimeWeightedLADRegressor fit method works as expected"""
+        lad1 = TimeWeightedLADRegressor(fit_intercept = True, alpha = 1, shrinkage_type = "l2", half_life = 24)
+        try:
+            lad1.fit(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(f"L2 regularization TimeWeightedLADRegressor, alpha = 1, fit method failed with exception: {e}")
+        self.assertTrue(isinstance(lad1.coef_, np.ndarray))
+        self.assertTrue(len(lad1.coef_) == self.X.shape[1])
+        self.assertTrue(isinstance(lad1.intercept_, float))
+        self.assertTrue(lad1.intercept_ != 0)
+
+    def test_types_predict(self):
+        lad = TimeWeightedLADRegressor(half_life = 24).fit(self.X, self.y)
+        self.assertRaises(TypeError, lad.predict, X=1)
+        self.assertRaises(TypeError, lad.predict, X="X")
+        self.assertRaises(ValueError, lad.predict, X=self.X.iloc[:,:-1])
+        self.assertRaises(ValueError, lad.predict, X=self.X_nan)
+        self.assertRaises(TypeError, lad.predict, X=self.X.values)
+
+    def test_valid_predict(self):
+        """Check default TimeWeightedLADRegressor predict method works as expected"""
+        lad = TimeWeightedLADRegressor().fit(self.X, self.y)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"Default TimeWeightedLADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])
+
+        """Check L1 regularization TimeWeightedLADRegressor predict method works as expected"""
+        lad = TimeWeightedLADRegressor(alpha = 1, shrinkage_type = "l1").fit(self.X, self.y)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"L1 regularization TimeWeightedLADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])
+
+        """Check L2 regularization SignWeightedLADRegressor predict method works as expected"""
+        lad = TimeWeightedLADRegressor(alpha = 1, shrinkage_type = "l2").fit(self.X, self.y)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"L2 regularization TimeWeightedLADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])
