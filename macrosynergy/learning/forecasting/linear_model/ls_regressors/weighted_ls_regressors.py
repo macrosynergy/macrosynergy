@@ -1,3 +1,4 @@
+import numbers
 import numpy as np
 import pandas as pd
 
@@ -7,7 +8,7 @@ from macrosynergy.learning.forecasting.weighted_regressors import SignWeightedRe
 class SignWeightedLinearRegression(SignWeightedRegressor):
     def __init__(
         self,
-        fit_intercept: bool = True,
+        fit_intercept = True,
         positive = False,
         alpha = 0,
         shrinkage_type = "l1",
@@ -44,6 +45,20 @@ class SignWeightedLinearRegression(SignWeightedRegressor):
         target samples are given a higher weight in the model training process.
         The opposite is true if there are more negative targets than positive targets.
         """
+        # Checks
+        if not isinstance(fit_intercept, bool):
+            raise TypeError("fit_intercept must be a boolean.")
+        if not isinstance(positive, bool):
+            raise TypeError("positive must be a boolean.")
+        if not isinstance(alpha, numbers.Number) or isinstance(alpha, bool):
+            raise TypeError("alpha must be a number.")
+        if alpha < 0:
+            raise ValueError("alpha must be non-negative.")
+        if not isinstance(shrinkage_type, str):
+            raise TypeError("shrinkage_type must be a string.")
+        if shrinkage_type not in ["l1", "l2"]:
+            raise ValueError("Invalid shrinkage_type. Must be 'l1' or 'l2'.")
+        
         if alpha == 0:
             super().__init__(
                 model = LinearRegression(fit_intercept=fit_intercept, positive=positive),
@@ -56,8 +71,11 @@ class SignWeightedLinearRegression(SignWeightedRegressor):
             super().__init__(
                 model = Ridge(fit_intercept=fit_intercept, positive=positive, alpha=alpha),
             )
-        else:
-            raise ValueError("Invalid shrinkage_type. Must be 'l1' or 'l2'.")
+
+        self.fit_intercept = fit_intercept
+        self.positive = positive
+        self.alpha = alpha
+        self.shrinkage_type = shrinkage_type
 
     def set_params(self, **params):
         super().set_params(**params)
