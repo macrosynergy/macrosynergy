@@ -444,6 +444,63 @@ class TestSignWeightedLADRegression(unittest.TestCase):
         self.assertTrue(isinstance(lad1.intercept_, float))
         self.assertTrue(lad1.intercept_ != 0)
 
+    def test_types_predict(self):
+        lad = SignWeightedLADRegressor().fit(self.X, self.y)
+        self.assertRaises(TypeError, lad.predict, X=1)
+        self.assertRaises(TypeError, lad.predict, X="X")
+        self.assertRaises(ValueError, lad.predict, X=self.X.iloc[:,:-1])
+        self.assertRaises(ValueError, lad.predict, X=self.X_nan)
+        self.assertRaises(ValueError, lad.predict, X=self.X_nan.values)
+
+    def test_valid_predict(self):
+        """Check default SignWeightedLADRegressor predict method works as expected"""
+        lad = SignWeightedLADRegressor().fit(self.X, self.y)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"Default SignWeightedLADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])
+        lad = SignWeightedLADRegressor().fit(self.X.values, self.y.values)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"Default SignWeightedLADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])
+
+        """Check L1 regularization SignWeightedLADRegressor predict method works as expected"""
+        lad = SignWeightedLADRegressor(alpha = 1, shrinkage_type = "l1").fit(self.X, self.y)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"L1 regularization SignWeightedLADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])
+        lad = SignWeightedLADRegressor(alpha = 1, shrinkage_type = "l1").fit(self.X.values, self.y.values)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"L1 regularization SignWeightedLADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])
+
+        """Check L2 regularization SignWeightedLADRegressor predict method works as expected"""
+        lad = SignWeightedLADRegressor(alpha = 1, shrinkage_type = "l2").fit(self.X, self.y)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"L2 regularization SignWeightedLADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])
+        lad = SignWeightedLADRegressor(alpha = 1, shrinkage_type = "l2").fit(self.X.values, self.y.values)
+        try:
+            pred = lad.predict(self.X)
+        except Exception as e:
+            self.fail(f"L2 regularization SignWeightedLADRegressor predict method failed with exception: {e}")
+        self.assertTrue(isinstance(pred, np.ndarray))
+        self.assertTrue(len(pred) == self.X.shape[0])
+
 class TestTimeWeightedLADRegression(unittest.TestCase):
     @classmethod
     def setUpClass(self):
