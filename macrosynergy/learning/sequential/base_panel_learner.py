@@ -117,8 +117,17 @@ class BasePanelLearner(ABC):
 
         # Create initial dataframe to store model selection data from the learning process
         self.chosen_models = pd.DataFrame(
-            columns=["real_date", "name", "model_type", "score", "hparams", "n_splits_used"]
+            columns=[
+                "real_date",
+                "name",
+                "model_type",
+                "score",
+                "hparams",
+                "n_splits_used",
+            ]
         )
+
+        self.split_results = []
 
     def run(
         self,
@@ -205,33 +214,33 @@ class BasePanelLearner(ABC):
         # Determine all outer splits and run the learning process in parallel
         train_test_splits = list(outer_splitter.split(self.X, self.y))
 
+        self.split_results = []
         # Return list of results
-        optim_results = tqdm(
-            Parallel(n_jobs=n_jobs_outer, return_as="generator")(
-                delayed(self._worker)(
-                    name=name,
-                    train_idx=train_idx,
-                    test_idx=test_idx,
-                    inner_splitters=inner_splitters,
-                    models=models,
-                    hyperparameters=hyperparameters,
-                    scorers=scorers,
-                    cv_summary=cv_summary,
-                    search_type=search_type,
-                    n_iter=n_iter,
-                    n_splits_add=(
-                        [
-                            np.ceil(split_function(iteration))
-                            for idx, split_function in enumerate(split_functions)
-                        ]
-                        if split_functions is not None
-                        else None
-                    ),
-                    n_jobs_inner=n_jobs_inner,
-                )
-                for iteration, (train_idx, test_idx) in enumerate(train_test_splits)
-            ),
-            total=len(train_test_splits),
+        optim_results = Parallel(n_jobs=n_jobs_outer, return_as="list")(
+            delayed(self._worker)(
+                name=name,
+                train_idx=train_idx,
+                test_idx=test_idx,
+                inner_splitters=inner_splitters,
+                models=models,
+                hyperparameters=hyperparameters,
+                scorers=scorers,
+                cv_summary=cv_summary,
+                search_type=search_type,
+                n_iter=n_iter,
+                n_splits_add=(
+                    [
+                        np.ceil(split_function(iteration))
+                        for idx, split_function in enumerate(split_functions)
+                    ]
+                    if split_functions is not None
+                    else None
+                ),
+                n_jobs_inner=n_jobs_inner,
+            )
+            for iteration, (train_idx, test_idx) in tqdm(
+                enumerate(train_test_splits), total=len(train_test_splits)
+            )
         )
 
         return optim_results
@@ -305,100 +314,25 @@ class BasePanelLearner(ABC):
             n_jobs_inner=n_jobs_inner,
         )
 
-        # Handle case where no model was selected
-        if optim_name is None:
-            warnings.warn(
-                f"No model was selected for {name} at time {self.date_levels[train_idx].max()}",
-                " Hence, resulting signals are set to zero.",
-                RuntimeWarning,
-            )
-            preds = np.zeros(y_test.shape)
-            prediction_data = [name, test_index, preds]
-            modelchoice_data = [
-                self.date_levels[train_idx],
-                name,
-                None,  # Model selected
-                None,  # Hyperparameters selected
-                [inner_splitter.n_splits for inner_splitter in inner_splitters_adj.values],
-            ]
-            other_data = None
-
-        else:
-            # # Then a model was selected
-            # optim_model.fit(X_train, y_train)
-
-            # # If optim_model has a create_signal method, use it otherwise use predict
-            # if hasattr(optim_model, "create_signal"):
-            #     if callable(getattr(optim_model, "create_signal")):
-            #         preds: np.ndarray = optim_model.create_signal(X_test)
-            #     else:
-            #         preds: np.ndarray = optim_model.predict(X_test)
-            # else:
-            #     preds: np.ndarray = optim_model.predict(X_test)
-
-            # prediction_data = [name, test_index, preds]
-
-            # # Store model choice information
-            # modelchoice_data = [
-            #     self.date_levels[train_idx],
-            #     name,
-            #     optim_name,
-            #     optim_params,
-            #     int(n_splits),
-            # ]
-
-            # # Store other information - inherited classes can specify this method to store coefficients, intercepts etc if needed
-            # other_data: List[List] = self._extract_model_info(
-            #     name,
-            #     self.date_levels[train_idx],
-            #     optim_model,
-            # )
-            # optim_model.fit(X_train, y_train)
-
-            # Store model selection data
-            modelchoice_data: dict = self.store_modelchoice_data(
-                pipeline_name=name,
-                optimal_model=optim_model,
-                optimal_model_name=optim_name,
-                optimal_model_score=optim_score,
-                optimal_model_params=optim_params,
-                n_splits=[
-                    inner_splitter.n_splits for inner_splitter in inner_splitters_adj.values()
-                ],
-                X_train=X_train,
-                y_train=y_train,
-                X_test=X_test,
-                y_test=y_test,
-                timestamp=adj_test_date_levels.min(),
-            )
-
-            # Store quantamental data
-            quantamental_data: dict = self.store_quantamental_data(
-                pipeline_name=name,
-                model=optim_model,
-                X_train=X_train,
-                y_train=y_train,
-                X_test=X_test,
-                y_test=y_test,
-                adjusted_test_index=test_index,
-            )
-
-            # Store other data
-            other_data: dict = self.store_other_data(
-                pipeline_name=name,
-                optimal_model=optim_model,
-                X_train=X_train,
-                y_train=y_train,
-                X_test=X_test,
-                y_test=y_test,
-                timestamp=adj_test_date_levels.min(),
-            )
-
-        return (
-            quantamental_data,
-            modelchoice_data,
-            other_data,
+        split_results = self._get_split_results(
+            pipeline_name=name,
+            optimal_model=optim_model,
+            optimal_model_name=optim_name,
+            optimal_model_score=optim_score,
+            optimal_model_params=optim_params,
+            n_splits=[
+                inner_splitter.n_splits
+                for inner_splitter in inner_splitters_adj.values()
+            ],
+            X_train=X_train,
+            y_train=y_train,
+            X_test=X_test,
+            y_test=y_test,
+            timestamp=adj_test_date_levels.min(),
+            adjusted_test_index=test_index,
         )
+
+        return split_results
 
     def _model_search(
         self,
@@ -525,23 +459,76 @@ class BasePanelLearner(ABC):
         else:
             return cv_results["final_score"].max()
 
-    @abstractmethod
-    def store_quantamental_data(
+    # @abstractmethod
+    # def store_quantamental_data(
+    #     self,
+    #     pipeline_name,
+    #     model,
+    #     X_train,
+    #     y_train,
+    #     X_test,
+    #     y_test,
+    #     adjusted_test_index,
+    # ):
+    #     """
+    #     Abstract method for storing quantamental data.
+    #     """
+    #     pass
+
+    def _get_split_results(
         self,
         pipeline_name,
-        model,
+        optimal_model,
+        optimal_model_name,
+        optimal_model_score,
+        optimal_model_params,
+        n_splits,
         X_train,
         y_train,
         X_test,
         y_test,
+        timestamp,
         adjusted_test_index,
     ):
         """
-        Abstract method for storing quantamental data.
+        Store model selection information for training set (X_train, y_train)
         """
-        pass
+        split_result = dict()
+        model_result = self._store_model_choice_data(
+            pipeline_name,
+            optimal_model,
+            optimal_model_name,
+            optimal_model_score,
+            optimal_model_params,
+            n_splits,
+            X_train,
+            y_train,
+            X_test,
+            y_test,
+            timestamp,
+        )
 
-    def store_modelchoice_data(
+        split_result.update(model_result)
+
+        split_data = self.store_split_data(
+            pipeline_name,
+            optimal_model,
+            optimal_model_name,
+            optimal_model_score,
+            optimal_model_params,
+            n_splits,
+            X_train,
+            y_train,
+            X_test,
+            y_test,
+            timestamp,
+            adjusted_test_index,
+        )
+
+        split_result.update(split_data)
+        return split_result
+
+    def _store_model_choice_data(
         self,
         pipeline_name,
         optimal_model,
@@ -563,7 +550,11 @@ class BasePanelLearner(ABC):
             optim_score = optimal_model_score
             optim_params = optimal_model_params
         else:
-
+            warnings.warn(
+                f"No model was selected for {optim_name} at time {timestamp}",
+                " Hence, resulting signals are set to zero.",
+                RuntimeWarning,
+            )
             optim_name = ("None",)
             optim_score = (-np.inf,)
             optim_params = ({},)
@@ -573,16 +564,31 @@ class BasePanelLearner(ABC):
 
         return {"model_choice": data}
 
-    @abstractmethod
-    def store_other_data(self, pipeline_name, optimal_model, X_train, y_train, X_test, y_test, timestamp):
-        """
-        Abstract method for storing other data.
-        """
-        pass
-
-    def get_optimal_models(
-        self, name = None
+    def store_split_data(
+        self,
+        pipeline_name,
+        model,
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        adjusted_test_index,
     ):
+        """
+        Method for storing quantamental data.
+        """
+        return dict()
+
+    # @abstractmethod
+    # def store_other_data(
+    #     self, pipeline_name, optimal_model, X_train, y_train, X_test, y_test, timestamp
+    # ):
+    #     """
+    #     Abstract method for storing other data.
+    #     """
+    #     pass
+
+    def get_optimal_models(self, name=None):
         """
         Returns the sequences of optimal models for one or more processes.
 
@@ -596,7 +602,7 @@ class BasePanelLearner(ABC):
         -------
         return : pd.DataFrame
             Pandas dataframe of the optimal models and hyperparameters selected at each
-            retraining date. 
+            retraining date.
         """
         if name is None:
             return self.chosen_models
@@ -617,13 +623,13 @@ class BasePanelLearner(ABC):
                         """
                     )
             return self.chosen_models[self.chosen_models.name.isin(name)]
-        
+
     def models_heatmap(
         self,
         name,
-        title = None,
-        cap = 5,
-        figsize = (12, 8),
+        title=None,
+        cap=5,
+        figsize=(12, 8),
     ):
         """
         Visualized optimal models used for signal calculation.
@@ -640,7 +646,7 @@ class BasePanelLearner(ABC):
             models are the 'cap' most frequently occurring in the pipeline.
         figsize : tuple, optional
             Tuple of floats or ints denoting the figure size. Default is (12, 8).
-        
+
         Notes
         -----
         This method displays the models selected at each date in time over the span
@@ -651,7 +657,7 @@ class BasePanelLearner(ABC):
         self._checks_models_heatmap(name=name, title=title, cap=cap, figsize=figsize)
 
         # Get the chosen models for the specified pipeline to visualise selection.
-        chosen_models = self.get_optimal_models(name = name).sort_values(by = "real_date")
+        chosen_models = self.get_optimal_models(name=name).sort_values(by="real_date")
         chosen_models["model_hparam_id"] = chosen_models.apply(
             lambda row: (
                 row["model_type"]
@@ -827,10 +833,8 @@ class BasePanelLearner(ABC):
 
         # inner splitter
         if not isinstance(inner_splitters, dict):
-            raise TypeError(
-                "inner splitters should be specified as a dictionary"
-            )
-        
+            raise TypeError("inner splitters should be specified as a dictionary")
+
         for names in inner_splitters.keys():
             if not isinstance(names, str):
                 raise TypeError(
@@ -957,16 +961,22 @@ class BasePanelLearner(ABC):
         if split_functions is not None:
             if not isinstance(split_functions, dict):
                 raise TypeError("split_functions must be a dictionary.")
-            if len(set(split_functions.keys()).intersection(set(inner_splitters.keys()))) != len(inner_splitters):
+            if len(
+                set(split_functions.keys()).intersection(set(inner_splitters.keys()))
+            ) != len(inner_splitters):
                 raise ValueError(
                     "The keys of the split_functions dictionary must match the keys of the inner_splitters dictionary."
                 )
             for key in split_functions.keys():
                 if not isinstance(key, str):
-                    raise TypeError("The keys of the split_functions dictionary must be strings.")
+                    raise TypeError(
+                        "The keys of the split_functions dictionary must be strings."
+                    )
                 if split_functions[key] is not None:
                     if not callable(split_functions[key]):
-                        raise TypeError("The values of the split_functions dictionary must be callables or None.")
+                        raise TypeError(
+                            "The values of the split_functions dictionary must be callables or None."
+                        )
 
         # n_jobs_outer
         if not isinstance(n_jobs_outer, int):
@@ -1000,13 +1010,13 @@ class BasePanelLearner(ABC):
             n_jobs_outer,
             n_jobs_inner,
         )
-    
+
     def _checks_models_heatmap(
         self,
         name,
-        title = None,
-        cap = 5,
-        figsize = (12, 8),
+        title=None,
+        cap=5,
+        figsize=(12, 8),
     ):
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
