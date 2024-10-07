@@ -218,6 +218,27 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 "The number of features in the input feature matrix must match the number "
                 "of model coefficients."
             )
+        
+        if isinstance(X, pd.DataFrame):
+            if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+                raise ValueError(
+                    "All columns in the input feature matrix must be numeric."
+                )
+            if X.isnull().values.any():
+                raise ValueError(
+                    "The input feature matrix for the LADRegressor must not contain any "
+                    "missing values."
+                )
+        else:
+            if not np.issubdtype(X.dtype, np.number):
+                raise ValueError(
+                    "All elements in the input feature matrix must be numeric."
+                )
+            if np.isnan(X).any():
+                raise ValueError(
+                    "The input feature matrix for the LADRegressor must not contain any "
+                    "missing values."
+                )
 
         # Predict
         if self.coef_ is None:

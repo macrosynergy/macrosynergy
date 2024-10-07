@@ -194,7 +194,12 @@ class TestLADRegressor(unittest.TestCase):
         self.assertTrue(lad1.intercept_ != 0)
 
     def test_types_predict(self):
-        pass 
+        lad = LADRegressor().fit(self.X, self.y)
+        self.assertRaises(TypeError, lad.predict, X=1)
+        self.assertRaises(TypeError, lad.predict, X="X")
+        self.assertRaises(ValueError, lad.predict, X=self.X.iloc[:,:-1])
+        self.assertRaises(ValueError, lad.predict, X=self.X_nan)
+        self.assertRaises(ValueError, lad.predict, X=self.X_nan.values)
 
     def test_valid_predict(self):
         pass
