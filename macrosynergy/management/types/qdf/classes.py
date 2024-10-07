@@ -2,10 +2,9 @@
 Module hosting custom types and meta-classes for use across the package.
 """
 
-from typing import List, Optional, Any, Dict, Mapping, Union, Callable, Sequence
+from typing import Optional, Any, Mapping, Union, Callable, Sequence
 
 import pandas as pd
-import warnings
 
 from .methods import (
     change_column_format,
@@ -72,6 +71,15 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
 
         """
         return change_column_format(self, cols=self._StrIndexCols, dtype=str)
+
+    def to_original_dtypes(self) -> "QuantamentalDataFrame":
+        """
+        Converts the QuantamentalDataFrame to its original dtypes (using the
+        `InitialisedAsCategorical` attribute).
+        """
+        if self.InitializedAsCategorical:
+            return self.to_categorical()
+        return self.to_string_type()
 
     def reduce_df(
         self,
