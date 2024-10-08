@@ -88,9 +88,9 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         inplace: bool = False,
     ) -> "QuantamentalDataFrame":
         """
-        Filter DataFrame by `cids`, `xcats`, `tickers`, and `start` & `end` dates.
+        Filter DataFrame by `cids`, `xcats`, and `start` & `end` dates.
         """
-        return reduce_df(
+        result = reduce_df(
             df=self,
             cids=cids,
             xcats=xcats,
@@ -100,6 +100,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             out_all=out_all,
             intersect=intersect,
         )
+        return QuantamentalDataFrame(result, categorical=self.InitializedAsCategorical)
 
     def apply_blacklist(
         self,
@@ -116,7 +117,8 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         #     df=self,
         #     blacklist=blacklist,
         # )
-        return apply_blacklist(df=self, blacklist=blacklist)
+        result = apply_blacklist(df=self, blacklist=blacklist)
+        return QuantamentalDataFrame(result, categorical=self.InitializedAsCategorical)
 
     def update_df(
         self,
@@ -126,7 +128,8 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         Update the QuantamentalDataFrame with a new DataFrame.
         """
-        return update_df(df=self, new_df=df)
+        result = update_df(df=self, new_df=df)
+        return QuantamentalDataFrame(result, categorical=self.InitializedAsCategorical)
 
     def add_nan_series(
         self,
