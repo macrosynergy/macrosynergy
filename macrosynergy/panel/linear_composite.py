@@ -551,6 +551,7 @@ def linear_composite(
 
     # update local variables
     df = QuantamentalDataFrame(df)
+    result_as_categorical = df.InitializedAsCategorical
     _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
 
     df: pd.DataFrame
@@ -604,7 +605,7 @@ def linear_composite(
             new_cid=new_cid,
         )
 
-    return result_df.to_original_dtypes()
+    return QuantamentalDataFrame(result_df, categorical=result_as_categorical)
 
 
 if __name__ == "__main__":
@@ -651,7 +652,7 @@ if __name__ == "__main__":
     lc_cid = linear_composite(
         df=df, xcats="XR", weights="INFL", normalize_weights=False
     )
-
+    df = QuantamentalDataFrame(df)
     lc_xcat = linear_composite(
         df=df,
         cids=["AUD", "CAD"],
