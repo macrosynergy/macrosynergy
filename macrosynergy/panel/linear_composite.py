@@ -569,7 +569,7 @@ def linear_composite(
         intersect=False,
         out_all=True,
     )
-    df.is_categorical()
+
     if len(remaining_xcats) == 1 and len(remaining_cids) < len(cids) and not _xcat_agg:
         raise ValueError(
             "Not all `cids` have complete `xcat` data required for the calculation."
