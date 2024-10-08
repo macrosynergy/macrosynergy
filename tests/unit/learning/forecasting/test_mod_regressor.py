@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 import unittest
+import itertools
 
 from macrosynergy.learning import (
     ModifiedLinearRegression,
@@ -488,8 +489,9 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
         self.assertIsInstance(mlr7.intercept_, numbers.Number)
         self.assertEqual(mlr7.intercept_, 0)
 
-    def test_types_predict(self):
-        mlr = ModifiedLinearRegression(method="analytic")
+    @parameterized.expand(itertools.product([None, "White"], [True, False]))
+    def test_types_predict(self, analytic_method, fit_intercept):
+        mlr = ModifiedSignWeightedLinearRegression(method="analytic", fit_intercept=fit_intercept, analytic_method=analytic_method)
         mlr.fit(self.X, self.y)
         # X
         self.assertRaises(TypeError, mlr.predict, X=1)
@@ -497,24 +499,27 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
         self.assertRaises(ValueError, mlr.predict, X=self.X_nan)
         self.assertRaises(ValueError, mlr.predict, X=self.X_nan.reset_index())
 
-    def test_valid_predict(self):
-        mlr = ModifiedLinearRegression(method="analytic")
+    @parameterized.expand(itertools.product([None, "White"], [True, False]))
+    def test_valid_predict(self, analytic_method, fit_intercept):
+        mlr = ModifiedSignWeightedLinearRegression(method="analytic", fit_intercept = fit_intercept, analytic_method=analytic_method)
         mlr.fit(self.X, self.y)
         y_pred = mlr.predict(self.X)
         self.assertIsInstance(y_pred, np.ndarray)
         self.assertEqual(len(y_pred), len(self.y))
         np.testing.assert_array_equal(y_pred, mlr.model.predict(self.X))
 
-    def test_valid_create_signal(self):
-        mlr = ModifiedLinearRegression(method="analytic")
+    @parameterized.expand(itertools.product([None, "White"], [True, False]))
+    def test_valid_create_signal(self, analytic_method, fit_intercept):
+        mlr = ModifiedSignWeightedLinearRegression(method="analytic", fit_intercept=fit_intercept, analytic_method=analytic_method)
         mlr.fit(self.X, self.y)
         y_pred = mlr.create_signal(self.X)
         self.assertIsInstance(y_pred, np.ndarray)
         self.assertEqual(len(y_pred), len(self.y))
         np.testing.assert_array_equal(y_pred, mlr.intercept_ + np.matmul(self.X, mlr.coef_))
 
-    def test_types_create_signal(self):
-        mlr = ModifiedLinearRegression(method="analytic")
+    @parameterized.expand(itertools.product([None, "White"], [True, False]))
+    def test_types_create_signal(self, analytic_method, fit_intercept):
+        mlr = ModifiedSignWeightedLinearRegression(method="analytic", fit_intercept=fit_intercept, analytic_method=analytic_method)
         mlr.fit(self.X, self.y)
         # X
         self.assertRaises(TypeError, mlr.create_signal, X=1)
