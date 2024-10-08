@@ -205,3 +205,60 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
                 ticker=ticker,
             )
         )
+
+    @classmethod
+    def from_long_df(
+        cls,
+        df: pd.DataFrame,
+        real_date_column: str = "real_date",
+        value_column: str = "value",
+        cid: Optional[str] = None,
+        xcat: Optional[str] = None,
+        ticker: Optional[str] = None,
+        categorical: bool = True,
+    ) -> "QuantamentalDataFrame":
+        """
+        Convert a long DataFrame to a QuantamentalDataFrame. This is useful when the DataFrame
+        may contain only a CID or XCAT column, or in cases where the CID and XCAT columns are
+        not named as such.
+        """
+        # does the real_date column exist?
+        if real_date_column not in df.columns:
+            raise ValueError(f"No `{real_date_column}` column found in the DataFrame.")
+        if value_column not in df.columns:
+            raise ValueError(f"No `{value_column}` column found in the DataFrame.")
+        if len(df) == 0:
+            raise ValueError("Input DataFrame is empty.")
+
+        errstr = "No `{}` column found in the DataFrame and `{}` not specified."
+        for var_, name_ in zip([cid, xcat], ["cid", "xcat"]):
+            if name_ not in df.columns and var_ is None:
+                raise ValueError(errstr.format(name_, name_))
+
+        if ticker is not None:
+            if bool(cid) or bool(xcat):
+                raise ValueError("Cannot specify `ticker` with `cid` or `xcat`.")
+            cid, xcat = ticker.split("_", 1)
+
+        new_df = df[[real_date_column, value_column]].copy()
+
+        # if the cid col is there in the df copy it over as a categorical type
+        if "cid" in df.columns:
+            new_df["cid"] = df["cid"].astype("category")
+        # if the xcat col is there in the df copy it over as a categorical type
+        if "xcat" in df.columns:
+            new_df["xcat"] = df["xcat"].astype("category")
+
+        # if the cid was specfied then overwrite and initialise as a single cid category dtype
+        if cid is not None:
+            new_df["cid"] = pd.Categorical.from_codes(
+                codes=[0] * len(new_df), categories=[cid]
+            )
+
+        # if the xcat was specfied then overwrite and initialise as a single xcat category dtype
+        if xcat is not None:
+            new_df["xcat"] = pd.Categorical.from_codes(
+                codes=[0] * len(new_df), categories=[xcat]
+            )
+
+        return QuantamentalDataFrame(new_df, categorical=categorical)
