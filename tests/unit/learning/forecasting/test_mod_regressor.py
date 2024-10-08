@@ -419,7 +419,7 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
         self.assertRaises(ValueError, mlr.fit, X=self.X, y=self.y_nan)
 
     def test_valid_fit(self):
-        """ ModifiedLinearRegression with usual standard errors """
+        """ ModifiedSignWeightedLinearRegression with usual standard errors """
         mlr1 = ModifiedSignWeightedLinearRegression(method="analytic", error_offset=1e-2, fit_intercept = False)
         mlr1.fit(self.X, self.y)
         self.assertIsInstance(mlr1.coef_, np.ndarray)
@@ -441,11 +441,18 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
         coef_adj = lr.coef_ / (np.sqrt(ses)+1e-2)
         np.testing.assert_array_almost_equal(mlr1.coef_, coef_adj, decimal=4)
 
-        # ModifiedLinearRegression with HC3 errors
-        mlr2 = ModifiedLinearRegression(method="analytic", error_offset=1e-2, analytic_method="White")
+        """ ModifiedSignWeightedLinearRegression with HC3 errors """
+        mlr2 = ModifiedSignWeightedLinearRegression(method="analytic", error_offset=1e-2, analytic_method="White", fit_intercept = False)
         mlr2.fit(self.X, self.y)
         self.assertIsInstance(mlr2.coef_, np.ndarray)
         self.assertIsInstance(mlr2.intercept_, numbers.Number)
+        self.assertEqual(mlr2.intercept_, 0)
+        # determine theoretical standard errors
+        hat_matrix = X_adj @ XTX_inv @ X_adj.T
+        Omega = X_adj.T @ np.diag(residuals ** 2 / (1 - np.diag(hat_matrix))**2) @ X_adj
+        ses = np.sqrt(np.diag(XTX_inv @ Omega @ XTX_inv))
+        coef_adj = lr.coef_ / (ses+1e-2)
+        np.testing.assert_array_almost_equal(mlr2.coef_, coef_adj, decimal=4)
 
         # ModifiedLinearRegression with panel bootstrap
         mlr3 = ModifiedLinearRegression(method="bootstrap", bootstrap_method="panel", bootstrap_iters=100)
@@ -453,26 +460,33 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
         self.assertIsInstance(mlr3.coef_, np.ndarray)
         self.assertIsInstance(mlr3.intercept_, numbers.Number)
         
-        # ModifiedLinearRegression with period bootstrap
-        ml4 = ModifiedLinearRegression(method="bootstrap", bootstrap_method="period", bootstrap_iters=100)
+        # ModifiedSignWeightedLinearRegression with period bootstrap
+        ml4 = ModifiedSignWeightedLinearRegression(method="bootstrap", bootstrap_method="period", bootstrap_iters=100, fit_intercept=False)
         ml4.fit(self.X, self.y)
         self.assertIsInstance(ml4.coef_, np.ndarray)
         self.assertIsInstance(ml4.intercept_, numbers.Number)
-        # ModifiedLinearRegression with cross-sectional bootstrap
-        mlr5 = ModifiedLinearRegression(method="bootstrap", bootstrap_method="cross", bootstrap_iters=100)
+        self.assertEqual(ml4.intercept_, 0)
+
+        # ModifiedSignWeightedLinearRegression with cross-sectional bootstrap
+        mlr5 = ModifiedSignWeightedLinearRegression(method="bootstrap", bootstrap_method="cross", fit_intercept = False, bootstrap_iters=100)
         mlr5.fit(self.X, self.y)
         self.assertIsInstance(mlr5.coef_, np.ndarray)
         self.assertIsInstance(mlr5.intercept_, numbers.Number)
-        # ModifiedLinearRegression with period_per_cross bootstrap
-        mlr6 = ModifiedLinearRegression(method="bootstrap", bootstrap_method="period_per_cross", bootstrap_iters=100)
+        self.assertEqual(mlr5.intercept_, 0)
+
+        # ModifiedSignWeightedLinearRegression with period_per_cross bootstrap
+        mlr6 = ModifiedSignWeightedLinearRegression(method="bootstrap", bootstrap_method="period_per_cross", fit_intercept=False, bootstrap_iters=100)
         mlr6.fit(self.X, self.y)
         self.assertIsInstance(mlr6.coef_, np.ndarray)
         self.assertIsInstance(mlr6.intercept_, numbers.Number)
-        # ModifiedLinearRegression with cross_per_period bootstrap
-        mlr7 = ModifiedLinearRegression(method="bootstrap", bootstrap_method="cross_per_period", bootstrap_iters=100)
+        self.assertEqual(mlr6.intercept_, 0)
+
+        # ModifiedSignWeightedLinearRegression with cross_per_period bootstrap
+        mlr7 = ModifiedSignWeightedLinearRegression(method="bootstrap", fit_intercept = False, bootstrap_method="cross_per_period", bootstrap_iters=100)
         mlr7.fit(self.X, self.y)
         self.assertIsInstance(mlr7.coef_, np.ndarray)
         self.assertIsInstance(mlr7.intercept_, numbers.Number)
+        self.assertEqual(mlr7.intercept_, 0)
 
     def test_types_predict(self):
         mlr = ModifiedLinearRegression(method="analytic")
