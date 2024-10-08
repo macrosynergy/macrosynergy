@@ -34,11 +34,6 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
                 isinstance(df, pd.DataFrame) and isinstance(df, QuantamentalDataFrame)
             ):
                 raise TypeError("Input must be a QuantamentalDataFrame (pd.DataFrame).")
-
-        if type(df) is QuantamentalDataFrame:
-            self = df
-            return
-
         super().__init__(df)
         self.InitializedAsCategorical = check_is_categorical(self)
         if categorical:
@@ -177,4 +172,9 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         Convert a timeseries DataFrame to a QuantamentalDataFrame.
         """
-        return qdf_from_timseries(timeseries=timeseries, ticker=ticker)
+        return QuantamentalDataFrame(
+            qdf_from_timseries(
+                timeseries=timeseries,
+                ticker=ticker,
+            )
+        )
