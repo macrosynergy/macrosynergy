@@ -88,7 +88,7 @@ def standardise_dataframe(
     df = df[col_order]
 
     # for every remaining col, try to convert to float
-    for col in col_order:
+    for col in jpmaqs_metrics + sorted(list(non_jpmaqs_metrics)):
         try:
             df[col] = df[col].astype(float)
         except:
