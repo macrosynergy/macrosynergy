@@ -2,12 +2,27 @@
 Module hosting custom types and meta-classes for use with Quantamental DataFrames.
 """
 
-from typing import List, Optional, Any, Iterable, Mapping, Union
+from typing import List, Optional, Any, Iterable, Mapping, Union, Dict, Set
 import pandas as pd
 import numpy as np
 import warnings
+from macrosynergy.management.constants import JPMAQS_METRICS
 
 from .base import QuantamentalDataFrameBase
+
+
+def get_col_sort_order(df: QuantamentalDataFrameBase) -> List[str]:
+    """
+    Sort the columns of a QuantamentalDataFrame (in-place) in a consistent order.
+    """
+    if not isinstance(df, QuantamentalDataFrameBase):
+        raise TypeError("`df` must be a QuantamentalDataFrame.")
+
+    metric_cols: Set = set(df.columns) - set(QuantamentalDataFrameBase.IndexCols)
+    non_jpmaqs_metrics: List[str] = sorted(metric_cols - set(JPMAQS_METRICS))
+    jpmaqs_metrics: List[str] = [m for m in JPMAQS_METRICS if m in metric_cols]
+
+    return QuantamentalDataFrameBase.IndexCols + jpmaqs_metrics + non_jpmaqs_metrics
 
 
 def change_column_format(
