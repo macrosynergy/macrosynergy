@@ -25,7 +25,7 @@ def change_column_format(
         curr_type = df[col].dtype
         try:
             df[col] = df[col].astype(dtype)
-        except: # noqa
+        except:  # noqa
             warnings.warn(
                 f"Could not convert column {col} to {dtype} from {curr_type}."
             )
@@ -344,7 +344,8 @@ def qdf_from_timseries(
 
     df = timeseries.reset_index().rename(columns={"index": "real_date", 0: metric})
     # assign as categorical string
-    df["cid"] = pd.Categorical([cid], categories=[cid], ordered=False)
-    df["xcat"] = pd.Categorical([xcat], categories=[xcat], ordered=False)
+    df["cid"] = pd.Categorical.from_codes([0] * len(df), categories=[cid])
+    df["xcat"] = pd.Categorical.from_codes([0] * len(df), categories=[xcat])
 
+    df = df[[*QuantamentalDataFrameBase.IndexCols, metric]]
     return QuantamentalDataFrameBase(df)

@@ -172,4 +172,9 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         Convert a timeseries DataFrame to a QuantamentalDataFrame.
         """
-        return qdf_from_timseries(timeseries=timeseries, ticker=ticker)
+        return QuantamentalDataFrame(
+            qdf_from_timseries(
+                timeseries=timeseries,
+                ticker=ticker,
+            )
+        )
