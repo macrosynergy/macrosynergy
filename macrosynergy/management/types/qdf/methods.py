@@ -282,6 +282,66 @@ def add_ticker_column(
     return df
 
 
+def rename_xcats(
+    df: QuantamentalDataFrameBase,
+    xcat_map: Optional[Dict[str, str]] = None,
+    select_xcats: Optional[List[str]] = None,
+    postfix: Optional[str] = None,
+    prefix: Optional[str] = None,
+    name_all: Optional[str] = None,
+    fmt_string: Optional[str] = None,
+) -> QuantamentalDataFrameBase:
+    if not isinstance(df, QuantamentalDataFrameBase):
+        raise TypeError("`df` must be a QuantamentalDataFrame.")
+
+    if bool(xcat_map) and bool(select_xcats):
+        raise ValueError("Only one of `xcat_map` or `select_xcats` must be provided.")
+
+    # Validate `xcat_map`
+    if xcat_map is not None:
+        if not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in xcat_map.items()
+        ):
+            raise TypeError(
+                "`xcat_map` must be a dictionary with string keys and values."
+            )
+        # Rename xcats based on `xcat_map`
+        df["xcat"] = df["xcat"].cat.rename_categories(
+            {old_cat: xcat_map.get(old_cat, old_cat) for old_cat in df["xcat"].unique()}
+        )
+        return df
+
+    if select_xcats is None:
+        select_xcats = df["xcat"].unique()
+
+    # Ensure exactly one of postfix, prefix, name_all, or fmt_string is provided
+    if not (bool(postfix) ^ bool(prefix) ^ bool(name_all) ^ bool(fmt_string)):
+        raise ValueError(
+            "Exactly one of `postfix`, `prefix`, `name_all`, or `fmt_string` must be provided."
+        )
+
+    funcs = {
+        "postfix": lambda x: f"{x}{postfix}",
+        "prefix": lambda x: f"{prefix}{x}",
+        "name_all": lambda x: name_all,
+        "fmt_string": lambda x: fmt_string.format(x),
+    }
+
+    curr_func = None
+    for var_, name_ in zip(
+        [postfix, prefix, name_all, fmt_string],
+        ["postfix", "prefix", "name_all", "fmt_string"],
+    ):
+        if var_ is not None:
+            curr_func = name_
+
+    df["xcat"] = df["xcat"].cat.rename_categories(
+        {cat: funcs[curr_func](cat) for cat in select_xcats}
+    )
+
+    return df
+
+
 def add_nan_series(
     df: QuantamentalDataFrameBase,
     ticker: str,
