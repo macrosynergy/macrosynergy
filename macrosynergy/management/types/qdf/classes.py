@@ -13,6 +13,7 @@ from .methods import (
     apply_blacklist,
     qdf_to_wide_df,
     check_is_categorical,
+    add_nan_series,
     qdf_from_timseries,
 )
 from .base import QuantamentalDataFrameBase
@@ -126,6 +127,18 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         Update the QuantamentalDataFrame with a new DataFrame.
         """
         return update_df(df=self, new_df=df)
+
+    def add_nan_series(
+        self,
+        ticker: str,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        inplace: bool = False,
+    ) -> "QuantamentalDataFrame":
+        """
+        Add a NaN series to the QuantamentalDataFrame.
+        """
+        return add_nan_series(df=self, ticker=ticker, start=start, end=end)
 
     def to_wide(
         self,
