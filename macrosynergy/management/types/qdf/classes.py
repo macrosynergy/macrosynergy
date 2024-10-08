@@ -100,7 +100,18 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             out_all=out_all,
             intersect=intersect,
         )
-        return QuantamentalDataFrame(result, categorical=self.InitializedAsCategorical)
+
+        if out_all:
+            result, _xcats, _cids = result
+
+        result = QuantamentalDataFrame(
+            result, categorical=self.InitializedAsCategorical
+        )
+
+        if out_all:
+            return result, _xcats, _cids
+
+        return result
 
     def apply_blacklist(
         self,
