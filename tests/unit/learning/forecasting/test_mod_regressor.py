@@ -419,25 +419,27 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
         self.assertRaises(ValueError, mlr.fit, X=self.X, y=self.y_nan)
 
     def test_valid_fit(self):
-        # ModifiedLinearRegression with usual standard errors
-        mlr1 = ModifiedSignWeightedLinearRegression(method="analytic", error_offset=1e-2)
+        """ ModifiedLinearRegression with usual standard errors """
+        mlr1 = ModifiedSignWeightedLinearRegression(method="analytic", error_offset=1e-2, fit_intercept = False)
         mlr1.fit(self.X, self.y)
         self.assertIsInstance(mlr1.coef_, np.ndarray)
         self.assertIsInstance(mlr1.intercept_, numbers.Number)
-
+        self.assertEqual(mlr1.intercept_, 0)
         # Check this aligns with theory
-        lr = LinearRegression().fit(self.X, self.y)
-        n = self.X.shape[0]
-        p = self.X.shape[1]
-        y_hat = lr.predict(self.X)
-        residuals = self.y - y_hat
+        sqrt_weight_matrix = np.diag(np.sqrt(self.sign_weights))
+        X_adj = np.matmul(sqrt_weight_matrix, self.X.values)
+        y_adj = np.matmul(sqrt_weight_matrix, self.y.values)
+        lr = LinearRegression(fit_intercept = False).fit(X_adj, y_adj)
+        n = X_adj.shape[0]
+        p = X_adj.shape[1]
+        y_hat = lr.predict(X_adj)
+        residuals = y_adj - y_hat
         sigma2 = np.sum(residuals ** 2) / (n - p)
-        XTX = np.matmul(self.X.T, self.X)
+        XTX = np.matmul(X_adj.T, X_adj)
         XTX_inv = np.linalg.inv(XTX)
         ses = sigma2 * np.diag(XTX_inv)
-        coef_adj = lr.coef_ / (np.sqrt(ses[:-1])+1e-2)
-        np.testing.assert_array_almost_equal(mlr1.coef_, coef_adj)
-        np.testing.assert_almost_equal(mlr1.intercept_, intercept_adj)
+        coef_adj = lr.coef_ / (np.sqrt(ses)+1e-2)
+        np.testing.assert_array_almost_equal(mlr1.coef_, coef_adj, decimal=4)
 
         # ModifiedLinearRegression with HC3 errors
         mlr2 = ModifiedLinearRegression(method="analytic", error_offset=1e-2, analytic_method="White")

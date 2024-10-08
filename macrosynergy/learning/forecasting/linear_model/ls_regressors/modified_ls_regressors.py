@@ -326,7 +326,7 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
 
         # Calculate the standard errors
         predictions = model.predict(X)
-        residuals = (y - predictions).to_numpy()
+        residuals = (y - predictions).to_numpy() * np.sqrt(weights)
         XtX_inv = np.linalg.inv(X_new.T @ X_new)
         if analytic_method is None:
             se = np.sqrt(
