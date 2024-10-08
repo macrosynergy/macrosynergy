@@ -2,11 +2,11 @@
 Module hosting custom types and meta-classes for use across the package.
 """
 
-from typing import Optional, Any, Mapping, Union, Callable, Sequence
-
+from typing import Optional, Any, Mapping, Union, Callable, Sequence, List
 import pandas as pd
 
 from .methods import (
+    get_col_sort_order,
     change_column_format,
     reduce_df,
     update_df,
@@ -14,6 +14,7 @@ from .methods import (
     qdf_to_wide_df,
     check_is_categorical,
     add_nan_series,
+    rename_xcats,
     qdf_from_timseries,
 )
 from .base import QuantamentalDataFrameBase
@@ -34,6 +35,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
                 isinstance(df, pd.DataFrame) and isinstance(df, QuantamentalDataFrame)
             ):
                 raise TypeError("Input must be a QuantamentalDataFrame (pd.DataFrame).")
+        df = df[get_col_sort_order(df)]
         super().__init__(df)
         self.InitializedAsCategorical = check_is_categorical(self)
         if categorical:
