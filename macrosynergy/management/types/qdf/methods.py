@@ -4,6 +4,7 @@ Module hosting custom types and meta-classes for use with Quantamental DataFrame
 
 from typing import List, Optional, Any, Iterable, Mapping, Union
 import pandas as pd
+import numpy as np
 import warnings
 
 from .base import QuantamentalDataFrameBase
@@ -24,7 +25,7 @@ def change_column_format(
         curr_type = df[col].dtype
         try:
             df[col] = df[col].astype(dtype)
-        except:
+        except: # noqa
             warnings.warn(
                 f"Could not convert column {col} to {dtype} from {curr_type}."
             )
@@ -263,6 +264,52 @@ def add_ticker_column(
 
     df["ticker"] = _get_tickers_series(df)
 
+    return df
+
+
+def add_nan_series(
+    df: QuantamentalDataFrameBase,
+    ticker: str,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+) -> QuantamentalDataFrameBase:
+    """
+    Add a NaN series to the DataFrame for a given ticker.
+    """
+
+    if not isinstance(df, QuantamentalDataFrameBase):
+        raise TypeError("`df` must be a QuantamentalDataFrame.")
+    if not isinstance(ticker, str):
+        raise TypeError("`ticker` must be a string.")
+    if "_" not in ticker:
+        raise ValueError("Ticker must be in the format 'cid_xcat'.")
+
+    if start is not None:
+        df = df.loc[df["real_date"] >= pd.to_datetime(start)]
+    if end is not None:
+        df = df.loc[df["real_date"] <= pd.to_datetime(end)]
+
+    metrics = list(set(df.columns.tolist()) - set(df.IndexCols))
+
+    cid, xcat = ticker.split("_", 1)
+
+    # warn for overwriting existing entries
+    if len(df[(df["cid"] == cid) & (df["xcat"] == xcat)]) > 0:
+        warnings.warn(
+            f"Entries for {ticker} already exist in the DataFrame in the given date range. "
+            "The existing entries will be overwritten."
+        )
+
+    nan_df = pd.DataFrame(
+        {
+            "real_date": df["real_date"].unique(),
+            **{metric: np.nan for metric in metrics},
+        }
+    )
+    nan_df["cid"] = pd.Categorical([cid], categories=[cid], ordered=False)
+    nan_df["xcat"] = pd.Categorical([xcat], categories=[xcat], ordered=False)
+
+    df = update_df(df=df, df_add=QuantamentalDataFrameBase(nan_df))
     return df
 
 
