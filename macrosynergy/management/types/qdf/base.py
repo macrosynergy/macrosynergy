@@ -37,7 +37,7 @@ class QuantamentalDataFrameMeta(type):
             )
             result = result and correct_date_type
 
-        except:
+        except: # noqa
             result: bool = False
         finally:
             return result
