@@ -156,6 +156,29 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         result = add_nan_series(df=self, ticker=ticker, start=start, end=end)
         return QuantamentalDataFrame(result)
+
+    def rename_xcats(
+        self,
+        xcat_map: Optional[Mapping[str, str]] = None,
+        select_xcats: Optional[List[str]] = None,
+        postfix: Optional[str] = None,
+        prefix: Optional[str] = None,
+        name_all: Optional[str] = None,
+        fmt_string: Optional[str] = None,
+        inplace: bool = False,
+    ) -> "QuantamentalDataFrame":
+        """
+        Rename xcats in the QuantamentalDataFrame.
+        """
+        result = rename_xcats(
+            df=self,
+            xcat_map=xcat_map,
+            select_xcats=select_xcats,
+            postfix=postfix,
+            prefix=prefix,
+            name_all=name_all,
+            fmt_string=fmt_string,
+        )
         return QuantamentalDataFrame(result)
 
     def to_wide(
