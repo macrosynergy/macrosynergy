@@ -64,6 +64,15 @@ class TestTypes(unittest.TestCase):
             .reset_index(drop=True)
         )
         df_S = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
+        self.assertTrue((df_S == df_Q).all().all())
+
+        # test with categorical=False
+        df_Q = (
+            QuantamentalDataFrame(df, categorical=False)
+            .sort_values(["cid", "xcat", "real_date"])
+            .reset_index(drop=True)
+        )
+        df_S = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
         self.assertTrue(df_Q.equals(df_S))
 
 
