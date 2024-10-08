@@ -38,8 +38,6 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         self.InitializedAsCategorical = check_is_categorical(self)
         if categorical:
             self.to_categorical()
-        else:
-            self.to_string_type()
 
     def _inplaceoperation(
         self, method: Callable[..., Any], inplace: bool = False, *args, **kwargs
