@@ -48,9 +48,9 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
     ):
         result = method(*args, **kwargs)
         if inplace:
-            self.__init__(result, categorical=self.InitializedAsCategorical)
+            self.__init__(result)
             return self
-        return QuantamentalDataFrame(result, categorical=self.InitializedAsCategorical)
+        return QuantamentalDataFrame(result)
 
     def is_categorical(self) -> bool:
         """
@@ -108,9 +108,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         if out_all:
             result, _xcats, _cids = result
 
-        result = QuantamentalDataFrame(
-            result, categorical=self.InitializedAsCategorical
-        )
+        result = QuantamentalDataFrame(result)
 
         if out_all:
             return result, _xcats, _cids
@@ -133,7 +131,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         #     blacklist=blacklist,
         # )
         result = apply_blacklist(df=self, blacklist=blacklist)
-        return QuantamentalDataFrame(result, categorical=self.InitializedAsCategorical)
+        return QuantamentalDataFrame(result)
 
     def update_df(
         self,
@@ -144,7 +142,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         Update the QuantamentalDataFrame with a new DataFrame.
         """
         result = update_df(df=self, new_df=df)
-        return QuantamentalDataFrame(result, categorical=self.InitializedAsCategorical)
+        return QuantamentalDataFrame(result)
 
     def add_nan_series(
         self,
@@ -156,7 +154,9 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         Add a NaN series to the QuantamentalDataFrame.
         """
-        return add_nan_series(df=self, ticker=ticker, start=start, end=end)
+        result = add_nan_series(df=self, ticker=ticker, start=start, end=end)
+        return QuantamentalDataFrame(result)
+        return QuantamentalDataFrame(result)
 
     def to_wide(
         self,
