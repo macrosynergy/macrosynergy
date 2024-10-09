@@ -346,6 +346,18 @@ def rename_xcats(
     return df
 
 
+def _add_index_str_column(
+    df: pd.DataFrame,
+    column_name: str,
+    fill_value: str,
+) -> pd.DataFrame:
+    """
+    Add an index column to the DataFrame with a specified fill value.
+    """
+    df[column_name] = pd.Categorical.from_codes([0] * len(df), categories=[fill_value])
+    return df
+
+
 def add_nan_series(
     df: QuantamentalDataFrameBase,
     ticker: str,
@@ -368,7 +380,7 @@ def add_nan_series(
     if end is not None:
         df = df.loc[df["real_date"] <= pd.to_datetime(end)]
 
-    metrics = list(set(df.columns.tolist()) - set(df.IndexCols))
+    metrics = list(set(df.columns.tolist()) - set(QuantamentalDataFrameBase.IndexCols))
 
     cid, xcat = ticker.split("_", 1)
 
@@ -385,8 +397,8 @@ def add_nan_series(
             **{metric: np.nan for metric in metrics},
         }
     )
-    nan_df["cid"] = pd.Categorical([cid], categories=[cid], ordered=False)
-    nan_df["xcat"] = pd.Categorical([xcat], categories=[xcat], ordered=False)
+    nan_df = _add_index_str_column(nan_df, "cid", cid)
+    nan_df = _add_index_str_column(nan_df, "xcat", xcat)
 
     df = update_df(df=df, df_add=QuantamentalDataFrameBase(nan_df))
     return df
@@ -423,20 +435,8 @@ def qdf_from_timseries(
 
     df = timeseries.reset_index().rename(columns={"index": "real_date", 0: metric})
     # assign as categorical string
-    df["cid"] = pd.Categorical.from_codes([0] * len(df), categories=[cid])
-    df["xcat"] = pd.Categorical.from_codes([0] * len(df), categories=[xcat])
+    df = _add_index_str_column(df, "cid", cid)
+    df = _add_index_str_column(df, "xcat", xcat)
 
     df = df[[*QuantamentalDataFrameBase.IndexCols, metric]]
     return QuantamentalDataFrameBase(df)
-
-
-def _add_index_str_column(
-    df: pd.DataFrame,
-    column_name: str,
-    fill_value: str,
-) -> pd.DataFrame:
-    """
-    Add an index column to the DataFrame with a specified fill value.
-    """
-    df[column_name] = pd.Categorical.from_codes([0] * len(df), categories=[fill_value])
-    return df
