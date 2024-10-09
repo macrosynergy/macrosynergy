@@ -152,7 +152,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         Update the QuantamentalDataFrame with a new DataFrame.
         """
-        result = update_df(df=self, new_df=df)
+        result = update_df(df=self, df_add=df)
         return QuantamentalDataFrame(
             result,
             # categorical=self.InitializedAsCategorical,
