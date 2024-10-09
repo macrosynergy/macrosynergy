@@ -8,6 +8,7 @@ import pandas as pd
 from .methods import (
     get_col_sort_order,
     change_column_format,
+    _get_tickers_series,
     reduce_df,
     update_df,
     apply_blacklist,
@@ -79,6 +80,10 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         if self.InitializedAsCategorical:
             return self.to_categorical()
         return self.to_string_type()
+
+    def list_tickers(self) -> List[str]:
+        ltickers: List[str] = sorted(_get_tickers_series(self).unique())
+        return ltickers
 
     def reduce_df(
         self,
