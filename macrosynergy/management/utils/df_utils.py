@@ -84,11 +84,11 @@ def standardise_dataframe(
 
     jpmaqs_metrics = [mtr for mtr in metric_columns if mtr in df.columns]
     non_jpmaqs_metrics = (set(df.columns) - set(jpmaqs_metrics)) - set(idx_cols)
-    col_order = idx_cols + jpmaqs_metrics + sorted(list(non_jpmaqs_metrics))
+    col_order = idx_cols + jpmaqs_metrics + sorted(non_jpmaqs_metrics)
     df = df[col_order]
 
     # for every remaining col, try to convert to float
-    for col in col_order:
+    for col in jpmaqs_metrics + list(non_jpmaqs_metrics):
         try:
             df[col] = df[col].astype(float)
         except:
