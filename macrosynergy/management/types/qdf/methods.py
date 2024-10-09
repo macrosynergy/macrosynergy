@@ -187,6 +187,43 @@ def reduce_df(
         return df
 
 
+def reduce_df_by_ticker(
+    df: QuantamentalDataFrameBase,
+    tickers: List[str],
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    blacklist: dict = None,
+) -> QuantamentalDataFrameBase:
+    """
+    Filter DataFrame by `tickers` and `start` & `end` dates.
+    """
+    if not isinstance(df, QuantamentalDataFrameBase):
+        raise TypeError("`df` must be a QuantamentalDataFrame.")
+
+    if not isinstance(tickers, list):
+        if tickers is not None:
+            raise TypeError("`tickers` must be a list of strings.")
+
+    if start is not None:
+        df = df.loc[df["real_date"] >= pd.to_datetime(start)]
+    if end is not None:
+        df = df.loc[df["real_date"] <= pd.to_datetime(end)]
+
+    if blacklist is not None:
+        df = apply_blacklist(df, blacklist)
+
+    # df = df[df["cid"].isin([t.split("_", 1)[0] for t in tickers])]
+    # df = df[df["xcat"].isin([t.split("_", 1)[1] for t in tickers])]
+    # keep only the rows where the ticker is in the list of tickers - the list is in perfect order, so use boolean indexing
+    ticker_series = _get_tickers_series(df)
+    if tickers is None:
+        tickers = sorted(ticker_series.unique())
+
+    df = df[ticker_series.isin(tickers)]
+
+    return df.reset_index(drop=True)
+
+
 def update_df(
     df: QuantamentalDataFrameBase,
     df_add: QuantamentalDataFrameBase,
