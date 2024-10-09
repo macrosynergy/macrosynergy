@@ -10,6 +10,7 @@ from .methods import (
     change_column_format,
     _get_tickers_series,
     reduce_df,
+    reduce_df_by_ticker,
     update_df,
     apply_blacklist,
     qdf_to_wide_df,
@@ -154,6 +155,30 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             return result, _xcats, _cids
 
         return result
+
+    def reduce_df_by_ticker(
+        self,
+        tickers: Sequence[str],
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        blacklist: Mapping[str, Sequence[Union[str, pd.Timestamp]]] = None,
+        inplace: bool = False,
+    ) -> "QuantamentalDataFrame":
+        """
+        Filter DataFrame by `ticker`, `start` & `end` dates.
+        """
+        result = reduce_df_by_ticker(
+            df=self,
+            tickers=tickers,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+        )
+        return QuantamentalDataFrame(
+            result,
+            # categorical=self.InitializedAsCategorical,
+            _initialized_as_categorical=self.InitializedAsCategorical,
+        )
 
     def apply_blacklist(
         self,
