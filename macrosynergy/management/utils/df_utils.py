@@ -116,6 +116,9 @@ def drop_nan_series(
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a Quantamental DataFrame.")
 
+    if type(df) is QuantamentalDataFrame:
+        return df.drop_nan_series(column=column, raise_warning=raise_warning)
+
     if not column in df.columns:
         raise ValueError(f"Column {column} not present in DataFrame.")
 
@@ -545,7 +548,7 @@ def reduce_df(
 
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a standardised Quantamental DataFrame.")
-    
+
     if type(df) is QuantamentalDataFrame:
         return df.reduce_df(
             cids=cids,
