@@ -42,6 +42,11 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
                 isinstance(df, pd.DataFrame) and isinstance(df, QuantamentalDataFrame)
             ):
                 raise TypeError("Input must be a QuantamentalDataFrame (pd.DataFrame).")
+
+        if type(df) is QuantamentalDataFrame:
+            if _initialized_as_categorical is None:
+                _initialized_as_categorical = df.InitializedAsCategorical
+
         df = df[get_col_sort_order(df)]
         super().__init__(df)
         if _initialized_as_categorical is None:
