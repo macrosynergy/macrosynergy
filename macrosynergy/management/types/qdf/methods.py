@@ -88,7 +88,7 @@ def _get_tickers_series(
 def apply_blacklist(
     df: QuantamentalDataFrameBase,
     blacklist: Mapping[str, Iterable[Union[str, pd.Timestamp]]],
-) -> List[str]:
+) -> QuantamentalDataFrameBase:
     """
     Apply a blacklist to a list of `cids` and `xcats`.
     """
@@ -104,8 +104,12 @@ def apply_blacklist(
     if not all([isinstance(v, Iterable) for v in blacklist.values()]):
         raise TypeError("Values of `blacklist` must be iterables.")
 
-    if not all([isinstance(v, (str, pd.Timestamp)) for v in blacklist.values()]):
-        raise TypeError("Values of `blacklist` must be strings or pandas Timestamps.")
+    if not all(
+        [isinstance(vv, (str, pd.Timestamp)) for v in blacklist.values() for vv in v]
+    ):
+        raise TypeError(
+            "Values of `blacklist` must be lists of date strings or pandas Timestamps."
+        )
 
     for key, value in blacklist.items():
         df = df[
