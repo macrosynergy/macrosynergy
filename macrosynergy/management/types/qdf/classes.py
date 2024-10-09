@@ -126,7 +126,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
 
         result = QuantamentalDataFrame(
             result,
-            categorical=self.InitializedAsCategorical,
+            # categorical=self.InitializedAsCategorical,
             _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
@@ -153,7 +153,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         result = apply_blacklist(df=self, blacklist=blacklist)
         return QuantamentalDataFrame(
             result,
-            categorical=self.InitializedAsCategorical,
+            # categorical=self.InitializedAsCategorical,
             _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
@@ -168,7 +168,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         result = update_df(df=self, df_add=df)
         return QuantamentalDataFrame(
             result,
-            categorical=self.InitializedAsCategorical,
+            # categorical=self.InitializedAsCategorical,
             _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
@@ -185,7 +185,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         result = add_nan_series(df=self, ticker=ticker, start=start, end=end)
         return QuantamentalDataFrame(
             result,
-            categorical=self.InitializedAsCategorical,
+            # categorical=self.InitializedAsCategorical,
             _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
@@ -213,7 +213,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         )
         return QuantamentalDataFrame(
             result,
-            categorical=self.InitializedAsCategorical,
+            # categorical=self.InitializedAsCategorical,
             _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
