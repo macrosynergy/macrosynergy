@@ -397,8 +397,8 @@ def add_nan_series(
             **{metric: np.nan for metric in metrics},
         }
     )
-    nan_df["cid"] = pd.Categorical([cid], categories=[cid], ordered=False)
-    nan_df["xcat"] = pd.Categorical([xcat], categories=[xcat], ordered=False)
+    nan_df = _add_index_str_column(nan_df, "cid", cid)
+    nan_df = _add_index_str_column(nan_df, "xcat", xcat)
 
     df = update_df(df=df, df_add=QuantamentalDataFrameBase(nan_df))
     return df
@@ -435,8 +435,8 @@ def qdf_from_timseries(
 
     df = timeseries.reset_index().rename(columns={"index": "real_date", 0: metric})
     # assign as categorical string
-    df["cid"] = pd.Categorical.from_codes([0] * len(df), categories=[cid])
-    df["xcat"] = pd.Categorical.from_codes([0] * len(df), categories=[xcat])
+    df = _add_index_str_column(df, "cid", cid)
+    df = _add_index_str_column(df, "xcat", xcat)
 
     df = df[[*QuantamentalDataFrameBase.IndexCols, metric]]
     return QuantamentalDataFrameBase(df)
