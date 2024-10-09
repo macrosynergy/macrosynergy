@@ -630,6 +630,13 @@ def reduce_df_by_ticker(
 
     :return <pd.Dataframe>: reduced dataframe that also removes duplicates
     """
+    if type(df) is QuantamentalDataFrame:
+        return df.reduce_df_by_ticker(
+            tickers=ticks,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+        )
 
     dfx = df.copy()
 
