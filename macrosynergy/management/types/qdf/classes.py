@@ -15,6 +15,7 @@ from .methods import (
     qdf_to_wide_df,
     check_is_categorical,
     add_nan_series,
+    drop_nan_series,
     rename_xcats,
     qdf_from_timseries,
 )
@@ -183,6 +184,22 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         Add a NaN series to the QuantamentalDataFrame.
         """
         result = add_nan_series(df=self, ticker=ticker, start=start, end=end)
+        return QuantamentalDataFrame(
+            result,
+            # categorical=self.InitializedAsCategorical,
+            _initialized_as_categorical=self.InitializedAsCategorical,
+        )
+
+    def drop_nan_series(
+        self,
+        column: str = "value",
+        raise_warning: bool = True,
+        inplace: bool = False,
+    ) -> "QuantamentalDataFrame":
+        """
+        Drop NaN series from the QuantamentalDataFrame.
+        """
+        result = drop_nan_series(df=self, column=column, raise_warning=raise_warning)
         return QuantamentalDataFrame(
             result,
             # categorical=self.InitializedAsCategorical,
