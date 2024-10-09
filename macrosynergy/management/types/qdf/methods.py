@@ -404,6 +404,42 @@ def add_nan_series(
     return df
 
 
+def drop_nan_series(
+    df: QuantamentalDataFrameBase, column: str = "value", raise_warning: bool = False
+) -> QuantamentalDataFrameBase:
+    """
+    Drops any series that are entirely NaNs.
+    Raises a user warning if any series are dropped.
+    """
+    if not isinstance(df, QuantamentalDataFrameBase):
+        raise TypeError("Argument `df` must be a Quantamental DataFrame.")
+
+    if not column in df.columns:
+        raise ValueError(f"Column {column} not present in DataFrame.")
+
+    if not df[column].isna().any():
+        return df
+
+    if not isinstance(raise_warning, bool):
+        raise TypeError("Error: The raise_warning argument must be a boolean.")
+
+    df_orig: pd.DataFrame = df.copy()
+    for cd, xc in df_orig.groupby(["cid", "xcat"]).groups:
+        sel_series: pd.Series = df_orig[
+            (df_orig["cid"] == cd) & (df_orig["xcat"] == xc)
+        ][column]
+        if sel_series.isna().all():
+            if raise_warning:
+                warnings.warn(
+                    message=f"The series {cd}_{xc} is populated "
+                    "with NaNs only, and will be dropped.",
+                    category=UserWarning,
+                )
+            df = df[~((df["cid"] == cd) & (df["xcat"] == xc))]
+
+    return df.reset_index(drop=True)
+
+
 def qdf_from_timseries(
     timeseries: pd.Series,
     cid: Optional[str] = None,

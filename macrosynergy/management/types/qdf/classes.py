@@ -15,6 +15,7 @@ from .methods import (
     qdf_to_wide_df,
     check_is_categorical,
     add_nan_series,
+    drop_nan_series,
     rename_xcats,
     qdf_from_timseries,
 )
@@ -126,7 +127,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
 
         result = QuantamentalDataFrame(
             result,
-            categorical=self.InitializedAsCategorical,
+            # categorical=self.InitializedAsCategorical,
             _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
@@ -153,7 +154,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         result = apply_blacklist(df=self, blacklist=blacklist)
         return QuantamentalDataFrame(
             result,
-            categorical=self.InitializedAsCategorical,
+            # categorical=self.InitializedAsCategorical,
             _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
@@ -168,7 +169,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         result = update_df(df=self, df_add=df)
         return QuantamentalDataFrame(
             result,
-            categorical=self.InitializedAsCategorical,
+            # categorical=self.InitializedAsCategorical,
             _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
@@ -185,7 +186,23 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         result = add_nan_series(df=self, ticker=ticker, start=start, end=end)
         return QuantamentalDataFrame(
             result,
-            categorical=self.InitializedAsCategorical,
+            # categorical=self.InitializedAsCategorical,
+            _initialized_as_categorical=self.InitializedAsCategorical,
+        )
+
+    def drop_nan_series(
+        self,
+        column: str = "value",
+        raise_warning: bool = True,
+        inplace: bool = False,
+    ) -> "QuantamentalDataFrame":
+        """
+        Drop NaN series from the QuantamentalDataFrame.
+        """
+        result = drop_nan_series(df=self, column=column, raise_warning=raise_warning)
+        return QuantamentalDataFrame(
+            result,
+            # categorical=self.InitializedAsCategorical,
             _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
@@ -213,7 +230,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         )
         return QuantamentalDataFrame(
             result,
-            categorical=self.InitializedAsCategorical,
+            # categorical=self.InitializedAsCategorical,
             _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
