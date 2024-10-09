@@ -30,7 +30,12 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
     >>> qdf = QuantamentalDataFrame(df)
     """
 
-    def __init__(self, df: Optional[pd.DataFrame] = None, categorical: bool = True):
+    def __init__(
+        self,
+        df: Optional[pd.DataFrame] = None,
+        categorical: bool = True,
+        _initialized_as_categorical: Optional[bool] = None,
+    ):
         if df is not None:
             if not (
                 isinstance(df, pd.DataFrame) and isinstance(df, QuantamentalDataFrame)
@@ -38,7 +43,13 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
                 raise TypeError("Input must be a QuantamentalDataFrame (pd.DataFrame).")
         df = df[get_col_sort_order(df)]
         super().__init__(df)
-        self.InitializedAsCategorical = check_is_categorical(self)
+        if _initialized_as_categorical is None:
+            self.InitializedAsCategorical = check_is_categorical(self)
+        else:
+            if not isinstance(_initialized_as_categorical, bool):
+                raise TypeError("`_initialized_as_categorical` must be a boolean.")
+            self.InitializedAsCategorical = _initialized_as_categorical
+
         if categorical:
             self.to_categorical()
         else:
@@ -115,7 +126,8 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
 
         result = QuantamentalDataFrame(
             result,
-            # categorical=self.InitializedAsCategorical,
+            categorical=self.InitializedAsCategorical,
+            _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
         if out_all:
@@ -141,7 +153,8 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         result = apply_blacklist(df=self, blacklist=blacklist)
         return QuantamentalDataFrame(
             result,
-            # categorical=self.InitializedAsCategorical,
+            categorical=self.InitializedAsCategorical,
+            _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
     def update_df(
@@ -155,7 +168,8 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         result = update_df(df=self, df_add=df)
         return QuantamentalDataFrame(
             result,
-            # categorical=self.InitializedAsCategorical,
+            categorical=self.InitializedAsCategorical,
+            _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
     def add_nan_series(
@@ -171,7 +185,8 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         result = add_nan_series(df=self, ticker=ticker, start=start, end=end)
         return QuantamentalDataFrame(
             result,
-            # categorical=self.InitializedAsCategorical,
+            categorical=self.InitializedAsCategorical,
+            _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
     def rename_xcats(
@@ -198,7 +213,8 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         )
         return QuantamentalDataFrame(
             result,
-            # categorical=self.InitializedAsCategorical,
+            categorical=self.InitializedAsCategorical,
+            _initialized_as_categorical=self.InitializedAsCategorical,
         )
 
     def to_wide(
