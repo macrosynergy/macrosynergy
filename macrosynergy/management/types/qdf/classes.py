@@ -260,7 +260,12 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         Pivot the QuantamentalDataFrame.
         """
-        return qdf_to_wide_df(self, value_column=value_column)
+        result = qdf_to_wide_df(self, value_column=value_column)
+        if self.InitializedAsCategorical:
+            return result
+
+        result.columns = result.columns.astype(str)
+        return result
 
     @classmethod
     def from_timeseries(
