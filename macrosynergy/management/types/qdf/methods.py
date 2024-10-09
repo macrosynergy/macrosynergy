@@ -78,11 +78,13 @@ def _get_tickers_series(
     cid_labels = df["cid"].cat.categories[df["cid"].cat.codes]
     xcat_labels = df["xcat"].cat.categories[df["xcat"].cat.codes]
 
+    ticker_labels = [f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)]
+    categories = pd.unique(pd.Series(ticker_labels))
+
     ticker_series = pd.Categorical(
-        [f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)],
-        categories=pd.Categorical(
-            f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)
-        ).categories,
+        ticker_labels,
+        categories=categories,
+        ordered=True,
     )
 
     return ticker_series
