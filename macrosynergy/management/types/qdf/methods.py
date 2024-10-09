@@ -52,7 +52,10 @@ def check_is_categorical(df: QuantamentalDataFrameBase) -> bool:
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("`df` must be a Quantamental DataFrame.")
 
-    return all(df[col].dtype.name == "category" for col in df._StrIndexCols)
+    return all(
+        df[col].dtype.name == "category"
+        for col in QuantamentalDataFrameBase._StrIndexCols
+    )
 
 
 def _get_tickers_series(
@@ -75,11 +78,13 @@ def _get_tickers_series(
     cid_labels = df["cid"].cat.categories[df["cid"].cat.codes]
     xcat_labels = df["xcat"].cat.categories[df["xcat"].cat.codes]
 
+    ticker_labels = [f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)]
+    categories = pd.unique(pd.Series(ticker_labels))
+
     ticker_series = pd.Categorical(
-        [f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)],
-        categories=pd.Categorical(
-            f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)
-        ).categories,
+        ticker_labels,
+        categories=categories,
+        ordered=True,
     )
 
     return ticker_series
@@ -180,6 +185,40 @@ def reduce_df(
         return df, xcats_found, cids_found
     else:
         return df
+
+
+def reduce_df_by_ticker(
+    df: QuantamentalDataFrameBase,
+    tickers: List[str],
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    blacklist: dict = None,
+) -> QuantamentalDataFrameBase:
+    """
+    Filter DataFrame by `tickers` and `start` & `end` dates.
+    """
+    if not isinstance(df, QuantamentalDataFrameBase):
+        raise TypeError("`df` must be a QuantamentalDataFrame.")
+
+    if not isinstance(tickers, list):
+        if tickers is not None:
+            raise TypeError("`tickers` must be a list of strings.")
+
+    if start is not None:
+        df = df.loc[df["real_date"] >= pd.to_datetime(start)]
+    if end is not None:
+        df = df.loc[df["real_date"] <= pd.to_datetime(end)]
+
+    if blacklist is not None:
+        df = apply_blacklist(df, blacklist)
+
+    ticker_series = _get_tickers_series(df)
+    if tickers is None:
+        tickers = sorted(ticker_series.unique())
+
+    df = df[ticker_series.isin(tickers)]
+
+    return df.reset_index(drop=True)
 
 
 def update_df(

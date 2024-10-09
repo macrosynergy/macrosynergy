@@ -10,6 +10,7 @@ from .methods import (
     change_column_format,
     _get_tickers_series,
     reduce_df,
+    reduce_df_by_ticker,
     update_df,
     apply_blacklist,
     qdf_to_wide_df,
@@ -42,6 +43,11 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
                 isinstance(df, pd.DataFrame) and isinstance(df, QuantamentalDataFrame)
             ):
                 raise TypeError("Input must be a QuantamentalDataFrame (pd.DataFrame).")
+
+        if type(df) is QuantamentalDataFrame:
+            if _initialized_as_categorical is None:
+                _initialized_as_categorical = df.InitializedAsCategorical
+
         df = df[get_col_sort_order(df)]
         super().__init__(df)
         if _initialized_as_categorical is None:
@@ -97,6 +103,20 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         ltickers: List[str] = sorted(_get_tickers_series(self).unique())
         return ltickers
 
+    def add_ticker_column(self) -> "QuantamentalDataFrame":
+        """
+        Add a ticker column to the QuantamentalDataFrame.
+        """
+        ticker_col = _get_tickers_series(self)
+        self["ticker"] = ticker_col
+        return self
+
+    def drop_ticker_column(self) -> "QuantamentalDataFrame":
+        """
+        Drop the ticker column from the QuantamentalDataFrame.
+        """
+        return self.drop(columns=["ticker"])
+
     def reduce_df(
         self,
         cids: Optional[Sequence[str]] = None,
@@ -135,6 +155,30 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             return result, _xcats, _cids
 
         return result
+
+    def reduce_df_by_ticker(
+        self,
+        tickers: Sequence[str],
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        blacklist: Mapping[str, Sequence[Union[str, pd.Timestamp]]] = None,
+        inplace: bool = False,
+    ) -> "QuantamentalDataFrame":
+        """
+        Filter DataFrame by `ticker`, `start` & `end` dates.
+        """
+        result = reduce_df_by_ticker(
+            df=self,
+            tickers=tickers,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+        )
+        return QuantamentalDataFrame(
+            result,
+            # categorical=self.InitializedAsCategorical,
+            _initialized_as_categorical=self.InitializedAsCategorical,
+        )
 
     def apply_blacklist(
         self,
@@ -241,7 +285,12 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         Pivot the QuantamentalDataFrame.
         """
-        return qdf_to_wide_df(self, value_column=value_column)
+        result = qdf_to_wide_df(self, value_column=value_column)
+        if self.InitializedAsCategorical:
+            return result
+
+        result.columns = result.columns.astype(str)
+        return result
 
     @classmethod
     def from_timeseries(
