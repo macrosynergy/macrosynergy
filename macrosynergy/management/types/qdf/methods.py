@@ -59,7 +59,7 @@ def _get_tickers_series(
     df: QuantamentalDataFrameBase,
     cid_column: str = "cid",
     xcat_column: str = "xcat",
-) -> List[str]:
+) -> pd.Categorical:
     """
     Get the list of tickers from the DataFrame.
     """
@@ -78,7 +78,7 @@ def _get_tickers_series(
     ticker_series = pd.Categorical(
         [f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)],
         categories=pd.Categorical(
-            [f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)]
+            f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)
         ).categories,
     )
 

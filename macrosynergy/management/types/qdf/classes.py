@@ -8,6 +8,7 @@ import pandas as pd
 from .methods import (
     get_col_sort_order,
     change_column_format,
+    _get_tickers_series,
     reduce_df,
     update_df,
     apply_blacklist,
@@ -80,6 +81,10 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             return self.to_categorical()
         return self.to_string_type()
 
+    def list_tickers(self) -> List[str]:
+        ltickers: List[str] = sorted(_get_tickers_series(self).unique())
+        return ltickers
+
     def reduce_df(
         self,
         cids: Optional[Sequence[str]] = None,
@@ -147,7 +152,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         Update the QuantamentalDataFrame with a new DataFrame.
         """
-        result = update_df(df=self, new_df=df)
+        result = update_df(df=self, df_add=df)
         return QuantamentalDataFrame(
             result,
             # categorical=self.InitializedAsCategorical,
@@ -277,3 +282,41 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             )
 
         return QuantamentalDataFrame(new_df, categorical=categorical)
+
+    @classmethod
+    def from_qdf_list(
+        cls,
+        qdf_list: List["QuantamentalDataFrame"],
+        categorical: bool = True,
+    ) -> "QuantamentalDataFrame":
+        """
+        Concatenate a list of QuantamentalDataFrames into a single QuantamentalDataFrame.
+        """
+        if not all(isinstance(qdf, QuantamentalDataFrame) for qdf in qdf_list):
+            raise TypeError("All elements in the list must be QuantamentalDataFrames.")
+        if not qdf_list:
+            raise ValueError("Input list is empty.")
+
+        if not categorical:
+            return QuantamentalDataFrame(
+                pd.concat(qdf_list, ignore_index=True),
+                categorical=False,
+            )
+
+        qdf_list = [QuantamentalDataFrame(qdf) for qdf in qdf_list]
+        # use pd.api.types.union_categoricals to combine the categories of all the dfs into one
+        comb_cids = pd.api.types.union_categoricals(
+            [qdf["cid"].unique() for qdf in qdf_list]
+        )
+        comb_xcats = pd.api.types.union_categoricals(
+            [qdf["xcat"].unique() for qdf in qdf_list]
+        )
+
+        for qdf in qdf_list:
+            qdf["cid"] = pd.Categorical(qdf["cid"], categories=comb_cids.categories)
+            qdf["xcat"] = pd.Categorical(qdf["xcat"], categories=comb_xcats.categories)
+
+        return QuantamentalDataFrame(
+            pd.concat(qdf_list, ignore_index=True),
+            categorical=True,
+        )
