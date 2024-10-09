@@ -52,7 +52,10 @@ def check_is_categorical(df: QuantamentalDataFrameBase) -> bool:
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("`df` must be a Quantamental DataFrame.")
 
-    return all(df[col].dtype.name == "category" for col in df._StrIndexCols)
+    return all(
+        df[col].dtype.name == "category"
+        for col in QuantamentalDataFrameBase._StrIndexCols
+    )
 
 
 def _get_tickers_series(
