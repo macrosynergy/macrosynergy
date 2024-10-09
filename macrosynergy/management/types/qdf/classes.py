@@ -102,6 +102,20 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         ltickers: List[str] = sorted(_get_tickers_series(self).unique())
         return ltickers
 
+    def add_ticker_column(self) -> "QuantamentalDataFrame":
+        """
+        Add a ticker column to the QuantamentalDataFrame.
+        """
+        ticker_col = _get_tickers_series(self)
+        self["ticker"] = ticker_col
+        return self
+
+    def drop_ticker_column(self) -> "QuantamentalDataFrame":
+        """
+        Drop the ticker column from the QuantamentalDataFrame.
+        """
+        return self.drop(columns=["ticker"])
+
     def reduce_df(
         self,
         cids: Optional[Sequence[str]] = None,
