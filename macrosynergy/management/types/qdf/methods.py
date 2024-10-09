@@ -380,7 +380,7 @@ def add_nan_series(
     if end is not None:
         df = df.loc[df["real_date"] <= pd.to_datetime(end)]
 
-    metrics = list(set(df.columns.tolist()) - set(df.IndexCols))
+    metrics = list(set(df.columns.tolist()) - set(QuantamentalDataFrameBase.IndexCols))
 
     cid, xcat = ticker.split("_", 1)
 
