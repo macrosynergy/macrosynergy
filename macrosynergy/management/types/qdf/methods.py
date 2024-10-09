@@ -346,6 +346,18 @@ def rename_xcats(
     return df
 
 
+def _add_index_str_column(
+    df: pd.DataFrame,
+    column_name: str,
+    fill_value: str,
+) -> pd.DataFrame:
+    """
+    Add an index column to the DataFrame with a specified fill value.
+    """
+    df[column_name] = pd.Categorical.from_codes([0] * len(df), categories=[fill_value])
+    return df
+
+
 def add_nan_series(
     df: QuantamentalDataFrameBase,
     ticker: str,
@@ -428,15 +440,3 @@ def qdf_from_timseries(
 
     df = df[[*QuantamentalDataFrameBase.IndexCols, metric]]
     return QuantamentalDataFrameBase(df)
-
-
-def _add_index_str_column(
-    df: pd.DataFrame,
-    column_name: str,
-    fill_value: str,
-) -> pd.DataFrame:
-    """
-    Add an index column to the DataFrame with a specified fill value.
-    """
-    df[column_name] = pd.Categorical.from_codes([0] * len(df), categories=[fill_value])
-    return df
