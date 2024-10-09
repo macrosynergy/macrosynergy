@@ -212,9 +212,6 @@ def reduce_df_by_ticker(
     if blacklist is not None:
         df = apply_blacklist(df, blacklist)
 
-    # df = df[df["cid"].isin([t.split("_", 1)[0] for t in tickers])]
-    # df = df[df["xcat"].isin([t.split("_", 1)[1] for t in tickers])]
-    # keep only the rows where the ticker is in the list of tickers - the list is in perfect order, so use boolean indexing
     ticker_series = _get_tickers_series(df)
     if tickers is None:
         tickers = sorted(ticker_series.unique())
