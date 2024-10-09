@@ -108,7 +108,10 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         if out_all:
             result, _xcats, _cids = result
 
-        result = QuantamentalDataFrame(result)
+        result = QuantamentalDataFrame(
+            result,
+            # categorical=self.InitializedAsCategorical,
+        )
 
         if out_all:
             return result, _xcats, _cids
@@ -131,7 +134,10 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         #     blacklist=blacklist,
         # )
         result = apply_blacklist(df=self, blacklist=blacklist)
-        return QuantamentalDataFrame(result)
+        return QuantamentalDataFrame(
+            result,
+            # categorical=self.InitializedAsCategorical,
+        )
 
     def update_df(
         self,
@@ -142,7 +148,10 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         Update the QuantamentalDataFrame with a new DataFrame.
         """
         result = update_df(df=self, new_df=df)
-        return QuantamentalDataFrame(result)
+        return QuantamentalDataFrame(
+            result,
+            # categorical=self.InitializedAsCategorical,
+        )
 
     def add_nan_series(
         self,
@@ -155,7 +164,10 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         Add a NaN series to the QuantamentalDataFrame.
         """
         result = add_nan_series(df=self, ticker=ticker, start=start, end=end)
-        return QuantamentalDataFrame(result)
+        return QuantamentalDataFrame(
+            result,
+            # categorical=self.InitializedAsCategorical,
+        )
 
     def rename_xcats(
         self,
@@ -179,7 +191,10 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             name_all=name_all,
             fmt_string=fmt_string,
         )
-        return QuantamentalDataFrame(result)
+        return QuantamentalDataFrame(
+            result,
+            # categorical=self.InitializedAsCategorical,
+        )
 
     def to_wide(
         self,
