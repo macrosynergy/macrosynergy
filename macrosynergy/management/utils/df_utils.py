@@ -439,6 +439,9 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     if not isinstance(df_add, QuantamentalDataFrame):
         raise TypeError(error_message)
 
+    if type(df) is QuantamentalDataFrame:
+        return df.update_df(df_add=df_add, xcat_replace=xcat_replace)
+
     error_message = (
         "The two Quantamental DataFrames must share at least "
         "four columns including than 'real_date', 'cid', and 'xcat'."
