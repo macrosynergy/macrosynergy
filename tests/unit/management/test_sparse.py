@@ -367,15 +367,18 @@ class TestInformationStateChanges(unittest.TestCase):
     def test_class_methods(self) -> None:
         # test the class methods
         qdf = get_long_format_data(end="2012-01-01")
-        isc = InformationStateChanges.from_qdf(qdf)
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
         self.assertTrue(isinstance(isc, InformationStateChanges))
         self.assertTrue(isinstance(isc.isc_dict, dict))
 
         self.assertEqual(set(isc.isc_dict.keys()), set(isc.keys()))
         # can't directly check the values and items as they are not hashable
-        self.assertEqual(str(isc), str(isc.isc_dict))
-        self.assertEqual(repr(isc), repr(isc.isc_dict))
 
+        tks = (qdf["cid"] + "_" + qdf["xcat"]).unique().tolist()
+        self.assertTrue(str(tks) in str(isc))
+        self.assertEqual(
+            repr(isc), f"InformationStateChanges object with {len(tks)} tickers"
+        )
         first_dict_key = list(isc.isc_dict.keys())[0]
         self.assertTrue((isc[first_dict_key]).equals(isc.isc_dict[first_dict_key]))
 
