@@ -481,6 +481,9 @@ def validate_download_args(
     if not isinstance(delay_param, float):
         raise TypeError("`delay_param` must be a float >=0.2 (seconds).")
 
+    if delay_param < 0.0:
+        raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
+
     if delay_param < 0.2:
         warnings.warn(
             RuntimeWarning(
@@ -488,8 +491,6 @@ def validate_download_args(
                 f"Minimum recommended value is 0.2 seconds. "
             )
         )
-    if delay_param < 0.0:
-        raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
 
     if not isinstance(batch_size, int):
         raise TypeError("`batch_size` must be an integer.")
@@ -556,7 +557,7 @@ class DataQueryInterface(object):
     :param <str> token_url: token URL for the DataQuery API. Defaults to OAUTH_TOKEN_URL.
     :param <bool> suppress_warnings: whether to suppress warnings. Defaults to True.
 
-    :param <Any> custom_auth: custom authentication object. When specified oauth must be 
+    :param <Any> custom_auth: custom authentication object. When specified oauth must be
         False and the object must have a get_auth method. Defaults to None.
 
     :return <DataQueryInterface>: DataQueryInterface object.

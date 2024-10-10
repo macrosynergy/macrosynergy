@@ -14,6 +14,7 @@ import requests.compat
 from packaging import version
 
 from macrosynergy.management.constants import FREQUENCY_MAP
+from macrosynergy.compat import PD_NEW_DATE_FREQ
 
 
 @overload
@@ -175,10 +176,16 @@ def _map_to_business_day_frequency(freq: str, valid_freqs: List[str] = None) -> 
     if freq in FREQUENCY_MAP.values():
         freq = list(FREQUENCY_MAP.keys())[list(FREQUENCY_MAP.values()).index(freq)]
 
-    if freq not in valid_freqs:
+    if freq not in valid_freqs and not ((freq in ["BME", "BQE"]) and PD_NEW_DATE_FREQ):
         raise ValueError(
             f"Frequency must be one of {valid_freqs}, but received {freq}."
         )
+
+    if PD_NEW_DATE_FREQ:
+        if freq in ["M", "Q"]:
+            return FREQUENCY_MAP[freq] + "E"
+        if freq in ["BME", "BQE"]:
+            return freq
 
     return FREQUENCY_MAP[freq]
 

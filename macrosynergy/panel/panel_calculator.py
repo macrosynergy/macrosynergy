@@ -271,7 +271,8 @@ def _replace_zeros(df: pd.DataFrame):
     """
     if not PYTHON_3_8_OR_LATER:
         for col in df.columns:
-            df[col] = df[col].replace(0, np.nan)
+            df[col] = df[col].replace(pd.NA, np.nan)
+            df[col] = df[col].astype('float64')
         return df
     else:
         return df

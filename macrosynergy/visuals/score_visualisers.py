@@ -7,7 +7,11 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 
-from macrosynergy.management.utils.df_utils import reduce_df, update_df
+from macrosynergy.management.utils.df_utils import (
+    reduce_df,
+    update_df,
+    _map_to_business_day_frequency,
+)
 from macrosynergy.panel import linear_composite, make_zn_scores
 
 
@@ -425,10 +429,11 @@ class ScoreVisualisers:
         cids = cids or self.cids
         xcat = xcat if xcat.endswith(self.postfix) else xcat + self.postfix
 
-        if freq not in ["Q", "A", "BA"]:
+        freq = "2AS" if freq == "BA" else _map_to_business_day_frequency(freq)
+
+        if not (freq in ["2AS", "BA", "A"] or freq.startswith("BQ")):
             raise ValueError("freq must be 'Q', 'A', or 'BA'")
 
-        freq = "2AS" if freq == "BA" else freq
         df = self.df[self.df["xcat"] == xcat]
         df = df[df["cid"].isin(cids)]
         df = df if start is None else df[df["real_date"] >= start]
@@ -545,10 +550,10 @@ class ScoreVisualisers:
         if not isinstance(cid, str):
             raise TypeError("cid must be a string")
 
-        if freq not in ["Q", "A", "BA"]:
-            raise ValueError("freq must be 'Q', 'A', or 'BA'")
+        freq = "2AS" if freq == "BA" else _map_to_business_day_frequency(freq)
 
-        freq = "2AS" if freq == "BA" else freq
+        if not (freq in ["2AS", "BA", "A"] or freq.startswith("BQ")):
+            raise ValueError("freq must be 'Q', 'A', or 'BA'")
 
         xcat_labels = xcat_labels or self.xcat_labels
         xcats = self._apply_postfix(xcats)
