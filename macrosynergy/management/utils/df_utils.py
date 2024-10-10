@@ -387,7 +387,7 @@ def downsample_df_on_real_date(
     non_groupby_columns = list(set(df.columns) - set(groupby_columns) - {"real_date"})
     res = (
         df.set_index("real_date")
-        .groupby(groupby_columns)[non_groupby_columns]
+        .groupby(groupby_columns, observed=False)[non_groupby_columns]
         .resample(freq)
     )
     if PD_OLD_RESAMPLE:
