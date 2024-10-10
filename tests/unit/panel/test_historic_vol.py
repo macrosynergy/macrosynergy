@@ -163,6 +163,16 @@ class TestAll(unittest.TestCase):
             df_output[["cid", "xcat", "real_date"]].shape
             == df_reduce[["cid", "xcat", "real_date"]].shape
         )
+        dfod = (
+            df_output.groupby(["cid", "xcat"])["real_date"]
+            .agg(min_dt="min", max_dt="max")
+            .reset_index()
+        )
+        dfrd = (
+            df_reduce.groupby(["cid", "xcat"])["real_date"]
+            .agg(min_dt="min", max_dt="max")
+            .reset_index()
+        )
 
         lback_periods = 20
         half_life = 8
