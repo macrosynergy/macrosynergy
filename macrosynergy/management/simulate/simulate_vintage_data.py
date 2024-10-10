@@ -7,6 +7,9 @@ import numpy as np
 import pandas as pd
 import math
 import datetime as dt
+from typing import List
+from macrosynergy.management.utils import _map_to_business_day_frequency
+from macrosynergy.management.constants import ANNUALIZATION_FACTORS
 
 
 class VintageData:
@@ -62,8 +65,8 @@ class VintageData:
         self.number_firsts = number_firsts
         self.shortest = shortest
 
-        self.freq = freq
-        self.freq_int = dict(zip(["Q", "M", "W"], [4, 12, 52]))
+        self.freq = _map_to_business_day_frequency(freq)
+        self.freq_int = ANNUALIZATION_FACTORS
         self.af = self.freq_int[freq]
 
         self.start_value = start_value
@@ -153,7 +156,7 @@ class VintageData:
 
         seas_factors = self.seasonal / np.std(linear_scale)
         seas_factors *= linear_scale
-
+        df_rels: List[pd.DataFrame] = []
         for i, eop_date in enumerate(eop_dates):
             v = vin_lengths[i]
             if i > 0:
@@ -188,7 +191,9 @@ class VintageData:
                         "value": values,
                     }
                 )
-                df_gr1 = pd.concat([df_gr1, df_rel], ignore_index=True)
+                df_rels.append(df_rel)
+
+        df_gr1 = pd.concat(df_rels, ignore_index=True)
 
         df_gr1["grading"] = 1
         return self.add_ticker_parts(df_gr1)
@@ -259,7 +264,6 @@ class VintageData:
         df_gr2["release_date"] = data
         df_gr2["observation_date"] = eop_arr
         df_gr2["ticker"] = self.ticker
-        print(df_gr2)
 
         return self.add_ticker_parts(df_gr2)
 

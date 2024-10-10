@@ -2,9 +2,13 @@ import unittest
 import random
 import numpy as np
 import pandas as pd
-from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY
+from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY, PD_OLD_RESAMPLE
 from tests.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df, categories_df
+from macrosynergy.management.utils import (
+    reduce_df,
+    categories_df,
+    _map_to_business_day_frequency,
+)
 from math import ceil, floor
 from datetime import timedelta
 from pandas.tseries.offsets import BMonthEnd
@@ -282,17 +286,21 @@ class TestAll(unittest.TestCase):
             self.dfd["real_date"].dt.month.isin([10, 11, 12])
         )
         filt2 = (self.dfd["cid"] == "AUD") & (self.dfd["xcat"] == "XR")
-        x1 = round(
-            float(
-                np.mean(
-                    self.dfd[filt1 & filt2]
-                    .set_index("real_date")
-                    .resample("M")
-                    .mean(**RESAMPLE_NUMERIC_ONLY)
-                )
-            ),
-            10,
-        )
+        _freq = _map_to_business_day_frequency("M")
+
+        _resamp = self.dfd[filt1 & filt2].set_index("real_date").resample(_freq)
+        if PD_OLD_RESAMPLE:
+            _resamp = _resamp.agg(
+                {
+                    col: "mean"
+                    for col in self.dfd.columns
+                    if pd.api.types.is_numeric_dtype(self.dfd[col])
+                }
+            )
+        else:
+            _resamp = _resamp.mean(**RESAMPLE_NUMERIC_ONLY)
+
+        x1 = round(float(np.mean(_resamp)), 10)
 
         x2 = round(float(dfc.loc[("AUD", "2013-10-31"), "XR"]), 10)
         self.assertAlmostEqual(x1, x2)
@@ -384,8 +392,8 @@ class TestAll(unittest.TestCase):
         # value will be removed.
         earliest_date = min(self.dfd["real_date"])
         last_date = max(self.dfd["real_date"])
-
-        dates = pd.date_range(start=earliest_date, end=last_date, freq="M")
+        _freq = _map_to_business_day_frequency("M")
+        dates = pd.date_range(start=earliest_date, end=last_date, freq=_freq)
         # Reduce to a single cross-section.
         index = dfc.loc["AUD", :].index
 

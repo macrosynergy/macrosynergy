@@ -813,10 +813,10 @@ class InformationStateChanges(object):
         self.isc_dict[key] = value
 
     def __str__(self):
-        return str(self.isc_dict)
+        return f"InformationStateChanges object with tickers: {list(self.keys())}"
 
     def __repr__(self):
-        return repr(self.isc_dict)
+        return f"InformationStateChanges object with {len(self.keys())} tickers"
 
     def __add__(self, other):
         if not isinstance(other, InformationStateChanges):

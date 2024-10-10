@@ -1335,6 +1335,8 @@ class SignalReturnRelations:
         df_result = pd.DataFrame(
             columns=df_column_names, index=df_row_names, dtype=np.float64
         )
+        # sort index to prevent performance degradation: PerformanceWarning
+        df_result.sort_index(inplace=True)
 
         loop_tuples: List[Tuple[str, str, str, str]] = [
             (ret, sig, freq, agg_sig)

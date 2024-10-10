@@ -53,6 +53,8 @@ from .sparse import (
 
 from .math import (
     expanding_mean_with_nan,
+    ewm_sum,
+    calculate_cumulative_weights,
 )
 
 
@@ -107,4 +109,6 @@ __all__ = [
     "InformationStateChanges",
     # Math
     "expanding_mean_with_nan",
+    "ewm_sum",
+    "calculate_cumulative_weights",
 ]
