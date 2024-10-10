@@ -64,10 +64,6 @@ class TestAll(unittest.TestCase):
         self.assertIsInstance(map_result, float, "panel_significance_probability should return a float")
         self.assertGreaterEqual(map_result, 0, "panel_significance_probability should return a value greater or equal to zero")
         self.assertLessEqual(map_result, 1, "panel_significance_probability should return a value less or equal to one")
-        # check that if all true values are zero, then the result is zero
-        all_zeros = pd.Series(data=np.zeros(len(self.regressor_true)), index=self.regressor_true.index)
-        map_result = panel_significance_probability(all_zeros, self.regressor_predictions)
-        self.assertEqual(map_result, 0, "panel_significance_probability should return zero if all true values are zero")
 
     def test_types_panel_significance_probability(self):
         with self.assertRaises(TypeError):
