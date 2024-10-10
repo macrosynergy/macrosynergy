@@ -204,13 +204,14 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
 
     def update_df(
         self,
-        df: pd.DataFrame,
+        df_add: pd.DataFrame,
+        xcat_replace: bool = False,
         inplace: bool = False,
     ) -> "QuantamentalDataFrame":
         """
         Update the QuantamentalDataFrame with a new DataFrame.
         """
-        result = update_df(df=self, df_add=df)
+        result = update_df(df=self, df_add=df_add, xcat_replace=xcat_replace)
         return QuantamentalDataFrame(
             result,
             # categorical=self.InitializedAsCategorical,
