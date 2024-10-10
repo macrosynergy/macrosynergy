@@ -85,8 +85,7 @@ def panel_cv_scores(
         raise ValueError("scoring must not be an empty dictionary.")
     if np.any([not isinstance(metric_name, str) for metric_name in scoring.keys()]):
         raise TypeError("scorer names must all be strings.")
-    if np.any([not isinstance(scorer, object) for scorer in scoring.values()]):
-        raise TypeError("scorers must all be objects.")
+    
     if not isinstance(show_longbias, bool):
         raise TypeError("show_longbias must be a boolean.")
     if not isinstance(show_std, bool):

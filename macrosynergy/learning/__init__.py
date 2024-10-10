@@ -53,6 +53,8 @@ from .predictors import (
 
 from .beta_estimator import BetaEstimator
 
+from .random_effects import RandomEffects
+
 __all__ = [
     # panel_time_series_split
     "ExpandingKFoldPanelSplit",
@@ -104,4 +106,6 @@ __all__ = [
     "RidgeRegressionSystem",
     "LinearRegressionSystem",
     "CorrelationVolatilitySystem",
+    # random effects
+    "RandomEffects",
 ]

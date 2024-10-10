@@ -15,7 +15,7 @@ from macrosynergy.panel.return_beta import (
     adjusted_returns,
     return_beta,
 )
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.utils import reduce_df, _map_to_business_day_frequency
 
 
 class TestAll(unittest.TestCase):
@@ -177,8 +177,9 @@ class TestAll(unittest.TestCase):
         start_date: pd.Timestamp
         end_date: pd.Timestamp
         start_date, end_date = date_alignment(unhedged_return=xr, benchmark_return=br)
+        freq = _map_to_business_day_frequency("m")
         dates_re: List[pd.Timestamp] = list(
-            pd.date_range(start=start_date, end=end_date, freq="BM")
+            pd.date_range(start=start_date, end=end_date, freq=freq)
         )
 
         min_observation: int = 50

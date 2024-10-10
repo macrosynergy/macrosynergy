@@ -16,7 +16,11 @@ import seaborn as sns
 
 from macrosynergy import PYTHON_3_8_OR_LATER
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df, update_df
+from macrosynergy.management.utils import (
+    reduce_df,
+    update_df,
+    _map_to_business_day_frequency,
+)
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.signal import SignalReturnRelations
 
@@ -795,7 +799,7 @@ class NaivePnL:
         pnl_cids: List[str] = None,
         start: str = None,
         end: str = None,
-        freq: str = "m",
+        freq: str = "M",
         title: str = "Average applied signal values",
         x_label: str = "",
         y_label: str = "",
@@ -830,19 +834,18 @@ class NaivePnL:
         if pnl_name not in self.pnl_names:
             raise ValueError(error_cats)
 
-        error_time = "Defined time-period must be monthly ('m') or quarterly ('q')"
-        if not isinstance(freq, str) or freq not in ["m", "q"]:
-            raise ValueError(error_time)
+        err_msg = "Defined time-period must be monthly ('m') or quarterly ('q')"
+        freq = _map_to_business_day_frequency(freq)
+        if not freq.startswith(("BQ", "BM")):
+            raise ValueError(err_msg)
 
-        error_cids = (
-            f"Cross-sections not available. Available cids are:" f"{self.cids}."
-        )
+        err_cids = f"Cross-sections not available. Available cids are:" f"{self.cids}."
 
         if pnl_cids is None:
             pnl_cids = self.cids
         else:
             if not set(pnl_cids) <= set(self.cids):
-                raise ValueError(error_cids)
+                raise ValueError(err_cids)
 
         for vname, lbl in zip(["x_label", "y_label"], [x_label, y_label]):
             if not isinstance(lbl, str):
@@ -911,7 +914,9 @@ class NaivePnL:
         assert pnl_name in self.pnl_names, error_cats
 
         error_time = "Defined time-period must either be monthly, m, or quarterly, q."
-        assert isinstance(freq, str) and freq in ["m", "q"], error_time
+        freq = _map_to_business_day_frequency(freq)
+        if not freq.startswith(("BQ", "BM")):
+            raise ValueError(error_time)
 
         metric_error = "The metric must either be 'direction' or 'strength'."
         assert metric in ["direction", "strength"], metric_error
@@ -1063,7 +1068,8 @@ class NaivePnL:
 
         df.iloc[6, :] = -drawdown.max()
 
-        monthly_pnl = dfw.resample("M").sum()
+        mfreq = _map_to_business_day_frequency("M")
+        monthly_pnl = dfw.resample(mfreq).sum()
         total_pnl = monthly_pnl.sum(axis=0)
         top_5_percent_cutoff = int(np.ceil(len(monthly_pnl) * 0.05))
         top_months = pd.DataFrame(columns=monthly_pnl.columns)
@@ -1085,7 +1091,8 @@ class NaivePnL:
                 )
                 df.iloc[8 + i, :] = correlation
 
-        df.iloc[8 + len(benchmark_tickers), :] = dfw.resample("M").sum().count()
+        mfreq = _map_to_business_day_frequency("M")
+        df.iloc[8 + len(benchmark_tickers), :] = dfw.resample(mfreq).sum().count()
 
         if label_dict is not None:
             if not isinstance(label_dict, dict):

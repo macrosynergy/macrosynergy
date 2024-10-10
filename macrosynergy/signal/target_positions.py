@@ -10,6 +10,7 @@ from macrosynergy.management.simulate import make_qdf
 from macrosynergy.panel.historic_vol import historic_vol
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.panel.basket import Basket
+from macrosynergy.compat import PD_FUTURE_STACK
 import random
 
 
@@ -523,7 +524,7 @@ def target_positions(
         # dataframe.
         df_mods_copy *= v  # modified signal x sigrel = post-VT position.
 
-        df_posi = df_mods_copy.stack(dropna=False).to_frame("value").reset_index()
+        df_posi = df_mods_copy.stack(**PD_FUTURE_STACK).to_frame("value").reset_index()
         df_posi = df_posi.fillna(0)
         df_posi["xcat"] = k
         df_posi = df_posi.sort_values(["cid", "xcat", "real_date"])[cols]
