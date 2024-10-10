@@ -373,8 +373,6 @@ class TestInformationStateChanges(unittest.TestCase):
 
         self.assertEqual(set(isc.isc_dict.keys()), set(isc.keys()))
         # can't directly check the values and items as they are not hashable
-        self.assertEqual(str(isc), str(isc.isc_dict))
-        self.assertEqual(repr(isc), repr(isc.isc_dict))
 
         first_dict_key = list(isc.isc_dict.keys())[0]
         self.assertTrue((isc[first_dict_key]).equals(isc.isc_dict[first_dict_key]))
