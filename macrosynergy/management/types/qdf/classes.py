@@ -47,18 +47,20 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         if type(df) is QuantamentalDataFrame:
             if _initialized_as_categorical is None:
                 _initialized_as_categorical = df.InitializedAsCategorical
-
-        df = df[get_col_sort_order(df)]
+        else:
+            df = df[get_col_sort_order(df)]
         super().__init__(df)
+        _check_cat = check_is_categorical(self)
         if _initialized_as_categorical is None:
-            self.InitializedAsCategorical = check_is_categorical(self)
+            self.InitializedAsCategorical = _check_cat
         else:
             if not isinstance(_initialized_as_categorical, bool):
                 raise TypeError("`_initialized_as_categorical` must be a boolean.")
             self.InitializedAsCategorical = _initialized_as_categorical
 
         if categorical:
-            self.to_categorical()
+            if not _check_cat:
+                self.to_categorical()
         else:
             self.to_string_type()
 
