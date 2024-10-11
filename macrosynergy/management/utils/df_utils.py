@@ -64,6 +64,9 @@ def standardise_dataframe(
         if len(df.columns) < 4:
             raise ValueError(fail_str)
 
+    if isinstance(df, QuantamentalDataFrame) and type(df) is QuantamentalDataFrame:
+        return QuantamentalDataFrame(df)
+
     # Convert date and ensure specific columns are strings in one step
     # 'datetime64[ns]' is the default dtype for datetime columns in pandas
     df["real_date"] = pd.to_datetime(
