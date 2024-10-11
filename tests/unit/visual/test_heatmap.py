@@ -86,7 +86,10 @@ class TestAll(unittest.TestCase):
     def test_plot_heatmap_no_error(self):
         heatmap = Heatmap(**self.constructor_args)
         heatmap.df = heatmap.df.pivot_table(
-            index="cid", columns="real_date", values=self.metric
+            index="cid",
+            columns="real_date",
+            values=self.metric,
+            observed=False,
         )
         try:
             heatmap._plot(heatmap.df, **self.plot_args)
