@@ -16,6 +16,7 @@ import pandas as pd
 
 from macrosynergy.management.decorators import argcopy, argvalidation
 from macrosynergy.management.validation import validate_and_reduce_qdf
+from macrosynergy.management.types import QuantamentalDataFrame
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,7 @@ class Plotter(metaclass=PlotterMetaClass):
             end=end,
         )
 
-        self.df: pd.DataFrame = validated_args.df
+        self.df: pd.DataFrame = QuantamentalDataFrame(validated_args.df)
         self.cids: List[str] = validated_args.cids
         self.xcats: List[str] = validated_args.xcats
         self.metrics: List[str] = validated_args.metrics
