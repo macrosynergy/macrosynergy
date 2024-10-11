@@ -53,6 +53,8 @@ def check_availability(
     if not isinstance(missing_recent, bool):
         raise TypeError(f"<bool> object expected and not {type(missing_recent)}.")
 
+    df = QuantamentalDataFrame(df)
+
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
     if dfx.empty:
         raise ValueError(
