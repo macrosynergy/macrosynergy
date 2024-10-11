@@ -16,13 +16,15 @@ from .transformers import (
     PanelStandardScaler,
     FeatureAverager,
 )
-from .metrics import (
+from .model_evaluation import (
     neg_mean_abs_corr,
     panel_significance_probability,
     sharpe_ratio,
     sortino_ratio,
     regression_accuracy,
     regression_balanced_accuracy,
+    correlation_coefficient,
+    create_panel_metric,
 )
 from .signal_optimizer import SignalOptimizer
 
@@ -43,6 +45,8 @@ from .forecasting import (
 )
 
 from .beta_estimator import BetaEstimator
+
+from .random_effects import RandomEffects
 
 __all__ = [
     # panel_time_series_split
@@ -69,6 +73,8 @@ __all__ = [
     "sortino_ratio",
     "regression_accuracy",
     "regression_balanced_accuracy",
+    "create_panel_metric",
+    "correlation_coefficient",
     # signal_optimizer
     "SignalOptimizer",
     # forecasting
@@ -88,4 +94,6 @@ __all__ = [
     "RidgeRegressionSystem",
     "LinearRegressionSystem",
     "CorrelationVolatilitySystem",
+    # random effects
+    "RandomEffects",
 ]

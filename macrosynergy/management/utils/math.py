@@ -2,11 +2,13 @@
 Contains mathematical utility functions used across the package.
 """
 
+import itertools
+from numbers import Number
 from typing import List
 
-import pandas as pd
 import numpy as np
-import itertools
+import pandas as pd
+
 from macrosynergy.management.simulate import make_qdf
 
 
@@ -65,6 +67,36 @@ def expanding_mean_with_nan(
     ret = list(map(mean_calc, rolling_summation, rolling_active_cross))
 
     return np.array(ret)
+
+
+def ewm_sum(df: pd.DataFrame, halflife: Number):
+    """
+    Compute the exponentially weighted moving sum of a DataFrame.
+    
+    :param <pd.DataFrame> df: DataFrame in the wide format for which to calculate weights.
+    :param <Number> halflife: The halflife of the exponential decay.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Method expects to receive a pd.DataFrame.")
+    if not isinstance(halflife, Number):
+        raise TypeError("The parameter `halflife` must be of type `<Number>`.")
+    
+    weights = calculate_cumulative_weights(df, halflife)
+    return df.ewm(halflife=halflife).mean().mul(weights, axis=0)
+    
+def calculate_cumulative_weights(df: pd.DataFrame, halflife: Number):
+    """
+    Calculate the cumulative moving exponential weights for a DataFrame. 
+        
+    :param <pd.DataFrame> df: DataFrame in the wide format for which to calculate weights.
+    :param <Number> halflife: The halflife of the exponential decay.
+    """
+    n = len(df)
+    raw_weights = [(1/2) ** (i / halflife) for i in range(n)]
+
+    cumulative_weights = np.cumsum(raw_weights)
+    
+    return pd.Series(cumulative_weights, index=df.index)
 
 
 if __name__ == "__main__":

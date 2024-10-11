@@ -27,6 +27,7 @@ from macrosynergy.learning.panel_time_series_split import (
 
 from macrosynergy.learning.forecasting import LADRegressionSystem
 from macrosynergy.management.validation import _validate_Xy_learning
+from macrosynergy.compat import JOBLIB_RETURN_AS
 
 
 class SignalOptimizer:
@@ -395,7 +396,7 @@ class SignalOptimizer:
         train_test_splits = list(outer_splitter.split(X=X, y=y))
 
         results = tqdm(
-            Parallel(n_jobs=n_jobs, return_as="generator")(
+            Parallel(n_jobs=n_jobs, **JOBLIB_RETURN_AS)(
                 delayed(self._worker)(
                     train_idx=train_idx,
                     test_idx=test_idx,
@@ -1403,7 +1404,7 @@ class SignalOptimizer:
                 )
 
         # Set the style
-        plt.style.use("seaborn-v0_8-darkgrid")
+        sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
         ftrcoef_df = self.get_ftr_coefficients(name)
@@ -1482,7 +1483,7 @@ class SignalOptimizer:
                 )
 
         # Set the style
-        plt.style.use("seaborn-v0_8-darkgrid")
+        sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
         intercepts_df = intercepts_df.set_index("real_date")
@@ -1601,7 +1602,7 @@ class SignalOptimizer:
                 raise ValueError("The cap argument must be no greater than 10.")
 
         # Set the style
-        plt.style.use("seaborn-v0_8-darkgrid")
+        sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
         ftrcoef_df = self.get_ftr_coefficients(name)
@@ -1719,7 +1720,7 @@ class SignalOptimizer:
                 )
 
         # Set the style
-        plt.style.use("seaborn-v0_8-darkgrid")
+        sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
         models_df = models_df.set_index("real_date").sort_index()

@@ -651,7 +651,12 @@ class TestAll(unittest.TestCase):
                 cids=sel_cids,
                 metrics=["value"],
             )
-            self.assertEqual(len(w), 3)
+            efilter = (
+                "Tickers targetted for applying slip are not present in the DataFrame."
+            )
+            wlist = [_w for _w in w if efilter in str(_w.message)]
+
+            self.assertEqual(len(wlist), 3)
         try:
             cat_rel: CategoryRelations = CategoryRelations(
                 df=df, xcats=sel_xcats, cids=sel_cids, slip=100
