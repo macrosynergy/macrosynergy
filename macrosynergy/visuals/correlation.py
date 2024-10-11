@@ -15,6 +15,7 @@ from matplotlib import pyplot as plt
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import _map_to_business_day_frequency, reduce_df
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def view_correlation(
@@ -91,10 +92,10 @@ def view_correlation(
         symmetrically to positive and negative values.
     :param <bool> show: if True the figure will be displayed, else the axis object is returned.
         Default is True.
-    :param <Optional[Union[List[str], Dict[str, str]]]> xcat_labels: optional list or 
-        dictionary of labels for xcats. A list should be in the same order as xcats, a 
+    :param <Optional[Union[List[str], Dict[str, str]]]> xcat_labels: optional list or
+        dictionary of labels for xcats. A list should be in the same order as xcats, a
         dictionary should map from each xcat to its label.
-    :param <Optional[Union[List[str], Dict[str, str]]]> xcat_secondary_labels: optional 
+    :param <Optional[Union[List[str], Dict[str, str]]]> xcat_secondary_labels: optional
         list or dictionary of labels for xcats_secondary.
     :param <Union[float, int]> cbar_shrink: shrinkage factor of the color bar. Default is 0.5.
     :param <int> cbar_fontsize: font size of the color bar. Default is 12.
@@ -103,9 +104,7 @@ def view_correlation(
     N.B:. The function displays the heatmap of a correlation matrix across categories or
     cross-sections (depending on which parameter has received multiple elements).
     """
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-    col_names = ["cid", "xcat", "real_date", val]
-    df = df[col_names]
+    df = QuantamentalDataFrame(df[["cid", "xcat", "real_date", val]])
 
     if freq is not None:
         freq = _map_to_business_day_frequency(freq=freq, valid_freqs=["W", "M", "Q"])
