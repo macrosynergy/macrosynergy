@@ -1,7 +1,7 @@
 """
 Base class for sequential learning over a panel.
 """
-
+import numbers
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -17,7 +17,7 @@ from macrosynergy.learning import (
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 
 import warnings
 from abc import ABC, abstractmethod
@@ -129,8 +129,9 @@ class BasePanelLearner(ABC):
         hyperparameters,
         scorers,
         search_type="grid",
-        cv_summary="mean",  # can be mean, median or lambda function on fold scores.
-        n_iter=100,  # number of iterations for random or bayes
+        normalize_fold_results = False,
+        cv_summary="mean",
+        n_iter=100,  
         split_functions=None,
         n_jobs_outer=-1,
         n_jobs_inner=1,
@@ -145,29 +146,31 @@ class BasePanelLearner(ABC):
             Category name for the forecasted panel resulting from the learning process.
         outer_splitter : WalkForwardPanelSplit
             Outer splitter for the learning process.
-        inner_splitters : BaseCrossValidator or list
-            Inner splitters for the learning process. If an instance of BaseCrossValidator,
-            then this is used for cross-validation. If a list, then each splitter is used
-            before the results for each are averaged.
+        inner_splitters : dict
+            Inner splitters for the learning process.
         models : dict
             Dictionary of model names and compatible `scikit-learn` model objects.
         hyperparameters : dict
             Dictionary of model names and hyperparameter grids.
-        scorers : callable or list
-            `scikit-learn` compatible scoring function or list of scoring functions.
+        scorers : dict
+            Dictionary of `scikit-learn` compatible scoring functions.
         search_type : str
             Search type for hyperparameter optimization. Default is "grid".
             Options are "grid", "prior" and "bayes".
+        normalize_fold_results : bool
+            Whether to normalize the scores across folds before combining them. Default is
+            False.
         cv_summary : str or callable
             Summary function for determining cross-validation scores given scores for
             each validation fold. Default is "mean". Can also be "median" or a function
             that takes a list of scores and returns a single value.
         n_iter : int
             Number of iterations for random or bayesian hyperparameter optimization.
-        split_functions : callable or list, optional
-            Callable or list of callables for determining the number of cross-validation
-            splits to add to the initial number  as a function of the number of iterations passed in the
-            sequential learning process. Default is None.
+        split_functions : dict, optional
+            Dictionary of callables for determining the number of cross-validation
+            splits to add to the initial number, as a function of the number of iterations
+            passed in the sequential learning process. Keys must match with those in the
+            `inner_splitters` dictionary. Default is None.
         n_jobs_outer : int, optional
             Number of jobs to run in parallel for the outer loop. Default is -1.
         n_jobs_inner : int, optional
@@ -182,24 +185,26 @@ class BasePanelLearner(ABC):
             hyperparameters,
             scorers,
             search_type,
+            normalize_fold_results,
             cv_summary,
             n_iter,
             split_functions,
             n_jobs_outer,
             n_jobs_inner,
         ) = self._check_run(
-            name,
-            outer_splitter,
-            inner_splitters,
-            models,
-            hyperparameters,
-            scorers,
-            search_type,
-            cv_summary,
-            n_iter,
-            split_functions,
-            n_jobs_outer,
-            n_jobs_inner,
+            name=name,
+            outer_splitter=outer_splitter,
+            inner_splitters=inner_splitters,
+            models = models,
+            hyperparameters = hyperparameters,
+            scorers = scorers,
+            search_type = search_type,
+            normalize_fold_results = normalize_fold_results,
+            cv_summary = cv_summary,
+            n_iter = n_iter,
+            split_functions = split_functions,
+            n_jobs_outer = n_jobs_outer,
+            n_jobs_inner = n_jobs_inner,
         )
 
         # Determine all outer splits and run the learning process in parallel
@@ -218,6 +223,7 @@ class BasePanelLearner(ABC):
                     scorers=scorers,
                     cv_summary=cv_summary,
                     search_type=search_type,
+                    normalize_fold_results=normalize_fold_results,
                     n_iter=n_iter,
                     n_splits_add=(
                         [
@@ -247,12 +253,50 @@ class BasePanelLearner(ABC):
         scorers,
         cv_summary,
         search_type,
+        normalize_fold_results,
         n_iter,
         n_splits_add,
         n_jobs_inner,
     ):
         """
         Worker function for parallel processing of the learning process.
+
+        Parameters
+        ----------
+        name : str
+            Category name for the forecasted panel resulting from the learning process.
+        train_idx : np.ndarray
+            Training indices for the current outer split.
+        test_idx : np.ndarray
+            Test indices for the current outer split.
+        inner_splitters : dict
+            Inner splitters for the learning process.
+        models : dict
+            Compatible `scikit-learn` model objects.
+        hyperparameters : dict
+            Hyperparameter grids.
+        scorers : dict
+            Compatible `scikit-learn` scoring functions.
+        cv_summary : str or callable
+            Summary function to condense cross-validation scores in each fold to a single
+            value, against which different hyperparameter choices can be compared.
+        search_type : str
+            Search type for hyperparameter optimization. Default is "grid".
+            Options are "grid", "prior" and "bayes".
+        normalize_fold_results : bool
+            Whether to normalize the scores across folds before combining them.
+        n_iter : int
+            Number of iterations for random or bayesian hyperparameter optimization.
+        n_splits_add : list, optional
+            List of integers to add to the number of splits for each inner splitter.
+            Default is None.
+        n_jobs_inner : int
+            Number of jobs to run in parallel for the inner loop. Default is 1.
+
+        Returns
+        -------
+        return : tuple
+            Tuple of quantamental data, model choice data and other data.
         """
         # Train-test split
         X_train, X_test = self.X.iloc[train_idx, :], self.X.iloc[test_idx, :]
@@ -300,6 +344,7 @@ class BasePanelLearner(ABC):
             hyperparameters=hyperparameters,
             scorers=scorers,
             search_type=search_type,
+            normalize_fold_results=normalize_fold_results,
             n_iter=n_iter,
             cv_summary=cv_summary,
             n_jobs_inner=n_jobs_inner,
@@ -409,12 +454,45 @@ class BasePanelLearner(ABC):
         hyperparameters,
         scorers,
         search_type,
+        normalize_fold_results,
         n_iter,
         cv_summary,
         n_jobs_inner,
     ):
         """
-        TODO later
+        Determine optimal model based on cross-validation from a given training set. 
+
+        Parameters
+        ----------
+        X_train : pd.DataFrame
+            Training data.
+        y_train : pd.Series
+            Training target.
+        inner_splitters : dict
+            Inner splitters for the learning process.
+        models : dict
+            Compatible `scikit-learn` model objects.
+        hyperparameters : dict
+            Hyperparameter grids.
+        scorers : dict
+            Compatible `scikit-learn` scoring functions.
+        search_type : str
+            Search type for hyperparameter optimization. Default is "grid".
+        normalize_fold_results : bool
+            Whether to normalize the scores across folds before combining them.
+        n_iter : int
+            Number of iterations for random or bayesian hyperparameter optimization.
+        cv_summary : str or callable
+            Summary function to condense cross-validation scores in each fold to a single
+            value, against which different hyperparameter choices can be compared.
+        n_jobs_inner : int
+            Number of jobs to run in parallel for the inner loop.
+
+        Returns
+        -------
+        return : tuple
+            Tuple of optimal model name, optimal model, optimal model score and optimal
+            model hyperparameters.
         """
         optim_name = None
         optim_model = None
@@ -424,6 +502,9 @@ class BasePanelLearner(ABC):
         cv_splits = []
         for splitter in inner_splitters.values():
             cv_splits.extend(list(splitter.split(X=X_train, y=y_train)))
+        # TODO (for Eric): instead of picking one model, the best hyperparameters could be selected
+        # for each model and then "final" prediction would be the average of the individual
+        # predictions. This would be a simple ensemble method.
         for model_name, model in models.items():
             # For each model, find the optimal hyperparameters
             if search_type == "grid":
@@ -462,7 +543,11 @@ class BasePanelLearner(ABC):
                     RuntimeWarning,
                 )
             score = self._model_selection(
-                search_object.cv_results_, cv_summary, scorers, return_index=False
+                search_object.cv_results_,
+                cv_summary,
+                scorers,
+                normalize_fold_results,
+                return_index=False
             )
             if score > optim_score:
                 optim_name = model_name
@@ -472,17 +557,46 @@ class BasePanelLearner(ABC):
 
         return optim_name, optim_model, optim_score, optim_params
 
-    def _model_selection(self, cv_results, cv_summary, scorers, return_index=True):
+    def _model_selection(
+        self,
+        cv_results,
+        cv_summary,
+        scorers,
+        normalize_fold_results,
+        return_index=True
+    ):
         """
-        Determine index of best estimator in a scikit-learn cv_results summary dictionary,
-        as well as a cv_summary function indicating how to summarize the cross-validation
-        scores across folds.
+        Select the optimal hyperparameters based on a `scikit-learn` cv_results dataframe.
 
-        For each hyperparameter choice, determine test metrics for each cv fold. Transform
-        these scores by min-max scaling for each metric. Then, for each hyperparameter choice,
-        average the different metrics for each fold, resulting in a single score for each
-        fold. Finally, cv_summary is applied to these scores to determine the best hyperparameter
-        choice.
+        Parameters
+        ----------
+        cv_results : dict
+            Cross-validation results dictionary.
+        cv_summary : str or callable
+            Summary function to condense cross-validation scores in each fold to a single
+            value, against which different hyperparameter choices can be compared.
+        scorers : dict
+            Compatible `scikit-learn` scoring functions.
+        normalize_fold_results : bool
+            Whether to normalize the scores across folds before combining them.
+        return_index : bool
+            Whether to return the index of the best estimator or the maximal score itself.
+            Default is True.
+        
+        Returns
+        -------
+        return : int or float
+            Either the index of the best estimator or the maximal score itself.
+
+        Notes
+        -----
+        For each hyperparameter choice, the given scorers are evaluated on each test cv
+        fold. If `normalize_fold_results` is True, the scores for each fold are standardized
+        across hyperparameter choices. This is done to make the scores comparable across
+        different test periods. Following this, the scores for each hyperparameter choice
+        are summarized using `cv_summary` and standardized, in order for fair comparison 
+        across different scorers. The final score is the average of the standardized scores
+        for each scorer. The hyperparameter with the largest composite score is selected.
         """
         cv_results = pd.DataFrame(cv_results)
         metric_columns = [
@@ -504,6 +618,23 @@ class BasePanelLearner(ABC):
                 cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].median(
                     axis=1
                 )
+            elif cv_summary == "mean-std":
+                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].mean(
+                    axis=1
+                ) - cv_results[scorer_columns].std(axis=1)
+            elif cv_summary == "mean/std":
+                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].mean(
+                    axis=1
+                ) / cv_results[scorer_columns].std(axis=1)
+            # TODO
+            elif cv_summary == "median-mad":
+                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].median(
+                    axis=1
+                ) - cv_results[scorer_columns].mad(axis=1)
+            elif cv_summary == "median/mad":
+                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].median(
+                    axis=1
+                ) / cv_results[scorer_columns].mad(axis=1)
             else:
                 # TODO: handle NAs?
                 cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].apply(
@@ -511,7 +642,7 @@ class BasePanelLearner(ABC):
                 )
 
         # Now apply min-max scaling to the summary scores
-        scaler = MinMaxScaler()
+        scaler = StandardScaler()
         summary_cols = [f"{scorer}_summary" for scorer in scorers.keys()]
         cv_results[summary_cols] = scaler.fit_transform(cv_results[summary_cols])
 
@@ -805,6 +936,7 @@ class BasePanelLearner(ABC):
         models,
         hyperparameters,
         scorers,
+        normalize_fold_results,
         search_type,
         cv_summary,
         n_iter,
@@ -920,6 +1052,10 @@ class BasePanelLearner(ABC):
                     "The values of the scorers dictionary must be callable scoring functions."
                 )
 
+        # normalize_fold_results
+        if not isinstance(normalize_fold_results, bool):
+            raise TypeError("normalize_fold_results must be a boolean.")
+        
         # search_type
         if not isinstance(search_type, str):
             raise TypeError("search_type must be a string.")
@@ -930,17 +1066,28 @@ class BasePanelLearner(ABC):
         if not isinstance(cv_summary, (str, callable)):
             raise TypeError("cv_summary must be a string or a callable.")
         if isinstance(cv_summary, str):
-            if cv_summary not in ["mean", "median"]:
-                raise ValueError("cv_summary must be one of 'mean' or 'median'.")
+            if cv_summary not in [
+                "mean",
+                "median",
+                "mean-std",
+                "mean/std",
+                "median-mad",
+                "median/mad",
+            ]:
+                raise ValueError(
+                    "cv_summary must be one of 'mean', 'median', 'mean-std', 'mean/std', "
+                    "'median-mad' or 'median/mad'."
+                )
         else:
             try:
                 test_summary = cv_summary([1, 2, 3])
             except Exception as e:
                 raise TypeError(
                     "cv_summary must be a function that takes a list of scores and returns "
-                    "a single value. Check the validity of cv_summary."
+                    "a single value. Check the validity of cv_summary. Error raised when "
+                    "testing the function with [1, 2, 3]: {e}"
                 )
-            if not isinstance(test_summary, (int, float, np.int_, np.float_)):
+            if not isinstance(test_summary, numbers.Number) and not isinstance(bool):
                 raise TypeError(
                     "cv_summary must be a function that takes a list of scores and returns "
                     "a single value. Check whether the output of cv_summary is a number."
@@ -993,6 +1140,7 @@ class BasePanelLearner(ABC):
             models,
             hyperparameters,
             scorers,
+            normalize_fold_results,
             search_type,
             cv_summary,
             n_iter,

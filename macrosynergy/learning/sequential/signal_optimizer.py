@@ -132,6 +132,7 @@ class SignalOptimizer(BasePanelLearner):
         scorers,
         inner_splitters,
         search_type="grid",
+        normalize_fold_results = False,
         cv_summary="mean",
         min_cids=4,
         min_periods=12 * 3,
@@ -167,6 +168,9 @@ class SignalOptimizer(BasePanelLearner):
         search_type : str, optional
             Type of hyperparameter optimization to perform. Default is "grid". Options are
             "grid" and "prior".
+        normalize_fold_results : bool, optional
+            Whether to normalize the scores across folds before combining them. Default is
+            False.
         cv_summary : str or callable, optional
             Summary function to use to combine scores across cross-validation folds.
             Default is "mean". Options are "mean", "median" or a callable function.
@@ -216,18 +220,19 @@ class SignalOptimizer(BasePanelLearner):
         )
 
         results = self.run(
-            name=name,
-            outer_splitter=outer_splitter,
-            inner_splitters=inner_splitters,
-            models=models,
-            hyperparameters=hyperparameters,
-            scorers=scorers,
-            search_type=search_type,
-            cv_summary=cv_summary,
-            split_functions=split_functions,
-            n_iter=n_iter,
-            n_jobs_outer=n_jobs_outer,
-            n_jobs_inner=n_jobs_inner,
+            name = name,
+            outer_splitter = outer_splitter,
+            inner_splitters = inner_splitters,
+            models = models,
+            hyperparameters = hyperparameters,
+            scorers = scorers,
+            search_type = search_type,
+            normalize_fold_results = normalize_fold_results,
+            cv_summary = cv_summary,
+            split_functions = split_functions,
+            n_iter = n_iter,
+            n_jobs_outer = n_jobs_outer,
+            n_jobs_inner = n_jobs_inner,
         )
 
         # Collect results from the worker
