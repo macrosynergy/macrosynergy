@@ -23,6 +23,20 @@ import functools
 IDX_COLS_SORT_ORDER = ["cid", "xcat", "real_date"]
 
 
+def is_categorical_qdf(df: pd.DataFrame) -> bool:
+    """
+    Check if a column in a DataFrame is categorical.
+
+    :param <pd.DataFrame> df: The DataFrame to be checked.
+    :param <str> column: The column to be checked.
+    :return <bool>: True if the column is categorical, False otherwise.
+    """
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
+
+    return all([df[col].dtype.name == "category" for col in ["cid", "xcat"]])
+
+
 def standardise_dataframe(
     df: pd.DataFrame, verbose: bool = False
 ) -> QuantamentalDataFrame:
