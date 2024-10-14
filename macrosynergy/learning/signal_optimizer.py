@@ -988,6 +988,40 @@ class SignalOptimizer:
             ftr_corr_data,
         )
 
+    def get_feature_correlations(
+        self,
+        name: Optional[Union[str, List]] = None,      
+    ):
+        """
+        Returns dataframe of feature correlations for one or more processes
+
+        :param <Optional[Union[str, List]]> name: Label of signal optimization process.
+            Default is all stored in the class instance.
+        
+        :return <pd.DataFrame>: Pandas dataframe of the correlations between the
+            features passed into a model pipeline and the post-processed features inputted
+            into the final model.
+        """
+        if name is None:
+            return self.ftr_corr
+        else:
+            if isinstance(name, str):
+                name = [name]
+            elif not isinstance(name, list):
+                raise TypeError(
+                    "The process name must be a string or a list of strings."
+                )
+
+            for n in name:
+                if n not in self.ftr_corr.name.unique():
+                    raise ValueError(
+                        f"""The process name '{n}' is not in the list of already-run
+                        pipelines. Please check the name carefully. If correct, please run 
+                        calculate_predictions() first.
+                        """
+                    )
+            return self.ftr_corr[self.ftr_corr.name.isin(name)]
+        
     def get_optimized_signals(
         self, name: Optional[Union[str, List]] = None
     ) -> pd.DataFrame:
@@ -1304,6 +1338,92 @@ class SignalOptimizer:
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
+            
+    def correlations_heatmap(
+        self,
+        name: str,
+        feature_name: str,
+        title: Optional[str] = None,
+        cap: Optional[int] = None,
+        ftrs_renamed: Optional[dict] = None,
+        figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
+    ):
+        """
+        Method to visualise correlations between features entering a model, and those that
+        entered a preprocessing pipeline. 
+
+        :param <str> name: Name of the prediction model.
+        :param <str> feature_name: Name of the feature passed into the final predictor.
+        :param <Optional[str]> title: Title of the heatmap. Default is None. This creates
+            a figure title of the form "Correlation Heatmap for feature {feature_name}
+            and pipeline {name}".
+        :param <int> cap: Maximum number of correlations to display. Default is None.
+            The chosen features are the 'cap' most highly correlated.
+        :param <Optional[dict]> ftrs_renamed: Dictionary to rename the feature names for
+            visualisation in the plot axis. Default is None, which uses the original
+            feature names.
+        :param <Optional[Tuple[Union[int, float], Union[int, float]]> figsize: Tuple of
+            floats or ints denoting the figure size. Default is (12, 8).
+
+        Note: 
+        This method displays the correlation between a feature that is about to be entered
+        into a final predictor and the `cap` most correlated features entered into the 
+        original pipeline. 
+        """
+        # Checks
+        self._checks_correlations_heatmap(
+            name=name,
+            feature_name=feature_name,
+            title=title,
+            cap=cap,
+            ftrs_renamed=ftrs_renamed,
+            figsize=figsize
+        )
+
+        # Get the correlations
+        correlations = self.get_feature_correlations(name=name)
+        correlations = correlations[correlations.predictor_input == feature_name]
+        correlations = correlations.sort_values(by="real_date").drop(columns=["name"])
+        correlations["real_date"] = correlations["real_date"].dt.date
+
+        # Sort this dataframe based on the average correlation with each feature in
+        # pipeline_input
+        avg_corr = correlations.groupby("pipeline_input")["pearson"].mean()
+        avg_corr = avg_corr.sort_values(ascending=False)
+        if cap is not None:
+            avg_corr = avg_corr.head(cap)
+        
+        reindexed_columns = avg_corr.index
+        correlations = correlations[correlations.pipeline_input.isin(reindexed_columns)]
+        if ftrs_renamed is not None:
+            # rename items in correlations.pipeline_input based on ftrs_renamed
+            # but leave items not in ftrs_renamed as they are
+            correlations["pipeline_input"] = correlations["pipeline_input"].map(
+                lambda x: ftrs_renamed.get(x, x)
+            )
+            
+        # Create the heatmap
+        plt.figure(figsize=figsize)
+        sns.heatmap(
+            correlations.pivot(index="pipeline_input", columns="real_date", values="pearson"),
+            cmap="coolwarm",
+            cbar=True,
+        )
+        if title is None:
+            title = f"Correlation Heatmap for feature {feature_name} and pipeline {name}"
+        plt.title(title)
+        plt.show()
+
+    def _checks_correlations_heatmap(
+        self,
+        name: str,
+        feature_name: str,
+        title: Optional[str],
+        cap: Optional[int],
+        ftrs_renamed: Optional[dict],
+        figsize: Tuple[Union[int, float], Union[int, float]]
+    ):
+        pass
 
     def get_ftr_coefficients(self, name):
         """
@@ -1917,7 +2037,8 @@ if __name__ == "__main__":
         test_size=3,
         n_jobs=1,
     )
-
+    so.models_heatmap(name="test")
+    so.correlations_heatmap("test", "Feature 1")
     # (1) Example SignalOptimizer usage.
     #     We get adaptive signals for a linear regression with feature selection.
     #     Hyperparameters: whether or not to fit an intercept, usage of positive restriction.
