@@ -100,7 +100,7 @@ class TestAll(unittest.TestCase):
 
         for col_name in expc_cols:
             df_test.rename(columns={col_name: col_name + "_"}, inplace=True)
-            with self.assertRaises(TypeError):
+            with self.assertRaises(ValueError):
                 return_beta(
                     df=df_test,
                     cids=self.cids,
