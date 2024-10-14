@@ -23,6 +23,20 @@ import functools
 IDX_COLS_SORT_ORDER = ["cid", "xcat", "real_date"]
 
 
+def is_categorical_qdf(df: pd.DataFrame) -> bool:
+    """
+    Check if a column in a DataFrame is categorical.
+
+    :param <pd.DataFrame> df: The DataFrame to be checked.
+    :param <str> column: The column to be checked.
+    :return <bool>: True if the column is categorical, False otherwise.
+    """
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
+
+    return all([df[col].dtype.name == "category" for col in ["cid", "xcat"]])
+
+
 def standardise_dataframe(
     df: pd.DataFrame, verbose: bool = False
 ) -> QuantamentalDataFrame:
@@ -320,7 +334,10 @@ def apply_slip(
     else:
         sel_tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
 
-    df["ticker"] = df["cid"] + "_" + df["xcat"]
+    if is_categorical_qdf(df):
+        df = QuantamentalDataFrame(df).add_ticker_column()
+    else:
+        df["ticker"] = df["cid"] + "_" + df["xcat"]
     err_str = (
         "Tickers targetted for applying slip are not present in the DataFrame.\n"
         "Missing tickers: {tickers}"
@@ -339,7 +356,7 @@ def apply_slip(
     for col in metrics:
         tks_isin = df["ticker"].isin(sel_tickers)
         df.loc[tks_isin, col] = df.loc[tks_isin, col].astype(float)
-        df.loc[tks_isin, col] = df.groupby("ticker")[col].shift(slip)
+        df.loc[tks_isin, col] = df.groupby("ticker", observed=False)[col].shift(slip)
 
     df = df.drop(columns=["ticker"]).reset_index(drop=True)
     assert isinstance(df, QuantamentalDataFrame), "Failed to apply slip."
@@ -728,7 +745,11 @@ def _categories_df_explanatory_df(
             explanatory_col = dfw[xcat].sum(min_count=1)
 
         if lag > 0:
-            explanatory_col = explanatory_col.groupby(level=0).shift(lag)
+            explanatory_col: pd.Series
+            explanatory_col = explanatory_col.groupby(
+                level=0,
+                observed=False,
+            ).shift(lag)
 
         dfw_explanatory[xcat] = explanatory_col
 
@@ -871,7 +892,8 @@ def categories_df(
             [
                 pd.Grouper(level="cid"),
                 pd.Grouper(level="real_date", freq=freq),
-            ]
+            ],
+            observed=False,
         )
 
         dfw_explanatory = _categories_df_explanatory_df(

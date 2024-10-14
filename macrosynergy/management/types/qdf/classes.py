@@ -39,10 +39,10 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         _initialized_as_categorical: Optional[bool] = None,
     ):
         if df is not None:
-            if not (
-                isinstance(df, pd.DataFrame) and isinstance(df, QuantamentalDataFrame)
-            ):
-                raise TypeError("Input must be a QuantamentalDataFrame (pd.DataFrame).")
+            if not isinstance(df, pd.DataFrame):
+                raise TypeError("Input must be a standardised Quantamental DataFrame.")
+            if not isinstance(df, QuantamentalDataFrame):
+                raise ValueError("Input must be a standardised Quantamental DataFrame.")
 
         if type(df) is QuantamentalDataFrame:
             if _initialized_as_categorical is None:
