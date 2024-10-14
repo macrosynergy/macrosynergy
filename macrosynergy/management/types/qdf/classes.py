@@ -32,6 +32,10 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
     >>> qdf = QuantamentalDataFrame(df)
     """
 
+    @property
+    def _constructor(self):
+        return QuantamentalDataFrame
+
     def __init__(
         self,
         df: Optional[pd.DataFrame] = None,
