@@ -334,7 +334,10 @@ def apply_slip(
     else:
         sel_tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
 
-    df["ticker"] = df["cid"] + "_" + df["xcat"]
+    if is_categorical_qdf(df):
+        df = QuantamentalDataFrame(df).add_ticker_column()
+    else:
+        df["ticker"] = df["cid"] + "_" + df["xcat"]
     err_str = (
         "Tickers targetted for applying slip are not present in the DataFrame.\n"
         "Missing tickers: {tickers}"
