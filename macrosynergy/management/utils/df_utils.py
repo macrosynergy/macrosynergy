@@ -745,7 +745,11 @@ def _categories_df_explanatory_df(
             explanatory_col = dfw[xcat].sum(min_count=1)
 
         if lag > 0:
-            explanatory_col = explanatory_col.groupby(level=0).shift(lag)
+            explanatory_col: pd.Series
+            explanatory_col = explanatory_col.groupby(
+                level=0,
+                observed=False,
+            ).shift(lag)
 
         dfw_explanatory[xcat] = explanatory_col
 
@@ -888,7 +892,8 @@ def categories_df(
             [
                 pd.Grouper(level="cid"),
                 pd.Grouper(level="real_date", freq=freq),
-            ]
+            ],
+            observed=False,
         )
 
         dfw_explanatory = _categories_df_explanatory_df(
