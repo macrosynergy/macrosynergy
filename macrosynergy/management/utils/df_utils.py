@@ -356,7 +356,7 @@ def apply_slip(
     for col in metrics:
         tks_isin = df["ticker"].isin(sel_tickers)
         df.loc[tks_isin, col] = df.loc[tks_isin, col].astype(float)
-        df.loc[tks_isin, col] = df.groupby("ticker", observed=False)[col].shift(slip)
+        df.loc[tks_isin, col] = df.groupby("ticker", observed=True)[col].shift(slip)
 
     df = df.drop(columns=["ticker"]).reset_index(drop=True)
     assert isinstance(df, QuantamentalDataFrame), "Failed to apply slip."
@@ -407,7 +407,7 @@ def downsample_df_on_real_date(
     non_groupby_columns = list(set(df.columns) - set(groupby_columns) - {"real_date"})
     res = (
         df.set_index("real_date")
-        .groupby(groupby_columns, observed=False)[non_groupby_columns]
+        .groupby(groupby_columns, observed=True)[non_groupby_columns]
         .resample(freq)
     )
     if PD_OLD_RESAMPLE:
@@ -748,7 +748,7 @@ def _categories_df_explanatory_df(
             explanatory_col: pd.Series
             explanatory_col = explanatory_col.groupby(
                 level=0,
-                observed=False,
+                observed=True,
             ).shift(lag)
 
         dfw_explanatory[xcat] = explanatory_col
@@ -893,7 +893,7 @@ def categories_df(
                 pd.Grouper(level="cid"),
                 pd.Grouper(level="real_date", freq=freq),
             ],
-            observed=False,
+            observed=True,
         )
 
         dfw_explanatory = _categories_df_explanatory_df(
