@@ -89,7 +89,7 @@ class TestAll(unittest.TestCase):
             index="cid",
             columns="real_date",
             values=self.metric,
-            observed=False,
+            observed=True,
         )
         try:
             heatmap._plot(heatmap.df, **self.plot_args)

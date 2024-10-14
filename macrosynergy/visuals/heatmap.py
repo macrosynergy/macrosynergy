@@ -320,7 +320,7 @@ class Heatmap(Plotter):
             index=y_axis_column,
             columns=x_axis_column,
             values=metric,
-            observed=False,
+            observed=True,
         )
 
         if figsize is None:
