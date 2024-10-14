@@ -197,6 +197,10 @@ class SignalOptimizer:
             columns=["real_date", "name"] + list(X.columns)
         )
 
+        # Create data structure to store correlation matrix of features feeding into the
+        # final model and the input features themselves
+        self.ftr_corr = pd.DataFrame(columns=["real_date", "name", "predictor_input", "pipeline_input", "pearson"])
+
     def _checks_init_params(
         self,
         inner_splitter: BasePanelSplit,
@@ -428,13 +432,16 @@ class SignalOptimizer:
         ftrcoeff_data = []
         intercept_data = []
         ftr_selection_data = []
+        ftr_corr_data = []
 
-        for pred_data, model_data, ftr_data, inter_data, ftrselect_data in results:
+        for pred_data, model_data, ftr_data, inter_data, ftrselect_data, ftrcorr_data in results:
             prediction_data.append(pred_data)
             modelchoice_data.append(model_data)
             ftrcoeff_data.append(ftr_data)
             intercept_data.append(inter_data)
             ftr_selection_data.append(ftrselect_data)
+            ftr_corr_data.extend(ftrcorr_data)
+
 
         # Condense the collected data into a single dataframe and forward fill 
         for column_name, idx, predictions in prediction_data:
@@ -478,6 +485,9 @@ class SignalOptimizer:
         )
         ftr_select_df_long = pd.DataFrame(
             columns=self.selected_ftrs.columns, data=ftr_selection_data
+        )
+        ftr_corr_df_long = pd.DataFrame(
+            columns=self.ftr_corr.columns, data=ftr_corr_data
         )
 
         self.chosen_models = pd.concat(
@@ -533,6 +543,22 @@ class SignalOptimizer:
             ),
             axis=0,
         ).astype(ftr_selection_types)
+
+        self.ftr_corr = pd.concat(
+            (
+                self.ftr_corr,
+                ftr_corr_df_long,
+            ),
+            axis=0,
+        ).astype(
+            {
+                "real_date": "datetime64[ns]",
+                "name": "object",
+                "predictor_input": "object",
+                "pipeline_input": "object",
+                "pearson": "float",
+            }
+        )
 
     def _checks_calcpred_params(
         self,
@@ -804,12 +830,23 @@ class SignalOptimizer:
             ftr_selection_data = [test_date_levels.date[0], name] + [
                 1 for _ in range(X_train_i.shape[1])
             ]
+            ftr_corr_data = [
+                [
+                    test_date_levels.date[0],
+                    name,
+                    feature_name,
+                    feature_name,
+                    1,
+                ]
+                for feature_name in X_train_i.columns
+            ]
             return (
                 prediction_date,
                 modelchoice_data,
                 coefficients_data,
                 intercept_data,
                 ftr_selection_data,
+                ftr_corr_data, 
             )
         # Store the best estimator predictions/signals
         # If optim_model has a create_signal method, use it otherwise use predict
@@ -878,6 +915,57 @@ class SignalOptimizer:
             ftr_selection_data = [test_date_levels.date[0], name] + [
                 1 if name in ftr_names else 0 for name in np.array(X_train_i.columns)
             ]
+
+        # Store the correlation matrix of the features used in the final model
+        if not isinstance(optim_model, Pipeline):
+            ftr_corr_data = [
+                [
+                    test_date_levels.date[0],
+                    name,
+                    feature_name,
+                    feature_name,
+                    1,
+                ]
+                for feature_name in X_train_i.columns
+            ] 
+        else:
+            # Transform the training data to the final feature space
+            transformers = Pipeline(steps = optim_model.steps[:-1])
+            X_train_transformed = transformers.transform(X_train_i)
+            n_features = X_train_transformed.shape[1]
+            feature_names = (
+                X_train_transformed.columns
+                if isinstance(X_train_transformed, pd.DataFrame)
+                else [f"Feature {i+1}" for i in range(n_features)]
+            )
+            # Calculate correlation between each original feature in X_train_i and 
+            # the transformed features in X_train_transformed
+            if isinstance(X_train_transformed, pd.DataFrame):
+                ftr_corr_data = [
+                    [
+                        test_date_levels.date[0],
+                        name,
+                        final_feature_name,
+                        input_feature_name,
+                        np.corrcoef(X_train_transformed.values[:, idx], X_train_i[input_feature_name])[0, 1]
+                    ]
+                    for idx, final_feature_name in enumerate(feature_names)
+                    for input_feature_name in X_train_i.columns
+                ]
+            else:
+                ftr_corr_data = [
+                    [
+                        test_date_levels.date[0],
+                        name,
+                        final_feature_name,
+                        input_feature_name,
+                        np.corrcoef(X_train_transformed[:, idx], X_train_i[input_feature_name])[0, 1]
+                    ]
+                    for idx, final_feature_name in enumerate(feature_names)
+                    for input_feature_name in X_train_i.columns
+                ]
+
+        # Store correlation 
         modelchoice_data = [
             test_date_levels.date[0],
             name,
@@ -897,6 +985,7 @@ class SignalOptimizer:
             coefficients_data,
             intercept_data,
             ftr_selection_data,
+            ftr_corr_data,
         )
 
     def get_optimized_signals(
@@ -1743,9 +1832,14 @@ if __name__ == "__main__":
     from sklearn.linear_model import LinearRegression
     from sklearn.metrics import make_scorer
     from sklearn.neighbors import KNeighborsRegressor
+    from sklearn.decomposition import PCA
 
     import macrosynergy.management as msm
-    from macrosynergy.learning import MapSelector, regression_balanced_accuracy
+    from macrosynergy.learning import (
+        MapSelector,
+        regression_balanced_accuracy,
+        PanelStandardScaler,
+    )
     from macrosynergy.management.simulate import make_qdf
 
     cids = ["AUD", "CAD", "GBP", "USD"]
@@ -1793,6 +1887,37 @@ if __name__ == "__main__":
         frame=y_train.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
     )
 
+    # (1) Example PCA usage.
+    models = {
+        "PLS": Pipeline(
+            [
+                ("scaler", PanelStandardScaler()),
+                ("pca", PCA(n_components = 2)),
+                ("model", LinearRegression(fit_intercept=True)),
+            ]
+        ),
+    }
+    metric = make_scorer(regression_balanced_accuracy, greater_is_better=True)
+    inner_splitter = RollingKFoldPanelSplit(n_splits=4)
+    grid = {
+        "PLS": {},
+    }
+    so = SignalOptimizer(
+        inner_splitter=inner_splitter,
+        X=X_train,
+        y=y_train,
+        blacklist=black,
+    )
+    so.calculate_predictions(
+        name="test",
+        models=models,
+        metric=metric,
+        hparam_grid=grid,
+        hparam_type="grid",
+        test_size=3,
+        n_jobs=1,
+    )
+
     # (1) Example SignalOptimizer usage.
     #     We get adaptive signals for a linear regression with feature selection.
     #     Hyperparameters: whether or not to fit an intercept, usage of positive restriction.
@@ -1837,7 +1962,7 @@ if __name__ == "__main__":
         hparam_grid=grid,
         hparam_type="grid",
         test_size=3,
-        n_jobs=-1, # Set to 1 when debugging.
+        n_jobs=1, # Set to 1 when debugging.
     )
     so.models_heatmap(name="test")
     so.coefs_stackedbarplot("test", ftrs_renamed={"CRY": "carry", "GROWTH": "growth"})
