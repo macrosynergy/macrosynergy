@@ -460,7 +460,7 @@ def drop_nan_series(
         raise TypeError("Error: The raise_warning argument must be a boolean.")
 
     df_orig: pd.DataFrame = df.copy()
-    for cd, xc in df_orig.groupby(["cid", "xcat"]).groups:
+    for cd, xc in df_orig.groupby(["cid", "xcat"], observed=False).groups:
         sel_series: pd.Series = df_orig[
             (df_orig["cid"] == cd) & (df_orig["xcat"] == xc)
         ][column]
