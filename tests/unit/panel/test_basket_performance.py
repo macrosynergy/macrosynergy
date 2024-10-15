@@ -10,6 +10,8 @@ import random
 from macrosynergy.panel.historic_vol import flat_std
 from itertools import chain
 import warnings
+import matplotlib
+import matplotlib.pyplot as plt
 
 
 def dataframe_basket(ret="XR_NSA", cry=["CRY_NSA"], start=None, end=None, black=None):
@@ -147,7 +149,13 @@ class TestAll(unittest.TestCase):
         )
         self.basket: Basket = basket
 
+        self.orig_backend = matplotlib.get_backend()
+        plt.close("all")
+        matplotlib.use("Agg")
+
     def tearDown(self) -> None:
+        plt.close("all")
+        matplotlib.use(self.orig_backend)
         return super().tearDown()
 
     # Internal method used to return a dataframe with the uniform weights and a bool
