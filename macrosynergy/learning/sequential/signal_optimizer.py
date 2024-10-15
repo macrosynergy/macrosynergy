@@ -133,7 +133,7 @@ class SignalOptimizer(BasePanelLearner):
         scorers,
         inner_splitters,
         search_type="grid",
-        normalize_fold_results = False,
+        normalize_fold_results=False,
         cv_summary="mean",
         min_cids=4,
         min_periods=12 * 3,
@@ -221,19 +221,19 @@ class SignalOptimizer(BasePanelLearner):
         )
 
         results = self.run(
-            name = name,
-            outer_splitter = outer_splitter,
-            inner_splitters = inner_splitters,
-            models = models,
-            hyperparameters = hyperparameters,
-            scorers = scorers,
-            search_type = search_type,
-            normalize_fold_results = normalize_fold_results,
-            cv_summary = cv_summary,
-            split_functions = split_functions,
-            n_iter = n_iter,
-            n_jobs_outer = n_jobs_outer,
-            n_jobs_inner = n_jobs_inner,
+            name=name,
+            outer_splitter=outer_splitter,
+            inner_splitters=inner_splitters,
+            models=models,
+            hyperparameters=hyperparameters,
+            scorers=scorers,
+            search_type=search_type,
+            normalize_fold_results=normalize_fold_results,
+            cv_summary=cv_summary,
+            split_functions=split_functions,
+            n_iter=n_iter,
+            n_jobs_outer=n_jobs_outer,
+            n_jobs_inner=n_jobs_inner,
         )
 
         # Collect results from the worker
