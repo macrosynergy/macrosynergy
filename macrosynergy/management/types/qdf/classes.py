@@ -19,6 +19,7 @@ from .methods import (
     drop_nan_series,
     rename_xcats,
     qdf_from_timseries,
+    create_empty_categorical_qdf,
     concat_qdfs,
 )
 from .base import QuantamentalDataFrameBase
@@ -431,3 +432,29 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
 
         qdfs_list = QuantamentalDataFrame.from_qdf_list(qdfs_list)
         return qdfs_list
+
+    @classmethod
+    def create_empty_df(
+        cls,
+        cid: Optional[str] = None,
+        xcat: Optional[str] = None,
+        ticker: Optional[str] = None,
+        metrics: List[str] = ["value"],
+        date_range: Optional[pd.DatetimeIndex] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        categorical: bool = True,
+    ) -> "QuantamentalDataFrame":
+        """
+        Create an empty QuantamentalDataFrame.
+        """
+        qdf = create_empty_categorical_qdf(
+            cid=cid,
+            xcat=xcat,
+            ticker=ticker,
+            metrics=metrics,
+            date_range=date_range,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return QuantamentalDataFrame(qdf, categorical=categorical)
