@@ -128,7 +128,6 @@ class BasePanelLearner(ABC):
             ]
         )
 
-        self.split_results = []
 
     def run(
         self,
@@ -205,9 +204,8 @@ class BasePanelLearner(ABC):
         # Determine all outer splits and run the learning process in parallel
         train_test_splits = list(outer_splitter.split(self.X, self.y))
 
-        self.split_results = []
         # Return list of results
-        optim_results = Parallel(n_jobs=n_jobs_outer, return_as="list")(
+        optim_results = Parallel(n_jobs=n_jobs_outer, return_as="generator")(
             delayed(self._worker)(
                 name=name,
                 train_idx=train_idx,
@@ -358,10 +356,7 @@ class BasePanelLearner(ABC):
             optimal_model_name=optim_name,
             optimal_model_score=optim_score,
             optimal_model_params=optim_params,
-            n_splits=[
-                inner_splitter.n_splits
-                for inner_splitter in inner_splitters_adj.values()
-            ],
+            inner_splitters_adj=inner_splitters_adj,
             X_train=X_train,
             y_train=y_train,
             X_test=X_test,
@@ -442,7 +437,10 @@ class BasePanelLearner(ABC):
                     scoring=scorers,
                     n_jobs=n_jobs_inner,
                     refit=partial(
-                        self._model_selection, cv_summary=cv_summary, scorers=scorers
+                        self._model_selection,
+                        cv_summary=cv_summary,
+                        scorers=scorers,
+                        normalize_fold_results=normalize_fold_results,
                     ),
                     cv=cv_splits,
                 )
@@ -527,6 +525,10 @@ class BasePanelLearner(ABC):
             for col in cv_results.columns
             if col.startswith("split") and "test" in col
         ]
+        if normalize_fold_results:
+            cv_results[metric_columns] = (
+                cv_results[metric_columns] - cv_results[metric_columns].mean()
+            ) / cv_results[metric_columns].std()
 
         # For each metric, summarise the scores across folds for each hyperparameter choice
         # using cv_summary
@@ -602,7 +604,7 @@ class BasePanelLearner(ABC):
         optimal_model_name,
         optimal_model_score,
         optimal_model_params,
-        n_splits,
+        inner_splitters_adj,
         X_train,
         y_train,
         X_test,
@@ -620,7 +622,7 @@ class BasePanelLearner(ABC):
             optimal_model_name,
             optimal_model_score,
             optimal_model_params,
-            n_splits,
+            inner_splitters_adj,
             X_train,
             y_train,
             X_test,
@@ -636,7 +638,7 @@ class BasePanelLearner(ABC):
             optimal_model_name,
             optimal_model_score,
             optimal_model_params,
-            n_splits,
+            inner_splitters_adj,
             X_train,
             y_train,
             X_test,
@@ -655,7 +657,7 @@ class BasePanelLearner(ABC):
         optimal_model_name,
         optimal_model_score,
         optimal_model_params,
-        n_splits,
+        inner_splitters_adj,
         X_train,
         y_train,
         X_test,
@@ -680,18 +682,25 @@ class BasePanelLearner(ABC):
             optim_params = ({},)
 
         data = [timestamp, pipeline_name, optim_name, optim_score, optim_params]
-        data.append(np.sum(n_splits))
+        
+        n_splits = {splitter_name: splitter.n_splits for splitter_name, splitter in inner_splitters_adj.items()}
+        data.append(n_splits)
 
         return {"model_choice": data}
 
     def store_split_data(
         self,
         pipeline_name,
-        model,
+        optimal_model,
+        optimal_model_name,
+        optimal_model_score,
+        optimal_model_params,
+        inner_splitters_adj,
         X_train,
         y_train,
         X_test,
         y_test,
+        timestamp,
         adjusted_test_index,
     ):
         """

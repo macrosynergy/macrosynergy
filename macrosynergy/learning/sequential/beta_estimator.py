@@ -14,6 +14,7 @@ from sklearn.ensemble import VotingRegressor
 
 from collections import defaultdict
 
+
 class BetaEstimator(BasePanelLearner):
     """
     Class for sequential beta estimation by learning optimal regression coefficients.
@@ -26,16 +27,17 @@ class BetaEstimator(BasePanelLearner):
     -----
     TODO
     """
+
     def __init__(
         self,
         df,
         xcats,
         benchmark_return,
-        cids = None,
-        start = None,
-        end = None, 
+        cids=None,
+        start=None,
+        end=None,
     ):
-        # Checks 
+        # Checks
         # TODO
 
         # Create pseudo-panel
@@ -65,22 +67,30 @@ class BetaEstimator(BasePanelLearner):
             dfx = update_df(dfx, df_cid)
 
         super().__init__(
-            df = dfx,
-            xcats = xcats + [benchmark_xcat] if isinstance(xcats, list) else [xcats, benchmark_xcat],
-            cids = list(dfx["cid"].unique()),
-            start = start,
-            end = end,
-            blacklist = None,
-            freq = "D",
-            lag = 0,
+            df=dfx,
+            xcats=(
+                xcats + [benchmark_xcat]
+                if isinstance(xcats, list)
+                else [xcats, benchmark_xcat]
+            ),
+            cids=list(dfx["cid"].unique()),
+            start=start,
+            end=end,
+            blacklist=None,
+            freq="D",
+            lag=0,
         )
 
-        # Create forecast dataframe index 
+        # Create forecast dataframe index
         min_date = min(self.unique_date_levels)
         max_date = max(self.unique_date_levels)
         forecast_date_levels = pd.date_range(start=min_date, end=max_date, freq="B")
         self.forecast_idxs = pd.MultiIndex.from_product(
-            [[cid.split("v")[0] for cid in self.unique_xs_levels], forecast_date_levels], names=["cid", "real_date"]
+            [
+                [cid.split("v")[0] for cid in self.unique_xs_levels],
+                forecast_date_levels,
+            ],
+            names=["cid", "real_date"],
         )
 
         # Create initial dataframes to store estimated betas and OOS hedged returns
@@ -97,16 +107,16 @@ class BetaEstimator(BasePanelLearner):
         hyperparameters,
         scorers,
         inner_splitters,
-        search_type = "grid",
-        cv_summary = "mean",
-        min_cids = 4,
-        min_periods = 12 * 3,
-        est_freq = "D",
-        max_periods = None,
-        split_functions = None,
-        n_iter = None,
-        n_jobs_outer = -1,
-        n_jobs_inner = 1,
+        search_type="grid",
+        cv_summary="mean",
+        min_cids=4,
+        min_periods=12 * 3,
+        est_freq="D",
+        max_periods=None,
+        split_functions=None,
+        n_iter=None,
+        n_jobs_outer=-1,
+        n_jobs_inner=1,
     ):
         # Checks
         # TODO
@@ -116,42 +126,45 @@ class BetaEstimator(BasePanelLearner):
             index=self.forecast_idxs, columns=[beta_xcat], data=np.nan, dtype=np.float32
         )
         stored_hedged_returns = pd.DataFrame(
-            index=self.forecast_idxs, columns=[hedged_return_xcat], data=np.nan, dtype=np.float32
+            index=self.forecast_idxs,
+            columns=[hedged_return_xcat],
+            data=np.nan,
+            dtype=np.float32,
         )
 
         # Set up outer splitter
         outer_splitter = ExpandingFrequencyPanelSplit(
-            expansion_freq = est_freq,
-            test_freq = est_freq,
-            min_cids = min_cids,
-            min_periods = min_periods,
+            expansion_freq=est_freq,
+            test_freq=est_freq,
+            min_cids=min_cids,
+            min_periods=min_periods,
         )
 
         # Run pipeline
         results = self.run(
-            name = beta_xcat,
-            outer_splitter = outer_splitter,
-            inner_splitters = inner_splitters,
-            models = models,
-            hyperparameters = hyperparameters,
-            scorers = scorers,
-            search_type = search_type,
-            cv_summary = cv_summary,
-            split_functions = split_functions,
-            n_iter = n_iter,
-            n_jobs_outer = n_jobs_outer,
-            n_jobs_inner = n_jobs_inner,
+            name=beta_xcat,
+            outer_splitter=outer_splitter,
+            inner_splitters=inner_splitters,
+            models=models,
+            hyperparameters=hyperparameters,
+            scorers=scorers,
+            search_type=search_type,
+            cv_summary=cv_summary,
+            split_functions=split_functions,
+            n_iter=n_iter,
+            n_jobs_outer=n_jobs_outer,
+            n_jobs_inner=n_jobs_inner,
         )
 
-        # Collect results from the worker 
+        # Collect results from the worker
         beta_data = []
         hedged_return_data = []
-        modelchoice_data = []
+        model_choice_data = []
 
-        for quantamental_data, model_data, other_data in results:
-            beta_data.extend(quantamental_data["betas"])
-            hedged_return_data.extend(quantamental_data["hedged_returns"])
-            modelchoice_data.append(model_data["model_choice"])
+        for split_result in results:
+            beta_data.extend(split_result["betas"])
+            hedged_return_data.extend(split_result["hedged_returns"])
+            model_choice_data.append(split_result["model_choice"])
 
         # Create quantamental dataframes of betas and hedged returns
         for cid, real_date, xcat, value in beta_data:
@@ -195,8 +208,8 @@ class BetaEstimator(BasePanelLearner):
 
         # Store model selection data
         model_df_long = pd.DataFrame(
-            columns = self.chosen_models.columns,
-            data = modelchoice_data,
+            columns=self.chosen_models.columns,
+            data=model_choice_data,
         )
         self.chosen_models = pd.concat(
             (
@@ -210,13 +223,27 @@ class BetaEstimator(BasePanelLearner):
                 "name": "object",
                 "model_type": "object",
                 "hparams": "object",
-                "n_splits_used": "int",
+                "n_splits_used": "object",
             }
         )
 
-    def store_quantamental_data(self, pipeline_name, model, X_train, y_train, X_test, y_test, adjusted_test_index):
-        if isinstance(model, VotingRegressor):
-            estimators = model.estimators_
+    def store_split_data(
+        self,
+        pipeline_name,
+        optimal_model,
+        optimal_model_name,
+        optimal_model_score,
+        optimal_model_params,
+        inner_splitters_adj,
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        timestamp,
+        adjusted_test_index,
+    ):
+        if isinstance(optimal_model, VotingRegressor):
+            estimators = optimal_model.estimators_
             coefs_list = [est.coefs_ for est in estimators]
             sum_dict = defaultdict(lambda: [0, 0])
 
@@ -227,9 +254,17 @@ class BetaEstimator(BasePanelLearner):
 
             betas = {key: sum / count for key, (sum, count) in sum_dict.items()}
         else:
-            betas = model.coefs_
+            betas = optimal_model.coefs_
 
-        betas_list = [[cid.split("v")[0], X_train.index.get_level_values(1).max(), pipeline_name, beta] for cid, beta in betas.items()]
+        betas_list = [
+            [
+                cid.split("v")[0],
+                X_train.index.get_level_values(1).max(),
+                pipeline_name,
+                beta,
+            ]
+            for cid, beta in betas.items()
+        ]
 
         # Now calculate the induced hedged returns
         betas_series = pd.Series(betas)
@@ -240,9 +275,6 @@ class BetaEstimator(BasePanelLearner):
             for i, (idx, _) in enumerate(y_test.items())
         ]
         return {"betas": betas_list, "hedged_returns": hedged_returns_data}
-
-    def store_other_data(self, pipeline_name, optimal_model, X_train, y_train, X_test, y_test, timestamp):
-        pass
 
 
 if __name__ == "__main__":
@@ -284,21 +316,19 @@ if __name__ == "__main__":
     models = {
         "LR": LinearRegressionSystem(min_xs_samples=21 * 3),
     }
-    hparam_grid = {
-        "LR": {"fit_intercept": [True, False], "positive": [True, False]}
-    }
+    hparam_grid = {"LR": {"fit_intercept": [True, False], "positive": [True, False]}}
 
     scorer = {"scorer": neg_mean_abs_corr}
 
     be.estimate_beta(
         beta_xcat="BETA_NSA",
         hedged_return_xcat="HEDGED_RETURN_NSA",
-        models = models,
-        hyperparameters = hparam_grid,
-        scorers = scorer,
-        inner_splitters = {"expandingkfold": ExpandingKFoldPanelSplit(n_splits = 5)},
-        search_type = "grid",
-        cv_summary = "median",
+        models=models,
+        hyperparameters=hparam_grid,
+        scorers=scorer,
+        inner_splitters={"expandingkfold": ExpandingKFoldPanelSplit(n_splits=5)},
+        search_type="grid",
+        cv_summary="median",
         min_cids=1,
         min_periods=21 * 12,
         est_freq="Q",
