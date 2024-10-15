@@ -3,7 +3,7 @@ import unittest
 import warnings
 import pandas as pd
 import itertools
-
+import os
 from typing import List, Dict, Any
 from macrosynergy.download.jpmaqs import (
     JPMaQSDownload,
@@ -16,6 +16,8 @@ from macrosynergy.download.jpmaqs import (
     timeseries_to_column,
     concat_single_metric_qdfs,
     validate_downloaded_df,
+    DEFAULT_CLIENT_ID_ENV_VAR,
+    DEFAULT_CLIENT_SECRET_ENV_VAR,
 )
 
 from macrosynergy.download.exceptions import InvalidDataframeError
@@ -95,7 +97,14 @@ class TestJPMaQSDownload(unittest.TestCase):
                 "password",
             ]:
                 bad_args[vx] = None
+
             JPMaQSDownload(**bad_args)
+            # the above line will NOT fail for systems with the env vars set
+            # therefore if the below is reached, the the env vars must be there.
+            if bool(os.getenv(DEFAULT_CLIENT_ID_ENV_VAR)) and bool(
+                os.getenv(DEFAULT_CLIENT_SECRET_ENV_VAR)
+            ):
+                raise ValueError("Env. variables are set; raising error to pass test")
 
     @mock.patch(
         "macrosynergy.download.dataquery.OAuth._get_token",
