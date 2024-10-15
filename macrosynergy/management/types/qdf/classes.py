@@ -52,7 +52,9 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             if _initialized_as_categorical is None:
                 _initialized_as_categorical = df.InitializedAsCategorical
         else:
-            df = df[get_col_sort_order(df)]
+            if df.columns.tolist() != get_col_sort_order(df):
+                df = df[get_col_sort_order(df)]
+
         super().__init__(df)
         _check_cat = check_is_categorical(self)
         if _initialized_as_categorical is None:
