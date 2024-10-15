@@ -1,4 +1,4 @@
-name: Test Python package on Ubuntu
+name: Test Python package on Ubuntu (Python 3.7.9)
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   prepare-matrix:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -21,17 +21,17 @@ jobs:
 
   run-unit-tests:
     needs: prepare-matrix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         folder: ${{fromJson(needs.prepare-matrix.outputs.matrix)}}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore caches - Python 3.11
+      - name: Restore caches - Python 3.7.9
         uses: ./.github/actions/restore-pip-cache
         with:
-          python-version: 3.11
+          python-version: 3.7.9
 
       - name: Check for sys.path.append
         run: |
@@ -46,12 +46,6 @@ jobs:
         run: |
           python -m pytest ./tests/unit/${{ matrix.folder }}
 
-      - name: Upload reports to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: .coverage
-
   run-unit-tests-success:
     needs: run-unit-tests
     runs-on: ubuntu-latest
@@ -64,3 +58,5 @@ jobs:
           else
             echo "Unit tests passed"
           fi
+
+          

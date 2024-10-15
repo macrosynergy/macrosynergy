@@ -33,6 +33,7 @@ from macrosynergy.management.utils import (
 )
 from macrosynergy.management.constants import FREQUENCY_MAP
 from macrosynergy.management.utils.math import expanding_mean_with_nan
+from macrosynergy.compat import PD_NEW_DATE_FREQ
 from tests.simulate import make_qdf
 from tests.unit.download.mock_helpers import mock_request_wrapper
 
@@ -258,9 +259,15 @@ class TestFunctions(unittest.TestCase):
                 self.fail("Warning raised unexpectedly")
 
         df_test: pd.DataFrame = df_orig.copy()
-        df_test.loc[
-            (df_test["cid"] == "AUD") & (df_test["xcat"].isin(["FXXR", "IR"])), "value"
-        ] = pd.NA
+
+        with warnings.catch_warnings(record=True) as w:
+            # all warnings will raise errors, this raises deprecated warning
+            # with older pd/np versions. the ignore filter is to suppress it
+            warnings.simplefilter("ignore")
+            df_test.loc[
+                (df_test["cid"] == "AUD") & (df_test["xcat"].isin(["FXXR", "IR"])),
+                "value",
+            ] = pd.NA
 
         warnings.simplefilter("always")
         with warnings.catch_warnings(record=True) as w:
@@ -873,6 +880,10 @@ class TestFunctions(unittest.TestCase):
 
     def test_map_to_business_day_frequency(self):
         fm_copy = FREQUENCY_MAP.copy()
+        if PD_NEW_DATE_FREQ:
+            fm_copy["M"] = "BME"
+            fm_copy["Q"] = "BQE"
+
         for k in fm_copy.keys():
             self.assertEqual(
                 _map_to_business_day_frequency(k), fm_copy[k], f"Failed for {k}"
@@ -1059,10 +1070,12 @@ class TestFunctions(unittest.TestCase):
                 metrics=["value"],
                 raise_error=False,
             )
-            self.assertEqual(len(w), 3)
-            for ww in w:
-                self.assertTrue(issubclass(ww.category, UserWarning))
+            efilter = (
+                "Tickers targetted for applying slip are not present in the DataFrame."
+            )
+            wlist = [_w for _w in w if efilter in str(_w.message)]
 
+            self.assertEqual(len(wlist), 3)
         warnings.resetwarnings()
 
         with self.assertRaises(ValueError):
@@ -1095,10 +1108,20 @@ class TestFunctions(unittest.TestCase):
         xcats: List[str] = ["XR", "CRY", "GROWTH", "INFL"]
         test_df: pd.DataFrame = make_test_df(cids=cids, xcats=xcats)
 
-        # Ensure that test dataframe has differing values for XR and CRY on 2015-01-01 
-        test_df.loc[(test_df["cid"] == "AUD") & (test_df["xcat"] == "XR") & (test_df["real_date"] == "2015-01-01"), "value"] = 1.0
+        # Ensure that test dataframe has differing values for XR and CRY on 2015-01-01
+        test_df.loc[
+            (test_df["cid"] == "AUD")
+            & (test_df["xcat"] == "XR")
+            & (test_df["real_date"] == "2015-01-01"),
+            "value",
+        ] = 1.0
 
-        test_df.loc[(test_df["cid"] == "AUD") & (test_df["xcat"] == "CRY") & (test_df["real_date"] == "2015-01-01"), "value"] = 2.0
+        test_df.loc[
+            (test_df["cid"] == "AUD")
+            & (test_df["xcat"] == "CRY")
+            & (test_df["real_date"] == "2015-01-01"),
+            "value",
+        ] = 2.0
         # Typings are correct
 
         with self.assertRaises(TypeError):
@@ -1108,7 +1131,9 @@ class TestFunctions(unittest.TestCase):
             merge_categories(test_df, xcats=1, new_xcat="NEW_CAT")
 
         with self.assertRaises(TypeError):
-            merge_categories(test_df, xcats=["XR", "CRY"], new_xcat="NEW_CAT", cids="AUD")
+            merge_categories(
+                test_df, xcats=["XR", "CRY"], new_xcat="NEW_CAT", cids="AUD"
+            )
 
         with self.assertRaises(TypeError):
             merge_categories(test_df, xcats=["XR", "CRY"], cids=["AUD"], new_xcat=1)
@@ -1116,43 +1141,87 @@ class TestFunctions(unittest.TestCase):
         # Check dataframe has correct format
 
         with self.assertRaises(TypeError):
-            merge_categories(test_df.drop(columns=["value", "real_date"]), xcats=["XR", "CRY"], new_xcat="NEW_CAT", cids=["AUD"])
-        
+            merge_categories(
+                test_df.drop(columns=["value", "real_date"]),
+                xcats=["XR", "CRY"],
+                new_xcat="NEW_CAT",
+                cids=["AUD"],
+            )
+
         # Check values specified exist in Dataframe
 
         with self.assertRaises(ValueError):
-            merge_categories(test_df, xcats=["XR", "CRY", "NOT_PRESENT", "INFL"], new_xcat="NEW_CAT", cids=["AUD"])
+            merge_categories(
+                test_df,
+                xcats=["XR", "CRY", "NOT_PRESENT", "INFL"],
+                new_xcat="NEW_CAT",
+                cids=["AUD"],
+            )
 
         with self.assertRaises(ValueError):
-            merge_categories(test_df, xcats=["XR", "CRY", "INFL"], new_xcat="NEW_CAT", cids=["NOPE"])
+            merge_categories(
+                test_df, xcats=["XR", "CRY", "INFL"], new_xcat="NEW_CAT", cids=["NOPE"]
+            )
 
         # Check that the new category is created
 
         new_xcat = "NEW_CAT"
-        new_df = merge_categories(test_df, xcats=["XR", "CRY"], cids=["AUD"], new_xcat=new_xcat)
+        new_df = merge_categories(
+            test_df, xcats=["XR", "CRY"], cids=["AUD"], new_xcat=new_xcat
+        )
         self.assertTrue(new_xcat in new_df["xcat"].unique())
 
         # Check that the new category is equal to preference 1
 
-        new_df = merge_categories(test_df, xcats=["XR", "CRY"], cids=["AUD"], new_xcat=new_xcat)
-        new_df_values = new_df[new_df["xcat"] == new_xcat]["value"].reset_index(drop=True)
+        new_df = merge_categories(
+            test_df, xcats=["XR", "CRY"], cids=["AUD"], new_xcat=new_xcat
+        )
+        new_df_values = new_df[new_df["xcat"] == new_xcat]["value"].reset_index(
+            drop=True
+        )
 
-        test_df_values = test_df[(test_df["xcat"] == "XR") & (test_df["cid"] == "AUD")]["value"].reset_index(drop=True)
+        test_df_values = test_df[(test_df["xcat"] == "XR") & (test_df["cid"] == "AUD")][
+            "value"
+        ].reset_index(drop=True)
 
         self.assertTrue(new_df_values.equals(test_df_values))
 
         # Check that the new category is equal to preference 2 if preference 1 does not exist
 
-        mask = ~((test_df['cid'] == "AUD") & (test_df['xcat'] == "XR") & (test_df['real_date'] == "2015-01-01"))
+        mask = ~(
+            (test_df["cid"] == "AUD")
+            & (test_df["xcat"] == "XR")
+            & (test_df["real_date"] == "2015-01-01")
+        )
         df_filtered = test_df[mask].reset_index(drop=True)
 
-        new_df = merge_categories(df_filtered, xcats=["XR", "CRY"], cids=["AUD"], new_xcat=new_xcat)
+        new_df = merge_categories(
+            df_filtered, xcats=["XR", "CRY"], cids=["AUD"], new_xcat=new_xcat
+        )
 
-        new_df_value = new_df[(new_df["xcat"] == new_xcat) & (new_df['cid'] == "AUD") & (new_df['real_date'] == "2015-01-01")]["value"].reset_index(drop=True)
-        self.assertTrue(new_df_value.equals(test_df[(test_df['cid'] == "AUD") & (test_df['xcat'] == "CRY") & (test_df['real_date'] == "2015-01-01")]["value"].reset_index(drop=True)))
-        self.assertTrue(not new_df_value.equals(test_df[(test_df['cid'] == "AUD") & (test_df['xcat'] == "XR") & (test_df['real_date'] == "2015-01-01")]["value"].reset_index(drop=True)))
-
-
+        new_df_value = new_df[
+            (new_df["xcat"] == new_xcat)
+            & (new_df["cid"] == "AUD")
+            & (new_df["real_date"] == "2015-01-01")
+        ]["value"].reset_index(drop=True)
+        self.assertTrue(
+            new_df_value.equals(
+                test_df[
+                    (test_df["cid"] == "AUD")
+                    & (test_df["xcat"] == "CRY")
+                    & (test_df["real_date"] == "2015-01-01")
+                ]["value"].reset_index(drop=True)
+            )
+        )
+        self.assertTrue(
+            not new_df_value.equals(
+                test_df[
+                    (test_df["cid"] == "AUD")
+                    & (test_df["xcat"] == "XR")
+                    & (test_df["real_date"] == "2015-01-01")
+                ]["value"].reset_index(drop=True)
+            )
+        )
 
 
 class TestTimer(unittest.TestCase):

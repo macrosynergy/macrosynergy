@@ -4,14 +4,20 @@ Implementation of linear_composite() function as a module.
 
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Union, Optional, Tuple, Type
+from typing import List, Dict, Union, Optional, Tuple, Type, Set
 import warnings
-
-from macrosynergy.management.utils import reduce_df
+from packaging import version
+from macrosynergy.management.utils import reduce_df, is_valid_iso_date
 from macrosynergy.management.simulate import make_test_df
-from macrosynergy.management.utils import is_valid_iso_date
+from macrosynergy.management.types import QuantamentalDataFrame
 
 listtypes: Tuple[Type, ...] = (list, np.ndarray, pd.Series, tuple)
+
+PD_FUTURE_STACK = (
+    dict(future_stack=True)
+    if version.parse(pd.__version__) > version.parse("2.1.0")
+    else dict(dropna=False)
+)
 
 
 def _linear_composite_basic(
@@ -105,8 +111,8 @@ def linear_composite_cid_agg(
     # so that we have the same set of dates and same set of CIDs -- thank you
     # @mikiinterfiore
     weights_df = (
-        weights_df.stack(dropna=False)
-        .reindex(data_df.stack(dropna=False).index)
+        weights_df.stack(**PD_FUTURE_STACK)
+        .reindex(data_df.stack(**PD_FUTURE_STACK).index)
         .unstack(1)
     )
 
@@ -171,8 +177,89 @@ def linear_composite_xcat_agg(
     return out_df
 
 
-def linear_composite(
-    df: pd.DataFrame,
+def _populate_missing_xcat_series(
+    df: QuantamentalDataFrame,
+) -> QuantamentalDataFrame:
+    """
+    Populate missing xcat series with NaNs
+    """
+    found_cids: List[str] = df["cid"].unique().tolist()
+    found_xcats: List[str] = df["xcat"].unique().tolist()
+    found_xcats_set: Set[str] = set(found_xcats)
+    dt_range: pd.DatetimeIndex = pd.to_datetime(df["real_date"].unique())
+    wrn_msg: str = (
+        "{cidx} does not have complete xcat data for {missing_xcats}."
+        " These will be filled with NaNs for the calculation."
+    )
+
+    for cidx in found_cids:
+        missing_xcats = list(
+            found_xcats_set - set(df.loc[df["cid"] == cidx, "xcat"].unique())
+        )
+        if missing_xcats:
+            warnings.warn(wrn_msg.format(cidx=cidx, missing_xcats=missing_xcats))
+            for xc in missing_xcats:
+                dct = {"cid": cidx, "xcat": xc, "real_date": dt_range, "value": np.NaN}
+                df = pd.concat([df, pd.DataFrame(data=dct)])
+
+    return df
+
+
+def _check_df_for_missing_cid_data(
+    df: QuantamentalDataFrame,
+    weights: Union[str, List[float]],
+    signs: List[float],
+) -> QuantamentalDataFrame:
+    """
+    Check the DataFrame for missing `cid` data and drop them if necessary and return the
+    DataFrame with the missing `cid` data dropped.
+    """
+    found_cids: List[str] = df["cid"].unique().tolist()
+    found_xcats: List[str] = df["xcat"].unique().tolist()
+    found_xcats_set: Set[str] = set(found_xcats)
+    wrn_msg: str = (
+        "`cid` {cidx} does not have complete `xcat` data for {missing_xcats}."
+        " These will be dropped from the calculation."
+    )
+    if isinstance(weights, str):
+        if not (
+            (weights in found_xcats) and (len((set(found_xcats) - {weights})) == 1)
+        ):
+            raise ValueError(
+                f"Weight category {weights} not found in `df`."
+                f" Available categories are {found_xcats}."
+            )
+
+    ctr = 0
+    for cidx in found_cids.copy():  # copy to allow modification of `cids`
+        missing_xcats = list(
+            found_xcats_set - set(df.loc[df["cid"] == cidx, "xcat"].unique())
+        )
+        if missing_xcats:
+            found_cids.pop(ctr)
+            signs.pop(ctr)
+            if isinstance(weights, list):
+                weights.pop(ctr)
+            # drop from df
+            df = df.loc[df["cid"] != cidx, :]
+            warnings.warn(wrn_msg.format(cidx=cidx, missing_xcats=missing_xcats))
+        else:
+            ctr += 1
+
+    if len(found_cids) == 0:
+        raise ValueError(
+            "No `cids` have complete `xcat` data required for the calculation."
+        )
+
+    _xcat: str = list(set(found_xcats) - {weights if isinstance(weights, str) else ""})[
+        0
+    ]
+
+    return df, found_cids, _xcat
+
+
+def _check_args(
+    df: QuantamentalDataFrame,
     xcats: Union[str, List[str]],
     cids: Optional[List[str]] = None,
     weights: Optional[Union[List[float], str]] = None,
@@ -187,75 +274,17 @@ def linear_composite(
     new_cid="GLB",
 ):
     """
-    Weighted linear combinations of cross sections or categories
-
-    :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
-        columns: 'cid', 'xcat', 'real_date' and 'value'.
-    :param <Union[str, List[str]> xcats: One or more categories to be combined.
-        If a single category is given the linear combination is calculated across
-        sections. This results in a single series to which a new cross-sectional
-        identifier is assigned.
-        If more than one category string is given the output will be a new category,
-        i.e. a panel that is a linear combination of the categories specified.
-    :param <List[str]> cids: cross-sections for which the linear combinations are
-        calculated. Default is all cross-section available.
-    :param <Union[List[float], str]> weights: This specifies how categories or cross
-        sections are combined. There are three principal options.
-        The first (default) is None, in which case equal weights are given to all
-        categories or cross sections that are available.
-        The second case is a set of fixed coefficients, in which case these very
-        coefficients are applied to all available categories of cross sections.
-        Per default the coefficients are normalized so that they add up to one for each
-        period. This can be changed with the argument `normalize_weights`.
-        The third case is the assignment of a weighting category. This only applies to
-        combinations of cross sections. In this care the weighting category is multiplied
-        for each period with the corresponding value of main category of the same cross
-        section. Per default the weight category values are normalized so that they add up
-        to one for each period. This can be changed with the argument `normalize_weights`.
-    :param <bool> normalize_weights: If True (default) the weights are normalized to sum
-        to 1. If False the weights are used as specified.
-    :param <List[float]> signs: An array of consisting of +1s or -1s, of the same length
-        as the number of categories in `xcats` to indicate whether the respective category
-        should be added or subtracted from the linear combination. Not relevant when
-        aggregating over cross-sections, i.e. when a single category is given in `xcats`.
-        Default is None and all signs are set to +1.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date
-        for which the respective category is available is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date for
-        which the respective category is available is used.
-    :param <bool> complete_xcats: If True (default) combinations are only calculated for
-        observation dates on which all xcats are available. If False a combination of the
-        available categories is used. Not relevant when aggregating over cross-sections,
-        i.e. when a single category is given in `xcats`.
-    :param <bool> complete_cids: If True (default) combinations are only calculated for
-        observation dates on which all cids are available. If False a combination of the
-        available cross-sections is used. Not relevant when aggregating over categories,
-        i.e. when multiple categories are given in `xcats`.
-    :param <str> new_xcat: Name of new composite xcat when aggregating over xcats for a
-        given cid. Default is "NEW".
-    :param <str> new_cid: Name of new composite cid when aggregating over cids for a given
-        xcat. Default is "GLB".
-
-    :return <pd.DataFrame>: standardized DataFrame with the relative values, featuring
-        the categories: 'cid', 'xcat', 'real_date' and 'value'.
+    Check the arguments of linear_composite()
     """
 
     # df check
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError("`df` must be a pandas DataFrame")
-
-    if not set(["cid", "xcat", "real_date", "value"]).issubset(set(df.columns)):
-        raise ValueError(
-            "`df` must be a standardized JPMaQS DataFrame with the necessary columns: "
-            "'cid', 'xcat', 'real_date' and 'value'."
-        )
-
-    if df["value"].isna().all():
-        raise ValueError("`df` does not contain any valid values.")
-
+    if (
+        (not isinstance(df, QuantamentalDataFrame))
+        or ("value" not in df.columns)
+        or (df["value"].isna().all())
+    ):
+        raise TypeError("`df` must be a standardized Quantamental DataFrame.")
     # copy df to avoid side effects
-    # NOTE: The below arg validation contains code that "copy" the args.
-    # Be careful when making changes.
     df: pd.DataFrame = df.copy()
 
     if start is None:
@@ -346,13 +375,154 @@ def linear_composite(
             warnings.warn(
                 "`signs` must be a list of +1s or -1s. "
                 "`signs` will be coerced to +1s/-1s. "
-                "(i.e. signs ← abs(signs) / signs)"
+                "(i.e. signs = abs(signs) / signs)"
             )
 
             signs: List[float] = [abs(x) / x for x in signs]
 
     else:
         raise TypeError("`signs` must be a list of floats/ints or None.")
+
+    if not isinstance(normalize_weights, bool):
+        raise TypeError("`normalize_weights` must be a boolean.")
+
+    if not isinstance(complete_xcats, bool):
+        raise TypeError("`complete_xcats` must be a boolean.")
+
+    if not isinstance(complete_cids, bool):
+        raise TypeError("`complete_cids` must be a boolean.")
+
+    if not isinstance(new_xcat, str):
+        raise TypeError("`new_xcat` must be a string.")
+
+    if not isinstance(new_cid, str):
+        raise TypeError("`new_cid` must be a string.")
+
+    if blacklist is not None:
+        if not isinstance(blacklist, dict):
+            raise TypeError("`blacklist` must be a dictionary.")
+
+    return (
+        df,
+        xcats,
+        cids,
+        weights,
+        normalize_weights,
+        signs,
+        start,
+        end,
+        blacklist,
+        complete_xcats,
+        complete_cids,
+        new_xcat,
+        new_cid,
+        _xcat_agg,
+        mode,
+    )
+
+
+def linear_composite(
+    df: pd.DataFrame,
+    xcats: Union[str, List[str]],
+    cids: Optional[List[str]] = None,
+    weights: Optional[Union[List[float], str]] = None,
+    normalize_weights: bool = True,
+    signs: Optional[List[float]] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    blacklist: Dict[str, List[str]] = None,
+    complete_xcats: bool = False,
+    complete_cids: bool = False,
+    new_xcat="NEW",
+    new_cid="GLB",
+):
+    """
+    Weighted linear combinations of cross sections or categories
+
+    :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
+        columns: 'cid', 'xcat', 'real_date' and 'value'.
+    :param <Union[str, List[str]> xcats: One or more categories to be combined.
+        If a single category is given the linear combination is calculated across
+        sections. This results in a single series to which a new cross-sectional
+        identifier is assigned.
+        If more than one category string is given the output will be a new category,
+        i.e. a panel that is a linear combination of the categories specified.
+    :param <List[str]> cids: cross-sections for which the linear combinations are
+        calculated. Default is all cross-section available.
+    :param <Union[List[float], str]> weights: This specifies how categories or cross
+        sections are combined. There are three principal options.
+        The first (default) is None, in which case equal weights are given to all
+        categories or cross sections that are available.
+        The second case is a set of fixed coefficients, in which case these very
+        coefficients are applied to all available categories of cross sections.
+        Per default the coefficients are normalized so that they add up to one for each
+        period. This can be changed with the argument `normalize_weights`.
+        The third case is the assignment of a weighting category. This only applies to
+        combinations of cross sections. In this care the weighting category is multiplied
+        for each period with the corresponding value of main category of the same cross
+        section. Per default the weight category values are normalized so that they add up
+        to one for each period. This can be changed with the argument `normalize_weights`.
+    :param <bool> normalize_weights: If True (default) the weights are normalized to sum
+        to 1. If False the weights are used as specified.
+    :param <List[float]> signs: An array of consisting of +1s or -1s, of the same length
+        as the number of categories in `xcats` to indicate whether the respective category
+        should be added or subtracted from the linear combination. Not relevant when
+        aggregating over cross-sections, i.e. when a single category is given in `xcats`.
+        Default is None and all signs are set to +1.
+    :param <str> start: earliest date in ISO format. Default is None and earliest date
+        for which the respective category is available is used.
+    :param <str> end: latest date in ISO format. Default is None and latest date for
+        which the respective category is available is used.
+    :param <bool> complete_xcats: If True (default) combinations are only calculated for
+        observation dates on which all xcats are available. If False a combination of the
+        available categories is used. Not relevant when aggregating over cross-sections,
+        i.e. when a single category is given in `xcats`.
+    :param <bool> complete_cids: If True (default) combinations are only calculated for
+        observation dates on which all cids are available. If False a combination of the
+        available cross-sections is used. Not relevant when aggregating over categories,
+        i.e. when multiple categories are given in `xcats`.
+    :param <str> new_xcat: Name of new composite xcat when aggregating over xcats for a
+        given cid. Default is "NEW".
+    :param <str> new_cid: Name of new composite cid when aggregating over cids for a given
+        xcat. Default is "GLB".
+
+    :return <pd.DataFrame>: standardized DataFrame with the relative values, featuring
+        the categories: 'cid', 'xcat', 'real_date' and 'value'.
+    """
+
+    (
+        df,
+        xcats,
+        cids,
+        weights,
+        normalize_weights,
+        signs,
+        start,
+        end,
+        blacklist,
+        complete_xcats,
+        complete_cids,
+        new_xcat,
+        new_cid,
+        _xcat_agg,
+        mode,
+    ) = _check_args(
+        df=df,
+        xcats=xcats,
+        cids=cids,
+        weights=weights,
+        normalize_weights=normalize_weights,
+        signs=signs,
+        start=start,
+        end=end,
+        blacklist=blacklist,
+        complete_xcats=complete_xcats,
+        complete_cids=complete_cids,
+        new_xcat=new_xcat,
+        new_cid=new_cid,
+    )
+
+    # update local variables
 
     _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
 
@@ -378,36 +548,7 @@ def linear_composite(
         )
 
     if _xcat_agg:
-        found_cids: List[str] = df["cid"].unique().tolist()
-        found_xcats: List[str] = df["xcat"].unique().tolist()
-
-        for icid, cidx in enumerate(found_cids):
-            missing_xcats: List[str] = list(
-                set(found_xcats) - set(df.loc[df["cid"] == cidx, "xcat"].unique())
-            )
-            if missing_xcats:
-                # warn the user, and put in the dates with NaNs
-                warnings.warn(
-                    f"`cid` {cidx} does not have complete `xcat` data for "
-                    f"{missing_xcats}."
-                    " These will be filled with NaNs for the calculation."
-                )
-                # artificially add the missing xcats
-                dt_range: pd.DatetimeIndex = pd.to_datetime(df["real_date"].unique())
-                for xc in missing_xcats:
-                    df = pd.concat(
-                        [
-                            df,
-                            pd.DataFrame(
-                                data={
-                                    "cid": cidx,
-                                    "xcat": xc,
-                                    "real_date": dt_range,
-                                    "value": np.NaN,
-                                }
-                            ),
-                        ]
-                    )
+        df = _populate_missing_xcat_series(df)
 
         return linear_composite_xcat_agg(
             df=df,
@@ -420,46 +561,9 @@ def linear_composite(
         )
 
     else:  # mode == "cid_agg" -- single xcat
-        found_cids: List[str] = df["cid"].unique().tolist()
-        found_xcats: List[str] = df["xcat"].unique().tolist()
-        if isinstance(weights, str):
-            # one of the found_xcats must be the weights, and there should be only one
-            # more
-            assert (weights in found_xcats) and len(
-                (set(found_xcats) - {weights})
-            ) == 1, (
-                "When using a category-string as `weights`"
-                " it must be present in `df` and there must be only one other `xcat`."
-            )
-
-        ctr = 0
-        for cidx in cids.copy():  # copy to allow modification of `cids`
-            missing_xcats: List[str] = list(
-                set(found_xcats) - set(df.loc[df["cid"] == cidx, "xcat"].unique())
-            )
-            if missing_xcats:
-                cids.pop(ctr)
-                signs.pop(ctr)
-                if isinstance(weights, list):
-                    weights.pop(ctr)
-                # drop from df
-                df = df.loc[df["cid"] != cidx, :]
-                warnings.warn(
-                    f"`cid` {cidx} does not have complete `xcat` data for "
-                    f"{missing_xcats}."
-                    " It will be dropped from dataframe."
-                )
-            else:
-                ctr += 1
-
-        if len(cids) == 0:
-            raise ValueError(
-                "No `cids` have complete `xcat` data required for the calculation."
-            )
-
-        _xcat: str = list(
-            set(found_xcats) - {weights if isinstance(weights, str) else ""}
-        )[0]
+        df, cids, _xcat = _check_df_for_missing_cid_data(
+            df=df, weights=weights, signs=signs
+        )
 
         return linear_composite_cid_agg(
             df=df,

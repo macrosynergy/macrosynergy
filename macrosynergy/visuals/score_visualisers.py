@@ -7,73 +7,78 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 
-from macrosynergy.management.utils.df_utils import reduce_df, update_df
+from macrosynergy.management.utils.df_utils import (
+    reduce_df,
+    update_df,
+    _map_to_business_day_frequency,
+)
 from macrosynergy.panel import linear_composite, make_zn_scores
 
 
 class ScoreVisualisers:
     """
-    Class to visualize the scores and linear composite of specified categories and 
+    Class to visualize the scores and linear composite of specified categories and
     cross-sections.
-    
+
     Parameters
     :param <pd.DataFrame> df: A standardized JPMaQS with the following columns:
         'cid', 'xcat', 'real_date', and at least one metric from -
         'value', 'grading', 'eop_lag', or 'mop_lag'.
-    :param <List[str]> cids: A list of cross-section identifiers to select from the 
+    :param <List[str]> cids: A list of cross-section identifiers to select from the
         DataFrame. If None, all cross-sections in the frame are selected.
     :param <List[str]> xcats: A list of category tickers to select from the DataFrame.
         If None, all categories are selected.
-    :param <Dict[str, str]> xcat_labels: A dictionary mapping category tickers (keys) to 
+    :param <Dict[str, str]> xcat_labels: A dictionary mapping category tickers (keys) to
         their labels (values).
     :param <str> xcat_comp: The name of the composite category. Default is 'Composite'.
-    :param <List[float]> weights: A list of weights for the linear composite. Default is 
-        equal weights. The length of the list must be equal to the number of categories in 
+    :param <List[float]> weights: A list of weights for the linear composite. Default is
+        equal weights. The length of the list must be equal to the number of categories in
         xcats. If weights do not add up to 1, they are normalized.
     :param <bool> normalize_weights: If True (default), normalize weights if they do not
         add to one.
-    :param <List[float]> signs: A list of signs in order to use both negative and 
-        positive values of categories for the linear composite. 
+    :param <List[float]> signs: A list of signs in order to use both negative and
+        positive values of categories for the linear composite.
         This must have the same length as weights and xcats, and correspondes to the
         order of categories in xcats. Default is all positive.
-    :param <Dict[str, str]> blacklist: A dictionary of cross-sections (keys) and date 
-        ranges (values) that should be excluded. If one cross-section has several 
+    :param <Dict[str, str]> blacklist: A dictionary of cross-sections (keys) and date
+        ranges (values) that should be excluded. If one cross-section has several
         blacklist periods append numbers to the cross-section identifier.
-    :param <bool> complete_xcats: If True, all xcats must have data for the 
+    :param <bool> complete_xcats: If True, all xcats must have data for the
         composite to be calculated. Default is False, which means that the composite is
         calculate if at least one category has data.
     :param <bool> no_zn_scores: Per default, all categories are scored before they are
-        averaged into the composite. If True, the class does not calculate scores and 
+        averaged into the composite. If True, the class does not calculate scores and
         takes the average of the original categiries. This is useful if those are
         already score or of similar scale.
     :param <bool> rescore_composite: If True, the composite is re-scored to a normal
         unit scale. Default is False.
-    :param <bool> sequential: if True (default) score parameters (neutral level and mean 
-        absolute deviation) are estimated sequentially with concurrently available 
+    :param <bool> sequential: if True (default) score parameters (neutral level and mean
+        absolute deviation) are estimated sequentially with concurrently available
         information only.
-    :param <int> min_obs: the minimum number of observations required to calculate 
-        zn_scores. Default is 261. The parameter is only applicable if the “sequential” 
-        parameter is set to True. Otherwise the neutral level and the mean absolute 
+    :param <int> min_obs: the minimum number of observations required to calculate
+        zn_scores. Default is 261. The parameter is only applicable if the "sequential"
+        parameter is set to True. Otherwise the neutral level and the mean absolute
         deviation are both computed in-sample and will use the full sample.
-    :param <bool> iis: if True (default) zn-scores are also calculated for the initial 
-        sample period defined by min-obs on an in-sample basis to avoid losing history. 
+    :param <bool> iis: if True (default) zn-scores are also calculated for the initial
+        sample period defined by min-obs on an in-sample basis to avoid losing history.
         This is irrelevant if sequential is set to False.
     :param <str> neutral: The method to calculate the neutral score.
-        Default is ‘zero’. Alternatives are ‘mean’, ‘median’ or a number.
-    :param <float> pan_weight: The weight of panel (versus individual cross section) for 
-        calculating the z-score parameters, i.e. the neutral level and the mean absolute 
-        deviation. Default is 1, i.e. panel data are the basis for the parameters. 
+        Default is 'zero'. Alternatives are 'mean', 'median' or a number.
+    :param <float> pan_weight: The weight of panel (versus individual cross section) for
+        calculating the z-score parameters, i.e. the neutral level and the mean absolute
+        deviation. Default is 1, i.e. panel data are the basis for the parameters.
         Lowest possible value is 0, i.e. parameters are all specific to cross section.
-    :param <float> thresh: The threshold value beyond which scores are winsorized, 
-        i.e. contained at that threshold. The threshold is the maximum absolute score 
-        value that the function is allowed to produce. The minimum threshold is 1 mean 
+    :param <float> thresh: The threshold value beyond which scores are winsorized,
+        i.e. contained at that threshold. The threshold is the maximum absolute score
+        value that the function is allowed to produce. The minimum threshold is 1 mean
         absolute deviation.
-    :param <str> est_freq: the frequency at which mean absolute deviations or means are 
-        re-estimated. The options are daily, weekly, monthly & quarterly: “D”, “W”, “M”, 
-        “Q”. Default is monthly. Re-estimation is performed at period end.
-    :param <str> postfix: The string appended to category name for output; 
-        default is “_ZN”.
+    :param <str> est_freq: the frequency at which mean absolute deviations or means are
+        re-estimated. The options are daily, weekly, monthly & quarterly: "D", "W", "M",
+        "Q". Default is monthly. Re-estimation is performed at period end.
+    :param <str> postfix: The string appended to category name for output;
+        default is "_ZN".
     """
+
     def __init__(
         self,
         df: pd.DataFrame,
@@ -126,7 +131,6 @@ class ScoreVisualisers:
             if xcat not in self.df["xcat"].unique():
                 self.xcats.remove(xcat)
                 warnings.warn(f"{xcat} not in the DataFrame")
-
 
         composite_df = linear_composite(
             self.df,
@@ -188,11 +192,11 @@ class ScoreVisualisers:
         min_obs,
         est_freq,
         postfix,
-        no_zn_scores
+        no_zn_scores,
     ):
         if no_zn_scores:
             return reduce_df(df, xcats=xcats, cids=self.cids)
-        
+
         result_df = None
         for xcat in xcats:
             dfzm = make_zn_scores(
@@ -288,14 +292,14 @@ class ScoreVisualisers:
         View heatmap of the scores at the specified or latest available date.
 
         Parameters
-        :param <List[str]> cids: A list of cross-section identifiers to select from the 
+        :param <List[str]> cids: A list of cross-section identifiers to select from the
             DataFrame. If None, all cross-sections in the frame are selected.
         :param <List[str]> xcats: A list of category tickers to select from the DataFrame.
             If None, all categories are selected.
-        :param <bool> transpose: If True, transpose the snapshot so cross-section 
+        :param <bool> transpose: If True, transpose the snapshot so cross-section
             identifiers are on the x-axis and category tickers are on the y-axis.
         :param <str> date: ISO-8601 formatted date. The date of the snapshot. If None, the
-            latest date in the DataFrame is selected. Unless the date is today, then the 
+            latest date in the DataFrame is selected. Unless the date is today, then the
             latest date is set to the previous business day.
         :param <bool> annot: If True, annotate the heatmap.
         :param <str> title: The title of the heatmap.
@@ -315,7 +319,10 @@ class ScoreVisualisers:
         if date:
             date = pd.to_datetime(date)
         else:
-            if self.df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
+            if (
+                self.df["real_date"].max().normalize()
+                == pd.Timestamp.today().normalize()
+            ):
                 date = pd.Timestamp.today() - pd.tseries.offsets.BDay(1)
             else:
                 date = self.df["real_date"].max()
@@ -376,7 +383,7 @@ class ScoreVisualisers:
     def view_score_evolution(
         self,
         xcat: str,
-        freq: str = 'A',
+        freq: str = "A",
         cids: List[str] = None,
         include_latest_period: bool = True,
         include_latest_day: bool = True,
@@ -397,18 +404,18 @@ class ScoreVisualisers:
         Parameters
         :param <str> xcat: The category to view the evolution of.
         :param <str> freq: The frequency of the evolution. Must be 'Q', 'A', or 'BA'.
-        :param <List[str]> cids: A list of cross-section identifiers to select from the 
+        :param <List[str]> cids: A list of cross-section identifiers to select from the
             DataFrame. If None, all in the dataframe are selected.
         :param <bool> include_latest_period: If True, include the latest period in the
             evolution.
-        :param <bool> include_latest_day: If True, include the latest day in the 
-            evolution. If the latest date is today, then the latest date is set to the 
+        :param <bool> include_latest_day: If True, include the latest day in the
+            evolution. If the latest date is today, then the latest date is set to the
             previous business day.
         :param <str> date: ISO-8601 formatted date. The date of the snapshot. If None, the
             latest date in the DataFrame is selected.
         :param <str> start: ISO-8601 formatted date. Select data from this date onwards.
             If None, all dates are selected.
-        :param <bool> transpose: If True, transpose the evolution so cross-section 
+        :param <bool> transpose: If True, transpose the evolution so cross-section
             identifiers are on the x-axis and dates are on the y-axis.
         :param <bool> annot: If True, annotate the heatmap.
         :param <str> title: The title of the heatmap.
@@ -422,10 +429,11 @@ class ScoreVisualisers:
         cids = cids or self.cids
         xcat = xcat if xcat.endswith(self.postfix) else xcat + self.postfix
 
-        if freq not in ["Q", "A", "BA"]:
+        freq = "2AS" if freq == "BA" else _map_to_business_day_frequency(freq)
+
+        if not (freq in ["2AS", "BA", "A"] or freq.startswith("BQ")):
             raise ValueError("freq must be 'Q', 'A', or 'BA'")
 
-        freq = "2AS" if freq == "BA" else freq
         df = self.df[self.df["xcat"] == xcat]
         df = df[df["cid"].isin(cids)]
         df = df if start is None else df[df["real_date"] >= start]
@@ -439,11 +447,23 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled.iloc[:-1]
 
         if include_latest_day:
-            if self.df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
-                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = dfw.ffill().loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)]
-                print("Latest day: ", self.df["real_date"].max() - pd.tseries.offsets.BDay(1))
+            if (
+                self.df["real_date"].max().normalize()
+                == pd.Timestamp.today().normalize()
+            ):
+                dfw_resampled.loc[
+                    self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
+                ] = dfw.ffill().loc[
+                    self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
+                ]
+                print(
+                    "Latest day: ",
+                    self.df["real_date"].max() - pd.tseries.offsets.BDay(1),
+                )
             else:
-                dfw_resampled.loc[self.df["real_date"].max()] = dfw.ffill().loc[self.df["real_date"].max()]
+                dfw_resampled.loc[self.df["real_date"].max()] = dfw.ffill().loc[
+                    self.df["real_date"].max()
+                ]
                 print("Latest day: ", self.df["real_date"].max())
             if freq == "Q":
                 dfw_resampled.index = list(
@@ -511,7 +531,7 @@ class ScoreVisualisers:
         :param <bool> include_latest_period: If True, include the latest period in the
             evolution.
         :param <bool> include_latest_day: If True, include the latest day in the
-            evolution. If the latest date is today, then the latest date is set to the 
+            evolution. If the latest date is today, then the latest date is set to the
             previous business day.
         :param <str> start: ISO-8601 formatted date. Select data from this date onwards.
             If None, all dates are selected.
@@ -530,10 +550,10 @@ class ScoreVisualisers:
         if not isinstance(cid, str):
             raise TypeError("cid must be a string")
 
-        if freq not in ["Q", "A", "BA"]:
-            raise ValueError("freq must be 'Q', 'A', or 'BA'")
+        freq = "2AS" if freq == "BA" else _map_to_business_day_frequency(freq)
 
-        freq = "2AS" if freq == "BA" else freq
+        if not (freq in ["2AS", "BA", "A"] or freq.startswith("BQ")):
+            raise ValueError("freq must be 'Q', 'A', or 'BA'")
 
         xcat_labels = xcat_labels or self.xcat_labels
         xcats = self._apply_postfix(xcats)
@@ -551,11 +571,23 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled.iloc[:-1]
 
         if include_latest_day:
-            if self.df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
-                dfw_resampled.loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)] = dfw.ffill().loc[self.df["real_date"].max() - pd.tseries.offsets.BDay(1)]
-                print("Latest day: ", self.df["real_date"].max() - pd.tseries.offsets.BDay(1))
+            if (
+                self.df["real_date"].max().normalize()
+                == pd.Timestamp.today().normalize()
+            ):
+                dfw_resampled.loc[
+                    self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
+                ] = dfw.ffill().loc[
+                    self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
+                ]
+                print(
+                    "Latest day: ",
+                    self.df["real_date"].max() - pd.tseries.offsets.BDay(1),
+                )
             else:
-                dfw_resampled.loc[self.df["real_date"].max()] = dfw.ffill().loc[self.df["real_date"].max()]
+                dfw_resampled.loc[self.df["real_date"].max()] = dfw.ffill().loc[
+                    self.df["real_date"].max()
+                ]
                 print("Latest day: ", self.df["real_date"].max())
             if freq == "Q":
                 dfw_resampled.index = list(
@@ -690,7 +722,15 @@ if __name__ == "__main__":
             show_progress=True,
         )
 
-    sv = ScoreVisualisers(df, cids=cids, xcats=xcats, thresh=3, no_zn_scores=True, complete_xcats=False, rescore_composite=True)
+    sv = ScoreVisualisers(
+        df,
+        cids=cids,
+        xcats=xcats,
+        thresh=3,
+        no_zn_scores=True,
+        complete_xcats=False,
+        rescore_composite=True,
+    )
 
     sv.view_snapshot(
         cids=["USD"],
@@ -699,10 +739,7 @@ if __name__ == "__main__":
         figsize=(14, 12),
     )
     sv.view_cid_evolution(
-        cid="USD",
-        xcats=xcats + ["Composite"],
-        freq="A",
-        transpose=False
+        cid="USD", xcats=xcats + ["Composite"], freq="A", transpose=False
     )
     sv.view_score_evolution(
         xcat="GGIEDGDP_NSA",
@@ -711,5 +748,5 @@ if __name__ == "__main__":
         transpose=False,
         start="2010-01-01",
         title="AHKSJDA",
-        include_latest_day=True
+        include_latest_day=True,
     )

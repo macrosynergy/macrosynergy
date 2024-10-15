@@ -10,6 +10,7 @@ from typing import List, Tuple
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.utils import drop_nan_series
+from macrosynergy import PYTHON_3_8_OR_LATER
 import re
 import random
 
@@ -100,7 +101,7 @@ def panel_calculator(
     start: str = None,
     end: str = None,
     blacklist: dict = None,
-    external_func: dict = None
+    external_func: dict = None,
 ) -> pd.DataFrame:
     """
     Calculates new data panels through operations on existing panels.
@@ -202,6 +203,7 @@ def panel_calculator(
     for xcat in old_xcats_used:
         dfxx = dfx[dfx["xcat"] == xcat]
         dfw = dfxx.pivot(index="real_date", columns="cid", values="value")
+        dfw = _replace_zeros(df=dfw)
         exec(f"{xcat} = dfw")
 
     for single in singles_used:
@@ -215,6 +217,7 @@ def panel_calculator(
 
             dfw = pd.concat([dfx1] * len(cids), axis=1, ignore_index=True)
             dfw.columns = cids
+            dfw = _replace_zeros(df=dfw)
             exec(f"{single} = dfw")
 
     # F. Calculate the panels and collect.
@@ -229,6 +232,7 @@ def panel_calculator(
             df_out = df_add[cols]
         else:
             df_out = pd.concat([df_out, df_add[cols]], axis=0, ignore_index=True)
+        dfw_add = _replace_zeros(df=dfw_add)
         exec(f"{new_xcat} = dfw_add")
 
     if df_out.isna().any().any():
@@ -255,6 +259,25 @@ def _check_calcs(formulas: List[str]):
                     f"Invalid character found next to a capital letter or 'i' in string: {term}. "
                     + "Arithmetic operators and parentheses must be separated by spaces."
                 )
+
+
+def _replace_zeros(df: pd.DataFrame):
+    """
+    Replace zeros with NaNs in the dataframe.
+
+    :param <pd.DataFrame> df: dataframe to be cleaned.
+
+    :return <pd.DataFrame>: cleaned dataframe.
+    """
+    if not PYTHON_3_8_OR_LATER:
+        for col in df.columns:
+            df[col] = df[col].replace(pd.NA, np.nan)
+            df[col] = df[col].astype('float64')
+        return df
+    else:
+        return df
+
+    return df
 
 
 if __name__ == "__main__":
