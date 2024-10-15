@@ -48,6 +48,16 @@ def change_column_format(
     return df
 
 
+def qdf_to_categorical(
+    df: QuantamentalDataFrameBase,
+) -> QuantamentalDataFrameBase:
+    if not isinstance(df, QuantamentalDataFrameBase):
+        raise TypeError("`df` must be a pandas DataFrame.")
+
+    df = change_column_format(df, QuantamentalDataFrameBase._StrIndexCols, "category")
+    return df
+
+
 def check_is_categorical(df: QuantamentalDataFrameBase) -> bool:
     return all(
         df[col].dtype.name == "category"
@@ -450,7 +460,7 @@ def drop_nan_series(
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("Argument `df` must be a Quantamental DataFrame.")
 
-    if not column in df.columns:
+    if column not in df.columns:
         raise ValueError(f"Column {column} not present in DataFrame.")
 
     if not df[column].isna().any():
@@ -512,3 +522,80 @@ def qdf_from_timseries(
 
     df = df[[*QuantamentalDataFrameBase.IndexCols, metric]]
     return QuantamentalDataFrameBase(df)
+
+
+def create_empty_categorical_qdf(
+    cid: Optional[str] = None,
+    xcat: Optional[str] = None,
+    ticker: Optional[str] = None,
+    metrics: List[str] = ["value"],
+    date_range: Optional[pd.DatetimeIndex] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    categorical: bool = True,
+) -> QuantamentalDataFrameBase:
+
+    if not all(isinstance(m, str) for m in metrics):
+        raise TypeError("`metrics` must be a list of strings.")
+
+    if (date_range is None) and (start_date is None or end_date is None):
+        raise ValueError(
+            "Either `date_range` or `start_date` & `end_date` must be specified."
+        )
+
+    if date_range is None:
+        date_range = pd.date_range(start=start_date, end=end_date, freq="B")
+
+    if bool(cid) ^ bool(xcat):
+        raise ValueError("`cid` and `xcat` must be specified together.")
+
+    if not (bool(cid) ^ bool(ticker)):
+        raise ValueError("Either specify `cid` & `xcat` or `ticker` but not both.")
+
+    if ticker is not None:
+        cid, xcat = ticker.split("_", 1)
+
+    qdf = pd.DataFrame(columns=["real_date"], data=date_range)
+    qdf = _add_index_str_column(qdf, "cid", cid)
+    qdf = _add_index_str_column(qdf, "xcat", xcat)
+
+    for metric in metrics:
+        qdf[metric] = np.nan
+
+    return qdf
+
+
+def concat_qdfs(
+    qdf_list: List[QuantamentalDataFrameBase],
+) -> QuantamentalDataFrameBase:
+
+    if not isinstance(qdf_list, list):
+        raise TypeError("`qdfs_list` must be a list of QuantamentalDataFrames.")
+
+    if not all(isinstance(qdf, QuantamentalDataFrameBase) for qdf in qdf_list):
+        raise TypeError("All elements in `qdfs_list` must be QuantamentalDataFrames.")
+
+    if len(qdf_list) == 0:
+        raise ValueError("`qdfs_list` is empty.")
+
+    qdf_list = [qdf_to_categorical(qdf) for qdf in qdf_list]
+
+    comb_cids = pd.api.types.union_categoricals(
+        [qdf["cid"].unique() for qdf in qdf_list]
+    )
+    comb_xcats = pd.api.types.union_categoricals(
+        [qdf["xcat"].unique() for qdf in qdf_list]
+    )
+
+    for qdf in qdf_list:
+        qdf["cid"] = pd.Categorical(qdf["cid"], categories=comb_cids.categories)
+        qdf["xcat"] = pd.Categorical(qdf["xcat"], categories=comb_xcats.categories)
+
+    qdf_list = (
+        pd.concat(qdf_list, axis=0, join="outer")
+        .groupby(QuantamentalDataFrameBase.IndexCols, observed=True, as_index=False)
+        .last()
+        .sort_values(by=QuantamentalDataFrameBase.IndexCols)
+        .reset_index(drop=True)
+    )
+    return qdf_list

@@ -19,6 +19,8 @@ from .methods import (
     drop_nan_series,
     rename_xcats,
     qdf_from_timseries,
+    create_empty_categorical_qdf,
+    concat_qdfs,
 )
 from .base import QuantamentalDataFrameBase
 
@@ -52,7 +54,9 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             if _initialized_as_categorical is None:
                 _initialized_as_categorical = df.InitializedAsCategorical
         else:
-            df = df[get_col_sort_order(df)]
+            if df.columns.tolist() != get_col_sort_order(df):
+                df = df[get_col_sort_order(df)]
+
         super().__init__(df)
         _check_cat = check_is_categorical(self)
         if _initialized_as_categorical is None:
@@ -386,29 +390,8 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         if not qdf_list:
             raise ValueError("Input list is empty.")
 
-        if not categorical:
-            return QuantamentalDataFrame(
-                pd.concat(qdf_list, ignore_index=True),
-                categorical=False,
-            )
-
-        qdf_list = [QuantamentalDataFrame(qdf) for qdf in qdf_list]
-        # use pd.api.types.union_categoricals to combine the categories of all the dfs into one
-        comb_cids = pd.api.types.union_categoricals(
-            [qdf["cid"].unique() for qdf in qdf_list]
-        )
-        comb_xcats = pd.api.types.union_categoricals(
-            [qdf["xcat"].unique() for qdf in qdf_list]
-        )
-
-        for qdf in qdf_list:
-            qdf["cid"] = pd.Categorical(qdf["cid"], categories=comb_cids.categories)
-            qdf["xcat"] = pd.Categorical(qdf["xcat"], categories=comb_xcats.categories)
-
-        return QuantamentalDataFrame(
-            pd.concat(qdf_list, ignore_index=True),
-            categorical=True,
-        )
+        qdf_list = concat_qdfs(qdf_list)
+        return QuantamentalDataFrame(qdf_list, categorical=categorical)
 
     @classmethod
     def from_wide(
@@ -442,8 +425,36 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             cid, xcat = ticker.split("_", 1)
             qdf = df[[tkr]].reset_index().rename(columns={tkr: value_column})
             df = df.drop(columns=[tkr])
-            qdf = QuantamentalDataFrame.from_long_df(df=qdf, cid=cid, xcat=xcat)
+            qdf = QuantamentalDataFrame.from_long_df(
+                df=qdf, cid=cid, xcat=xcat, value_column=value_column
+            )
             qdfs_list.append(qdf)
 
         qdfs_list = QuantamentalDataFrame.from_qdf_list(qdfs_list)
         return qdfs_list
+
+    @classmethod
+    def create_empty_df(
+        cls,
+        cid: Optional[str] = None,
+        xcat: Optional[str] = None,
+        ticker: Optional[str] = None,
+        metrics: List[str] = ["value"],
+        date_range: Optional[pd.DatetimeIndex] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        categorical: bool = True,
+    ) -> "QuantamentalDataFrame":
+        """
+        Create an empty QuantamentalDataFrame.
+        """
+        qdf = create_empty_categorical_qdf(
+            cid=cid,
+            xcat=xcat,
+            ticker=ticker,
+            metrics=metrics,
+            date_range=date_range,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return QuantamentalDataFrame(qdf, categorical=categorical)
