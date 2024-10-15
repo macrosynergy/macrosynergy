@@ -135,7 +135,6 @@ class TestRequestWrapper(unittest.TestCase):
             with self.assertRaises(InvalidResponseError):
                 validate_response(response, user_id=user_id)
 
-
     def test_request_wrapper(self):
         warnings.filterwarnings("ignore", category=UserWarning, module="logger")
         curr_logger_level: int = logging.getLogger().getEffectiveLevel()
@@ -666,8 +665,10 @@ class TestDataQueryInterface(unittest.TestCase):
         for delay_param in [0.0, 0.1, 0.15]:
             bad_args: Dict[str, Any] = good_args.copy()
             bad_args["delay_param"] = delay_param
-            with self.assertWarns(RuntimeWarning):
+            with warnings.catch_warnings(record=True) as w:
                 validate_download_args(**bad_args)
+                self.assertEqual(len(w), 1)
+                self.assertTrue(issubclass(w[-1].category, RuntimeWarning))
 
         for date_arg in ["start_date", "end_date"]:
             bad_args: Dict[str, Any] = good_args.copy()

@@ -14,6 +14,7 @@ class TestAll(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         # Prevents plots from being displayed during tests.
+        plt.close("all")
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
         self.mock_show = patch("matplotlib.pyplot.show").start()

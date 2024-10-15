@@ -1,4 +1,5 @@
 """Convergence of rows for max weight"""
+
 import numpy as np
 
 

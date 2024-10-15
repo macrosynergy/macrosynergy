@@ -20,8 +20,9 @@ from macrosynergy.management.utils import (
 )
 import macrosynergy.visuals as msv
 
-#Ensure warnings are printed
+# Ensure warnings are printed
 warnings.simplefilter("always")
+
 
 class SignalReturnRelations:
     """
@@ -33,7 +34,9 @@ class SignalReturnRelations:
     :param <str, List[str]> sigs: list of signal categories to be considered for which
         detailed relational statistics can be calculated.
     :param <bool, List[bool]> sig_neg: if set to True puts the signal in negative terms
-        for all analysis. Default is False.
+        for all analysis. If more than one signal is tested, `sig_neg` must be a
+        same-order list of the same length as the signals, containing a True for each
+        signal that needs to be put in negative terms. Default is False.
     :param <bool> cosp: If True the comparative statistics are calculated only for the
         "communal sample periods", i.e. periods and cross-sections that have values
         for all compared signals. Default is False.
@@ -97,8 +100,6 @@ class SignalReturnRelations:
             else:
                 if not all(isinstance(cid, str) for cid in cids):
                     raise TypeError(f"List of strings expected for cids.")
-            
-            
 
         required_columns = ["cid", "xcat", "real_date", "value"]
 
@@ -130,7 +131,9 @@ class SignalReturnRelations:
                         seen.add(f)
                         self.freqs.append(f)
                     else:
-                        warnings.warn(f"Frequency {f} is repeated, dropping repeated frequency.")
+                        warnings.warn(
+                            f"Frequency {f} is repeated, dropping repeated frequency."
+                        )
         else:
             if not freqs in self.dic_freq.keys():
                 raise ValueError(freq_error)
@@ -138,7 +141,9 @@ class SignalReturnRelations:
                 self.freqs = [freqs]
 
         if not isinstance(ms_panel_test, bool):
-            raise TypeError(f"<bool> object expected for ms_panel_test and not {type(ms_panel_test)}.")
+            raise TypeError(
+                f"<bool> object expected for ms_panel_test and not {type(ms_panel_test)}."
+            )
 
         self.ms_panel_test = ms_panel_test
 
@@ -224,7 +229,7 @@ class SignalReturnRelations:
 
         if len(self.signs) != len(self.sigs):
             raise ValueError("Signs must have a length equal to signals")
-        
+
         self.df = reduce_df(
             df,
             xcats=self.xcats,
@@ -237,7 +242,9 @@ class SignalReturnRelations:
         for sig in self.sigs:
             if self.signs[self.sigs.index(sig)]:
                 self.df.loc[self.df["xcat"] == sig, "value"] *= -1
-                self.df.loc[self.df["xcat"] == sig, "xcat"] = self.df.loc[self.df["xcat"] == sig, "xcat"] + "_NEG"
+                self.df.loc[self.df["xcat"] == sig, "xcat"] = (
+                    self.df.loc[self.df["xcat"] == sig, "xcat"] + "_NEG"
+                )
                 self.sigs[self.sigs.index(sig)] = f"{sig}_NEG"
 
         self.original_df = self.df.copy()
@@ -310,8 +317,8 @@ class SignalReturnRelations:
         if sigs is None:
             sigs = self.sigs
         elif isinstance(sigs, str):
-                if sigs not in self.sigs and sigs + "_NEG" in self.sigs:
-                    sigs = sigs + "_NEG"
+            if sigs not in self.sigs and sigs + "_NEG" in self.sigs:
+                sigs = sigs + "_NEG"
         if isinstance(sigs, list):
             for sig in sigs:
                 if sig not in self.sigs and sig + "_NEG" in self.sigs:
@@ -969,39 +976,46 @@ class SignalReturnRelations:
         warnings.warn(
             "summary_table() has been deprecated will be removed in a subsequent "
             "version, please now use single_relation_table(table_type='summary').",
-            FutureWarning
+            FutureWarning,
         )
         if cross_section and years:
             raise ValueError("Both cross_section and years cannot be True")
         if not (cross_section and years):
             return self.single_relation_table(table_type="summary")
         else:
-            return self.single_relation_table(table_type="years" if years else "cross_section")
-    
+            return self.single_relation_table(
+                table_type="years" if years else "cross_section"
+            )
+
     def signals_table(self, sigs: List[str] = None):
         warnings.warn(
             "signals_table() has been deprecated will be removed in a subsequent "
             "version, please now use multiple_relations_table()",
-            FutureWarning
+            FutureWarning,
         )
         if sigs is None:
             sigs = self.sigs
-        return self.multiple_relations_table(rets=self.rets[0], xcats=sigs, freqs=self.freqs[0], agg_sigs=self.agg_sigs[0])
-    
+        return self.multiple_relations_table(
+            rets=self.rets[0],
+            xcats=sigs,
+            freqs=self.freqs[0],
+            agg_sigs=self.agg_sigs[0],
+        )
+
     def cross_section_table(self):
         warnings.warn(
             "cross_section_table() has been deprecated will be removed in a subsequent "
-            "version, please now use " 
+            "version, please now use "
             " single_relation_table(table_type='cross_section_table')",
-            FutureWarning
+            FutureWarning,
         )
         return self.single_relation_table(table_type="cross_section")
-    
+
     def yearly_table(self):
         warnings.warn(
             "yearly_table() has been deprecated will be removed in a subsequent "
             "version, please now use single_relation_table(table_type='years')",
-            FutureWarning
+            FutureWarning,
         )
         return self.single_relation_table(table_type="years")
 
@@ -1025,7 +1039,7 @@ class SignalReturnRelations:
             If not specified uses the freq stored in the class.
         :param <str> agg_sigs: aggregation method applied to the signal values in
             down-sampling.
-        :param <str> table_type: type of table to be returned. Either "summary", "years", 
+        :param <str> table_type: type of table to be returned. Either "summary", "years",
             "cross_section".
         """
         self.df = self.original_df
@@ -1044,7 +1058,7 @@ class SignalReturnRelations:
             xcat = [sig, ret]
         elif not isinstance(xcat, str):
             raise TypeError("xcat must be a string")
-        else: # If xcat is a string
+        else:  # If xcat is a string
             if xcat not in self.sigs and xcat + "_NEG" in self.sigs:
                 xcat = xcat + "_NEG"
             sig = xcat
@@ -1095,7 +1109,9 @@ class SignalReturnRelations:
                 "Positive ratio",
             ]
         else:
-            df_result = self.__output_table__(cs_type=cs_type, ret=ret, sig=sig, srt=table_type is None)
+            df_result = self.__output_table__(
+                cs_type=cs_type, ret=ret, sig=sig, srt=table_type is None
+            )
 
         self.df = self.original_df
         index = f"{freq}: {sig}/{agg_sigs} => {ret}"
@@ -1103,11 +1119,15 @@ class SignalReturnRelations:
         df_result.rename(index={"Panel": index}, inplace=True)
 
         return df_result.round(5)
-    
-    def reindex_multindex_df(self, df: pd.DataFrame, desired_order: List[str], var_type: str):
-        df['Signal_Order'] = pd.Categorical(df.index.get_level_values(var_type), categories=desired_order, ordered=True)
-        df_sorted = df.sort_values('Signal_Order')
-        df_sorted.drop('Signal_Order', axis=1, inplace=True)
+
+    def reindex_multindex_df(
+        self, df: pd.DataFrame, desired_order: List[str], var_type: str
+    ):
+        df["Signal_Order"] = pd.Categorical(
+            df.index.get_level_values(var_type), categories=desired_order, ordered=True
+        )
+        df_sorted = df.sort_values("Signal_Order")
+        df_sorted.drop("Signal_Order", axis=1, inplace=True)
         return df_sorted
 
     def multiple_relations_table(
@@ -1176,24 +1196,31 @@ class SignalReturnRelations:
         for agg_sigs_elem in agg_sigs:
             if not agg_sigs_elem in self.agg_sigs:
                 raise ValueError(f"{agg_sigs_elem} is not a valid aggregation method")
-            
+
         xcats = [x for x in xcats if x in self.sigs]
 
-        multiindex = pd.MultiIndex.from_tuples([
-            (ret, xcat, freq, agg_sig)
-            for freq in freqs
-            for agg_sig in agg_sigs
-            for ret in rets
-            for xcat in xcats
-        ], names=["Return", "Signal", "Frequency", "Aggregation"])
+        multiindex = pd.MultiIndex.from_tuples(
+            [
+                (ret, xcat, freq, agg_sig)
+                for freq in freqs
+                for agg_sig in agg_sigs
+                for ret in rets
+                for xcat in xcats
+            ],
+            names=["Return", "Signal", "Frequency", "Aggregation"],
+        )
 
         df_rows = []
         for freq in freqs:
             for agg_sig in agg_sigs:
                 for ret in rets:
-                    self.manipulate_df(xcat=xcats+[ret], freq=freq, agg_sig=agg_sig)
+                    self.manipulate_df(xcat=xcats + [ret], freq=freq, agg_sig=agg_sig)
                     for xcat in xcats:
-                        df_rows.append(self.__output_table__(cs_type="cids", ret=ret, sig=xcat, srt=True))
+                        df_rows.append(
+                            self.__output_table__(
+                                cs_type="cids", ret=ret, sig=xcat, srt=True
+                            )
+                        )
 
         df_result = pd.concat(df_rows, axis=0)
 
@@ -1201,11 +1228,15 @@ class SignalReturnRelations:
 
         if signal_name_dict is not None:
             df_result.rename(index=signal_name_dict, inplace=True)
-            df_result = self.reindex_multindex_df(df_result, signal_name_dict.values(), "Signal")
+            df_result = self.reindex_multindex_df(
+                df_result, signal_name_dict.values(), "Signal"
+            )
 
         if return_name_dict is not None:
             df_result.rename(index=return_name_dict, inplace=True)
-            df_result = self.reindex_multindex_df(df_result, return_name_dict.values(), "Return")
+            df_result = self.reindex_multindex_df(
+                df_result, return_name_dict.values(), "Return"
+            )
 
         self.df = self.original_df
 
@@ -1234,9 +1265,9 @@ class SignalReturnRelations:
         Creates a table which shows the specified statistic for each row and
         column specified as arguments:
 
-        :param stat: type of statistic to be displayed (this can be any of
+        :param <str> stat: type of statistic to be displayed (this can be any of
             the column names of summary_table).
-        :param type: type of the statistic displayed. This can be based on
+        :param <str> type: type of the statistic displayed. This can be based on
             the overall panel ("panel", default), an
             average of annual panels (mean_years), an average of cross-sectional
             relations ("mean_cids"), the positive ratio across years("pr_years"),
@@ -1268,7 +1299,7 @@ class SignalReturnRelations:
         :param <int> round: number of decimals to round the values to on the
             heatmap's annotations.
 
-        :return: DataFrame with the specified statistic for each row and column
+        :return <pd.DataFrame>: DataFrame with the specified statistic for each row and column
         """
         self.df = self.original_df.copy()
 
@@ -1304,6 +1335,8 @@ class SignalReturnRelations:
         df_result = pd.DataFrame(
             columns=df_column_names, index=df_row_names, dtype=np.float64
         )
+        # sort index to prevent performance degradation: PerformanceWarning
+        df_result.sort_index(inplace=True)
 
         loop_tuples: List[Tuple[str, str, str, str]] = [
             (ret, sig, freq, agg_sig)
@@ -1313,7 +1346,7 @@ class SignalReturnRelations:
             for agg_sig in self.agg_sigs
         ]
 
-        # Reorder tuples 
+        # Reorder tuples
 
         for ret, sig, freq, agg_sig in loop_tuples:
             # Prepare xcat and manipulate DataFrame
@@ -1323,7 +1356,9 @@ class SignalReturnRelations:
 
             row = self.get_rowcol(hash, rows)
             column = self.get_rowcol(hash, columns)
-            df_result.loc[row, column] = self.calculate_single_stat(stat, ret, sig, type)
+            df_result.loc[row, column] = self.calculate_single_stat(
+                stat, ret, sig, type
+            )
 
             # Reset self.df and sig to original values
             self.df = self.original_df
@@ -1332,16 +1367,20 @@ class SignalReturnRelations:
             # Reorder the index according to the signal_name_dict
             if "xcat" in rows:
                 df_result.rename(index=signal_name_dict, inplace=True)
-                df_result = self.reindex_multindex_df(df_result, signal_name_dict.values(), "Signal")
+                df_result = self.reindex_multindex_df(
+                    df_result, signal_name_dict.values(), "Signal"
+                )
             else:
                 df_result.rename(columns=signal_name_dict, inplace=True)
                 df_result = df_result[signal_name_dict.values()]
-        
+
         if return_name_dict is not None:
             # Reorder the index according to the return_name_dict
             if "ret" in rows:
                 df_result.rename(index=return_name_dict, inplace=True)
-                df_result = self.reindex_multindex_df(df_result, return_name_dict.values(), "Return")
+                df_result = self.reindex_multindex_df(
+                    df_result, return_name_dict.values(), "Return"
+                )
             else:
                 df_result.rename(columns=return_name_dict, inplace=True)
                 df_result = df_result[return_name_dict.values()]
@@ -1354,8 +1393,6 @@ class SignalReturnRelations:
                 min_color = df_result.values.min()
             if max_color is None:
                 max_color = df_result.values.max()
-
-            
 
             msv.view_table(
                 df_result,
@@ -1384,15 +1421,46 @@ class SignalReturnRelations:
         :param <List[str]> columns: list of strings specifying which of the categories
             are included in the columns of the dataframe.
         """
-        label_dict = {"xcat": "Signal", "ret": "Return", "freq": "Frequency", "agg_sigs": "Aggregation"}
+        label_dict = {
+            "xcat": "Signal",
+            "ret": "Return",
+            "freq": "Frequency",
+            "agg_sigs": "Aggregation",
+        }
         if len(rows) == 2:
-            rows_names = pd.MultiIndex.from_tuples([(a, b) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]], names=[label_dict[rows[0]], label_dict[rows[1]]])
-            columns_names = pd.MultiIndex.from_tuples([(a, b) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]]], names=[label_dict[columns[0]], label_dict[columns[1]]])
+            rows_names = pd.MultiIndex.from_tuples(
+                [(a, b) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]],
+                names=[label_dict[rows[0]], label_dict[rows[1]]],
+            )
+            columns_names = pd.MultiIndex.from_tuples(
+                [(a, b) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]]],
+                names=[label_dict[columns[0]], label_dict[columns[1]]],
+            )
         elif len(rows) == 1:
             rows_names = rows_dict[rows[0]]
-            columns_names = pd.MultiIndex.from_tuples([(a, b, c) for a in rows_dict[columns[0]] for b in rows_dict[columns[1]] for c in rows_dict[columns[2]]], names=[label_dict[columns[0]], label_dict[columns[1]], label_dict[columns[2]]])
+            columns_names = pd.MultiIndex.from_tuples(
+                [
+                    (a, b, c)
+                    for a in rows_dict[columns[0]]
+                    for b in rows_dict[columns[1]]
+                    for c in rows_dict[columns[2]]
+                ],
+                names=[
+                    label_dict[columns[0]],
+                    label_dict[columns[1]],
+                    label_dict[columns[2]],
+                ],
+            )
         elif len(columns) == 1:
-            rows_names = pd.MultiIndex.from_tuples([(a, b, c) for a in rows_dict[rows[0]] for b in rows_dict[rows[1]] for c in rows_dict[rows[2]]], names=[label_dict[rows[0]], label_dict[rows[1]], label_dict[rows[2]]])
+            rows_names = pd.MultiIndex.from_tuples(
+                [
+                    (a, b, c)
+                    for a in rows_dict[rows[0]]
+                    for b in rows_dict[rows[1]]
+                    for c in rows_dict[rows[2]]
+                ],
+                names=[label_dict[rows[0]], label_dict[rows[1]], label_dict[rows[2]]],
+            )
             columns_names = rows_dict[columns[0]]
 
         return rows_names, columns_names
@@ -1412,9 +1480,16 @@ class SignalReturnRelations:
         if len(rowcols) == 1:
             result = hash.split("/")[idx.index(rowcols[0])]
         if len(rowcols) == 2:
-            result = (hash.split("/")[idx.index(rowcols[0])], hash.split("/")[idx.index(rowcols[1])])
+            result = (
+                hash.split("/")[idx.index(rowcols[0])],
+                hash.split("/")[idx.index(rowcols[1])],
+            )
         if len(rowcols) == 3:
-            result = (hash.split("/")[idx.index(rowcols[0])], hash.split("/")[idx.index(rowcols[1])], hash.split("/")[idx.index(rowcols[2])])
+            result = (
+                hash.split("/")[idx.index(rowcols[0])],
+                hash.split("/")[idx.index(rowcols[1])],
+                hash.split("/")[idx.index(rowcols[2])],
+            )
 
         return result
 
@@ -1462,15 +1537,15 @@ if __name__ == "__main__":
     from statsmodels.tsa.stattools import grangercausalitytests
 
     def granger(x, y):
-        return grangercausalitytests(np.array([x, y]).T, maxlag=3, addconst=True, verbose=False)[1][0][
-            "ssr_ftest"
-        ][0]
+        return grangercausalitytests(
+            np.array([x, y]).T, maxlag=3, addconst=True, verbose=False
+        )[1][0]["ssr_ftest"][0]
 
     def granger_pval(x, y):
-        return grangercausalitytests(np.array([x, y]).T, maxlag=3, addconst=True, verbose=False)[1][0][
-            "ssr_ftest"
-        ][1]
-    
+        return grangercausalitytests(
+            np.array([x, y]).T, maxlag=3, addconst=True, verbose=False
+        )[1][0]["ssr_ftest"][1]
+
     sigs = ["CRY"]
     # Additional signals.
     srn = SignalReturnRelations(
@@ -1506,7 +1581,7 @@ if __name__ == "__main__":
 
     df_sigs = srn.multiple_relations_table()
     print(df_sigs)
-    
+
     dfsum = srn.single_relation_table(table_type="cross_section")
     print(dfsum)
 
@@ -1530,7 +1605,12 @@ if __name__ == "__main__":
 
     srt = sr.single_relation_table()
     mrt = sr.multiple_relations_table()
-    sst = sr.single_statistic_table(stat="accuracy", type="mean_years", rows=["ret", "agg_sigs"], columns=["xcat", "freq"])
+    sst = sr.single_statistic_table(
+        stat="accuracy",
+        type="mean_years",
+        rows=["ret", "agg_sigs"],
+        columns=["xcat", "freq"],
+    )
 
     print(srt)
     print(mrt)
@@ -1552,7 +1632,9 @@ if __name__ == "__main__":
     sr.accuracy_bars(sigs=["CRY", "INFL_NEG"], type="signals", title="Accuracy")
     sr.correlation_bars(sigs=["CRY", "INFL_NEG"], type="signals", title="Correlation")
 
-    srt = sr.single_relation_table(ret="XRH", xcat="INFL_NEG", freq="Q", agg_sigs="last")
+    srt = sr.single_relation_table(
+        ret="XRH", xcat="INFL_NEG", freq="Q", agg_sigs="last"
+    )
     mrt = sr.multiple_relations_table()
     sst = sr.single_statistic_table(stat="pearson", show_heatmap=True)
 

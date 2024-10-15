@@ -2,26 +2,155 @@
 Collection of custom scikit-learn transformer classes.
 """
 
+import datetime
+import warnings
+from typing import Any, Optional, Union
+
 import numpy as np
 import pandas as pd
-
-import datetime
-
-import scipy.stats as stats
-
-from sklearn.linear_model import Lasso, ElasticNet
-from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
-from sklearn.feature_selection import SelectorMixin
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.exceptions import NotFittedError
+from sklearn.feature_selection import SelectorMixin
+from sklearn.linear_model import ElasticNet, Lars, Lasso
 
-from statsmodels.tools.tools import add_constant
+from macrosynergy.compat import OneToOneFeatureMixin
 
-from linearmodels.panel import RandomEffects
+from macrosynergy.learning.random_effects import RandomEffects
 
-from typing import Union, Any, Optional
 
-import warnings
+class LarsSelector(BaseEstimator, SelectorMixin):
+    def __init__(self, fit_intercept = False, n_factors = 10):
+        """
+        Statistical feature selection using LARS.  
 
+        :param <bool> fit_intercept: Whether to fit an intercept term in the LARS model.
+        :param <int> n_factors: Number of factors to select. 
+        """
+        # Checks 
+        if not isinstance(fit_intercept, bool):
+            raise TypeError("'fit_intercept' must be a boolean.")
+        if not isinstance(n_factors, int):
+            raise TypeError("'n_factors' must be an integer.")
+        if n_factors <= 0:
+            raise ValueError("'n_factors' must be a positive integer.")
+        
+        # Attributes
+        self.fit_intercept = fit_intercept
+        self.n_factors = n_factors
+
+    def fit(self, X, y):
+        """
+        Fit method for LARS to obtain the selected features.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.Series,pd.DataFrame]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+        """
+        # Checks 
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError(
+                "Input feature matrix for the LARS selector must be a pandas dataframe. ",
+                "If used as part of an sklearn pipeline, ensure that previous steps ",
+                "return a pandas dataframe."
+            )
+        if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
+            raise TypeError(
+                "Target vector for the LARS selector must be a pandas series or dataframe. ",
+                "If used as part of an sklearn pipeline, ensure that previous steps ",
+                "return a pandas series or dataframe."
+            )
+        if isinstance(y, pd.DataFrame):
+            if y.shape[1] != 1:
+                raise ValueError(
+                    "The target dataframe must have only one column. If used as part of ",
+                    "an sklearn pipeline, ensure that previous steps return a pandas ",
+                    "series or dataframe."
+                )
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of y must be datetime.date.")
+        if not X.index.equals(y.index):
+            raise ValueError(
+                "The indices of the input dataframe X and the output dataframe y don't "
+                "match."
+            )
+        
+        # Store the names of the features and dataframe dimensions
+        self.feature_names_in_ = X.columns
+        self.n = len(X)
+        self.p = X.shape[1]
+
+        # Standardise the features for fair comparison
+        X = ((X - X.mean()) / X.std()).copy()
+
+        # Fit the model
+        lars = Lars(fit_intercept = self.fit_intercept, n_nonzero_coefs = self.n_factors)
+        lars.fit(X.values, y.values.reshape(-1, 1))
+        coefs = lars.coef_
+
+        self.mask = [True if coef != 0 else False for coef in coefs]
+
+        return self
+    
+    def transform(self, X):
+        """
+        Transform method to return only the selected features of the dataframe.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+
+        :return <pd.DataFrame>: Pandas dataframe of input features selected based
+            on LARS' feature selection capabilities.
+        """
+        # checks
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError(
+                "Input feature matrix for the LARS selector must be a pandas dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas dataframe."
+            )
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not X.shape[-1] == self.p:
+            raise ValueError(
+                "The number of columns of the dataframe to be transformed, X, doesn't "
+                "match the number of columns of the training dataframe."
+            )
+        if sum(self.mask) == 0:
+            # Then no features were selected
+            # Then at the given time, no trading decisions can be made based on these features
+            warnings.warn(
+                "No features were selected. At the given time, no trading decisions can be made based on these features.",
+                RuntimeWarning,
+            )
+            return X.iloc[:, :0]
+        
+        return X.loc[:, self.mask]
+    
+    def _get_support_mask(self):
+        """
+        Private method to return a boolean mask of the features selected for the Pandas
+        dataframe.
+        """
+        return self.mask
+    
+    def get_feature_names_out(self):
+        """
+        Method to mask feature names according to selected features.
+        """
+        if self.feature_names_in_ is None:
+            raise NotFittedError(
+                "The LarsSelector selector has not been fitted. Please fit the selector ",
+                "before calling get_feature_names_out()."
+            )
+
+        return self.feature_names_in_[self.get_support(indices=False)]
 
 class ENetSelector(BaseEstimator, SelectorMixin):
     def __init__(
@@ -432,27 +561,16 @@ class MapSelector(BaseEstimator, SelectorMixin):
         self.ftrs = []
         self.feature_names_in_ = np.array(X.columns)
 
-        # Convert cross-sections to numeric codes for compatibility with RandomEffects
-        unique_xss = sorted(X.index.get_level_values(0).unique())
-        xs_codes = dict(zip(unique_xss, range(1, len(unique_xss) + 1)))
-
-        X = X.rename(xs_codes, level=0, inplace=False).copy()
-        y = y.rename(xs_codes, level=0, inplace=False).copy()
-
         # For each column, obtain Wald test p-value
         # Keep significant features
         for col in self.feature_names_in_:
             ftr = X[col]
-            ftr = add_constant(ftr)
-            # Swap levels so that random effects are placed on each time period,
-            # as opposed to the cross-section
-            re = RandomEffects(y.swaplevel(), ftr.swaplevel()).fit()
-            est = re.params[col]
-            zstat = est / re.std_errors[col]
-            pval = 2 * (1 - stats.norm.cdf(zstat))
+
+            re = RandomEffects(fit_intercept=True).fit(ftr, y)
+            pval = re.pvals[col]
             if pval < self.threshold:
                 if self.positive:
-                    if est > 0:
+                    if re.params[col] > 0:
                         self.ftrs.append(col)
                 else:
                     self.ftrs.append(col)
@@ -910,8 +1028,8 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
 
 
 if __name__ == "__main__":
-    from macrosynergy.management import make_qdf
     import macrosynergy.management as msm
+    from macrosynergy.management import make_qdf
 
     np.random.seed(1)
 

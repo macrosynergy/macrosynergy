@@ -32,10 +32,14 @@ def view_correlation(
     lags_secondary: Optional[dict] = None,
     title: str = None,
     size: Tuple[float] = (14, 8),
+    title_fontsize: int = 20,
+    fontsize: int = 14,
     max_color: float = None,
     show: bool = True,
     xcat_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     xcat_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    cbar_shrink: Union[float, int] = 0.5,
+    cbar_fontsize: int = 12,
     **kwargs: Any,
 ):
     """
@@ -80,15 +84,21 @@ def view_correlation(
     :param <str> title: chart heading. If none is given, a default title is used.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
         is (14, 8).
+    :param <int> title_fontsize: font size of the title. Default is 20.
+    :param <int> fontsize: font size of the title. Default is 14.
     :param <float> max_color: maximum values of positive/negative correlation
         coefficients for color scale. Default is none. If a value is given it applies
         symmetrically to positive and negative values.
-    :param <bool> show: if True the figure will be displayed. Default is True.
-    :param xcat_labels: optional list or dictionary of labels for xcats.
-        A list should be in the same order as xcats, a dictionary should map
-        from each xcat to its label.
-    :param xcat_secondary_labels: optional list or dictionary of labels for xcats_secondary.
-    :param **kwargs: Arbitrary keyword arguments that are passed to seaborn.heatmap.
+    :param <bool> show: if True the figure will be displayed, else the axis object is returned.
+        Default is True.
+    :param <Optional[Union[List[str], Dict[str, str]]]> xcat_labels: optional list or 
+        dictionary of labels for xcats. A list should be in the same order as xcats, a 
+        dictionary should map from each xcat to its label.
+    :param <Optional[Union[List[str], Dict[str, str]]]> xcat_secondary_labels: optional 
+        list or dictionary of labels for xcats_secondary.
+    :param <Union[float, int]> cbar_shrink: shrinkage factor of the color bar. Default is 0.5.
+    :param <int> cbar_fontsize: font size of the color bar. Default is 12.
+    :param <Dict> **kwargs: Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
     N.B:. The function displays the heatmap of a correlation matrix across categories or
     cross-sections (depending on which parameter has received multiple elements).
@@ -104,6 +114,13 @@ def view_correlation(
 
     if max_color is not None:
         assert isinstance(max_color, float), "Parameter max_color must be type <float>."
+
+    if not isinstance(cbar_shrink, (int, float)):
+        raise ValueError(
+            "The parameter `cbar_shrink` must be of type <int> or <float>."
+        )
+    if not isinstance(cbar_fontsize, int):
+        raise ValueError("The parameter `cbar_fontsize` must be of type <int>.")
 
     min_color = None if max_color is None else -max_color
     mask = None
@@ -235,7 +252,6 @@ def view_correlation(
 
     ax: plt.Axes
     fig, ax = plt.subplots(figsize=size)
-
     with sns.axes_style("white"):
         with sns.axes_style("ticks"):
             sns.heatmap(
@@ -247,23 +263,35 @@ def view_correlation(
                 vmax=max_color,
                 square=False,
                 linewidths=0.5,
-                cbar_kws={"shrink": 0.5},
+                cbar_kws={"shrink": cbar_shrink},
+                xticklabels=True,
+                yticklabels=True,
                 **kwargs,
             )
 
-    ax.set(xlabel=xlabel, ylabel=ylabel)
-    ax.set_title(title, fontsize=14)
+            cbar = ax.collections[0].colorbar
+            cbar.ax.tick_params(labelsize=cbar_fontsize)
 
+    ax.set(xlabel=xlabel, ylabel=ylabel)
+    ax.set_title(title, fontsize=title_fontsize)
+
+    ax.tick_params(axis="x", labelsize=fontsize)
+    ax.tick_params(axis="y", labelsize=fontsize)
+
+    plt.tight_layout()
     if show:
         plt.show()
+        return
+    else:
+        return ax
 
 
 def _parse_xcat_labels(xcats: List[str], xcat_labels: Union[List[str], Dict[str, str]]):
     """
     Parse xcat labels for correlation plot.
 
-    :param xcats: extended categories to be correlated.
-    :param xcat_labels: optional list or dictionary of
+    :param <List[str]> xcats: extended categories to be correlated.
+    :param <Union[List[str], Dict[str, str]]> xcat_labels: optional list or dictionary of
         labels for the extended categories.
     """
     labels_dict = {}

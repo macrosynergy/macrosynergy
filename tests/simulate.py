@@ -1,4 +1,5 @@
 """Module with functions to simulate data for testing."""
+
 import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple
