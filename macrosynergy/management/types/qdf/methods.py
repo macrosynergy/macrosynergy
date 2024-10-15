@@ -564,3 +564,38 @@ def create_empty_categorical_qdf(
 
     return qdf
 
+
+def concat_qdfs(
+    qdf_list: List[QuantamentalDataFrameBase],
+) -> QuantamentalDataFrameBase:
+
+    if not isinstance(qdf_list, list):
+        raise TypeError("`qdfs_list` must be a list of QuantamentalDataFrames.")
+
+    if not all(isinstance(qdf, QuantamentalDataFrameBase) for qdf in qdf_list):
+        raise TypeError("All elements in `qdfs_list` must be QuantamentalDataFrames.")
+
+    if len(qdf_list) == 0:
+        raise ValueError("`qdfs_list` is empty.")
+
+    qdf_list = [qdf_to_categorical(qdf) for qdf in qdf_list]
+
+    comb_cids = pd.api.types.union_categoricals(
+        [qdf["cid"].unique() for qdf in qdf_list]
+    )
+    comb_xcats = pd.api.types.union_categoricals(
+        [qdf["xcat"].unique() for qdf in qdf_list]
+    )
+
+    for qdf in qdf_list:
+        qdf["cid"] = pd.Categorical(qdf["cid"], categories=comb_cids.categories)
+        qdf["xcat"] = pd.Categorical(qdf["xcat"], categories=comb_xcats.categories)
+
+    qdf_list = (
+        pd.concat(qdf_list, axis=0, join="outer")
+        .groupby(QuantamentalDataFrameBase.IndexCols, observed=True, as_index=False)
+        .last()
+        .sort_values(by=QuantamentalDataFrameBase.IndexCols)
+        .reset_index(drop=True)
+    )
+    return qdf_list
