@@ -18,7 +18,7 @@ from macrosynergy.management.types import QuantamentalDataFrame
 
 
 class CategoryRelations(object):
-    """W
+    """
     Class for analyzing and visualizing the relations of multiple panel categories.
 
     :param <pd.DataFrame> df: standardized DataFrame with the necessary columns:
