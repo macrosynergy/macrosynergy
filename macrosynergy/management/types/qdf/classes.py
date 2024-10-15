@@ -94,7 +94,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         Converts the QuantamentalDataFrame to a string DataFrame.
 
         """
-        return change_column_format(self, cols=self._StrIndexCols, dtype=str)
+        return change_column_format(self, cols=self._StrIndexCols, dtype="object")
 
     def to_original_dtypes(self) -> "QuantamentalDataFrame":
         """
