@@ -522,3 +522,45 @@ def qdf_from_timseries(
 
     df = df[[*QuantamentalDataFrameBase.IndexCols, metric]]
     return QuantamentalDataFrameBase(df)
+
+
+def create_empty_categorical_qdf(
+    cid: Optional[str] = None,
+    xcat: Optional[str] = None,
+    ticker: Optional[str] = None,
+    metrics: List[str] = ["value"],
+    date_range: Optional[pd.DatetimeIndex] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    categorical: bool = True,
+) -> QuantamentalDataFrameBase:
+
+    if not all(isinstance(m, str) for m in metrics):
+        raise TypeError("`metrics` must be a list of strings.")
+
+    if (date_range is None) and (start_date is None or end_date is None):
+        raise ValueError(
+            "Either `date_range` or `start_date` & `end_date` must be specified."
+        )
+
+    if date_range is None:
+        date_range = pd.date_range(start=start_date, end=end_date, freq="B")
+
+    if bool(cid) ^ bool(xcat):
+        raise ValueError("`cid` and `xcat` must be specified together.")
+
+    if not (bool(cid) ^ bool(ticker)):
+        raise ValueError("Either specify `cid` & `xcat` or `ticker` but not both.")
+
+    if ticker is not None:
+        cid, xcat = ticker.split("_", 1)
+
+    qdf = pd.DataFrame(columns=["real_date"], data=date_range)
+    qdf = _add_index_str_column(qdf, "cid", cid)
+    qdf = _add_index_str_column(qdf, "xcat", xcat)
+
+    for metric in metrics:
+        qdf[metric] = np.nan
+
+    return qdf
+
