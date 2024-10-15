@@ -2,6 +2,7 @@
 Class to determine and store sequentially-optimized panel forecasts based on statistical
 learning. 
 """
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -14,6 +15,7 @@ from macrosynergy.learning.sequential import BasePanelLearner
 from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import SelectorMixin
 
+
 class SignalOptimizer(BasePanelLearner):
     """
     Class for sequential optimization of return forecasts based on panels of quantamental
@@ -22,7 +24,7 @@ class SignalOptimizer(BasePanelLearner):
     Parameters
     ----------
     df : pd.DataFrame
-        Daily quantamental dataframe in JPMaQS format containing a panel of features, as 
+        Daily quantamental dataframe in JPMaQS format containing a panel of features, as
         well as a panel of returns.
     xcats : list
         List comprising feature names, with the last element being the response variable
@@ -45,9 +47,9 @@ class SignalOptimizer(BasePanelLearner):
     lag : int, optional
         Number of periods to lag the response variable. Default is 1.
     xcat_aggs : list, optional
-        List of aggregation functions to apply to the features, used when `freq` is not 
+        List of aggregation functions to apply to the features, used when `freq` is not
         `D`. Default is ["last", "sum"].
-    
+
     Notes
     -----
     The `SignalOptimizer` class is used to predict the response variable, usually an asset
@@ -55,30 +57,31 @@ class SignalOptimizer(BasePanelLearner):
     of periods. This is done in a sequential manner, by specifying the size of an initial
     training set, choosing an optimal model out of a provided collection (with associated
     hyperparameters), forecasting the (possibly) forward return panel, and then expanding
-    the training set to include the previously forward realized returns. The process 
+    the training set to include the previously forward realized returns. The process
     continues until the end of the dataset is reached.
 
-    In addition to storing the forecasts, this class also stores useful information for 
+    In addition to storing the forecasts, this class also stores useful information for
     analysis such as the models selected at each point in time, the feature coefficients
-    and intercepts (where relevant) of selected models, as well as the features 
+    and intercepts (where relevant) of selected models, as well as the features
     selected by any feature selection modules.
 
     Model and hyperparameter selection is performed by cross-validation. Given a
     collection of models and associated hyperparameters to choose from, an HPO is run
     - currently only grid search and random search are supported - to determine the
-    optimal choice. This is done by providing a collection of `scikit-learn` compatible 
+    optimal choice. This is done by providing a collection of `scikit-learn` compatible
     scoring functions, as well as a collection of `scikit-learn` compatible cross-validation
     splitters. At each point in time, the cross-validation folds are the union of the folds
-    produced by each splitter provided. Each scorer is evaluated on each test fold and 
+    produced by each splitter provided. Each scorer is evaluated on each test fold and
     summarised across test folds by either the mean, median or through a custom function
     provided by the user. This results in multiple scores for each model and hyperparameter
     combination. In order to make a final choice, a composite score for each model and
-    hyperparameter combination is calculated by adjusting scores for each scorer by the 
-    minimum and maximum scores across all models and hyperparameters, for that scorer. 
+    hyperparameter combination is calculated by adjusting scores for each scorer by the
+    minimum and maximum scores across all models and hyperparameters, for that scorer.
     This makes scores across scorers comparable, so that the average score across adjusted
-    scores can be used as a meaningful estimate of each model's generalization ability. 
-    The optimal model is the one with the largest composite score. 
+    scores can be used as a meaningful estimate of each model's generalization ability.
+    The optimal model is the one with the largest composite score.
     """
+
     def __init__(
         self,
         df,
@@ -117,9 +120,7 @@ class SignalOptimizer(BasePanelLearner):
         self.ftr_coefficients = pd.DataFrame(
             columns=["real_date", "name"] + list(self.X.columns)
         )
-        self.intercepts = pd.DataFrame(
-            columns=["real_date", "name", "intercepts"]
-        )
+        self.intercepts = pd.DataFrame(columns=["real_date", "name", "intercepts"])
         self.selected_ftrs = pd.DataFrame(
             columns=["real_date", "name"] + list(self.X.columns)
         )
@@ -132,7 +133,7 @@ class SignalOptimizer(BasePanelLearner):
         scorers,
         inner_splitters,
         search_type="grid",
-        normalize_fold_results = False,
+        normalize_fold_results=False,
         cv_summary="mean",
         min_cids=4,
         min_periods=12 * 3,
@@ -160,7 +161,7 @@ class SignalOptimizer(BasePanelLearner):
         scorers : dict
             Dictionary of scoring functions to use in the hyperparameter optimization
             process. The keys are scorer names and the values are scikit-learn compatible
-            scoring functions. 
+            scoring functions.
         inner_splitters : dict
             Dictionary of inner splitters to use in the hyperparameter optimization
             process. The keys are splitter names and the values are scikit-learn compatible
@@ -189,19 +190,19 @@ class SignalOptimizer(BasePanelLearner):
         split_functions : dict, optional
             Dict of callables for determining the number of cross-validation
             splits to add to the initial number as a function of the number of iterations
-            passed in the sequential learning process. Default is None. The keys must 
+            passed in the sequential learning process. Default is None. The keys must
             correspond to the keys in `inner_splitters` and should be set to None for any
             splitters that do not require splitter adjustment.
         n_iter : int, optional
             Number of iterations to run in random hyperparameter search. Default is None.
         n_jobs_outer : int, optional
             Number of jobs to run in parallel for the outer sequential loop. Default is -1.
-            It is advised for n_jobs_inner * n_jobs_outer (replacing -1 with the number of 
+            It is advised for n_jobs_inner * n_jobs_outer (replacing -1 with the number of
             available cores) to be less than or equal to the number of available cores on
             the machine.
         n_jobs_inner : int, optional
-            Number of jobs to run in parallel for the inner loop. Default is 1. 
-            It is advised for n_jobs_inner * n_jobs_outer (replacing -1 with the number of 
+            Number of jobs to run in parallel for the inner loop. Default is 1.
+            It is advised for n_jobs_inner * n_jobs_outer (replacing -1 with the number of
             available cores) to be less than or equal to the number of available cores on
             the machine.
         """
@@ -220,35 +221,35 @@ class SignalOptimizer(BasePanelLearner):
         )
 
         results = self.run(
-            name = name,
-            outer_splitter = outer_splitter,
-            inner_splitters = inner_splitters,
-            models = models,
-            hyperparameters = hyperparameters,
-            scorers = scorers,
-            search_type = search_type,
-            normalize_fold_results = normalize_fold_results,
-            cv_summary = cv_summary,
-            split_functions = split_functions,
-            n_iter = n_iter,
-            n_jobs_outer = n_jobs_outer,
-            n_jobs_inner = n_jobs_inner,
+            name=name,
+            outer_splitter=outer_splitter,
+            inner_splitters=inner_splitters,
+            models=models,
+            hyperparameters=hyperparameters,
+            scorers=scorers,
+            search_type=search_type,
+            normalize_fold_results=normalize_fold_results,
+            cv_summary=cv_summary,
+            split_functions=split_functions,
+            n_iter=n_iter,
+            n_jobs_outer=n_jobs_outer,
+            n_jobs_inner=n_jobs_inner,
         )
 
         # Collect results from the worker
         # quantamental_data, model_data, other_data
         prediction_data = []
-        modelchoice_data = []
-        ftrcoeff_data = []
+        model_choice_data = []
+        ftr_coef_data = []
         intercept_data = []
         ftr_selection_data = []
 
-        for quantamental_data, model_data, other_data in results:
-            prediction_data.append(quantamental_data["predictions"])
-            modelchoice_data.append(model_data["model_choice"])
-            ftrcoeff_data.append(other_data["ftr_coefficients"])
-            intercept_data.append(other_data["intercepts"])
-            ftr_selection_data.append(other_data["selected_ftrs"])
+        for split_result in results:
+            prediction_data.append(split_result["predictions"])
+            model_choice_data.append(split_result["model_choice"])
+            ftr_coef_data.append(split_result["ftr_coefficients"])
+            intercept_data.append(split_result["intercepts"])
+            ftr_selection_data.append(split_result["selected_ftrs"])
 
         # Create quantamental dataframe of forecasts
         for pipeline_name, idx, forecasts in prediction_data:
@@ -281,7 +282,7 @@ class SignalOptimizer(BasePanelLearner):
         # Store model selection data
         model_df_long = pd.DataFrame(
             columns=self.chosen_models.columns,
-            data=modelchoice_data,
+            data=model_choice_data,
         )
         self.chosen_models = pd.concat(
             (
@@ -296,13 +297,13 @@ class SignalOptimizer(BasePanelLearner):
                 "model_type": "object",
                 "score": "float32",
                 "hparams": "object",
-                "n_splits_used": "int",
+                "n_splits_used": "object",
             }
         )
 
         # Store feature coefficients
         coef_df_long = pd.DataFrame(
-            columns=self.ftr_coefficients.columns, data=ftrcoeff_data
+            columns=self.ftr_coefficients.columns, data=ftr_coef_data
         )
         ftr_coef_types = {col: "float32" for col in self.X.columns}
         ftr_coef_types["real_date"] = "datetime64[ns]"
@@ -349,32 +350,32 @@ class SignalOptimizer(BasePanelLearner):
             axis=0,
         ).astype(ftr_selection_types)
 
-    def store_quantamental_data(
+    def store_split_data(
         self,
         pipeline_name,
-        model,
+        optimal_model,
+        optimal_model_name,
+        optimal_model_score,
+        optimal_model_params,
+        inner_splitters_adj,
         X_train,
         y_train,
         X_test,
         y_test,
+        timestamp,
         adjusted_test_index,
     ):
-        if model is not None:
-            if hasattr(model, "create_signal"):
-                if callable(getattr(model, "create_signal")):
-                    preds = model.create_signal(X_test)
+        if optimal_model is not None:
+            if hasattr(optimal_model, "create_signal"):
+                if callable(getattr(optimal_model, "create_signal")):
+                    preds = optimal_model.create_signal(X_test)
             else:
-                preds = model.predict(X_test)
+                preds = optimal_model.predict(X_test)
         else:
             preds = np.zeros(X_test.shape[0])
 
         prediction_data = [pipeline_name, adjusted_test_index, preds]
 
-        return {"predictions": prediction_data}
-
-    def store_other_data(
-        self, pipeline_name, optimal_model, X_train, y_train, X_test, y_test, timestamp
-    ):
         feature_names = np.array(X_train.columns)
         if isinstance(optimal_model, Pipeline):
             final_estimator = optimal_model[-1]
@@ -385,18 +386,16 @@ class SignalOptimizer(BasePanelLearner):
         else:
             final_estimator = optimal_model
 
+        coefs = np.full(X_train.shape[1], np.nan)
+
         if hasattr(final_estimator, "coef_"):
-            if len(final_estimator.coef_.shape) == 1:
-                coefs = np.array(final_estimator.coef_)
-            elif len(final_estimator.coef_.shape) == 2:
-                if final_estimator.coef_.shape[0] != 1:
-                    coefs = np.array([np.nan for _ in range(X_train.shape[1])])
-                else:
-                    coefs = np.array(final_estimator.coef_).squeeze()
-            else:
-                coefs = np.array([np.nan for _ in range(X_train.shape[1])])
-        else:
-            coefs = np.array([np.nan for _ in range(X_train.shape[1])])
+            coef = final_estimator.coef_
+
+            if coef.ndim == 1:
+                coefs = coef
+            elif coef.ndim == 2:
+                if coef.shape[0] == 1:
+                    coefs = coef.flatten()
 
         coef_ftr_map = {ftr: coef for ftr, coef in zip(feature_names, coefs)}
         coefs = [
@@ -427,13 +426,14 @@ class SignalOptimizer(BasePanelLearner):
             ]
 
         # Store data
-        other_data = {
+        split_result = {
             "ftr_coefficients": [timestamp, pipeline_name] + coefs,
             "intercepts": [timestamp, pipeline_name, intercepts],
             "selected_ftrs": ftr_selection_data,
+            "predictions": prediction_data,
         }
 
-        return other_data
+        return split_result
 
     def get_optimized_signals(self, name=None):
         """
@@ -702,19 +702,19 @@ class SignalOptimizer(BasePanelLearner):
                         in the pipeline {name}.
                         """
                     )
-                
+
     def coefs_timeplot(
         self,
         name,
-        ftrs = None,
-        title = None,
-        ftrs_renamed = None,
-        figsize = (10, 6),
+        ftrs=None,
+        title=None,
+        ftrs_renamed=None,
+        figsize=(10, 6),
     ):
         """
         Visualise time series of feature coefficients for a given pipeline, when
-        available. 
-        
+        available.
+
         Parameters
         ----------
         name : str
@@ -729,7 +729,7 @@ class SignalOptimizer(BasePanelLearner):
             Default is None, which uses the original feature names.
         figsize : tuple of floats or ints, optional
             Tuple of floats or ints denoting the figure size. Default is (10, 6).
-        
+
         Notes
         -----
         This method displays the time series of feature coefficients for a given pipeline,
@@ -814,7 +814,7 @@ class SignalOptimizer(BasePanelLearner):
         na_count = ftrcoef_df.isna().sum().sort_values()
         reindexed_columns = na_count.index
         ftrcoef_df = ftrcoef_df[reindexed_columns]
-        
+
         if ftrs is not None:
             ftrcoef_df = ftrcoef_df[ftrs]
         else:
@@ -908,14 +908,14 @@ class SignalOptimizer(BasePanelLearner):
     def coefs_stackedbarplot(
         self,
         name,
-        ftrs = None,
-        title = None,
-        cap = None,
-        ftrs_renamed = None,
-        figsize = (10, 6),
+        ftrs=None,
+        title=None,
+        cap=None,
+        ftrs_renamed=None,
+        figsize=(10, 6),
     ):
         """
-        Visualise feature coefficients for a given pipeline in a stacked bar plot. 
+        Visualise feature coefficients for a given pipeline in a stacked bar plot.
 
         Parameters
         ----------
@@ -928,7 +928,7 @@ class SignalOptimizer(BasePanelLearner):
             "Stacked bar plot of model coefficients: {name}".
         cap : int, optional
             Maximum number of features to display. Default is None. The chosen features
-            are the 'cap' most frequently occurring in the pipeline. This cannot exceed 
+            are the 'cap' most frequently occurring in the pipeline. This cannot exceed
             10.
         ftrs_renamed : dict, optional
             Dictionary to rename the feature names for visualisation in the plot legend.
@@ -1152,9 +1152,11 @@ if __name__ == "__main__":
         name="LR",
         models={
             "LR": LinearRegression(),
+            "LA": LinearRegression(),
         },
         hyperparameters={
             "LR": {"fit_intercept": [True, False], "positive": [True, False]},
+            "LA": {"fit_intercept": [True, False]},
         },
         scorers={
             "r2": make_scorer(r2_score),
