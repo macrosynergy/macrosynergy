@@ -460,7 +460,7 @@ def drop_nan_series(
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("Argument `df` must be a Quantamental DataFrame.")
 
-    if not column in df.columns:
+    if column not in df.columns:
         raise ValueError(f"Column {column} not present in DataFrame.")
 
     if not df[column].isna().any():
