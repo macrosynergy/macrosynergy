@@ -1440,7 +1440,7 @@ class SignalOptimizer:
         plt.figure(figsize=figsize)
         sns.heatmap(
             correlations.pivot(index="pipeline_input", columns="real_date", values="pearson"),
-            cmap="coolwarm",
+            cmap="coolwarm_r",
             cbar=True,
         )
         if title is None:
