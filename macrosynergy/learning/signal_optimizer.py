@@ -3,6 +3,7 @@ Class to handle the calculation of quantamental predictions based on adaptive
 hyperparameter and model selection.
 """
 
+import numbers
 import warnings
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -1457,7 +1458,65 @@ class SignalOptimizer:
         ftrs_renamed: Optional[dict],
         figsize: Tuple[Union[int, float], Union[int, float]]
     ):
-        pass
+        # name
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.ftr_corr.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of pipelines with calculated
+                correlation matrices. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first, or make sure `store_correlations` is
+                turned on. 
+                """
+            )
+        # feature name
+        if not isinstance(feature_name, str):
+            raise TypeError("The feature name must be a string.")
+        if feature_name not in self.ftr_corr.predictor_input.unique():
+            raise ValueError(
+                f"""The feature name {feature_name} is not in the list of features that
+                were passed into the final predictor. Please check the feature name carefully.
+                """
+            )
+        # title
+        if title is not None:
+            if not isinstance(title, str):
+                raise TypeError("The title must be a string.")
+        # cap
+        if cap is not None:
+            if not isinstance(cap, int):
+                raise TypeError("The cap must be an integer.")
+            if cap <= 0:
+                raise ValueError("The cap must be greater than zero.")
+        # ftrs_renamed
+        if ftrs_renamed is not None:
+            if not isinstance(ftrs_renamed, dict):
+                raise TypeError("The ftrs_renamed argument must be a dictionary.")
+            for key, value in ftrs_renamed.items():
+                if not isinstance(key, str):
+                    raise TypeError(
+                        "The keys of the ftrs_renamed dictionary must be strings."
+                    )
+                if not isinstance(value, str):
+                    raise TypeError(
+                        "The values of the ftrs_renamed dictionary must be strings."
+                    )
+                if key not in self.X.columns:
+                    raise ValueError(
+                        f"""The key {key} in the ftrs_renamed dictionary is not a feature 
+                        in the pipeline {name}.
+                        """
+                    )
+        # figsize
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, numbers.Number) and not isinstance(element, bool):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
 
     def get_ftr_coefficients(self, name):
         """
