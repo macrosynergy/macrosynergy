@@ -424,7 +424,9 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             cid, xcat = ticker.split("_", 1)
             qdf = df[[tkr]].reset_index().rename(columns={tkr: value_column})
             df = df.drop(columns=[tkr])
-            qdf = QuantamentalDataFrame.from_long_df(df=qdf, cid=cid, xcat=xcat)
+            qdf = QuantamentalDataFrame.from_long_df(
+                df=qdf, cid=cid, xcat=xcat, value_column=value_column
+            )
             qdfs_list.append(qdf)
 
         qdfs_list = QuantamentalDataFrame.from_qdf_list(qdfs_list)
