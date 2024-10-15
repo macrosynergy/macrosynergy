@@ -409,3 +409,41 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             pd.concat(qdf_list, ignore_index=True),
             categorical=True,
         )
+
+    @classmethod
+    def from_wide(
+        cls,
+        df: pd.DataFrame,
+        value_column: str = "value",
+    ) -> "QuantamentalDataFrame":
+        """
+        Convert a wide DataFrame to a QuantamentalDataFrame.
+        """
+
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("`df` must be a pandas DataFrame.")
+
+        if not isinstance(df.index, pd.DatetimeIndex):
+            raise ValueError("`df` must have a datetime index.")
+
+        if not isinstance(value_column, str):
+            raise TypeError("`value_column` must be a string.")
+
+        if not all("_" in col for col in df.columns):
+            raise ValueError("All columns must be in the format 'cid_xcat'.")
+
+        df.index.name = "real_date"
+        df.columns.name = None
+        tickers = df.columns.tolist()
+        qdfs_list: List[QuantamentalDataFrame] = []
+
+        for tkr in tickers:
+            ticker = tkr
+            cid, xcat = ticker.split("_", 1)
+            qdf = df[[tkr]].reset_index().rename(columns={tkr: value_column})
+            df = df.drop(columns=[tkr])
+            qdf = QuantamentalDataFrame.from_long_df(df=qdf, cid=cid, xcat=xcat)
+            qdfs_list.append(qdf)
+
+        qdfs_list = QuantamentalDataFrame.from_qdf_list(qdfs_list)
+        return qdfs_list
