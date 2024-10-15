@@ -28,6 +28,8 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
 
         # Attributes
         self.type = type
+        self.n_features_in_ = None
+        self.feature_names_in_ = None
 
     def fit(self, X, y=None):
         """
@@ -42,6 +44,8 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
         """
         # Checks
         self._check_fit_params(X, y)
+        self.n_features_in_ = X.shape[1]
+        self.feature_names_in_ = X.columns
 
         # Set up hash table for storing statistics
         unique_cross_sections = X.index.get_level_values(0).unique()
@@ -110,7 +114,7 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
             scaled_columns.append(X_transformed)
 
         # Concatenate the transformed columns
-        X_transformed = pd.concat(scaled_columns, axis=1)
+        X_transformed = pd.DataFrame(pd.concat(scaled_columns, axis=1).values, index=X.index, columns=X.columns)
 
         return X_transformed
 
@@ -146,9 +150,21 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
                 "If used as part of an sklearn pipeline, ensure that previous steps ",
                 "return a pandas dataframe.",
             )
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise ValueError(
+                "All columns in the input feature matrix for PanelStandardScaler",
+                " must be numeric."
+            )
+        if X.isnull().values.any():
+            raise ValueError(
+                "The input feature matrix for PanelStandardScaler must not contain any "
+                "missing values."
+            )
         if not isinstance(X.index, pd.MultiIndex):
-            raise ValueError("X must be multi-indexed.")
-        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise ValueError("The input feature matrix for X must be multi-indexed.")
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
 
     def _check_transform_params(self, X):
@@ -166,7 +182,28 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas dataframe."
             )
-        if not isinstance(X.index, pd.MultiIndex):
-            raise ValueError("X must be multi-indexed.")
-        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise ValueError(
+                "All columns in the input feature matrix for PanelStandardScaler",
+                " must be numeric."
+            )
+        if X.isnull().values.any():
+            raise ValueError(
+                "The input feature matrix for PanelStandardScaler must not contain any "
+                "missing values."
+            )
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
+        
+        if X.shape[1] != self.n_features_in_:
+            raise ValueError(
+                "The input feature matrix must have the same number of columns as the "
+                "training feature matrix."
+            )
+        if not X.columns.equals(self.feature_names_in_):
+            raise ValueError(
+                "The input feature matrix must have the same columns as the training "
+                "feature matrix."
+            )
