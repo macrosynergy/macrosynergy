@@ -285,6 +285,7 @@ class SignalOptimizer:
         max_periods: Optional[int] = None,
         n_iter: Optional[int] = 10,
         n_jobs: Optional[int] = -1,
+        store_correlations: bool = False,
     ) -> None:
         """
         Calculate, store and return sequentially optimized signals for a given process.
@@ -334,6 +335,8 @@ class SignalOptimizer:
         :param <int> n_iter: Number of iterations to run for random search. Default is 10.
         :param <int> n_jobs: Number of jobs to run in parallel. Default is -1, which uses
             all available cores.
+        :param <bool> store_correlations: Whether to store the correlations between input
+            pipeline features and input predictor features. Default is False.
 
         Note:
         The method produces signals for financial contract positions. They are calculated
@@ -356,6 +359,7 @@ class SignalOptimizer:
             max_periods=max_periods,
             n_iter=n_iter,
             n_jobs=n_jobs,
+            store_correlations=store_correlations,
         )
 
         # (1) Create a dataframe to store the signals induced by each model.
@@ -416,6 +420,7 @@ class SignalOptimizer:
                         if self.initial_nsplits
                         else None
                     ),
+                    store_correlations=store_correlations,
                 )
                 for idx, (train_idx, test_idx) in enumerate(train_test_splits)
             ),
@@ -573,6 +578,7 @@ class SignalOptimizer:
         max_periods: Optional[int],
         n_iter: Optional[int],
         n_jobs: Optional[int],
+        store_correlations: bool,
     ):
         """
         Private method to check the calculate_predictions method parameters.
@@ -691,6 +697,9 @@ class SignalOptimizer:
             raise TypeError("The n_jobs argument must be an integer.")
         if (n_jobs <= 0) and (n_jobs != -1):
             raise ValueError("The n_jobs argument must be greater than zero or -1.")
+        
+        if not isinstance(store_correlations, bool):
+            raise TypeError("The store_correlations argument must be a boolean.")
 
     def _worker(
         self,
@@ -704,6 +713,7 @@ class SignalOptimizer:
         n_iter: int = 10,
         hparam_type: str = "grid",
         nsplits_add: Optional[Union[int, np.int_]] = None,
+        store_correlations: bool = False,
     ):
         """
         Private helper function to run the grid search for a single (train, test) pair
@@ -729,6 +739,8 @@ class SignalOptimizer:
             This must be either "grid", "random" or "bayes". Default is "grid".
         :param <Optional[Union[int, np.int_]]> nsplits_add: Additional number of splits
             to add to the number of splits in the inner splitter. Default is None.
+        :param <bool> store_correlations: Whether to store the correlations between input
+            pipeline features and input predictor features. Default is False.
         """
         # Set up training and test sets
         X_train_i: pd.DataFrame = self.X.iloc[train_idx]
@@ -830,24 +842,34 @@ class SignalOptimizer:
             ftr_selection_data = [test_date_levels.date[0], name] + [
                 1 for _ in range(X_train_i.shape[1])
             ]
-            ftr_corr_data = [
-                [
-                    test_date_levels.date[0],
-                    name,
-                    feature_name,
-                    feature_name,
-                    1,
+            if store_correlations:
+                ftr_corr_data = [
+                    [
+                        test_date_levels.date[0],
+                        name,
+                        feature_name,
+                        feature_name,
+                        1,
+                    ]
+                    for feature_name in X_train_i.columns
                 ]
-                for feature_name in X_train_i.columns
-            ]
-            return (
-                prediction_date,
-                modelchoice_data,
-                coefficients_data,
-                intercept_data,
-                ftr_selection_data,
-                ftr_corr_data, 
-            )
+                return (
+                    prediction_date,
+                    modelchoice_data,
+                    coefficients_data,
+                    intercept_data,
+                    ftr_selection_data,
+                    ftr_corr_data, 
+                )
+            else:
+                return (
+                    prediction_date,
+                    modelchoice_data,
+                    coefficients_data,
+                    intercept_data,
+                    ftr_selection_data,
+                    [],
+                )
         # Store the best estimator predictions/signals
         # If optim_model has a create_signal method, use it otherwise use predict
         if hasattr(optim_model, "create_signal"):
@@ -917,53 +939,54 @@ class SignalOptimizer:
             ]
 
         # Store the correlation matrix of the features used in the final model
-        if not isinstance(optim_model, Pipeline):
-            ftr_corr_data = [
-                [
-                    test_date_levels.date[0],
-                    name,
-                    feature_name,
-                    feature_name,
-                    1,
-                ]
-                for feature_name in X_train_i.columns
-            ] 
-        else:
-            # Transform the training data to the final feature space
-            transformers = Pipeline(steps = optim_model.steps[:-1])
-            X_train_transformed = transformers.transform(X_train_i)
-            n_features = X_train_transformed.shape[1]
-            feature_names = (
-                X_train_transformed.columns
-                if isinstance(X_train_transformed, pd.DataFrame)
-                else [f"Feature {i+1}" for i in range(n_features)]
-            )
-            # Calculate correlation between each original feature in X_train_i and 
-            # the transformed features in X_train_transformed
-            if isinstance(X_train_transformed, pd.DataFrame):
+        if store_correlations:
+            if not isinstance(optim_model, Pipeline):
                 ftr_corr_data = [
                     [
                         test_date_levels.date[0],
                         name,
-                        final_feature_name,
-                        input_feature_name,
-                        np.corrcoef(X_train_transformed.values[:, idx], X_train_i[input_feature_name])[0, 1]
+                        feature_name,
+                        feature_name,
+                        1,
                     ]
-                    for idx, final_feature_name in enumerate(feature_names)
-                    for input_feature_name in X_train_i.columns
-                ]
+                    for feature_name in X_train_i.columns
+                ] 
             else:
-                ftr_corr_data = [
-                    [
-                        test_date_levels.date[0],
-                        name,
-                        final_feature_name,
-                        input_feature_name,
-                        np.corrcoef(X_train_transformed[:, idx], X_train_i[input_feature_name])[0, 1]
+                # Transform the training data to the final feature space
+                transformers = Pipeline(steps = optim_model.steps[:-1])
+                X_train_transformed = transformers.transform(X_train_i)
+                n_features = X_train_transformed.shape[1]
+                feature_names = (
+                    X_train_transformed.columns
+                    if isinstance(X_train_transformed, pd.DataFrame)
+                    else [f"Feature {i+1}" for i in range(n_features)]
+                )
+                # Calculate correlation between each original feature in X_train_i and 
+                # the transformed features in X_train_transformed
+                if isinstance(X_train_transformed, pd.DataFrame):
+                    ftr_corr_data = [
+                        [
+                            test_date_levels.date[0],
+                            name,
+                            final_feature_name,
+                            input_feature_name,
+                            np.corrcoef(X_train_transformed.values[:, idx], X_train_i[input_feature_name])[0, 1]
+                        ]
+                        for idx, final_feature_name in enumerate(feature_names)
+                        for input_feature_name in X_train_i.columns
                     ]
-                    for idx, final_feature_name in enumerate(feature_names)
-                    for input_feature_name in X_train_i.columns
-                ]
+                else:
+                    ftr_corr_data = [
+                        [
+                            test_date_levels.date[0],
+                            name,
+                            final_feature_name,
+                            input_feature_name,
+                            np.corrcoef(X_train_transformed[:, idx], X_train_i[input_feature_name])[0, 1]
+                        ]
+                        for idx, final_feature_name in enumerate(feature_names)
+                        for input_feature_name in X_train_i.columns
+                    ]
 
         # Store correlation 
         modelchoice_data = [
@@ -979,14 +1002,24 @@ class SignalOptimizer:
         ] + coefs
         intercept_data = [test_date_levels.date[0], name, intercepts]
 
-        return (
-            prediction_data,
-            modelchoice_data,
-            coefficients_data,
-            intercept_data,
-            ftr_selection_data,
-            ftr_corr_data,
-        )
+        if store_correlations:
+            return (
+                prediction_data,
+                modelchoice_data,
+                coefficients_data,
+                intercept_data,
+                ftr_selection_data,
+                ftr_corr_data,
+            )
+        else:
+            return (
+                prediction_data,
+                modelchoice_data,
+                coefficients_data,
+                intercept_data,
+                ftr_selection_data,
+                [],
+            )
 
     def get_feature_correlations(
         self,
@@ -1015,8 +1048,9 @@ class SignalOptimizer:
             for n in name:
                 if n not in self.ftr_corr.name.unique():
                     raise ValueError(
-                        f"""The process name '{n}' is not in the list of already-run
-                        pipelines. Please check the name carefully. If correct, please run 
+                        f"""Either the process name '{n}' is not in the list of already-run
+                        pipelines, or no correlations were stored for this pipeline.
+                        Please check the name carefully. If correct, please run 
                         calculate_predictions() first.
                         """
                     )
@@ -2036,6 +2070,7 @@ if __name__ == "__main__":
         hparam_type="grid",
         test_size=3,
         n_jobs=1,
+        store_correlations=True,
     )
     so.models_heatmap(name="test")
     so.correlations_heatmap("test", "Feature 1")
