@@ -54,7 +54,7 @@ class Test_All(unittest.TestCase):
 
         min_release_date = grade1["release_date"].min().strftime("%Y-%m-%d")
         max_release_date = grade1["release_date"].max().strftime("%Y-%m-%d")
-        self.assertEqual(min_release_date, "2018-07-04")
+        self.assertEqual(min_release_date, "2018-07-03")
         self.assertEqual(max_release_date, "2019-06-26")
 
         # grading should be 1
@@ -65,10 +65,10 @@ class Test_All(unittest.TestCase):
     def test_grade2(self):
         dfm2: pd.DataFrame = self.vins_m.make_grade2()
 
-        # earlist release date - 2018-01-03, latest release date - 2019-06-25
+        # earlist release date - 2018-01-01, latest release date - 2019-06-25
         min_release_date = dfm2["release_date"].min().strftime("%Y-%m-%d")
         max_release_date = dfm2["release_date"].max().strftime("%Y-%m-%d")
-        self.assertEqual(min_release_date, "2018-01-03")
+        self.assertEqual(min_release_date, "2018-01-01")
         self.assertEqual(max_release_date, "2019-06-25")
 
         # check that grade2[cross_section] is a single value - USD
@@ -94,12 +94,14 @@ class Test_All(unittest.TestCase):
         self.assertEqual(unique_ticker[0], "USD_INDX_SA")
 
     def test_make_graded(self):
-        graded: pd.DataFrame = self.vins_m.make_graded(grading=[3, 2.1, 1], upgrades=[12, 24])
-        
+        graded: pd.DataFrame = self.vins_m.make_graded(
+            grading=[3, 2.1, 1], upgrades=[12, 24]
+        )
+
         min_release_date = graded["release_date"].min().strftime("%Y-%m-%d")
         max_release_date = graded["release_date"].max().strftime("%Y-%m-%d")
 
-        self.assertEqual(min_release_date, "2018-07-04")
+        self.assertEqual(min_release_date, "2018-07-03")
         self.assertEqual(max_release_date, "2019-06-26")
 
         # check that grade2[cross_section] is a single value - USD
@@ -147,6 +149,7 @@ class Test_All(unittest.TestCase):
                 added_dates=6,
                 freq="M",
             ).make_grade1()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -686,7 +686,6 @@ class TestFunctions(unittest.TestCase):
             expression = dictx["attributes"][0]["expression"]
             _test_column(timeseries_to_column(dictx), expression)
 
-
     def test_concat_column_dfs(self):
         dicts_list = mock_request_wrapper(
             dq_expressions=self.expressions,

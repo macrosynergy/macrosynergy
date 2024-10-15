@@ -12,6 +12,7 @@ from macrosynergy.learning import (
     PanelMinMaxScaler,
     PanelStandardScaler,
     ZnScoreAverager,
+    RandomEffects,
 )
 
 from statsmodels.tools.tools import add_constant
@@ -24,7 +25,7 @@ from sklearn.linear_model import Lasso, Lars
 from sklearn.exceptions import NotFittedError
 
 import scipy.stats as stats
-from linearmodels.panel import RandomEffects
+from linearmodels.panel import RandomEffects as lm_RandomEffects
 
 class TestLarsSelector(unittest.TestCase):
     @classmethod
@@ -475,10 +476,10 @@ class TestMapSelector(unittest.TestCase):
         for col in X_map_test.columns:
             ftr = X_map_test[col]
             ftr = add_constant(ftr)
-            re = RandomEffects(y_map_test.swaplevel(), ftr.swaplevel()).fit()
+            re = lm_RandomEffects(y_map_test.swaplevel(), ftr.swaplevel()).fit()
             est = re.params[col]
             zstat = est / re.std_errors[col]
-            pval = 2 * (1 - stats.norm.cdf(zstat))
+            pval = 2 * (1 - stats.norm.cdf(np.abs(zstat)))
             self.est.append(est)
             self.pval.append(pval)
 

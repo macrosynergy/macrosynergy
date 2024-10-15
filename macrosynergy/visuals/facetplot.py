@@ -557,7 +557,9 @@ class FacetPlot(Plotter):
             title_height: float = (title.count("\n") + 1) * title_newline_adjust
 
             re_adj[3] = (
-                re_adj[3] - title_height + fig_height / fig.get_window_extent(renderer=renderer).height
+                re_adj[3]
+                - title_height
+                + fig_height / fig.get_window_extent(renderer=renderer).height
             )
 
         axs: Union[np.ndarray, plt.Axes] = outer_gs.subplots(

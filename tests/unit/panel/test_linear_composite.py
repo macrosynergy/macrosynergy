@@ -49,6 +49,14 @@ class TestAll(unittest.TestCase):
             {"cids": 1},
             {"weights": pd.DataFrame()},
             {"weights": [1, 2, "bar"]},
+            {"df": pd.DataFrame()},
+            {"df": self.dfd.assign(value=np.NaN)},
+            {"normalize_weights": "foo"},
+            {"complete_cids": "foo"},
+            {"complete_xcats": "foo"},
+            {"new_cid": 1},
+            {"new_xcat": 1},
+            {"blacklist": 1},
         ]
         for case in type_error_cases:
             argsx: Dict[str, Any] = base_args.copy()
@@ -58,8 +66,6 @@ class TestAll(unittest.TestCase):
 
         # value error cases
         value_error_cases: List[Dict[str, Any]] = [
-            {"df": pd.DataFrame()},
-            {"df": self.dfd.assign(value=np.NaN)},
             {"start": 1},
             {"end": 1},
             {"xcats": ["foo"]},
@@ -148,9 +154,7 @@ class TestAll(unittest.TestCase):
         end: str = "2001-01-01"
 
         ## Test Case 1a - Testing non-normalized weights
-        dfd = make_test_df(
-            cids=all_cids, xcats=all_xcats, start=start, end=end
-        )
+        dfd = make_test_df(cids=all_cids, xcats=all_xcats, start=start, end=end)
         # set all values to 1
         dfd["value"] = 1
 
@@ -193,9 +197,7 @@ class TestAll(unittest.TestCase):
 
         ## Test Case 2a & b - Testing nan logic
         _end: str = "2000-02-01"
-        dfd = make_test_df(
-            cids=all_cids, xcats=all_xcats, start=start, end=_end
-        )
+        dfd = make_test_df(cids=all_cids, xcats=all_xcats, start=start, end=_end)
         dfd["value"] = 1
 
         # make 2000-01-17 for all CAD and AUD values a nan
@@ -221,9 +223,7 @@ class TestAll(unittest.TestCase):
         _xcats: List[str] = ["XR", "CRY", "INFL"]
         weights: List[str] = [1, 2, 4]
         _end: str = "2000-02-01"
-        dfd = make_test_df(
-            cids=all_cids, xcats=all_xcats, start=start, end=_end
-        )
+        dfd = make_test_df(cids=all_cids, xcats=all_xcats, start=start, end=_end)
         dfd["value"] = 1
 
         # make 2000-01-17 for CAD and AUD XR values a nan
@@ -474,13 +474,15 @@ class TestAll(unittest.TestCase):
         rdf: pd.DataFrame = linear_composite(
             df=dfd, cids=_cids, xcats=_xcat, complete_cids=True, weights=_weights
         )
-                
+
         # check that all the dates in the input are there in the output, cast to pd.Timestamp
         self.assertTrue(
             set(rdf["real_date"].unique().tolist())
             == set(dfd["real_date"].unique().tolist())
         )
-        interesting_dates: List[str] = ["2000-01-17", "2000-01-18", "2000-01-19"]
+        interesting_dates: List[pd.Timestamp] = [
+            pd.to_datetime(x) for x in ["2000-01-17", "2000-01-18", "2000-01-19"]
+        ]
         # with complete_cids=True, 2000-01-17 to 2000-01-19 should be nan
         self.assertTrue(
             rdf[rdf["real_date"].isin(interesting_dates)]["value"].isna().all()
@@ -501,7 +503,9 @@ class TestAll(unittest.TestCase):
         )
 
         self.assertTrue(
-            rdf[rdf["real_date"].isin(["2000-01-19"])]["value"].isna().all()
+            rdf[rdf["real_date"].isin([pd.Timestamp("2000-01-19")])]["value"]
+            .isna()
+            .all()
         )
 
         self.assertTrue(
@@ -513,11 +517,13 @@ class TestAll(unittest.TestCase):
 
         # value on 2000-01-17 should be 4:
         self.assertTrue(
-            rdf[rdf["real_date"].isin(["2000-01-17"])]["value"].values[0] == 4
+            rdf[rdf["real_date"].isin([pd.Timestamp("2000-01-17")])]["value"].values[0]
+            == 4
         )
         # value on 2000-01-18 should be 3
         self.assertTrue(
-            rdf[rdf["real_date"].isin(["2000-01-18"])]["value"].values[0] == 3
+            rdf[rdf["real_date"].isin([pd.Timestamp("2000-01-18")])]["value"].values[0]
+            == 3
         )
 
         ## Testing category-weights
@@ -545,11 +551,17 @@ class TestAll(unittest.TestCase):
 
         # value on 2000-01-17 should be 30:
         self.assertTrue(
-            rdf[rdf["real_date"].isin(["2000-01-17"])]["value"].values[0] == 30
+            rdf[rdf["real_date"].isin([pd.Timestamp("2000-01-17")])]["value"].values[0]
+            == 30
         )
         # all else should be 3
         self.assertTrue(
-            np.all(rdf[~rdf["real_date"].isin(["2000-01-17"])]["value"].values == 3)
+            np.all(
+                rdf[~rdf["real_date"].isin([pd.Timestamp("2000-01-17")])][
+                    "value"
+                ].values
+                == 3
+            )
         )
         self.assertTrue(rdf["cid"].unique().tolist() == ["GLB"])
         self.assertTrue(rdf["xcat"].unique().tolist() == ["XR"])

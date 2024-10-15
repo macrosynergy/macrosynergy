@@ -18,7 +18,7 @@ class TestAll(unittest.TestCase):
 
         for cid in cids[:-1]:
             index = random.randint(1, n_vals)
-            arr[tracker:(tracker + index)] = np.repeat(cid, index)
+            arr[tracker : (tracker + index)] = np.repeat(cid, index)
 
             tracker += index
             n_vals -= index
@@ -36,8 +36,8 @@ class TestAll(unittest.TestCase):
 
     def dataframe_generator(self):
 
-        cids = ['AUD', 'USD', 'GBP', 'CAD']
-        xcat = ['FXXR_NSA']
+        cids = ["AUD", "USD", "GBP", "CAD"]
+        xcat = ["FXXR_NSA"]
         timestamps = 1000
         sequence = 20
 
@@ -60,7 +60,7 @@ class TestAll(unittest.TestCase):
 
         category = np.repeat(xcat[0], timestamps)
         data = np.column_stack((cids_, category, np.array(dates_l), value))
-        cols = ['cid', 'xcat', 'real_date', 'value']
+        cols = ["cid", "xcat", "real_date", "value"]
 
         self.df = pd.DataFrame(data=data, columns=cols)
 
@@ -109,17 +109,17 @@ class TestAll(unittest.TestCase):
         self.dataframe_generator()
         dfd = self.df
         shape = dfd.shape
-        cross_sections = dfd['cid'].unique()
+        cross_sections = dfd["cid"].unique()
         cross_sections.sort()
 
-        dfd['value'] = np.arange(0, shape[0])
+        dfd["value"] = np.arange(0, shape[0])
 
-        with self.assertRaises(AssertionError):
-            make_blacklist(dfd, 'FXXR_NSA', cids=list(cross_sections))
+        with self.assertRaises(ValueError):
+            make_blacklist(dfd, "FXXR_NSA", cids=list(cross_sections))
 
-        dfd['value'] = np.repeat(0, shape[0])
+        dfd["value"] = np.repeat(0, shape[0])
 
-        dict_ = make_blacklist(dfd, xcat='FXXR_NSA', cids=list(cross_sections))
+        dict_ = make_blacklist(dfd, xcat="FXXR_NSA", cids=list(cross_sections))
         # Validate the dictionary is empty if every row in the 'value' column contains
         # a zero.
         self.assertTrue(not bool(dict_))
@@ -128,12 +128,12 @@ class TestAll(unittest.TestCase):
         self.dataframe_generator()
         dfd = self.df
 
-        dfd['value'] = np.repeat(1, shape[0])
+        dfd["value"] = np.repeat(1, shape[0])
         # If the entire 'value' column is equated to one, the number of keys in the
         # dictionary should equal the number of cross-sections in the dataframe.
-        dict_ = make_blacklist(dfd, 'FXXR_NSA', cids=list(cross_sections))
+        dict_ = make_blacklist(dfd, "FXXR_NSA", cids=list(cross_sections))
 
-        cross_sections = dfd['cid'].unique()
+        cross_sections = dfd["cid"].unique()
         cross_sections.sort()
         no_cross_sections = cross_sections.size
         keys = list(dict_.keys())
@@ -143,7 +143,7 @@ class TestAll(unittest.TestCase):
         # In this situation, indexing is not required: 'AUD_1', 'AUD_2' etc..
         self.assertTrue(sorted(keys) == list(cross_sections))
 
-        df_pivot = dfd.pivot(index='real_date', columns='cid', values='value')
+        df_pivot = dfd.pivot(index="real_date", columns="cid", values="value")
 
         # Check the start & end dates. All cross-sections have the same start date but
         # varying end dates depending on the number of periods in the series.
@@ -156,10 +156,10 @@ class TestAll(unittest.TestCase):
         # Refresh the DataFrame for the next testing framework.
         self.dataframe_generator()
         dfd = self.df
-        df_pivot = dfd.pivot(index='real_date', columns='cid', values='value')
+        df_pivot = dfd.pivot(index="real_date", columns="cid", values="value")
         dates = df_pivot.index
 
-        dict_ = make_blacklist(dfd, 'FXXR_NSA', cids=list(cross_sections))
+        dict_ = make_blacklist(dfd, "FXXR_NSA", cids=list(cross_sections))
         dict_tracker = self.dict_counter(dict_, cross_sections)
 
         # Test the number of keys in the dictionary per cross_section.
@@ -178,13 +178,13 @@ class TestAll(unittest.TestCase):
             last_index = np.where(dates == last_index)[0]
             last_index = next(iter(last_index))
 
-            values = column.tolist()[:(last_index + 1)]
+            values = column.tolist()[: (last_index + 1)]
 
             count = self.sequence_ones(values)
             self.assertTrue(count == dict_tracker[cid])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     print(os.getcwd())
     unittest.main()

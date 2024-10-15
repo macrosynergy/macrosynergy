@@ -30,7 +30,7 @@ def _prepare_category_basket(
     :param <str> cid: target cross-section for the relative value calculation.
     :param <pd.DataFrame> basket: set of categories to be used for the relative value
         benchmark if available.
-    :param <List[str] xcats_avl: actual set of categories available for the target cross-section.
+    :param <List[str]> xcats_avl: actual set of categories available for the target cross-section.
     :param <bool> complete_set: if True, the basket is only calculated if all categories, held in the basket,
         are available for that respective category.
     """

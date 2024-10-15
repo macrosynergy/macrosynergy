@@ -11,7 +11,14 @@ from .simulate import simulate_vintage_data, simulate_quantamental_data
 
 from .simulate.simulate_vintage_data import VintageData
 from .simulate.simulate_quantamental_data import make_qdf
-from .utils import common_cids, update_df, reduce_df, categories_df, reduce_df_by_ticker, merge_categories
+from .utils import (
+    common_cids,
+    update_df,
+    reduce_df,
+    categories_df,
+    reduce_df_by_ticker,
+    merge_categories,
+)
 from . import utils, types, decorators, simulate, constants
 from .validation import validate_and_reduce_qdf
 
@@ -24,6 +31,8 @@ from .utils.sparse import (
     temporal_aggregator_mean,
     InformationStateChanges,
 )
+
+from .utils.math import ewm_sum, calculate_cumulative_weights
 
 __all__ = [
     # METHODS
@@ -59,4 +68,7 @@ __all__ = [
     "simulate_quantamental_data",
     "validate_and_reduce_qdf",
     "merge_categories",
+    # Math
+    "ewm_sum",
+    "calculate_cumulative_weights",
 ]

@@ -22,6 +22,7 @@ from macrosynergy.learning.predictors import (
 )
 from parameterized import parameterized
 
+
 class TestBaseModifiedRegressor(unittest.TestCase):
     @classmethod
     def setUpClass(self):
@@ -62,14 +63,30 @@ class TestBaseModifiedRegressor(unittest.TestCase):
         self.X = df.drop(columns="XR")
         self.y = df["XR"]
 
-    @parameterized.expand(itertools.product([LinearRegression(), LinearSVR()], ["analytic", "bootstrap"], [1e-5, 1e-3, 1e-1], ["panel", "period", "cross", "period_per_cross", "cross_per_period"], [0.25,0.5,1.0], ["White"]))
-    def test_valid_init(self, model, method, error_offset, bootstrap_method, resample_ratio, analytic_method):
+    @parameterized.expand(
+        itertools.product(
+            [LinearRegression(), LinearSVR()],
+            ["analytic", "bootstrap"],
+            [1e-5, 1e-3, 1e-1],
+            ["panel", "period", "cross", "period_per_cross", "cross_per_period"],
+            [0.25, 0.5, 1.0],
+            ["White"],
+        )
+    )
+    def test_valid_init(
+        self,
+        model,
+        method,
+        error_offset,
+        bootstrap_method,
+        resample_ratio,
+        analytic_method,
+    ):
         # Check that the class initializes
         try:
             bmr = BaseModifiedRegressor(
                 model=model,
                 method=method,
-
                 error_offset=error_offset,
                 bootstrap_method=bootstrap_method,
                 resample_ratio=resample_ratio,
@@ -95,50 +112,69 @@ class TestBaseModifiedRegressor(unittest.TestCase):
             BaseModifiedRegressor(model="invalid_model")
         with self.assertRaises(TypeError):
             BaseModifiedRegressor(model=LogisticRegression())
-        
+
+        lr = LinearRegression()
         # method
         with self.assertRaises(TypeError):
-            BaseModifiedRegressor(model = LinearRegression(), method=1)
+            BaseModifiedRegressor(model=lr, method=1)
         with self.assertRaises(ValueError):
-            BaseModifiedRegressor(model = LinearRegression(), method="invalid_method")
+            BaseModifiedRegressor(model=lr, method="invalid_method")
 
         # error_offset
         with self.assertRaises(TypeError):
-            BaseModifiedRegressor(model = LinearRegression(), method="analytic", error_offset="invalid_offset")
+            BaseModifiedRegressor(
+                model=lr,
+                method="analytic",
+                error_offset="invalid_offset",
+            )
         with self.assertRaises(ValueError):
-            BaseModifiedRegressor(model = LinearRegression(), method="analytic", error_offset=-1)
+            BaseModifiedRegressor(model=lr, method="analytic", error_offset=-1)
 
         # bootstrap_method
         with self.assertRaises(TypeError):
-            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", bootstrap_method=1)
+            BaseModifiedRegressor(model=lr, method="bootstrap", bootstrap_method=1)
         with self.assertRaises(ValueError):
-            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", bootstrap_method="invalid_method")
+            BaseModifiedRegressor(
+                model=lr,
+                method="bootstrap",
+                bootstrap_method="invalid_method",
+            )
 
         # bootstrap_iters
         with self.assertRaises(TypeError):
-            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", bootstrap_iters="invalid_iters")
+            BaseModifiedRegressor(
+                model=lr,
+                method="bootstrap",
+                bootstrap_iters="invalid_iters",
+            )
         with self.assertRaises(ValueError):
-            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", bootstrap_iters=-1)
+            BaseModifiedRegressor(model=lr, method="bootstrap", bootstrap_iters=-1)
 
         # resample_ratio
         with self.assertRaises(TypeError):
-            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", resample_ratio="invalid_ratio")
+            BaseModifiedRegressor(
+                model=lr,
+                method="bootstrap",
+                resample_ratio="invalid_ratio",
+            )
         with self.assertRaises(ValueError):
-            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", resample_ratio=-1)
+            BaseModifiedRegressor(model=lr, method="bootstrap", resample_ratio=-1)
         with self.assertRaises(ValueError):
-            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", resample_ratio=1.1)
+            BaseModifiedRegressor(model=lr, method="bootstrap", resample_ratio=1.1)
 
         # max_features
         with self.assertRaises(NotImplementedError):
-            BaseModifiedRegressor(model = LinearRegression(), method="bootstrap", max_features=1)
+            BaseModifiedRegressor(model=lr, method="bootstrap", max_features=1)
 
         # analytic_method
         with self.assertRaises(TypeError):
-            BaseModifiedRegressor(model = LinearRegression(), method="analytic", analytic_method=1)
+            BaseModifiedRegressor(model=lr, method="analytic", analytic_method=1)
 
     def test_types_fit(self):
+
+        lr = LinearRegression()
         bmr = BaseModifiedRegressor(
-            model=LinearRegression(),
+            model=lr,
             method="analytic",
         )
 
@@ -161,6 +197,7 @@ class TestBaseModifiedRegressor(unittest.TestCase):
             bmr.fit(X=self.X, y=self.y.iloc[:20])
         with self.assertRaises(ValueError):
             bmr.fit(X=self.X, y=self.y.reset_index())
+
 
 class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
     @classmethod
@@ -202,8 +239,27 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
         self.X = df.drop(columns="XR")
         self.y = df["XR"]
 
-    @parameterized.expand(itertools.product(["analytic", "bootstrap"], [True, False], [True, False], [1e-5, 1e-3, 1e-1], ["panel", "period", "cross", "period_per_cross", "cross_per_period"], [0.25,0.5,1.0], ["White"]))
-    def test_valid_init(self, method, fit_intercept, positive, error_offset, bootstrap_method, resample_ratio, analytic_method):
+    @parameterized.expand(
+        itertools.product(
+            ["analytic", "bootstrap"],
+            [True, False],
+            [True, False],
+            [1e-5, 1e-3, 1e-1],
+            ["panel", "period", "cross", "period_per_cross", "cross_per_period"],
+            [0.25, 0.5, 1.0],
+            ["White"],
+        )
+    )
+    def test_valid_init(
+        self,
+        method,
+        fit_intercept,
+        positive,
+        error_offset,
+        bootstrap_method,
+        resample_ratio,
+        analytic_method,
+    ):
         # Check that the class initializes
         try:
             mswls = ModifiedSignWeightedLinearRegression(
@@ -238,22 +294,30 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
             ModifiedSignWeightedLinearRegression(method="invalid_method")
         # error_offset
         with self.assertRaises(TypeError):
-            ModifiedSignWeightedLinearRegression(method="analytic", error_offset="invalid_offset")
+            ModifiedSignWeightedLinearRegression(
+                method="analytic", error_offset="invalid_offset"
+            )
         with self.assertRaises(ValueError):
             ModifiedSignWeightedLinearRegression(method="analytic", error_offset=-1)
         # bootstrap_method
         with self.assertRaises(TypeError):
             ModifiedSignWeightedLinearRegression(method="bootstrap", bootstrap_method=1)
         with self.assertRaises(ValueError):
-            ModifiedSignWeightedLinearRegression(method="bootstrap", bootstrap_method="invalid_method")
+            ModifiedSignWeightedLinearRegression(
+                method="bootstrap", bootstrap_method="invalid_method"
+            )
         # bootstrap_iters
         with self.assertRaises(TypeError):
-            ModifiedSignWeightedLinearRegression(method="bootstrap", bootstrap_iters="invalid_iters")
+            ModifiedSignWeightedLinearRegression(
+                method="bootstrap", bootstrap_iters="invalid_iters"
+            )
         with self.assertRaises(ValueError):
             ModifiedSignWeightedLinearRegression(method="bootstrap", bootstrap_iters=-1)
         # resample_ratio
         with self.assertRaises(TypeError):
-            ModifiedSignWeightedLinearRegression(method="bootstrap", resample_ratio="invalid_ratio")
+            ModifiedSignWeightedLinearRegression(
+                method="bootstrap", resample_ratio="invalid_ratio"
+            )
         with self.assertRaises(ValueError):
             ModifiedSignWeightedLinearRegression(method="bootstrap", resample_ratio=-1)
         with self.assertRaises(ValueError):
@@ -303,7 +367,9 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
             )
 
         # Determine analytical expression for standard errors and check that the two align
-        model = SignWeightedLinearRegression(fit_intercept=fit_intercept, positive=positive).fit(X=self.X, y=self.y)
+        model = SignWeightedLinearRegression(
+            fit_intercept=fit_intercept, positive=positive
+        ).fit(X=self.X, y=self.y)
         if fit_intercept:
             X_new = np.column_stack((np.ones(len(self.X)), self.X.values))
         else:
@@ -345,7 +411,7 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
             method="analytic",
             fit_intercept=fit_intercept,
             positive=positive,
-            analytic_method="White"
+            analytic_method="White",
         )
         try:
             mswls.fit(X=self.X, y=self.y)
@@ -355,7 +421,9 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
             )
 
         # Determine analytical expression for standard errors and check that the two align
-        model = SignWeightedLinearRegression(fit_intercept=fit_intercept, positive=positive).fit(X=self.X, y=self.y)
+        model = SignWeightedLinearRegression(
+            fit_intercept=fit_intercept, positive=positive
+        ).fit(X=self.X, y=self.y)
         if fit_intercept:
             X_new = np.column_stack((np.ones(len(self.X)), self.X.values))
         else:
@@ -379,7 +447,6 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
         cov_matrix = XtX_inv @ Omega @ XtX_inv
         se = np.sqrt(np.diag(cov_matrix))
 
-
         if fit_intercept:
             coef_se = se[1:]
             intercept_se = se[0]
@@ -393,6 +460,7 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
 
         np.testing.assert_array_almost_equal(mswls.coef_, coef, decimal=3)
         self.assertAlmostEqual(mswls.intercept_, intercept, places=3)
+
 
 class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
     @classmethod
@@ -434,8 +502,29 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
         self.X = df.drop(columns="XR")
         self.y = df["XR"]
 
-    @parameterized.expand(itertools.product(["analytic", "bootstrap"], [True, False], [True, False], [12, 24, 36, 60], [1e-5, 1e-3, 1e-1], ["panel", "period", "cross", "period_per_cross", "cross_per_period"], [0.25,0.5,1.0], ["White"]))
-    def test_valid_init(self, method, fit_intercept, positive, half_life, error_offset, bootstrap_method, resample_ratio, analytic_method):
+    @parameterized.expand(
+        itertools.product(
+            ["analytic", "bootstrap"],
+            [True, False],
+            [True, False],
+            [12, 24, 36, 60],
+            [1e-5, 1e-3, 1e-1],
+            ["panel", "period", "cross", "period_per_cross", "cross_per_period"],
+            [0.25, 0.5, 1.0],
+            ["White"],
+        )
+    )
+    def test_valid_init(
+        self,
+        method,
+        fit_intercept,
+        positive,
+        half_life,
+        error_offset,
+        bootstrap_method,
+        resample_ratio,
+        analytic_method,
+    ):
         # Check that the class initializes
         try:
             mswls = ModifiedTimeWeightedLinearRegression(
@@ -473,7 +562,9 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
             ModifiedTimeWeightedLinearRegression(method="analytic", positive=1)
         # half_life
         with self.assertRaises(TypeError):
-            ModifiedTimeWeightedLinearRegression(method="analytic", half_life="invalid_half_life")
+            ModifiedTimeWeightedLinearRegression(
+                method="analytic", half_life="invalid_half_life"
+            )
         with self.assertRaises(ValueError):
             ModifiedTimeWeightedLinearRegression(method="analytic", half_life=-1)
         # method
@@ -483,22 +574,30 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
             ModifiedTimeWeightedLinearRegression(method="invalid_method")
         # error_offset
         with self.assertRaises(TypeError):
-            ModifiedTimeWeightedLinearRegression(method="analytic", error_offset="invalid_offset")
+            ModifiedTimeWeightedLinearRegression(
+                method="analytic", error_offset="invalid_offset"
+            )
         with self.assertRaises(ValueError):
             ModifiedTimeWeightedLinearRegression(method="analytic", error_offset=-1)
         # bootstrap_method
         with self.assertRaises(TypeError):
             ModifiedTimeWeightedLinearRegression(method="bootstrap", bootstrap_method=1)
         with self.assertRaises(ValueError):
-            ModifiedTimeWeightedLinearRegression(method="bootstrap", bootstrap_method="invalid_method")
+            ModifiedTimeWeightedLinearRegression(
+                method="bootstrap", bootstrap_method="invalid_method"
+            )
         # bootstrap_iters
         with self.assertRaises(TypeError):
-            ModifiedTimeWeightedLinearRegression(method="bootstrap", bootstrap_iters="invalid_iters")
+            ModifiedTimeWeightedLinearRegression(
+                method="bootstrap", bootstrap_iters="invalid_iters"
+            )
         with self.assertRaises(ValueError):
             ModifiedTimeWeightedLinearRegression(method="bootstrap", bootstrap_iters=-1)
         # resample_ratio
         with self.assertRaises(TypeError):
-            ModifiedTimeWeightedLinearRegression(method="bootstrap", resample_ratio="invalid_ratio")
+            ModifiedTimeWeightedLinearRegression(
+                method="bootstrap", resample_ratio="invalid_ratio"
+            )
         with self.assertRaises(ValueError):
             ModifiedTimeWeightedLinearRegression(method="bootstrap", resample_ratio=-1)
         with self.assertRaises(ValueError):
@@ -532,7 +631,9 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
         with self.assertRaises(ValueError):
             mswls.fit(X=self.X, y=self.y.reset_index())
 
-    @parameterized.expand(itertools.product([True, False], [True, False], [12, 24, 36, 60]))
+    @parameterized.expand(
+        itertools.product([True, False], [True, False], [12, 24, 36, 60])
+    )
     def test_valid_fit_analytic(self, fit_intercept, positive, half_life):
         # First check that setting no analytic method works as expected
         mswls = ModifiedTimeWeightedLinearRegression(
@@ -549,7 +650,9 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
             )
 
         # Determine analytical expression for standard errors and check that the two align
-        model = TimeWeightedLinearRegression(fit_intercept=fit_intercept, positive=positive, half_life = half_life).fit(X=self.X, y=self.y)
+        model = TimeWeightedLinearRegression(
+            fit_intercept=fit_intercept, positive=positive, half_life=half_life
+        ).fit(X=self.X, y=self.y)
         if fit_intercept:
             X_new = np.column_stack((np.ones(len(self.X)), self.X.values))
         else:
@@ -584,7 +687,9 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
         np.testing.assert_array_almost_equal(mswls.coef_, coef, decimal=3)
         self.assertAlmostEqual(mswls.intercept_, intercept, places=3)
 
-    @parameterized.expand(itertools.product([True, False], [True, False], [12, 24, 36, 60]))
+    @parameterized.expand(
+        itertools.product([True, False], [True, False], [12, 24, 36, 60])
+    )
     def test_valid_fit_white(self, fit_intercept, positive, half_life):
         # First check that setting no analytic method works as expected
         mswls = ModifiedTimeWeightedLinearRegression(
@@ -592,7 +697,7 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
             fit_intercept=fit_intercept,
             positive=positive,
             half_life=half_life,
-            analytic_method="White"
+            analytic_method="White",
         )
         try:
             mswls.fit(X=self.X, y=self.y)
@@ -602,7 +707,9 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
             )
 
         # Determine analytical expression for standard errors and check that the two align
-        model = TimeWeightedLinearRegression(fit_intercept=fit_intercept, positive=positive, half_life = half_life).fit(X=self.X, y=self.y)
+        model = TimeWeightedLinearRegression(
+            fit_intercept=fit_intercept, positive=positive, half_life=half_life
+        ).fit(X=self.X, y=self.y)
         if fit_intercept:
             X_new = np.column_stack((np.ones(len(self.X)), self.X.values))
         else:
@@ -625,7 +732,6 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
         Omega = X_new.T * weighted_residuals_squared @ X_new
         cov_matrix = XtX_inv @ Omega @ XtX_inv
         se = np.sqrt(np.diag(cov_matrix))
-
 
         if fit_intercept:
             coef_se = se[1:]

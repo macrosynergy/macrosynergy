@@ -16,7 +16,11 @@ import seaborn as sns
 
 from macrosynergy import PYTHON_3_8_OR_LATER
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df, update_df
+from macrosynergy.management.utils import (
+    reduce_df,
+    update_df,
+    _map_to_business_day_frequency,
+)
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.signal import SignalReturnRelations
 
@@ -336,7 +340,11 @@ class NaivePnL:
         for varx, name, typex in (
             (sig, "sig", str),
             (sig_op, "sig_op", str),
-            (sig_add, "sig_add", (Number)), # testing for number instead of (float, int)
+            (
+                sig_add,
+                "sig_add",
+                (Number),
+            ),  # testing for number instead of (float, int)
             (sig_neg, "sig_neg", bool),
             (pnl_name, "pnl_name", (str, type(None))),
             (rebal_freq, "rebal_freq", str),
@@ -791,7 +799,7 @@ class NaivePnL:
         pnl_cids: List[str] = None,
         start: str = None,
         end: str = None,
-        freq: str = "m",
+        freq: str = "M",
         title: str = "Average applied signal values",
         x_label: str = "",
         y_label: str = "",
@@ -826,19 +834,18 @@ class NaivePnL:
         if pnl_name not in self.pnl_names:
             raise ValueError(error_cats)
 
-        error_time = "Defined time-period must be monthly ('m') or quarterly ('q')"
-        if not isinstance(freq, str) or freq not in ["m", "q"]:
-            raise ValueError(error_time)
+        err_msg = "Defined time-period must be monthly ('m') or quarterly ('q')"
+        freq = _map_to_business_day_frequency(freq)
+        if not freq.startswith(("BQ", "BM")):
+            raise ValueError(err_msg)
 
-        error_cids = (
-            f"Cross-sections not available. Available cids are:" f"{self.cids}."
-        )
+        err_cids = f"Cross-sections not available. Available cids are:" f"{self.cids}."
 
         if pnl_cids is None:
             pnl_cids = self.cids
         else:
             if not set(pnl_cids) <= set(self.cids):
-                raise ValueError(error_cids)
+                raise ValueError(err_cids)
 
         for vname, lbl in zip(["x_label", "y_label"], [x_label, y_label]):
             if not isinstance(lbl, str):
@@ -907,7 +914,9 @@ class NaivePnL:
         assert pnl_name in self.pnl_names, error_cats
 
         error_time = "Defined time-period must either be monthly, m, or quarterly, q."
-        assert isinstance(freq, str) and freq in ["m", "q"], error_time
+        freq = _map_to_business_day_frequency(freq)
+        if not freq.startswith(("BQ", "BM")):
+            raise ValueError(error_time)
 
         metric_error = "The metric must either be 'direction' or 'strength'."
         assert metric in ["direction", "strength"], metric_error
@@ -1059,7 +1068,8 @@ class NaivePnL:
 
         df.iloc[6, :] = -drawdown.max()
 
-        monthly_pnl = dfw.resample("M").sum()
+        mfreq = _map_to_business_day_frequency("M")
+        monthly_pnl = dfw.resample(mfreq).sum()
         total_pnl = monthly_pnl.sum(axis=0)
         top_5_percent_cutoff = int(np.ceil(len(monthly_pnl) * 0.05))
         top_months = pd.DataFrame(columns=monthly_pnl.columns)
@@ -1081,7 +1091,8 @@ class NaivePnL:
                 )
                 df.iloc[8 + i, :] = correlation
 
-        df.iloc[8 + len(benchmark_tickers), :] = dfw.resample("M").sum().count()
+        mfreq = _map_to_business_day_frequency("M")
+        df.iloc[8 + len(benchmark_tickers), :] = dfw.resample(mfreq).sum().count()
 
         if label_dict is not None:
             if not isinstance(label_dict, dict):
@@ -1157,20 +1168,20 @@ def create_results_dataframe(
     :param <str> title: title of the DataFrame.
     :param <pd.DataFrame> df: DataFrame with the data.
     :param <str> ret: name of the return signal.
-    :param <Union[str, List[str] sigs: name of the comparative signal(s).
-    :param <Union[str, List[str] cids: name of the cross-section(s).
-    :param <Union[str, List[str] sig_ops: operation(s) to be applied to the signal(s).
-    :param <Union[float, List[float] sig_adds: value(s) to be added to the signal(s).
-    :param <Union[str, List[str] neutrals: neutralization method(s) to be applied.
-    :param <Union[float, List[float] threshs: threshold(s) to be applied to the signal(s).
+    :param <Union[str, List[str]> sigs: name of the comparative signal(s).
+    :param <Union[str, List[str]> cids: name of the cross-section(s).
+    :param <Union[str, List[str]> sig_ops: operation(s) to be applied to the signal(s).
+    :param <Union[float, List[float]> sig_adds: value(s) to be added to the signal(s).
+    :param <Union[str, List[str]> neutrals: neutralization method(s) to be applied.
+    :param <Union[float, List[float]> threshs: threshold(s) to be applied to the signal(s).
     :param <str> bm: name of the benchmark signal.
-    :param <Union[bool, List[bool] sig_negs: whether the signal(s) should be negated.
+    :param <Union[bool, List[bool]> sig_negs: whether the signal(s) should be negated.
     :param <bool> cosp: whether the signals should be cross-sectionally standardized.
     :param <str> start: start date of the analysis.
     :param <str> end: end date of the analysis.
     :param <dict> blacklist: dictionary with the blacklisted dates.
-    :param <Union[str, List[str] freqs: frequency of the rebalancing.
-    :param <Union[str, List[str] agg_sigs: aggregation method(s) for the signal(s).
+    :param <Union[str, List[str]> freqs: frequency of the rebalancing.
+    :param <Union[str, List[str]> agg_sigs: aggregation method(s) for the signal(s).
     :param <dict> sigs_renamed: dictionary with the renamed signals.
     :param <int> fwin: frequency of the rolling window.
     :param <int> slip: slippage to be applied to the PnLs.
