@@ -43,6 +43,9 @@ debug_stream_handler.setFormatter(
 )
 logger.addHandler(debug_stream_handler)
 
+DEFAULT_CLIENT_ID_ENV_VAR: str = "DQ_CLIENT_ID"
+DEFAULT_CLIENT_SECRET_ENV_VAR: str = "DQ_CLIENT_SECRET"
+
 
 def deconstruct_expression(
     expression: Union[str, List[str]]
@@ -600,6 +603,15 @@ class JPMaQSDownload(DataQueryInterface):
             if varx is not None:
                 if not isinstance(varx, str):
                     raise TypeError(f"`{namex}` must be a string.")
+
+        if not all([crt, key, username, password]):
+            if not all([client_id, client_secret]):
+                # check the environment variables
+                _clid = os.getenv(DEFAULT_CLIENT_ID_ENV_VAR)
+                _clsc = os.getenv(DEFAULT_CLIENT_SECRET_ENV_VAR)
+                if all([_clid, _clsc]):
+                    client_id = _clid
+                    client_secret = _clsc
 
         if not (all([client_id, client_secret]) or all([crt, key, username, password])):
             raise ValueError(

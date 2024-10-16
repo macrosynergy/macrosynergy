@@ -26,7 +26,7 @@ from .model_evaluation import (
     correlation_coefficient,
     create_panel_metric,
 )
-from .signal_optimizer import SignalOptimizer
+from .sequential import SignalOptimizer, BetaEstimator
 
 from .forecasting import (
     LADRegressor,
@@ -43,8 +43,6 @@ from .forecasting import (
     RidgeRegressionSystem,
     CorrelationVolatilitySystem,
 )
-
-from .beta_estimator import BetaEstimator
 
 from .random_effects import RandomEffects
 
