@@ -265,13 +265,15 @@ def granger_causality_test(
     ## value checks for `freq` and `agg` are implicitly checked in downstream functions
 
     ## Copy df to prevent side effects
-    df: QuantamentalDataFrame = df.copy()
+    df: QuantamentalDataFrame = QuantamentalDataFrame(df)
 
     ## Construct tickers from the `cids` and `xcats` if `tickers` is not specified
     tickers: List[str] = _get_tickers(tickers=tickers, cids=cids, xcats=xcats)
 
     ## Reduce df
-    df: pd.DataFrame = reduce_df_by_ticker(df=df, ticks=tickers, start=start, end=end)
+    df: QuantamentalDataFrame = reduce_df_by_ticker(
+        df=df, ticks=tickers, start=start, end=end
+    )
 
     # Downsample df
     freq = freq.upper()
@@ -281,7 +283,7 @@ def granger_causality_test(
     )
 
     # Pivot df
-    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df, value_column=metric)
+    df_wide: pd.DataFrame = QuantamentalDataFrame(df).to_wide(value_column=metric)
 
     # there must only be two columns in df_wide
     assert len(df_wide.columns) == 2, "df_wide must have only two columns"

@@ -338,8 +338,16 @@ class TestJPMaQSDownload(unittest.TestCase):
         _dfA = concat_single_metric_qdfs(
             list(itertools.chain.from_iterable(qdf_list_list.copy()))
         )  #
-        _dfB = self.jpmaqs_download._chain_download_outputs(qdf_list_list)
-        self.assertTrue(_dfA.equals(_dfB))
+        _dfB: QuantamentalDataFrame = self.jpmaqs_download._chain_download_outputs(
+            qdf_list_list
+        )
+        _dfB["cid"] = _dfB["cid"].astype("string")
+        _dfB["xcat"] = _dfB["xcat"].astype("string")
+
+        idx_cols = QuantamentalDataFrame.IndexCols
+        _dfA = _dfA.sort_values(by=idx_cols).reset_index(drop=True)
+        _dfB = _dfB.sort_values(by=idx_cols).reset_index(drop=True)
+        self.assertTrue(_dfA.eq(_dfB).all().all())
 
         ## Test for column list
 

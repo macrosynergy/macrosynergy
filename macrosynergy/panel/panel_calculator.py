@@ -10,6 +10,7 @@ from typing import List, Tuple
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.utils import drop_nan_series
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy import PYTHON_3_8_OR_LATER
 import re
 import random
@@ -150,10 +151,8 @@ def panel_calculator(
     col_error = f"The DataFrame must contain the necessary columns: {cols}."
     assert set(cols).issubset(set(df.columns)), col_error
     # Removes any columns beyond the required.
-    df = df.loc[:, cols]
-
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-
+    df = QuantamentalDataFrame(df[cols])
+    _as_categorical = df.InitializedAsCategorical
     assert isinstance(calcs, list), "List of functions expected."
 
     error_formula = "Each formula in the panel calculation list must be a string."
@@ -199,7 +198,7 @@ def panel_calculator(
     )
 
     # E. Create all required wide dataframes with category names.
-
+    df = df.add_ticker_column()
     for xcat in old_xcats_used:
         dfxx = dfx[dfx["xcat"] == xcat]
         dfw = dfxx.pivot(index="real_date", columns="cid", values="value")
@@ -208,7 +207,7 @@ def panel_calculator(
 
     for single in singles_used:
         ticker = single[1:]
-        dfxx = df[(df["cid"] + "_" + df["xcat"]) == ticker]
+        dfxx = df[(df["ticker"]) == ticker]
         if dfxx.empty:
             raise ValueError(f"Ticker, {ticker}, missing from the dataframe.")
         else:
@@ -227,7 +226,7 @@ def panel_calculator(
         df_add = pd.melt(dfw_add.reset_index(), id_vars=["real_date"]).rename(
             {"variable": "cid"}, axis=1
         )
-        df_add["xcat"] = new_xcat
+        df_add = QuantamentalDataFrame.from_long_df(df_add, xcat=new_xcat)
         if new_xcat == list(ops.keys())[0]:
             df_out = df_add[cols]
         else:
@@ -238,6 +237,7 @@ def panel_calculator(
     if df_out.isna().any().any():
         df_out = drop_nan_series(df=df_out, raise_warning=True)
 
+    df_out = QuantamentalDataFrame(df_out, categorical=_as_categorical)
     return df_out
 
 
@@ -272,7 +272,7 @@ def _replace_zeros(df: pd.DataFrame):
     if not PYTHON_3_8_OR_LATER:
         for col in df.columns:
             df[col] = df[col].replace(pd.NA, np.nan)
-            df[col] = df[col].astype('float64')
+            df[col] = df[col].astype("float64")
         return df
     else:
         return df
