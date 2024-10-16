@@ -1132,7 +1132,7 @@ class TestAll(unittest.TestCase):
         correct_labels += [
             col for col in list(neg_coefs.sum().index[neg_coefs.sum() < 0])
         ]
-        correct_labels = sorted(correct_labels)
+        correct_labels = sorted(list(set(correct_labels)))
         self.assertTrue(np.all(labels == correct_labels))
 
     # def test_types_nsplits_timeplot(self):
@@ -1177,53 +1177,46 @@ class TestAll(unittest.TestCase):
     #     title = ax.get_title()
     #     self.assertTrue(title == "hello")
 
-    # def test_invalid_plots(self):
-    #     splitter_idx = 1
-    #     so = SignalOptimizer(
-    #         inner_splitters=self.splitters[splitter_idx],
-    #         X=self.X,
-    #         y=self.y,
-    #     )
-    #     # Test that an error is raised if calculate_predictions has not been run
-    #     with self.assertRaises(ValueError):
-    #         so.nsplits_timeplot(name="test")
-    #     # Test that an error is raised if calculate_predictions has not been run
-    #     with self.assertRaises(ValueError):
-    #         so.coefs_stackedbarplot(name="test")
-    #     # Test that an error is raised if calculate_predictions has not been run
-    #     with self.assertRaises(ValueError):
-    #         so.intercepts_timeplot(name="test")
-    #     # Test that an error is raised if calculate_predictions has not been run
-    #     with self.assertRaises(ValueError):
-    #         so.coefs_timeplot(name="test")
-    #     # Test that if no signals have been calculated, an error is raised
-    #     with self.assertRaises(ValueError):
-    #         so.get_parameter_stats(name="test", include_intercept=False)
-    #     with self.assertRaises(ValueError):
-    #         so.get_parameter_stats(name="test", include_intercept=True)
-    #     # Test that if no signals have been calculated, an error is raised
-    #     with self.assertRaises(ValueError):
-    #         so.get_ftr_coefficients(name="test")
-    #     # Test that if no signals have been calculated, an error is raised
-    #     with self.assertRaises(ValueError):
-    #         so.get_intercepts(name="test")
-    #     # Test that if no signals have been calculated, an error is raised
-    #     with self.assertRaises(ValueError):
-    #         so.get_selected_features(name="test")
-    #     # Test that invalid names are caught
-    #     with self.assertRaises(TypeError):
-    #         so.feature_selection_heatmap(name=1)
-    #     with self.assertRaises(TypeError):
-    #         so.feature_selection_heatmap(name=[1, 2, 3])
-    #     with self.assertRaises(ValueError):
-    #         so.feature_selection_heatmap(name="test")
-    #     # Test that invalid names are caught
-    #     with self.assertRaises(TypeError):
-    #         so.models_heatmap(name=1)
-    #     with self.assertRaises(TypeError):
-    #         so.models_heatmap(name=[1, 2, 3])
-    #     with self.assertRaises(ValueError):
-    #         so.models_heatmap(name="test")
+    def test_invalid_plots(self):
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+        )
+        # # Test that an error is raised if calculate_predictions has not been run
+        # with self.assertRaises(ValueError):
+        #     so.nsplits_timeplot(name="test")
+        # Test that an error is raised if calculate_predictions has not been run
+        with self.assertRaises(ValueError):
+            so.coefs_stackedbarplot(name="test")
+        # Test that an error is raised if calculate_predictions has not been run
+        with self.assertRaises(ValueError):
+            so.intercepts_timeplot(name="test")
+        # Test that an error is raised if calculate_predictions has not been run
+        with self.assertRaises(ValueError):
+            so.coefs_timeplot(name="test")
+        # Test that if no signals have been calculated, an error is raised
+        with self.assertRaises(ValueError):
+            so.get_ftr_coefficients(name="test")
+        # Test that if no signals have been calculated, an error is raised
+        with self.assertRaises(ValueError):
+            so.get_intercepts(name="test")
+        # Test that if no signals have been calculated, an error is raised
+        with self.assertRaises(ValueError):
+            so.get_selected_features(name="test")
+        # Test that invalid names are caught
+        with self.assertRaises(TypeError):
+            so.feature_selection_heatmap(name=1)
+        with self.assertRaises(TypeError):
+            so.feature_selection_heatmap(name=[1, 2, 3])
+        with self.assertRaises(ValueError):
+            so.feature_selection_heatmap(name="test")
+        # Test that invalid names are caught
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name=1)
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name=[1, 2, 3])
+        with self.assertRaises(ValueError):
+            so.models_heatmap(name="test")
 
 
 def _get_X_y(so: SignalOptimizer):
