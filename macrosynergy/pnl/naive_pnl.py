@@ -1152,7 +1152,10 @@ class NaivePnL:
         filter_1 = self.df["xcat"].isin(selected_pnls)
         filter_2 = self.df["cid"] == "ALL" if not cs else True
 
-        return self.df[filter_1 & filter_2]
+        return QuantamentalDataFrame(
+            self.df[filter_1 & filter_2],
+            _initialized_as_categorical=self._as_categorical,
+        ).to_original_dtypes()
 
     def _winsorize(self, df: pd.DataFrame, thresh: float):
         if thresh is not None:
