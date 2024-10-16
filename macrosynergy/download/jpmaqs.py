@@ -154,14 +154,17 @@ def timeseries_to_qdf(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
     cid, xcat, metric = deconstruct_expression(_get_expr(timeseries))
     df = pd.DataFrame(_get_ts(timeseries), columns=["real_date", metric])
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y%m%d")
+
+    if df.empty or all(df.isna().all()):
+        return None
+
     df = QuantamentalDataFrame.from_long_df(
         df=df,
         value_column=metric,
         cid=cid,
         xcat=xcat,
     )
-    if df.empty:
-        return None
+
     return df
 
 
