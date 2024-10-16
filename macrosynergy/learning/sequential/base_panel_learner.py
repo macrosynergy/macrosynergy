@@ -128,7 +128,6 @@ class BasePanelLearner(ABC):
             ]
         )
 
-
     def run(
         self,
         name,
@@ -445,14 +444,17 @@ class BasePanelLearner(ABC):
                     cv=cv_splits,
                 )
             elif search_type == "prior":
-                search_type = RandomizedSearchCV(
+                search_object = RandomizedSearchCV(
                     estimator=model,
                     param_distributions=hyperparameters[model_name],
                     n_iter=n_iter,
                     scoring=scorers,
                     n_jobs=n_jobs_inner,
                     refit=partial(
-                        self._model_selection, cv_summary=cv_summary, scorers=scorers
+                        self._model_selection,
+                        cv_summary=cv_summary,
+                        scorers=scorers,
+                        normalize_fold_results=normalize_fold_results,
                     ),
                     cv=cv_splits,
                 )
@@ -682,8 +684,11 @@ class BasePanelLearner(ABC):
             optim_params = ({},)
 
         data = [timestamp, pipeline_name, optim_name, optim_score, optim_params]
-        
-        n_splits = {splitter_name: splitter.n_splits for splitter_name, splitter in inner_splitters_adj.items()}
+
+        n_splits = {
+            splitter_name: splitter.n_splits
+            for splitter_name, splitter in inner_splitters_adj.items()
+        }
         data.append(n_splits)
 
         return {"model_choice": data}
@@ -707,15 +712,6 @@ class BasePanelLearner(ABC):
         Method for storing quantamental data.
         """
         return dict()
-
-    # @abstractmethod
-    # def store_other_data(
-    #     self, pipeline_name, optimal_model, X_train, y_train, X_test, y_test, timestamp
-    # ):
-    #     """
-    #     Abstract method for storing other data.
-    #     """
-    #     pass
 
     def get_optimal_models(self, name=None):
         """
@@ -1052,7 +1048,7 @@ class BasePanelLearner(ABC):
                     "The values of the models dictionary must be sklearn predictors or "
                     "pipelines."
                 )
-
+        
         # hyperparameters
         if not isinstance(hyperparameters, dict):
             raise TypeError("The hyperparameters argument must be a dictionary.")
@@ -1072,7 +1068,7 @@ class BasePanelLearner(ABC):
                             "The keys of the inner hyperparameters dictionaries must be "
                             "strings."
                         )
-                    if hyperparameters == "grid":
+                    if search_type == "grid":
                         if not isinstance(hparam_values, list):
                             raise TypeError(
                                 "The values of the inner hyperparameters dictionaries must be "
@@ -1083,7 +1079,7 @@ class BasePanelLearner(ABC):
                                 "The values of the inner hyperparameters dictionaries cannot be "
                                 "empty lists."
                             )
-                    elif hyperparameters == "random":
+                    elif search_type == "prior":
                         # hparam_values must either be a list or a scipy.stats distribution
                         # create typeerror
                         if isinstance(hparam_values, list):
@@ -1157,13 +1153,16 @@ class BasePanelLearner(ABC):
                     "cv_summary must be a function that takes a list of scores and returns "
                     "a single value. Check whether the output of cv_summary is a number."
                 )
-
+        
         # n_iter
-        if search_type == "random":
-            if type(n_iter) != int:
-                raise TypeError("The n_iter argument must be an integer.")
+        if search_type == "prior":
+            if not isinstance(n_iter, int):
+                raise TypeError("If search_type is 'prior', n_iter must be an integer.")
             if n_iter < 1:
                 raise ValueError("The n_iter argument must be greater than zero.")
+        elif n_iter is not None and not isinstance(n_iter, int):
+            raise ValueError("n_iter must only be used if search_type is 'prior'.")
+            
 
         # split_functions
         if split_functions is not None:

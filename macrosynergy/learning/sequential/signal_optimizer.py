@@ -1117,16 +1117,16 @@ if __name__ == "__main__":
     df_cids = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
     )
-    df_cids.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
-    df_cids.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
-    df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
-    df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["AUD"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2012-01-01", "2020-12-31", 0, 1]
 
     df_xcats = pd.DataFrame(index=xcats, columns=cols)
-    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
-    df_xcats.loc["GROWTH"] = ["2001-01-01", "2020-12-31", 1, 2, 0.9, 1]
-    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
+    df_xcats.loc["XR"] = ["2012-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2012-01-01", "2020-12-31", 1, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2012-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2012-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfd["grading"] = np.ones(dfd.shape[0])
@@ -1168,9 +1168,6 @@ if __name__ == "__main__":
         },
         search_type="grid",
         cv_summary="median",
-        min_cids=4,
-        min_periods=36,
-        test_size=1,
         n_jobs_outer=1,
         n_jobs_inner=1,
     )

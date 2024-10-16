@@ -28,7 +28,7 @@ from .model_evaluation import (
     correlation_coefficient,
     create_panel_metric,
 )
-from .signal_optimizer import SignalOptimizer
+from .sequential import SignalOptimizer, BetaEstimator
 
 from .predictors import (
     NaivePredictor,
@@ -50,8 +50,6 @@ from .predictors import (
     ModifiedTimeWeightedLinearRegression,
     BaseModifiedRegressor,
 )
-
-from .beta_estimator import BetaEstimator
 
 from .random_effects import RandomEffects
 
