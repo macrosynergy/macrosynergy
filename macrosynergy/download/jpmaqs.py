@@ -152,17 +152,14 @@ def timeseries_to_qdf(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
         return None
 
     cid, xcat, metric = deconstruct_expression(_get_expr(timeseries))
-
-    df: pd.DataFrame = (
-        pd.DataFrame(
-            _get_ts(timeseries),
-            columns=["real_date", metric],
-        )
-        .assign(cid=cid, xcat=xcat)
-        .dropna()
-    )
-
+    df = pd.DataFrame(_get_ts(timeseries), columns=["real_date", metric])
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y%m%d")
+    df = QuantamentalDataFrame.from_long_df(
+        df=df,
+        value_column=metric,
+        cid=cid,
+        xcat=xcat,
+    )
     if df.empty:
         return None
     return df
@@ -263,9 +260,10 @@ def _save_qdf(data: List[dict], save_path: str) -> None:
         ticker_filename = _ticker_filename(ticker, save_path)
         os.makedirs(os.path.dirname(ticker_filename), exist_ok=True)
         ts = [_ts for _ts in data if _get_ticker(_ts) == ticker]
-        df: QuantamentalDataFrame = concat_single_metric_qdfs(
+        df: QuantamentalDataFrame = QuantamentalDataFrame.from_qdf_list(
             [timeseries_to_qdf(_ts) for _ts in ts]
         ).drop(columns=["cid", "xcat"])
+
         if os.path.exists(_ticker_filename(ticker, save_path)):
             edf = pd.read_csv(
                 ticker_filename, parse_dates=["real_date"], index_col="real_date"
@@ -393,7 +391,7 @@ def validate_downloaded_df(
                 raise InvalidDataframeError(f"Column {col} is empty.")
 
         check_exprs = construct_expressions(
-            tickers=(data_df["cid"] + "_" + data_df["xcat"]).unique(),
+            tickers=QuantamentalDataFrame(data_df).list_tickers(),
             metrics=found_metrics,
         )
 
@@ -826,7 +824,8 @@ class JPMaQSDownload(DataQueryInterface):
         if isinstance(download_outputs[0], (dict, bool)):
             return download_outputs
         if isinstance(download_outputs[0], QuantamentalDataFrame):
-            return concat_single_metric_qdfs(download_outputs)
+            # return concat_single_metric_qdfs(download_outputs)
+            return QuantamentalDataFrame.from_qdf_list(download_outputs)
             # cannot chain QDFs with different metrics
         if not self.jpmaqs_access:
             raise ValueError(
@@ -1096,6 +1095,7 @@ class JPMaQSDownload(DataQueryInterface):
         as_dataframe: bool = True,
         dataframe_format: str = "qdf",
         report_time_taken: bool = False,
+        categorical_dataframe: bool = False,
         *args,
         **kwargs,
     ) -> Union[pd.DataFrame, List[Dict]]:
@@ -1133,6 +1133,10 @@ class JPMaQSDownload(DataQueryInterface):
             format with each expression as a column, and a single date column.
         :param <bool> report_time_taken: If True, the time taken to download
             and apply data transformations is reported.
+        :param <bool> categorical_dataframe: If True, the dataframe returned will use the
+            pandas Categorical data type for the `cid` and `xcat` columns. Default is
+            False.
+        :param <dict> kwargs: any other keyword arguments.
 
         :return <pd.DataFrame|list[Dict]>: dataframe of data if
             `as_dataframe` is True, list of dictionaries if False.
@@ -1266,7 +1270,7 @@ class JPMaQSDownload(DataQueryInterface):
             if dataframe_format == "qdf":
                 assert isinstance(data, QuantamentalDataFrame)
 
-        return data
+        return QuantamentalDataFrame(data, categorical=categorical_dataframe)
 
 
 def custom_download(
