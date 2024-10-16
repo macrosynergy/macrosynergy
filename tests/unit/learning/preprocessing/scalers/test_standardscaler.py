@@ -52,6 +52,8 @@ class TestPanelStandardScaler(unittest.TestCase):
         self.assertEqual(scaler.type, "panel")
         self.assertTrue(scaler.with_mean)
         self.assertTrue(scaler.with_std)
+        self.assertTrue(scaler.feature_names_in_ is None)
+        self.assertTrue(scaler.n_features_in_ is None)
         self.assertIsInstance(scaler, PanelStandardScaler)
 
         # Test custom initialization
@@ -59,6 +61,8 @@ class TestPanelStandardScaler(unittest.TestCase):
         self.assertEqual(scaler.type, "cross_section")
         self.assertFalse(scaler.with_mean)
         self.assertFalse(scaler.with_std)
+        self.assertTrue(scaler.feature_names_in_ is None)
+        self.assertTrue(scaler.n_features_in_ is None)
         self.assertIsInstance(scaler, PanelStandardScaler)
 
         # Test another custom initialization
@@ -66,6 +70,8 @@ class TestPanelStandardScaler(unittest.TestCase):
         self.assertEqual(scaler.type, "cross_section")
         self.assertFalse(scaler.with_mean)
         self.assertTrue(scaler.with_std)
+        self.assertTrue(scaler.feature_names_in_ is None)
+        self.assertTrue(scaler.n_features_in_ is None)
         self.assertIsInstance(scaler, PanelStandardScaler)
 
 
@@ -99,6 +105,9 @@ class TestPanelStandardScaler(unittest.TestCase):
         self.assertEqual(scaler.statistics["panel"]["RIR"][1], self.X["RIR"].std())
         self.assertEqual(len(scaler.statistics["panel"]["RIR"]), 2)
 
+        self.assertTrue(scaler.n_features_in_ == 3)
+        np.testing.assert_array_equal(scaler.feature_names_in_, self.X.columns)
+
         # Test cross-section scaling
         scaler = PanelStandardScaler(type="cross_section")
         scaler.fit(self.X, self.y)
@@ -121,6 +130,9 @@ class TestPanelStandardScaler(unittest.TestCase):
             self.assertEqual(scaler.statistics[cid]["RIR"][1], self.X.loc[cid]["RIR"].std())
             self.assertEqual(len(scaler.statistics[cid]["RIR"]), 2)
 
+        self.assertTrue(scaler.n_features_in_ == 3)
+        np.testing.assert_array_equal(scaler.feature_names_in_, self.X.columns)
+
         # Panel scaling with no mean 
         # We still calculate these just don't transform using the mean
         scaler = PanelStandardScaler(with_mean=False)
@@ -141,6 +153,9 @@ class TestPanelStandardScaler(unittest.TestCase):
         self.assertEqual(scaler.statistics["panel"]["RIR"][1], self.X["RIR"].std())
         self.assertEqual(len(scaler.statistics["panel"]["RIR"]), 2)
 
+        self.assertTrue(scaler.n_features_in_ == 3)
+        np.testing.assert_array_equal(scaler.feature_names_in_, self.X.columns)
+
         # Panel scaling with no std
         # We still calculate these just don't transform using the std
         scaler = PanelStandardScaler(with_std=False)
@@ -160,6 +175,9 @@ class TestPanelStandardScaler(unittest.TestCase):
         self.assertEqual(scaler.statistics["panel"]["RIR"][0], self.X["RIR"].mean())
         self.assertEqual(scaler.statistics["panel"]["RIR"][1], self.X["RIR"].std())
         self.assertEqual(len(scaler.statistics["panel"]["RIR"]), 2)
+
+        self.assertTrue(scaler.n_features_in_ == 3)
+        np.testing.assert_array_equal(scaler.feature_names_in_, self.X.columns)
 
         # Cross-section scaling with no mean
         # We still calculate these just don't transform using the mean
@@ -184,6 +202,9 @@ class TestPanelStandardScaler(unittest.TestCase):
             self.assertEqual(scaler.statistics[cid]["RIR"][1], self.X.loc[cid]["RIR"].std())
             self.assertEqual(len(scaler.statistics[cid]["RIR"]), 2)
 
+        self.assertTrue(scaler.n_features_in_ == 3)
+        np.testing.assert_array_equal(scaler.feature_names_in_, self.X.columns)
+
         # Cross-section scaling with no std
         # We still calculate these just don't transform using the std
         scaler = PanelStandardScaler(type="cross_section", with_std=False)
@@ -206,6 +227,9 @@ class TestPanelStandardScaler(unittest.TestCase):
             self.assertEqual(scaler.statistics[cid]["RIR"][0], self.X.loc[cid]["RIR"].mean())
             self.assertEqual(scaler.statistics[cid]["RIR"][1], self.X.loc[cid]["RIR"].std())
             self.assertEqual(len(scaler.statistics[cid]["RIR"]), 2)
+
+        self.assertTrue(scaler.n_features_in_ == 3)
+        np.testing.assert_array_equal(scaler.feature_names_in_, self.X.columns)
 
     def test_types_fit(self):
         scaler = PanelStandardScaler()
