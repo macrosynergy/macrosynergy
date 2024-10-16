@@ -596,11 +596,13 @@ def concat_qdfs(
         qdf["cid"] = pd.Categorical(qdf["cid"], categories=comb_cids.categories)
         qdf["xcat"] = pd.Categorical(qdf["xcat"], categories=comb_xcats.categories)
 
-    qdf_list = (
+    df: pd.DataFrame = (
         pd.concat(qdf_list, axis=0, join="outer")
         .groupby(QuantamentalDataFrameBase.IndexCols, observed=True, as_index=False)
         .last()
+        .dropna(subset=["real_date"])
         .sort_values(by=QuantamentalDataFrameBase.IndexCols)
-        .reset_index(drop=True)
     )
-    return qdf_list
+    non_idx_cols = set(df.columns) - set(QuantamentalDataFrameBase.IndexCols)
+    df = df.dropna(subset=non_idx_cols, how="all")
+    return df.reset_index(drop=True)
