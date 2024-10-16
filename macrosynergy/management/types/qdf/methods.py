@@ -259,6 +259,11 @@ def update_tickers(
     """
     Method used to update aggregate DataFrame on the ticker level.
     """
+    if df_add.empty:
+        return df
+    elif df.empty:
+        return df_add
+
     df = pd.concat([df, df_add], axis=0, ignore_index=True)
     df = df.drop_duplicates(
         subset=QuantamentalDataFrameBase.IndexCols,
