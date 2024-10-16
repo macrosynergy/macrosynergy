@@ -1,6 +1,7 @@
+import numbers
+import datetime
 import numpy as np
 import pandas as pd
-import datetime
 
 from collections import Counter, defaultdict
 from abc import ABC
@@ -10,23 +11,27 @@ from typing import Union, Optional
 class BasePanelBootstrap(ABC):
     def __init__(
         self,
-        bootstrap_method: str = "panel",
-        resample_ratio: Union[float, int] = 1,
-        max_features: Optional[Union[str, int, float]] = None, # TODO
+        bootstrap_method = "panel",
+        resample_ratio = 1,
+        max_features = None,
     ):
         """
-        Base class to construct bootstrap datasets over a panel. 
+        Construct bootstrap datasets over a panel.
 
-        :param <str> bootstrap_method: Method to bootstrap the data. Current options are
-            "panel", "period", "cross", "cross_per_period" and "period_per_cross".
+        Parameters
+        ----------
+        bootstrap_method : str 
+            Method to bootstrap the data. Current options are "panel",
+            "period", "cross", "cross_per_period" and "period_per_cross".
             Default is "panel".
-        :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
-            in each bootstrap dataset. This is a fraction of the quantity of the panel
-            component to be resampled. Default value is 1.
-        :param <Optional[Union[str, int, float]]> max_features: The number of features to
-            consider in each bootstrap dataset. This can be used to increase the 
-            variation of the bootstrap datasets. Default is None and currently not
-            implemented.
+        resample_ratio : numbers.Number
+            Ratio of resampling units comprised in each bootstrap dataset.
+            This is a fraction of the quantity of the panel component to be
+            resampled. Default value is 1.
+        max_features: str or numbers.Number, optional
+            The number of features to consider in each bootstrap dataset.
+            This can be used to increase the variation between bootstrap datasets.
+            Default is None and currently not implemented.
         """
         # Checks 
         self._check_boot_params(
@@ -42,18 +47,26 @@ class BasePanelBootstrap(ABC):
 
     def create_bootstrap_dataset(
         self,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
+        X,
+        y,
     ):
         """
-        Method to generate a bootstrap dataset based on a panel of features and a target.
+        Generate a bootstrap dataset based on a panel of features and a
+        dependent variable.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
-            associated with each sample in X.
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix
+        y : pd.DataFrame or pd.Series
+            Dependent variable.
 
-        :return Tuple[pd.DataFrame, Union[pd.DataFrame, pd.Series]]: A tuple of the
-            resampled feature matrix and target vector.
+        Returns
+        -------
+        X_resampled : pd.DataFrame
+            Bootstrap resampled feature matrix.
+        y_resampled : pd.DataFrame or pd.Series
+            Bootstrap resampled dependent variable.
         """
         # Checks
         self._check_create_bootstrap_dataset_params(
@@ -107,18 +120,25 @@ class BasePanelBootstrap(ABC):
 
     def _panel_bootstrap(
         self,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],      
+        X,
+        y,      
     ):
         """
-        Method to generate a bootstrap dataset by resampling the entire panel.
+        Generate a bootstrap dataset by resampling the panel.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
-            associated with each sample in X.
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
+        y : pd.DataFrame or pd.Series
+            Dependent variable.
 
-        :return Tuple[pd.DataFrame, Union[pd.DataFrame, pd.Series]]: A tuple of the
-            resampled feature matrix and target vector.
+        Returns
+        -------
+        X_resampled : pd.DataFrame
+            Bootstrap resampled feature matrix.
+        y_resampled : pd.DataFrame or pd.Series
+            Bootstrap resampled dependent variable.
         """
         bootstrap_idx = np.random.choice(
             np.arange(X.shape[0]),
@@ -132,21 +152,28 @@ class BasePanelBootstrap(ABC):
     
     def _period_bootstrap(
         self,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
-        unique_real_dates: np.ndarray,
+        X,
+        y,
+        unique_real_dates,
     ):
         """
-        Method to generate a bootstrap dataset by resampling periods in the panel.
+        Generate a bootstrap dataset by resampling periods in the panel.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
-            associated with each sample in X.
-        :param <np.ndarray[pd.Timestamp]> unique_real_dates: Numpy array of the unique
-            dates in the panel.
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
+        y : pd.DataFrame or pd.Series
+            Dependent variable.
+        unique_real_dates : np.ndarray of pd.Timestamp
+            Unique dates in the panel.
 
-        :return Tuple[pd.DataFrame, Union[pd.DataFrame, pd.Series]]: A tuple of the
-            resampled feature matrix and target vector.
+        Returns
+        -------
+        X_resampled : pd.DataFrame
+            Bootstrap resampled feature matrix.
+        y_resampled : pd.DataFrame or pd.Series
+            Bootstrap resampled dependent variable.
         """
         # Resample unique panel dates with replacement
         bootstrap_periods = np.random.choice(
@@ -208,21 +235,28 @@ class BasePanelBootstrap(ABC):
     
     def _cross_bootstrap(
         self,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
-        unique_cross_sections: np.ndarray,
+        X,
+        y,
+        unique_cross_sections,
     ):
         """
-        Method to generate a bootstrap dataset by resampling cross-sections in the panel.
+        Generate a bootstrap dataset by resampling cross-sections in the panel.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
-            associated with each sample in X.
-        :param <np.ndarray[pd.Timestamp]> unique_real_dates: Numpy array of the unique
-            dates in the panel.
-
-        :return Tuple[pd.DataFrame, Union[pd.DataFrame, pd.Series]]: A tuple of the
-            resampled feature matrix and target vector.
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
+        y : pd.DataFrame or pd.Series
+            Dependent variable.
+        unique_cross_sections : np.ndarray of str
+            Unique cross-sections in the panel.
+        
+        Returns
+        -------
+        X_resampled : pd.DataFrame
+            Bootstrap resampled feature matrix.
+        y_resampled : pd.DataFrame or pd.Series
+            Bootstrap resampled dependent variable.
         """
         # Resample unique panel cross-sections with replacement
         bootstrap_cross_sections = np.random.choice(
@@ -283,22 +317,29 @@ class BasePanelBootstrap(ABC):
     
     def _cross_per_period_bootstrap(
         self,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
-        unique_cross_sections: np.ndarray,      
+        X,
+        y,
+        unique_cross_sections,      
     ):
         """
-        Method to generate a bootstrap dataset by resampling cross-sections within each
+        Generate a bootstrap dataset by resampling cross-sections within each 
         period in the panel.
+        
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
+        y : pd.DataFrame or pd.Series
+            Dependent variable.
+        unique_cross_sections : np.ndarray of str
+            Unique cross-sections in the panel.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
-            associated with each sample in X.
-        :param <np.ndarray[str]> unique_cross_sections: Numpy array of the unique
-            cross-sections in the panel.
-
-        :return Tuple[pd.DataFrame, Union[pd.DataFrame, pd.Series]]: A tuple of the
-            resampled feature matrix and target vector.
+        Returns
+        -------
+        X_resampled : pd.DataFrame
+            Bootstrap resampled feature matrix.
+        y_resampled : pd.DataFrame or pd.Series
+            Bootstrap resampled dependent variable.
         """
         n_resample = int(np.ceil(len(unique_cross_sections) * self.resample_ratio))
         X_resampled = X.groupby(level=1).sample(replace=True, n=n_resample)
@@ -308,22 +349,29 @@ class BasePanelBootstrap(ABC):
     
     def _period_per_cross_bootstrap(
         self,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
-        unique_real_dates: np.ndarray,      
+        X,
+        y,
+        unique_real_dates,      
     ):
         """
-        Method to generate a bootstrap dataset by resampling periods within each
+        Generate a bootstrap dataset by resampling periods within each
         cross-section in the panel.
+        
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
+        y : pd.DataFrame or pd.Series
+            Dependent variable.
+        unique_real_dates : np.ndarray of pd.Timestamp
+            Unique dates in the panel.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
-            associated with each sample in X.
-        :param <np.ndarray[pd.Timestamp]> unique_real_dates: Numpy array of the unique
-            dates in the panel.
-
-        :return Tuple[pd.DataFrame, Union[pd.DataFrame, pd.Series]]: A tuple of the
-            resampled feature matrix and target vector.
+        Returns
+        -------
+        X_resampled : pd.DataFrame
+            Bootstrap resampled feature matrix.
+        y_resampled : pd.DataFrame or pd.Series
+            Bootstrap resampled dependent variable.
         """
         n_resample = int(np.ceil(len(unique_real_dates) * self.resample_ratio))
         X_resampled = X.groupby(level=0).sample(replace=True, n=n_resample)
@@ -333,14 +381,18 @@ class BasePanelBootstrap(ABC):
 
     def _check_create_bootstrap_dataset_params(
         self,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],        
+        X,
+        y,        
     ):
         """
         Method to check the validity of the input parameters for create_bootstrap_dataset.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix
+        y : pd.DataFrame or pd.Series
+            Dependent variable.
         """
         # Checks
         if not isinstance(X, pd.DataFrame):
@@ -366,35 +418,43 @@ class BasePanelBootstrap(ABC):
             raise ValueError("X must be multi-indexed.")
         if not isinstance(y.index, pd.MultiIndex):
             raise ValueError("y must be multi-indexed.")
-        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
-        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+        if not y.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of y must be strings.")
+        if not y.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of y must be datetime.date.")
         if not X.index.equals(y.index):
             raise ValueError(
-                "The indices of the input dataframe X and the output dataframe y don't "
+                "The indices of the feature matrix X and the target vector y don't "
                 "match."
             )
         
     def _check_boot_params(
         self,
-        bootstrap_method: str,
-        resample_ratio: Union[float, int],
-        max_features: Optional[Union[str, int, float]],
+        bootstrap_method,
+        resample_ratio,
+        max_features,
     ):
         """
-        Private method to check the class initialization parameters.
+        Bootstrap class initialization checks.
 
-        :param <str> bootstrap_method: Method to bootstrap the data. Current options are
-            "panel", "period", "cross", "cross_per_period" and "period_per_cross".
-        :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
-            in each bootstrap dataset. This is a fraction of the quantity of the panel
-            component to be resampled.
-        :param <Optional[Union[str, int, float]]> max_features: The number of features to
-            consider in each bootstrap dataset. This can be used to increase the 
-            variation of the bootstrap datasets.
-
-        :return None
+        Parameters
+        ----------
+        bootstrap_method : str
+            Method to bootstrap the data. Current options are "panel",
+            "period", "cross", "cross_per_period" and "period_per_cross".
+            Default is "panel".
+        resample_ratio : numbers.Number
+            Ratio of resampling units comprised in each bootstrap dataset.
+            This is a fraction of the quantity of the panel component to be
+            resampled. Default value is 1.
+        max_features: str or numbers.Number, optional
+            The number of features to consider in each bootstrap dataset.
+            This can be used to increase the variation between bootstrap datasets.
+            Default is None and currently not implemented.
         """
         # bootstrap_method
         if not isinstance(bootstrap_method, str):

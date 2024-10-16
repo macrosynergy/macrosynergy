@@ -1,12 +1,13 @@
 import numpy as np
 import pandas as pd
 import datetime
+import numbers
 
 from sklearn.linear_model import LinearRegression
 from sklearn.base import RegressorMixin, BaseEstimator, clone
 
-from macrosynergy.learning.predictors.bootstrap import BasePanelBootstrap
-from macrosynergy.learning.predictors.weighted_regressors import (
+from macrosynergy.learning.forecasting.bootstrap import BasePanelBootstrap
+from macrosynergy.learning.forecasting.linear_model.ls_regressors import (
     SignWeightedLinearRegression,
     TimeWeightedLinearRegression,
 )
@@ -17,47 +18,80 @@ from typing import Union, Optional
 class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, ABC):
     def __init__(
         self,
-        model: RegressorMixin,
-        method: str,
-        error_offset: float = 1e-5,
-        bootstrap_method: str = "panel",
-        bootstrap_iters: int = 100,
-        resample_ratio: Union[float, int] = 1,
-        max_features: Optional[Union[str, int, float]] = None,
-        analytic_method: Optional[str] = None,
+        model,
+        method,
+        error_offset = 1e-5,
+        bootstrap_method = "panel",
+        bootstrap_iters = 100,
+        resample_ratio = 1,
+        max_features = None,
+        analytic_method = None,
     ):
         """
-        Base class for linear regressors where coefficients are modified by estimated
-        standard errors to account for statistical precision of the estimates.
+        Modified linear regression model. Estimated coefficients are divided
+        by estimated standard errors to form an auxiliary factor model.
 
-        :param <RegressorMixin> model: The underlying linear model to be modified. This
-            model must have `coef_` and `intercept_` attributes, in accordance with
-            standard `scikit-learn` conventions.
-        :param <str> method: The method used to modify the coefficients. Accepted values
-            are "analytic" and "bootstrap".
-        :param <float> error_offset: A small offset to add to the standard errors to
-            prevent division by zero in the case of very small standard errors. Default
-            value is 1e-5.
-        :param <str> bootstrap_method: The bootstrap method used to modify the coefficients.
-            Accepted values are "panel", "period", "cross", "cross_per_period"
-            and "period_per_cross". Default value is "panel".
-        :param <int> bootstrap_iters: The number of bootstrap iterations to perform in
-            order to determine the standard errors of the model parameters under the bootstrap
-            approach. Default value is 100.
-        :param <Union[float, int]> resample_ratio: The ratio of resampling units comprised
-            in each bootstrap dataset. This is a fraction of the quantity of the panel
-            component to be resampled. Default value is 1.
-        :param <Optional[Union[str, int, float]]> max_features: The number of features to
-            consider in each bootstrap dataset. This can be used to increase the 
-            variation of the bootstrap datasets. Default is None and currently not
-            implemented.
-        :param <Optional[str]> analytic_method: The analytic method used to calculate
-            standard errors. Expressions for analytic standard errors are expected to be
-            written within the method `adjust_analytical_se` and this parameter can be
-            passed into `adjust_analyical_se` for an alternative analytic standard error
-            estimate, for instance White's estimator. Default value is None.
+        Parameters
+        ----------
+        model : RegressorMixin
+            Underlying linear regression model to be modified to account 
+            for statistical precision of parameter estimates. This model must
+            have `coef_` and `intercept_` attributes, in accordance with 
+            `scikit-learn` convention. 
+        method : str
+            Method to modify coefficients. Accepted values are
+            "analytic" or "bootstrap".
+        error_offset : float, default = 1e-5
+            Small offset to add to estimated standard errors in order to prevent
+            small denominators during the coefficient adjustment. 
+        bootstrap_method : str, default = "panel"
+            Method used to modify coefficients, when `method = bootstrap`.
+            Accepted values are "panel", "period", "cross", "cross_per_period",
+            "period_per_cross". 
+        bootstrap_iters : int, default = 100
+            Number of bootstrap iterations to determine standard errors, used 
+            only when `method = bootstrap`.
+        resample_ratio : numbers.Number, default = 1
+            Ratio of resampling units in each bootstrap dataset, used only
+            when `method = bootstrap`. This is a fraction of the quantity of
+            the panel component to be resampled.
+        max_features : str or int or float, default = None
+            Number of features consider in each bootstrap dataset. This is
+            used to increase the amount of variation in bootstrap datasets. 
+            Accepted values are "sqrt", "log2", an integer number of features and
+            a floating point proportion of features. Default behaviour is to raise
+            a NotImplementedError.
+        analytic_method : str, default = None
+            The analytic method used to determine standard errors. This parameter
+            is passed into `adjust_analyical_se`, which should be implemented 
+            by the user if analytical, model-specific, expressions are required.
 
-        :return None
+        Notes
+        -----
+        Parametric regression models are fit by finding optimal "parameters" that
+        minimize a loss function. In the frequentist statistics framework, "true"
+        population-wide values exist for these parameters, which can only be
+        estimated from sampled data. Consequently, our parameter estimates can be
+        considered to be realizations from a random variable, and hence subject to 
+        variation depending on the data that was sampled. Broadly speaking, 
+        the greater the amount of independent data sampled, the smaller the 
+        variation in parameter estimates. In other words, 
+
+        In our modified parametric regression models, each estimated parameter is
+        adjusted by the estimated standard error. This means that greater volatility
+        in a parameter estimate due to lack of data is accounted for by reducing 
+        the magnitude of this estimate, whilst greater certainty in the precision of
+        the estimate is reflected by inflating a regression coefficient. 
+
+        Use of this class is only recommended for linear models, since these
+        regression models are interpretable and the coefficient adjustment can 
+        accordingly be interpreted as increasing the relevance of factors whose
+        coefficients we are more confident in, and decreasing relevance for factors
+        whose coefficients we are less confident in. For a more complex function,
+        for instance a neural network, amending model coefficients can be disastrous;
+        it would be unclear how such adjustment would affect the downstream performance
+        of the neural network. As a consequence, this class should be used with care
+        and we recommend its use for linear models only. 
         """
         # Checks
         super().__init__(
@@ -83,32 +117,35 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, A
 
     def _check_init_params(
         self,
-        model: RegressorMixin,
-        method: str,
-        error_offset: float,
-        bootstrap_iters: int,
-        analytic_method: Optional[str],
+        model,
+        method,
+        error_offset,
+        bootstrap_iters,
+        analytic_method,
     ):
         """
-        Method to check the validity of the initialization parameters of the class.
+        Constructor parameter checks.
 
-        :param <RegressorMixin> model: The underlying linear model to be modified. This
-            model must have `coef_` and `intercept_` attributes once fit, in accordance
-            with standard `scikit-learn` conventions.
-        :param <str> method: The method used to modify the coefficients. Accepted values
-            are "analytic" and "bootstrap".
-        :param <float> error_offset: A small offset to add to the standard errors to
-            prevent division by zero in the case of very small standard errors.
-        :param <int> bootstrap_iters: The number of bootstrap iterations to perform in
-            order to determine the standard errors of the model parameters under the
-            bootstrap approach.
-        :param <Optional[str]> analytic_method: The analytic method used to calculate
-            standard errors. Expressions for analytic standard errors are expected to be
-            written within the method `adjust_analytical_se` and this parameter can be
-            passed into `adjust_analyical_se` for an alternative analytic standard error
-            estimate, for instance White's estimator.
-
-        :return None
+        Parameters
+        ----------
+        model : RegressorMixin
+            Underlying linear regression model to be modified to account 
+            for statistical precision of parameter estimates. This model must
+            have `coef_` and `intercept_` attributes, in accordance with 
+            `scikit-learn` convention. 
+        method : str
+            Method to modify coefficients. Accepted values are
+            "analytic" or "bootstrap".
+        error_offset : float, default = 1e-5
+            Small offset to add to estimated standard errors in order to prevent
+            small denominators during the coefficient adjustment. 
+        bootstrap_iters : int, default = 100
+            Number of bootstrap iterations to determine standard errors, used 
+            only when `method = bootstrap`.
+        analytic_method : str, default = None
+            The analytic method used to determine standard errors. This parameter
+            is passed into `adjust_analyical_se`, which should be implemented 
+            by the user if analytical, model-specific, expressions are required.
         """
         # model
         if not isinstance(model, BaseEstimator):
@@ -123,14 +160,14 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, A
             raise ValueError("method must be either 'analytic' or 'bootstrap'.")
         
         # error_offset
-        if not isinstance(error_offset, (float, int)):
+        if not isinstance(error_offset, numbers.Number):
             raise TypeError("error_offset must be a float or an integer.")
         if error_offset <= 0:
             raise ValueError("error_offset must be greater than 0.")
         
         # bootstrap_iters
         if method == "bootstrap":
-            if not isinstance(bootstrap_iters, int):
+            if not isinstance(bootstrap_iters, numbers.Integral):
                 raise TypeError("bootstrap_iters must be an integer.")
             if bootstrap_iters <= 0:
                 raise ValueError("bootstrap_iters must be a positive integer.")
@@ -143,19 +180,23 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, A
                 
     def fit(
         self,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
+        X,
+        y,
     ):
         """
-        Fit method to fit the underlying linear model, as passed into the constructor,
-        and subsequently modify coefficients based on estimated standard errors to produce
-        a trading signal that accounts for the statistical precision of the factor weights.
+        Fit a linear model and modify coefficients based on standard errors.
+    
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
+        y : pd.DataFrame or pd.Series
+            Target vector associated with each sample in X.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
-            associated with each sample in X.
-
-        :return <BaseModifiedRegressor>
+        Returns
+        -------
+        self
+            Fitted estimator.
         """
         # Checks
         self._check_fit_params(X=X, y=y)
@@ -191,12 +232,20 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, A
     
     def predict(
         self,
-        X: pd.DataFrame,
+        X,
     ):
         """
-        Method to predict the target variable using the underlying linear model.
+        Predict using the unadjusted linear model.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
+
+        Returns
+        -------
+        np.ndarray or pd.Series
+            Predicted values.
         """
         # Checks
         if not isinstance(X, pd.DataFrame):
@@ -207,18 +256,39 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, A
             )
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
-        
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise TypeError("All columns in X must be numeric.")
+        if X.isnull().values.any():
+            raise ValueError("X must not contain missing values.")
         return self.model.predict(X)
 
     def create_signal(
         self,
-        X: pd.DataFrame,
+        X,
     ):
         """
-        Method to create a signal based on adjusting the underlying factor model weights
-        by their standard errors.
+        Predict using the coefficient-adjusted linear model.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
+
+        Returns
+        -------
+        np.ndarray or pd.Series
+            Signal from the adjusted factor model based on X.
+
+        Notes
+        -----
+        We define an additional `create_signal` method instead of using the 
+        `predict` method in order to not interfere with hyperparameter
+        searches with standard metrics. Moreover, outputs from the adjusted
+        factor model are not valid predictions, but are valid trading signals.
         """
         # Checks
         if not isinstance(X, pd.DataFrame):
@@ -229,15 +299,42 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, A
             )
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise TypeError("All columns in X must be numeric.")
+        if X.isnull().values.any():
+            raise ValueError("X must not contain missing values.")
 
         return np.dot(X, self.coef_) + self.intercept_
     
     def adjust_bootstrap_se(
         self,
-        model: RegressorMixin,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
+        model,
+        X,
+        y,
     ):
+        """
+        Adjust the coefficients of the linear model by bootstrap standard errors.
+
+        Parameters
+        ----------
+        model : RegressorMixin
+            The underlying linear model to be modified.
+        X : pd.DataFrame
+            Input feature matrix.
+        y : pd.DataFrame or pd.Series
+            Target vector associated with each sample in X.
+
+        Returns
+        -------
+        intercept : float
+            Adjusted intercept.
+        coef : np.ndarray
+            Adjusted coefficients.
+        """
         # Create storage for bootstrap coefficients and intercepts
         bootstrap_coefs = np.zeros((self.bootstrap_iters, X.shape[1]))
         bootstrap_intercepts = np.zeros(self.bootstrap_iters)
@@ -261,11 +358,38 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, A
     
     def adjust_analytical_se(
         self,
-        model: RegressorMixin,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
-        analytic_method: Optional[str],
+        model,
+        X,
+        y,
+        analytic_method,
     ):
+        """
+        Adjust the coefficients of the linear model by an analytical
+        standard error formula.
+
+        Parameters
+        ----------
+        model : RegressorMixin
+            The underlying linear model to be modified.
+        X : pd.DataFrame
+            Input feature matrix.
+        y : pd.DataFrame or pd.Series
+            Target vector associated with each sample in X.
+        analytic_method : str
+            The analytic method used to calculate standard errors.
+
+        Returns
+        -------
+        intercept : float
+            Adjusted intercept.
+        coef : np.ndarray
+            Adjusted coefficients.
+
+        Notes
+        -----
+        Analytical standard errors are model-specific, meaning that
+        they must be implemented in a subclass of BaseModifiedRegressor.
+        """
         raise NotImplementedError(
             "Analytical standard error adjustments are not available for most models."
             "This function must be implemented in a subclass of BaseModifiedRegressor "
@@ -274,14 +398,18 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, A
     
     def _check_fit_params(
         self,
-        X: pd.DataFrame,
-        y: Union[pd.DataFrame, pd.Series],
+        X,
+        y,
     ):
         """
-        Method to check the validity of the fit parameters of the class.
+        Check parameter validity for the fit method.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
+        y : pd.DataFrame or pd.Series
+            Target vector associated with each sample in X.
         """
         # Checks
         if not isinstance(X, pd.DataFrame):
@@ -307,15 +435,32 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, A
             raise ValueError("X must be multi-indexed.")
         if not isinstance(y.index, pd.MultiIndex):
             raise ValueError("y must be multi-indexed.")
-        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
-        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
-            raise TypeError("The inner index of y must be datetime.date.")
+        if not y.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not y.index.get_level_values(1).dtype == "datetime64[ns]":
+            raise TypeError("The inner index of X must be datetime.date.")
         if not X.index.equals(y.index):
             raise ValueError(
                 "The indices of the input dataframe X and the output dataframe y don't "
                 "match."
             )
+        
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise TypeError("All columns in X must be numeric.")
+        if isinstance(y, pd.DataFrame):
+            if not pd.api.types.is_numeric_dtype(y.iloc[:, 0]):
+                raise TypeError("All columns in y must be numeric.")
+        else:
+            if not pd.api.types.is_numeric_dtype(y):
+                raise TypeError("All columns in y must be numeric.")
+        if X.isnull().values.any():
+            raise ValueError("X must not contain missing values.")
+        if y.isnull().values.any():
+            raise ValueError("y must not contain missing values.")
         
 class ModifiedLinearRegression(BaseModifiedRegressor):
     def __init__(

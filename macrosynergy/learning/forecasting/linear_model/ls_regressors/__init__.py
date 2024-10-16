@@ -1,17 +1,17 @@
-from .bootstrap import (
-    BasePanelBootstrap,
+from .weighted_ls_regressors import (
+    SignWeightedLinearRegression,
+    TimeWeightedLinearRegression,
 )
 
-from .modified_regressors import (
-    BaseModifiedRegressor,
+from .modified_ls_regressors import (
     ModifiedLinearRegression,
     ModifiedSignWeightedLinearRegression,
     ModifiedTimeWeightedLinearRegression,
 )
 
 __all__ = [
-    "BasePanelBootstrap",
-    "BaseModifiedRegressor",
+    "SignWeightedLinearRegression",
+    "TimeWeightedLinearRegression",
     "ModifiedLinearRegression",
     "ModifiedSignWeightedLinearRegression",
     "ModifiedTimeWeightedLinearRegression",

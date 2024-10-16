@@ -1,5 +1,3 @@
-from . import predictors
-
 from .panel_time_series_split import (
     ExpandingKFoldPanelSplit,
     RollingKFoldPanelSplit,
@@ -30,25 +28,20 @@ from .model_evaluation import (
 )
 from .sequential import SignalOptimizer, BetaEstimator
 
-from .predictors import (
-    NaivePredictor,
-    BaseWeightedRegressor,
-    WeightedLinearRegression,
+from .forecasting import (
+    LADRegressor,
+    NaiveRegressor,
     SignWeightedLinearRegression,
     TimeWeightedLinearRegression,
-    WeightedLADRegressor,
     SignWeightedLADRegressor,
     TimeWeightedLADRegressor,
-    LADRegressor,
-    BaseRegressionSystem,
-    LADRegressionSystem,
-    RidgeRegressionSystem,
-    LinearRegressionSystem,
-    CorrelationVolatilitySystem,
     ModifiedLinearRegression,
     ModifiedSignWeightedLinearRegression,
     ModifiedTimeWeightedLinearRegression,
-    BaseModifiedRegressor,
+    LinearRegressionSystem,
+    LADRegressionSystem,
+    RidgeRegressionSystem,
+    CorrelationVolatilitySystem,
 )
 
 from .random_effects import RandomEffects
@@ -82,24 +75,19 @@ __all__ = [
     "correlation_coefficient",
     # signal_optimizer
     "SignalOptimizer",
-    # predictors
+    # forecasting
+    "NaiveRegressor",
     "LADRegressor",
-    "NaivePredictor",
     "SignWeightedLADRegressor",
-    "BaseWeightedRegressor",
     "TimeWeightedLADRegressor",
     "SignWeightedLinearRegression",
     "TimeWeightedLinearRegression",
     "ModifiedLinearRegression",
     "ModifiedSignWeightedLinearRegression",
     "ModifiedTimeWeightedLinearRegression",
-    "BaseModifiedRegressor",
     # market beta estimation
     "BetaEstimator",
-    "WeightedLinearRegression",
-    "WeightedLADRegressor",
     # regression system
-    "BaseRegressionSystem",
     "LADRegressionSystem",
     "RidgeRegressionSystem",
     "LinearRegressionSystem",
