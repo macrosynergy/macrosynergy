@@ -3,17 +3,16 @@ Class to determine and store sequentially-optimized panel forecasts based on sta
 learning. 
 """
 
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import seaborn as sns
+from sklearn.feature_selection import SelectorMixin
+from sklearn.pipeline import Pipeline
 
 from macrosynergy.learning import ExpandingIncrementPanelSplit
 from macrosynergy.learning.sequential import BasePanelLearner
-
-from sklearn.pipeline import Pipeline
-from sklearn.feature_selection import SelectorMixin
 
 
 class SignalOptimizer(BasePanelLearner):
@@ -803,7 +802,7 @@ class SignalOptimizer(BasePanelLearner):
                 )
 
         # Set the style
-        plt.style.use("seaborn-v0_8-darkgrid")
+        sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
         ftrcoef_df = self.get_ftr_coefficients(name)
@@ -889,7 +888,7 @@ class SignalOptimizer(BasePanelLearner):
                 )
 
         # Set the style
-        plt.style.use("seaborn-v0_8-darkgrid")
+        sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
         intercepts_df = intercepts_df.set_index("real_date")
@@ -1018,7 +1017,7 @@ class SignalOptimizer(BasePanelLearner):
                 raise ValueError("The cap argument must be no greater than 10.")
 
         # Set the style
-        plt.style.use("seaborn-v0_8-darkgrid")
+        sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
         ftrcoef_df = self.get_ftr_coefficients(name)
@@ -1103,11 +1102,9 @@ if __name__ == "__main__":
     from sklearn.metrics import make_scorer, r2_score
 
     import macrosynergy.management as msm
-    from macrosynergy.learning import (
-        regression_balanced_accuracy,
-        ExpandingKFoldPanelSplit,
-        RollingKFoldPanelSplit,
-    )
+    from macrosynergy.learning import (ExpandingKFoldPanelSplit,
+                                       RollingKFoldPanelSplit,
+                                       regression_balanced_accuracy)
     from macrosynergy.management.simulate import make_qdf
 
     cids = ["AUD", "CAD", "GBP", "USD"]

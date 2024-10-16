@@ -3,28 +3,27 @@ Sequential learning over a panel.
 """
 
 import numbers
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-from macrosynergy.management import categories_df
-from macrosynergy.learning import (
-    ExpandingFrequencyPanelSplit,
-    ExpandingIncrementPanelSplit,
-    BasePanelSplit,
-)
-
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, BaseCrossValidator
-from sklearn.base import BaseEstimator
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-
 import warnings
 from abc import ABC, abstractmethod
-from joblib import Parallel, delayed
-from tqdm.auto import tqdm
 from functools import partial
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from joblib import Parallel, delayed
+from sklearn.base import BaseEstimator
+from sklearn.model_selection import (BaseCrossValidator, GridSearchCV,
+                                     RandomizedSearchCV)
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from tqdm.auto import tqdm
+
+from macrosynergy.compat import JOBLIB_RETURN_AS
+from macrosynergy.learning import (BasePanelSplit,
+                                   ExpandingFrequencyPanelSplit,
+                                   ExpandingIncrementPanelSplit)
+from macrosynergy.management import categories_df
 
 
 class BasePanelLearner(ABC):
@@ -204,7 +203,7 @@ class BasePanelLearner(ABC):
         train_test_splits = list(outer_splitter.split(self.X, self.y))
 
         # Return list of results
-        optim_results = Parallel(n_jobs=n_jobs_outer, return_as="generator")(
+        optim_results = Parallel(n_jobs=n_jobs_outer, **JOBLIB_RETURN_AS)(
             delayed(self._worker)(
                 name=name,
                 train_idx=train_idx,

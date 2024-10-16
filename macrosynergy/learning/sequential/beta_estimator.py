@@ -3,16 +3,15 @@ Class to estimate market betas and calculate out-of-sample hedged returns based 
 sequential learning. 
 """
 
+from collections import defaultdict
+
 import numpy as np
 import pandas as pd
-
-from macrosynergy.management import categories_df, reduce_df, update_df
-from macrosynergy.learning import ExpandingFrequencyPanelSplit
-from macrosynergy.learning.sequential import BasePanelLearner
-
 from sklearn.ensemble import VotingRegressor
 
-from collections import defaultdict
+from macrosynergy.learning import ExpandingFrequencyPanelSplit
+from macrosynergy.learning.sequential import BasePanelLearner
+from macrosynergy.management import categories_df, reduce_df, update_df
 
 
 class BetaEstimator(BasePanelLearner):
@@ -278,11 +277,9 @@ class BetaEstimator(BasePanelLearner):
 
 
 if __name__ == "__main__":
-    from macrosynergy.learning import (
-        LinearRegressionSystem,
-        ExpandingKFoldPanelSplit,
-        neg_mean_abs_corr,
-    )
+    from macrosynergy.learning import (ExpandingKFoldPanelSplit,
+                                       LinearRegressionSystem,
+                                       neg_mean_abs_corr)
     from macrosynergy.management.simulate import make_qdf
 
     # Simulate a panel dataset of benchmark and contract returns
