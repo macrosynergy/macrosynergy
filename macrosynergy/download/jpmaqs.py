@@ -392,11 +392,12 @@ def validate_downloaded_df(
         for col in QuantamentalDataFrame.IndexCols:
             if not len(data_df[col].unique()) > 0:
                 raise InvalidDataframeError(f"Column {col} is empty.")
-
-        check_exprs = construct_expressions(
-            tickers=QuantamentalDataFrame(data_df).list_tickers(),
-            metrics=found_metrics,
+        tkrs = (
+            (data_df["cid"].astype(str) + "_" + data_df["xcat"].astype(str))
+            .unique()
+            .tolist()
         )
+        check_exprs = construct_expressions(tickers=tkrs, metrics=found_metrics)
 
     else:
         check_exprs = data_df.columns.tolist()
