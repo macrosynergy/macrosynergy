@@ -343,15 +343,15 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         if len(df) == 0:
             raise ValueError("Input DataFrame is empty.")
 
-        errstr = "No `{}` column found in the DataFrame and `{}` not specified."
-        for var_, name_ in zip([cid, xcat], ["cid", "xcat"]):
-            if name_ not in df.columns and var_ is None:
-                raise ValueError(errstr.format(name_, name_))
-
         if ticker is not None:
             if bool(cid) or bool(xcat):
                 raise ValueError("Cannot specify `ticker` with `cid` or `xcat`.")
             cid, xcat = ticker.split("_", 1)
+
+        errstr = "No `{}` column found in the DataFrame and `{}` not specified."
+        for var_, name_ in zip([cid, xcat], ["cid", "xcat"]):
+            if name_ not in df.columns and var_ is None:
+                raise ValueError(errstr.format(name_, name_))
 
         new_df = df[[real_date_column, value_column]].copy()
 
