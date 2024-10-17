@@ -13,16 +13,17 @@ import pandas as pd
 import seaborn as sns
 from joblib import Parallel, delayed
 from sklearn.base import BaseEstimator
-from sklearn.model_selection import (BaseCrossValidator, GridSearchCV,
-                                     RandomizedSearchCV)
+from sklearn.model_selection import BaseCrossValidator, GridSearchCV, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from tqdm.auto import tqdm
 
 from macrosynergy.compat import JOBLIB_RETURN_AS
-from macrosynergy.learning import (BasePanelSplit,
-                                   ExpandingFrequencyPanelSplit,
-                                   ExpandingIncrementPanelSplit)
+from macrosynergy.learning.splitters import (
+    BasePanelSplit,
+    ExpandingFrequencyPanelSplit,
+    ExpandingIncrementPanelSplit,
+)
 from macrosynergy.management import categories_df
 
 
@@ -1047,7 +1048,7 @@ class BasePanelLearner(ABC):
                     "The values of the models dictionary must be sklearn predictors or "
                     "pipelines."
                 )
-        
+
         # hyperparameters
         if not isinstance(hyperparameters, dict):
             raise TypeError("The hyperparameters argument must be a dictionary.")
@@ -1152,7 +1153,7 @@ class BasePanelLearner(ABC):
                     "cv_summary must be a function that takes a list of scores and returns "
                     "a single value. Check whether the output of cv_summary is a number."
                 )
-        
+
         # n_iter
         if search_type == "prior":
             if not isinstance(n_iter, int):
@@ -1161,7 +1162,6 @@ class BasePanelLearner(ABC):
                 raise ValueError("The n_iter argument must be greater than zero.")
         elif n_iter is not None and not isinstance(n_iter, int):
             raise ValueError("n_iter must only be used if search_type is 'prior'.")
-            
 
         # split_functions
         if split_functions is not None:
