@@ -1,9 +1,11 @@
-from .panel_time_series_split import (
+from . import predictors
+
+from .splitters import (
     ExpandingKFoldPanelSplit,
     RollingKFoldPanelSplit,
+    RecencyKFoldPanelSplit,
     ExpandingIncrementPanelSplit,
     ExpandingFrequencyPanelSplit,
-    BasePanelSplit,
 )
 from .cv_tools import panel_cv_scores
 from .transformers import (
@@ -47,9 +49,10 @@ from .forecasting import (
 from .random_effects import RandomEffects
 
 __all__ = [
-    # panel_time_series_split
+    # splitters
     "ExpandingKFoldPanelSplit",
     "RollingKFoldPanelSplit",
+    "RecencyKFoldPanelSplit",
     "ExpandingIncrementPanelSplit",
     "ExpandingFrequencyPanelSplit",
     "BasePanelSplit",

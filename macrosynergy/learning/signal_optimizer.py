@@ -18,12 +18,12 @@ from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from tqdm.auto import tqdm
 
-from macrosynergy.learning.panel_time_series_split import (
-    BasePanelSplit,
+from macrosynergy.learning.splitters import (
     ExpandingIncrementPanelSplit,
     RollingKFoldPanelSplit,
     ExpandingKFoldPanelSplit,
 )
+from macrosynergy.learning.splitters.base_splitters import BasePanelSplit
 
 from macrosynergy.learning.forecasting import LADRegressionSystem
 from macrosynergy.management.validation import _validate_Xy_learning
