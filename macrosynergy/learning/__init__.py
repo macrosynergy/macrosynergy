@@ -7,9 +7,6 @@ from .splitters import (
 )
 from .cv_tools import panel_cv_scores
 
-# from .preprocessing.scalers import BasePanelScaler
-# from.preprocessing.selectors import BasePanelSelector
-
 from .preprocessing import (
     LassoSelector,
     LarsSelector,

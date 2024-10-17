@@ -1,11 +1,11 @@
+import datetime
+from abc import ABC, abstractmethod
+
 import numpy as np
 import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
 
-import datetime
-
-from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
-
-from abc import ABC, abstractmethod
+from macrosynergy.compat import OneToOneFeatureMixin
 
 
 class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC):

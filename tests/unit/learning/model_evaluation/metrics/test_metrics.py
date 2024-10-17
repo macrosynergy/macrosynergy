@@ -583,3 +583,10 @@ class TestMetrics(unittest.TestCase):
         expected_result = np.mean(metrics)
         metric_result = create_panel_metric(self.classifier_true, self.classifier_predictions, metric, type = "time_periods")
         self.assertEqual(metric_result, expected_result, "create_panel_metric should return the same value as the metric function passed as argument, when applied over time periods")
+        
+        
+if __name__ == "__main__":
+    Test = TestMetrics()
+    Test.setUp()
+    Test.test_valid_panel_significance_probability() 
+        

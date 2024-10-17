@@ -7,6 +7,7 @@ import pandas as pd
 import scipy.stats as stats
 
 from linearmodels.panel import RandomEffects
+from macrosynergy.learning.random_effects import RandomEffects as msyRandomEffects
 
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 
@@ -287,7 +288,10 @@ def panel_significance_probability(
     coef = re.params.values[0]
     zstat = coef / re.std_errors.values[0]
     pval = 2 * (1 - stats.norm.cdf(abs(zstat)))
-
+    
+    re = msyRandomEffects(fit_intercept=False).fit(y_true, y_pred)
+    # pval = re.pvals[col]
+    
     return 1 - pval
 
 
