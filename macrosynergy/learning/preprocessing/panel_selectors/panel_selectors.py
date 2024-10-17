@@ -120,7 +120,7 @@ class MapSelector(BasePanelSelector):
         """
         if not isinstance(significance_level, numbers.Number):
             raise TypeError("The significance_level must be a float.")
-        if (significance_level <= 0) or (significance_level >= 1):
+        if (significance_level < 0) or (significance_level > 1):
             raise ValueError("The significance_level must be in between 0 and 1.")
         if not isinstance(positive, (bool, np.bool_)):
             raise TypeError("The 'positive' parameter must be a boolean.")
