@@ -8,7 +8,6 @@ from macrosynergy.learning import (
     LassoSelector,
     LarsSelector,
     MapSelector,
-    FeatureAverager,
     PanelMinMaxScaler,
     PanelStandardScaler,
     ZnScoreAverager,
@@ -26,6 +25,7 @@ from sklearn.exceptions import NotFittedError
 
 import scipy.stats as stats
 from linearmodels.panel import RandomEffects as lm_RandomEffects
+
 
 class TestLarsSelector(unittest.TestCase):
     @classmethod
@@ -67,30 +67,34 @@ class TestLarsSelector(unittest.TestCase):
     def test_types_init(self):
         # Test that non bool fit_intercept raises a TypeError
         with self.assertRaises(TypeError):
-            selector = LarsSelector(fit_intercept = 2)
+            selector = LarsSelector(fit_intercept=2)
         # Test that non_integer n_factors raises a TypeError
         with self.assertRaises(TypeError):
-            selector = LarsSelector(n_factors = 2.5)
+            selector = LarsSelector(n_factors=2.5)
         # Test that non positive n_factors raises a ValueError
         with self.assertRaises(ValueError):
-            selector = LarsSelector(n_factors = -1)
+            selector = LarsSelector(n_factors=-1)
         with self.assertRaises(ValueError):
-            selector = LarsSelector(n_factors = 0)
+            selector = LarsSelector(n_factors=0)
 
     def test_valid_init(self):
         # Check successful instantiation of the LarsSelector class
         try:
             selector = LarsSelector()
         except Exception as e:
-            self.fail(f"Instantiation of the LarsSelector class raised an exception: {e}")
+            self.fail(
+                f"Instantiation of the LarsSelector class raised an exception: {e}"
+            )
         self.assertIsInstance(selector, LarsSelector)
         self.assertEqual(selector.fit_intercept, False)
         self.assertEqual(selector.n_factors, 10)
         # Check with a different hyperparameter configuration
         try:
-            selector = LarsSelector(fit_intercept = True, n_factors=3)
+            selector = LarsSelector(fit_intercept=True, n_factors=3)
         except Exception as e:
-            self.fail(f"Instantiation of the LarsSelector class raised an exception: {e}")
+            self.fail(
+                f"Instantiation of the LarsSelector class raised an exception: {e}"
+            )
         self.assertIsInstance(selector, LarsSelector)
         self.assertEqual(selector.fit_intercept, True)
         self.assertEqual(selector.n_factors, 3)
@@ -98,23 +102,23 @@ class TestLarsSelector(unittest.TestCase):
     def test_types_fit(self):
         # Test that non dataframe X raises TypeError
         with self.assertRaises(TypeError):
-            selector = LarsSelector(n_factors = 5, fit_intercept=False)
+            selector = LarsSelector(n_factors=5, fit_intercept=False)
             selector.fit("X", self.y)
         # Test that non dataframe or series y raises TypeError
         with self.assertRaises(TypeError):
-            selector = LarsSelector(n_factors = 5, fit_intercept=True)
+            selector = LarsSelector(n_factors=5, fit_intercept=True)
             selector.fit(self.X, "y")
         # Test that a dataframe of targets with multiple columns raises ValueError
         with self.assertRaises(ValueError):
-            selector = LarsSelector(n_factors = 5, fit_intercept=True)
+            selector = LarsSelector(n_factors=5, fit_intercept=True)
             selector.fit(self.X, self.X)
         # Test that a value error is raised if the X index isn't a multi-index
         with self.assertRaises(ValueError):
-            selector = LarsSelector(n_factors = 5, fit_intercept=True)
+            selector = LarsSelector(n_factors=5, fit_intercept=True)
             selector.fit(self.X.reset_index(), self.y)
         # Test that a value error is raised if the y index isn't a multi-index
         with self.assertRaises(ValueError):
-            selector = LarsSelector(n_factors = 5, fit_intercept=True)
+            selector = LarsSelector(n_factors=5, fit_intercept=True)
             selector.fit(self.X, self.y.reset_index())
 
     @parameterized.expand(itertools.product([True, False], [1, 5, 10]))
@@ -130,8 +134,10 @@ class TestLarsSelector(unittest.TestCase):
         lars = Lars(fit_intercept=fit_intercept, n_nonzero_coefs=n_factors)
         lars.fit(self.X, self.y)
         chosen_ftrs = [i for i in range(len(lars.coef_)) if lars.coef_[i] != 0]
-        self.assertTrue(np.all(self.X.columns[chosen_ftrs] == selector.get_feature_names_out()))
-        
+        self.assertTrue(
+            np.all(self.X.columns[chosen_ftrs] == selector.get_feature_names_out())
+        )
+
     def test_types_transform(self):
         # Test that non np.ndarray X or dataframe raises TypeError
         with self.assertRaises(TypeError):
@@ -155,10 +161,15 @@ class TestLarsSelector(unittest.TestCase):
 
     @parameterized.expand(itertools.product([True, False], [1, 5, 10]))
     def test_valid_transform(self, fit_intercept, n_factors):
-        selector = LarsSelector(fit_intercept=fit_intercept, n_factors=n_factors).fit(self.X, self.y)
+        selector = LarsSelector(fit_intercept=fit_intercept, n_factors=n_factors).fit(
+            self.X, self.y
+        )
         X_transformed = selector.transform(self.X)
         X_transformed_columns = sorted(X_transformed.columns)
-        self.assertTrue(np.all(X_transformed_columns == sorted(selector.get_feature_names_out())))
+        self.assertTrue(
+            np.all(X_transformed_columns == sorted(selector.get_feature_names_out()))
+        )
+
 
 class TestLassoSelector(unittest.TestCase):
     @classmethod
@@ -626,8 +637,6 @@ class TestMapSelector(unittest.TestCase):
         with self.assertRaises(ValueError):
             selector.transform(self.X.drop(columns="CPI"))
 
-
-class TestFeatureAverager(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         # Generate data with true linear relationship
