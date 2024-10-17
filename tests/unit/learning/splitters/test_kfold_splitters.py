@@ -85,9 +85,9 @@ class TestExpandingKFold(unittest.TestCase):
     def test_types_split(self):
         splitter = ExpandingKFoldPanelSplit(n_splits=5)
         with self.assertRaises(TypeError):
-            splitter.split(X="a", y=self.y)
+            next(splitter.split(X="a", y=self.y))
         with self.assertRaises(TypeError):
-            splitter.split(X=self.X, y="a") 
+            next(splitter.split(X=self.X, y="a"))
 
     def test_valid_splits(self):
         splitter = ExpandingKFoldPanelSplit(n_splits=5)
@@ -100,3 +100,8 @@ class TestExpandingKFold(unittest.TestCase):
 
     def test_valid_transform(self):
         pass
+    
+if __name__ == "__main__":
+    Test = TestExpandingKFold()
+    Test.setUpClass()
+    Test.test_types_split()

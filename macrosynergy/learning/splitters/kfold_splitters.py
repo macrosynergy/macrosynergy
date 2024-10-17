@@ -7,6 +7,7 @@ import pandas as pd
 
 from macrosynergy.learning.splitters.base_splitters import KFoldPanelSplit
 
+
 class ExpandingKFoldPanelSplit(KFoldPanelSplit):
     """
     Time-respecting K-Fold cross-validator for panel data.
@@ -21,12 +22,13 @@ class ExpandingKFoldPanelSplit(KFoldPanelSplit):
     -----
     This splitter can be considered to be a panel data analogue to the `TimeSeriesSplit`
     splitter provided by `scikit-learn`.
-    
+
     Unique dates in the panel are divided into 'n_splits + 1' sequential and
     non-overlapping intervals, resulting in 'n_splits' pairs of training and test sets.
     The 'i'th training set is the union of the first 'i' intervals, and the 'i'th test set
     is the 'i+1'th interval.
     """
+
     def _determine_splits(self, unique_dates, n_splits):
         """
         Determine panel time period splits based on the sorted collection of unique dates and the
@@ -70,12 +72,13 @@ class ExpandingKFoldPanelSplit(KFoldPanelSplit):
         test : np.ndarray
             The testing set indices for that split.
         """
-        train_split = np.concatenate(splits[:n_split+1])
+        train_split = np.concatenate(splits[: n_split + 1])
         train_indices = np.where(dates.isin(train_split))[0]
         test_indices = np.where(dates.isin(splits[n_split + 1]))[0]
 
         return train_indices, test_indices
-    
+
+
 class RollingKFoldPanelSplit(KFoldPanelSplit):
     """
     Unshuffled K-Fold cross-validator for panel data.
@@ -88,7 +91,7 @@ class RollingKFoldPanelSplit(KFoldPanelSplit):
     Notes
     -----
     This splitter can be considered to be a panel data analogue to the `KFold` splitter
-    provided by `scikit-learn`, with `shuffle=False` and with splits determined on the 
+    provided by `scikit-learn`, with `shuffle=False` and with splits determined on the
     time dimension.
 
     Unique dates in the panel are divided into 'n_splits' sequential and non-overlapping
@@ -115,7 +118,7 @@ class RollingKFoldPanelSplit(KFoldPanelSplit):
             List of numpy arrays denoting dates in each split.
         """
         return np.array_split(unique_dates, n_splits)
-    
+
     def _get_split_indicies(self, n_split, splits, Xy, dates, unique_dates):
         """
         Determine the training and test set indices for a given split.
@@ -141,38 +144,40 @@ class RollingKFoldPanelSplit(KFoldPanelSplit):
             The testing set indices for that split.
         """
         test_split = splits[n_split]
-        train_split = np.concatenate(splits[:n_split] + splits[n_split+1:])
+        train_split = np.concatenate(splits[:n_split] + splits[n_split + 1 :])
         train_indices = np.where(dates.isin(train_split))[0]
         test_indices = np.where(dates.isin(test_split))[0]
 
         return train_indices, test_indices
-        
+
+
 class RecencyKFoldPanelSplit(KFoldPanelSplit):
     """
     Time-respecting K-Fold panel cross-validator that creates training and test sets based
     on the most recent samples in the panel.
-    
+
     Parameters
     ----------
     n_splits : int
         Number of folds i.e. (training set, test set) pairs. Default is 5.
         Must be at least 1.
     n_periods : int
-        Number of time periods, in units of native dataset frequency, to comprise each 
+        Number of time periods, in units of native dataset frequency, to comprise each
         test set. Default is 252 (1 year for daily data).
 
     Notes
     -----
-    This splitter is similar to the ExpandingKFoldPanelSplit, except that the sorted 
-    unique timestamps are not divided into equal intervals. Instead, the last 
+    This splitter is similar to the ExpandingKFoldPanelSplit, except that the sorted
+    unique timestamps are not divided into equal intervals. Instead, the last
     `n_periods` * `n_splits` timestamps in the panel are divided into `n_splits`
     non-overlapping intervals, each of which is used as a test set. The corresponding
     training set is comprised of all samples with timestamps earlier than its test set.
     Consequently, this is a K-Fold walk-forward cross-validator, but with test folds
-    concentrated on the most recent information. 
+    concentrated on the most recent information.
     """
+
     def __init__(self, n_splits=5, n_periods=252):
-        super().__init__(n_splits=n_splits,min_nsplits=1)
+        super().__init__(n_splits=n_splits, min_n_splits=1)
 
         # Additional checks
         if not isinstance(n_periods, int):
@@ -202,8 +207,8 @@ class RecencyKFoldPanelSplit(KFoldPanelSplit):
         splits : list of np.ndarray
             List of numpy arrays denoting dates in each split.
         """
-        return np.array_split(unique_dates[-n_splits * self.n_periods:], n_splits)
-    
+        return np.array_split(unique_dates[-n_splits * self.n_periods :], n_splits)
+
     def _get_split_indicies(self, n_split, splits, Xy, dates, unique_dates):
         """
         Determine the training and test set indices for a given split.
@@ -235,7 +240,8 @@ class RecencyKFoldPanelSplit(KFoldPanelSplit):
         test_indices = np.where(dates.isin(test_split))[0]
 
         return train_indices, test_indices
-        
+
+
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
     import macrosynergy.management as msm

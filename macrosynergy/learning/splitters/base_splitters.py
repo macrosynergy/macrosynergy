@@ -51,7 +51,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         n_splits : int
             Number of splits in the cross-validator.
         """
-        # Checks 
+        # Checks
         self._check_Xy(X, y)
 
         # Determine number of splits in the cross-validator
@@ -136,7 +136,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         """
         sns.set_theme(style="whitegrid", palette="colorblind")
 
-        # Checks 
+        # Checks
         self._check_Xy(X, y)
         if not isinstance(figsize, tuple):
             raise TypeError("figsize must be a tuple.")
@@ -202,8 +202,12 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                     self._calculate_xranges(cs_test_dates, real_dates, freq_offset)
                 )
 
-                plot_components.append((cs_idx, idx, xranges_train, "royalblue", "Train"))
-                plot_components.append((cs_idx, idx, xranges_test, "lightcoral", "Test"))
+                plot_components.append(
+                    (cs_idx, idx, xranges_train, "royalblue", "Train")
+                )
+                plot_components.append(
+                    (cs_idx, idx, xranges_test, "lightcoral", "Test")
+                )
 
         # Calculate the difference between final two dates.
         # This will be added to the x-axis limits to ensure that the final split is visible.
@@ -270,7 +274,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
             # Check y is provided
             if y is None:
                 raise ValueError("Either both X and y must be provided or neither.")
-            
+
         if X is not None:
             # Check X and y are dataframes/series respectively
             if not isinstance(X, pd.DataFrame):
@@ -279,17 +283,22 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                 raise ValueError("y must be a pandas dataframe or series.")
             if isinstance(y, pd.DataFrame) and len(y.columns) != 1:
                 raise ValueError("If y is a dataframe, it must have only one column.")
-            
+
             # Check indexing of X and y
             if not X.index.equals(y.index):
                 raise ValueError("X and y must have the same index.")
             if not isinstance(X.index, pd.MultiIndex):
                 raise ValueError("X and y must have a multi-index.")
             if X.index.get_level_values(0).dtype != "object":
-                raise ValueError("The input data must have string outer index representing panel cross-sections.")
+                raise ValueError(
+                    "The input data must have string outer index representing panel cross-sections."
+                )
             if X.index.get_level_values(1).dtype != "datetime64[ns]":
-                raise ValueError("The input data must have datetime inner index representing timestamps as datetime64[ns].")
-            
+                raise ValueError(
+                    "The input data must have datetime inner index representing timestamps as datetime64[ns]."
+                )
+
+
 class WalkForwardPanelSplit(BasePanelSplit, ABC):
     """
     Base class for a generic walk-forward panel cross-validator.
@@ -339,9 +348,7 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
         self.start_date = pd.Timestamp(start_date) if start_date else None
         self.max_periods = max_periods
 
-    def _check_wf_params(
-        self, min_cids, min_periods, start_date, max_periods
-    ):
+    def _check_wf_params(self, min_cids, min_periods, start_date, max_periods):
         """
         Type and value checks for the class initialisation parameters.
 
@@ -387,7 +394,7 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
             raise ValueError(
                 f"max_periods must be an integer greater than 0. Got {max_periods}."
             )
-        
+
     def _check_split_params(self, X, y, groups):
         """
         Type and value checks for the `split()` method parameters.
@@ -429,17 +436,18 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
         # groups
         if groups is not None:
             raise ValueError("groups is not supported by this splitter.")
-        
+
+
 class KFoldPanelSplit(BasePanelSplit, ABC):
-    def __init__(self, n_splits = 5, min_nsplits = 2):
+    def __init__(self, n_splits=5, min_n_splits=2):
         # Checks
         if not isinstance(n_splits, int):
             raise TypeError(f"n_splits must be an integer. Got {type(n_splits)}.")
-        if n_splits < min_nsplits:
+        if n_splits < min_n_splits:
             raise ValueError(
-                f"Cannot have number of splits less than {min_nsplits}. Got n_splits = {n_splits}."
+                f"Cannot have number of splits less than {min_n_splits}. Got n_splits = {n_splits}."
             )
-        
+
         # Attributes
         self.n_splits = n_splits
 
@@ -479,7 +487,7 @@ class KFoldPanelSplit(BasePanelSplit, ABC):
         dates = Xy.index.get_level_values(1)
         unique_dates = dates.unique().sort_values()
 
-        # Calculate splits 
+        # Calculate splits
         splits = self._determine_splits(unique_dates, self.n_splits)
 
         # Yield splits
