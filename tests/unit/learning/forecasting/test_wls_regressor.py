@@ -133,7 +133,7 @@ class TestSignWeightedLinearRegression(unittest.TestCase):
         self.assertTrue(len(ls.coef_) == self.X.shape[1])
         self.assertTrue(isinstance(ls.intercept_, numbers.Number))
         self.assertTrue(ls.intercept_ != 0)
-        # Check the solution is close to QuantileRegressor from scikit-learn
+        # Check the solution is close to LinearRegression from scikit-learn
         qr = LinearRegression(fit_intercept=True).fit(self.X.values, self.y.values, sample_weight=self.sign_weights)
         np.testing.assert_almost_equal(ls.coef_, qr.coef_,decimal=2)
         np.testing.assert_almost_equal(ls.intercept_, qr.intercept_,decimal=2)
