@@ -1,22 +1,21 @@
-from . import predictors
-
-from .panel_time_series_split import (
+from .splitters import (
     ExpandingKFoldPanelSplit,
     RollingKFoldPanelSplit,
+    RecencyKFoldPanelSplit,
     ExpandingIncrementPanelSplit,
     ExpandingFrequencyPanelSplit,
-    BasePanelSplit,
 )
 from .cv_tools import panel_cv_scores
-from .transformers import (
+
+from .preprocessing import (
     LassoSelector,
     LarsSelector,
     MapSelector,
-    ENetSelector,
     ZnScoreAverager,
     PanelMinMaxScaler,
     PanelStandardScaler,
-    FeatureAverager,
+    BasePanelScaler,
+    BasePanelSelector,
 )
 from .model_evaluation import (
     neg_mean_abs_corr,
@@ -28,48 +27,43 @@ from .model_evaluation import (
     correlation_coefficient,
     create_panel_metric,
 )
-from .signal_optimizer import SignalOptimizer
+from .sequential import SignalOptimizer, BetaEstimator
 
-from .predictors import (
-    NaivePredictor,
-    BaseWeightedRegressor,
-    WeightedLinearRegression,
+from .forecasting import (
+    LADRegressor,
+    NaiveRegressor,
     SignWeightedLinearRegression,
     TimeWeightedLinearRegression,
-    WeightedLADRegressor,
     SignWeightedLADRegressor,
     TimeWeightedLADRegressor,
-    LADRegressor,
-    BaseRegressionSystem,
-    LADRegressionSystem,
-    RidgeRegressionSystem,
-    LinearRegressionSystem,
-    CorrelationVolatilitySystem,
     ModifiedLinearRegression,
     ModifiedSignWeightedLinearRegression,
     ModifiedTimeWeightedLinearRegression,
-    BaseModifiedRegressor,
+    LinearRegressionSystem,
+    LADRegressionSystem,
+    RidgeRegressionSystem,
+    CorrelationVolatilitySystem,
 )
-
-from .beta_estimator import BetaEstimator
 
 from .random_effects import RandomEffects
 
 __all__ = [
-    # panel_time_series_split
+    # splitters
     "ExpandingKFoldPanelSplit",
     "RollingKFoldPanelSplit",
+    "RecencyKFoldPanelSplit",
     "ExpandingIncrementPanelSplit",
     "ExpandingFrequencyPanelSplit",
     "BasePanelSplit",
     # cv_tools
     "panel_cv_scores",
-    # transformers
-    "FeatureAverager",
+    # preprocessing
+    "BasePanelSelector",
     "LassoSelector",
     "LarsSelector",
     "MapSelector",
-    "ENetSelector",
+    # transformers
+    "BasePanelScaler",
     "PanelMinMaxScaler",
     "PanelStandardScaler",
     "ZnScoreAverager",
@@ -84,24 +78,19 @@ __all__ = [
     "correlation_coefficient",
     # signal_optimizer
     "SignalOptimizer",
-    # predictors
+    # forecasting
+    "NaiveRegressor",
     "LADRegressor",
-    "NaivePredictor",
     "SignWeightedLADRegressor",
-    "BaseWeightedRegressor",
     "TimeWeightedLADRegressor",
     "SignWeightedLinearRegression",
     "TimeWeightedLinearRegression",
     "ModifiedLinearRegression",
     "ModifiedSignWeightedLinearRegression",
     "ModifiedTimeWeightedLinearRegression",
-    "BaseModifiedRegressor",
     # market beta estimation
     "BetaEstimator",
-    "WeightedLinearRegression",
-    "WeightedLADRegressor",
     # regression system
-    "BaseRegressionSystem",
     "LADRegressionSystem",
     "RidgeRegressionSystem",
     "LinearRegressionSystem",
