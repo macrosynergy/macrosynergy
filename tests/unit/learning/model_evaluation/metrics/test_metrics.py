@@ -447,7 +447,7 @@ class TestMetrics(unittest.TestCase):
     def test_valid_correlation_coefficient(self):
         # Test correlation coefficients over the panel
         pearson = correlation_coefficient(self.regressor_true, self.regressor_predictions, correlation_type="pearson", type = "panel")
-        expected_pearson = stats.pearsonr(self.regressor_true, self.regressor_predictions).statistic
+        expected_pearson = stats.pearsonr(self.regressor_true, self.regressor_predictions)[0] # statisic
         self.assertEqual(pearson, expected_pearson, "correlation_coefficient should return the same value as scipy.stats.pearsonr")
         spearman = correlation_coefficient(self.regressor_true, self.regressor_predictions, correlation_type="spearman", type = "panel")
         expected_spearman = stats.spearmanr(self.regressor_true, self.regressor_predictions).correlation
@@ -462,7 +462,7 @@ class TestMetrics(unittest.TestCase):
         kendalls = []
         for cross_section in unique_cross_sections:
             pearson = correlation_coefficient(self.regressor_true[self.regressor_true.index.get_level_values(0) == cross_section], self.regressor_predictions.loc[cross_section], correlation_type="pearson")
-            expected_pearson = stats.pearsonr(self.regressor_true.loc[cross_section], self.regressor_predictions.loc[cross_section]).statistic
+            expected_pearson = stats.pearsonr(self.regressor_true.loc[cross_section], self.regressor_predictions.loc[cross_section])[0]
             self.assertEqual(pearson, expected_pearson, "correlation_coefficient should return the same value as scipy.stats.pearsonr, when applied over cross-sections")
             pearsons.append(pearson)
             spearman = correlation_coefficient(self.regressor_true[self.regressor_true.index.get_level_values(0) == cross_section], self.regressor_predictions.loc[cross_section], correlation_type="spearman")
@@ -489,7 +489,7 @@ class TestMetrics(unittest.TestCase):
         kendalls = []
         for date in unique_dates:
             pearson = correlation_coefficient(self.regressor_true[self.regressor_true.index.get_level_values(1) == date], self.regressor_predictions[self.regressor_predictions.index.get_level_values(1) == date], correlation_type="pearson")
-            expected_pearson = stats.pearsonr(self.regressor_true[self.regressor_true.index.get_level_values(1) == date], self.regressor_predictions[self.regressor_predictions.index.get_level_values(1) == date]).statistic
+            expected_pearson = stats.pearsonr(self.regressor_true[self.regressor_true.index.get_level_values(1) == date], self.regressor_predictions[self.regressor_predictions.index.get_level_values(1) == date])[0] # statistic
             self.assertEqual(pearson, expected_pearson, "correlation_coefficient should return the same value as scipy.stats.pearsonr, when applied over time periods")
             pearsons.append(pearson)
             spearman = correlation_coefficient(self.regressor_true[self.regressor_true.index.get_level_values(1) == date], self.regressor_predictions[self.regressor_predictions.index.get_level_values(1) == date], correlation_type="spearman")
