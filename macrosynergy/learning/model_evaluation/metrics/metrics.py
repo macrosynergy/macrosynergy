@@ -1,15 +1,16 @@
 """
 Scikit-learn compatible performance metrics for model evaluation.
 """
+
 import inspect
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
 
-from linearmodels.panel import RandomEffects
-from macrosynergy.learning.random_effects import RandomEffects as msyRandomEffects
+from macrosynergy.learning.random_effects import RandomEffects
 
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
+
 
 def create_panel_metric(
     y_true,
@@ -22,7 +23,7 @@ def create_panel_metric(
 
     Parameters
     ----------
-    
+
     y_true : pd.Series of shape (n_samples,)
         True regression labels.
     y_pred : array-like of shape (n_samples,)
@@ -44,20 +45,20 @@ def create_panel_metric(
     This function is a wrapper around a scikit-learn metric, allowing it to be
     evaluated over different panel axes. For instance, the :math:`R^2` metric can be
     evaluated over the whole panel, across cross-sections or across time periods. Instead
-    of re-implementing every scikit-learn metric so that evaluation over panel axes is 
+    of re-implementing every scikit-learn metric so that evaluation over panel axes is
     possible, the `create_panel_metric` function allows any scikit-learn metric to be
     evaluated over different panel axes.
     """
-    # Checks 
+    # Checks
     _check_metric_params(y_true, y_pred, type)
 
     if not callable(sklearn_metric):
         raise TypeError("sklearn_metric must be a callable")
     # check sklearn_metric has y_true and y_pred as arguments
-    metric_args = inspect.signature(sklearn_metric).parameters 
+    metric_args = inspect.signature(sklearn_metric).parameters
     if not all(arg in metric_args for arg in ["y_true", "y_pred"]):
         raise ValueError("sklearn_metric must accept y_true and y_pred as arguments")
-    
+
     if type == "panel":
         return sklearn_metric(y_true, y_pred)
     elif type == "cross_section":
@@ -65,16 +66,25 @@ def create_panel_metric(
         unique_cross_sections = y_true.index.get_level_values(0).unique()
         for cross_section in unique_cross_sections:
             cross_section_mask = y_true.index.get_level_values(0) == cross_section
-            metrics.append(sklearn_metric(y_true.values[cross_section_mask], y_pred[cross_section_mask]))
+            metrics.append(
+                sklearn_metric(
+                    y_true.values[cross_section_mask], y_pred[cross_section_mask]
+                )
+            )
         return np.mean(metrics)
     elif type == "time_periods":
         metrics = []
         unique_time_periods = y_true.index.get_level_values(1).unique()
         for time_period in unique_time_periods:
             time_period_mask = y_true.index.get_level_values(1) == time_period
-            metrics.append(sklearn_metric(y_true.values[time_period_mask], y_pred[time_period_mask]))
+            metrics.append(
+                sklearn_metric(
+                    y_true.values[time_period_mask], y_pred[time_period_mask]
+                )
+            )
         return np.mean(metrics)
-    
+
+
 def regression_accuracy(
     y_true,
     y_pred,
@@ -275,23 +285,9 @@ def panel_significance_probability(
     if not y_true.index.equals(y_pred.index):
         raise ValueError("y_true and y_pred must have the same index")
 
-    # Convert cross-section labels to integer codes
-    unique_cross_sections = sorted(y_true.index.get_level_values(0).unique())
-    cross_section_codes = dict(
-        zip(unique_cross_sections, range(1, len(unique_cross_sections) + 1))
-    )
-    y_true = y_true.rename(cross_section_codes, level=0, inplace=False).copy()
-    y_pred = y_pred.rename(cross_section_codes, level=0, inplace=False).copy()
+    re = RandomEffects(fit_intercept=False).fit(y_true, y_pred)
+    pval = re.pvals.to_numpy().item()
 
-    # Create random effects model
-    re = RandomEffects(y_true.swaplevel(), y_pred.swaplevel()).fit()
-    coef = re.params.values[0]
-    zstat = coef / re.std_errors.values[0]
-    pval = 2 * (1 - stats.norm.cdf(abs(zstat)))
-    
-    re = msyRandomEffects(fit_intercept=False).fit(y_true, y_pred)
-    # pval = re.pvals[col]
-    
     return 1 - pval
 
 
@@ -367,11 +363,11 @@ def sharpe_ratio(
         if not isinstance(y_pred, pd.Series):
             y_pred = pd.Series(y_pred, index=y_true.index)
         if thresh is not None:
-            portfolio_weights = (y_pred / y_pred.groupby(level=1).transform("std")).clip(
-                lower=-thresh, upper=thresh
-            )
+            portfolio_weights = (
+                y_pred / y_pred.groupby(level=1).transform("std")
+            ).clip(lower=-thresh, upper=thresh)
         else:
-            portfolio_weights = (y_pred / y_pred.groupby(level=1).transform("std"))
+            portfolio_weights = y_pred / y_pred.groupby(level=1).transform("std")
         portfolio_returns = portfolio_weights * y_true
 
     if type == "panel":
@@ -494,11 +490,11 @@ def sortino_ratio(
         if not isinstance(y_pred, pd.Series):
             y_pred = pd.Series(y_pred, index=y_true.index)
         if thresh is not None:
-            portfolio_weights = (y_pred / y_pred.groupby(level=1).transform("std")).clip(
-                lower=-thresh, upper=thresh
-            )
+            portfolio_weights = (
+                y_pred / y_pred.groupby(level=1).transform("std")
+            ).clip(lower=-thresh, upper=thresh)
         else:
-            portfolio_weights = (y_pred / y_pred.groupby(level=1).transform("std"))
+            portfolio_weights = y_pred / y_pred.groupby(level=1).transform("std")
         portfolio_returns = portfolio_weights * y_true
 
     if type == "panel":
@@ -544,7 +540,7 @@ def sortino_ratio(
 
             if denominator == 0 or np.isnan(denominator):
                 denominator = 1
-                
+
             sortino_ratio = average_return / denominator
 
             sortino_ratios.append(sortino_ratio)
@@ -655,6 +651,7 @@ def correlation_coefficient(
             correlations.append(correlation)
 
         return np.mean(correlations)
+
 
 def _check_metric_params(
     y_true,

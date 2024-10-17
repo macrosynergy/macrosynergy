@@ -1,19 +1,16 @@
+import numbers
+
 import numpy as np
 import pandas as pd
-import numbers
 import scipy.stats as stats
-
-from sklearn.linear_model import Lars, lasso_path, lars_path, enet_path
 from sklearn.exceptions import NotFittedError
-
+from sklearn.linear_model import Lars, enet_path, lars_path, lasso_path
 from statsmodels.tools.tools import add_constant
 
-# import statsmodels.api as api
-from linearmodels.panel import RandomEffects
+from macrosynergy.learning.preprocessing.panel_selectors.base_panel_selector import \
+    BasePanelSelector
+from macrosynergy.learning.random_effects import RandomEffects
 
-from macrosynergy.learning.preprocessing.panel_selectors.base_panel_selector import (
-    BasePanelSelector,
-)
 
 class LarsSelector(BasePanelSelector):
     def __init__(self, n_factors=10, fit_intercept=False):
@@ -104,10 +101,11 @@ class LassoSelector(BasePanelSelector):
             method="lasso",
         )
 
-        mask = coefs_path[:, min(self.n_factors, coefs_path.shape[1]-1)] != 0
+        mask = coefs_path[:, min(self.n_factors, coefs_path.shape[1] - 1)] != 0
 
         return mask
-    
+
+
 class MapSelector(BasePanelSelector):
     def __init__(self, significance_level=0.05, positive=False):
         """
@@ -120,7 +118,7 @@ class MapSelector(BasePanelSelector):
         positive : bool, default=False
             Whether to only keep features with positive estimated model coefficients.
         """
-        if type(significance_level) != float:
+        if not isinstance(significance_level, numbers.Number):
             raise TypeError("The significance_level must be a float.")
         if (significance_level <= 0) or (significance_level >= 1):
             raise ValueError("The significance_level must be in between 0 and 1.")
@@ -146,24 +144,14 @@ class MapSelector(BasePanelSelector):
         mask : np.ndarray
             Boolean mask of selected features.
         """
-        # Convert cross-sections to numeric codes for compatibility with RandomEffects
-        unique_xss = sorted(X.index.get_level_values(0).unique())
-        xs_codes = dict(zip(unique_xss, range(1, len(unique_xss) + 1)))
-
-        X = X.rename(xs_codes, level=0, inplace=False).copy()
-        y = y.rename(xs_codes, level=0, inplace=False).copy()
-
         # Iterate through each feature and perform the panel test
         mask = []
         for col in self.feature_names_in_:
             ftr = X[col]
-            ftr = add_constant(ftr)
-            # Swap levels so that random effects are placed on each time period,
-            # as opposed to the cross-section
-            re = RandomEffects(y.swaplevel(), ftr.swaplevel()).fit()
+
+            re = RandomEffects(fit_intercept=True).fit(ftr, y)
             est = re.params[col]
-            zstat = est / re.std_errors[col]
-            pval = 2 * (1 - stats.norm.cdf(zstat))
+            pval = re.pvals[col]
             if pval < self.significance_level:
                 if self.positive:
                     mask.append(est > 0)
@@ -232,9 +220,9 @@ if __name__ == "__main__":
     print(lars.transform(X_train))
 
     # LASSO selector
-    lasso = LassoSelector(n_factors = 1, positive = True).fit(X_train, y_train)
+    lasso = LassoSelector(n_factors=1, positive=True).fit(X_train, y_train)
     print(f"Lasso 1-factor, positive restriction: {lasso.get_feature_names_out()}")
-    lasso = LassoSelector(n_factors = 3, positive = False).fit(X_train, y_train)
+    lasso = LassoSelector(n_factors=3, positive=False).fit(X_train, y_train)
     print(f"Lasso 3-factors, with intercept: {lasso.get_feature_names_out()}")
 
     print(lasso.transform(X_train))
