@@ -166,7 +166,11 @@ def historic_vol(
     df = reduce_df(
         df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
     )
-
+    if df.empty:
+        raise ValueError(
+            "No data available for the given parameters."
+            f"\nParameters: xcat={xcat},\ncids={cids},\nstart={start},\nend={end},\nblacklist={blacklist}"
+        )
     dfw = df.pivot(index="real_date", columns="cid", values="value")
 
     trigger_indices = get_eops(
@@ -273,7 +277,7 @@ def historic_vol(
 
         out_dfs.append(df_out.loc[sel_bools & sel_dts])
 
-    return standardise_dataframe(pd.concat(out_dfs))
+    return standardise_dataframe(pd.concat(out_dfs)).dropna().reset_index(drop=True)
 
 
 if __name__ == "__main__":
