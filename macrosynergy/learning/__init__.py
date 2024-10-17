@@ -1,5 +1,3 @@
-from . import predictors
-
 from .splitters import (
     ExpandingKFoldPanelSplit,
     RollingKFoldPanelSplit,
