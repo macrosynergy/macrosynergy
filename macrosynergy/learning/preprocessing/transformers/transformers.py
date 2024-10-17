@@ -1,103 +1,92 @@
 import numpy as np
 import pandas as pd
-
+import warnings
 import datetime
 
 from sklearn.base import BaseEstimator, TransformerMixin
 
-from typing import Any, Optional
-
-
-class FeatureAverager(BaseEstimator, TransformerMixin):
-    def __init__(self, use_signs: Optional[bool] = False):
-        """
-        Transformer class to combine features into a benchmark signal by averaging.
-
-        :param <Optional[bool]> use_signs: Boolean to specify whether or not to return the
-            signs of the benchmark signal instead of the signal itself. Default is False.
-        """
-        if not isinstance(use_signs, bool):
-            raise TypeError("'use_signs' must be a boolean.")
-
-        self.use_signs = use_signs
-
-    def fit(self, X: pd.DataFrame, y: Any = None):
-        """
-        Fit method. Since this transformer is a simple averaging of features,
-        no fitting is required.
-
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Any> y: Placeholder for scikit-learn compatibility.
-        """
-
-        return self
-
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        """
-        Transform method to average features into a benchmark signal.
-        If use_signs is True, the signs of the benchmark signal are returned.
-
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-
-        :return <pd.DataFrame>: Pandas dataframe of benchmark signal.
-        """
-        # checks
-        if type(X) != pd.DataFrame:
-            raise TypeError(
-                "Input feature matrix for the FeatureAverager must be a pandas dataframe."
-                " If used as part of an sklearn pipeline, ensure that previous steps "
-                "return a pandas dataframe."
-            )
-        if not isinstance(X.index, pd.MultiIndex):
-            raise ValueError("X must be multi-indexed.")
-        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
-            raise TypeError("The inner index of X must be datetime.date.")
-
-        # transform
-        signal_df = X.mean(axis=1).to_frame(name="signal")
-        if self.use_signs:
-            return np.sign(signal_df).astype(int)
-
-        return signal_df
-
-
 class ZnScoreAverager(BaseEstimator, TransformerMixin):
-    def __init__(self, neutral: str = "zero", use_signs: bool = False):
+    def __init__(
+        self,
+        neutral = "zero",
+        use_signs = False,
+    ):
         """
-        Transformer class to combine features into a benchmark signal
-        according to a specified normalisation.
+        Point-in-time factor normalization before feature averaging for a conceptual
+        parity signal.
 
-        :param <str> neutral: Specified neutral value for a normalisation. This can
-            take either 'zero' or 'mean'. If the neutral level is zero, each feature
-            is standardised by dividing by the mean absolute deviation. If the neutral
-            level is mean, each feature is normalised by subtracting the mean and
-            dividing by the standard deviation. Any statistics are computed according
-            to a point-in-time principle. Default is 'zero'.
-        :param <bool> use_signs: Boolean to specify whether or not to return the
-            signs of the benchmark signal instead of the signal itself. Default is False.
+        :deprecated: This class is deprecated and will be replaced in a future release
+            by a transformer that applies PiT z-scoring to each feature, without 
+            any averaging.
+
+        Parameters
+        ----------
+        neutral : str, default='zero'
+            Specified neutral value for a normalisation. This can take either 'zero' or
+            'mean'. If the neutral level is zero, each feature is standardised by dividing
+            by the mean absolute deviation. If the neutral level is mean, each feature is
+            normalised by subtracting the mean and dividing by the standard deviation. Any
+            statistics are computed according to a point-in-time principle.
+        use_signs : bool, default=False
+            Boolean to specify whether or not to return the signs of the benchmark signal
+            instead of the signal itself.
+
+        Notes
+        -----
+        When clear priors on underlying market drivers are available, a useful signal 
+        can be constructed by averaging PiT :math:`z_{n}`-scores of each feature/factor.
+        This is often a competitive signal. 
+        
+        A :math:`z_{n}`-score involves standardising a feature PiT by subtracting a
+        `neutral` value and dividing by a measure of historic dispersion.
+        In this class, the neutral value can be set to zero or the mean. An option for the
+        median will be added in the future. The dispersion measure used is the mean
+        absolute deviation for the zero neutral value and the standard deviation for the
+        mean neutral value. The dispersion measure is calculated using all training
+        information and test information until (and including) that test time, reflecting
+        the information available to a portfolio manager at that time.
+        
+        We include that test time since features are assumed to lag behind returns, with
+        the timestamp in the index representing the date of the returns.
         """
+
+        warnings.warn(
+            "ZnScoreAverager is deprecated and will be replaced in a future "
+            "release by a transformer that applies PiT z-scoring to each feature, "
+            "without any averaging, as per the current implementation.",
+             DeprecationWarning
+        )
+        
         if not isinstance(neutral, str):
             raise TypeError("'neutral' must be a string.")
 
         if neutral not in ["zero", "mean"]:
-            raise ValueError("neutral must be either 'zero' or 'mean'.")
+            raise ValueError("'neutral' must be either 'zero' or 'mean'.")
 
         if not isinstance(use_signs, bool):
             raise TypeError("'use_signs' must be a boolean.")
 
         self.neutral = neutral
         self.use_signs = use_signs
+        self.n_features_in_ = None
+        self.feature_names_in_ = None
 
-    def fit(self, X: pd.DataFrame, y: Any = None):
+    def fit(
+        self,
+        X,
+        y = None
+    ):
         """
-        Fit method to extract relevant standardisation/normalisation statistics from a
-        training set so that PiT statistics can be computed in the transform method for
-        a hold-out set.
+        Extract relevant standardisation/normalisation statistics.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Any> y: Placeholder for scikit-learn compatibility.
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
+        y : Any, default=None
+            Placeholder for scikit-learn compatibility.
         """
-        # checks
+        # Checks
         if not isinstance(X, pd.DataFrame):
             raise TypeError(
                 "Input feature matrix for the ZnScoreAverager must be a pandas "
@@ -106,11 +95,26 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
             )
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
-        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise ValueError(
+                "All columns in the input feature matrix for a panel selector ",
+                "must be numeric."
+            )
+        if X.isnull().values.any():
+            raise ValueError(
+                "The input feature matrix for a panel selector must not contain any "
+                "missing values."
+            )
 
         # fit
+
         self.training_n: int = len(X)
+        self.n_features_in_ = X.shape[1]
+        self.feature_names_in_ = X.columns
 
         if self.neutral == "mean":
             # calculate the mean and sum of squares of each feature
@@ -120,21 +124,28 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
             self.training_sum_squares: pd.Series = sum_squares
         else:
             # calculate the mean absolute deviation of each feature
+            # TODO: maybe use the median?
             mads: pd.Series = np.mean(np.abs(X), axis=0)
             self.training_mads: pd.Series = mads
 
         return self
 
-    def transform(self, X: pd.DataFrame):
+    def transform(
+        self,
+        X
+    ):
         """
-        Transform method to compute an out-of-sample benchmark signal for each unique
-        date in the input test dataframe. At a given test time, the relevant statistics
-        (implied by choice of neutral value) are calculated using all training information
-        and test information until (and including) that test time, since the test time
-        denotes the time at which the return was available and the features lag behind
-        the returns.
+        Create an OOS conceptual parity signal by averaging PiT z-scores of features.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
+
+        Returns
+        -------
+        pd.DataFrame
+            Output signal.
         """
         # checks
         if not isinstance(X, pd.DataFrame):
@@ -147,6 +158,26 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
             raise ValueError("X must be multi-indexed.")
         if not isinstance(X.index.get_level_values(1)[0], datetime.date):
             raise TypeError("The inner index of X must be datetime.date.")
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise ValueError(
+                "All columns in the input feature matrix for `ZnScoreAverager` ",
+                "must be numeric."
+            )
+        if X.isnull().values.any():
+            raise ValueError(
+                "The input feature matrix for `ZnScoreAverager` must not contain any "
+                "missing values."
+            )
+        if X.shape[1] != self.n_features_in_:
+            raise ValueError(
+                "The input feature matrix must have the same number of columns as the "
+                "training feature matrix."
+            )
+        if not X.columns.equals(self.feature_names_in_):
+            raise ValueError(
+                "The input feature matrix must have the same columns as the training "
+                "feature matrix."
+            )
 
         X = X.sort_index(level="real_date")
 
@@ -223,10 +254,81 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
 
     def _get_expanding_count(self, X):
         """
-        Helper method to get the number of non-NaN values in each expanding window.
+        Get the number of non-NaN values in each expanding window.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
 
-        :return <np.ndarray>: Numpy array of expanding counts.
+        Returns
+        -------
+        np.ndarray
+            Expanding count.
         """
+
         return X.groupby(level="real_date").count().expanding().sum().to_numpy()
+    
+if __name__ == "__main__":
+    import numpy as np
+    import pandas as pd
+
+    from macrosynergy.management import (
+        categories_df,
+        make_qdf,
+    )
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+
+    """Example: Unbalanced panel """
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd["grading"] = np.ones(dfd.shape[0])
+    black = {
+        "GBP": (
+            pd.Timestamp(year=2009, month=1, day=1),
+            pd.Timestamp(year=2012, month=6, day=30),
+        ),
+        "CAD": (
+            pd.Timestamp(year=2015, month=1, day=1),
+            pd.Timestamp(year=2100, month=1, day=1),
+        ),
+    }
+
+    train = categories_df(
+        df=dfd, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
+    ).dropna()
+    train = train[train.index.get_level_values(1) >= pd.Timestamp(year=2005,month=8,day=1)]
+
+    X_train = train.drop(columns=["XR"])
+    y_train = train["XR"]
+
+    # Neutral = zero
+    zn = ZnScoreAverager(neutral="zero", use_signs=False)
+    zn.fit(X_train, y_train)
+    print(zn.transform(X_train))
+
+    # Neutral = mean, use_signs = False
+    zn = ZnScoreAverager(neutral="mean", use_signs=False)
+    zn.fit(X_train, y_train)
+    print(zn.transform(X_train))
+
+    # Neutral = mean, use_signs = True
+    zn = ZnScoreAverager(neutral="mean", use_signs=True)
+    zn.fit(X_train, y_train)
+    print(zn.transform(X_train))

@@ -19,8 +19,14 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
     """
     Base class for statistical feature selection over a panel.
     """
+    def __init__(self):
+        """
+        Initialize selector class.
+        """
+        self.n_features_in_ = None
+        self.feature_names_in_ = None
 
-    def fit(self, X, y):
+    def fit(self, X, y = None):
         """
         Learn optimal features based on a training set pair (X, y).
 
@@ -28,15 +34,14 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
         ----------
         X : pandas.DataFrame
             The feature matrix.
-        y : pandas.Series or pandas.DataFrame
+        y : pandas.Series or pandas.DataFrame, optional
             The target vector.
         """
         # Checks
         self._check_fit_params(X, y)
 
         # Store useful input information
-        self.n = X.shape[0]
-        self.p = X.shape[1]
+        self.n_features_in_ = X.shape[1]
         self.feature_names_in_ = X.columns
 
         # Standardise the features for fair comparison
@@ -73,8 +78,6 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
         ----------
         X : pandas.DataFrame
             The feature matrix.
-        y : pandas.Series or pandas.DataFrame
-            The target vector.
 
         Returns
         -------
@@ -122,45 +125,71 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
         ----------
         X : pandas.DataFrame
             The feature matrix.
-        y : pandas.Series or pandas.DataFrame
+        y : pandas.Series or pandas.DataFrame, optional
             The target vector.
         """
+        # Check input feature matrix
         if not isinstance(X, pd.DataFrame):
             raise TypeError(
                 "Input feature matrix for the selector must be a pandas dataframe. ",
                 "If used as part of an sklearn pipeline, ensure that previous steps ",
                 "return a pandas dataframe.",
             )
-        if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
-            raise TypeError(
-                "Target vector for the selector must be a pandas series or dataframe. ",
-                "If used as part of an sklearn pipeline, ensure that previous steps ",
-                "return a pandas series or dataframe.",
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError(
+                "The input dataframe must be multi-indexed."
             )
-        if isinstance(y, pd.DataFrame):
-            if y.shape[1] != 1:
-                raise ValueError(
-                    "The target dataframe must have only one column. If used as part of ",
-                    "an sklearn pipeline, ensure that previous steps return a pandas ",
-                    "series or single-column dataframe.",
-                )
         if not X.index.nlevels == 2:
             raise ValueError("X must be multi-indexed with two levels.")
-        if not y.index.nlevels == 2:
-            raise ValueError("y must be multi-indexed with two levels.")
         if not X.index.get_level_values(0).dtype == "object":
             raise TypeError("The outer index of X must be strings.")
-        if not y.index.get_level_values(0).dtype == "object":
-            raise TypeError("The outer index of y must be strings.")
         if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
-        if not y.index.get_level_values(1).dtype == "datetime64[ns]":
-            raise TypeError("The inner index of y must be datetime.date.")
-        if not X.index.equals(y.index):
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
             raise ValueError(
-                "The indices of the input dataframe X and the output dataframe y don't "
-                "match."
+                "All columns in the input feature matrix for a panel selector ",
+                "must be numeric."
             )
+        if X.isnull().values.any():
+            raise ValueError(
+                "The input feature matrix for a panel selector must not contain any "
+                "missing values."
+            )
+        # Check target vector, if provided
+        if y is not None:
+            if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
+                raise TypeError(
+                    "Target vector for the selector must be a pandas series or dataframe. ",
+                    "If used as part of an sklearn pipeline, ensure that previous steps ",
+                    "return a pandas series or dataframe.",
+                )
+            if isinstance(y, pd.DataFrame):
+                if y.shape[1] != 1:
+                    raise ValueError(
+                        "The target dataframe must have only one column. If used as part of ",
+                        "an sklearn pipeline, ensure that previous steps return a pandas ",
+                        "series or single-column dataframe.",
+                    )
+            if not isinstance(y.index, pd.MultiIndex):
+                raise ValueError(
+                    "The target vector must be multi-indexed."
+                )
+            if not y.index.nlevels == 2:
+                raise ValueError("y must be multi-indexed with two levels.")
+            if not y.index.get_level_values(0).dtype == "object":
+                raise TypeError("The outer index of y must be strings.")
+            if not y.index.get_level_values(1).dtype == "datetime64[ns]":
+                raise TypeError("The inner index of y must be datetime.date.")
+            if not X.index.equals(y.index):
+                raise ValueError(
+                    "The indices of the input dataframe X and the output dataframe y don't "
+                    "match."
+                )
+            if y.isnull().values.any():
+                raise ValueError(
+                    "The target vector for a panel selector must not contain any "
+                    "missing values."
+                )
 
     def _check_transform_params(self, X):
         """
@@ -177,15 +206,32 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas dataframe."
             )
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("The input dataframe must be multi-indexed.")
         if not X.index.nlevels == 2:
             raise ValueError("X must be multi-indexed with two levels.")
         if not X.index.get_level_values(0).dtype == "object":
             raise TypeError("The outer index of X must be strings.")
         if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
-
-        if not X.shape[-1] == self.p:
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
             raise ValueError(
-                "The number of columns of the dataframe to be transformed, X, doesn't "
-                "match the number of columns of the training dataframe."
+                "All columns in the input feature matrix for a panel selector ",
+                "must be numeric."
+            )
+        if X.isnull().values.any():
+            raise ValueError(
+                "The input feature matrix for a panel selector must not contain any "
+                "missing values."
+            )
+        
+        if X.shape[1] != self.n_features_in_:
+            raise ValueError(
+                "The input feature matrix must have the same number of columns as the "
+                "training feature matrix."
+            )
+        if not X.columns.equals(self.feature_names_in_):
+            raise ValueError(
+                "The input feature matrix must have the same columns as the training "
+                "feature matrix."
             )

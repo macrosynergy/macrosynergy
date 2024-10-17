@@ -2,7 +2,6 @@ from .panel_selectors import (
     BasePanelSelector,
     LarsSelector,
     LassoSelector,
-    ENetSelector,
     MapSelector,
 )
 
@@ -13,7 +12,6 @@ from .scalers import (
 )
 
 from .transformers import (
-    FeatureAverager,
     ZnScoreAverager,
 )
 
@@ -22,13 +20,11 @@ __all__ = [
     "BasePanelSelector",
     "LarsSelector",
     "LassoSelector",
-    "ENetSelector",
     "MapSelector",
     # scalers
     "BasePanelScaler",
     "PanelMinMaxScaler",
     "PanelStandardScaler",
     # transformers
-    "FeatureAverager",
     "ZnScoreAverager",
 ]
