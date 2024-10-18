@@ -23,6 +23,20 @@ import functools
 IDX_COLS_SORT_ORDER = ["cid", "xcat", "real_date"]
 
 
+def is_categorical_qdf(df: pd.DataFrame) -> bool:
+    """
+    Check if a column in a DataFrame is categorical.
+
+    :param <pd.DataFrame> df: The DataFrame to be checked.
+    :param <str> column: The column to be checked.
+    :return <bool>: True if the column is categorical, False otherwise.
+    """
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
+
+    return all([df[col].dtype.name == "category" for col in ["cid", "xcat"]])
+
+
 def standardise_dataframe(
     df: pd.DataFrame, verbose: bool = False
 ) -> QuantamentalDataFrame:
@@ -63,6 +77,9 @@ def standardise_dataframe(
         # check if there is atleast one more column
         if len(df.columns) < 4:
             raise ValueError(fail_str)
+
+    if isinstance(df, QuantamentalDataFrame) and type(df) is QuantamentalDataFrame:
+        return QuantamentalDataFrame(df)
 
     # Convert date and ensure specific columns are strings in one step
     # 'datetime64[ns]' is the default dtype for datetime columns in pandas
@@ -116,6 +133,9 @@ def drop_nan_series(
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a Quantamental DataFrame.")
 
+    if type(df) is QuantamentalDataFrame:
+        return df.drop_nan_series(column=column, raise_warning=raise_warning)
+
     if not column in df.columns:
         raise ValueError(f"Column {column} not present in DataFrame.")
 
@@ -156,6 +176,9 @@ def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFr
     """
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
+
+    if type(df) is QuantamentalDataFrame:
+        return df.to_wide(value_column=value_column)
 
     if not isinstance(value_column, str):
         raise TypeError("Argument `value_column` must be a string.")
@@ -311,7 +334,10 @@ def apply_slip(
     else:
         sel_tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
 
-    df["ticker"] = df["cid"] + "_" + df["xcat"]
+    if is_categorical_qdf(df):
+        df = QuantamentalDataFrame(df).add_ticker_column()
+    else:
+        df["ticker"] = df["cid"] + "_" + df["xcat"]
     err_str = (
         "Tickers targetted for applying slip are not present in the DataFrame.\n"
         "Missing tickers: {tickers}"
@@ -330,7 +356,7 @@ def apply_slip(
     for col in metrics:
         tks_isin = df["ticker"].isin(sel_tickers)
         df.loc[tks_isin, col] = df.loc[tks_isin, col].astype(float)
-        df.loc[tks_isin, col] = df.groupby("ticker")[col].shift(slip)
+        df.loc[tks_isin, col] = df.groupby("ticker", observed=True)[col].shift(slip)
 
     df = df.drop(columns=["ticker"]).reset_index(drop=True)
     assert isinstance(df, QuantamentalDataFrame), "Failed to apply slip."
@@ -381,7 +407,7 @@ def downsample_df_on_real_date(
     non_groupby_columns = list(set(df.columns) - set(groupby_columns) - {"real_date"})
     res = (
         df.set_index("real_date")
-        .groupby(groupby_columns)[non_groupby_columns]
+        .groupby(groupby_columns, observed=True)[non_groupby_columns]
         .resample(freq)
     )
     if PD_OLD_RESAMPLE:
@@ -432,6 +458,9 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     error_message = f"The added DataFrame must be a Quantamental Dataframe."
     if not isinstance(df_add, QuantamentalDataFrame):
         raise TypeError(error_message)
+
+    if type(df) is QuantamentalDataFrame:
+        return df.update_df(df_add=df_add, xcat_replace=xcat_replace)
 
     error_message = (
         "The two Quantamental DataFrames must share at least "
@@ -540,6 +569,20 @@ def reduce_df(
         (for out_all True) DataFrame and available and selected xcats and cids.
     """
 
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("Argument `df` must be a standardised Quantamental DataFrame.")
+
+    if type(df) is QuantamentalDataFrame:
+        return df.reduce_df(
+            cids=cids,
+            xcats=xcats,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            out_all=out_all,
+            intersect=intersect,
+        )
+
     if xcats is not None:
         if not isinstance(xcats, list):
             xcats = [xcats]
@@ -610,6 +653,13 @@ def reduce_df_by_ticker(
 
     :return <pd.Dataframe>: reduced dataframe that also removes duplicates
     """
+    if type(df) is QuantamentalDataFrame:
+        return df.reduce_df_by_ticker(
+            tickers=ticks,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+        )
 
     dfx = df.copy()
 
@@ -695,7 +745,11 @@ def _categories_df_explanatory_df(
             explanatory_col = dfw[xcat].sum(min_count=1)
 
         if lag > 0:
-            explanatory_col = explanatory_col.groupby(level=0).shift(lag)
+            explanatory_col: pd.Series
+            explanatory_col = explanatory_col.groupby(
+                level=0,
+                observed=True,
+            ).shift(lag)
 
         dfw_explanatory[xcat] = explanatory_col
 
@@ -838,7 +892,8 @@ def categories_df(
             [
                 pd.Grouper(level="cid"),
                 pd.Grouper(level="real_date", freq=freq),
-            ]
+            ],
+            observed=True,
         )
 
         dfw_explanatory = _categories_df_explanatory_df(
