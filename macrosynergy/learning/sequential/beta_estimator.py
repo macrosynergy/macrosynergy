@@ -37,11 +37,32 @@ class BetaEstimator(BasePanelLearner):
         end=None,
     ):
         # Checks
-        # TODO
-
+        # TODO: Refactor these checks.
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("df must be a pandas DataFrame.")
+        if not set(["cid", "xcat", "real_date", "value"]).issubset(df.columns):
+            raise ValueError(
+                "df must have columns 'cid', 'xcat', 'real_date' and 'value'."
+            )
+            
+        # cids checks
+        if cids is not None:
+            if not isinstance(cids, list):
+                raise TypeError("cids must be a list.")
+            if not all(isinstance(cid, str) for cid in cids):
+                raise TypeError("All elements in cids must be strings.")
+            for cid in cids:
+                if cid not in df["cid"].unique():
+                    raise ValueError(f"{cid} not in the dataframe.")
+                
+        if not isinstance(benchmark_return, str):
+            raise TypeError("benchmark_return must be a string.")
+            
         # Create pseudo-panel
         dfx = pd.DataFrame(columns=["real_date", "cid", "xcat", "value"])
-        benchmark_cid, benchmark_xcat = benchmark_return.split("_", 1)
+        
+        self.benchmark_return = benchmark_return
+        self.benchmark_cid, self.benchmark_xcat = benchmark_return.split("_", 1)
 
         for cid in cids:
             # Extract cross-section contract returns
@@ -53,24 +74,24 @@ class BetaEstimator(BasePanelLearner):
             # Extract benchmark returns
             dfb = reduce_df(
                 df=df,
-                xcats=[benchmark_xcat],
-                cids=[benchmark_cid],
+                xcats=[self.benchmark_xcat],
+                cids=[self.benchmark_cid],
             )
 
             # Combine contract and benchmark returns and rename cross-section identifier
             # in order to match the benchmark return with each cross section in a pseudo
             # panel
             df_cid = pd.concat([dfa, dfb], axis=0)
-            df_cid["cid"] = f"{cid}v{benchmark_cid}"
+            df_cid["cid"] = f"{cid}v{self.benchmark_cid}"
 
             dfx = update_df(dfx, df_cid)
 
         super().__init__(
             df=dfx,
             xcats=(
-                xcats + [benchmark_xcat]
+                [self.benchmark_xcat] + xcats
                 if isinstance(xcats, list)
-                else [xcats, benchmark_xcat]
+                else [self.benchmark_xcat, xcats]
             ),
             cids=list(dfx["cid"].unique()),
             start=start,
