@@ -105,7 +105,7 @@ class TestMethods(unittest.TestCase):
 
         # change dtype of eop_lag to int
         tdf = change_column_format(test_df, cols=["eop_lag"], dtype="int64")
-        self.assertEqual(tdf["eop_lag"].dtype.name, 'int64')
+        self.assertEqual(tdf["eop_lag"].dtype.name, "int64")
 
         # change dtype of eop_lag to float
         tdf = change_column_format(test_df, cols=["eop_lag"], dtype="float")
@@ -155,39 +155,93 @@ class TestMethods(unittest.TestCase):
         self.assertTrue(tseries.tolist() == tickers.tolist())
 
 
-# class TestConcatQDFs(unittest.TestCase):
+class TestConcatQDFs(unittest.TestCase):
 
-#     @staticmethod
-#     def random_tickers(n: int = 10) -> List[str]:
-#         def rstr(n: int = 3, m: int = 5) -> str:
-#             return "".join(random.sample(string.ascii_uppercase, random.randint(n, m)))
+    @staticmethod
+    def random_tickers(n: int = 10) -> List[str]:
+        def rstr(n: int = 3, m: int = 5) -> str:
+            return "".join(random.sample(string.ascii_uppercase, random.randint(n, m)))
 
-#         cids = [rstr() for _ in range(n)]
-#         xcats = [rstr(4, 5) for _ in range(n)]
+        cids = [rstr() for _ in range(n)]
+        xcats = [rstr(4, 5) for _ in range(n)]
 
-#         all_tickers = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
-#         return random.sample(all_tickers, n)
+        all_tickers = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+        return random.sample(all_tickers, n)
 
-#     def test_concat_qdfs_simple(self):
-#         tickers = self.random_tickers()
-#         cargs = dict(metrics=JPMAQS_METRICS, cids=None, xcats=None)
-#         dfA = make_test_df(tickers=tickers[:5], **cargs)
-#         dfB = make_test_df(tickers=tickers[5:], **cargs)
+    @staticmethod
+    def split_df_by_metrics(df: QuantamentalDataFrame) -> List[QuantamentalDataFrame]:
+        return [
+            df[QuantamentalDataFrame.IndexCols + [m]].reset_index(drop=True)
+            for m in (set(df.columns) - set(QuantamentalDataFrame.IndexCols))
+        ]
 
-#         qdfA = QuantamentalDataFrame(dfA)
-#         qdfB = QuantamentalDataFrame(dfB)
+    @staticmethod
+    def split_df_by_ticker(df: QuantamentalDataFrame) -> List[QuantamentalDataFrame]:
+        return [sdf for (c, x), sdf in df.groupby(["cid", "xcat"], observed=True)]
 
-#         qdfC = concat_qdfs([qdfA, qdfB])
+    def test_concat_qdfs_simple(self):
+        tickers = self.random_tickers()
+        cargs = dict(
+            metrics=JPMAQS_METRICS,
+            cids=None,
+            xcats=None,
+        )
+        dfA = make_test_df(tickers=tickers[:5], **cargs)
+        dfB = make_test_df(tickers=tickers[5:], **cargs)
 
-#         # assert that all tickers are in the new qdf
-#         self.assertEqual(set(QuantamentalDataFrame.list_tickers(qdfC)), set(tickers))
+        qdfA = QuantamentalDataFrame(dfA)
+        qdfB = QuantamentalDataFrame(dfB)
 
-#         # qdfA['test_col'] = concat all columns to a string
-#         qdfA["test_col"] = qdfA.apply(lambda x: "".join(x.astype(str)), axis=1)
-#         qdfB["test_col"] = qdfB.apply(lambda x: "".join(x.astype(str)), axis=1)
-#         qdfC["test_col"] = qdfC.apply(lambda x: "".join(x.astype(str)), axis=1)
+        qdfC = concat_qdfs([qdfA, qdfB])
 
-#         print(True)
+        # assert that all tickers are in the new qdf
+        self.assertEqual(set(QuantamentalDataFrame.list_tickers(qdfC)), set(tickers))
+
+        expc_df = (
+            pd.concat([qdfA, qdfB], axis=0)
+            .sort_values(by=QuantamentalDataFrame.IndexColsSortOrder + JPMAQS_METRICS)
+            .reset_index(drop=True)
+        )
+
+        self.assertTrue(expc_df.equals(qdfC))
+
+    def test_concat_single_metric_qdfs(self):
+        tickers = self.random_tickers(50)
+        cargs = dict(
+            metrics=JPMAQS_METRICS,
+            cids=None,
+            xcats=None,
+        )
+        dfo = QuantamentalDataFrame(make_test_df(tickers=tickers, **cargs))
+
+        n_random_nans = 219
+        for _ in range(n_random_nans):
+            rrow = random.randint(0, dfo.shape[0] - 1)
+            rcol = random.choice(JPMAQS_METRICS)
+            dfo.loc[rrow, rcol] = np.nan
+
+        split_dfs: List[QuantamentalDataFrame] = []
+        for sdf in self.split_df_by_ticker(dfo):
+            split_dfs.extend(self.split_df_by_metrics(sdf))
+
+        for sdf in split_dfs:
+            # sort my the metric just for fun
+            sdf = sdf.sort_values(
+                by=QuantamentalDataFrame.IndexCols + [sdf.columns[-1]]
+            )
+
+        output_df = concat_qdfs(split_dfs)
+
+        self.assertTrue(dfo.equals(output_df))
+
+        # get nan locs
+        in_nan_rows = dfo[dfo.isna().any(axis=1)]
+        out_nan_rows = output_df[output_df.isna().any(axis=1)]
+
+        non_eq_mask = in_nan_rows != out_nan_rows
+        nan_mask = dfo[dfo.isna().any(axis=1)].isna()
+
+        self.assertTrue((non_eq_mask == nan_mask).all().all())
 
 
 if __name__ == "__main__":
