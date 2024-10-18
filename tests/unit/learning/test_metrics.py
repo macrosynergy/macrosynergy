@@ -15,6 +15,7 @@ from macrosynergy.learning import (
     sortino_ratio,
 )
 
+
 class TestAll(unittest.TestCase):
     def setUp(self):
         cids = ["AUD", "CAD", "GBP", "USD"]
@@ -47,66 +48,109 @@ class TestAll(unittest.TestCase):
         regressor_true = np.random.normal(size=n_predictions)
 
         self.classifier_predictions = pd.Series(
-            data=classifier_predictions, index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"])
+            data=classifier_predictions,
+            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
         )
         self.regressor_predictions = pd.Series(
-            data=regressor_predictions, index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"])
+            data=regressor_predictions,
+            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
         )
         self.classifier_true = pd.Series(
-            data=classifier_true, index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"])
+            data=classifier_true,
+            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
         )
         self.regressor_true = pd.Series(
-            data=regressor_true, index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"])
+            data=regressor_true,
+            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
         )
 
     def test_valid_panel_significance_probability(self):
-        map_result = panel_significance_probability(self.regressor_true, self.regressor_predictions)
-        self.assertIsInstance(map_result, float, "panel_significance_probability should return a float")
-        self.assertGreaterEqual(map_result, 0, "panel_significance_probability should return a value greater or equal to zero")
-        self.assertLessEqual(map_result, 1, "panel_significance_probability should return a value less or equal to one")
+        map_result = panel_significance_probability(
+            self.regressor_true, self.regressor_predictions
+        )
+        self.assertIsInstance(
+            map_result, float, "panel_significance_probability should return a float"
+        )
+        self.assertGreaterEqual(
+            map_result,
+            0,
+            "panel_significance_probability should return a value greater or equal to zero",
+        )
+        self.assertLessEqual(
+            map_result,
+            1,
+            "panel_significance_probability should return a value less or equal to one",
+        )
 
     def test_types_panel_significance_probability(self):
         with self.assertRaises(TypeError):
-            panel_significance_probability("self.regressor_true", self.regressor_predictions)
+            panel_significance_probability(
+                "self.regressor_true", self.regressor_predictions
+            )
         with self.assertRaises(TypeError):
-            panel_significance_probability(self.regressor_true.reset_index(), self.regressor_predictions)
+            panel_significance_probability(
+                self.regressor_true.reset_index(), self.regressor_predictions
+            )
         with self.assertRaises(ValueError):
-            panel_significance_probability(self.regressor_true, self.regressor_predictions[:-1])
-
+            panel_significance_probability(
+                self.regressor_true, self.regressor_predictions[:-1]
+            )
 
     def test_valid_regression_accuracy(self):
-        acc_result = regression_accuracy(self.regressor_true, self.regressor_predictions)
+        acc_result = regression_accuracy(
+            self.regressor_true, self.regressor_predictions
+        )
         true_signs = np.sign(self.regressor_true)
         pred_signs = np.sign(self.regressor_predictions)
         expected_result = accuracy_score(true_signs, pred_signs)
-        self.assertEqual(acc_result, expected_result, "regression_accuracy should return the same value as sklearn.metrics.accuracy_score")
+        self.assertEqual(
+            acc_result,
+            expected_result,
+            "regression_accuracy should return the same value as sklearn.metrics.accuracy_score",
+        )
 
     def test_types_regression_accuracy(self):
         with self.assertRaises(TypeError):
             regression_accuracy("self.regressor_true", self.regressor_predictions)
         with self.assertRaises(TypeError):
-            regression_accuracy(self.regressor_true.reset_index(), self.regressor_predictions)
+            regression_accuracy(
+                self.regressor_true.reset_index(), self.regressor_predictions
+            )
         with self.assertRaises(ValueError):
             regression_accuracy(self.regressor_true, self.regressor_predictions[:-1])
 
     def test_valid_regression_balanced_accuracy(self):
         true_signs = np.sign(self.regressor_true)
         pred_signs = np.sign(self.regressor_predictions)
-        bac_result = regression_balanced_accuracy(self.regressor_true, self.regressor_predictions)
+        bac_result = regression_balanced_accuracy(
+            self.regressor_true, self.regressor_predictions
+        )
         expected_result = balanced_accuracy_score(true_signs, pred_signs)
-        self.assertEqual(bac_result, expected_result, "regression_balanced_accuracy should return the same value as sklearn.metrics.balanced_accuracy_score")
+        self.assertEqual(
+            bac_result,
+            expected_result,
+            "regression_balanced_accuracy should return the same value as sklearn.metrics.balanced_accuracy_score",
+        )
 
     def test_types_regression_balanced_accuracy(self):
         with self.assertRaises(TypeError):
-            regression_balanced_accuracy("self.regressor_true", self.regressor_predictions)
+            regression_balanced_accuracy(
+                "self.regressor_true", self.regressor_predictions
+            )
         with self.assertRaises(TypeError):
-            regression_balanced_accuracy(self.regressor_true.reset_index(), self.regressor_predictions)
+            regression_balanced_accuracy(
+                self.regressor_true.reset_index(), self.regressor_predictions
+            )
         with self.assertRaises(ValueError):
-            regression_balanced_accuracy(self.regressor_true, self.regressor_predictions[:-1])
+            regression_balanced_accuracy(
+                self.regressor_true, self.regressor_predictions[:-1]
+            )
 
     def test_valid_sharpe_ratio(self):
         sharpe_result = sharpe_ratio(self.regressor_true, self.regressor_predictions)
-        self.assertIsInstance(sharpe_result, float, "sharpe_ratio should return a float")
+        self.assertIsInstance(
+            sharpe_result, float, "sharpe_ratio should return a float"
+        )
 
     def test_types_sharpe_ratio(self):
         with self.assertRaises(TypeError):
@@ -118,7 +162,9 @@ class TestAll(unittest.TestCase):
 
     def test_valid_sortino_ratio(self):
         sortino_result = sortino_ratio(self.regressor_true, self.regressor_predictions)
-        self.assertIsInstance(sortino_result, float, "sortino_ratio should return a float")
+        self.assertIsInstance(
+            sortino_result, float, "sortino_ratio should return a float"
+        )
 
     def test_types_sortino_ratio(self):
         with self.assertRaises(TypeError):
@@ -127,6 +173,7 @@ class TestAll(unittest.TestCase):
             sortino_ratio(self.regressor_true.reset_index(), self.regressor_predictions)
         with self.assertRaises(ValueError):
             sortino_ratio(self.regressor_true, self.regressor_predictions[:-1])
+
 
 if __name__ == "__main__":
     unittest.main()
