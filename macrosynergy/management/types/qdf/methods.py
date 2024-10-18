@@ -6,6 +6,9 @@ from typing import List, Optional, Any, Iterable, Mapping, Union, Dict, Set
 import pandas as pd
 import numpy as np
 import warnings
+import itertools
+import functools
+
 from macrosynergy.management.constants import JPMAQS_METRICS
 
 from .base import QuantamentalDataFrameBase
@@ -592,17 +595,50 @@ def concat_qdfs(
         [qdf["xcat"].unique() for qdf in qdf_list]
     )
 
-    for qdf in qdf_list:
-        qdf["cid"] = pd.Categorical(qdf["cid"], categories=comb_cids.categories)
-        qdf["xcat"] = pd.Categorical(qdf["xcat"], categories=comb_xcats.categories)
+    for iq, qdf in enumerate(qdf_list):
+        qdf_list[iq]["cid"] = pd.Categorical(
+            qdf["cid"], categories=comb_cids.categories
+        )
+        qdf_list[iq]["xcat"] = pd.Categorical(
+            qdf["xcat"], categories=comb_xcats.categories
+        )
 
-    df: pd.DataFrame = (
-        pd.concat(qdf_list, axis=0, join="outer")
-        .groupby(QuantamentalDataFrameBase.IndexCols, observed=True, as_index=False)
-        .last()
-        .dropna(subset=["real_date"])
-        .sort_values(by=QuantamentalDataFrameBase.IndexCols)
+    def _convert_to_single_metric_qdfs(
+        qdf: QuantamentalDataFrameBase,
+    ) -> QuantamentalDataFrameBase:
+        return [
+            qdf[[*QuantamentalDataFrameBase.IndexCols, metric]]
+            for metric in qdf.columns.difference(QuantamentalDataFrameBase.IndexCols)
+        ]
+
+    qdf_list = list(itertools.chain(*map(_convert_to_single_metric_qdfs, qdf_list)))
+
+    def _get_metric(df: QuantamentalDataFrameBase) -> str:
+        return list(set(df.columns) - set(QuantamentalDataFrameBase.IndexCols))[0]
+
+    def _group_by_metric(
+        dfl: List[QuantamentalDataFrameBase], fm: List[str]
+    ) -> List[List[QuantamentalDataFrameBase]]:
+        r = [[] for _ in range(len(fm))]
+        while dfl:
+            metric = _get_metric(df=dfl[0])
+            r[fm.index(metric)] += [dfl.pop(0)]
+        return r
+
+    found_metrics = list(set(map(_get_metric, qdf_list)))
+    qdf_list = _group_by_metric(dfl=qdf_list, fm=found_metrics)
+
+    df: pd.DataFrame = functools.reduce(
+        lambda left, right: pd.merge(
+            left,
+            right,
+            on=QuantamentalDataFrameBase.IndexCols,
+            how="outer",
+        ),
+        map(
+            lambda x: pd.concat(qdf_list.pop(0), axis=0, ignore_index=False),
+            found_metrics,
+        ),
     )
-    non_idx_cols = set(df.columns) - set(QuantamentalDataFrameBase.IndexCols)
-    df = df.dropna(subset=non_idx_cols, how="all")
+
     return df.reset_index(drop=True)

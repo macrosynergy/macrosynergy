@@ -47,6 +47,11 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         if df is not None:
             if not isinstance(df, pd.DataFrame):
                 raise TypeError("Input must be a standardised Quantamental DataFrame.")
+
+            # if "real_date" in df.columns:
+            #     if not isinstance(df["real_date"].dtype, pd.DatetimeTZDtype):
+            #         df["real_date"] = pd.to_datetime(df["real_date"])
+
             if not isinstance(df, QuantamentalDataFrame):
                 raise ValueError("Input must be a standardised Quantamental DataFrame.")
 
