@@ -9,10 +9,11 @@ import seaborn as sns
 import warnings
 
 import random
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Dict
 from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
 from macrosynergy.management.utils import reduce_df_by_ticker
 from macrosynergy.panel.converge_row import ConvergeRow
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.simulate import make_qdf
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -54,9 +55,8 @@ class Basket(object):
         blacklist: dict = None,
         ewgts: List[str] = None,
     ):
-        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-        df = df[["cid", "xcat", "real_date", "value"]]
-
+        df = QuantamentalDataFrame(df[["cid", "xcat", "real_date", "value"]])
+        self._as_categorical = df.InitializedAsCategorical
         assert isinstance(contracts, list)
         c_error = "Contracts must be a list of strings."
         assert all(isinstance(c, str) for c in contracts), c_error
@@ -115,7 +115,7 @@ class Basket(object):
         self.__dict__["dfws_" + pf_name] = dfws_pfx
 
     @staticmethod
-    def pivot_dataframe(df, tick_list):
+    def pivot_dataframe(df: QuantamentalDataFrame, tick_list: List[str]):
         """
         Reduces the standardised DataFrame to include a subset of the possible tickers
         and, subsequently returns a wide dataframe: each column corresponds to a ticker.
@@ -126,10 +126,11 @@ class Basket(object):
         :return <pd.DataFrame> dfw: wide dataframe.
         """
 
-        df["ticker"] = df["cid"] + "_" + df["xcat"]
-        dfx = df[df["ticker"].isin(tick_list)]
-        dfw = dfx.pivot(index="real_date", columns="ticker", values="value")
-        return dfw
+        return (
+            QuantamentalDataFrame(df=df)
+            .reduce_df_by_ticker(tickers=tick_list)
+            .to_wide()
+        )
 
     @staticmethod
     def date_check(date_string):
@@ -456,9 +457,9 @@ class Basket(object):
 
         dfw_weight_names = lambda w_name: w_name[: w_name.find(self.w_field)]
         if self.wgt_flag and self.exo_w_postfix is not None:
-            self.__dict__["w_field"] = self.exo_w_postfix
+            self.w_field = self.exo_w_postfix
         else:
-            self.__dict__["w_field"] = self.ret
+            self.w_field = self.ret
 
         cols = list(map(dfw_weight_names, dfw_wgs.columns))
         dfw_wgs.columns = cols
@@ -514,7 +515,7 @@ class Basket(object):
 
         assert isinstance(weight_meth, str), "`weight_meth` must be string"
 
-        self.__dict__["exo_w_postfix"] = ewgt
+        self.exo_w_postfix: str = ewgt
         dfw_wgs = self.make_weights(
             weight_meth=weight_meth,
             weights=weights,
@@ -529,27 +530,27 @@ class Basket(object):
         dfw_wgs_copy = self.column_manager(df_cat=self.dfw_ret, dfw_wgs=dfw_wgs)
 
         dfw_bret = self.dfw_ret.multiply(dfw_wgs_copy).sum(axis=1)
-        dfxr = dfw_bret.to_frame("value").reset_index()
         basket_ret = basket_name + "_" + self.ret
-        dfxr = dfxr.assign(ticker=basket_ret)[select]
-        store = [dfxr]
-
+        store = [dfw_bret.to_frame(basket_ret)]
+        if not hasattr(self, "cry_flag"):
+            raise ValueError("Please initialise the class to use this method. ")
+        self.cry_flag: bool
         if self.cry_flag:
             cry_list = []
             for cr in self.cry:
                 dfw_wgs_copy = self.column_manager(
                     df_cat=self.dfws_cry[cr], dfw_wgs=dfw_wgs
                 )
-                dfw_bcry = self.dfws_cry[cr].multiply(dfw_wgs_copy).sum(axis=1)
-                dfcry = dfw_bcry.to_frame("value").reset_index()
-                basket_cry = basket_name + "_" + cr
-                dfcry = dfcry.assign(ticker=basket_cry)[select]
-                cry_list.append(dfcry)
+                self.dfws_cry: Dict[str, pd.DataFrame]
+                dfw_bcry: pd.Series = (
+                    self.dfws_cry[cr].multiply(dfw_wgs_copy).sum(axis=1)
+                )
+                tkr = basket_name + "_" + cr
+                cry_list.append(dfw_bcry.to_frame(tkr))
 
             store += cry_list
 
-        df_retcry = pd.concat(store)
-        df_retcry = df_retcry.reset_index(drop=True)
+        df_retcry = pd.concat(store, axis=1)
         self.dict_retcry[basket_name] = df_retcry
 
         self.dict_wgs[basket_name] = self.column_weights(dfw_wgs)
@@ -750,12 +751,13 @@ class Basket(object):
             except KeyError as e:
                 print(f"Basket not found - call make_basket() method first: {e}.")
             else:
-                dfw_retcry = self.column_split(dfw_retcry)
-                dfw_retcry = dfw_retcry.sort_values(["xcat", "real_date"])
-                ret_baskets.append(dfw_retcry)
+                qdf = QuantamentalDataFrame.from_wide(dfw_retcry)
+                ret_baskets.append(qdf)
 
-        return_df = pd.concat(ret_baskets)
-        return return_df.reset_index(drop=True)
+        return_df = QuantamentalDataFrame.from_qdf_list(ret_baskets)
+        return QuantamentalDataFrame(
+            df=return_df, _initialized_as_categorical=self._as_categorical
+        ).to_original_dtypes()
 
     def return_weights(self, basket_names: Union[str, List[str]] = None):
         """
@@ -782,20 +784,18 @@ class Basket(object):
 
         for b in basket_names:
             try:
-                dfw_wgs = self.dict_wgs[b]
+                dfw_wgs: pd.DataFrame = self.dict_wgs[b]
             except KeyError as e:
                 print(f"Basket not found - call make_basket() method first: {e}.")
             else:
-                w = dfw_wgs.stack().to_frame("value").reset_index()
-                w = self.column_split(df=w)
-                w = w.sort_values(["cid", "real_date"])
+                pfx = f"_{b}_WGT"
+                qdf = QuantamentalDataFrame.from_wide(dfw_wgs).rename_xcats(postfix=pfx)
+                weight_baskets.append(qdf)
 
-                w = w.loc[w.value > 0, select]
-                w["xcat"] += "_" + b + "_" + "WGT"
-                weight_baskets.append(w)
-
-        return_df = pd.concat(weight_baskets)
-        return return_df.reset_index(drop=True)
+        return QuantamentalDataFrame(
+            df=QuantamentalDataFrame.from_qdf_list(weight_baskets),
+            _initialized_as_categorical=self._as_categorical,
+        ).to_original_dtypes()
 
 
 if __name__ == "__main__":

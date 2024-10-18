@@ -18,6 +18,7 @@ from macrosynergy.management.utils import (
     reduce_df,
     categories_df,
 )
+from macrosynergy.management.types import QuantamentalDataFrame
 import macrosynergy.visuals as msv
 
 # Ensure warnings are printed
@@ -108,8 +109,8 @@ class SignalReturnRelations:
                 "Dataframe columns must be of value: 'cid', 'xcat','real_date' and  \
                 'value'"
             )
-
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+        df = QuantamentalDataFrame(df)
 
         self.dic_freq = {
             "D": "daily",
@@ -242,9 +243,13 @@ class SignalReturnRelations:
         for sig in self.sigs:
             if self.signs[self.sigs.index(sig)]:
                 self.df.loc[self.df["xcat"] == sig, "value"] *= -1
-                self.df.loc[self.df["xcat"] == sig, "xcat"] = (
-                    self.df.loc[self.df["xcat"] == sig, "xcat"] + "_NEG"
-                )
+                if type(self.df) is QuantamentalDataFrame:
+                    self.df = self.df.rename_xcats({sig: f"{sig}_NEG"})
+                else:
+                    self.df.loc[self.df["xcat"] == sig, "xcat"] = (
+                        self.df.loc[self.df["xcat"] == sig, "xcat"] + "_NEG"
+                    )
+
                 self.sigs[self.sigs.index(sig)] = f"{sig}_NEG"
 
         self.original_df = self.df.copy()
@@ -648,7 +653,9 @@ class SignalReturnRelations:
         df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values="value")
 
         storage = []
-        for c, cid_df in df_w.groupby(level=0):
+        cid_name: str
+        cid_df: pd.DataFrame
+        for cid_name, cid_df in df_w.groupby(level=0, observed=True):
             cid_df = cid_df[signal + [ret]]
 
             final_df = pd.DataFrame(
@@ -668,13 +675,13 @@ class SignalReturnRelations:
                 s_date = intersection_df.index[0]
                 e_date = intersection_df.index[-1]
 
-                final_df.loc[(c, s_date):(c, e_date), signal] = (
+                final_df.loc[(cid_name, s_date):(cid_name, e_date), signal] = (
                     intersection_df.to_numpy()
                 )
                 storage.append(final_df)
             else:
                 warnings.warn(
-                    f"Cross-section {c} has no common sample periods for the signals \
+                    f"Cross-section {cid_name} has no common sample periods for the signals \
                     {signal} and return {ret}."
                 )
 

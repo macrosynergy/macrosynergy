@@ -12,6 +12,7 @@ from macrosynergy.management.utils import (
     reduce_df,
     _map_to_business_day_frequency,
 )
+from macrosynergy.management.types import QuantamentalDataFrame
 from numbers import Number
 
 
@@ -164,15 +165,8 @@ def make_zn_scores(
     :return <pd.Dataframe>: standardized DataFrame with the zn-scores of the chosen xcat:
         'cid', 'xcat', 'real_date' and 'value'.
     """
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError("The `df` parameter must be a DataFrame object.")
-    df = df.copy()
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-
     expected_columns = ["cid", "xcat", "real_date", "value"]
-    col_error = f"The DataFrame must contain the necessary columns: {expected_columns}."
-    if not set(expected_columns).issubset(set(df.columns)):
-        raise ValueError(col_error)
+    df = QuantamentalDataFrame(df[expected_columns])
 
     # --- Assertions
     err: str = (
@@ -217,7 +211,6 @@ def make_zn_scores(
     # --- Prepare re-estimation dates and time-series DataFrame.
 
     # Remove any additional metrics defined in the DataFrame.
-    df = df.loc[:, expected_columns]
     if cids is not None:
         missing_cids = set(cids).difference(set(df["cid"]))
         if missing_cids:
@@ -310,12 +303,13 @@ def make_zn_scores(
     # --- Reformatting of output into standardised DataFrame.
 
     df_out = dfw_zns.stack().to_frame("value").reset_index()
-    df_out["xcat"] = xcat + postfix
+    df_out = QuantamentalDataFrame.from_long_df(
+        df=df_out,
+        xcat=xcat + postfix,
+        categorical=df.InitializedAsCategorical,
+    )
 
-    col_names = ["cid", "xcat", "real_date", "value"]
-    df_out = df_out.sort_values(["cid", "real_date"])[col_names]
-
-    return df_out[df.columns].reset_index(drop=True)
+    return df_out
 
 
 def _get_expanding_count(X: pd.DataFrame, min_periods: int = 1):
