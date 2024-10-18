@@ -1,28 +1,29 @@
+import datetime
+import itertools
+import unittest
+from unittest.mock import patch
+
+import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
-
-import unittest
-import itertools
-import datetime
-import matplotlib
-import matplotlib.pyplot as plt
-from unittest.mock import patch
-
 from parameterized import parameterized
+from sklearn.linear_model import Lasso, LinearRegression, Ridge
+from sklearn.metrics import make_scorer, r2_score
+from sklearn.model_selection import KFold
+from sklearn.pipeline import Pipeline
 
 from macrosynergy.learning import (
-    SignalOptimizer,
-    ExpandingKFoldPanelSplit,
-    RollingKFoldPanelSplit,
     ExpandingIncrementPanelSplit,
+    ExpandingKFoldPanelSplit,
     LassoSelector,
+    RollingKFoldPanelSplit,
+    SignalOptimizer,
+    regression_balanced_accuracy,
 )
-
-from sklearn.model_selection import KFold
-from sklearn.linear_model import LinearRegression, Ridge, Lasso
-from sklearn.pipeline import Pipeline
-from sklearn.metrics import make_scorer, mean_squared_error
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils.df_utils import categories_df
 
 
 class TestAll(unittest.TestCase):
@@ -32,51 +33,27 @@ class TestAll(unittest.TestCase):
         matplotlib.use("Agg")
         self.mock_show = patch("matplotlib.pyplot.show").start()
 
-        cids = ["AUD", "CAD", "GBP", "USD"]
-        xcats = ["XR", "CPI", "GROWTH", "RIR"]
+        self.cids = ["AUD", "CAD", "GBP", "USD"]
+        self.xcats = ["XR", "CPI", "GROWTH", "RIR"]
+        cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
 
-        df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
-        df_cids.loc["AUD"] = ["2020-01-01", "2020-12-31"]
-        df_cids.loc["CAD"] = ["2020-01-01", "2020-12-31"]
-        df_cids.loc["GBP"] = ["2020-06-01", "2020-12-31"]
-        df_cids.loc["USD"] = ["2020-06-01", "2020-12-31"]
-
-        tuples = []
-
-        for cid in cids:
-            # get list of all elidgible dates
-            sdate = df_cids.loc[cid]["earliest"]
-            edate = df_cids.loc[cid]["latest"]
-            all_days = pd.date_range(sdate, edate)
-            work_days = all_days[all_days.weekday < 5]
-            for work_day in work_days:
-                tuples.append((cid, work_day))
-
-        n_samples = len(tuples)
-        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
-        labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
-        df = pd.DataFrame(
-            data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
-            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
-            columns=xcats,
-            dtype=np.float32,
+        df_cids = pd.DataFrame(
+            index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
         )
-        train = df[
-            df.index.get_level_values(1) <= pd.Timestamp(day=1, month=10, year=2020)
-        ]
-        test = df[
-            df.index.get_level_values(1) > pd.Timestamp(day=1, month=10, year=2020)
-        ]
-        self.X_train = train.drop(columns="XR")
-        self.y_train = train["XR"]
-        self.X_test = test.drop(columns="XR")
-        self.y_test = test["XR"]
+        df_cids.loc["AUD"] = ["2014-01-01", "2020-12-31", 0, 1]
+        df_cids.loc["CAD"] = ["2015-01-01", "2020-12-31", 0, 1]
+        df_cids.loc["GBP"] = ["2015-01-01", "2020-12-31", 0, 1]
+        df_cids.loc["USD"] = ["2015-01-01", "2020-12-31", 0, 1]
 
-        # instantiate some splitters
-        expandingkfold = ExpandingKFoldPanelSplit(n_splits=4)
-        rollingkfold = RollingKFoldPanelSplit(n_splits=4)
-        expandingincrement = ExpandingIncrementPanelSplit(min_cids=2, min_periods=100)
-        self.splitters = [expandingkfold, rollingkfold, expandingincrement]
+        df_xcats = pd.DataFrame(index=self.xcats, columns=cols)
+        df_xcats.loc["XR"] = ["2014-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+        df_xcats.loc["CPI"] = ["2015-01-01", "2020-12-31", 1, 2, 0.95, 1]
+        df_xcats.loc["GROWTH"] = ["2015-01-01", "2020-12-31", 1, 2, 0.9, 1]
+        df_xcats.loc["RIR"] = ["2015-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
+
+        self.df = make_qdf(df_cids, df_xcats, back_ar=0.75)
+
+        self.df["value"] = self.df["value"].astype("float32")
 
         # create blacklist dictionary
         self.black_valid = {
@@ -130,27 +107,50 @@ class TestAll(unittest.TestCase):
             "linreg": LinearRegression(),
             "ridge": Ridge(),
         }
-        self.metric = make_scorer(mean_squared_error, greater_is_better=False)
-        self.hparam_grid = {
+        self.hyperparameters = {
             "linreg": {},
             "ridge": {"alpha": [0.1, 1.0]},
         }
-        
+        self.scorers = {
+            "r2": make_scorer(r2_score),
+            "bac": make_scorer(regression_balanced_accuracy),
+        }
+        # # instantiate some splitters
+        # expandingkfold = ExpandingKFoldPanelSplit(n_splits=4)
+        # rollingkfold = RollingKFoldPanelSplit(n_splits=4)
+        # expandingincrement = ExpandingIncrementPanelSplit(min_cids=2, min_periods=100)
+        # self.splitters = {
+        #     "expanding_kfold": expandingkfold,
+        #     "rolling": rollingkfold,
+        #     "expanding": expandingincrement,
+        # }
+        self.inner_splitters = {
+            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=4),
+            "RollingKFold": RollingKFoldPanelSplit(n_splits=4),
+        }
+        self.single_inner_splitter = {
+            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=4),
+        }
+
         so = SignalOptimizer(
-            inner_splitter=self.splitters[1],
-            X=self.X_train,
-            y=self.y_train,
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
         )
         # Now run calculate_predictions
         so.calculate_predictions(
             name="test",
             models=self.models,
-            metric=self.metric,
-            hparam_grid=self.hparam_grid,
-            hparam_type="grid",
-            n_jobs=1,
+            scorers=self.scorers,
+            hyperparameters=self.hyperparameters,
+            search_type="grid",
+            n_jobs_outer=1,
+            n_jobs_inner=1,
+            inner_splitters=self.single_inner_splitter,
         )
         self.so_with_calculated_preds = so
+
+        self.X, self.y, self.df_long = _get_X_y(so)
 
     @classmethod
     def tearDownClass(self) -> None:
@@ -158,226 +158,156 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         matplotlib.use(self.mpl_backend)
 
-    @parameterized.expand(itertools.product([0, 1], [True, False], [True, False]))
-    def test_valid_init(self, idx, use_blacklist, change_n_splits):
-        # Test standard instantiation of the SignalOptimizer works as expected
-        inner_splitter = self.splitters[idx]
+    @parameterized.expand(itertools.product([True, False], [True, False]))
+    def test_valid_init(self, use_blacklist, use_cids):
         try:
             blacklist = self.black_valid if use_blacklist else None
-            if change_n_splits:
-                # generate sample initial_nsplits and threshold_ndates
-                initial_nsplits = np.random.choice([2, 5, 10])
-                threshold_ndates = np.random.choice([1, 6, 12, 24])
-                so = SignalOptimizer(
-                    inner_splitter=inner_splitter,
-                    X=self.X_train,
-                    y=self.y_train,
-                    blacklist=blacklist,
-                    initial_nsplits=initial_nsplits,
-                    threshold_ndates=threshold_ndates,
-                )
-            else:
-                so = SignalOptimizer(
-                    inner_splitter=inner_splitter,
-                    X=self.X_train,
-                    y=self.y_train,
-                    blacklist=blacklist,
-                )
+            cids = self.cids if use_cids else None
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                cids=cids,
+                blacklist=blacklist,
+            )
         except Exception as e:
             self.fail(f"Instantiation of the SignalOptimizer raised an exception: {e}")
         self.assertIsInstance(so, SignalOptimizer)
-        self.assertEqual(so.inner_splitter, inner_splitter)
-        pd.testing.assert_frame_equal(so.X, self.X_train)
-        pd.testing.assert_series_equal(so.y, self.y_train)
-        self.assertEqual(so.blacklist, blacklist)
-        if change_n_splits:
-            self.assertEqual(so.initial_nsplits, initial_nsplits)
-            self.assertEqual(so.threshold_ndates, threshold_ndates)
-            # Run the signal optimizer again to check a warning is raised
-            with self.assertWarns(RuntimeWarning):
-                so = SignalOptimizer(
-                    inner_splitter=inner_splitter,
-                    X=self.X_train,
-                    y=self.y_train,
-                    blacklist=blacklist,
-                    initial_nsplits=initial_nsplits,
-                    threshold_ndates=threshold_ndates,
-                )
-                self.assertEqual(so.inner_splitter.n_splits, initial_nsplits)
+        X, y, df_long = _get_X_y(so)
+        pd.testing.assert_frame_equal(so.X, X)
+        pd.testing.assert_series_equal(so.y, y)
 
-        else:
-            self.assertEqual(so.threshold_ndates, None)
-            self.assertEqual(so.initial_nsplits, None)
-
-        pd.testing.assert_frame_equal(
-            so.preds, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
-        )
         pd.testing.assert_frame_equal(
             so.chosen_models,
             pd.DataFrame(
-                columns=["real_date", "name", "model_type", "hparams", "n_splits_used"]
+                columns=[
+                    "real_date",
+                    "name",
+                    "model_type",
+                    "score",
+                    "hparams",
+                    "n_splits_used",
+                ]
             ),
         )
         pd.testing.assert_frame_equal(
+            so.preds,
+            pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]),
+        )
+        pd.testing.assert_frame_equal(
             so.ftr_coefficients,
-            pd.DataFrame(columns=["real_date", "name"] + list(self.X_train.columns)),
+            pd.DataFrame(columns=["real_date", "name"] + list(so.X.columns)),
         )
         pd.testing.assert_frame_equal(
             so.intercepts, pd.DataFrame(columns=["real_date", "name", "intercepts"])
         )
 
+        min_date = min(so.unique_date_levels)
+        max_date = max(so.unique_date_levels)
+        forecast_date_levels = pd.date_range(start=min_date, end=max_date, freq="B")
+        pd.testing.assert_index_equal(
+            so.forecast_idxs,
+            pd.MultiIndex.from_product(
+                [so.unique_xs_levels, forecast_date_levels],
+                names=["cid", "real_date"],
+            ),
+        )
+
     def test_types_init(self):
-        inner_splitter = KFold(n_splits=5, shuffle=False)
         with self.assertRaises(TypeError):
             so = SignalOptimizer(
-                inner_splitter=inner_splitter, X=self.X_train, y=self.y_train
+                df=pd.Series([]),
+                xcats=self.xcats,
             )
         with self.assertRaises(TypeError):
             so = SignalOptimizer(
-                inner_splitter=self.splitters[1], X="self.X", y=self.y_train
+                df=self.df,
+                xcats="invalid",
             )
         with self.assertRaises(TypeError):
             so = SignalOptimizer(
-                inner_splitter=self.splitters[1], X=self.X_train, y="self.y"
+                df=self.df,
+                xcats=[1, 2, 3],
+            )
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                cids="invalid",
+            )
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                cids=[1, 2, 3],
             )
         with self.assertRaises(ValueError):
             so = SignalOptimizer(
-                inner_splitter=self.splitters[1],
-                X=self.X_train.reset_index(),
-                y=self.y_train,
+                df=pd.DataFrame([]),
+                xcats=self.xcats,
             )
         with self.assertRaises(ValueError):
             so = SignalOptimizer(
-                inner_splitter=self.splitters[1],
-                X=self.X_train,
-                y=self.y_train.reset_index(),
+                df=self.df,
+                xcats=["invalid"],
             )
         with self.assertRaises(ValueError):
             so = SignalOptimizer(
-                inner_splitter=self.splitters[1],
-                X=self.X_train,
-                y=self.y_train.iloc[1:],
-            )
-        with self.assertRaises(TypeError):
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[1],
-                X=self.X_train,
-                y=self.y_train,
-                blacklist="blacklist",
-            )
-        # check that an incorrect blacklisting format is caught
-        with self.assertRaises(TypeError):
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[1],
-                X=self.X_train,
-                y=self.y_train,
-                blacklist=self.black_invalid1,
-            )
-        with self.assertRaises(TypeError):
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[1],
-                X=self.X_train,
-                y=self.y_train,
-                blacklist=self.black_invalid2,
-            )
-        with self.assertRaises(TypeError):
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[1],
-                X=self.X_train,
-                y=self.y_train,
-                blacklist=self.black_invalid3,
+                df=self.df,
+                xcats=self.xcats + ["invalid"],
             )
         with self.assertRaises(ValueError):
             so = SignalOptimizer(
-                inner_splitter=self.splitters[1],
-                X=self.X_train,
-                y=self.y_train,
-                blacklist=self.black_invalid4,
+                df=self.df,
+                xcats=self.xcats,
+                cids=self.cids + ["invalid"],
             )
-
-        # Check that wrong adaptive cv splits formats raise an error
         with self.assertRaises(TypeError):
             so = SignalOptimizer(
-                inner_splitter=self.splitters[1],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits="initial_nsplits",
-                threshold_ndates="threshold_ndates",
+                df=self.df,
+                xcats=self.xcats,
+                start=1,
             )
-
         with self.assertRaises(TypeError):
             so = SignalOptimizer(
-                inner_splitter=self.splitters[1],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits=5,
-                threshold_ndates="threshold_ndates",
-            )
-
-        with self.assertRaises(TypeError):
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[1],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits="initial_nsplits",
-                threshold_ndates=6,
-            )
-
-        with self.assertRaises(TypeError):
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[0],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits="initial_nsplits",
-                threshold_ndates="threshold_ndates",
-            )
-
-        with self.assertRaises(TypeError):
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[0],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits=5,
-                threshold_ndates="threshold_ndates",
-            )
-
-        with self.assertRaises(TypeError):
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[0],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits="initial_nsplits",
-                threshold_ndates=6,
-            )
-
-        # Check that initial_nsplits and threshold_ndates require each other
-        with self.assertRaises(ValueError):
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[1],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits=10,
+                df=self.df,
+                xcats=self.xcats,
+                end=1,
             )
         with self.assertRaises(ValueError):
             so = SignalOptimizer(
-                inner_splitter=self.splitters[1],
-                X=self.X_train,
-                y=self.y_train,
-                threshold_ndates=6,
+                df=self.df,
+                xcats=self.xcats,
+                start="invalid",
             )
         with self.assertRaises(ValueError):
             so = SignalOptimizer(
-                inner_splitter=self.splitters[0],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits=10,
+                df=self.df,
+                xcats=self.xcats,
+                end="invalid",
+            )
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                blacklist=list(),
+            )
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                blacklist={1: "invalid"},
+            )
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                blacklist={"CAD": "invalid"},
             )
         with self.assertRaises(ValueError):
             so = SignalOptimizer(
-                inner_splitter=self.splitters[0],
-                X=self.X_train,
-                y=self.y_train,
-                threshold_ndates=6,
+                df=self.df,
+                xcats=self.xcats,
+                blacklist={"CAD": tuple()},
             )
 
     def test_valid_calculate_predictions(self):
@@ -389,23 +319,24 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df1.xcat.unique()[0], "test")
         # Test that blacklisting works as expected
         so2 = SignalOptimizer(
-            inner_splitter=self.splitters[1],
-            X=self.X_train,
-            y=self.y_train,
+            df=self.df,
+            xcats=self.xcats,
             blacklist=self.black_valid,
         )
         try:
             so2.calculate_predictions(
                 name="test",
                 models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="random",
-                n_jobs=1,
-                n_iter=1,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
             )
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
+
         df2 = so2.preds.copy()
         self.assertIsInstance(df2, pd.DataFrame)
         for cross_section, periods in self.black_valid.items():
@@ -422,17 +353,21 @@ class TestAll(unittest.TestCase):
             )
         # Test that rolling models work as expected
         so3 = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+            df=self.df,
+            xcats=self.xcats,
         )
         try:
             so3.calculate_predictions(
                 name="test",
                 models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                max_periods=21,  # monthly roll
-                n_jobs=1,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="prior",
+                n_iter=1,
+                max_periods=21,
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
             )
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
@@ -443,17 +378,20 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df3.xcat.unique()[0], "test")
         # Test that an unreasonably large roll is equivalent to no roll
         so4 = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+            df=self.df,
+            xcats=self.xcats,
         )
         try:
             so4.calculate_predictions(
                 name="test",
                 models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
                 max_periods=int(1e6),  # million days roll
-                n_jobs=1,
             )
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
@@ -463,452 +401,62 @@ class TestAll(unittest.TestCase):
             self.fail("The signal dataframe should only contain one xcat")
         self.assertEqual(df4.xcat.unique()[0], "test")
         self.assertTrue(df1.equals(df4))
-        self.assertFalse(df3.equals(df4))
-        # Test that the signal optimiser works with dataframe targets as well as series targets
-        so5 = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train.to_frame()
-        )
-        # check a correct optimisation runs
-        try:
-            so5.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                n_jobs=1,
-            )
-        except Exception as e:
-            self.fail(f"calculate_predictions raised an exception: {e}")
-        df5 = so5.preds.copy()
-        self.assertIsInstance(df5, pd.DataFrame)
-        pd.testing.assert_frame_equal(df1, df5)
 
-    @parameterized.expand(itertools.product([2, 5], [21, 21 * 3], [0, 1]))
-    def test_valid_change_n_splits(
-        self, initial_nsplits, threshold_ndates, splitter_idx
-    ):
-        # Test that the signals generated by the largest n_splits are correct
-        # For each of the suggested initial number of splits, look at increasing
-        # the number of splits by one after a) a month and b) six months
-        if splitter_idx == 0:
-            splitter = ExpandingKFoldPanelSplit(n_splits=5)
-        else:
-            splitter = RollingKFoldPanelSplit(n_splits=5)
-
-        so = SignalOptimizer(
-            inner_splitter=splitter,
-            X=self.X_train,
-            y=self.y_train,
-            initial_nsplits=initial_nsplits,
-            threshold_ndates=threshold_ndates,
-        )
-        so.calculate_predictions(
-            name="test",
-            models=self.models,
-            metric=self.metric,
-            hparam_grid=self.hparam_grid,
-            hparam_type="grid",
-            n_jobs=1,
-        )
-        # Get the dates of the first and last times the model with largest n_splits was used.
-        # Then filter the signals to only include those dates
-        mods_df = so.get_optimal_models("test")
-        filtered_mods_df = mods_df[mods_df.n_splits_used == mods_df.n_splits_used.max()]
-        sigs_df = so.get_optimized_signals("test")
-
-        earliest_date = filtered_mods_df.real_date.min()
-        latest_date = filtered_mods_df.real_date.max()
-
-        filtered_sigs_df = sigs_df[
-            (sigs_df.real_date >= earliest_date) & (sigs_df.real_date <= latest_date)
-        ]
-
-        # Check that this is equivalent to the signals generated by the signal optimiser
-        # with a fixed a n_splits equal to the largest n_splits used in the previous signal optimiser
-
-        so2 = SignalOptimizer(
-            inner_splitter=(
-                ExpandingKFoldPanelSplit(n_splits=int(mods_df.n_splits_used.max()))
-                if splitter_idx == 0
-                else RollingKFoldPanelSplit(n_splits=int(mods_df.n_splits_used.max()))
-            ),
-            X=self.X_train,
-            y=self.y_train,
-        )
-        so2.calculate_predictions(
-            name="test",
-            models=self.models,
-            metric=self.metric,
-            hparam_grid=self.hparam_grid,
-            hparam_type="grid",
-            n_jobs=1,
-        )
-
-        sigs_df2 = so2.get_optimized_signals("test")
-        filtered_sigs_df2 = sigs_df2[
-            (sigs_df2.real_date >= earliest_date) & (sigs_df2.real_date <= latest_date)
-        ]
-
-        pd.testing.assert_frame_equal(filtered_sigs_df, filtered_sigs_df2)
-
-        # Now check that the largest number of splits is what's expected
-        largest_nsplits = mods_df.n_splits_used.max()
-        num_new_dates = len(
-            pd.bdate_range(mods_df.real_date.min(), mods_df.real_date.max())
-        )
-        self.assertEqual(
-            largest_nsplits, initial_nsplits + (num_new_dates // threshold_ndates)
-        )
-
-    def test_types_calculate_predictions(self):
+    def test_types_run(self):
         # Training set only
         so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+            df=self.df,
+            xcats=self.xcats,
         )
-        # name
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name=1,
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                n_jobs=1,
-            )
-        # models
-        with self.assertRaises(ValueError):
-            so.calculate_predictions(
-                name="test",
-                models={},
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                n_jobs=1,
-            )
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=[LinearRegression()],
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                n_jobs=1,
-            )
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models={1: LinearRegression()},
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                n_jobs=1,
-            )
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models={"ols": 1},
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                n_jobs=1,
-            )
-        # metric
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric="metric",
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                n_jobs=1,
-            )
-        # hparam_grid - grid search
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=[1, 2],
-                hparam_type="grid",
-                n_jobs=1,
-            )
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={"ols": [1, 2]},
-                hparam_type="grid",
-                n_jobs=1,
-            )
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={1: [1, 2]},
-                hparam_type="grid",
-                n_jobs=1,
-            )
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={"ols": {"alpha": 1}},
-                hparam_type="grid",
-                n_jobs=1,
-            )
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={"ols": {1: 1}, "ridge": {"alpha": [1, 2, 3]}},
-                hparam_type="grid",
-                n_jobs=1,
-            )
-        with self.assertRaises(ValueError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={"ols": {}, "ridge": {"alpha": []}},
-                hparam_type="grid",
-                n_jobs=1,
-            )
-        with self.assertRaises(ValueError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={"linreg": {}},
-                hparam_type="grid",
-                n_jobs=1,
-            )
-        # hparam_grid - random search
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=[1, 2],
-                hparam_type="random",
-                n_jobs=1,
-            )
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={"ols": [1, 2]},
-                hparam_type="random",
-                n_jobs=1,
-            )
-        with self.assertRaises(ValueError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={"ols": {}, "ridge": {"alpha": []}},
-                hparam_type="random",
-                n_jobs=1,
-                n_iter=1,
-            )
-        with self.assertRaises(ValueError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={"ols": {"alpha": 1}},
-                hparam_type="random",
-                n_jobs=1,
-            )
-        with self.assertRaises(ValueError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={"ridge": {"alpha": stats.expon()}},
-                hparam_type="random",
-                n_jobs=1,
-            )
-        # hparam_type
-        with self.assertRaises(NotImplementedError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={"linreg": {}, "ridge": {"alpha": stats.expon()}},
-                hparam_type="bayes",
-                n_jobs=1,
-            )
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type=1,
-                n_jobs=1,
-            )
-        with self.assertRaises(ValueError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="somethingelse",
-                n_jobs=1,
-            )
-        # min_cids
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                min_cids="min_cids",
-                n_jobs=1,
-            )
-        with self.assertRaises(ValueError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                min_cids=-1,
-                n_jobs=1,
-            )
-        # min_periods
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                min_periods="min_periods",
-                n_jobs=1,
-            )
-        with self.assertRaises(ValueError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                min_periods=-1,
-                n_jobs=1,
-            )
-        # max_periods
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                max_periods="max_periods",
-                n_jobs=1,
-            )
-        with self.assertRaises(ValueError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                max_periods=0,
-                n_jobs=1,
-            )
-        with self.assertRaises(ValueError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                max_periods=-1,
-                n_jobs=1,
-            )
-        # n_iter
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={"linreg": {}, "ridge": {"alpha": stats.expon()}},
-                hparam_type="random",
-                n_iter="n_iter",
-                n_jobs=1,
-            )
-        with self.assertRaises(ValueError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={"linreg": {}, "ridge": {"alpha": stats.expon()}},
-                hparam_type="random",
-                n_iter=-1,
-                n_jobs=1,
-            )
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={"linreg": {}, "ridge": {"alpha": stats.expon()}},
-                hparam_type="random",
-                n_iter=0,
-                n_jobs=1,
-            )
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid={"linreg": {}, "ridge": {"alpha": stats.expon()}},
-                hparam_type="random",
-                n_iter=2.3,
-                n_jobs=1,
-            )
-        # n_jobs
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                n_jobs="n_jobs",
-            )
-        with self.assertRaises(ValueError):
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                n_jobs=0,
-            )
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                n_jobs=1.3,
-            )
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="grid",
-                n_jobs=-3,
-            )
+        outer_splitter = ExpandingIncrementPanelSplit()
+
+        # Valid parameters
+        valid_params = {
+            "name": "test",
+            "outer_splitter": outer_splitter,
+            "inner_splitters": self.single_inner_splitter,
+            "models": self.models,
+            "hyperparameters": self.hyperparameters,
+            "scorers": self.scorers,
+            "normalize_fold_results": True,
+            "search_type": "prior",
+            "cv_summary": "median",
+            "n_iter": 5,
+            "split_functions": None,
+            "n_jobs_outer": 1,
+            "n_jobs_inner": 1,
+        }
+
+        # Check the valid case to ensure it passes without error
+        so._check_run(**valid_params)
+
+        # A mapping of parameters to invalid values
+        invalid_params = {
+            "name": 123,  # Invalid: should be a string
+            "outer_splitter": "invalid_splitter",  # Invalid: should be a splitter object
+            "inner_splitters": "invalid_splitter",  # Invalid: should be a list or splitter object
+            "models": None,  # Invalid: should be a model list
+            "hyperparameters": "invalid_hyperparameters",  # Invalid: should be a dict or iterable
+            "scorers": None,  # Invalid: should be a scorer or list of scorers
+            "normalize_fold_results": "invalid_boolean",  # Invalid: should be a boolean
+            "search_type": 123,  # Invalid: should be a string
+            "cv_summary": 123,  # Invalid: should be a string
+            "n_iter": "invalid_integer",  # Invalid: should be an integer
+            "split_functions": "invalid_split_functions",  # Invalid: should be a function or None
+            "n_jobs_outer": "invalid_jobs",  # Invalid: should be an integer
+            "n_jobs_inner": "invalid_jobs",  # Invalid: should be an integer
+        }
+
+        # Loop through the invalid cases
+        for param, invalid_value in invalid_params.items():
+            invalid_case = valid_params.copy()  # Start with valid params
+            invalid_case[param] = invalid_value  # Introduce invalid value
+            with self.assertRaises(
+                TypeError,
+                msg=f"Expected TypeError for invalid '{param}' but didn't get it. "
+                f"Invalid value: {invalid_value}",
+            ):
+                so._check_run(**invalid_case)
 
     def test_types_get_optimized_signals(
         self,
@@ -925,36 +473,16 @@ class TestAll(unittest.TestCase):
             so.get_optimized_signals(name="test2")
         # Test that if no signals have been calculated, an error is raised
         so = SignalOptimizer(
-            inner_splitter=self.splitters[1], X=self.X_train, y=self.y_train
+            df=self.df,
+            xcats=self.xcats,
         )
         with self.assertRaises(ValueError):
             so.get_optimized_signals(name="test2")
 
-    @parameterized.expand(itertools.product([0, 1], [True, False]))
-    def test_valid_get_optimized_signals(self, splitter_idx, change_n_splits):
+    def test_valid_get_optimized_signals(self):
         # Test that the output is a dataframe
-        if change_n_splits:
-            initial_nsplits = np.random.choice([2, 3, 5, 10])
-            threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits=initial_nsplits,
-                threshold_ndates=threshold_ndates,
-            )
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="random",
-                n_iter=1,
-                n_jobs=1,
-            )
-        else:
-            so = self.so_with_calculated_preds
-        
+        so = self.so_with_calculated_preds
+
         df1 = so.get_optimized_signals(name="test")
         self.assertIsInstance(df1, pd.DataFrame)
         self.assertEqual(df1.shape[1], 4)
@@ -967,11 +495,12 @@ class TestAll(unittest.TestCase):
         so.calculate_predictions(
             name="test2",
             models=self.models,
-            metric=self.metric,
-            hparam_grid=self.hparam_grid,
-            hparam_type="random",
-            n_iter=1,
-            n_jobs=1,
+            scorers=self.scorers,
+            hyperparameters=self.hyperparameters,
+            search_type="grid",
+            n_jobs_outer=1,
+            n_jobs_inner=1,
+            inner_splitters=self.inner_splitters,
         )
         df2 = so.get_optimized_signals(name="test2")
         self.assertIsInstance(df2, pd.DataFrame)
@@ -999,7 +528,7 @@ class TestAll(unittest.TestCase):
         self.assertEqual(len(df4.xcat.unique()), 2)
 
     def test_types_get_optimal_models(self):
-        
+
         so = self.so_with_calculated_preds
         with self.assertRaises(TypeError):
             so.get_optimal_models(name=1)
@@ -1009,145 +538,144 @@ class TestAll(unittest.TestCase):
             so.get_optimal_models(name=["test", "test2"])
         with self.assertRaises(ValueError):
             so.get_optimal_models(name="test2")
-            
-        splitter_idx = 0
+
         # Test that if no signals have been calculated, an error is raised
         so = SignalOptimizer(
-            inner_splitter=self.splitters[splitter_idx], X=self.X_train, y=self.y_train
+            df=self.df,
+            xcats=self.xcats,
         )
         with self.assertRaises(ValueError):
             so.get_optimal_models(name="test2")
 
-    @parameterized.expand(itertools.product([1], [True, False]))
-    def test_valid_get_optimal_models(self, splitter_idx, change_n_splits):
-        # Test that the output is a dataframe
-        if change_n_splits:
-            initial_nsplits = np.random.choice([2, 3, 5, 10])
-            threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits=initial_nsplits,
-                threshold_ndates=threshold_ndates,
-            )
-        else:
-            so = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-            )
+    # @parameterized.expand(itertools.product([1], [True, False]))
+
+    def test_valid_get_optimal_models(self):
+
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+        )
         so.calculate_predictions(
             name="test",
             models=self.models,
-            metric=self.metric,
-            hparam_grid=self.hparam_grid,
-            hparam_type="grid",
-            n_jobs=1,
+            scorers=self.scorers,
+            hyperparameters=self.hyperparameters,
+            search_type="grid",
+            n_jobs_outer=1,
+            n_jobs_inner=1,
+            inner_splitters=self.single_inner_splitter,
         )
         df1 = so.get_optimal_models(name="test")
         self.assertIsInstance(df1, pd.DataFrame)
-        self.assertEqual(df1.shape[1], 5)
+        self.assertEqual(df1.shape[1], 6)
         self.assertEqual(df1.columns[0], "real_date")
         self.assertEqual(df1.columns[1], "name")
         self.assertEqual(df1.columns[2], "model_type")
-        self.assertEqual(df1.columns[3], "hparams")
-        self.assertEqual(df1.columns[4], "n_splits_used")
-        if not change_n_splits:
-            self.assertTrue(
-                np.all(df1.iloc[:, 4] == self.splitters[splitter_idx].n_splits)
-            )
-        else:
-            num_new_dates = len(
-                pd.bdate_range(df1.real_date.min(), df1.real_date.max())
-            )
-            self.assertTrue(np.min(df1.iloc[:, 4]) == initial_nsplits)
-            self.assertTrue(
-                np.max(df1.iloc[:, 4])
-                == initial_nsplits + (num_new_dates // threshold_ndates)
-            )
-
+        self.assertEqual(df1.columns[3], "score")
+        self.assertEqual(df1.columns[4], "hparams")
+        self.assertEqual(df1.columns[5], "n_splits_used")
         self.assertEqual(df1.name.unique()[0], "test")
+        #     if not change_n_splits:
+        #         self.assertTrue(
+        #             np.all(df1.iloc[:, 4] == self.splitters[splitter_idx].n_splits)
+        #         )
+        #     else:
+        #         num_new_dates = len(
+        #             pd.bdate_range(df1.real_date.min(), df1.real_date.max())
+        #         )
+        #         self.assertTrue(np.min(df1.iloc[:, 4]) == initial_nsplits)
+        #         self.assertTrue(
+        #             np.max(df1.iloc[:, 4])
+        #             == initial_nsplits + (num_new_dates // threshold_ndates)
+        #         )
+
         # Add a second signal and check that the output is a dataframe
         so.calculate_predictions(
             name="test2",
             models=self.models,
-            metric=self.metric,
-            hparam_grid=self.hparam_grid,
-            hparam_type="grid",
-            n_jobs=1,
+            scorers=self.scorers,
+            hyperparameters=self.hyperparameters,
+            search_type="grid",
+            n_jobs_outer=1,
+            n_jobs_inner=1,
+            inner_splitters=self.single_inner_splitter,
         )
         df2 = so.get_optimal_models(name="test2")
         self.assertIsInstance(df2, pd.DataFrame)
-        self.assertEqual(df2.shape[1], 5)
+        self.assertEqual(df2.shape[1], 6)
         self.assertEqual(df2.columns[0], "real_date")
         self.assertEqual(df2.columns[1], "name")
         self.assertEqual(df2.columns[2], "model_type")
-        self.assertEqual(df2.columns[3], "hparams")
-        self.assertEqual(df2.columns[4], "n_splits_used")
-        if not change_n_splits:
-            self.assertTrue(
-                np.all(df2.iloc[:, 4] == self.splitters[splitter_idx].n_splits)
-            )
-        else:
-            num_new_dates = len(
-                pd.bdate_range(df2.real_date.min(), df2.real_date.max())
-            )
-            self.assertTrue(np.min(df2.iloc[:, 4]) == initial_nsplits)
-            self.assertTrue(
-                np.max(df2.iloc[:, 4])
-                == initial_nsplits + (num_new_dates // threshold_ndates)
-            )
+        self.assertEqual(df2.columns[3], "score")
+        self.assertEqual(df2.columns[4], "hparams")
+        self.assertEqual(df2.columns[5], "n_splits_used")
         self.assertEqual(df2.name.unique()[0], "test2")
+        #     if not change_n_splits:
+        #         self.assertTrue(
+        #             np.all(df2.iloc[:, 4] == self.splitters[splitter_idx].n_splits)
+        #         )
+        #     else:
+        #         num_new_dates = len(
+        #             pd.bdate_range(df2.real_date.min(), df2.real_date.max())
+        #         )
+        #         self.assertTrue(np.min(df2.iloc[:, 4]) == initial_nsplits)
+        #         self.assertTrue(
+        #             np.max(df2.iloc[:, 4])
+        #             == initial_nsplits + (num_new_dates // threshold_ndates)
+        #         )
+
         df3 = so.get_optimal_models()
         self.assertIsInstance(df3, pd.DataFrame)
-        self.assertEqual(df3.shape[1], 5)
+        self.assertEqual(df3.shape[1], 6)
         self.assertEqual(df3.columns[0], "real_date")
         self.assertEqual(df3.columns[1], "name")
         self.assertEqual(df3.columns[2], "model_type")
-        self.assertEqual(df3.columns[3], "hparams")
-        self.assertEqual(df3.columns[4], "n_splits_used")
-        if not change_n_splits:
-            self.assertTrue(
-                np.all(df3.iloc[:, 4] == self.splitters[splitter_idx].n_splits)
-            )
-        else:
-            num_new_dates = len(
-                pd.bdate_range(df3.real_date.min(), df3.real_date.max())
-            )
-            self.assertTrue(np.min(df3.iloc[:, 4]) == initial_nsplits)
-            self.assertTrue(
-                np.max(df3.iloc[:, 4])
-                == initial_nsplits + (num_new_dates // threshold_ndates)
-            )
+        self.assertEqual(df3.columns[3], "score")
+        self.assertEqual(df3.columns[4], "hparams")
+        self.assertEqual(df3.columns[5], "n_splits_used")
         self.assertEqual(len(df3.name.unique()), 2)
+        #     if not change_n_splits:
+        #         self.assertTrue(
+        #             np.all(df3.iloc[:, 4] == self.splitters[splitter_idx].n_splits)
+        #         )
+        #     else:
+        #         num_new_dates = len(
+        #             pd.bdate_range(df3.real_date.min(), df3.real_date.max())
+        #         )
+        #         self.assertTrue(np.min(df3.iloc[:, 4]) == initial_nsplits)
+        #         self.assertTrue(
+        #             np.max(df3.iloc[:, 4])
+        #             == initial_nsplits + (num_new_dates // threshold_ndates)
+        #         )
+
         df4 = so.get_optimal_models(name=["test", "test2"])
         self.assertIsInstance(df4, pd.DataFrame)
-        self.assertEqual(df4.shape[1], 5)
+        self.assertEqual(df4.shape[1], 6)
         self.assertEqual(df4.columns[0], "real_date")
         self.assertEqual(df4.columns[1], "name")
         self.assertEqual(df4.columns[2], "model_type")
-        self.assertEqual(df4.columns[3], "hparams")
-        self.assertEqual(df4.columns[4], "n_splits_used")
-        if not change_n_splits:
-            self.assertTrue(
-                np.all(df4.iloc[:, 4] == self.splitters[splitter_idx].n_splits)
-            )
-        else:
-            num_new_dates = len(
-                pd.bdate_range(df4.real_date.min(), df4.real_date.max())
-            )
-            self.assertTrue(np.min(df4.iloc[:, 4]) == initial_nsplits)
-            self.assertTrue(
-                np.max(df4.iloc[:, 4])
-                == initial_nsplits + (num_new_dates // threshold_ndates)
-            )
-
+        self.assertEqual(df4.columns[3], "score")
+        self.assertEqual(df4.columns[4], "hparams")
+        self.assertEqual(df4.columns[5], "n_splits_used")
         self.assertEqual(len(df4.name.unique()), 2)
+
+    #     if not change_n_splits:
+    #         self.assertTrue(
+    #             np.all(df4.iloc[:, 4] == self.splitters[splitter_idx].n_splits)
+    #         )
+    #     else:
+    #         num_new_dates = len(
+    #             pd.bdate_range(df4.real_date.min(), df4.real_date.max())
+    #         )
+    #         self.assertTrue(np.min(df4.iloc[:, 4]) == initial_nsplits)
+    #         self.assertTrue(
+    #             np.max(df4.iloc[:, 4])
+    #             == initial_nsplits + (num_new_dates // threshold_ndates)
+    #         )
 
     def test_types_feature_selection_heatmap(self):
         so = self.so_with_calculated_preds
-        
+
         with self.assertRaises(TypeError):
             so.feature_selection_heatmap(name=1)
         with self.assertRaises(TypeError):
@@ -1231,8 +759,8 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"models_heatmap raised an exception: {e}")
 
-    @parameterized.expand(itertools.product([0, 1], [True, False]))
-    def test_valid_worker(self, splitter_idx, change_n_splits):
+    @parameterized.expand([["grid", None], ["prior", 1]])
+    def test_valid_worker(self, search_type, n_iter):
         # Check that the worker private method works as expected for a grid search
         outer_splitter = ExpandingIncrementPanelSplit(
             train_intervals=1,
@@ -1241,186 +769,63 @@ class TestAll(unittest.TestCase):
             min_periods=36,
             max_periods=None,
         )
-        if change_n_splits:
-            initial_nsplits = np.random.choice([2, 3, 5, 10])
-            threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
-            so1 = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits=initial_nsplits,
-                threshold_ndates=threshold_ndates,
-            )
-        else:
-            so1 = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-            )
-        for idx, (train_idx, test_idx) in enumerate(
-            outer_splitter.split(X=self.X_train, y=self.y_train)
-        ):
-            try:
-                if not change_n_splits:
-                    (
-                        prediction_date,
-                        modelchoice_data,
-                        ftr_data,
-                        inter_data,
-                        ftr_selection_data,
-                    ) = so1._worker(
-                        train_idx=train_idx,
-                        test_idx=test_idx,
-                        name="test",
-                        models=self.models,
-                        metric=self.metric,
-                        original_date_levels=sorted(
-                            self.X_train.index.get_level_values(1).unique()
-                        ),
-                        hparam_grid=self.hparam_grid,
-                        hparam_type="grid",
-                    )
-                else:
-                    (
-                        prediction_date,
-                        modelchoice_data,
-                        ftr_data,
-                        inter_data,
-                        ftr_selection_data,
-                    ) = so1._worker(
-                        train_idx=train_idx,
-                        test_idx=test_idx,
-                        name="test",
-                        models=self.models,
-                        metric=self.metric,
-                        original_date_levels=sorted(
-                            self.X_train.index.get_level_values(1).unique()
-                        ),
-                        hparam_grid=self.hparam_grid,
-                        hparam_type="random",
-                        n_iter=1,
-                        nsplits_add=np.floor(idx / threshold_ndates),
-                    )
-            except Exception as e:
-                self.fail(f"_worker raised an exception: {e}")
 
-            self.assertIsInstance(prediction_date, list)
-            self.assertTrue(prediction_date[0] == "test")
-            self.assertIsInstance(prediction_date[1], pd.MultiIndex)
-            self.assertIsInstance(prediction_date[2], np.ndarray)
-            self.assertIsInstance(modelchoice_data, list)
-            self.assertIsInstance(modelchoice_data[0], datetime.date)
-            self.assertTrue(modelchoice_data[1] == "test")
-            self.assertIsInstance(modelchoice_data[2], str)
-            self.assertTrue(modelchoice_data[2] in ["linreg", "ridge"])
-            self.assertIsInstance(modelchoice_data[3], dict)
-            # feature coefficients
-            self.assertIsInstance(ftr_data, list)
-            self.assertTrue(len(ftr_data) == 2 + 3)  # 3 ftrs + 2 extra columns
-            self.assertIsInstance(ftr_data[0], datetime.date)
-            self.assertTrue(ftr_data[1] == "test")
-            for i in range(2, len(ftr_data)):
-                if ftr_data[i] != np.nan:
-                    self.assertIsInstance(ftr_data[i], np.float32)
-            # intercept data
-            self.assertIsInstance(inter_data, list)
-            self.assertTrue(len(inter_data) == 2 + 1)  # 1 intercept + 2 extra columns
-            self.assertIsInstance(inter_data[0], datetime.date)
-            self.assertTrue(inter_data[1] == "test")
-            if inter_data[2] is not None:
-                self.assertIsInstance(inter_data[2], np.float32)
-            # feature selection data
-            self.assertIsInstance(ftr_selection_data, list)
-            self.assertTrue(
-                len(ftr_selection_data) == 2 + 3
-            )  # 3 ftrs + 2 extra columns
-            self.assertIsInstance(ftr_selection_data[0], datetime.date)
-            self.assertTrue(ftr_selection_data[1] == "test")
-            for i in range(2, len(ftr_selection_data)):
-                self.assertTrue(ftr_selection_data[i] in [0, 1])
-
-        # Check that the worker private method works as expected for a random search
-        if change_n_splits:
-            initial_nsplits = np.random.choice([2, 3, 5, 10])
-            threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
-            so2 = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-                initial_nsplits=initial_nsplits,
-                threshold_ndates=threshold_ndates,
-            )
-        else:
-            so2 = SignalOptimizer(
-                inner_splitter=self.splitters[splitter_idx],
-                X=self.X_train,
-                y=self.y_train,
-            )
-        outer_splitter = ExpandingIncrementPanelSplit(
-            train_intervals=1,
-            test_size=1,
-            min_cids=4,
-            min_periods=36,
-            max_periods=None,
+        so1 = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
         )
         for idx, (train_idx, test_idx) in enumerate(
-            outer_splitter.split(X=self.X_train, y=self.y_train)
+            outer_splitter.split(X=self.X, y=self.y)
         ):
             try:
-                if not change_n_splits:
-                    (
-                        prediction_date,
-                        modelchoice_data,
-                        ftr_data,
-                        inter_data,
-                        ftr_selection_data,
-                    ) = so2._worker(
-                        train_idx=train_idx,
-                        test_idx=test_idx,
-                        name="test",
-                        models=self.models,
-                        metric=self.metric,
-                        original_date_levels=sorted(
-                            self.X_train.index.get_level_values(1).unique()
-                        ),
-                        hparam_grid={"linreg": {}, "ridge": {"alpha": stats.expon()}},
-                        hparam_type="random",
-                        n_iter=1,
-                    )
-                else:
-                    (
-                        prediction_date,
-                        modelchoice_data,
-                        ftr_data,
-                        inter_data,
-                        ftr_selection_data,
-                    ) = so2._worker(
-                        train_idx=train_idx,
-                        test_idx=test_idx,
-                        name="test",
-                        models=self.models,
-                        metric=self.metric,
-                        original_date_levels=sorted(
-                            self.X_train.index.get_level_values(1).unique()
-                        ),
-                        hparam_grid={"linreg": {}, "ridge": {"alpha": stats.expon()}},
-                        hparam_type="random",
-                        n_iter=1,
-                        nsplits_add=np.floor(idx / threshold_ndates),
-                    )
+                split_result = so1._worker(
+                    train_idx=train_idx,
+                    test_idx=test_idx,
+                    name="test",
+                    models=self.models,
+                    scorers=self.scorers,
+                    hyperparameters=self.hyperparameters,
+                    search_type=search_type,
+                    n_iter=n_iter,
+                    n_jobs_inner=1,
+                    inner_splitters=self.single_inner_splitter,
+                    normalize_fold_results=False,
+                    # n_iter=None,
+                    n_splits_add=None,
+                    cv_summary="median",
+                )
+
             except Exception as e:
                 self.fail(f"_worker raised an exception: {e}")
-            self.assertIsInstance(prediction_date, list)
-            self.assertTrue(prediction_date[0] == "test")
-            self.assertIsInstance(prediction_date[1], pd.MultiIndex)
-            self.assertIsInstance(prediction_date[2], np.ndarray)
-            self.assertIsInstance(modelchoice_data, list)
-            self.assertIsInstance(modelchoice_data[0], datetime.date)
-            self.assertTrue(modelchoice_data[1] == "test")
-            self.assertIsInstance(modelchoice_data[2], str)
-            self.assertTrue(modelchoice_data[2] in ["linreg", "ridge"])
-            self.assertIsInstance(modelchoice_data[3], dict)
-            # feature coefficients
+
+            self.assertIsInstance(split_result, dict)
+            self.assertTrue(
+                split_result.keys()
+                == {
+                    "model_choice",
+                    "ftr_coefficients",
+                    "intercepts",
+                    "selected_ftrs",
+                    "predictions",
+                }
+            )
+
+            model_choice_data = split_result["model_choice"]
+            self.assertIsInstance(model_choice_data, list)
+            self.assertIsInstance(model_choice_data[0], datetime.date)
+            self.assertTrue(model_choice_data[1] == "test")
+            self.assertIsInstance(model_choice_data[2], str)
+            self.assertTrue(model_choice_data[2] in ["linreg", "ridge"])
+            self.assertIsInstance(model_choice_data[3], float)
+            self.assertIsInstance(model_choice_data[4], dict)
+            self.assertIsInstance(model_choice_data[5], dict)
+
+            prediction_data = split_result["predictions"]
+            self.assertTrue(prediction_data[0] == "test")
+            self.assertIsInstance(prediction_data[1], pd.MultiIndex)
+            self.assertIsInstance(prediction_data[2], np.ndarray)
+
+            ftr_data = split_result["ftr_coefficients"]
             self.assertIsInstance(ftr_data, list)
             self.assertTrue(len(ftr_data) == 2 + 3)  # 3 ftrs + 2 extra columns
             self.assertIsInstance(ftr_data[0], datetime.date)
@@ -1428,14 +833,18 @@ class TestAll(unittest.TestCase):
             for i in range(2, len(ftr_data)):
                 if ftr_data[i] != np.nan:
                     self.assertIsInstance(ftr_data[i], np.float32)
-            # intercept data
-            self.assertIsInstance(inter_data, list)
-            self.assertTrue(len(inter_data) == 2 + 1)  # 1 intercept + 2 extra columns
-            self.assertIsInstance(inter_data[0], datetime.date)
-            self.assertTrue(inter_data[1] == "test")
-            if inter_data[2] is not None:
-                self.assertIsInstance(inter_data[2], np.float32)
-            # feature selection data
+
+            intercept_data = split_result["intercepts"]
+            self.assertIsInstance(intercept_data, list)
+            self.assertTrue(
+                len(intercept_data) == 2 + 1
+            )  # 1 intercept + 2 extra columns
+            self.assertIsInstance(intercept_data[0], datetime.date)
+            self.assertTrue(intercept_data[1] == "test")
+            if intercept_data[2] is not None:
+                self.assertIsInstance(intercept_data[2], np.float32)
+
+            ftr_selection_data = split_result["selected_ftrs"]
             self.assertIsInstance(ftr_selection_data, list)
             self.assertTrue(
                 len(ftr_selection_data) == 2 + 3
@@ -1444,116 +853,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(ftr_selection_data[1] == "test")
             for i in range(2, len(ftr_selection_data)):
                 self.assertTrue(ftr_selection_data[i] in [0, 1])
-        #     # Check that the worker function outputs as expected when no models are selected
-        #     if change_n_splits:
-        #         initial_nsplits = np.random.choice([2, 3, 5, 10])
-        #         threshold_ndates = np.random.choice([21, 21 * 3, 21 * 6])
-        #         so3 = SignalOptimizer(
-        #             inner_splitter=self.splitters[splitter_idx],
-        #             X=self.X_train,
-        #             y=self.y_train,
-        #             initial_nsplits=initial_nsplits,
-        #             threshold_ndates=threshold_ndates,
-        #         )
-        #     else:
-        #         so3 = SignalOptimizer(
-        #             inner_splitter=self.splitters[splitter_idx],
-        #             X=self.X_train,
-        #             y=self.y_train,
-        #         )
-        #     outer_splitter = ExpandingIncrementPanelSplit(
-        #         train_intervals=1,
-        #         test_size=1,
-        #         min_cids=4,
-        #         min_periods=36,
-        #         max_periods=None,
-        #     )
-        #     models = {
-        #         "linreg": Pipeline(
-        #             [
-        #                 ("selector", LassoSelector(alpha=10000)),
-        #                 ("linreg", LinearRegression()),
-        #             ]
-        #         )
-        #     }
-        #     for idx, (train_idx, test_idx) in enumerate(
-        #         outer_splitter.split(X=self.X_train, y=self.y_train)
-        #     ):
-        #         try:
-        #             if not change_n_splits:
-        #                 (
-        #                     prediction_date,
-        #                     modelchoice_data,
-        #                     ftr_data,
-        #                     inter_data,
-        #                     ftr_selection_data,
-        #                 ) = so3._worker(
-        #                     train_idx=train_idx,
-        #                     test_idx=test_idx,
-        #                     name="test",
-        #                     models=models,
-        #                     metric=self.metric,
-        #                     original_date_levels=sorted(
-        #                         self.X_train.index.get_level_values(1).unique()
-        #                     ),
-        #                     hparam_grid={"linreg": {}},
-        #                     hparam_type="random",
-        #                     n_iter=1,
-        #                 )
-        #             else:
-        #                 (
-        #                     prediction_date,
-        #                     modelchoice_data,
-        #                     ftr_data,
-        #                     inter_data,
-        #                     ftr_selection_data,
-        #                 ) = so3._worker(
-        #                     train_idx=train_idx,
-        #                     test_idx=test_idx,
-        #                     name="test",
-        #                     models=models,
-        #                     metric=self.metric,
-        #                     original_date_levels=sorted(
-        #                         self.X_train.index.get_level_values(1).unique()
-        #                     ),
-        #                     hparam_grid={"linreg": {}},
-        #                     hparam_type="random",
-        #                     n_iter=1,
-        #                     nsplits_add=np.floor(idx / threshold_ndates),
-        #                 )
-        #         except Exception as e:
-        #             self.fail(f"_worker raised an exception: {e}")
-        #         self.assertIsInstance(prediction_date, list)
-        #         self.assertTrue(prediction_date[0] == "test")
-        #         self.assertIsInstance(prediction_date[1], pd.Index)
-        #         self.assertIsInstance(prediction_date[2], pd.DatetimeIndex)
-        #         self.assertIsInstance(prediction_date[3], np.ndarray)
-        #         self.assertTrue(np.all(prediction_date[3] == 0))
-        #         self.assertIsInstance(modelchoice_data, list)
-        #         self.assertIsInstance(modelchoice_data[0], datetime.date)
-        #         self.assertTrue(modelchoice_data[1] == "test")
-        #         self.assertTrue(modelchoice_data[2] == "None")
-        #         self.assertTrue(modelchoice_data[3] == {})
-        #         # feature coefficients
-        #         self.assertIsInstance(ftr_data, list)
-        #         self.assertTrue(len(ftr_data) == 2 + 3)
-        #         self.assertIsInstance(ftr_data[0], datetime.date)
-        #         self.assertTrue(ftr_data[1] == "test")
-        #         for ftr_coef in ftr_data[2:]:
-        #             self.assertTrue(ftr_coef is np.nan)
-        #         # intercept data
-        #         self.assertIsInstance(inter_data, list)
-        #         self.assertTrue(len(inter_data) == 2 + 1)
-        #         self.assertIsInstance(inter_data[0], datetime.date)
-        #         self.assertTrue(inter_data[1] == "test")
-        #         self.assertTrue(inter_data[2] is np.nan)
-        #         # feature selection data
-        #         self.assertIsInstance(ftr_selection_data, list)
-        #         self.assertTrue(len(ftr_selection_data) == 2 + 3)  # 3 ftrs + 2 extra columns
-        #         self.assertIsInstance(ftr_selection_data[0], datetime.date)
-        #         self.assertTrue(ftr_selection_data[1] == "test")
-        #         for i in range(2, len(ftr_selection_data)):
-        #             self.assertTrue(ftr_selection_data[i] in [0,1])
 
     def test_types_get_intercepts(self):
         so = self.so_with_calculated_preds
@@ -1603,7 +902,7 @@ class TestAll(unittest.TestCase):
         self.assertEqual(selected_ftrs.columns[0], "real_date")
         self.assertEqual(selected_ftrs.columns[1], "name")
         for i in range(2, 5):
-            self.assertEqual(selected_ftrs.columns[i], self.X_train.columns[i - 2])
+            self.assertEqual(selected_ftrs.columns[i], self.X.columns[i - 2])
         self.assertTrue(selected_ftrs.name.unique()[0] == "test")
         self.assertTrue(selected_ftrs.isna().sum().sum() == 0)
 
@@ -1629,51 +928,9 @@ class TestAll(unittest.TestCase):
         self.assertEqual(ftr_coefficients.columns[0], "real_date")
         self.assertEqual(ftr_coefficients.columns[1], "name")
         for i in range(2, 5):
-            self.assertEqual(ftr_coefficients.columns[i], self.X_train.columns[i - 2])
+            self.assertEqual(ftr_coefficients.columns[i], self.X.columns[i - 2])
         self.assertTrue(ftr_coefficients.name.unique()[0] == "test")
         self.assertTrue(ftr_coefficients.isna().sum().sum() == 0)
-
-    @parameterized.expand(itertools.product([True, False]))
-    def test_types_get_parameter_stats(self, include_intercept):
-        so = self.so_with_calculated_preds
-        # Test that a wrong signal name raises an error
-        with self.assertRaises(ValueError):
-            so.get_parameter_stats(name="test2", include_intercept=include_intercept)
-        with self.assertRaises(TypeError):
-            so.get_parameter_stats(name=1, include_intercept=include_intercept)
-        with self.assertRaises(TypeError):
-            so.get_parameter_stats(name="test", include_intercept=2)
-
-    @parameterized.expand(itertools.product([True, False]))
-    def test_valid_get_parameter_stats(self, include_intercept):
-        so = self.so_with_calculated_preds
-        # Test that running get_parameter_stats on pipeline "test" works
-        try:
-            parameter_stats = so.get_parameter_stats(
-                name="test", include_intercept=include_intercept
-            )
-        except Exception as e:
-            self.fail(f"get_parameter_stats raised an exception: {e}")
-        # Test that the output is as expected
-        if include_intercept:
-            self.assertTrue(len(parameter_stats) == 4)
-            ftr_coefs = so.get_ftr_coefficients(name="test")
-            intercepts = so.get_intercepts(name="test")
-            mean_coefs = ftr_coefs.iloc[:, 2:].mean(skipna=True)
-            std_coefs = ftr_coefs.iloc[:, 2:].std(skipna=True)
-            mean_intercept = intercepts.iloc[:, 2:].mean(skipna=True)
-            std_intercept = intercepts.iloc[:, 2:].std(skipna=True)
-            self.assertTrue(np.all(parameter_stats[0] == mean_coefs))
-            self.assertTrue(np.all(parameter_stats[1] == std_coefs))
-            self.assertTrue(np.all(parameter_stats[2] == mean_intercept))
-            self.assertTrue(np.all(parameter_stats[3] == std_intercept))
-        else:
-            self.assertTrue(len(parameter_stats) == 2)
-            ftr_coefs = so.get_ftr_coefficients(name="test")
-            mean_coefs = ftr_coefs.iloc[:, 2:].mean(skipna=True)
-            std_coefs = ftr_coefs.iloc[:, 2:].std(skipna=True)
-            self.assertTrue(np.all(parameter_stats[0] == mean_coefs))
-            self.assertTrue(np.all(parameter_stats[1] == std_coefs))
 
     def test_types_coefs_timeplot(self):
         so = self.so_with_calculated_preds
@@ -1717,7 +974,7 @@ class TestAll(unittest.TestCase):
         ax = plt.gca()
         legend = ax.get_legend()
         labels = [text.get_text() for text in legend.get_texts()]
-        self.assertTrue(np.all(sorted(self.X_train.columns) == sorted(labels)))
+        self.assertTrue(np.all(sorted(self.X.columns) == sorted(labels)))
         # Now rerun coefs_timeplot but with a feature renaming dictionary
         ftr_dict = {"CPI": "inflation"}
         try:
@@ -1729,7 +986,7 @@ class TestAll(unittest.TestCase):
         labels = [text.get_text() for text in legend.get_texts()]
         self.assertTrue(
             np.all(
-                sorted(self.X_train.rename(columns=ftr_dict).columns) == sorted(labels)
+                sorted(self.X.rename(columns=ftr_dict).columns) == sorted(labels)
             )
         )
         # Now rename two features
@@ -1743,11 +1000,11 @@ class TestAll(unittest.TestCase):
         labels = [text.get_text() for text in legend.get_texts()]
         self.assertTrue(
             np.all(
-                sorted(self.X_train.rename(columns=ftr_dict).columns) == sorted(labels)
+                sorted(self.X.rename(columns=ftr_dict).columns) == sorted(labels)
             )
         )
         # Now rename all features
-        ftr_dict = {ftr: f"ftr{i}" for i, ftr in enumerate(self.X_train.columns)}
+        ftr_dict = {ftr: f"ftr{i}" for i, ftr in enumerate(self.X.columns)}
         try:
             so.coefs_timeplot(name="test", ftrs_renamed=ftr_dict)
         except Exception as e:
@@ -1757,7 +1014,7 @@ class TestAll(unittest.TestCase):
         labels = [text.get_text() for text in legend.get_texts()]
         self.assertTrue(
             np.all(
-                sorted(self.X_train.rename(columns=ftr_dict).columns) == sorted(labels)
+                sorted(self.X.rename(columns=ftr_dict).columns) == sorted(labels)
             )
         )
         # Finally, test that the title works
@@ -1875,61 +1132,59 @@ class TestAll(unittest.TestCase):
         correct_labels += [
             col for col in list(neg_coefs.sum().index[neg_coefs.sum() < 0])
         ]
-        correct_labels = sorted(correct_labels)
+        correct_labels = sorted(list(set(correct_labels)))
         self.assertTrue(np.all(labels == correct_labels))
 
-    def test_types_nsplits_timeplot(self):
-        so = self.so_with_calculated_preds
-        # Test that a wrong signal name raises an error
-        with self.assertRaises(ValueError):
-            so.nsplits_timeplot(name="test2")
-        with self.assertRaises(TypeError):
-            so.nsplits_timeplot(name=1)
-        # title
-        with self.assertRaises(TypeError):
-            so.nsplits_timeplot(name="test", title=1)
-        # figsize
-        with self.assertRaises(TypeError):
-            so.nsplits_timeplot(name="test", figsize="figsize")
-        with self.assertRaises(ValueError):
-            so.nsplits_timeplot(name="test", figsize=(0, 1, 2))
-        with self.assertRaises(TypeError):
-            so.nsplits_timeplot(name="test", figsize=(10, "hello"))
-        with self.assertRaises(TypeError):
-            so.nsplits_timeplot(name="test", figsize=("hello", 6))
-        with self.assertRaises(TypeError):
-            so.nsplits_timeplot(name="test", figsize=("hello", "hello"))
+    # def test_types_nsplits_timeplot(self):
+    #     so = self.so_with_calculated_preds
+    #     # Test that a wrong signal name raises an error
+    #     with self.assertRaises(ValueError):
+    #         so.nsplits_timeplot(name="test2")
+    #     with self.assertRaises(TypeError):
+    #         so.nsplits_timeplot(name=1)
+    #     # title
+    #     with self.assertRaises(TypeError):
+    #         so.nsplits_timeplot(name="test", title=1)
+    #     # figsize
+    #     with self.assertRaises(TypeError):
+    #         so.nsplits_timeplot(name="test", figsize="figsize")
+    #     with self.assertRaises(ValueError):
+    #         so.nsplits_timeplot(name="test", figsize=(0, 1, 2))
+    #     with self.assertRaises(TypeError):
+    #         so.nsplits_timeplot(name="test", figsize=(10, "hello"))
+    #     with self.assertRaises(TypeError):
+    #         so.nsplits_timeplot(name="test", figsize=("hello", 6))
+    #     with self.assertRaises(TypeError):
+    #         so.nsplits_timeplot(name="test", figsize=("hello", "hello"))
 
-    def test_valid_nsplits_timeplot(self):
-        so = self.so_with_calculated_preds
-        # Test that running nsplits_timeplot on pipeline "test" works
-        try:
-            so.nsplits_timeplot(name="test")
-        except Exception as e:
-            self.fail(f"nsplits_timeplot raised an exception: {e}")
-        # Test that setting the title works
-        ax = plt.gca()
-        title = ax.get_title()
-        self.assertTrue(title == "Number of CV splits for pipeline: test")
-        # Try changing the title
-        try:
-            so.nsplits_timeplot(name="test", title="hello")
-        except Exception as e:
-            self.fail(f"nsplits_timeplot raised an exception: {e}")
-        ax = plt.gca()
-        title = ax.get_title()
-        self.assertTrue(title == "hello")
+    # def test_valid_nsplits_timeplot(self):
+    #     so = self.so_with_calculated_preds
+    #     # Test that running nsplits_timeplot on pipeline "test" works
+    #     try:
+    #         so.nsplits_timeplot(name="test")
+    #     except Exception as e:
+    #         self.fail(f"nsplits_timeplot raised an exception: {e}")
+    #     # Test that setting the title works
+    #     ax = plt.gca()
+    #     title = ax.get_title()
+    #     self.assertTrue(title == "Number of CV splits for pipeline: test")
+    #     # Try changing the title
+    #     try:
+    #         so.nsplits_timeplot(name="test", title="hello")
+    #     except Exception as e:
+    #         self.fail(f"nsplits_timeplot raised an exception: {e}")
+    #     ax = plt.gca()
+    #     title = ax.get_title()
+    #     self.assertTrue(title == "hello")
 
     def test_invalid_plots(self):
-        splitter_idx = 1
         so = SignalOptimizer(
-            inner_splitter=self.splitters[splitter_idx],
-            X=self.X_train,
-            y=self.y_train,
+            df=self.df,
+            xcats=self.xcats,
         )
-        # Test that an error is raised if calculate_predictions has not been run
-        with self.assertRaises(ValueError):
-            so.nsplits_timeplot(name="test")
+        # # Test that an error is raised if calculate_predictions has not been run
+        # with self.assertRaises(ValueError):
+        #     so.nsplits_timeplot(name="test")
         # Test that an error is raised if calculate_predictions has not been run
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test")
@@ -1939,11 +1194,6 @@ class TestAll(unittest.TestCase):
         # Test that an error is raised if calculate_predictions has not been run
         with self.assertRaises(ValueError):
             so.coefs_timeplot(name="test")
-        # Test that if no signals have been calculated, an error is raised
-        with self.assertRaises(ValueError):
-            so.get_parameter_stats(name="test", include_intercept=False)
-        with self.assertRaises(ValueError):
-            so.get_parameter_stats(name="test", include_intercept=True)
         # Test that if no signals have been calculated, an error is raised
         with self.assertRaises(ValueError):
             so.get_ftr_coefficients(name="test")
@@ -1967,3 +1217,30 @@ class TestAll(unittest.TestCase):
             so.models_heatmap(name=[1, 2, 3])
         with self.assertRaises(ValueError):
             so.models_heatmap(name="test")
+
+
+def _get_X_y(so: SignalOptimizer):
+    df_long = (
+        categories_df(
+            df=so.df,
+            xcats=so.xcats,
+            cids=so.cids,
+            start=so.start,
+            end=so.end,
+            blacklist=so.blacklist,
+            freq=so.freq,
+            lag=so.lag,
+            xcat_aggs=so.xcat_aggs,
+        )
+        .dropna()
+        .sort_index()
+    )
+    X = df_long.iloc[:, :-1]
+    y = df_long.iloc[:, -1]
+    return X, y, df_long
+
+
+if __name__ == "__main__":
+    Test = TestAll()
+    Test.setUpClass()
+    Test.test_valid_coefs_stackedbarplot()
