@@ -1102,9 +1102,12 @@ if __name__ == "__main__":
     from sklearn.metrics import make_scorer, r2_score
 
     import macrosynergy.management as msm
-    from macrosynergy.learning import (ExpandingKFoldPanelSplit,
-                                       RollingKFoldPanelSplit,
-                                       regression_balanced_accuracy)
+    from macrosynergy.learning import (
+        ExpandingKFoldPanelSplit,
+        RollingKFoldPanelSplit,
+        regression_balanced_accuracy,
+        SignWeightedLinearRegression,
+    )
     from macrosynergy.management.simulate import make_qdf
 
     cids = ["AUD", "CAD", "GBP", "USD"]
@@ -1138,6 +1141,8 @@ if __name__ == "__main__":
         ),
     }
 
+    # Signal optimizer with single metric and inner splitter
+
     so = SignalOptimizer(
         df=dfd,
         xcats=["CRY", "GROWTH", "INFL", "XR"],
@@ -1149,11 +1154,42 @@ if __name__ == "__main__":
         name="LR",
         models={
             "LR": LinearRegression(),
-            "LA": LinearRegression(),
+            "SWLS": SignWeightedLinearRegression(),
         },
         hyperparameters={
-            "LR": {"fit_intercept": [True, False], "positive": [True, False]},
-            "LA": {"fit_intercept": [True, False]},
+            "LR": {"fit_intercept": [True, False]},
+            "SWLS": {"fit_intercept": [True, False]},
+        },
+        scorers={
+            "r2": make_scorer(r2_score),
+        },
+        inner_splitters={
+            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
+        },
+        search_type="grid",
+        cv_summary="mean",
+        n_jobs_outer=1,
+        n_jobs_inner=1,
+    )
+
+    # Now run a pipeline with changes from the default
+
+    so = SignalOptimizer(
+        df=dfd,
+        xcats=["CRY", "GROWTH", "INFL", "XR"],
+        cids=cids,
+        blacklist=black,
+    )
+
+    so.calculate_predictions(
+        name="LR",
+        models={
+            "LR": LinearRegression(),
+            "SWLS": SignWeightedLinearRegression(),
+        },
+        hyperparameters={
+            "LR": {"fit_intercept": [True, False]},
+            "SWLS": {"fit_intercept": [True, False]},
         },
         scorers={
             "r2": make_scorer(r2_score),
@@ -1164,7 +1200,14 @@ if __name__ == "__main__":
             "RollingKFold": RollingKFoldPanelSplit(n_splits=5),
         },
         search_type="grid",
-        cv_summary="median",
+        normalize_fold_results=True,
+        cv_summary="mean-std",
+        test_size = 3,
+        max_periods = 24,
+        split_functions = {
+            "ExpandingKFold": None,
+            "RollingKFold": lambda n: n // 12,
+        },
         n_jobs_outer=1,
         n_jobs_inner=1,
     )

@@ -220,7 +220,7 @@ class BasePanelLearner(ABC):
                 n_splits_add=(
                     {
                         splitter_name: (
-                            np.ceil(split_function(iteration))
+                            int(np.ceil(split_function(iteration)))
                             if split_function is not None
                             else 0
                         )
@@ -424,7 +424,7 @@ class BasePanelLearner(ABC):
 
         for splitter in inner_splitters.values():
             cv_splits.extend(list(splitter.split(X=X_train, y=y_train)))
-        # TODO (for Eric): instead of picking one model, the best hyperparameters could be selected
+        # TODO: instead of picking one model, the best hyperparameters could be selected
         # for each model and then "final" prediction would be the average of the individual
         # predictions. This would be a simple ensemble method.
         for model_name, model in models.items():
@@ -529,8 +529,9 @@ class BasePanelLearner(ABC):
         ]
         if normalize_fold_results:
             cv_results[metric_columns] = (
-                cv_results[metric_columns] - cv_results[metric_columns].mean()
-            ) / cv_results[metric_columns].std()
+                cv_results[metric_columns].values
+                - np.mean(cv_results[metric_columns].values, axis=0)
+            ) / np.std(cv_results[metric_columns].values, axis=0)
 
         # For each metric, summarise the scores across folds for each hyperparameter choice
         # using cv_summary
@@ -554,6 +555,7 @@ class BasePanelLearner(ABC):
                     axis=1
                 ) / cv_results[scorer_columns].std(axis=1)
             # TODO sort out mad - this should create an error for now
+            # sort out NaNs for mad as well
             elif cv_summary == "median-mad":
                 cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].median(
                     axis=1
@@ -568,7 +570,7 @@ class BasePanelLearner(ABC):
                     cv_summary, axis=1
                 )
 
-        # Now apply min-max scaling to the summary scores
+        # Now scale the summary scores for each scorer
         scaler = StandardScaler()
         summary_cols = [f"{scorer}_summary" for scorer in scorers.keys()]
         cv_results[summary_cols] = scaler.fit_transform(cv_results[summary_cols])
