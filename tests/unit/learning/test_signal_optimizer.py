@@ -1268,6 +1268,7 @@ class TestAll(unittest.TestCase):
                         ftr_data,
                         inter_data,
                         ftr_selection_data,
+                        ftr_corr_data,
                     ) = so1._worker(
                         train_idx=train_idx,
                         test_idx=test_idx,
@@ -1287,6 +1288,7 @@ class TestAll(unittest.TestCase):
                         ftr_data,
                         inter_data,
                         ftr_selection_data,
+                        ftr_corr_data,
                     ) = so1._worker(
                         train_idx=train_idx,
                         test_idx=test_idx,
@@ -1374,6 +1376,7 @@ class TestAll(unittest.TestCase):
                         ftr_data,
                         inter_data,
                         ftr_selection_data,
+                        ftr_corr_data,
                     ) = so2._worker(
                         train_idx=train_idx,
                         test_idx=test_idx,
@@ -1394,6 +1397,7 @@ class TestAll(unittest.TestCase):
                         ftr_data,
                         inter_data,
                         ftr_selection_data,
+                        ftr_corr_data,
                     ) = so2._worker(
                         train_idx=train_idx,
                         test_idx=test_idx,
