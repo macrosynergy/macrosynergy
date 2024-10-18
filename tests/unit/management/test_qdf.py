@@ -105,7 +105,7 @@ class TestMethods(unittest.TestCase):
 
         # change dtype of eop_lag to int
         tdf = change_column_format(test_df, cols=["eop_lag"], dtype="int")
-        self.assertEqual(tdf["eop_lag"].dtype, np.int32)
+        self.assertEqual(tdf["eop_lag"].dtype.name, 'int32')
 
         # change dtype of eop_lag to float
         tdf = change_column_format(test_df, cols=["eop_lag"], dtype="float")
