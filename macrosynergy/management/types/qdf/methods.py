@@ -641,4 +641,6 @@ def concat_qdfs(
         ),
     )
 
-    return df.reset_index(drop=True)
+    return df.sort_values(by=QuantamentalDataFrameBase.IndexColsSortOrder).reset_index(
+        drop=True
+    )[get_col_sort_order(df)]
