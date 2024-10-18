@@ -104,8 +104,8 @@ class TestMethods(unittest.TestCase):
         test_df: pd.DataFrame = make_test_df(metrics=JPMAQS_METRICS)
 
         # change dtype of eop_lag to int
-        tdf = change_column_format(test_df, cols=["eop_lag"], dtype="int")
-        self.assertEqual(tdf["eop_lag"].dtype.name, 'int32')
+        tdf = change_column_format(test_df, cols=["eop_lag"], dtype="int64")
+        self.assertEqual(tdf["eop_lag"].dtype.name, 'int64')
 
         # change dtype of eop_lag to float
         tdf = change_column_format(test_df, cols=["eop_lag"], dtype="float")
