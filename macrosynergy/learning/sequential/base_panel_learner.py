@@ -1117,20 +1117,21 @@ class BasePanelLearner(ABC):
         # normalize_fold_results
         if not isinstance(normalize_fold_results, bool):
             raise TypeError("normalize_fold_results must be a boolean.")
-        for model in hyperparameters.keys():
-            num_models = sum([len(hyperparameters[model][hparam]) for hparam in hyperparameters[model].keys()])
-            if num_models < 2:
-                raise ValueError(
-                    "normalize_fold_results cannot be True if there are less than 2 candidate models. "
-                    f"This is the case for the model {model}."
-                )
-            if num_models == 2:
-                warnings.warn(
-                    "normalize_fold_results is True but there are only two candidate models for "
-                    f"the model {model}. It is recommended for at least three candidate models "
-                    "to be available for normalization to be meaningful.",
-                    RuntimeWarning,
-                )
+        if normalize_fold_results:
+            for model in hyperparameters.keys():
+                num_models = sum([len(hyperparameters[model][hparam]) for hparam in hyperparameters[model].keys()])
+                if num_models < 2:
+                    raise ValueError(
+                        "normalize_fold_results cannot be True if there are less than 2 candidate models. "
+                        f"This is the case for the model {model}."
+                    )
+                if num_models == 2:
+                    warnings.warn(
+                        "normalize_fold_results is True but there are only two candidate models for "
+                        f"the model {model}. It is recommended for at least three candidate models "
+                        "to be available for normalization to be meaningful.",
+                        RuntimeWarning,
+                    )
 
         # search_type
         if not isinstance(search_type, str):
