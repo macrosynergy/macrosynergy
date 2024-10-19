@@ -1196,8 +1196,8 @@ if __name__ == "__main__":
             "bac": make_scorer(regression_balanced_accuracy),
         },
         inner_splitters={
-            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
-            "RollingKFold": RollingKFoldPanelSplit(n_splits=5),
+            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=2),
+            "RollingKFold": RollingKFoldPanelSplit(n_splits=2),
         },
         search_type="grid",
         normalize_fold_results=True,
@@ -1212,8 +1212,9 @@ if __name__ == "__main__":
         n_jobs_inner=1,
     )
 
-    so.models_heatmap(name="LR")
-    so.feature_selection_heatmap(name="LR")
-    so.coefs_timeplot(name="LR")
-    so.intercepts_timeplot(name="LR")
-    so.coefs_stackedbarplot(name="LR")
+    # so.models_heatmap(name="LR")
+    # so.feature_selection_heatmap(name="LR")
+    # so.coefs_timeplot(name="LR")
+    # so.intercepts_timeplot(name="LR")
+    # so.coefs_stackedbarplot(name="LR")
+    #so.nsplits(name="LR")
