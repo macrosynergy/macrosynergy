@@ -60,6 +60,16 @@ def qdf_to_categorical(
     return df
 
 
+def qdf_to_string_index(
+    df: QuantamentalDataFrameBase,
+) -> QuantamentalDataFrameBase:
+    if not isinstance(df, QuantamentalDataFrameBase):
+        raise TypeError("`df` must be a pandas DataFrame.")
+
+    df = change_column_format(df, QuantamentalDataFrameBase._StrIndexCols, "object")
+    return df
+
+
 def check_is_categorical(df: QuantamentalDataFrameBase) -> bool:
     return all(
         df[col].dtype.name == "category"
