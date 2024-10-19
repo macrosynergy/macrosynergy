@@ -1118,6 +1118,13 @@ class BasePanelLearner(ABC):
         # normalize_fold_results
         if not isinstance(normalize_fold_results, bool):
             raise TypeError("normalize_fold_results must be a boolean.")
+        for model in hyperparameters.keys():
+            num_models = sum([len(hyperparameters[model][hparam]) for hparam in hyperparameters[model].keys()])
+            if num_models < 3:
+                raise ValueError(
+                    "normalize_fold_results cannot be True if there are less than 3 candidate models. "
+                    f"This is the case for the model {model}."
+                )
 
         # search_type
         if not isinstance(search_type, str):
