@@ -21,6 +21,7 @@ from macrosynergy.learning import (
     RollingKFoldPanelSplit,
     SignalOptimizer,
     regression_balanced_accuracy,
+    RandomEffects,
 )
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils.df_utils import categories_df
@@ -309,6 +310,905 @@ class TestAll(unittest.TestCase):
                 xcats=self.xcats,
                 blacklist={"CAD": tuple()},
             )
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                freq = 1,
+            )
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                freq = "invalid",
+            )
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                lag = "invalid",
+            )
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                lag = -1,
+            )
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                xcat_aggs = "invalid",
+            )
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                xcat_aggs = [1, "sum"],
+            )
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                xcat_aggs = ["last", 1],
+            )
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                xcat_aggs = [1, 2],
+            )
+
+    def test_types_calculate_predictions(self):
+        # Name
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name=1,
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name=True,
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+
+        # Models
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=1,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models={},
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models={1: LinearRegression()},
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models={"LR": 1},
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models={"LR": RandomEffects()},
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+
+        # Hyperparameters
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=1,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # wrong length of hyperparameter dict
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={"linreg": {"fit_intercept": [True, False]}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # check hyperparameter dict is a nested dict
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={"linreg": 1, "ridge": 1},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "linreg": 1,
+                    "ridge": {"fit_intercept": [True, False]},
+                },
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "ridge": 1,
+                    "linreg": {"fit_intercept": [True, False]},
+                },
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "ridge": {1: [True, False]},
+                    "linreg": {"fit_intercept": [True, False]},
+                },
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # Check inner hparam dictionaries specify a grid
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "ridge": {"fit_intercept": 1},
+                    "linreg": {"fit_intercept": [True, False]},
+                },
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "linreg": {"fit_intercept": 1},
+                    "ridge": {"fit_intercept": [True, False]},
+                },
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "ridge": {"fit_intercept": 1},
+                    "linreg": {"fit_intercept": 1},
+                },
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # Scorers should be a dict
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=1,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # Scorers dict shouldn't be empty
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers={},
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # Scorer keys should be strings
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers={1: make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers={"R2": make_scorer(r2_score), 1 : make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # Scorer values should be scorers
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers={"R2": 1},
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers={"R2": r2_score},
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # Inner splitters should be a dict
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=1,
+            )
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=ExpandingKFoldPanelSplit(),
+            )
+        # Inner splitters dict shouldn't be empty
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters={},
+            )
+        # Inner splitters keys should be strings
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters={1: ExpandingKFoldPanelSplit()},
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters={"ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5), 1: ExpandingKFoldPanelSplit(n_splits=10)},
+            )
+        # Inner splitters values should be splitters
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters={"ExpandingKFold": 1},
+            )
+        # Search type should be a string
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type=1,
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # Search type should be either "grid" or "prior"
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="invalid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(NotImplementedError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="bayes",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # Normalize_fold_results should be a boolean
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                normalize_fold_results=1,
+            )
+        # If normalize_fold_results is True, then at least 2 hparams should
+        # be provided for each model
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={"ridge": {"alpha": [0.1]}, "linreg": {"fit_intercept": [True, False]}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                normalize_fold_results=True,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={"ridge": {"alpha": [0.1, 1, 10]}, "linreg": {"fit_intercept": [True]}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                normalize_fold_results=True,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={"ridge": {"alpha": [0.1]}, "linreg": {"fit_intercept": [True]}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                normalize_fold_results=True,
+            )
+        # Test structure of the hyperparameter grid when 
+        # search_type is "prior"
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=1,
+                search_type="prior",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={},
+                search_type="prior",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # wrong length of hyperparameter dict
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={"LR": {}},
+                search_type="prior",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # wrong model names in hyperparameter dict
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={"LR": {}, "L2": {}},
+                search_type="prior",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # invalid hyperparameter dictionary
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={"linreg": {1: {}}},
+                search_type="prior",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={"linreg": {1: {}}, "ridge": {1: {}}},
+                search_type="prior",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # hyperparameter values are neither grids nor distributions
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "linreg": {"fit_intercept": [True, False]},
+                    "ridge": {"alpha": 1},
+                },
+                search_type="prior",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "linreg": {"fit_intercept": 1},
+                    "ridge": {"alpha": stats.expon()},
+                },
+                search_type="prior",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # cv_summary should be str or callable
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                cv_summary=1,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                cv_summary="invalid",
+            )
+        # min_cids should be an int
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                min_cids="invalid",
+            )
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                min_cids=7.2,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                min_cids=-2,
+            )
+        # min_periods should be an int
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                min_periods="invalid",
+            )
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                min_periods=7.2,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                min_periods=-2,
+            )
+        # test size should be a positive int
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                test_size="invalid",
+            )
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                test_size=7.2,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                test_size=-2,
+            )
+        # max periods should be a positive int, if not None
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                max_periods="invalid",
+            )
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                max_periods=7.2,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                max_periods=-2,
+            )
+        # n_iter should be a positive int, if not None
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="prior",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                n_iter="invalid",
+            )
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="prior",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                n_iter=None,
+            )
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="prior",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                n_iter=3.4,
+            )
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="prior",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                n_iter=3.4,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="prior",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                n_iter=-3,
+            )
+        # n_jobs should be an integer >= -1
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer="invalid",
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=-2,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_inner="invalid",
+                n_jobs_outer=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_inner=-2,
+                n_jobs_outer=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+
+        # split_functions should be a dict with keys matching inner_splitters
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                split_functions=1,
+            )
+
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                split_functions={"ExpandingKFold": 1},
+            )
+
+    def test_valid_calculate_predictions(self):
+        pass
 
 def _get_X_y(so: SignalOptimizer):
     df_long = (

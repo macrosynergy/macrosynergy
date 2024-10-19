@@ -12,10 +12,11 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from joblib import Parallel, delayed
-from sklearn.base import BaseEstimator
+from sklearn.base import RegressorMixin, ClassifierMixin
 from sklearn.model_selection import BaseCrossValidator, GridSearchCV, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics._scorer import _BaseScorer
 from tqdm.auto import tqdm
 
 from macrosynergy.compat import JOBLIB_RETURN_AS
@@ -956,6 +957,8 @@ class BasePanelLearner(ABC):
         # xcat_aggs checks
         if not isinstance(xcat_aggs, list):
             raise TypeError("xcat_aggs must be a list.")
+        if not all(isinstance(xcat_agg, str) for xcat_agg in xcat_aggs):
+            raise ValueError("All elements in xcat_aggs must be strings.")
         if len(xcat_aggs) != 2:
             raise ValueError("xcat_aggs must have exactly two elements.")
 
@@ -1022,17 +1025,19 @@ class BasePanelLearner(ABC):
                 "outer_splitter must be an instance of ExpandingFrequencyPanelSplit or ExpandingIncrementPanelSplit."
             )
 
-        # inner splitter
+        # inner splitters
         if not isinstance(inner_splitters, dict):
             raise TypeError("inner splitters should be specified as a dictionary")
-
+        if inner_splitters == {}:
+            raise ValueError("The inner splitters dictionary cannot be empty.")
+        
         for names in inner_splitters.keys():
             if not isinstance(names, str):
-                raise TypeError(
+                raise ValueError(
                     "The keys of the inner splitters dictionary must be strings."
                 )
             if not isinstance(inner_splitters[names], BaseCrossValidator):
-                raise TypeError(
+                raise ValueError(
                     "The values of the inner splitters dictionary must be instances of BaseCrossValidator."
                 )
 
@@ -1043,9 +1048,9 @@ class BasePanelLearner(ABC):
             raise ValueError("The models dictionary cannot be empty.")
         for key in models.keys():
             if not isinstance(key, str):
-                raise TypeError("The keys of the models dictionary must be strings.")
-            if not isinstance(models[key], (BaseEstimator, Pipeline)):
-                raise TypeError(
+                raise ValueError("The keys of the models dictionary must be strings.")
+            if not isinstance(models[key], (RegressorMixin, ClassifierMixin, Pipeline)):
+                raise ValueError(
                     "The values of the models dictionary must be sklearn predictors or "
                     "pipelines."
                 )
@@ -1055,23 +1060,23 @@ class BasePanelLearner(ABC):
             raise TypeError("The hyperparameters argument must be a dictionary.")
         for pipe_name, pipe_params in hyperparameters.items():
             if not isinstance(pipe_name, str):
-                raise TypeError(
+                raise ValueError(
                     "The keys of the hyperparameters dictionary must be strings."
                 )
             if not isinstance(pipe_params, dict):
-                raise TypeError(
+                raise ValueError(
                     "The values of the hyperparameters dictionary must be dictionaries."
                 )
             if pipe_params != {}:
                 for hparam_key, hparam_values in pipe_params.items():
                     if not isinstance(hparam_key, str):
-                        raise TypeError(
+                        raise ValueError(
                             "The keys of the inner hyperparameters dictionaries must be "
                             "strings."
                         )
                     if search_type == "grid":
                         if not isinstance(hparam_values, list):
-                            raise TypeError(
+                            raise ValueError(
                                 "The values of the inner hyperparameters dictionaries must be "
                                 "lists if hparam_type is 'grid'."
                             )
@@ -1106,12 +1111,18 @@ class BasePanelLearner(ABC):
         # scorers
         if not isinstance(scorers, dict):
             raise TypeError("scorers must be a dictionary.")
+        if scorers == {}:
+            raise ValueError("The scorers dictionary cannot be empty.")
         for key in scorers.keys():
             if not isinstance(key, str):
-                raise TypeError("The keys of the scorers dictionary must be strings.")
+                raise ValueError("The keys of the scorers dictionary must be strings.")
             if not callable(scorers[key]):
-                raise TypeError(
+                raise ValueError(
                     "The values of the scorers dictionary must be callable scoring functions."
+                )
+            if not isinstance(scorers[key], _BaseScorer):
+                raise ValueError(
+                    "The values of the scorers dictionary must be instances of `scikit-learn`'s _BaseScorer."
                 )
 
         # normalize_fold_results
@@ -1130,7 +1141,7 @@ class BasePanelLearner(ABC):
                         "normalize_fold_results is True but there are only two candidate models for "
                         f"the model {model}. It is recommended for at least three candidate models "
                         "to be available for normalization to be meaningful.",
-                        RuntimeWarning,
+                        UserWarning,
                     )
 
         # search_type
@@ -1140,7 +1151,7 @@ class BasePanelLearner(ABC):
             raise ValueError("search_type must be one of 'grid', 'prior' or 'bayes'.")
 
         # cv_summary
-        if not isinstance(cv_summary, (str, callable)):
+        if not isinstance(cv_summary, str) and not callable(cv_summary):
             raise TypeError("cv_summary must be a string or a callable.")
         if isinstance(cv_summary, str):
             if cv_summary not in [
@@ -1148,12 +1159,9 @@ class BasePanelLearner(ABC):
                 "median",
                 "mean-std",
                 "mean/std",
-                "median-mad",
-                "median/mad",
             ]:
                 raise ValueError(
-                    "cv_summary must be one of 'mean', 'median', 'mean-std', 'mean/std', "
-                    "'median-mad' or 'median/mad'."
+                    "cv_summary must be one of 'mean', 'median', 'mean-std' or 'mean/std'"
                 )
         else:
             try:
@@ -1191,12 +1199,12 @@ class BasePanelLearner(ABC):
                 )
             for key in split_functions.keys():
                 if not isinstance(key, str):
-                    raise TypeError(
+                    raise ValueError(
                         "The keys of the split_functions dictionary must be strings."
                     )
                 if split_functions[key] is not None:
                     if not callable(split_functions[key]):
-                        raise TypeError(
+                        raise ValueError(
                             "The values of the split_functions dictionary must be callables or None."
                         )
 
