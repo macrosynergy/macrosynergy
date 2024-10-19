@@ -528,10 +528,9 @@ class BasePanelLearner(ABC):
             if col.startswith("split") and "test" in col
         ]
         if normalize_fold_results:
-            cv_results[metric_columns] = (
-                cv_results[metric_columns].values
-                - np.mean(cv_results[metric_columns].values, axis=0)
-            ) / np.std(cv_results[metric_columns].values, axis=0)
+            cv_results[metric_columns] = StandardScaler().fit_transform(
+                cv_results[metric_columns]
+            )
 
         # For each metric, summarise the scores across folds for each hyperparameter choice
         # using cv_summary
@@ -1120,10 +1119,17 @@ class BasePanelLearner(ABC):
             raise TypeError("normalize_fold_results must be a boolean.")
         for model in hyperparameters.keys():
             num_models = sum([len(hyperparameters[model][hparam]) for hparam in hyperparameters[model].keys()])
-            if num_models < 3:
+            if num_models < 2:
                 raise ValueError(
-                    "normalize_fold_results cannot be True if there are less than 3 candidate models. "
+                    "normalize_fold_results cannot be True if there are less than 2 candidate models. "
                     f"This is the case for the model {model}."
+                )
+            if num_models == 2:
+                warnings.warn(
+                    "normalize_fold_results is True but there are only two candidate models for "
+                    f"the model {model}. It is recommended for at least three candidate models "
+                    "to be available for normalization to be meaningful.",
+                    RuntimeWarning,
                 )
 
         # search_type
