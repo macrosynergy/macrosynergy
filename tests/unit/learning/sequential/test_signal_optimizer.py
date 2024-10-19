@@ -1208,7 +1208,228 @@ class TestAll(unittest.TestCase):
             )
 
     def test_valid_calculate_predictions(self):
-        pass
+        so1 = self.so_with_calculated_preds
+        df1 = so1.preds.copy()
+        self.assertIsInstance(df1, pd.DataFrame)
+        if len(df1.xcat.unique()) != 1:
+            self.fail("The signal dataframe should only contain one xcat")
+        self.assertEqual(df1.xcat.unique()[0], "test")
+        # Test that blacklisting works as expected
+        so2 = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            blacklist=self.black_valid,
+        )
+        try:
+            so2.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+
+        df2 = so2.preds.copy()
+        self.assertIsInstance(df2, pd.DataFrame)
+        for cross_section, periods in self.black_valid.items():
+            cross_section_key = cross_section.split("_")[0]
+            self.assertTrue(
+                len(
+                    df2[
+                        (df2.cid == cross_section_key)
+                        & (df2.real_date >= periods[0])
+                        & (df2.real_date <= periods[1])
+                    ].dropna()
+                )
+                == 0
+            )
+        # Test that rolling models work as expected
+        so3 = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+        )
+        try:
+            so3.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="prior",
+                n_iter=1,
+                max_periods=21,
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+        df3 = so3.preds.copy()
+        self.assertIsInstance(df3, pd.DataFrame)
+        if len(df3.xcat.unique()) != 1:
+            self.fail("The signal dataframe should only contain one xcat")
+        self.assertEqual(df3.xcat.unique()[0], "test")
+        # Test that an unreasonably large roll is equivalent to no roll
+        so4 = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+        )
+        try:
+            so4.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                max_periods=int(1e6),  # million days roll
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+        df4 = so4.preds.copy()
+        self.assertIsInstance(df4, pd.DataFrame)
+        if len(df4.xcat.unique()) != 1:
+            self.fail("The signal dataframe should only contain one xcat")
+        self.assertEqual(df4.xcat.unique()[0], "test")
+        self.assertTrue(df1.equals(df4))
+
+        # Test that a random search works as expected
+        so5 = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids = self.cids,
+            blacklist = self.black_valid,
+        )
+        try:
+            so5.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "linreg": {
+                        "fit_intercept": [True, False],
+                    },
+                    "ridge": {
+                        "alpha": stats.expon(),
+                    },
+                },
+                search_type="prior",
+                n_iter=7,
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+
+        df5 = so5.preds.copy()
+        self.assertIsInstance(df5, pd.DataFrame)
+        if len(df5.xcat.unique()) != 1:
+            self.fail("The signal dataframe should only contain one xcat")
+        self.assertEqual(df5.xcat.unique()[0], "test")
+
+        # Tests normalize_fold_results, cv_summary, split_functions, multiple inner splitters
+        # TODO: debug and discover why this test is failing
+        so6 = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids = self.cids,
+            blacklist = self.black_valid,
+        )
+
+        try:
+            so6.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "linreg": {
+                        "fit_intercept": [True, False],
+                        "positive": [True, False],
+                    },
+                    "ridge": {
+                        "alpha": stats.expon(),
+                    },
+                },
+                search_type="prior",
+                n_iter=5,
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.inner_splitters,
+                normalize_fold_results=True,
+                cv_summary="mean/std",
+                split_functions = {
+                    "ExpandingKFold": None,
+                    "RollingKFold": lambda n: 2 * (n // 12),
+                },
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+
+    def test_types_run(self):
+        # Training set only
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+        )
+        outer_splitter = ExpandingIncrementPanelSplit()
+
+        # Valid parameters
+        valid_params = {
+            "name": "test",
+            "outer_splitter": outer_splitter,
+            "inner_splitters": self.single_inner_splitter,
+            "models": self.models,
+            "hyperparameters": {
+                "linreg": {"fit_intercept": [True, False], "positive": [True, False]},
+                "ridge": {"alpha": [0.1, 1, 10], "fit_intercept": [True, False]},
+            },
+            "scorers": self.scorers,
+            "normalize_fold_results": True,
+            "search_type": "prior",
+            "cv_summary": "median",
+            "n_iter": 5,
+            "split_functions": None,
+            "n_jobs_outer": 1,
+            "n_jobs_inner": 1,
+        }
+
+        # Check the valid case to ensure it passes without error
+        so._check_run(**valid_params)
+
+        # A mapping of parameters to invalid values
+        invalid_params = {
+            "name": 123,  # Invalid: should be a string
+            "outer_splitter": "invalid_splitter",  # Invalid: should be a splitter object
+            "inner_splitters": "invalid_splitter",  # Invalid: should be a list or splitter object
+            "models": None,  # Invalid: should be a model list
+            "hyperparameters": "invalid_hyperparameters",  # Invalid: should be a dict or iterable
+            "scorers": None,  # Invalid: should be a scorer or list of scorers
+            "normalize_fold_results": "invalid_boolean",  # Invalid: should be a boolean
+            "search_type": 123,  # Invalid: should be a string
+            "cv_summary": 123,  # Invalid: should be a string
+            "n_iter": "invalid_integer",  # Invalid: should be an integer
+            "split_functions": "invalid_split_functions",  # Invalid: should be a function or None
+            "n_jobs_outer": "invalid_jobs",  # Invalid: should be an integer
+            "n_jobs_inner": "invalid_jobs",  # Invalid: should be an integer
+        }
+
+        # Loop through the invalid cases
+        for param, invalid_value in invalid_params.items():
+            invalid_case = valid_params.copy()  # Start with valid params
+            invalid_case[param] = invalid_value  # Introduce invalid value
+            with self.assertRaises(
+                TypeError,
+                msg=f"Expected TypeError for invalid '{param}' but didn't get it. "
+                f"Invalid value: {invalid_value}",
+            ):
+                so._check_run(**invalid_case)
 
 def _get_X_y(so: SignalOptimizer):
     df_long = (
