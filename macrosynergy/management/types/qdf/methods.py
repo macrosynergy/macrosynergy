@@ -40,13 +40,12 @@ def change_column_format(
         raise TypeError("`cols` must be a list of strings.")
 
     for col in cols:
-        curr_type = df[col].dtype
         try:
+            if col not in df.columns:
+                raise ValueError(f"Column '{col}' not found in DataFrame.")
             df[col] = df[col].astype(dtype)
-        except:  # noqa
-            warnings.warn(
-                f"Could not convert column {col} to {dtype} from {curr_type}."
-            )
+        except Exception as exc:
+            warnings.warn(f"Could not convert column {col} to {dtype}. Error: {exc}")
 
     return df
 
