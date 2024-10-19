@@ -158,7 +158,7 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         matplotlib.use(self.mpl_backend)
 
-        @parameterized.expand(itertools.product([True, False], [True, False]))
+    @parameterized.expand(itertools.product([True, False], [True, False]))
     def test_valid_init(self, use_blacklist, use_cids):
         try:
             blacklist = self.black_valid if use_blacklist else None
