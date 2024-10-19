@@ -4,6 +4,7 @@ import pandas as pd
 import random
 import string
 from typing import Any, List
+import warnings
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.constants import JPMAQS_METRICS
 from macrosynergy.management.types.qdf.methods import (
@@ -116,6 +117,18 @@ class TestMethods(unittest.TestCase):
         self.assertEqual(tdf["cid"].dtype.name, "category")
         self.assertTrue(check_is_categorical(tdf))
 
+        with self.assertRaises(TypeError):
+            change_column_format(
+                test_df.rename(columns={"cid": "xid"}), ["cid"], "category"
+            )
+
+        with self.assertRaises(TypeError):
+            change_column_format(test_df, 1, "category")
+
+        with warnings.catch_warnings(record=True) as w:
+            change_column_format(test_df, ["random-col"], "category")
+            self.assertTrue(len(w) == 1)
+
     def test_qdf_to_categorical(self):
         test_df: pd.DataFrame = make_test_df(metrics=JPMAQS_METRICS)
 
@@ -153,6 +166,64 @@ class TestMethods(unittest.TestCase):
         # now test for non categorical
         tseries = _get_tickers_series(test_df)
         self.assertTrue(tseries.tolist() == tickers.tolist())
+
+        with self.assertRaises(ValueError):
+            _get_tickers_series(df=test_df, cid_column="A")
+        with self.assertRaises(ValueError):
+            _get_tickers_series(df=test_df, xcat_column="A")
+
+    def test_create_empty_categorical_qdf(self):
+        dt_range = pd.bdate_range("2000-01-01", "2020-01-01")
+
+        good_args = dict(cid="A", xcat="X", metrics=["a", "b"], date_range=dt_range)
+
+        df = create_empty_categorical_qdf(**good_args)
+
+        alt_args = dict(
+            ticker="A_X",
+            metrics=["a", "b"],
+            start_date="2000-01-01",
+            end_date="2020-01-01",
+        )
+
+        df2 = create_empty_categorical_qdf(**alt_args)
+
+        self.assertTrue(df.equals(df2))
+
+        test_ticker = (
+            (df2["cid"].astype(str) + "_" + df2["xcat"].astype(str))
+            .unique()
+            .tolist()[0]
+        )
+
+        self.assertEqual(test_ticker, "A_X")
+
+        self.assertTrue(
+            set(df.columns) - set(QuantamentalDataFrame.IndexCols) == set(["a", "b"])
+        )
+
+        with self.assertRaises(ValueError):
+            create_empty_categorical_qdf(
+                cid="A", metrics=["a", "b"], date_range=dt_range
+            )
+
+        with self.assertRaises(ValueError):
+            create_empty_categorical_qdf(
+                xcat="X", metrics=["a", "b"], date_range=dt_range
+            )
+
+        with self.assertRaises(ValueError):
+            create_empty_categorical_qdf(
+                cid="A", xcat="X", ticker="A_X", date_range=dt_range
+            )
+
+        with self.assertRaises(ValueError):
+            create_empty_categorical_qdf(cid="A", xcat="X", metrics=["a", "b"])
+
+        with self.assertRaises(TypeError):
+            create_empty_categorical_qdf(
+                cid="A", xcat="X", metrics=["a", 1], date_range=dt_range
+            )
 
 
 class TestConcatQDFs(unittest.TestCase):
