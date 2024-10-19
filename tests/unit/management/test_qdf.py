@@ -35,7 +35,6 @@ from macrosynergy.management.types.qdf.methods import (
 from macrosynergy.management.simulate import make_test_df
 
 
-@staticmethod
 def helper_random_tickers(n: int = 10) -> List[str]:
     def rstr(n: int = 3, m: int = 5) -> str:
         return "".join(random.sample(string.ascii_uppercase, random.randint(n, m)))
@@ -47,7 +46,6 @@ def helper_random_tickers(n: int = 10) -> List[str]:
     return random.sample(all_tickers, n)
 
 
-@staticmethod
 def helper_split_df_by_metrics(
     df: QuantamentalDataFrame,
 ) -> List[QuantamentalDataFrame]:
@@ -57,7 +55,6 @@ def helper_split_df_by_metrics(
     ]
 
 
-@staticmethod
 def helper_split_df_by_ticker(df: QuantamentalDataFrame) -> List[QuantamentalDataFrame]:
     return [sdf for (c, x), sdf in df.groupby(["cid", "xcat"], observed=True)]
 
