@@ -11,6 +11,7 @@ from macrosynergy.management.types.qdf.methods import (
     get_col_sort_order,
     change_column_format,
     qdf_to_categorical,
+    qdf_to_string_index,
     check_is_categorical,
     _get_tickers_series,
     apply_blacklist,
@@ -128,6 +129,9 @@ class TestMethods(unittest.TestCase):
         torder = get_col_sort_order(test_df)
         self.assertEqual(expc_order, torder)
 
+        with self.assertRaises(TypeError):
+            get_col_sort_order(pd.DataFrame())
+
     def test_change_column_format(self):
         test_df: pd.DataFrame = make_test_df(metrics=JPMAQS_METRICS)
 
@@ -174,6 +178,25 @@ class TestMethods(unittest.TestCase):
         # check that is fails if not a QuantamentalDataFrame
         with self.assertRaises(TypeError):
             qdf_to_categorical(test_df.rename(columns={"cid": "xid"}))
+
+    def test_qdf_to_string_index(self):
+        test_df: pd.DataFrame = make_test_df(metrics=JPMAQS_METRICS)
+
+        curr_dtypes = test_df.dtypes.to_dict()
+
+        tdf = qdf_to_string_index(test_df)
+        # check the types of cid, xcat columns
+        self.assertEqual(tdf["cid"].dtype.name, "object")
+        self.assertEqual(tdf["xcat"].dtype.name, "object")
+        self.assertFalse(check_is_categorical(tdf))
+
+        # check that the other columns are not changed
+        for col in JPMAQS_METRICS:
+            self.assertEqual(tdf[col].dtype, curr_dtypes[col])
+
+        # check that is fails if not a QuantamentalDataFrame
+        with self.assertRaises(TypeError):
+            qdf_to_string_index(test_df.rename(columns={"cid": "xid"}))
 
     def test_check_is_categorical(self):
         test_df: pd.DataFrame = make_test_df()
