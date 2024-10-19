@@ -34,6 +34,33 @@ from macrosynergy.management.types.qdf.methods import (
 from macrosynergy.management.simulate import make_test_df
 
 
+@staticmethod
+def helper_random_tickers(n: int = 10) -> List[str]:
+    def rstr(n: int = 3, m: int = 5) -> str:
+        return "".join(random.sample(string.ascii_uppercase, random.randint(n, m)))
+
+    cids = [rstr() for _ in range(n)]
+    xcats = [rstr(4, 5) for _ in range(n)]
+
+    all_tickers = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+    return random.sample(all_tickers, n)
+
+
+@staticmethod
+def helper_split_df_by_metrics(
+    df: QuantamentalDataFrame,
+) -> List[QuantamentalDataFrame]:
+    return [
+        df[QuantamentalDataFrame.IndexCols + [m]].reset_index(drop=True)
+        for m in (set(df.columns) - set(QuantamentalDataFrame.IndexCols))
+    ]
+
+
+@staticmethod
+def helper_split_df_by_ticker(df: QuantamentalDataFrame) -> List[QuantamentalDataFrame]:
+    return [sdf for (c, x), sdf in df.groupby(["cid", "xcat"], observed=True)]
+
+
 class TestQDFBasic(unittest.TestCase):
     def test_quantamental_dataframe_type(self):
         test_df: pd.DataFrame = make_test_df()
@@ -225,33 +252,151 @@ class TestMethods(unittest.TestCase):
                 cid="A", xcat="X", metrics=["a", 1], date_range=dt_range
             )
 
+    def test_qdf_from_timseries(self):
+        ts = pd.Series(
+            np.random.randn(100), index=pd.bdate_range("2020-01-01", periods=100)
+        )
+
+        # test with cid and xcat
+        qdf = qdf_from_timseries(ts, cid="A", xcat="X")
+        self.assertTrue(check_is_categorical(qdf))
+
+        # test with ticker
+        qdf = qdf_from_timseries(ts, ticker="A_X")
+        self.assertTrue(check_is_categorical(qdf))
+
+        # test with ticker
+        qdf = qdf_from_timseries(ts, ticker="A_X")
+        self.assertTrue(check_is_categorical(qdf))
+
+        # test with non datetime index
+
+        with self.assertRaises(ValueError):
+            ts_copy = ts.copy()
+            ts_copy.index = ts_copy.index.astype(str)
+            qdf_from_timseries(ts_copy, ticker="A_X")
+
+        # test with non pd.Series
+        with self.assertRaises(TypeError):
+            qdf_from_timseries(ts.values, ticker="A_X")
+
+        # test with non string metric
+        with self.assertRaises(TypeError):
+            qdf_from_timseries(ts, ticker="A_X", metric=1)
+
+        # test with no cid or xcat
+        with self.assertRaises(ValueError):
+            qdf_from_timseries(ts, ticker="A_X", cid="A", xcat="X")
+
+        with self.assertRaises(ValueError):
+            qdf_from_timseries(ts, ticker="A_X", cid="A")
+
+        with self.assertRaises(ValueError):
+            qdf_from_timseries(ts, xcat="X")
+
+
+class TestQDFMethods(unittest.TestCase):
+    def test_drop_nan_series(self):
+
+        tickers = helper_random_tickers(50)
+        sel_tickers = random.sample(tickers, 10)
+        test_df: pd.DataFrame = make_test_df(tickers=tickers, cids=None, xcats=None)
+
+        for (cid, xcat), sdf in test_df.groupby(["cid", "xcat"], observed=True):
+            if f"{cid}_{xcat}" in sel_tickers:
+                test_df.loc[sdf.index, "value"] = np.nan
+
+        # randomly make 200 more nans
+        n_random_nans = 200
+        for _ in range(n_random_nans):
+            rrow = random.randint(0, test_df.shape[0] - 1)
+            test_df.loc[rrow, "value"] = np.nan
+
+        qdf = QuantamentalDataFrame(test_df)
+
+        with warnings.catch_warnings(record=True) as w:
+            out_qdf = drop_nan_series(qdf, raise_warning=True)
+            self.assertTrue(len(w) == len(sel_tickers))
+
+        out_tickers = list(_get_tickers_series(out_qdf).unique())
+
+        self.assertTrue(set(tickers) - set(out_tickers) == set(sel_tickers))
+
+        # test return when no nans
+        test_qdf = make_test_df(
+            tickers=helper_random_tickers(10), cids=None, xcats=None
+        )
+        self.assertTrue(drop_nan_series(test_qdf).equals(test_qdf))
+
+        # test with non QuantamentalDataFrame
+        with self.assertRaises(TypeError):
+            drop_nan_series(test_df.rename(columns={"cid": "xid"}))
+
+        with self.assertRaises(ValueError):
+            drop_nan_series(test_df, column="random-col")
+
+        with self.assertRaises(TypeError):
+            drop_nan_series(test_df, raise_warning="True")
+
+    def test_add_nan_series(self):
+        tickers = helper_random_tickers(10)
+        test_df: pd.DataFrame = make_test_df(tickers=tickers, cids=None, xcats=None)
+        sel_ticker = random.choice(tickers)
+        # add a series of nans
+        new_df = add_nan_series(test_df, ticker=sel_ticker)
+
+        nan_loc = new_df[new_df["value"].isna()]
+        found_cids = nan_loc["cid"].unique()
+        self.assertEqual(len(found_cids), 1)
+        found_cid = found_cids[0]
+
+        found_xcats = nan_loc["xcat"].unique()
+        self.assertEqual(len(found_xcats), 1)
+        found_xcat = found_xcats[0]
+
+        self.assertEqual(f"{found_cid}_{found_xcat}", sel_ticker)
+
+        # test with custom date range
+        start = "2020-01-01"
+        end = "2020-01-10"
+
+        new_df = add_nan_series(test_df, ticker=sel_ticker, start=start, end=end)
+
+        nan_loc = new_df[new_df["value"].isna()]
+        # check that the dates are pd.bdate_range(start, end)
+        self.assertTrue(
+            (nan_loc["real_date"].unique() == pd.bdate_range(start, end)).all()
+        )
+
+        with self.assertRaises(TypeError):
+            add_nan_series(df=1, ticker=sel_ticker)
+
+    def test_qdf_to_wide_df(self):
+        tickers = helper_random_tickers(10)
+        test_df: pd.DataFrame = make_test_df(tickers=tickers, cids=None, xcats=None)
+
+        qdf = QuantamentalDataFrame(test_df)
+        wide_df = qdf_to_wide_df(qdf)
+
+        self.assertTrue(wide_df.shape[0] == len(qdf["real_date"].unique()))
+        self.assertTrue(wide_df.shape[1] == len(tickers))
+        self.assertTrue((wide_df.index == qdf["real_date"].unique()).all())
+
+        # test with non QuantamentalDataFrame
+        with self.assertRaises(TypeError):
+            qdf_to_wide_df(test_df.rename(columns={"cid": "xid"}))
+
+        with self.assertRaises(TypeError):
+            qdf_to_wide_df(test_df, value_column=1)
+
+        with self.assertRaises(ValueError):
+            qdf_to_wide_df(test_df, value_column="random-col")
+
 
 class TestConcatQDFs(unittest.TestCase):
 
-    @staticmethod
-    def random_tickers(n: int = 10) -> List[str]:
-        def rstr(n: int = 3, m: int = 5) -> str:
-            return "".join(random.sample(string.ascii_uppercase, random.randint(n, m)))
-
-        cids = [rstr() for _ in range(n)]
-        xcats = [rstr(4, 5) for _ in range(n)]
-
-        all_tickers = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
-        return random.sample(all_tickers, n)
-
-    @staticmethod
-    def split_df_by_metrics(df: QuantamentalDataFrame) -> List[QuantamentalDataFrame]:
-        return [
-            df[QuantamentalDataFrame.IndexCols + [m]].reset_index(drop=True)
-            for m in (set(df.columns) - set(QuantamentalDataFrame.IndexCols))
-        ]
-
-    @staticmethod
-    def split_df_by_ticker(df: QuantamentalDataFrame) -> List[QuantamentalDataFrame]:
-        return [sdf for (c, x), sdf in df.groupby(["cid", "xcat"], observed=True)]
-
     def test_concat_qdfs_simple(self):
-        tickers = self.random_tickers()
+        tickers = helper_random_tickers()
         cargs = dict(
             metrics=JPMAQS_METRICS,
             cids=None,
@@ -277,7 +422,7 @@ class TestConcatQDFs(unittest.TestCase):
         self.assertTrue(expc_df.equals(qdfC))
 
     def test_concat_single_metric_qdfs(self):
-        tickers = self.random_tickers(50)
+        tickers = helper_random_tickers(50)
         cargs = dict(
             metrics=JPMAQS_METRICS,
             cids=None,
@@ -292,8 +437,8 @@ class TestConcatQDFs(unittest.TestCase):
             dfo.loc[rrow, rcol] = np.nan
 
         split_dfs: List[QuantamentalDataFrame] = []
-        for sdf in self.split_df_by_ticker(dfo):
-            split_dfs.extend(self.split_df_by_metrics(sdf))
+        for sdf in helper_split_df_by_ticker(dfo):
+            split_dfs.extend(helper_split_df_by_metrics(sdf))
 
         for sdf in split_dfs:
             # sort my the metric just for fun
@@ -313,6 +458,21 @@ class TestConcatQDFs(unittest.TestCase):
         nan_mask = dfo[dfo.isna().any(axis=1)].isna()
 
         self.assertTrue((non_eq_mask == nan_mask).all().all())
+
+    def test_concat_qdfs_errors(self):
+
+        dfs = [make_test_df() for _ in range(5)]
+        with self.assertRaises(ValueError):
+            concat_qdfs([])
+
+        with self.assertRaises(TypeError):
+            concat_qdfs(dfs + [pd.DataFrame()])
+
+        with self.assertRaises(TypeError):
+            concat_qdfs(dfs + [1])
+
+        with self.assertRaises(TypeError):
+            concat_qdfs(1)
 
 
 if __name__ == "__main__":
