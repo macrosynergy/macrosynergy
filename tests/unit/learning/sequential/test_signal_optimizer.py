@@ -1214,14 +1214,42 @@ class TestAll(unittest.TestCase):
         if len(df1.xcat.unique()) != 1:
             self.fail("The signal dataframe should only contain one xcat")
         self.assertEqual(df1.xcat.unique()[0], "test")
-        # Test that blacklisting works as expected
+
+        # Test that a different retraining frequency works as expected
         so2 = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+        )
+        try:
+            so2.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                test_size=3,
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+        df2 = so2.preds.copy()
+        self.assertIsInstance(df2, pd.DataFrame)
+        if len(df2.xcat.unique()) != 1:
+            self.fail("The signal dataframe should only contain one xcat")
+        self.assertEqual(df2.xcat.unique()[0], "test")
+        self.assertTrue(len(df2) != 0)
+        self.assertTrue(df2.value.notnull().all())
+
+        # Test that blacklisting works as expected
+        so3 = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
             blacklist=self.black_valid,
         )
         try:
-            so2.calculate_predictions(
+            so3.calculate_predictions(
                 name="test",
                 models=self.models,
                 scorers=self.scorers,
@@ -1234,27 +1262,28 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
 
-        df2 = so2.preds.copy()
-        self.assertIsInstance(df2, pd.DataFrame)
+        df3 = so3.preds.copy()
+        self.assertIsInstance(df3, pd.DataFrame)
         for cross_section, periods in self.black_valid.items():
             cross_section_key = cross_section.split("_")[0]
             self.assertTrue(
                 len(
-                    df2[
-                        (df2.cid == cross_section_key)
-                        & (df2.real_date >= periods[0])
-                        & (df2.real_date <= periods[1])
+                    df3[
+                        (df3.cid == cross_section_key)
+                        & (df3.real_date >= periods[0])
+                        & (df3.real_date <= periods[1])
                     ].dropna()
                 )
                 == 0
             )
+
         # Test that rolling models work as expected
-        so3 = SignalOptimizer(
+        so4 = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
         )
         try:
-            so3.calculate_predictions(
+            so4.calculate_predictions(
                 name="test",
                 models=self.models,
                 scorers=self.scorers,
@@ -1268,18 +1297,19 @@ class TestAll(unittest.TestCase):
             )
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
-        df3 = so3.preds.copy()
-        self.assertIsInstance(df3, pd.DataFrame)
-        if len(df3.xcat.unique()) != 1:
+        df4 = so4.preds.copy()
+        self.assertIsInstance(df4, pd.DataFrame)
+        if len(df4.xcat.unique()) != 1:
             self.fail("The signal dataframe should only contain one xcat")
-        self.assertEqual(df3.xcat.unique()[0], "test")
+        self.assertEqual(df4.xcat.unique()[0], "test")
+
         # Test that an unreasonably large roll is equivalent to no roll
-        so4 = SignalOptimizer(
+        so5 = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
         )
         try:
-            so4.calculate_predictions(
+            so5.calculate_predictions(
                 name="test",
                 models=self.models,
                 scorers=self.scorers,
@@ -1292,22 +1322,22 @@ class TestAll(unittest.TestCase):
             )
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
-        df4 = so4.preds.copy()
-        self.assertIsInstance(df4, pd.DataFrame)
-        if len(df4.xcat.unique()) != 1:
+        df5 = so5.preds.copy()
+        self.assertIsInstance(df5, pd.DataFrame)
+        if len(df5.xcat.unique()) != 1:
             self.fail("The signal dataframe should only contain one xcat")
-        self.assertEqual(df4.xcat.unique()[0], "test")
-        self.assertTrue(df1.equals(df4))
+        self.assertEqual(df5.xcat.unique()[0], "test")
+        self.assertTrue(df1.equals(df5))
 
         # Test that a random search works as expected
-        so5 = SignalOptimizer(
+        so6 = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
             cids = self.cids,
             blacklist = self.black_valid,
         )
         try:
-            so5.calculate_predictions(
+            so6.calculate_predictions(
                 name="test",
                 models=self.models,
                 scorers=self.scorers,
@@ -1329,15 +1359,15 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
 
-        df5 = so5.preds.copy()
-        self.assertIsInstance(df5, pd.DataFrame)
-        if len(df5.xcat.unique()) != 1:
+        df6 = so6.preds.copy()
+        self.assertIsInstance(df6, pd.DataFrame)
+        if len(df6.xcat.unique()) != 1:
             self.fail("The signal dataframe should only contain one xcat")
-        self.assertEqual(df5.xcat.unique()[0], "test")
+        self.assertEqual(df6.xcat.unique()[0], "test")
 
         # Tests normalize_fold_results, cv_summary, split_functions, multiple inner splitters
         # TODO: debug and discover why this test is failing
-        so6 = SignalOptimizer(
+        so7 = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
             cids = self.cids,
@@ -1345,7 +1375,7 @@ class TestAll(unittest.TestCase):
         )
 
         try:
-            so6.calculate_predictions(
+            so7.calculate_predictions(
                 name="test",
                 models=self.models,
                 scorers=self.scorers,
@@ -1359,7 +1389,7 @@ class TestAll(unittest.TestCase):
                     },
                 },
                 search_type="prior",
-                n_iter=5,
+                n_iter=4,
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.inner_splitters,

@@ -317,7 +317,7 @@ class BasePanelLearner(ABC):
                 [self.date_levels[i] if i >= 0 else pd.NaT for i in locs]
             )
             # Now formulate correct index
-            date_map = dict(zip(test_date_levels, adj_test_date_levels))
+            date_map = dict(zip(sorted_test_date_levels, adj_test_date_levels))
             mapped_dates = test_date_levels.map(date_map)
             test_index = pd.MultiIndex.from_arrays(
                 [test_xs_levels, mapped_dates], names=["cid", "real_date"]

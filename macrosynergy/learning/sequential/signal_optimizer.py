@@ -254,7 +254,7 @@ class SignalOptimizer(BasePanelLearner):
         for pipeline_name, idx, forecasts in prediction_data:
             forecasts_df.loc[idx, name] = forecasts
 
-        forecasts_df = forecasts_df.groupby(level=0).ffill()
+        forecasts_df = forecasts_df.groupby(level=0).ffill().dropna()
 
         if self.blacklist is not None:
             for cross_section, periods in self.blacklist.items():
