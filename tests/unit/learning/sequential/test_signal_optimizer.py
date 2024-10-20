@@ -1314,13 +1314,14 @@ class TestAll(unittest.TestCase):
                 hyperparameters={
                     "linreg": {
                         "fit_intercept": [True, False],
+                        "positive": [True, False],
                     },
                     "ridge": {
                         "alpha": stats.expon(),
                     },
                 },
                 search_type="prior",
-                n_iter=7,
+                n_iter=4,
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
@@ -1366,8 +1367,9 @@ class TestAll(unittest.TestCase):
                 cv_summary="mean/std",
                 split_functions = {
                     "ExpandingKFold": None,
-                    "RollingKFold": lambda n: (n // 12), # Increases by one every year
+                    "RollingKFold": lambda n: (n // 24), # Increases by one every two years
                 },
+                test_size=3,
             )
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
