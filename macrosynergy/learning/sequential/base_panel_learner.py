@@ -221,7 +221,7 @@ class BasePanelLearner(ABC):
                 n_splits_add=(
                     {
                         splitter_name: (
-                            int(np.ceil(split_function(iteration)))
+                            int(np.ceil(split_function(iteration * outer_splitter.test_size)))
                             if split_function is not None
                             else 0
                         )
