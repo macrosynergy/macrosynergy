@@ -130,9 +130,9 @@ def apply_blacklist(
 
     if not all(
         [isinstance(vv, (str, pd.Timestamp)) for v in blacklist.values() for vv in v]
-    ):
+    ) or any([len(v) != 2 for v in blacklist.values()]):
         raise TypeError(
-            "Values of `blacklist` must be lists of date strings or pandas Timestamps."
+            "Values of `blacklist` must be lists of start & end dates (str or pd.Timestamp)."
         )
 
     for key, value in blacklist.items():
