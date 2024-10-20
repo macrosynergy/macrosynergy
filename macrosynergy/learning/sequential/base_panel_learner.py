@@ -459,10 +459,6 @@ class BasePanelLearner(ABC):
                     ),
                     cv=cv_splits,
                 )
-            else:
-                raise NotImplementedError(
-                    f"Search type {search_type} is not implemented."
-                )
 
             try:
                 search_object.fit(X_train, y_train)
@@ -1125,30 +1121,15 @@ class BasePanelLearner(ABC):
                     "The values of the scorers dictionary must be instances of `scikit-learn`'s _BaseScorer."
                 )
 
-        # normalize_fold_results
-        if not isinstance(normalize_fold_results, bool):
-            raise TypeError("normalize_fold_results must be a boolean.")
-        if normalize_fold_results:
-            for model in hyperparameters.keys():
-                num_models = sum([len(hyperparameters[model][hparam]) for hparam in hyperparameters[model].keys()])
-                if num_models < 2:
-                    raise ValueError(
-                        "normalize_fold_results cannot be True if there are less than 2 candidate models. "
-                        f"This is the case for the model {model}."
-                    )
-                if num_models == 2:
-                    warnings.warn(
-                        "normalize_fold_results is True but there are only two candidate models for "
-                        f"the model {model}. It is recommended for at least three candidate models "
-                        "to be available for normalization to be meaningful.",
-                        UserWarning,
-                    )
-
         # search_type
         if not isinstance(search_type, str):
             raise TypeError("search_type must be a string.")
         if search_type not in ["grid", "prior", "bayes"]:
             raise ValueError("search_type must be one of 'grid', 'prior' or 'bayes'.")
+        if search_type == "bayes":
+            raise NotImplementedError(
+                "Bayesian hyperparameter search is not yet implemented."
+            )
 
         # cv_summary
         if not isinstance(cv_summary, str) and not callable(cv_summary):
@@ -1186,6 +1167,37 @@ class BasePanelLearner(ABC):
                 raise ValueError("The n_iter argument must be greater than zero.")
         elif n_iter is not None and not isinstance(n_iter, int):
             raise ValueError("n_iter must only be used if search_type is 'prior'.")
+        
+        # normalize_fold_results
+        if not isinstance(normalize_fold_results, bool):
+            raise TypeError("normalize_fold_results must be a boolean.")
+        if normalize_fold_results:
+            if search_type == "grid":
+                for model in hyperparameters.keys():
+                    num_models = sum([len(hyperparameters[model][hparam]) for hparam in hyperparameters[model].keys()])
+                    if num_models < 2:
+                        raise ValueError(
+                            "normalize_fold_results cannot be True if there are less than 2 candidate models. "
+                            f"This is the case for the model {model}."
+                        )
+                    if num_models == 2:
+                        warnings.warn(
+                            "normalize_fold_results is True but there are only two candidate models for "
+                            f"the model {model}. It is recommended for at least three candidate models "
+                            "to be available for normalization to be meaningful.",
+                            UserWarning,
+                        )
+            elif search_type == "prior":
+                if n_iter < 2:
+                    raise ValueError(
+                        "normalize_fold_results cannot be True if n_iter is less than 2."
+                    )
+                if n_iter == 2:
+                    warnings.warn(
+                        "normalize_fold_results is True but n_iter is 2. It is recommended for n_iter to be "
+                        "at least 3 for normalization to be meaningful.",
+                        UserWarning,
+                    )
 
         # split_functions
         if split_functions is not None:

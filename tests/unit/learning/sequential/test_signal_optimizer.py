@@ -1366,7 +1366,7 @@ class TestAll(unittest.TestCase):
                 cv_summary="mean/std",
                 split_functions = {
                     "ExpandingKFold": None,
-                    "RollingKFold": lambda n: 2 * (n // 12),
+                    "RollingKFold": lambda n: (n // 12), # Increases by one every year
                 },
             )
         except Exception as e:
