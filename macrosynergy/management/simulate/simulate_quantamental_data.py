@@ -373,12 +373,6 @@ def make_test_df(
             raise ValueError("Please provide a list of tickers or `cids` & `xcats`.")
 
     if tickers is not None:
-        if not (isinstance(tickers, list) and all(isinstance(x, str) for x in tickers)):
-            raise TypeError("`tickers` must be a list of strings.`")
-        if cids is not None:
-            warnings.warn(
-                "`cids` and `xcats` are being ignored as `tickers` is provided."
-            )
         cids = None
         xcats = None
 
