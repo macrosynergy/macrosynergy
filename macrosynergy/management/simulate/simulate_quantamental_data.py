@@ -340,6 +340,8 @@ def make_test_df(
 
     :param <List[str]> cids: A list of strings for cids.
     :param <List[str]> xcats: A list of strings for xcats.
+    :param <List[str]> tickers: A list of strings for tickers. If provided, `cids` and
+        `xcats` will be ignored.
     :param <List[str]> metrics: A list of strings for metrics.
     :param <str> start: An ISO-formatted date string.
     :param <str> end: An ISO-formatted date string.
@@ -369,6 +371,16 @@ def make_test_df(
     if tickers is None or len(tickers) == 0:
         if cids is None:
             raise ValueError("Please provide a list of tickers or `cids` & `xcats`.")
+
+    if tickers is not None:
+        if not (isinstance(tickers, list) and all(isinstance(x, str) for x in tickers)):
+            raise TypeError("`tickers` must be a list of strings.`")
+        if cids is not None:
+            warnings.warn(
+                "`cids` and `xcats` are being ignored as `tickers` is provided."
+            )
+        cids = None
+        xcats = None
 
     for varx, namex in zip(
         [cids, xcats, metrics, tickers], ["cids", "xcats", "metrics", "tickers"]
