@@ -308,7 +308,7 @@ class Test_All(unittest.TestCase):
         for argx in good_args.keys():
             bad_args: dict = good_args.copy()
             bad_args[argx] = 10
-            self.assertRaises(TypeError, make_test_df, **bad_args)
+            self.assertRaises(TypeError, make_test_df, **bad_args, msg=f"Testing {argx}")
 
         # test value errors
         for argx in ["cids", "xcats"]:
