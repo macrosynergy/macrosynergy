@@ -57,7 +57,7 @@ def dataframe_generator(
     edate = pd.to_datetime(
         min(df_cids.loc[cid, "latest"], df_xcats.loc[xcat, "latest"])
     )
-    all_days = pd.date_range(sdate, edate)
+    all_days = pd.bdate_range(sdate, edate)
     work_days = all_days[all_days.weekday < 5]
 
     df_add = pd.DataFrame(columns=qdf_cols)
@@ -100,7 +100,7 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     if any(df_xcats["back_coef"] != 0):
         sdate = min(min(df_cids.loc[:, "earliest"]), min(df_xcats.loc[:, "earliest"]))
         edate = max(max(df_cids.loc[:, "latest"]), max(df_xcats.loc[:, "latest"]))
-        all_days = pd.date_range(sdate, edate)
+        all_days = pd.bdate_range(sdate, edate)
         work_days = all_days[all_days.weekday < 5]
         ser = simulate_ar(len(work_days), mean=0, sd_mult=1, ar_coef=back_ar)
         df_back = pd.DataFrame(index=work_days, columns=["value"])
