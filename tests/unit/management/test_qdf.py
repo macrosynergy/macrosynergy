@@ -3,10 +3,11 @@ import numpy as np
 import pandas as pd
 import random
 import string
-from typing import Any, List
+from typing import List
 import warnings
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.constants import JPMAQS_METRICS
+from macrosynergy.management.utils import get_cid, get_xcat
 from macrosynergy.management.types.qdf.methods import (
     get_col_sort_order,
     change_column_format,
@@ -36,13 +37,17 @@ from macrosynergy.management.simulate import make_test_df
 
 
 def helper_random_tickers(n: int = 10) -> List[str]:
-    def rstr(n: int = 3, m: int = 5) -> str:
-        return "".join(random.sample(string.ascii_uppercase, random.randint(n, m)))
+    cids = ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "SEK", "NOK", "DKK"]
+    cids += ["NZD", "ZAR", "BRL", "CNY", "INR", "RUB", "TRY", "KRW", "IDR", "MXN"]
+    xcats = ["FXXR", "IR", "EQXR", "CDS", "PPP", "CTOT", "CPI", "PMI", "GDP", "UNR"]
+    xcats += ["HSP", "CREDIT", "INDPROD", "RETAIL", "SENTIMENT", "TRADE"]
+    adjs = ["", "NSA", "SA", "SJA"]
 
-    cids = [rstr() for _ in range(n)]
-    xcats = [rstr(4, 5) for _ in range(n)]
-
-    all_tickers = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+    all_tickers = [
+        f"{cid}_{xcat}_{adj}" for cid in cids for xcat in xcats for adj in adjs
+    ]
+    while n > len(all_tickers):
+        all_tickers += all_tickers
     return random.sample(all_tickers, n)
 
 
@@ -411,6 +416,106 @@ class TestQDFMethods(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             qdf_to_wide_df(test_df, value_column="random-col")
+
+    def test_apply_blacklist(self):
+        tickers = [
+            f"{cid}_{xcat}"
+            for cid in ["USD", "EUR", "GBP", "JPY"]
+            for xcat in ["FX", "IR", "EQ"]
+        ]
+        test_df: pd.DataFrame = make_test_df(
+            tickers=tickers,
+            cids=None,
+            xcats=None,
+            start="2010-01-01",
+            end="2010-12-31",
+        )
+
+        qdf = QuantamentalDataFrame(test_df)
+        bl_start, bl_end = pd.Timestamp("2010-06-06"), pd.Timestamp("2010-07-23")
+        sel_ticker = random.choice(tickers)
+        sel_cid, sel_xcat = sel_ticker.split("_", 1)
+        blacklist = {sel_cid: [bl_start, bl_end]}
+
+        new_df = apply_blacklist(qdf, blacklist)
+
+        # check that the dates are not in the new df
+        self.assertTrue(
+            new_df[
+                (new_df["cid"] == sel_cid)
+                & (new_df["xcat"] == sel_xcat)
+                & (new_df["real_date"] >= bl_start)
+                & (new_df["real_date"] <= bl_end)
+            ].empty
+        )
+
+        # check that all other entries are intact are unchanged by checking if all of them are in the new df
+        expected_remaining_entries = (
+            test_df[
+                ~test_df["cid"].isin([sel_cid])
+                | ~test_df["real_date"].between(bl_start, bl_end)
+            ]
+            .sort_values(by=QuantamentalDataFrame.IndexColsSortOrder)
+            .reset_index(drop=True)
+        )
+
+        self.assertTrue(expected_remaining_entries.eq(new_df).all().all())
+
+        ## test with very long periiod of time
+
+        tickers = [
+            f"{cid}_{xcat}"
+            for cid in ["USD", "EUR", "GBP", "JPY"]
+            for xcat in ["FX", "IR", "EQ"]
+        ]
+        bl_start, bl_end = pd.Timestamp("2000-01-01"), pd.Timestamp("2020-01-01")
+
+        test_df: pd.DataFrame = make_test_df(
+            tickers=tickers,
+            cids=None,
+            xcats=None,
+            start="2005-01-01",
+            end="2015-01-01",
+        )
+
+        blacklist = {sel_cid: [bl_start, bl_end]}
+        new_df = apply_blacklist(qdf, blacklist)
+
+        self.assertTrue(new_df[new_df["cid"] == sel_cid].empty)
+
+        with self.assertRaises(TypeError):
+            apply_blacklist(df=1, blacklist=blacklist)
+
+        with self.assertRaises(TypeError):
+            apply_blacklist(df=test_df, blacklist={1: [bl_start, bl_end]})
+
+        with self.assertRaises(TypeError):
+            apply_blacklist(df=test_df, blacklist={sel_cid: 1})
+
+        with self.assertRaises(TypeError):
+            apply_blacklist(df=test_df, blacklist={sel_cid: [bl_start]})
+
+        with self.assertRaises(TypeError):
+            apply_blacklist(df=test_df, blacklist=[])
+
+
+class TestReduceDF(unittest.TestCase):
+    def test_reduce_df_basic(self):
+        tickers = helper_random_tickers(20)
+        test_df: pd.DataFrame = make_test_df(tickers=tickers, cids=None, xcats=None)
+
+        qdf = QuantamentalDataFrame(test_df)
+
+        # test with no cids or xcats
+        new_df: QuantamentalDataFrame = reduce_df(qdf)
+        self.assertTrue(new_df.equals(qdf))
+
+        # test with out_all
+        new_df, xcats, cids = reduce_df(qdf, out_all=True)
+        self.assertTrue(new_df.equals(qdf))
+
+        found_cids = new_df["cid"].unique()
+        found_xcats = new_df["xcat"].unique()
 
 
 class TestConcatQDFs(unittest.TestCase):
