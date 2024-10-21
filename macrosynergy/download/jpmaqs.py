@@ -1099,7 +1099,7 @@ class JPMaQSDownload(DataQueryInterface):
         as_dataframe: bool = True,
         dataframe_format: str = "qdf",
         report_time_taken: bool = False,
-        categorical_dataframe: bool = False,
+        categorical_dataframe: bool = True,
         *args,
         **kwargs,
     ) -> Union[pd.DataFrame, List[Dict]]:
@@ -1341,7 +1341,7 @@ if __name__ == "__main__":
             start_date=start_date,
             end_date=end_date,
             show_progress=True,
-            report_time_taken=True,
+            report_time_taken=True
         )
         print(data.info())
         print(data)
