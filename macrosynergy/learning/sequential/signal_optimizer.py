@@ -505,34 +505,23 @@ class SignalOptimizer(BasePanelLearner):
             # Calculate correlation between each original feature in X_train and
             # the transformed features in X_train_transformed
             if isinstance(X_train_transformed, pd.DataFrame):
-                ftr_corr_data = [
-                    [
-                        timestamp,
-                        optimal_model,
-                        final_feature_name,
-                        input_feature_name,
-                        np.corrcoef(
-                            X_train_transformed.values[:, idx],
-                            X_train[input_feature_name],
-                        )[0, 1],
-                    ]
-                    for idx, final_feature_name in enumerate(feature_names)
-                    for input_feature_name in X_train.columns
+                X_train_transformed = X_train_transformed.values
+
+            ftr_corr_data = [
+                [
+                    timestamp,
+                    pipeline_name,
+                    final_feature_name,
+                    input_feature_name,
+                    np.corrcoef(
+                        X_train_transformed.values[:, idx],
+                        X_train[input_feature_name],
+                    )[0, 1],
                 ]
-            else:
-                ftr_corr_data = [
-                    [
-                        timestamp,
-                        pipeline_name,
-                        final_feature_name,
-                        input_feature_name,
-                        np.corrcoef(
-                            X_train_transformed[:, idx], X_train[input_feature_name]
-                        )[0, 1],
-                    ]
-                    for idx, final_feature_name in enumerate(feature_names)
-                    for input_feature_name in X_train.columns
-                ]
+                for idx, final_feature_name in enumerate(feature_names)
+                for input_feature_name in X_train.columns
+            ]
+
         elif self.store_correlations and optimal_model is None:
             ftr_corr_data = [
                 [

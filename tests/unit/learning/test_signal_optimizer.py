@@ -9,10 +9,12 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 from parameterized import parameterized
+from sklearn.decomposition import PCA
 from sklearn.linear_model import Lasso, LinearRegression, Ridge
 from sklearn.metrics import make_scorer, r2_score
 from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 from macrosynergy.learning import (
     ExpandingIncrementPanelSplit,
@@ -107,9 +109,23 @@ class TestAll(unittest.TestCase):
             "linreg": LinearRegression(),
             "ridge": Ridge(),
         }
+        self.pipelines = {
+            "linreg": Pipeline(
+                [
+                    ("scaler", StandardScaler()),
+                    ("pca", PCA(n_components=3)),
+                    ("linreg", LinearRegression()),
+                ]
+            ),
+        }
         self.hyperparameters = {
             "linreg": {},
             "ridge": {"alpha": [0.1, 1.0]},
+        }
+        self.pipeline_hyperparameters = {
+            "linreg": {
+                "pca__n_components": [3],
+            },
         }
         self.scorers = {
             "r2": make_scorer(r2_score),
@@ -761,6 +777,7 @@ class TestAll(unittest.TestCase):
 
     @parameterized.expand([["grid", None], ["prior", 1]])
     def test_valid_worker(self, search_type, n_iter):
+        store_correlations = False
         # Check that the worker private method works as expected for a grid search
         outer_splitter = ExpandingIncrementPanelSplit(
             train_intervals=1,
@@ -774,6 +791,7 @@ class TestAll(unittest.TestCase):
             df=self.df,
             xcats=self.xcats,
         )
+        so1.store_correlations = store_correlations
         for idx, (train_idx, test_idx) in enumerate(
             outer_splitter.split(X=self.X, y=self.y)
         ):
@@ -854,6 +872,154 @@ class TestAll(unittest.TestCase):
             self.assertTrue(ftr_selection_data[1] == "test")
             for i in range(2, len(ftr_selection_data)):
                 self.assertTrue(ftr_selection_data[i] in [0, 1])
+
+    def test_valid_store_correlation(self):
+        search_type = "grid"
+        n_iter = None
+        store_correlations = True
+        # Check that the worker private method works as expected for a grid search
+        outer_splitter = ExpandingIncrementPanelSplit(
+            train_intervals=1,
+            test_size=1,
+            min_cids=4,
+            min_periods=36,
+            max_periods=None,
+        )
+
+        so1 = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+        )
+        so1.store_correlations = store_correlations
+        for idx, (train_idx, test_idx) in enumerate(
+            outer_splitter.split(X=self.X, y=self.y)
+        ):
+            try:
+                split_result = so1._worker(
+                    train_idx=train_idx,
+                    test_idx=test_idx,
+                    name="test",
+                    models=self.pipelines,
+                    scorers=self.scorers,
+                    hyperparameters=self.pipeline_hyperparameters,
+                    search_type=search_type,
+                    n_iter=n_iter,
+                    n_jobs_inner=1,
+                    inner_splitters=self.single_inner_splitter,
+                    normalize_fold_results=False,
+                    # n_iter=None,
+                    n_splits_add=None,
+                    cv_summary="median",
+                )
+
+            except Exception as e:
+                self.fail(f"_worker raised an exception: {e}")
+
+            self.assertIsInstance(split_result, dict)
+            self.assertTrue(
+                split_result.keys()
+                == {
+                    "model_choice",
+                    "ftr_coefficients",
+                    "intercepts",
+                    "selected_ftrs",
+                    "predictions",
+                    "ftr_corr",
+                }
+            )
+
+            model_choice_data = split_result["model_choice"]
+            self.assertIsInstance(model_choice_data, list)
+            self.assertIsInstance(model_choice_data[0], datetime.date)
+            self.assertTrue(model_choice_data[1] == "test")
+            self.assertIsInstance(model_choice_data[2], str)
+            self.assertTrue(model_choice_data[2] in ["linreg"])
+            self.assertIsInstance(model_choice_data[3], float)
+            self.assertIsInstance(model_choice_data[4], dict)
+            self.assertIsInstance(model_choice_data[5], dict)
+
+            prediction_data = split_result["predictions"]
+            self.assertTrue(prediction_data[0] == "test")
+            self.assertIsInstance(prediction_data[1], pd.MultiIndex)
+            self.assertIsInstance(prediction_data[2], np.ndarray)
+
+            ftr_data = split_result["ftr_coefficients"]
+            self.assertIsInstance(ftr_data, list)
+            self.assertTrue(len(ftr_data) == 2 + 3)  # 3 ftrs + 2 extra columns
+            self.assertIsInstance(ftr_data[0], datetime.date)
+            self.assertTrue(ftr_data[1] == "test")
+            for i in range(2, len(ftr_data)):
+                if ftr_data[i] != np.nan:
+                    self.assertIsInstance(ftr_data[i], np.float32)
+
+            intercept_data = split_result["intercepts"]
+            self.assertIsInstance(intercept_data, list)
+            self.assertTrue(
+                len(intercept_data) == 2 + 1
+            )  # 1 intercept + 2 extra columns
+            self.assertIsInstance(intercept_data[0], datetime.date)
+            self.assertTrue(intercept_data[1] == "test")
+            if intercept_data[2] is not None:
+                self.assertIsInstance(intercept_data[2], np.float32)
+
+            ftr_selection_data = split_result["selected_ftrs"]
+            self.assertIsInstance(ftr_selection_data, list)
+            self.assertTrue(
+                len(ftr_selection_data) == 2 + 3
+            )  # 3 ftrs + 2 extra columns
+            self.assertIsInstance(ftr_selection_data[0], datetime.date)
+            self.assertTrue(ftr_selection_data[1] == "test")
+            for i in range(2, len(ftr_selection_data)):
+                self.assertTrue(ftr_selection_data[i] in [0, 1])
+
+            ftr_correlation = split_result["ftr_corr"]
+            self.assertIsInstance(ftr_correlation, list)
+            self.assertTrue(len(ftr_correlation[0]) == 5)
+            self.assertIsInstance(ftr_correlation[0][0], datetime.date)
+            self.assertTrue(ftr_correlation[0][1] == "test")
+            self.assertIsInstance(ftr_correlation[0][2], str)
+            self.assertIsInstance(ftr_correlation[0][3], str)
+
+    def test_get_ftr_corr_data_no_model(self):
+
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+        )
+        so.store_correlations = True
+        ftr_corr_data = so._get_ftr_corr_data(
+            pipeline_name="test",
+            optimal_model=None,
+            X_train=self.X,
+            timestamp=datetime.date(2021, 1, 1),
+        )
+
+        self.assertIsInstance(ftr_corr_data, list)
+        self.assertTrue(len(ftr_corr_data) == 3)
+
+        for lst in ftr_corr_data[1:]:
+            self.assertIsInstance(lst, list)
+            self.assertTrue(len(lst) == 5)
+            self.assertIsInstance(lst[0], datetime.date)
+            self.assertEqual(lst[1], "test")
+            self.assertEqual(lst[2], lst[3])
+            self.assertEqual(lst[4], 1)
+
+    def test_get_ftr_corr_data_no_corr(self):
+
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+        )
+        ftr_corr_data = so._get_ftr_corr_data(
+            pipeline_name="test",
+            optimal_model=None,
+            X_train=self.X,
+            timestamp=datetime.date(2021, 1, 1),
+        )
+
+        self.assertIsInstance(ftr_corr_data, list)
+        self.assertTrue(len(ftr_corr_data) == 0)
 
     def test_types_get_intercepts(self):
         so = self.so_with_calculated_preds
@@ -986,9 +1152,7 @@ class TestAll(unittest.TestCase):
         legend = ax.get_legend()
         labels = [text.get_text() for text in legend.get_texts()]
         self.assertTrue(
-            np.all(
-                sorted(self.X.rename(columns=ftr_dict).columns) == sorted(labels)
-            )
+            np.all(sorted(self.X.rename(columns=ftr_dict).columns) == sorted(labels))
         )
         # Now rename two features
         ftr_dict = {"CPI": "inflation", "GROWTH": "growth"}
@@ -1000,9 +1164,7 @@ class TestAll(unittest.TestCase):
         legend = ax.get_legend()
         labels = [text.get_text() for text in legend.get_texts()]
         self.assertTrue(
-            np.all(
-                sorted(self.X.rename(columns=ftr_dict).columns) == sorted(labels)
-            )
+            np.all(sorted(self.X.rename(columns=ftr_dict).columns) == sorted(labels))
         )
         # Now rename all features
         ftr_dict = {ftr: f"ftr{i}" for i, ftr in enumerate(self.X.columns)}
@@ -1014,9 +1176,7 @@ class TestAll(unittest.TestCase):
         legend = ax.get_legend()
         labels = [text.get_text() for text in legend.get_texts()]
         self.assertTrue(
-            np.all(
-                sorted(self.X.rename(columns=ftr_dict).columns) == sorted(labels)
-            )
+            np.all(sorted(self.X.rename(columns=ftr_dict).columns) == sorted(labels))
         )
         # Finally, test that the title works
         title = ax.get_title()
@@ -1244,4 +1404,4 @@ def _get_X_y(so: SignalOptimizer):
 if __name__ == "__main__":
     Test = TestAll()
     Test.setUpClass()
-    Test.test_valid_worker()
+    Test.test_get_ftr_corr_data_no_model()
