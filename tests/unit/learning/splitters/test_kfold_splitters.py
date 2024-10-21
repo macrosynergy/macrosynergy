@@ -134,6 +134,25 @@ class TestExpandingKFold(unittest.TestCase):
             self.assertEqual(test_set[0], i + 1)
             self.assertEqual(test_set[1], i + periods1 + 1)
 
+    def test_types_visualise_splits(self):
+        splitter = ExpandingKFoldPanelSplit(n_splits=5)
+        with self.assertRaises(TypeError):
+            splitter.visualise_splits(X="a", y=self.y)
+        with self.assertRaises(ValueError):
+            splitter.visualise_splits(X=self.X.reset_index(), y=self.y)
+
+        with self.assertRaises(TypeError):
+            splitter.visualise_splits(X=self.X, y="a")
+        with self.assertRaises(ValueError):
+            splitter.visualise_splits(X=self.X, y=self.y.reset_index(drop=True))
+
+    def test_valid_visualise_splits(self):
+        splitter = ExpandingKFoldPanelSplit(n_splits=5)
+        try:
+            splitter.visualise_splits(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(f"Unexpected exception: {e}")
+
 class TestRollingKFold(unittest.TestCase):
     @classmethod
     def setUpClass(self):
@@ -257,6 +276,25 @@ class TestRollingKFold(unittest.TestCase):
                     )
                 )
             )
+
+    def test_types_visualise_splits(self):
+        splitter = RollingKFoldPanelSplit(n_splits=5)
+        with self.assertRaises(TypeError):
+            splitter.visualise_splits(X="a", y=self.y)
+        with self.assertRaises(ValueError):
+            splitter.visualise_splits(X=self.X.reset_index(), y=self.y)
+
+        with self.assertRaises(TypeError):
+            splitter.visualise_splits(X=self.X, y="a")
+        with self.assertRaises(ValueError):
+            splitter.visualise_splits(X=self.X, y=self.y.reset_index(drop=True))
+
+    def test_valid_visualise_splits(self):
+        splitter = RollingKFoldPanelSplit(n_splits=5)
+        try:
+            splitter.visualise_splits(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(f"Unexpected exception: {e}")
 
 class TestRecencyKFold(unittest.TestCase):
     @classmethod
@@ -388,7 +426,26 @@ class TestRecencyKFold(unittest.TestCase):
                         )
                     )
                 )
-            )        
+            )
+
+    def test_types_visualise_splits(self):
+        splitter = RecencyKFoldPanelSplit(n_splits=5, n_periods = 1)
+        with self.assertRaises(TypeError):
+            splitter.visualise_splits(X="a", y=self.y)
+        with self.assertRaises(ValueError):
+            splitter.visualise_splits(X=self.X.reset_index(), y=self.y)
+
+        with self.assertRaises(TypeError):
+            splitter.visualise_splits(X=self.X, y="a")
+        with self.assertRaises(ValueError):
+            splitter.visualise_splits(X=self.X, y=self.y.reset_index(drop=True))
+
+    def test_valid_visualise_splits(self):
+        splitter = RecencyKFoldPanelSplit(n_splits=5, n_periods = 1)
+        try:
+            splitter.visualise_splits(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(f"Unexpected exception: {e}")       
 
 def make_simple_df(
     start1="2020-01-01",

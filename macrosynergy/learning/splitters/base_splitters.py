@@ -278,9 +278,9 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         if X is not None:
             # Check X and y are dataframes/series respectively
             if not isinstance(X, pd.DataFrame):
-                raise ValueError("X must be a pandas dataframe.")
+                raise TypeError("X must be a pandas dataframe.")
             if not isinstance(y, (pd.DataFrame, pd.Series)):
-                raise ValueError("y must be a pandas dataframe or series.")
+                raise TypeError("y must be a pandas dataframe or series.")
             if isinstance(y, pd.DataFrame) and len(y.columns) != 1:
                 raise ValueError("If y is a dataframe, it must have only one column.")
 
