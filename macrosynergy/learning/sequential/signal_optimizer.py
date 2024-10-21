@@ -51,15 +51,15 @@ class SignalOptimizer(BasePanelLearner):
 
     Notes
     -----
-    The `SignalOptimizer` class is used to predict the response variable, usually an asset
-    class return panel, based on a panel of features that are lagged by a specified number
-    of periods. This is done in a sequential manner, by specifying the size of an initial
-    training set, choosing an optimal model out of a provided collection (with associated
-    hyperparameters), forecasting the (possibly) forward return panel, and then expanding
-    the training set to include the previously forward realized returns. The process
-    continues until the end of the dataset is reached.
+    The `SignalOptimizer` class is used to predict the response variable, usually a panel
+    of asset class returns, based on a panel of features that are lagged by a specified
+    number of periods. This is done in a sequential manner, by specifying the size of an
+    initial training set, choosing an optimal model out of a provided collection
+    (with associated hyperparameters), forecasting the return panel, and then expanding
+    the training set to include the now-realized returns. The process continues until the
+    end of the dataset is reached.
 
-    In addition to storing the forecasts, this class also stores useful information for
+    In addition to storing forecasts, this class also stores useful information for
     analysis such as the models selected at each point in time, the feature coefficients
     and intercepts (where relevant) of selected models, as well as the features
     selected by any feature selection modules.
@@ -68,16 +68,21 @@ class SignalOptimizer(BasePanelLearner):
     collection of models and associated hyperparameters to choose from, an HPO is run
     - currently only grid search and random search are supported - to determine the
     optimal choice. This is done by providing a collection of `scikit-learn` compatible
-    scoring functions, as well as a collection of `scikit-learn` compatible cross-validation
-    splitters. At each point in time, the cross-validation folds are the union of the folds
-    produced by each splitter provided. Each scorer is evaluated on each test fold and
-    summarised across test folds by either the mean, median or through a custom function
-    provided by the user. This results in multiple scores for each model and hyperparameter
-    combination. In order to make a final choice, a composite score for each model and
-    hyperparameter combination is calculated by adjusting scores for each scorer by the
-    minimum and maximum scores across all models and hyperparameters, for that scorer.
-    This makes scores across scorers comparable, so that the average score across adjusted
-    scores can be used as a meaningful estimate of each model's generalization ability.
+    scoring functions, as well as a collection of `scikit-learn` compatible
+    cross-validation splitters and scorers. At each point in time, the cross-validation
+    folds are the union of the folds produced by each splitter provided. Each scorer is
+    evaluated on each test fold and summarised across test folds by either a custom
+    function provided by the user or a common string i.e. 'mean'.
+    
+    Consequently, each model and hyperparameter combination has an associated collection
+    of scores induced by different metrics, in units of those scorers. In order to form a 
+    composite score for each hyperparameter, the scores must be normalized across
+    model/hyperparameter combinations. This makes scores across scorers comparable, so
+    that the average score across adjusted scores can be used as a meaningful estimate
+    of each model's generalization ability. Finally, a composite score for each model and
+    hyperparameter combination is calculated by averaging the adjusted scores across all 
+    scorers.
+
     The optimal model is the one with the largest composite score.
     """
 
@@ -478,8 +483,8 @@ class SignalOptimizer(BasePanelLearner):
         Parameters
         ----------
         name : str or list, optional
-            Label(s) of signal optimization process(es). Default is all stored in the class
-            instance.
+            Label(s) of signal optimization process(es). Default is all stored in the
+            class instance.
 
         Returns
         -------
@@ -513,8 +518,8 @@ class SignalOptimizer(BasePanelLearner):
         Parameters
         ----------
         name: str or list, optional
-            Label(s) of signal optimization process(es). Default is all stored in the class
-            instance.
+            Label(s) of signal optimization process(es). Default is all stored in the
+            class instance.
 
         Returns
         -------
@@ -690,54 +695,6 @@ class SignalOptimizer(BasePanelLearner):
             sns.heatmap(selected_ftrs.T, cmap="binary", cbar=False)
         plt.title(title)
         plt.show()
-
-    def _checks_feature_selection_heatmap(
-        self,
-        name: str,
-        title=None,
-        ftrs_renamed=None,
-        figsize=(12, 8),
-    ):
-        if not isinstance(name, str):
-            raise TypeError("The pipeline name must be a string.")
-        if name not in self.selected_ftrs.name.unique():
-            raise ValueError(
-                f"""The pipeline name {name} is not in the list of already-calculated 
-                pipelines. Please check the pipeline name carefully. If correct, please 
-                run calculate_predictions() first.
-                """
-            )
-        if title is None:
-            title = f"Feature Selection Heatmap for {name}"
-        if not isinstance(title, str):
-            raise TypeError("The figure title must be a string.")
-        if not isinstance(figsize, tuple):
-            raise TypeError("The figsize argument must be a tuple.")
-        if len(figsize) != 2:
-            raise ValueError("The figsize argument must be a tuple of length 2.")
-        for element in figsize:
-            if not isinstance(element, (int, float)):
-                raise TypeError(
-                    "The elements of the figsize tuple must be floats or ints."
-                )
-        if ftrs_renamed is not None:
-            if not isinstance(ftrs_renamed, dict):
-                raise TypeError("The ftrs_renamed argument must be a dictionary.")
-            for key, value in ftrs_renamed.items():
-                if not isinstance(key, str):
-                    raise TypeError(
-                        "The keys of the ftrs_renamed dictionary must be strings."
-                    )
-                if not isinstance(value, str):
-                    raise TypeError(
-                        "The values of the ftrs_renamed dictionary must be strings."
-                    )
-                if key not in self.X.columns:
-                    raise ValueError(
-                        f"""The key {key} in the ftrs_renamed dictionary is not a feature 
-                        in the pipeline {name}.
-                        """
-                    )
 
     def coefs_timeplot(
         self,
@@ -1133,6 +1090,69 @@ class SignalOptimizer(BasePanelLearner):
         plt.tight_layout()
         plt.show()
 
+    def _checks_feature_selection_heatmap(
+        self,
+        name: str,
+        title=None,
+        ftrs_renamed=None,
+        figsize=(12, 8),
+    ):
+        """
+        Checks for the feature_selection_heatmap method.
+
+        Parameters
+        ----------
+        name : str
+            Name of the previously run signal optimization process.
+        title : str, optional
+            Title of the heatmap. Default is None. This creates a figure title of the form
+            "Feature Selection Heatmap for {name}".
+        ftrs_renamed : dict, optional
+            Dictionary to rename the feature names for visualisation in the plot axis.
+            Default is None, which uses the original feature names.
+        figsize : tuple of floats or ints, optional
+            Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        """
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.selected_ftrs.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
+        if title is None:
+            title = f"Feature Selection Heatmap for {name}"
+        if not isinstance(title, str):
+            raise TypeError("The figure title must be a string.")
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, (int, float)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
+        if ftrs_renamed is not None:
+            if not isinstance(ftrs_renamed, dict):
+                raise TypeError("The ftrs_renamed argument must be a dictionary.")
+            for key, value in ftrs_renamed.items():
+                if not isinstance(key, str):
+                    raise TypeError(
+                        "The keys of the ftrs_renamed dictionary must be strings."
+                    )
+                if not isinstance(value, str):
+                    raise TypeError(
+                        "The values of the ftrs_renamed dictionary must be strings."
+                    )
+                if key not in self.X.columns:
+                    raise ValueError(
+                        f"""The key {key} in the ftrs_renamed dictionary is not a feature 
+                        in the pipeline {name}.
+                        """
+                    )
 
 if __name__ == "__main__":
     from sklearn.linear_model import LinearRegression
