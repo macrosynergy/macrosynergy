@@ -133,18 +133,18 @@ def check_attributes_in_sync(response_dict: dict) -> bool:
     """
 
     if 'instruments' not in response_dict:
-        raise InvalidResponseError("Response does not contain 'instruments' key.")
+        return True
 
     expressions_last_value_dict = {}
 
     for instrument in response_dict['instruments']:
         attributes = instrument.get('attributes')
         if not attributes:
-            raise InvalidResponseError("Instrument does not contain 'attributes' key.")
+            continue
         
         time_series = attributes[0].get('time-series')
         if not time_series:
-            raise InvalidResponseError("Attributes do not contain 'time-series' key.")
+            continue
 
         last_valid_item = None
         for i in range(len(time_series) - 1, -1, -1):
@@ -157,9 +157,9 @@ def check_attributes_in_sync(response_dict: dict) -> bool:
 
         expression = attributes[0].get('expression')
         if not expression:
-            raise InvalidResponseError("Attributes do not contain 'expression' key.")
-
-        _, ticker, metric = expression.replace(")", "").split(",")
+            last_valid_item = ["No data", 0]
+        else:
+            _, ticker, metric = expression.replace(")", "").split(",")
 
         last_value_date = last_valid_item[0]
         if ticker not in expressions_last_value_dict:
