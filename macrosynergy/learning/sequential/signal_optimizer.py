@@ -226,6 +226,13 @@ class SignalOptimizer(BasePanelLearner):
         """
         if not isinstance(store_correlations, bool):
             raise TypeError("The store_correlations argument must be a boolean.")
+
+        if store_correlations and not all(
+            [isinstance(model, Pipeline) for model in models.values()]
+        ):
+            raise ValueError(
+                "The store_correlations argument is only valid when all models are Scikit-learn Pipelines."
+            )
         self.store_correlations = store_correlations
 
         # First create pandas dataframes to store the forecasts
