@@ -16,7 +16,6 @@ from sklearn.base import RegressorMixin, ClassifierMixin
 from sklearn.model_selection import BaseCrossValidator, GridSearchCV, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics._scorer import _BaseScorer
 from tqdm.auto import tqdm
 
 from macrosynergy.compat import JOBLIB_RETURN_AS
@@ -1115,10 +1114,6 @@ class BasePanelLearner(ABC):
             if not callable(scorers[key]):
                 raise ValueError(
                     "The values of the scorers dictionary must be callable scoring functions."
-                )
-            if not isinstance(scorers[key], _BaseScorer):
-                raise ValueError(
-                    "The values of the scorers dictionary must be instances of `scikit-learn`'s _BaseScorer."
                 )
 
         # search_type
