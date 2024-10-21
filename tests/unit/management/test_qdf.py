@@ -41,10 +41,10 @@ def helper_random_tickers(n: int = 10) -> List[str]:
     cids += ["NZD", "ZAR", "BRL", "CNY", "INR", "RUB", "TRY", "KRW", "IDR", "MXN"]
     xcats = ["FXXR", "IR", "EQXR", "CDS", "PPP", "CTOT", "CPI", "PMI", "GDP", "UNR"]
     xcats += ["HSP", "CREDIT", "INDPROD", "RETAIL", "SENTIMENT", "TRADE"]
-    adjs = ["", "NSA", "SA", "SJA"]
+    adjs = ["", "_NSA", "_SA", "_SJA"]
 
     all_tickers = [
-        f"{cid}_{xcat}_{adj}" for cid in cids for xcat in xcats for adj in adjs
+        f"{cid}_{xcat}{adj}" for cid in cids for xcat in xcats for adj in adjs
     ]
     while n > len(all_tickers):
         all_tickers += all_tickers
@@ -570,6 +570,59 @@ class TestConcatQDFs(unittest.TestCase):
             sdf = sdf.sort_values(
                 by=QuantamentalDataFrame.IndexCols + [sdf.columns[-1]]
             )
+
+        output_df = concat_qdfs(split_dfs)
+
+        self.assertTrue(dfo.equals(output_df))
+
+        # get nan locs
+        in_nan_rows = dfo[dfo.isna().any(axis=1)]
+        out_nan_rows = output_df[output_df.isna().any(axis=1)]
+
+        non_eq_mask = in_nan_rows != out_nan_rows
+        nan_mask = dfo[dfo.isna().any(axis=1)].isna()
+
+        self.assertTrue((non_eq_mask == nan_mask).all().all())
+
+    def test_concat_single_metric_qdfs_partial(self):
+        tickers = helper_random_tickers(50)
+        cargs = dict(
+            metrics=JPMAQS_METRICS,
+            cids=None,
+            xcats=None,
+        )
+        dfo = QuantamentalDataFrame(make_test_df(tickers=tickers, **cargs))
+
+        n_random_nans = random.randint(100, 1000)
+        for _ in range(n_random_nans):
+            rrow = random.randint(0, dfo.shape[0] - 1)
+            rcol = random.choice(JPMAQS_METRICS)
+            dfo.loc[rrow, rcol] = np.nan
+
+        drop_pairs = [
+            (t, m) for t in tickers for m in JPMAQS_METRICS if random.random() < 0.1
+        ]
+        split_dfs: List[QuantamentalDataFrame] = []
+        for sdf in helper_split_df_by_ticker(dfo):
+            split_dfs.extend(helper_split_df_by_metrics(sdf))
+
+        for sdf in split_dfs:
+            sdf = sdf.sort_values(
+                by=QuantamentalDataFrame.IndexCols + [sdf.columns[-1]]
+            )
+
+        orig_len = len(split_dfs)
+        for idf, _ in enumerate(split_dfs):
+            cid = split_dfs[idf]["cid"].unique().tolist()[0]
+            xcat = split_dfs[idf]["xcat"].unique().tolist()[0]
+            _metric = split_dfs[idf].columns[-1]
+            for t, m in drop_pairs:
+                if t == f"{cid}_{xcat}" and m == _metric:
+                    # split_dfs.pop()
+                    split_dfs.pop(idf)
+
+                    # dfo[(dfo["cid"] == cid) & (dfo["xcat"] == xcat)][m] = np.nan
+                    dfo.loc[(dfo["cid"] == cid) & (dfo["xcat"] == xcat), m] = np.nan
 
         output_df = concat_qdfs(split_dfs)
 
