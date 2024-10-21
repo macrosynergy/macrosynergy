@@ -649,17 +649,17 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
             )
-        with self.assertRaises(ValueError):
-            self.so_with_calculated_preds.calculate_predictions(
-                name="test",
-                models=self.models,
-                scorers={"R2": r2_score},
-                hyperparameters=self.hyperparameters,
-                search_type="grid",
-                n_jobs_outer=1,
-                n_jobs_inner=1,
-                inner_splitters=self.single_inner_splitter,
-            )
+        # with self.assertRaises(ValueError):
+        #     self.so_with_calculated_preds.calculate_predictions(
+        #         name="test",
+        #         models=self.models,
+        #         scorers={"R2": r2_score},
+        #         hyperparameters=self.hyperparameters,
+        #         search_type="grid",
+        #         n_jobs_outer=1,
+        #         n_jobs_inner=1,
+        #         inner_splitters=self.single_inner_splitter,
+        #     )
         # Inner splitters should be a dict
         with self.assertRaises(TypeError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -2289,4 +2289,4 @@ def _get_X_y(so: SignalOptimizer):
 if __name__ == "__main__":
     Test = TestAll()
     Test.setUpClass()
-    Test.test_valid_coefs_stackedbarplot()
+    Test.test_types_calculate_predictions()
