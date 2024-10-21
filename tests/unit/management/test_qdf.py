@@ -731,14 +731,75 @@ class TestReduceDF(unittest.TestCase):
         self.assertTrue(new_df.equals(expected_df))
 
 
-# class TestUpdateDF(unittest.TestCase):
-#     def test_upate_df_basic(self):
-#         tickers = helper_random_tickers(20)
-#         dfa = make_test_df(tickers=tickers[:10])
-#         dfb = make_test_df(tickers=tickers[10:])
+class TestUpdateDF(unittest.TestCase):
+    def test_upate_df_basic(self):
+        tickers = helper_random_tickers(20)
+        dfa = make_test_df(tickers=tickers[:10])
+        dfb = make_test_df(tickers=tickers[10:])
 
-#         qdfa = QuantamentalDataFrame(dfa)
-#         qdfb = QuantamentalDataFrame(dfb)
+        qdfa = QuantamentalDataFrame(dfa)
+        qdfb = QuantamentalDataFrame(dfb)
+
+        new_df = update_df(qdfa, qdfb)
+
+        expected_df = (
+            pd.concat([qdfa, qdfb], axis=0, ignore_index=True)
+            .sort_values(QuantamentalDataFrame.IndexColsSortOrder)
+            .drop_duplicates(subset=QuantamentalDataFrame.IndexCols, keep="last")
+            .reset_index(drop=True)
+        )
+
+        self.assertTrue(new_df.equals(expected_df))
+        
+        self.assertRaises(TypeError, update_df, 1, dfa)
+        self.assertRaises(TypeError, update_df, dfa, 1)
+        self.assertRaises(TypeError, update_df, dfa, dfa, 'string')
+
+    def test_update_df_with_nans(self):
+        tickers = helper_random_tickers(20)
+        dfa = make_test_df(tickers=tickers[:10], metrics=JPMAQS_METRICS)
+        dfb = make_test_df(tickers=tickers[10:], metrics=JPMAQS_METRICS)
+
+        for _ in range(100):
+            rrow = random.randint(0, dfa.shape[0] - 1)
+            rcol = random.choice(JPMAQS_METRICS)
+            dfa.loc[rrow, rcol] = np.nan
+
+            rrow = random.randint(0, dfb.shape[0] - 1)
+            rcol = random.choice(JPMAQS_METRICS)
+            dfb.loc[rrow, rcol] = np.nan
+
+        qdfa = QuantamentalDataFrame(dfa)
+        qdfb = QuantamentalDataFrame(dfb)
+
+        new_df = update_df(qdfa, qdfb)
+
+        expected_df = (
+            pd.concat([qdfa, qdfb], axis=0, ignore_index=True)
+            .sort_values(QuantamentalDataFrame.IndexColsSortOrder)
+            .drop_duplicates(subset=QuantamentalDataFrame.IndexCols, keep="last")
+            .reset_index(drop=True)
+        )
+
+        self.assertTrue(new_df.equals(expected_df))
+
+    def test_update_df_short_circuited(self):
+        tickers = helper_random_tickers(20)
+        dfa = make_test_df(tickers=tickers[:10], metrics=JPMAQS_METRICS)
+        dfb = make_test_df(tickers=tickers[10:], metrics=JPMAQS_METRICS)
+
+        empty_df = pd.DataFrame(
+            columns=QuantamentalDataFrame.IndexCols + JPMAQS_METRICS
+        )
+
+        test_df = update_df(empty_df, empty_df)
+        self.assertTrue(test_df.empty)
+
+        test_df = update_df(dfa, empty_df)
+        self.assertTrue(test_df.equals(dfa))
+
+        test_df = update_df(empty_df, dfb)
+        self.assertTrue(test_df.equals(dfb))
 
 
 class TestConcatQDFs(unittest.TestCase):
