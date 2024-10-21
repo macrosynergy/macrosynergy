@@ -364,6 +364,43 @@ class SignalOptimizer(BasePanelLearner):
         timestamp,
         adjusted_test_index,
     ):
+        """
+        Stores characteristics of the optimal model at each retraining date.
+
+        Parameters
+        ----------
+        pipeline_name : str
+            Name of the signal optimization process.
+        optimal_model : RegressorMixin, ClassifierMixin or Pipeline
+            Optimal model selected at each retraining date.
+        optimal_model_name : str
+            Name of the optimal model.
+        optimal_model_score : float
+            Cross-validation score for the optimal model.
+        optimal_model_params : dict
+            Chosen hyperparameters for the optimal model.
+        inner_splitters_adj : dict
+            Dictionary of adjusted inner splitters.
+        X_train : pd.DataFrame
+            Training feature matrix.
+        y_train : pd.Series
+            Training response variable.
+        X_test : pd.DataFrame
+            Test feature matrix.    
+        y_test : pd.Series
+            Test response variable.
+        timestamp : pd.Timestamp
+            Timestamp of the retraining date.
+        adjusted_test_index : pd.MultiIndex
+            Adjusted test index to account for lagged features.
+
+        Returns 
+        -------
+        dict
+            Dictionary containing the optimal model, model choice data, feature
+            coefficients, intercepts, selected features and correlations between 
+            inputs to pipelines and those entered into a final model.
+        """
         if optimal_model is not None:
             if hasattr(optimal_model, "create_signal"):
                 if callable(getattr(optimal_model, "create_signal")):

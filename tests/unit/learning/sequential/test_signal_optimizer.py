@@ -1208,12 +1208,26 @@ class TestAll(unittest.TestCase):
             )
 
     def test_valid_calculate_predictions(self):
+        # Test that the function runs without error and prediction dataframe is as expected
+        outer_splitter = list(ExpandingIncrementPanelSplit(
+            train_intervals = 1,
+            test_size = 1,
+            min_cids = 4,
+            min_periods = 36,
+        ).split(self.X,self.y))
+        first_date = self.X.iloc[outer_splitter[0][0], :].index.get_level_values(1).max()
+        last_date = self.X.iloc[outer_splitter[-1][1], :].index.get_level_values(1).max()
         so1 = self.so_with_calculated_preds
         df1 = so1.preds.copy()
         self.assertIsInstance(df1, pd.DataFrame)
         if len(df1.xcat.unique()) != 1:
             self.fail("The signal dataframe should only contain one xcat")
         self.assertEqual(df1.xcat.unique()[0], "test")
+        self.assertTrue(len(df1) != 0)
+        self.assertTrue(df1.value.notnull().all())
+        self.assertTrue(len(df1.cid.unique()) == 4)
+        self.assertTrue(df1.real_date.min() == first_date)
+        self.assertTrue(df1.real_date.max() == last_date)
 
         # Test that a different retraining frequency works as expected
         so2 = SignalOptimizer(
@@ -1241,6 +1255,9 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df2.xcat.unique()[0], "test")
         self.assertTrue(len(df2) != 0)
         self.assertTrue(df2.value.notnull().all())
+        self.assertTrue(len(df2.cid.unique()) == 4)
+        self.assertTrue(df2.real_date.min() == first_date)
+        self.assertTrue(df2.real_date.max() == last_date)
 
         # Test that blacklisting works as expected
         so3 = SignalOptimizer(
@@ -1276,6 +1293,9 @@ class TestAll(unittest.TestCase):
                 )
                 == 0
             )
+        self.assertTrue(len(df3.cid.unique()) == 4)
+        self.assertTrue(df3.real_date.min() == first_date)
+        self.assertTrue(df3.real_date.max() == last_date)
 
         # Test that rolling models work as expected
         so4 = SignalOptimizer(
@@ -1302,6 +1322,9 @@ class TestAll(unittest.TestCase):
         if len(df4.xcat.unique()) != 1:
             self.fail("The signal dataframe should only contain one xcat")
         self.assertEqual(df4.xcat.unique()[0], "test")
+        self.assertTrue(len(df4.cid.unique()) == 4)
+        self.assertTrue(df4.real_date.min() == first_date)
+        self.assertTrue(df4.real_date.max() == last_date)
 
         # Test that an unreasonably large roll is equivalent to no roll
         so5 = SignalOptimizer(
@@ -1328,6 +1351,9 @@ class TestAll(unittest.TestCase):
             self.fail("The signal dataframe should only contain one xcat")
         self.assertEqual(df5.xcat.unique()[0], "test")
         self.assertTrue(df1.equals(df5))
+        self.assertTrue(len(df5.cid.unique()) == 4)
+        self.assertTrue(df5.real_date.min() == first_date)
+        self.assertTrue(df5.real_date.max() == last_date)
 
         # Test that a random search works as expected
         so6 = SignalOptimizer(
@@ -1364,9 +1390,11 @@ class TestAll(unittest.TestCase):
         if len(df6.xcat.unique()) != 1:
             self.fail("The signal dataframe should only contain one xcat")
         self.assertEqual(df6.xcat.unique()[0], "test")
+        self.assertTrue(len(df6.cid.unique()) == 4)
+        self.assertTrue(df6.real_date.min() == first_date)
+        self.assertTrue(df6.real_date.max() == last_date)
 
         # Tests normalize_fold_results, cv_summary, split_functions, multiple inner splitters
-        # TODO: debug and discover why this test is failing
         so7 = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
@@ -1403,6 +1431,14 @@ class TestAll(unittest.TestCase):
             )
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
+        df7 = so7.preds.copy()
+        self.assertIsInstance(df7, pd.DataFrame)
+        if len(df7.xcat.unique()) != 1:
+            self.fail("The signal dataframe should only contain one xcat")
+        self.assertEqual(df7.xcat.unique()[0], "test")
+        self.assertTrue(len(df7.cid.unique()) == 4)
+        self.assertTrue(df7.real_date.min() == first_date)
+        self.assertTrue(df7.real_date.max() == last_date)
 
     def test_types_run(self):
         # Training set only
@@ -1463,6 +1499,495 @@ class TestAll(unittest.TestCase):
             ):
                 so._check_run(**invalid_case)
 
+    def test_types_get_optimized_signals(self):
+        so = self.so_with_calculated_preds
+
+        # Test invalid names are caught
+        with self.assertRaises(TypeError):
+            so.get_optimized_signals(name=1)
+        with self.assertRaises(TypeError):
+            so.get_optimized_signals(name={})
+
+        # Test an error is raised if a wrong name is passed
+        with self.assertRaises(ValueError):
+            so.get_optimized_signals(name=["test", "test2"])
+        with self.assertRaises(ValueError):
+            so.get_optimized_signals(name="test2")
+
+        # Test that if no signals have been calculated, an error is raised
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+        )
+        with self.assertRaises(ValueError):
+            so.get_optimized_signals(name="test2")
+
+    def test_valid_get_optimized_signals(self):
+        # Test that the output is a dataframe
+        so = self.so_with_calculated_preds
+
+        df1 = so.get_optimized_signals(name="test")
+        self.assertIsInstance(df1, pd.DataFrame)
+        self.assertEqual(df1.shape[1], 4)
+        self.assertEqual(df1.columns[0], "cid")
+        self.assertEqual(df1.columns[1], "real_date")
+        self.assertEqual(df1.columns[2], "xcat")
+        self.assertEqual(df1.columns[3], "value")
+        self.assertEqual(df1.xcat.unique()[0], "test")
+
+        # Add a second signal and check that the output is a dataframe
+        so.calculate_predictions(
+            name="test2",
+            models=self.models,
+            scorers=self.scorers,
+            hyperparameters=self.hyperparameters,
+            search_type="grid",
+            n_jobs_outer=1,
+            n_jobs_inner=1,
+            inner_splitters=self.inner_splitters,
+        )
+        df2 = so.get_optimized_signals(name="test2")
+        self.assertIsInstance(df2, pd.DataFrame)
+        self.assertEqual(df2.shape[1], 4)
+        self.assertEqual(df2.columns[0], "cid")
+        self.assertEqual(df2.columns[1], "real_date")
+        self.assertEqual(df2.columns[2], "xcat")
+        self.assertEqual(df2.columns[3], "value")
+        self.assertEqual(df2.xcat.unique()[0], "test2")
+
+        df3 = so.get_optimized_signals()
+        self.assertIsInstance(df3, pd.DataFrame)
+        self.assertEqual(df3.shape[1], 4)
+        self.assertEqual(df3.columns[0], "cid")
+        self.assertEqual(df3.columns[1], "real_date")
+        self.assertEqual(df3.columns[2], "xcat")
+        self.assertEqual(df3.columns[3], "value")
+        self.assertEqual(len(df3.xcat.unique()), 2)
+
+        df4 = so.get_optimized_signals(name=["test", "test2"])
+        self.assertIsInstance(df4, pd.DataFrame)
+        self.assertEqual(df4.shape[1], 4)
+        self.assertEqual(df4.columns[0], "cid")
+        self.assertEqual(df4.columns[1], "real_date")
+        self.assertEqual(df4.columns[2], "xcat")
+        self.assertEqual(df4.columns[3], "value")
+        self.assertEqual(len(df4.xcat.unique()), 2)
+
+    def test_types_get_selected_features(self):
+        so = self.so_with_calculated_preds
+        # Test that a wrong signal name raises an error
+        with self.assertRaises(ValueError):
+            so.get_selected_features(name="test2")
+        with self.assertRaises(ValueError):
+            so.get_selected_features(name=["test", "test2"])
+
+        # Test that the wrong dtype of a signal name raises an error
+        with self.assertRaises(TypeError):
+            so.get_selected_features(name=1)
+        with self.assertRaises(TypeError):
+            so.get_selected_features(name={})
+
+    def test_valid_get_selected_features(self):
+        so = self.so_with_calculated_preds
+        # Test that running get_selected_features on pipeline "test" works
+        try:
+            selected_ftrs = so.get_selected_features(name="test")
+        except Exception as e:
+            self.fail(f"get_selected_features raised an exception: {e}")
+        # Test that the output is as expected
+        self.assertIsInstance(selected_ftrs, pd.DataFrame)
+        self.assertEqual(selected_ftrs.shape[1], 5)
+        self.assertEqual(selected_ftrs.columns[0], "real_date")
+        self.assertEqual(selected_ftrs.columns[1], "name")
+        for i in range(2, 5):
+            self.assertEqual(selected_ftrs.columns[i], self.X.columns[i - 2])
+        self.assertTrue(selected_ftrs.name.unique()[0] == "test")
+        self.assertTrue(selected_ftrs.isna().sum().sum() == 0)
+
+        # Test that running get_selected_features without a name works
+        try:
+            selected_ftrs = so.get_selected_features()
+        except Exception as e:
+            self.fail(f"get_selected_features raised an exception: {e}")
+        # Test that the output is as expected
+        self.assertIsInstance(selected_ftrs, pd.DataFrame)
+        self.assertEqual(selected_ftrs.shape[1], 5)
+        self.assertEqual(selected_ftrs.columns[0], "real_date")
+        self.assertEqual(selected_ftrs.columns[1], "name")
+        for i in range(2, 5):
+            self.assertEqual(selected_ftrs.columns[i], self.X.columns[i - 2])
+        self.assertTrue(selected_ftrs.name.unique()[0] == "test")
+        self.assertTrue(selected_ftrs.isna().sum().sum() == 0)
+
+    def test_types_get_ftr_coefficients(self):
+        so = self.so_with_calculated_preds
+        # Test that a wrong signal name raises an error
+        with self.assertRaises(ValueError):
+            so.get_ftr_coefficients(name="test2")
+        with self.assertRaises(ValueError):
+            so.get_ftr_coefficients(name=["test", "test2"])
+        # Test that the wrong dtype of a signal name raises an error
+        with self.assertRaises(TypeError):
+            so.get_ftr_coefficients(name=1)
+        with self.assertRaises(TypeError):
+            so.get_ftr_coefficients(name={})
+
+    def test_valid_get_ftr_coefficients(self):
+        so = self.so_with_calculated_preds
+        # Test that running get_ftr_coefficients on pipeline "test" works
+        try:
+            ftr_coefficients = so.get_ftr_coefficients(name="test")
+        except Exception as e:
+            self.fail(f"get_ftr_coefficients raised an exception: {e}")
+        # Test that the output is as expected
+        self.assertIsInstance(ftr_coefficients, pd.DataFrame)
+        self.assertEqual(ftr_coefficients.shape[1], 5)
+        self.assertEqual(ftr_coefficients.columns[0], "real_date")
+        self.assertEqual(ftr_coefficients.columns[1], "name")
+        for i in range(2, 5):
+            self.assertEqual(ftr_coefficients.columns[i], self.X.columns[i - 2])
+        self.assertTrue(ftr_coefficients.name.unique()[0] == "test")
+        self.assertTrue(ftr_coefficients.isna().sum().sum() == 0)
+
+        # Test that running get_ftr_coefficients without a name works
+        try:
+            ftr_coefficients = so.get_ftr_coefficients()
+        except Exception as e:
+            self.fail(f"get_selected_features raised an exception: {e}")
+        # Test that the output is as expected
+        self.assertIsInstance(ftr_coefficients, pd.DataFrame)
+        self.assertEqual(ftr_coefficients.shape[1], 5)
+        self.assertEqual(ftr_coefficients.columns[0], "real_date")
+        self.assertEqual(ftr_coefficients.columns[1], "name")
+        for i in range(2, 5):
+            self.assertEqual(ftr_coefficients.columns[i], self.X.columns[i - 2])
+        self.assertTrue(ftr_coefficients.name.unique()[0] == "test")
+        self.assertTrue(ftr_coefficients.isna().sum().sum() == 0)
+
+    def test_types_get_intercepts(self):
+        so = self.so_with_calculated_preds
+        # Test that a wrong signal name raises an error
+        with self.assertRaises(ValueError):
+            so.get_intercepts(name="test2")
+        with self.assertRaises(ValueError):
+            so.get_intercepts(name=["test", "test2"])
+        # Test that the wrong dtype of a signal name raises an error
+        with self.assertRaises(TypeError):
+            so.get_intercepts(name=1)
+        with self.assertRaises(TypeError):
+            so.get_intercepts(name={})
+
+    def test_valid_get_intercepts(self):
+        so = self.so_with_calculated_preds
+        # Test that running get_intercepts on pipeline "test" works
+        try:
+            intercepts = so.get_intercepts(name="test")
+        except Exception as e:
+            self.fail(f"get_intercepts raised an exception: {e}")
+        # Test that the output is as expected
+        self.assertIsInstance(intercepts, pd.DataFrame)
+        self.assertEqual(intercepts.shape[1], 3)
+        self.assertEqual(intercepts.columns[0], "real_date")
+        self.assertEqual(intercepts.columns[1], "name")
+        self.assertEqual(intercepts.columns[2], "intercepts")
+        self.assertTrue(intercepts.name.unique()[0] == "test")
+        self.assertTrue(intercepts.isna().sum().sum() == 0)
+
+        # Test that running get_intercepts without a name works
+        try:
+            intercepts = so.get_intercepts()
+        except Exception as e:
+            self.fail(f"get_intercepts raised an exception: {e}")
+        # Test that the output is as expected
+        self.assertIsInstance(intercepts, pd.DataFrame)
+        self.assertEqual(intercepts.shape[1], 3)
+        self.assertEqual(intercepts.columns[0], "real_date")
+        self.assertEqual(intercepts.columns[1], "name")
+        self.assertEqual(intercepts.columns[2], "intercepts")
+        self.assertTrue(intercepts.name.unique()[0] == "test")
+        self.assertTrue(intercepts.isna().sum().sum() == 0)
+
+    def test_types_feature_selection_heatmap(self):
+        so = self.so_with_calculated_preds
+
+        with self.assertRaises(TypeError):
+            so.feature_selection_heatmap(name=1)
+        with self.assertRaises(TypeError):
+            so.feature_selection_heatmap(name=["test"])
+        with self.assertRaises(ValueError):
+            so.feature_selection_heatmap(name="test2")
+        # title
+        with self.assertRaises(TypeError):
+            so.feature_selection_heatmap(name="test", title=1)
+        # figsize
+        with self.assertRaises(TypeError):
+            so.feature_selection_heatmap(name="test", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so.feature_selection_heatmap(name="test", figsize=1)
+        with self.assertRaises(TypeError):
+            so.feature_selection_heatmap(
+                name="test", figsize=[1.5, 2]
+            )  # needs to be a tuple!
+        with self.assertRaises(TypeError):
+            so.feature_selection_heatmap(name="test", figsize=(1.5, "e"))
+        with self.assertRaises(ValueError):
+            so.feature_selection_heatmap(name="test", figsize=(0,))
+        with self.assertRaises(ValueError):
+            so.feature_selection_heatmap(name="test", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
+            so.feature_selection_heatmap(name="test", figsize=(2, -1))
+
+    def test_valid_feature_selection_heatmap(self):
+        so = self.so_with_calculated_preds
+        try:
+            so.feature_selection_heatmap(name="test")
+        except Exception as e:
+            self.fail(f"feature_selection_heatmap raised an exception: {e}")
+
+    def test_types_coefs_timeplot(self):
+        so = self.so_with_calculated_preds
+        # Test that a wrong signal name raises an error
+        with self.assertRaises(ValueError):
+            so.coefs_timeplot(name="test2")
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name=1)
+        # title
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", title=1)
+        # figsize
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", figsize="figsize")
+        with self.assertRaises(ValueError):
+            so.coefs_timeplot(name="test", figsize=(0, 1, 2))
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", figsize=("hello", "hello"))
+        # ftrs_renamed
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", ftrs_renamed=1)
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", ftrs_renamed={1: "ftr1"})
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", ftrs_renamed={"ftr1": 1})
+        with self.assertRaises(ValueError):
+            so.coefs_timeplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
+
+    def test_valid_coefs_timeplot(self):
+        so = self.so_with_calculated_preds
+        # Test that running coefs_timeplot on pipeline "test" works
+        try:
+            so.coefs_timeplot(name="test")
+        except Exception as e:
+            self.fail(f"coefs_timeplot raised an exception: {e}")
+        # Check that the legend is correct
+        ax = plt.gca()
+        legend = ax.get_legend()
+        labels = [text.get_text() for text in legend.get_texts()]
+        self.assertTrue(np.all(sorted(self.X.columns) == sorted(labels)))
+        # Now rerun coefs_timeplot but with a feature renaming dictionary
+        ftr_dict = {"CPI": "inflation"}
+        try:
+            so.coefs_timeplot(name="test", ftrs_renamed=ftr_dict)
+        except Exception as e:
+            self.fail(f"coefs_timeplot raised an exception: {e}")
+        ax = plt.gca()
+        legend = ax.get_legend()
+        labels = [text.get_text() for text in legend.get_texts()]
+        self.assertTrue(
+            np.all(
+                sorted(self.X.rename(columns=ftr_dict).columns) == sorted(labels)
+            )
+        )
+        # Now rename two features
+        ftr_dict = {"CPI": "inflation", "GROWTH": "growth"}
+        try:
+            so.coefs_timeplot(name="test", ftrs_renamed=ftr_dict)
+        except Exception as e:
+            self.fail(f"coefs_timeplot raised an exception: {e}")
+        ax = plt.gca()
+        legend = ax.get_legend()
+        labels = [text.get_text() for text in legend.get_texts()]
+        self.assertTrue(
+            np.all(
+                sorted(self.X.rename(columns=ftr_dict).columns) == sorted(labels)
+            )
+        )
+        # Now rename all features
+        ftr_dict = {ftr: f"ftr{i}" for i, ftr in enumerate(self.X.columns)}
+        try:
+            so.coefs_timeplot(name="test", ftrs_renamed=ftr_dict)
+        except Exception as e:
+            self.fail(f"coefs_timeplot raised an exception: {e}")
+        ax = plt.gca()
+        legend = ax.get_legend()
+        labels = [text.get_text() for text in legend.get_texts()]
+        self.assertTrue(
+            np.all(
+                sorted(self.X.rename(columns=ftr_dict).columns) == sorted(labels)
+            )
+        )
+        # Finally, test that the title works
+        title = ax.get_title()
+        self.assertTrue(title == "Feature coefficients for pipeline: test")
+        # Try changing the title
+        try:
+            so.coefs_timeplot(name="test", title="hello")
+        except Exception as e:
+            self.fail(f"coefs_timeplot raised an exception: {e}")
+        ax = plt.gca()
+        title = ax.get_title()
+        self.assertTrue(title == "hello")
+
+    def test_types_intercepts_timeplot(self):
+        so = self.so_with_calculated_preds
+        # Test that a wrong signal name raises an error
+        with self.assertRaises(ValueError):
+            so.intercepts_timeplot(name="test2")
+        with self.assertRaises(TypeError):
+            so.intercepts_timeplot(name=1)
+        # title
+        with self.assertRaises(TypeError):
+            so.intercepts_timeplot(name="test", title=1)
+        # figsize
+        with self.assertRaises(TypeError):
+            so.intercepts_timeplot(name="test", figsize="figsize")
+        with self.assertRaises(ValueError):
+            so.intercepts_timeplot(name="test", figsize=(0, 1, 2))
+        with self.assertRaises(TypeError):
+            so.intercepts_timeplot(name="test", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
+            so.intercepts_timeplot(name="test", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
+            so.intercepts_timeplot(name="test", figsize=("hello", "hello"))
+
+    def test_valid_intercepts_timeplot(self):
+        so = self.so_with_calculated_preds
+        # Test that running intercepts_timeplot on pipeline "test" works
+        try:
+            so.intercepts_timeplot(name="test")
+        except Exception as e:
+            self.fail(f"intercepts_timeplot raised an exception: {e}")
+
+    def test_types_coefs_stackedbarplot(self):
+        so = self.so_with_calculated_preds
+        # Test that a wrong signal name raises an error
+        with self.assertRaises(ValueError):
+            so.coefs_stackedbarplot(name="test2")
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name=1)
+        # title
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", title=1)
+        # figsize
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", figsize="figsize")
+        with self.assertRaises(ValueError):
+            so.coefs_stackedbarplot(name="test", figsize=(0, 1, 2))
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", figsize=("hello", "hello"))
+        # ftrs_renamed
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", ftrs_renamed=1)
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", ftrs_renamed={1: "ftr1"})
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", ftrs_renamed={"ftr1": 1})
+        with self.assertRaises(ValueError):
+            so.coefs_stackedbarplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
+
+    def test_valid_coefs_stackedbarplot(self):
+        so = self.so_with_calculated_preds
+        # Test that running coefs_stackedbarplot on pipeline "test" works
+        try:
+            so.coefs_stackedbarplot(name="test")
+        except Exception as e:
+            self.fail(f"coefs_stackedbarplot raised an exception: {e}")
+        # Check that the title is correct
+        ax = plt.gca()
+        title = ax.get_title()
+        self.assertTrue(title == "Stacked bar plot of model coefficients: test")
+        # Change the title
+        try:
+            so.coefs_stackedbarplot(name="test", title="hello")
+        except Exception as e:
+            self.fail(f"coefs_stackedbarplot raised an exception: {e}")
+        ax = plt.gca()
+        title = ax.get_title()
+        self.assertTrue(title == "hello")
+        # Now rerun coefs_stackedbarplot but with a feature renaming dictionary
+        ftr_dict = {"CPI": "inflation"}
+        try:
+            so.coefs_stackedbarplot(name="test", ftrs_renamed=ftr_dict)
+        except Exception as e:
+            self.fail(f"coefs_stackedbarplot raised an exception: {e}")
+        ax = plt.gca()
+        legend = ax.get_legend()
+        labels = sorted([text.get_text() for text in legend.get_texts()])
+        # Check that the legend is correct
+        ftrcoef_df = so.get_ftr_coefficients(name="test")
+        ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
+        ftrcoef_df = ftrcoef_df.drop(columns=["real_date", "name"])
+        ftrcoef_df = ftrcoef_df.rename(columns=ftr_dict)
+        avg_coefs = ftrcoef_df.groupby("year").mean()
+        pos_coefs = avg_coefs.clip(lower=0)
+        neg_coefs = avg_coefs.clip(upper=0)
+        correct_labels = [
+            col for col in list(pos_coefs.sum().index[pos_coefs.sum() > 0])
+        ]
+        correct_labels += [
+            col for col in list(neg_coefs.sum().index[neg_coefs.sum() < 0])
+        ]
+        correct_labels = sorted(list(set(correct_labels)))
+        self.assertTrue(np.all(labels == correct_labels))
+
+    def test_invalid_plots(self):
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+        )
+        # # Test that an error is raised if calculate_predictions has not been run
+        # with self.assertRaises(ValueError):
+        #     so.nsplits_timeplot(name="test")
+        # Test that an error is raised if calculate_predictions has not been run
+        with self.assertRaises(ValueError):
+            so.coefs_stackedbarplot(name="test")
+        # Test that an error is raised if calculate_predictions has not been run
+        with self.assertRaises(ValueError):
+            so.intercepts_timeplot(name="test")
+        # Test that an error is raised if calculate_predictions has not been run
+        with self.assertRaises(ValueError):
+            so.coefs_timeplot(name="test")
+        # Test that if no signals have been calculated, an error is raised
+        with self.assertRaises(ValueError):
+            so.get_ftr_coefficients(name="test")
+        # Test that if no signals have been calculated, an error is raised
+        with self.assertRaises(ValueError):
+            so.get_intercepts(name="test")
+        # Test that if no signals have been calculated, an error is raised
+        with self.assertRaises(ValueError):
+            so.get_selected_features(name="test")
+        # Test that invalid names are caught
+        with self.assertRaises(TypeError):
+            so.feature_selection_heatmap(name=1)
+        with self.assertRaises(TypeError):
+            so.feature_selection_heatmap(name=[1, 2, 3])
+        with self.assertRaises(ValueError):
+            so.feature_selection_heatmap(name="test")
+        # Test that invalid names are caught
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name=1)
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name=[1, 2, 3])
+        with self.assertRaises(ValueError):
+            so.models_heatmap(name="test")
+
 def _get_X_y(so: SignalOptimizer):
     df_long = (
         categories_df(
@@ -1482,3 +2007,8 @@ def _get_X_y(so: SignalOptimizer):
     X = df_long.iloc[:, :-1]
     y = df_long.iloc[:, -1]
     return X, y, df_long
+
+if __name__ == "__main__":
+    Test = TestAll()
+    Test.setUpClass()
+    Test.test_valid_coefs_stackedbarplot()
