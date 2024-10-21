@@ -547,7 +547,7 @@ class TestReduceDF(unittest.TestCase):
 
         # check that the dates are within the range
         self.assertEqual(
-            set(new_df["real_date"].unique()),
+            set(new_df["real_date"]),
             set(pd.bdate_range(reduce_start, reduce_end)),
         )
 
@@ -578,7 +578,7 @@ class TestReduceDF(unittest.TestCase):
 
         # check that the dates are within the range
         self.assertEqual(
-            set(new_df["real_date"].unique()),
+            set(new_df["real_date"]),
             set(pd.bdate_range(reduce_start, reduce_end)),
         )
 
