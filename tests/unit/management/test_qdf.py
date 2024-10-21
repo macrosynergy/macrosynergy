@@ -325,7 +325,7 @@ class TestQDFMethods(unittest.TestCase):
 
         tickers = helper_random_tickers(50)
         sel_tickers = random.sample(tickers, 10)
-        test_df: pd.DataFrame = make_test_df(tickers=tickers, cids=None, xcats=None)
+        test_df: pd.DataFrame = make_test_df(tickers=tickers)
 
         for (cid, xcat), sdf in test_df.groupby(["cid", "xcat"], observed=True):
             if f"{cid}_{xcat}" in sel_tickers:
@@ -348,9 +348,7 @@ class TestQDFMethods(unittest.TestCase):
         self.assertTrue(set(tickers) - set(out_tickers) == set(sel_tickers))
 
         # test return when no nans
-        test_qdf = make_test_df(
-            tickers=helper_random_tickers(10), cids=None, xcats=None
-        )
+        test_qdf = make_test_df(tickers=helper_random_tickers(10))
         self.assertTrue(drop_nan_series(test_qdf).equals(test_qdf))
 
         # test with non QuantamentalDataFrame
@@ -365,7 +363,7 @@ class TestQDFMethods(unittest.TestCase):
 
     def test_add_nan_series(self):
         tickers = helper_random_tickers(10)
-        test_df: pd.DataFrame = make_test_df(tickers=tickers, cids=None, xcats=None)
+        test_df: pd.DataFrame = make_test_df(tickers=tickers)
         sel_ticker = random.choice(tickers)
         # add a series of nans
         new_df = add_nan_series(test_df, ticker=sel_ticker)
@@ -398,7 +396,7 @@ class TestQDFMethods(unittest.TestCase):
 
     def test_qdf_to_wide_df(self):
         tickers = helper_random_tickers(10)
-        test_df: pd.DataFrame = make_test_df(tickers=tickers, cids=None, xcats=None)
+        test_df: pd.DataFrame = make_test_df(tickers=tickers)
 
         qdf = QuantamentalDataFrame(test_df)
         wide_df = qdf_to_wide_df(qdf)
@@ -502,10 +500,11 @@ class TestQDFMethods(unittest.TestCase):
 class TestReduceDF(unittest.TestCase):
     def test_reduce_df_basic(self):
         tickers = helper_random_tickers(20)
-        test_df: pd.DataFrame = make_test_df(tickers=tickers, cids=None, xcats=None)
+        test_df: pd.DataFrame = make_test_df(tickers=tickers)
 
         qdf = QuantamentalDataFrame(test_df)
-
+        orig_cids = set(qdf["cid"].unique())
+        orig_xcats = set(qdf["xcat"].unique())
         # test with no cids or xcats
         new_df: QuantamentalDataFrame = reduce_df(qdf)
         self.assertTrue(new_df.equals(qdf))
@@ -516,6 +515,230 @@ class TestReduceDF(unittest.TestCase):
 
         found_cids = new_df["cid"].unique()
         found_xcats = new_df["xcat"].unique()
+
+        # should be the same as the original
+        self.assertTrue(set(found_cids) == orig_cids)
+        self.assertTrue(set(found_xcats) == orig_xcats)
+
+    def test_reduce_df_across_cid(self):
+        tickers = helper_random_tickers(20)
+        start = "2010-01-01"
+        end = "2010-12-31"
+        test_df: pd.DataFrame = make_test_df(tickers=tickers, start=start, end=end)
+
+        qdf = QuantamentalDataFrame(test_df)
+        orig_cids = set(qdf["cid"].unique())
+        orig_xcats = set(qdf["xcat"].unique())
+
+        reduce_cids = random.sample(list(orig_cids), random.randint(2, 5))
+        rel_tickers = sorted(set([t for t in tickers if get_cid(t) in reduce_cids]))
+        reduce_start = pd.Timestamp("2010-06-06")
+        reduce_end = pd.Timestamp("2010-08-25")
+        # test with cids
+        new_df: QuantamentalDataFrame = reduce_df(
+            qdf, cids=reduce_cids, start=reduce_start, end=reduce_end
+        )
+
+        # check that the cids are the same
+        self.assertTrue(set(new_df["cid"].unique()) == set(reduce_cids))
+
+        found_tickers = new_df["cid"].astype(str) + "_" + new_df["xcat"].astype(str)
+        self.assertTrue(set(found_tickers) == set(rel_tickers))
+
+        # check that the dates are within the range
+        self.assertEqual(
+            set(new_df["real_date"].unique()),
+            set(pd.bdate_range(reduce_start, reduce_end)),
+        )
+
+    def test_reduce_df_across_xcat(self):
+        tickers = helper_random_tickers(20)
+        start = "2010-01-01"
+        end = "2010-12-31"
+        test_df: pd.DataFrame = make_test_df(tickers=tickers)
+
+        qdf = QuantamentalDataFrame(test_df)
+        orig_cids = set(qdf["cid"].unique())
+        orig_xcats = set(qdf["xcat"].unique())
+
+        reduce_xcats = random.sample(list(orig_xcats), random.randint(2, 5))
+        rel_tickers = sorted(set([t for t in tickers if get_xcat(t) in reduce_xcats]))
+        reduce_start = pd.Timestamp("2010-06-01")
+        reduce_end = pd.Timestamp("2010-08-25")
+        # test with cids
+        new_df: QuantamentalDataFrame = reduce_df(
+            qdf, xcats=reduce_xcats, start=reduce_start, end=reduce_end
+        )
+
+        # check that the cids are the same
+        self.assertTrue(set(new_df["xcat"].unique()) == set(reduce_xcats))
+
+        found_tickers = new_df["cid"].astype(str) + "_" + new_df["xcat"].astype(str)
+        self.assertTrue(set(found_tickers) == set(rel_tickers))
+
+        # check that the dates are within the range
+        self.assertEqual(
+            set(new_df["real_date"].unique()),
+            set(pd.bdate_range(reduce_start, reduce_end)),
+        )
+
+    def test_reduce_df_intersect(self):
+        cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
+        xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
+        tickers = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+
+        rm_tickers = ["GBP_FX", "GBP_EQ", "AUD_IR", "JPY_CDS"]
+        tickers = [t for t in tickers if t not in rm_tickers]
+
+        start = "2010-01-01"
+        end = "2010-12-31"
+        test_df: pd.DataFrame = make_test_df(tickers=tickers, metrics=JPMAQS_METRICS)
+
+        qdf = QuantamentalDataFrame(test_df)
+        orig_cids = set(qdf["cid"].unique())
+        orig_xcats = set(qdf["xcat"].unique())
+
+        reduce_xcats = ["FX", "IR", "EQ", "CDS"]
+
+        expected_cids = sorted(
+            set([get_cid(t) for t in tickers if get_cid(t) not in get_cid(rm_tickers)])
+        )
+
+        new_df: QuantamentalDataFrame = reduce_df(
+            qdf, xcats=reduce_xcats, intersect=True, start=start, end=end
+        )
+
+        found_cids = sorted(new_df["cid"].unique())
+        self.assertEqual(set(found_cids), set(expected_cids))
+
+        found_xcats = sorted(new_df["xcat"].unique())
+        self.assertEqual(set(found_xcats), set(reduce_xcats))
+
+        # check that the dates are within the range
+        dtrange = pd.bdate_range(start, end)
+        for (_cid, _xcat), sdf in new_df.groupby(["cid", "xcat"], observed=True):
+            self.assertEqual(set(sdf["real_date"]), set(dtrange))
+
+    def test_reduce_df_blacklist(self):
+        cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
+        xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
+
+        start, end = "2010-01-01", "2015-01-01"
+
+        blacklist = {
+            "GBP": [pd.Timestamp("2010-06-06"), pd.Timestamp("2010-07-23")],
+            "AUD": [pd.Timestamp("2000-01-01"), pd.Timestamp("2025-01-01")],
+        }
+
+        df = make_test_df(
+            cids=cids, xcats=xcats, start=start, end=end, metrics=JPMAQS_METRICS
+        )
+
+        qdf = QuantamentalDataFrame(df)
+
+        new_df = reduce_df(qdf, blacklist=blacklist)
+
+        # test the result = apply_blacklist(qdf, blacklist)
+        expected_df = apply_blacklist(qdf, blacklist)
+
+        self.assertTrue(new_df.equals(expected_df))
+
+        # test with some reduced as well
+        reduce_cids = ["USD", "AUD", "GBP"]
+        reduce_xcats = ["FX", "IR", "EQ"]
+
+        new_df = reduce_df(
+            qdf,
+            blacklist=blacklist,
+            cids=reduce_cids,
+            xcats=reduce_xcats,
+        )
+
+        expected_df = reduce_df(
+            apply_blacklist(df=qdf, blacklist=blacklist),
+            cids=reduce_cids,
+            xcats=reduce_xcats,
+        )
+
+        self.assertTrue(new_df.equals(expected_df))
+
+    def test_reduce_df_str_args(self):
+        cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
+        xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
+        df = make_test_df(cids=cids, xcats=xcats, metrics=JPMAQS_METRICS)
+
+        qdf = QuantamentalDataFrame(df)
+
+        rdf = reduce_df(qdf, cids="USD", xcats="FX")
+
+        expected_df = qdf[(qdf["cid"] == "USD") & (qdf["xcat"] == "FX")].reset_index(
+            drop=True
+        )
+
+        self.assertTrue(rdf.equals(expected_df))
+
+    def test_reduce_df_by_ticker(self):
+        cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
+        xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
+        tickers = [f"{c}_{x}" for c in cids for x in xcats]
+        start = "2010-01-01"
+        end = "2010-12-31"
+        test_df: pd.DataFrame = make_test_df(
+            cids=cids, xcats=xcats, start=start, end=end
+        )
+
+        qdf = QuantamentalDataFrame(test_df)
+
+        sel_tickers = random.sample(tickers, 10)
+        sel_start = "2010-06-10"
+        sel_end = "2010-06-20"
+        new_df: QuantamentalDataFrame = reduce_df_by_ticker(
+            df=qdf, tickers=sel_tickers, start=sel_start, end=sel_end
+        )
+
+        self.assertTrue(set(_get_tickers_series(new_df).unique()) == set(sel_tickers))
+
+        df_ts = _get_tickers_series(qdf)
+        expected_df = qdf.loc[
+            (df_ts.isin(sel_tickers))
+            & (qdf["real_date"] >= pd.Timestamp(sel_start))
+            & (qdf["real_date"] <= pd.Timestamp(sel_end)),
+        ].reset_index(drop=True)
+
+        self.assertTrue(new_df.equals(expected_df))
+
+        # test with non QuantamentalDataFrame
+        with self.assertRaises(TypeError):
+            reduce_df_by_ticker(df=1, tickers=sel_tickers)
+
+        with self.assertRaises(TypeError):
+            reduce_df_by_ticker(df=test_df, tickers=1)
+
+        empty_df = reduce_df_by_ticker(df=test_df, tickers=["random-ticker"])
+        self.assertTrue(empty_df.empty)
+
+        # test with tickers=None
+        new_df = reduce_df_by_ticker(df=qdf, tickers=None)
+
+        self.assertTrue(new_df.equals(qdf))
+
+        # test with blacklist of AUD
+        blacklist = {"AUD": [pd.Timestamp("2010-06-06"), pd.Timestamp("2010-07-23")]}
+        new_df = reduce_df_by_ticker(df=qdf, blacklist=blacklist, tickers=None)
+
+        expected_df = apply_blacklist(qdf, blacklist)
+
+        self.assertTrue(new_df.equals(expected_df))
+
+
+# class TestUpdateDF(unittest.TestCase):
+#     def test_upate_df_basic(self):
+#         tickers = helper_random_tickers(20)
+#         dfa = make_test_df(tickers=tickers[:10])
+#         dfb = make_test_df(tickers=tickers[10:])
+
+#         qdfa = QuantamentalDataFrame(dfa)
+#         qdfb = QuantamentalDataFrame(dfb)
 
 
 class TestConcatQDFs(unittest.TestCase):
