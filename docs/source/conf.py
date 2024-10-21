@@ -25,6 +25,7 @@ extensions = [
     "sphinx_design",
     # "sphinx_changelog",
     "myst_parser",
+    "sphinxcontrib.mermaid",
 ]
 
 autodoc_member_order = "bysource"
