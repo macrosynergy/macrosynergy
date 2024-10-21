@@ -192,7 +192,7 @@ def reduce_df(
         )
     else:
         cids_in_df = df["cid"].unique()
-        cids = sorted(c for c in cids if c in cids_in_df)
+    cids = sorted(c for c in cids if c in cids_in_df)
 
     df = df[df["xcat"].isin(xcats)]
     df = df[df["cid"].isin(cids)]
