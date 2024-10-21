@@ -156,6 +156,7 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
         for ensuing components of the self.split() method.
         """
         self.unique_dates: pd.DatetimeIndex = real_dates.unique().sort_values()
+        
         # First determine the dates for the first training set
         if self.start_date:
             date_last_train = self.start_date
@@ -171,19 +172,19 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
             ]
 
         # Determine all remaining training splits
-        unique_dates_train: pd.arrays.DatetimeArray = self.unique_dates[
-            self.unique_dates.get_loc(date_last_train) + 1 : -self.test_size
+        splits = [
+            self.unique_dates[self.unique_dates <= date_last_train]
         ]
-        n_splits: int = int(np.ceil(len(unique_dates_train) / self.train_intervals))
-        splits: List = np.array_split(unique_dates_train, n_splits)
-        # Add the first training set to the list of training splits, so that the dates
-        # that constitute each training split are together.
-        splits.insert(
-            0,
-            real_dates[real_dates <= date_last_train].unique().sort_values(),
-        )
+        i = self.unique_dates.get_loc(date_last_train)
 
-        self.n_splits = n_splits + 1
+        # Loop until no test sets can be created
+        while (i < len(self.unique_dates) - (self.test_size + 1)):
+            next_loc = i + self.train_intervals
+            splits.append(self.unique_dates[i + 1 : next_loc + 1])
+            i = next_loc
+
+        
+        self.n_splits = len(splits)
 
         return splits
 
