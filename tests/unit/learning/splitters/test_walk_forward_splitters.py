@@ -157,6 +157,8 @@ class TestExpandingIncrement(unittest.TestCase):
     @parameterized.expand(itertools.product([1, 2, 3], [1, 2]))
     def test_valid_split(self, window_size, min_cids):
         # Test functionality on simple dataframe
+        # TODO: replace simple df with a realistic dataframe from the constructor but 
+        # only from the last year of data
         periods1 = 12
         periods2 = 9
         X, y = make_simple_df(periods1=periods1, periods2=periods2)
