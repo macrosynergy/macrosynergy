@@ -415,6 +415,8 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
             Ignored. Exists for compatibility with scikit-learn.
         """
         # X
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError("X must be a pandas dataframe.")
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
         if not pd.api.types.is_datetime64_any_dtype(X.index.get_level_values(1)):
@@ -422,6 +424,8 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
                 f"The dates in X must be datetime objects. Got {X.index.get_level_values(1).dtype} instead."
             )
         # y
+        if not isinstance(y, (pd.DataFrame, pd.Series)):
+            raise TypeError("y must be a pandas dataframe or series.")
         if not isinstance(y.index, pd.MultiIndex):
             raise ValueError("y must be multi-indexed.")
         if not pd.api.types.is_datetime64_any_dtype(y.index.get_level_values(1)):

@@ -1,14 +1,9 @@
-from typing import List
 import unittest
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LinearRegression
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.model_selection import cross_val_score
 import matplotlib
 import matplotlib.pyplot as plt
 from unittest.mock import patch
-from parameterized import parameterized
 
 from macrosynergy.learning import (
     ExpandingKFoldPanelSplit,
