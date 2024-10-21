@@ -40,13 +40,12 @@ def change_column_format(
         raise TypeError("`cols` must be a list of strings.")
 
     for col in cols:
-        curr_type = df[col].dtype
         try:
+            if col not in df.columns:
+                raise ValueError(f"Column '{col}' not found in DataFrame.")
             df[col] = df[col].astype(dtype)
-        except:  # noqa
-            warnings.warn(
-                f"Could not convert column {col} to {dtype} from {curr_type}."
-            )
+        except Exception as exc:
+            warnings.warn(f"Could not convert column {col} to {dtype}. Error: {exc}")
 
     return df
 
@@ -58,6 +57,16 @@ def qdf_to_categorical(
         raise TypeError("`df` must be a pandas DataFrame.")
 
     df = change_column_format(df, QuantamentalDataFrameBase._StrIndexCols, "category")
+    return df
+
+
+def qdf_to_string_index(
+    df: QuantamentalDataFrameBase,
+) -> QuantamentalDataFrameBase:
+    if not isinstance(df, QuantamentalDataFrameBase):
+        raise TypeError("`df` must be a pandas DataFrame.")
+
+    df = change_column_format(df, QuantamentalDataFrameBase._StrIndexCols, "object")
     return df
 
 
@@ -121,9 +130,9 @@ def apply_blacklist(
 
     if not all(
         [isinstance(vv, (str, pd.Timestamp)) for v in blacklist.values() for vv in v]
-    ):
+    ) or any([len(v) != 2 for v in blacklist.values()]):
         raise TypeError(
-            "Values of `blacklist` must be lists of date strings or pandas Timestamps."
+            "Values of `blacklist` must be lists of start & end dates (str or pd.Timestamp)."
         )
 
     for key, value in blacklist.items():
@@ -183,7 +192,7 @@ def reduce_df(
         )
     else:
         cids_in_df = df["cid"].unique()
-        cids = sorted(c for c in cids if c in cids_in_df)
+    cids = sorted(c for c in cids if c in cids_in_df)
 
     df = df[df["xcat"].isin(xcats)]
     df = df[df["cid"].isin(cids)]
@@ -412,11 +421,57 @@ def _add_index_str_column(
     return df
 
 
+def create_empty_categorical_qdf(
+    cid: Optional[str] = None,
+    xcat: Optional[str] = None,
+    ticker: Optional[str] = None,
+    metrics: List[str] = ["value"],
+    date_range: Optional[pd.DatetimeIndex] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    categorical: bool = True,
+) -> QuantamentalDataFrameBase:
+
+    if not all(isinstance(m, str) for m in metrics):
+        raise TypeError("`metrics` must be a list of strings.")
+
+    if (date_range is None) and (start_date is None or end_date is None):
+        raise ValueError(
+            "Either `date_range` or `start_date` & `end_date` must be specified."
+        )
+
+    if date_range is None:
+        date_range = pd.date_range(start=start_date, end=end_date, freq="B")
+
+    if bool(cid) ^ bool(xcat):
+        raise ValueError("`cid` and `xcat` must be specified together.")
+
+    if not (bool(cid) ^ bool(ticker)):
+        raise ValueError("Either specify `cid` & `xcat` or `ticker` but not both.")
+
+    if ticker is not None:
+        cid, xcat = ticker.split("_", 1)
+
+    qdf = pd.DataFrame(columns=["real_date"], data=date_range)
+    qdf = _add_index_str_column(qdf, "cid", cid)
+    qdf = _add_index_str_column(qdf, "xcat", xcat)
+
+    for metric in metrics:
+        qdf[metric] = np.nan
+
+    if not categorical:
+        qdf = qdf_to_string_index(qdf)
+
+    return qdf
+
+
 def add_nan_series(
     df: QuantamentalDataFrameBase,
-    ticker: str,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
+    ticker: Optional[str] = None,
+    cid: Optional[str] = None,
+    xcat: Optional[str] = None,
+    start: Optional[Union[str, pd.Timestamp]] = None,
+    end: Optional[Union[str, pd.Timestamp]] = None,
 ) -> QuantamentalDataFrameBase:
     """
     Add a NaN series to the DataFrame for a given ticker.
@@ -424,37 +479,25 @@ def add_nan_series(
 
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("`df` must be a QuantamentalDataFrame.")
-    if not isinstance(ticker, str):
-        raise TypeError("`ticker` must be a string.")
-    if "_" not in ticker:
-        raise ValueError("Ticker must be in the format 'cid_xcat'.")
 
-    if start is not None:
-        df = df.loc[df["real_date"] >= pd.to_datetime(start)]
-    if end is not None:
-        df = df.loc[df["real_date"] <= pd.to_datetime(end)]
+    metrics = df.columns.difference(QuantamentalDataFrameBase.IndexCols)
 
-    metrics = list(set(df.columns.tolist()) - set(QuantamentalDataFrameBase.IndexCols))
+    if start is None:
+        start = df["real_date"].min()
+    if end is None:
+        end = df["real_date"].max()
 
-    cid, xcat = ticker.split("_", 1)
-
-    # warn for overwriting existing entries
-    if len(df[(df["cid"] == cid) & (df["xcat"] == xcat)]) > 0:
-        warnings.warn(
-            f"Entries for {ticker} already exist in the DataFrame in the given date range. "
-            "The existing entries will be overwritten."
-        )
-
-    nan_df = pd.DataFrame(
-        {
-            "real_date": df["real_date"].unique(),
-            **{metric: np.nan for metric in metrics},
-        }
+    nan_df = create_empty_categorical_qdf(
+        cid=cid,
+        xcat=xcat,
+        ticker=ticker,
+        start_date=start,
+        end_date=end,
+        metrics=metrics,
+        categorical=check_is_categorical(df),
     )
-    nan_df = _add_index_str_column(nan_df, "cid", cid)
-    nan_df = _add_index_str_column(nan_df, "xcat", xcat)
 
-    df = update_df(df=df, df_add=QuantamentalDataFrameBase(nan_df))
+    df = update_df(df=df, df_add=nan_df)
     return df
 
 
@@ -532,47 +575,6 @@ def qdf_from_timseries(
     return QuantamentalDataFrameBase(df)
 
 
-def create_empty_categorical_qdf(
-    cid: Optional[str] = None,
-    xcat: Optional[str] = None,
-    ticker: Optional[str] = None,
-    metrics: List[str] = ["value"],
-    date_range: Optional[pd.DatetimeIndex] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    categorical: bool = True,
-) -> QuantamentalDataFrameBase:
-
-    if not all(isinstance(m, str) for m in metrics):
-        raise TypeError("`metrics` must be a list of strings.")
-
-    if (date_range is None) and (start_date is None or end_date is None):
-        raise ValueError(
-            "Either `date_range` or `start_date` & `end_date` must be specified."
-        )
-
-    if date_range is None:
-        date_range = pd.date_range(start=start_date, end=end_date, freq="B")
-
-    if bool(cid) ^ bool(xcat):
-        raise ValueError("`cid` and `xcat` must be specified together.")
-
-    if not (bool(cid) ^ bool(ticker)):
-        raise ValueError("Either specify `cid` & `xcat` or `ticker` but not both.")
-
-    if ticker is not None:
-        cid, xcat = ticker.split("_", 1)
-
-    qdf = pd.DataFrame(columns=["real_date"], data=date_range)
-    qdf = _add_index_str_column(qdf, "cid", cid)
-    qdf = _add_index_str_column(qdf, "xcat", xcat)
-
-    for metric in metrics:
-        qdf[metric] = np.nan
-
-    return qdf
-
-
 def concat_qdfs(
     qdf_list: List[QuantamentalDataFrameBase],
 ) -> QuantamentalDataFrameBase:
@@ -641,4 +643,6 @@ def concat_qdfs(
         ),
     )
 
-    return df.reset_index(drop=True)
+    return df.sort_values(by=QuantamentalDataFrameBase.IndexColsSortOrder).reset_index(
+        drop=True
+    )[get_col_sort_order(df)]
