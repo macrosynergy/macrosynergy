@@ -807,6 +807,7 @@ class TestAll(unittest.TestCase):
                     "intercepts",
                     "selected_ftrs",
                     "predictions",
+                    "ftr_corr",
                 }
             )
 
@@ -1243,4 +1244,4 @@ def _get_X_y(so: SignalOptimizer):
 if __name__ == "__main__":
     Test = TestAll()
     Test.setUpClass()
-    Test.test_valid_coefs_stackedbarplot()
+    Test.test_valid_worker()

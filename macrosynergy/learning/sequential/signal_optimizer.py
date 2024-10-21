@@ -224,7 +224,8 @@ class SignalOptimizer(BasePanelLearner):
         :param <bool> store_correlations: Whether to store the correlations between input
             pipeline features and input predictor features. Default is False.
         """
-
+        if not isinstance(store_correlations, bool):
+            raise TypeError("The store_correlations argument must be a boolean.")
         self.store_correlations = store_correlations
 
         # First create pandas dataframes to store the forecasts
@@ -264,6 +265,7 @@ class SignalOptimizer(BasePanelLearner):
         ftr_coef_data = []
         intercept_data = []
         ftr_selection_data = []
+        ftr_corr_data = []
 
         for split_result in results:
             prediction_data.append(split_result["predictions"])
@@ -271,6 +273,7 @@ class SignalOptimizer(BasePanelLearner):
             ftr_coef_data.append(split_result["ftr_coefficients"])
             intercept_data.append(split_result["intercepts"])
             ftr_selection_data.append(split_result["selected_ftrs"])
+            ftr_corr_data.extend(split_result["ftr_corr"])
 
         # Create quantamental dataframe of forecasts
         for pipeline_name, idx, forecasts in prediction_data:
@@ -370,6 +373,26 @@ class SignalOptimizer(BasePanelLearner):
             ),
             axis=0,
         ).astype(ftr_selection_types)
+
+        ftr_corr_df_long = pd.DataFrame(
+            columns=self.ftr_corr.columns, data=ftr_corr_data
+        )
+
+        self.ftr_corr = pd.concat(
+            (
+                self.ftr_corr,
+                ftr_corr_df_long,
+            ),
+            axis=0,
+        ).astype(
+            {
+                "real_date": "datetime64[ns]",
+                "name": "object",
+                "predictor_input": "object",
+                "pipeline_input": "object",
+                "pearson": "float",
+            }
+        )
 
     def store_split_data(
         self,
@@ -515,7 +538,7 @@ class SignalOptimizer(BasePanelLearner):
                 for feature_name in X_train.columns
             ]
         else:
-            ftr_corr_data = None
+            ftr_corr_data = []
         return ftr_corr_data
 
     def get_optimized_signals(self, name=None):
