@@ -12,10 +12,11 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from joblib import Parallel, delayed
-from sklearn.base import BaseEstimator
+from sklearn.base import RegressorMixin, ClassifierMixin
 from sklearn.model_selection import BaseCrossValidator, GridSearchCV, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics._scorer import _BaseScorer
 from tqdm.auto import tqdm
 
 from macrosynergy.compat import JOBLIB_RETURN_AS
@@ -220,7 +221,7 @@ class BasePanelLearner(ABC):
                 n_splits_add=(
                     {
                         splitter_name: (
-                            np.ceil(split_function(iteration))
+                            int(np.ceil(split_function(iteration * outer_splitter.test_size)))
                             if split_function is not None
                             else 0
                         )
@@ -316,7 +317,7 @@ class BasePanelLearner(ABC):
                 [self.date_levels[i] if i >= 0 else pd.NaT for i in locs]
             )
             # Now formulate correct index
-            date_map = dict(zip(test_date_levels, adj_test_date_levels))
+            date_map = dict(zip(sorted_test_date_levels, adj_test_date_levels))
             mapped_dates = test_date_levels.map(date_map)
             test_index = pd.MultiIndex.from_arrays(
                 [test_xs_levels, mapped_dates], names=["cid", "real_date"]
@@ -424,7 +425,7 @@ class BasePanelLearner(ABC):
 
         for splitter in inner_splitters.values():
             cv_splits.extend(list(splitter.split(X=X_train, y=y_train)))
-        # TODO (for Eric): instead of picking one model, the best hyperparameters could be selected
+        # TODO: instead of picking one model, the best hyperparameters could be selected
         # for each model and then "final" prediction would be the average of the individual
         # predictions. This would be a simple ensemble method.
         for model_name, model in models.items():
@@ -457,10 +458,6 @@ class BasePanelLearner(ABC):
                         normalize_fold_results=normalize_fold_results,
                     ),
                     cv=cv_splits,
-                )
-            else:
-                raise NotImplementedError(
-                    f"Search type {search_type} is not implemented."
                 )
 
             try:
@@ -528,9 +525,9 @@ class BasePanelLearner(ABC):
             if col.startswith("split") and "test" in col
         ]
         if normalize_fold_results:
-            cv_results[metric_columns] = (
-                cv_results[metric_columns] - cv_results[metric_columns].mean()
-            ) / cv_results[metric_columns].std()
+            cv_results[metric_columns] = StandardScaler().fit_transform(
+                cv_results[metric_columns]
+            )
 
         # For each metric, summarise the scores across folds for each hyperparameter choice
         # using cv_summary
@@ -554,6 +551,7 @@ class BasePanelLearner(ABC):
                     axis=1
                 ) / cv_results[scorer_columns].std(axis=1)
             # TODO sort out mad - this should create an error for now
+            # sort out NaNs for mad as well
             elif cv_summary == "median-mad":
                 cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].median(
                     axis=1
@@ -568,7 +566,7 @@ class BasePanelLearner(ABC):
                     cv_summary, axis=1
                 )
 
-        # Now apply min-max scaling to the summary scores
+        # Now scale the summary scores for each scorer
         scaler = StandardScaler()
         summary_cols = [f"{scorer}_summary" for scorer in scorers.keys()]
         cv_results[summary_cols] = scaler.fit_transform(cv_results[summary_cols])
@@ -955,6 +953,8 @@ class BasePanelLearner(ABC):
         # xcat_aggs checks
         if not isinstance(xcat_aggs, list):
             raise TypeError("xcat_aggs must be a list.")
+        if not all(isinstance(xcat_agg, str) for xcat_agg in xcat_aggs):
+            raise ValueError("All elements in xcat_aggs must be strings.")
         if len(xcat_aggs) != 2:
             raise ValueError("xcat_aggs must have exactly two elements.")
 
@@ -1021,17 +1021,19 @@ class BasePanelLearner(ABC):
                 "outer_splitter must be an instance of ExpandingFrequencyPanelSplit or ExpandingIncrementPanelSplit."
             )
 
-        # inner splitter
+        # inner splitters
         if not isinstance(inner_splitters, dict):
             raise TypeError("inner splitters should be specified as a dictionary")
-
+        if inner_splitters == {}:
+            raise ValueError("The inner splitters dictionary cannot be empty.")
+        
         for names in inner_splitters.keys():
             if not isinstance(names, str):
-                raise TypeError(
+                raise ValueError(
                     "The keys of the inner splitters dictionary must be strings."
                 )
             if not isinstance(inner_splitters[names], BaseCrossValidator):
-                raise TypeError(
+                raise ValueError(
                     "The values of the inner splitters dictionary must be instances of BaseCrossValidator."
                 )
 
@@ -1042,9 +1044,9 @@ class BasePanelLearner(ABC):
             raise ValueError("The models dictionary cannot be empty.")
         for key in models.keys():
             if not isinstance(key, str):
-                raise TypeError("The keys of the models dictionary must be strings.")
-            if not isinstance(models[key], (BaseEstimator, Pipeline)):
-                raise TypeError(
+                raise ValueError("The keys of the models dictionary must be strings.")
+            if not isinstance(models[key], (RegressorMixin, ClassifierMixin, Pipeline)):
+                raise ValueError(
                     "The values of the models dictionary must be sklearn predictors or "
                     "pipelines."
                 )
@@ -1054,23 +1056,23 @@ class BasePanelLearner(ABC):
             raise TypeError("The hyperparameters argument must be a dictionary.")
         for pipe_name, pipe_params in hyperparameters.items():
             if not isinstance(pipe_name, str):
-                raise TypeError(
+                raise ValueError(
                     "The keys of the hyperparameters dictionary must be strings."
                 )
             if not isinstance(pipe_params, dict):
-                raise TypeError(
+                raise ValueError(
                     "The values of the hyperparameters dictionary must be dictionaries."
                 )
             if pipe_params != {}:
                 for hparam_key, hparam_values in pipe_params.items():
                     if not isinstance(hparam_key, str):
-                        raise TypeError(
+                        raise ValueError(
                             "The keys of the inner hyperparameters dictionaries must be "
                             "strings."
                         )
                     if search_type == "grid":
                         if not isinstance(hparam_values, list):
-                            raise TypeError(
+                            raise ValueError(
                                 "The values of the inner hyperparameters dictionaries must be "
                                 "lists if hparam_type is 'grid'."
                             )
@@ -1105,26 +1107,32 @@ class BasePanelLearner(ABC):
         # scorers
         if not isinstance(scorers, dict):
             raise TypeError("scorers must be a dictionary.")
+        if scorers == {}:
+            raise ValueError("The scorers dictionary cannot be empty.")
         for key in scorers.keys():
             if not isinstance(key, str):
-                raise TypeError("The keys of the scorers dictionary must be strings.")
+                raise ValueError("The keys of the scorers dictionary must be strings.")
             if not callable(scorers[key]):
-                raise TypeError(
+                raise ValueError(
                     "The values of the scorers dictionary must be callable scoring functions."
                 )
-
-        # normalize_fold_results
-        if not isinstance(normalize_fold_results, bool):
-            raise TypeError("normalize_fold_results must be a boolean.")
+            if not isinstance(scorers[key], _BaseScorer):
+                raise ValueError(
+                    "The values of the scorers dictionary must be instances of `scikit-learn`'s _BaseScorer."
+                )
 
         # search_type
         if not isinstance(search_type, str):
             raise TypeError("search_type must be a string.")
         if search_type not in ["grid", "prior", "bayes"]:
             raise ValueError("search_type must be one of 'grid', 'prior' or 'bayes'.")
+        if search_type == "bayes":
+            raise NotImplementedError(
+                "Bayesian hyperparameter search is not yet implemented."
+            )
 
         # cv_summary
-        if not isinstance(cv_summary, (str, callable)):
+        if not isinstance(cv_summary, str) and not callable(cv_summary):
             raise TypeError("cv_summary must be a string or a callable.")
         if isinstance(cv_summary, str):
             if cv_summary not in [
@@ -1132,12 +1140,9 @@ class BasePanelLearner(ABC):
                 "median",
                 "mean-std",
                 "mean/std",
-                "median-mad",
-                "median/mad",
             ]:
                 raise ValueError(
-                    "cv_summary must be one of 'mean', 'median', 'mean-std', 'mean/std', "
-                    "'median-mad' or 'median/mad'."
+                    "cv_summary must be one of 'mean', 'median', 'mean-std' or 'mean/std'"
                 )
         else:
             try:
@@ -1162,6 +1167,37 @@ class BasePanelLearner(ABC):
                 raise ValueError("The n_iter argument must be greater than zero.")
         elif n_iter is not None and not isinstance(n_iter, int):
             raise ValueError("n_iter must only be used if search_type is 'prior'.")
+        
+        # normalize_fold_results
+        if not isinstance(normalize_fold_results, bool):
+            raise TypeError("normalize_fold_results must be a boolean.")
+        if normalize_fold_results:
+            if search_type == "grid":
+                for model in hyperparameters.keys():
+                    num_models = sum([len(hyperparameters[model][hparam]) for hparam in hyperparameters[model].keys()])
+                    if num_models < 2:
+                        raise ValueError(
+                            "normalize_fold_results cannot be True if there are less than 2 candidate models. "
+                            f"This is the case for the model {model}."
+                        )
+                    if num_models == 2:
+                        warnings.warn(
+                            "normalize_fold_results is True but there are only two candidate models for "
+                            f"the model {model}. It is recommended for at least three candidate models "
+                            "to be available for normalization to be meaningful.",
+                            UserWarning,
+                        )
+            elif search_type == "prior":
+                if n_iter < 2:
+                    raise ValueError(
+                        "normalize_fold_results cannot be True if n_iter is less than 2."
+                    )
+                if n_iter == 2:
+                    warnings.warn(
+                        "normalize_fold_results is True but n_iter is 2. It is recommended for n_iter to be "
+                        "at least 3 for normalization to be meaningful.",
+                        UserWarning,
+                    )
 
         # split_functions
         if split_functions is not None:
@@ -1175,12 +1211,12 @@ class BasePanelLearner(ABC):
                 )
             for key in split_functions.keys():
                 if not isinstance(key, str):
-                    raise TypeError(
+                    raise ValueError(
                         "The keys of the split_functions dictionary must be strings."
                     )
                 if split_functions[key] is not None:
                     if not callable(split_functions[key]):
-                        raise TypeError(
+                        raise ValueError(
                             "The values of the split_functions dictionary must be callables or None."
                         )
 
