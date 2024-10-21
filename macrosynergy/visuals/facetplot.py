@@ -14,6 +14,7 @@ import pandas as pd
 from matplotlib.gridspec import GridSpec
 
 from macrosynergy.visuals.plotter import Plotter
+from macrosynergy.management.types import QuantamentalDataFrame
 from numbers import Number
 
 
@@ -386,9 +387,7 @@ class FacetPlot(Plotter):
         _cids: List[str] = self.cids if cids is None else cids
         _xcats: List[str] = self.xcats if xcats is None else xcats
 
-        tickers_to_plot: List[str] = (
-            (self.df["cid"] + "_" + self.df["xcat"]).unique().tolist()
-        )
+        tickers_to_plot: List[str] = QuantamentalDataFrame(self.df).list_tickers()
 
         _tk: List[str] = tickers_to_plot.copy()
         if compare_series:

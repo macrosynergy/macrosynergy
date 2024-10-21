@@ -21,6 +21,7 @@ from macrosynergy.management.utils import (
     update_df,
     _map_to_business_day_frequency,
 )
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.signal import SignalReturnRelations
 
@@ -61,8 +62,10 @@ class NaivePnL:
         end: str = None,
         blacklist: dict = None,
     ):
-        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+        cols = ["cid", "xcat", "real_date", "value"]
 
+        df = QuantamentalDataFrame(df[cols])
+        self._as_categorical = df.InitializedAsCategorical
         # Will host the benchmarks.
         self.dfd = df
 
@@ -70,7 +73,6 @@ class NaivePnL:
         self.ret = ret
         xcats = [ret] + sigs
 
-        cols = ["cid", "xcat", "real_date", "value"]
         # Potentially excludes the benchmarks but will be held on the instance level
         # through self.dfd.
         self.df, self.xcats, self.cids = reduce_df(
@@ -81,8 +83,6 @@ class NaivePnL:
 
         ticker_func = lambda t: t[0] + "_" + t[1]
         self.tickers = list(map(ticker_func, product(self.cids, self.xcats)))
-
-        self.df["real_date"] = pd.to_datetime(self.df["real_date"])
 
         # Data structure used to track all of the generated PnLs from make_pnl() method.
         self.pnl_names = []
@@ -188,7 +188,7 @@ class NaivePnL:
             )
 
             df_ms = df_ms.drop("xcat", axis=1)
-            df_ms["xcat"] = "psig"
+            df_ms = QuantamentalDataFrame.from_long_df(df_ms, xcat="psig")
 
             dfx_concat = pd.concat([dfx, df_ms])
             dfw = dfx_concat.pivot(
@@ -198,7 +198,7 @@ class NaivePnL:
         # Reconstruct the DataFrame to recognise the signal's start date for each
         # individual cross-section
         dfw_list = []
-        for c, cid_df in dfw.groupby(level=0):
+        for c, cid_df in dfw.groupby(level=0, observed=True):
             first_date = cid_df.loc[:, "psig"].first_valid_index()
             cid_df = cid_df.loc[first_date:, :]
             dfw_list.append(cid_df)
@@ -228,7 +228,10 @@ class NaivePnL:
         dfw["year"] = dfw["real_date"].dt.year
         if rebal_freq == "monthly":
             dfw["month"] = dfw["real_date"].dt.month
-            rebal_dates = dfw.groupby(["cid", "year", "month"])["real_date"].min()
+            rebal_dates = dfw.groupby(
+                ["cid", "year", "month"],
+                observed=True,
+            )["real_date"].min()
         elif rebal_freq == "weekly":
             dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
             rebal_dates = dfw.groupby(["cid", "year", "week"])["real_date"].min()
@@ -416,7 +419,7 @@ class NaivePnL:
         self._winsorize(df=dfw["psig"], thresh=thresh)
 
         # Multi-index DataFrame with a natural minimum lag applied.
-        dfw["psig"] = dfw["psig"].groupby(level=0).shift(1)
+        dfw["psig"] = dfw["psig"].groupby(level=0, observed=True).shift(1)
         dfw.reset_index(inplace=True)
         dfw = dfw.rename_axis(None, axis=1)
 
@@ -441,11 +444,22 @@ class NaivePnL:
         df_pnl_all = df_pnl.groupby(["real_date"]).sum(numeric_only=True)
         df_pnl_all = df_pnl_all[df_pnl_all["value"].cumsum() != 0]
         # Returns are computed for each cross-section and across the panel.
-        df_pnl_all["cid"] = "ALL"
+        if df_pnl["cid"].dtype.name == "category":
+            df_pnl_all["cid"] = pd.Categorical.from_codes(
+                codes=[0] * len(df_pnl_all), categories=["ALL"]
+            )
+        else:
+            df_pnl_all["cid"] = "ALL"
+
         df_pnl_all = df_pnl_all.reset_index()[df_pnl.columns]
         # Will be inclusive of each individual cross-section's signal-adjusted return and
         # the aggregated panel return.
-        df_pnl = pd.concat([df_pnl, df_pnl_all])
+
+        pnn = ("PNL_" + sig + neg) if pnl_name is None else pnl_name
+
+        df_pnl = QuantamentalDataFrame.from_long_df(df_pnl, xcat=pnn)
+        df_pnl_all = QuantamentalDataFrame.from_long_df(df_pnl_all, xcat=pnn)
+        df_pnl = QuantamentalDataFrame.from_qdf_list([df_pnl, df_pnl_all])
 
         if vol_scale is not None:
             leverage = vol_scale * (df_pnl_all["value"].std() * np.sqrt(261)) ** (-1)
@@ -453,18 +467,21 @@ class NaivePnL:
         assert isinstance(leverage, (float, int)), err_lev  # sanity check
         df_pnl["value"] = df_pnl["value"] * leverage
 
-        pnn = ("PNL_" + sig + neg) if pnl_name is None else pnl_name
         # Populating the signal dictionary is required for the display methods:
         self.signal_df[pnn] = dfw.loc[:, ["cid", "real_date", "sig"]]
 
-        df_pnl["xcat"] = pnn
         if pnn in self.pnl_names:
             self.df = self.df[~(self.df["xcat"] == pnn)]
         else:
             self.pnl_names = self.pnl_names + [pnn]
 
-        agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
+        # agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
+        agg_df = QuantamentalDataFrame.from_qdf_list([self.df, df_pnl[self.df.columns]])
         self.df = agg_df.reset_index(drop=True)
+
+        self.df = QuantamentalDataFrame(
+            self.df, _initialized_as_categorical=self._as_categorical
+        )
 
         self.pnl_params[pnn] = PnLParams(
             pnl_name=pnn,
@@ -527,7 +544,7 @@ class NaivePnL:
             dfw=dfx, vol_scale=vol_scale, label=label, leverage=leverage
         )
 
-        self.df: pd.DataFrame = pd.concat([self.df, df_long])
+        self.df = QuantamentalDataFrame.from_qdf_list([self.df, df_long])
 
         if label not in self.pnl_names:
             self.pnl_names = self.pnl_names + [label]
@@ -564,8 +581,7 @@ class NaivePnL:
 
         panel_pnl = dfw_long.groupby(["real_date"]).sum(numeric_only=True)
         panel_pnl = panel_pnl.reset_index(level=0)
-        panel_pnl["cid"] = "ALL"
-        panel_pnl["xcat"] = label
+        panel_pnl = QuantamentalDataFrame.from_long_df(panel_pnl, cid="ALL", xcat=label)
 
         if vol_scale is not None:
             leverage = vol_scale * (panel_pnl["value"].std() * np.sqrt(261)) ** (-1)
@@ -574,7 +590,10 @@ class NaivePnL:
             raise TypeError(lev_err)
         panel_pnl["value"] = panel_pnl["value"] * leverage
 
-        return panel_pnl[["cid", "xcat", "real_date", "value"]]
+        return QuantamentalDataFrame(
+            panel_pnl[["cid", "xcat", "real_date", "value"]],
+            _initialized_as_categorical=True,
+        ).to_original_dtypes()
 
     def plot_pnls(
         self,
@@ -721,7 +740,7 @@ class NaivePnL:
                 labels = pnl_cids.copy()
             legend_title = "Cross Section(s)"
 
-        dfx["cum_value"] = dfx.groupby(plot_by).cumsum(numeric_only=True)
+        dfx["cum_value"] = dfx.groupby(plot_by, observed=True).cumsum(numeric_only=True)
 
         if facet:
             fg = sns.FacetGrid(
@@ -1133,7 +1152,10 @@ class NaivePnL:
         filter_1 = self.df["xcat"].isin(selected_pnls)
         filter_2 = self.df["cid"] == "ALL" if not cs else True
 
-        return self.df[filter_1 & filter_2]
+        return QuantamentalDataFrame(
+            self.df[filter_1 & filter_2],
+            _initialized_as_categorical=self._as_categorical,
+        ).to_original_dtypes()
 
     def _winsorize(self, df: pd.DataFrame, thresh: float):
         if thresh is not None:

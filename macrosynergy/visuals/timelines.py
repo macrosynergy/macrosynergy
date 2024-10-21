@@ -220,7 +220,6 @@ def timelines(
             start=start,
             end=end,
         ) as fp:
-
             fp.lineplot(
                 share_y=same_y,
                 share_x=not all_xticks,

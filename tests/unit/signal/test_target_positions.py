@@ -770,7 +770,7 @@ class TestAll(unittest.TestCase):
                 posname="POS",
             )
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test the notion that the received dataframe must be a standardised
             # dataframe with the columns ['cid', 'xcat', 'real_date', 'value'].
             ctypes = ["FX", "EQ"]

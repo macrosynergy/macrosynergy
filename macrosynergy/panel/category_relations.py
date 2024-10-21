@@ -14,6 +14,7 @@ import warnings
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import categories_df
 from macrosynergy.management.utils import apply_slip as apply_slip_util
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 class CategoryRelations(object):
@@ -113,8 +114,11 @@ class CategoryRelations(object):
             raise TypeError("val must be a string.")
         if not {"cid", "xcat", "real_date", val}.issubset(set(df.columns)):
             raise ValueError(
-                "`df` must have columns 'cid', 'xcat', 'real_date' and `val`."
+                f"`df` must have columns 'cid', 'xcat', 'real_date' and `{val}`."
             )
+        df = QuantamentalDataFrame(df)
+        self._as_categorical = df.InitializedAsCategorical
+
         if not isinstance(xcats, (list, tuple)):
             raise TypeError("`xcats` must be a list or a tuple.")
         elif not len(xcats) == 2:

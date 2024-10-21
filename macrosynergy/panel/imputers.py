@@ -1,11 +1,14 @@
 import numpy as np
 import pandas as pd
 
-from macrosynergy.management import update_df
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def impute_panel(
-    df: pd.DataFrame, cids: list, xcats: list, threshold: float = 0.5
+    df: pd.DataFrame,
+    cids: list,
+    xcats: list,
+    threshold: float = 0.5,
 ) -> pd.DataFrame:
     """
     Imputes missing values for each category in a long-format panel dataset by a
@@ -37,7 +40,8 @@ def impute_panel(
     if not 0 <= threshold <= 1:
         raise ValueError("The input `threshold` must be between 0 and 1.")
 
-    complete_df = df.copy()
+    complete_df = QuantamentalDataFrame(df)
+    _as_categorical = complete_df.InitializedAsCategorical
     complete_df = complete_df.set_index(["cid", "real_date", "xcat"])
     full_idx = pd.MultiIndex.from_frame(
         pd.concat(
@@ -83,4 +87,8 @@ def impute_panel(
         incomplete_df.loc[mask, "mean_val"]
     )
 
-    return incomplete_df.loc[:, complete_df.columns]
+    # return incomplete_df.loc[:, complete_df.columns]
+    return QuantamentalDataFrame(
+        incomplete_df[:, complete_df.columns],
+        categorical=_as_categorical,
+    )
