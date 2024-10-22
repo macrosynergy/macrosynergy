@@ -1053,7 +1053,7 @@ class TestRenameXCATs(unittest.TestCase):
 
         self.assertTrue(new_df.equals(qdf))
         dfo_copy = dfo.copy()
-        dfo_copy["xcat"] = dfo_copy["xcat"] + postfix
+        dfo_copy["xcat"] = dfo_copy["xcat"].astype(str) + postfix
         self.assertTrue(new_df.equals(QuantamentalDataFrame(dfo_copy)))
 
         qdf = QuantamentalDataFrame(dfo)
@@ -1092,7 +1092,7 @@ class TestRenameXCATs(unittest.TestCase):
 
         self.assertTrue(new_df.equals(qdf))
         dfo_copy = dfo.copy()
-        dfo_copy["xcat"] = prefix + dfo_copy["xcat"]
+        dfo_copy["xcat"] = prefix + dfo_copy["xcat"].astype(str)
         self.assertTrue(new_df.equals(QuantamentalDataFrame(dfo_copy)))
 
         qdf = QuantamentalDataFrame(dfo)
