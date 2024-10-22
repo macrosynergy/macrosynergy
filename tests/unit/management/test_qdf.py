@@ -1247,10 +1247,14 @@ class TestRenameXCATs(unittest.TestCase):
 
 
 class TestQDFClass(unittest.TestCase):
-    def test_qdf_basic(self):
-        tickers = helper_random_tickers(10)
-        test_df: pd.DataFrame = make_test_df(tickers=tickers, metrics=JPMAQS_METRICS)
+    def setUp(self) -> None:
+        self.tickers = helper_random_tickers(50)
+        self.test_df: pd.DataFrame = make_test_df(
+            tickers=self.tickers, metrics=JPMAQS_METRICS
+        )
 
+    def test_qdf_basic(self):
+        test_df = self.test_df.copy()
         qdf = QuantamentalDataFrame(test_df.copy())
         in_dtypes = test_df.dtypes.to_dict()
 
@@ -1275,6 +1279,64 @@ class TestQDFClass(unittest.TestCase):
         self.assertTrue(qdf.equals(test_df))
         self.assertTrue(qdf.dtypes.to_dict()["cid"].name == "object")
         self.assertTrue(qdf.dtypes.to_dict()["xcat"].name == "object")
+
+    def test_qdf_is_categorical(self):
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df)
+        self.assertTrue(qdf.is_categorical())
+        self.assertEqual(check_is_categorical(qdf), qdf.is_categorical())
+
+        qdf = QuantamentalDataFrame(test_df, categorical=False)
+        self.assertFalse(qdf.is_categorical())
+        self.assertEqual(check_is_categorical(qdf), qdf.is_categorical())
+
+    def test_qdf_to_categorical(self):
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df, categorical=False)
+        self.assertFalse(qdf.is_categorical())
+        qdf = qdf.to_categorical()
+        self.assertTrue(qdf.is_categorical())
+
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df)
+        self.assertTrue(qdf.is_categorical())
+        qdf = qdf.to_categorical()
+        self.assertTrue(qdf.is_categorical())
+
+    def test_qdf_to_string_type(self):
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df, categorical=False)
+        self.assertFalse(qdf.is_categorical())
+        qdf = qdf.to_string_type()
+        self.assertFalse(qdf.is_categorical())
+
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df)
+        self.assertTrue(qdf.is_categorical())
+        qdf = qdf.to_string_type()
+        self.assertFalse(qdf.is_categorical())
+
+    def test_qdf_to_original_dtypes(self):
+        test_df = self.test_df.copy()
+
+        qdf = QuantamentalDataFrame(test_df)
+        self.assertTrue(qdf.is_categorical())
+        qdf = qdf.to_original_dtypes()
+        self.assertFalse(qdf.is_categorical())
+        self.assertTrue(qdf.equals(test_df))
+
+        # now try with an already categorical df
+        new_test_df = qdf_to_categorical(self.test_df.copy())
+        qdf = QuantamentalDataFrame(new_test_df)
+        qdf = qdf.to_original_dtypes()
+        self.assertTrue(qdf.is_categorical())
+
+    def test_qdf_list_tickers(self):
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df)
+        self.assertEqual(set(qdf.list_tickers()), set(self.tickers))
+
+        self.assertTrue(pd.DataFrame(qdf).eq(self.test_df).all().all())
 
 
 if __name__ == "__main__":
