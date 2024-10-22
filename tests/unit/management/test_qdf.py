@@ -1020,7 +1020,7 @@ class TestRenameXCATs(unittest.TestCase):
         xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
 
         dfo = make_test_df(cids=cids, xcats=xcats)
-        qdf = QuantamentalDataFrame(dfo)
+        qdf = QuantamentalDataFrame(dfo.copy())
 
         xcat_map = {xc: xc[::-1] for xc in xcats}
 
@@ -1041,7 +1041,7 @@ class TestRenameXCATs(unittest.TestCase):
         xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
 
         dfo = make_test_df(cids=cids, xcats=xcats)
-        qdf = QuantamentalDataFrame(dfo)
+        qdf = QuantamentalDataFrame(dfo.copy())
 
         postfix = "_new"
         new_df = rename_xcats(qdf, postfix=postfix)
@@ -1056,7 +1056,7 @@ class TestRenameXCATs(unittest.TestCase):
         dfo_copy["xcat"] = dfo_copy["xcat"].astype(str) + postfix
         self.assertTrue(new_df.equals(QuantamentalDataFrame(dfo_copy)))
 
-        qdf = QuantamentalDataFrame(dfo)
+        qdf = QuantamentalDataFrame(dfo.copy())
 
         postfix = "_new"
         sel_xcats = ["EQ", "PPP"]
@@ -1080,7 +1080,7 @@ class TestRenameXCATs(unittest.TestCase):
         xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
 
         dfo = make_test_df(cids=cids, xcats=xcats)
-        qdf = QuantamentalDataFrame(dfo)
+        qdf = QuantamentalDataFrame(dfo.copy())
 
         prefix = "new_"
         new_df = rename_xcats(qdf, prefix=prefix)
@@ -1095,7 +1095,7 @@ class TestRenameXCATs(unittest.TestCase):
         dfo_copy["xcat"] = prefix + dfo_copy["xcat"].astype(str)
         self.assertTrue(new_df.equals(QuantamentalDataFrame(dfo_copy)))
 
-        qdf = QuantamentalDataFrame(dfo)
+        qdf = QuantamentalDataFrame(dfo.copy())
 
         prefix = "new_"
         sel_xcats = ["FX", "IR"]
@@ -1119,7 +1119,7 @@ class TestRenameXCATs(unittest.TestCase):
         xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
 
         dfo = make_test_df(cids=cids, xcats=xcats)
-        qdf = QuantamentalDataFrame(dfo)
+        qdf = QuantamentalDataFrame(dfo.copy())
 
         new_name = "new_name"
         new_df = rename_xcats(qdf, name_all=new_name)
@@ -1133,7 +1133,7 @@ class TestRenameXCATs(unittest.TestCase):
         dfo_copy["xcat"] = new_name
         self.assertTrue(new_df.equals(QuantamentalDataFrame(dfo_copy)))
 
-        qdf = QuantamentalDataFrame(dfo)
+        qdf = QuantamentalDataFrame(dfo.copy())
 
         new_name = "new_name"
         sel_xcats = ["CDS", "FX"]
@@ -1148,7 +1148,13 @@ class TestRenameXCATs(unittest.TestCase):
 
         unchanged_dfo = dfo[~dfo["xcat"].isin(sel_xcats)]
         unchanged_new = new_df[new_df["xcat"] != new_name]
-
+        # sort these by unchanged_dfo.columns.tolist()
+        # unchanged_dfo = unchanged_dfo.sort_values(
+        #     by=QuantamentalDataFrame.IndexColsSortOrder
+        # )
+        # unchanged_new = unchanged_new.sort_values(
+        #     by=QuantamentalDataFrame.IndexColsSortOrder
+        # )
         self.assertTrue(unchanged_dfo.eq(unchanged_new).all().all())
 
     def test_rename_xcats_fmt_string(self):
@@ -1156,7 +1162,7 @@ class TestRenameXCATs(unittest.TestCase):
         xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
 
         dfo = make_test_df(cids=cids, xcats=xcats)
-        qdf = QuantamentalDataFrame(dfo)
+        qdf = QuantamentalDataFrame(dfo.copy())
 
         fmt_string = "new_{}_name"
         new_df = rename_xcats(qdf, fmt_string=fmt_string)
@@ -1171,7 +1177,7 @@ class TestRenameXCATs(unittest.TestCase):
         self.assertTrue(new_df.equals(qdf))
 
         # now only with a selected xcat
-        qdf = QuantamentalDataFrame(dfo)
+        qdf = QuantamentalDataFrame(dfo.copy())
 
         fmt_string = "new_{}_name"
         sel_xcats = ["CDS", "FX"]
