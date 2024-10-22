@@ -24,13 +24,13 @@ class TestExpandingIncrement(unittest.TestCase):
         self.mock_show = patch("matplotlib.pyplot.show").start()
 
         cids = ["AUD", "CAD", "GBP", "USD"]
-        xcats = ["XR", "CPI", "GROWTH", "RIR"]
+        xcats = ["RIR", "CPI", "GROWTH", "XR"]
 
         df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
-        df_cids.loc["AUD"] = ["2015-01-01", "2020-12-31"]
-        df_cids.loc["CAD"] = ["2014-01-01", "2020-12-31"]
-        df_cids.loc["GBP"] = ["2015-01-01", "2020-12-31"]
-        df_cids.loc["USD"] = ["2015-01-01", "2020-12-31"]
+        df_cids.loc["AUD"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["CAD"] = ["2019-04-01", "2020-12-31"]
+        df_cids.loc["GBP"] = ["2019-04-01", "2020-12-31"]
+        df_cids.loc["USD"] = ["2019-04-01", "2020-12-31"]
 
         tuples = []
 
@@ -53,8 +53,12 @@ class TestExpandingIncrement(unittest.TestCase):
             dtype=np.float32,
         )
 
+        # Create sample X and y dataframes resampled at monthly frequency
         self.X = df.drop(columns="XR")
+        self.X = self.X.groupby(level=0).resample("M", level="real_date").mean()
+
         self.y = df["XR"]
+        self.y = self.y.groupby(level=0).resample("M", level="real_date").last()
 
     @classmethod
     def tearDownClass(self) -> None:
@@ -157,35 +161,79 @@ class TestExpandingIncrement(unittest.TestCase):
     @parameterized.expand(itertools.product([1, 2, 3], [1, 2]))
     def test_valid_split(self, window_size, min_cids):
         # Test functionality on simple dataframe
-        # TODO: replace simple df with a realistic dataframe from the constructor but 
-        # only from the last year of data
-        periods1 = 12
-        periods2 = 9
-        X, y = make_simple_df(periods1=periods1, periods2=periods2)
         splitter = ExpandingIncrementPanelSplit(
             train_intervals = window_size,
             test_size = window_size,
             min_cids = min_cids,
             min_periods = 2,
         )
-        splits = list(splitter.split(X, y))
-        if min_cids == 1:
-            # The first split should have 2 samples
-            self.assertEqual(len(splits[0][0]), 4)
-            # There should be nine splits in total
-            self.assertEqual(len(splits), 9)
-        elif min_cids == 2:
-            # The first split should have 7 samples
-            self.assertEqual(len(splits[0][0]), 6)
-            # There should be five splits in total
-            self.assertEqual(len(splits), 5)
+        splits = list(splitter.split(self.X, self.y))
         
+        # Check first split is correct
+        X_train_split1 = self.X.iloc[splits[0][0], :]
+        X_test_split1 = self.X.iloc[splits[0][1], :]
+        n_samples = len(X_train_split1)
+        n_unique_dates = len(X_train_split1.index.get_level_values(1).unique())
+        n_unique_test_dates = len(X_test_split1.index.get_level_values(1).unique())
+        if min_cids == 1:
+            # unique training dates should be two and number of samples should be two
+            self.assertEqual(n_samples, 2)
+            self.assertEqual(n_unique_dates, 2)
+            self.assertEqual(n_unique_test_dates, window_size)
+        else:
+            # min_cids = 2
+            # The first split should have (3 + 2) + 3*2 = 11 samples
+            # Unique training dates should be 5
+            self.assertEqual(n_samples, 11)
+            self.assertEqual(n_unique_dates, 5)
+            self.assertEqual(n_unique_test_dates, window_size)
 
-    def test_types_visualise_splits(self):
-        pass 
+        # Track the number of unique dates in each set
+        current_n_unique_dates = n_unique_dates
+        for split_idx in range(1, len(splits)):
+            X_train_split = self.X.iloc[splits[split_idx][0], :]
+            X_test_split = self.X.iloc[splits[split_idx][1], :]
+            n_samples = len(X_train_split)
+            n_unique_dates = len(X_train_split.index.get_level_values(1).unique())
+            n_unique_test_dates = len(X_test_split.index.get_level_values(1).unique())
+            self.assertEqual(n_unique_dates, current_n_unique_dates + window_size)
+            current_n_unique_dates = n_unique_dates
+            if split_idx != len(splits) - 1:
+                self.assertEqual(n_unique_test_dates, window_size)
+            else:
+                self.assertLessEqual(n_unique_test_dates, window_size)
+                self.assertGreater(n_unique_test_dates, 0)
+        
+    @parameterized.expand(itertools.product([1, 2, 3], [1, 2]))
+    def test_types_visualise_splits(self, window_size, min_cids):
+        splitter = ExpandingIncrementPanelSplit(
+            train_intervals = window_size,
+            test_size = window_size,
+            min_cids = min_cids,
+            min_periods = 2,
+        )
+        with self.assertRaises(TypeError):
+            splitter.visualise_splits(X="a", y=self.y)
+        with self.assertRaises(ValueError):
+            splitter.visualise_splits(X=self.X.reset_index(), y=self.y)
 
-    def test_types_visualise_splits(self):
-        pass
+        with self.assertRaises(TypeError):
+            splitter.visualise_splits(X=self.X, y="a")
+        with self.assertRaises(ValueError):
+            splitter.visualise_splits(X=self.X, y=self.y.reset_index(drop=True))
+
+    @parameterized.expand(itertools.product([1, 2, 3], [1, 2]))
+    def test_valid_visualise_splits(self, window_size, min_cids):
+        splitter = ExpandingIncrementPanelSplit(
+            train_intervals = window_size,
+            test_size = window_size,
+            min_cids = min_cids,
+            min_periods = 2,
+        )
+        try:
+            splitter.visualise_splits(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(f"Unexpected exception: {e}")    
 
 class TestExpandingFrequency(unittest.TestCase):
     @classmethod
