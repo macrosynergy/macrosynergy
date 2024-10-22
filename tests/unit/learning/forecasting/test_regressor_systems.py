@@ -127,6 +127,27 @@ class TestLinearRegressionSystem(unittest.TestCase):
         model = LinearRegressionSystem()
         self.assertIsInstance(model.create_model(), LinearRegression)
 
+    @parameterized.expand(itertools.product([None, 5], ["D", "W", "M", "Q"]))
+    def test_fit(self, roll, data_freq):
+        model = LinearRegressionSystem(roll=roll, data_freq=data_freq)
+        model.fit(self.X, self.y)
+        self.assertIsInstance(model.coefs_, dict)
+        self.assertIsInstance(model.intercepts_, dict)
+
+    def test_predict(self):
+        model = LinearRegressionSystem()
+        model.fit(self.X, self.y)
+        y_pred = model.predict(self.X)
+        self.assertIsInstance(y_pred, pd.Series)
+        self.assertEqual(len(y_pred), len(self.y))
+        
+    def test_types_predict(self):
+        model = LinearRegressionSystem()
+        model.fit(self.X, self.y)
+        self.assertRaises(TypeError, model.predict, X=1)
+        self.assertRaises(ValueError, model.predict, X=pd.DataFrame())
+
+
 
 class TestLADRegressionSystem(unittest.TestCase):
     @classmethod

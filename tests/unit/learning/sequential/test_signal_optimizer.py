@@ -1825,15 +1825,27 @@ class TestAll(unittest.TestCase):
             inner_splitters=self.single_inner_splitter,
             store_correlations=True,
         )
-        ftr_corr_df = so.get_feature_correlations(name="test")
+        kwargs_list = [
+            {"name": "test"},
+            {"name": None},
+            {"name": ["test"]},
+        ]
+        for kwargs in kwargs_list:
+            ftr_corr_df = so.get_feature_correlations(**kwargs)
 
-        self.assertIsInstance(ftr_corr_df, pd.DataFrame)
-        self.assertTrue(ftr_corr_df.shape[1] == 5)
-        self.assertTrue(ftr_corr_df.columns[0] == "real_date")
-        self.assertTrue(ftr_corr_df.columns[1] == "name")
-        self.assertTrue(ftr_corr_df.columns[2] == "predictor_input")
-        self.assertTrue(ftr_corr_df.columns[3] == "pipeline_input")
-        self.assertTrue(ftr_corr_df.columns[4] == "pearson")
+            self.assertIsInstance(ftr_corr_df, pd.DataFrame)
+            self.assertTrue(ftr_corr_df.shape[1] == 5)
+            self.assertTrue(ftr_corr_df.columns[0] == "real_date")
+            self.assertTrue(ftr_corr_df.columns[1] == "name")
+            self.assertTrue(ftr_corr_df.columns[2] == "predictor_input")
+            self.assertTrue(ftr_corr_df.columns[3] == "pipeline_input")
+            self.assertTrue(ftr_corr_df.columns[4] == "pearson")
+
+        with self.assertRaises(TypeError):
+            so.get_feature_correlations(name=1)
+
+        with self.assertRaises(ValueError):
+            so.get_feature_correlations(name=["invalid"])
 
     def test_types_get_optimized_signals(self):
         so = self.so_with_calculated_preds
@@ -2072,11 +2084,25 @@ class TestAll(unittest.TestCase):
             so.feature_selection_heatmap(name="test", figsize=(0, 1, 2))
         with self.assertRaises(ValueError):
             so.feature_selection_heatmap(name="test", figsize=(2, -1))
+        # ftrs_renamed
+        with self.assertRaises(TypeError):
+            so.feature_selection_heatmap(name="test", ftrs_renamed="invalid")
+        with self.assertRaises(TypeError):
+            so.feature_selection_heatmap(name="test", ftrs_renamed={1: "ftr1"})
+        with self.assertRaises(TypeError):
+            so.feature_selection_heatmap(name="test", ftrs_renamed={"ftr1": 1})
+        with self.assertRaises(ValueError):
+            so.feature_selection_heatmap(name="test", ftrs_renamed={"ftr1": "ftr2"})
 
     def test_valid_feature_selection_heatmap(self):
         so = self.so_with_calculated_preds
         try:
             so.feature_selection_heatmap(name="test")
+        except Exception as e:
+            self.fail(f"feature_selection_heatmap raised an exception: {e}")
+
+        try:
+            so.feature_selection_heatmap(name="test", cap=1)
         except Exception as e:
             self.fail(f"feature_selection_heatmap raised an exception: {e}")
 
@@ -2130,7 +2156,9 @@ class TestAll(unittest.TestCase):
             )
         # cap
         with self.assertRaises(TypeError):
-            so.correlations_heatmap(name="test", feature_name="Feature 1", cap="invalid")
+            so.correlations_heatmap(
+                name="test", feature_name="Feature 1", cap="invalid"
+            )
         with self.assertRaises(ValueError):
             so.correlations_heatmap(name="test", feature_name="Feature 1", cap=-1)
         # ftrs_renamed
@@ -2152,11 +2180,25 @@ class TestAll(unittest.TestCase):
             )
 
     def test_valid_correlations_heatmap(self):
-        so = self.so_with_calculated_preds
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+        )
+        so.calculate_predictions(
+            name="test",
+            models=self.pipelines,
+            scorers=self.scorers,
+            hyperparameters=self.pipeline_hyperparameters,
+            search_type="grid",
+            n_jobs_outer=1,
+            n_jobs_inner=1,
+            inner_splitters=self.single_inner_splitter,
+            store_correlations=True,
+        )
         try:
-            so.feature_selection_heatmap(name="test")
+            so.correlations_heatmap(name="test", feature_name="Feature 1")
         except Exception as e:
-            self.fail(f"feature_selection_heatmap raised an exception: {e}")
+            self.fail(f"correlations_heatmap raised an exception: {e}")
 
     def test_types_coefs_timeplot(self):
         so = self.so_with_calculated_preds
@@ -2188,6 +2230,15 @@ class TestAll(unittest.TestCase):
             so.coefs_timeplot(name="test", ftrs_renamed={"ftr1": 1})
         with self.assertRaises(ValueError):
             so.coefs_timeplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
+        # ftrs
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", ftrs=1)
+        with self.assertRaises(ValueError):
+            so.coefs_timeplot(name="test", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+        with self.assertRaises(TypeError):
+            so.coefs_timeplot(name="test", ftrs=[1])
+        with self.assertRaises(ValueError):
+            so.coefs_timeplot(name="test", ftrs=["invalid"])
 
     def test_valid_coefs_timeplot(self):
         so = self.so_with_calculated_preds
@@ -2309,6 +2360,24 @@ class TestAll(unittest.TestCase):
             so.coefs_stackedbarplot(name="test", ftrs_renamed={"ftr1": 1})
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
+        # ftrs
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", ftrs=1)
+        with self.assertRaises(ValueError):
+            so.coefs_stackedbarplot(
+                name="test", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+            )
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", ftrs=[1])
+        with self.assertRaises(ValueError):
+            so.coefs_stackedbarplot(name="test", ftrs=["invalid"])
+        # cap
+        with self.assertRaises(TypeError):
+            so.coefs_stackedbarplot(name="test", cap="invalid")
+        with self.assertRaises(ValueError):
+            so.coefs_stackedbarplot(name="test", cap=-1)
+        with self.assertRaises(ValueError):
+            so.coefs_stackedbarplot(name="test", cap=11)
 
     def test_valid_coefs_stackedbarplot(self):
         so = self.so_with_calculated_preds
@@ -2396,6 +2465,39 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             so.models_heatmap(name="test")
 
+    def test_types_models_heatmap(self):
+        so = self.so_with_calculated_preds
+
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name=1)
+        with self.assertRaises(ValueError):
+            so.models_heatmap(name="invalid")
+        # cap
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name="test", cap="invalid")
+        with self.assertRaises(ValueError):
+            so.models_heatmap(name="test", cap=-1)
+        with self.assertRaises(ValueError):
+            so.models_heatmap(name="test", cap=11)
+        # title
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name="test", title=1)
+        # figsize
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name="test", figsize="figsize")
+        with self.assertRaises(ValueError):
+            so.models_heatmap(name="test", figsize=(1.5, 2, 3))
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name="test", figsize=(1.5, "e"))
+
+    def test_valid_models_heatmap(self):
+
+        so = self.so_with_calculated_preds
+        try:
+            so.models_heatmap(name="test")
+        except Exception as e:
+            self.fail(f"models_heatmap raised an exception: {e}")
+
 
 def _get_X_y(so: SignalOptimizer):
     df_long = (
@@ -2421,4 +2523,4 @@ def _get_X_y(so: SignalOptimizer):
 if __name__ == "__main__":
     Test = TestAll()
     Test.setUpClass()
-    Test.test_types_correlations_heatmap()
+    Test.test_types_feature_selection_heatmap()
