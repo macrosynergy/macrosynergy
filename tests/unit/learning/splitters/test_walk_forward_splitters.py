@@ -55,10 +55,10 @@ class TestExpandingIncrement(unittest.TestCase):
 
         # Create sample X and y dataframes resampled at monthly frequency
         self.X = df.drop(columns="XR")
-        self.X = self.X.groupby(level=0).resample("ME", level="real_date").mean()
+        self.X = self.X.groupby(level=0).resample("M", level="real_date").mean()
 
         self.y = df["XR"]
-        self.y = self.y.groupby(level=0).resample("ME", level="real_date").last()
+        self.y = self.y.groupby(level=0).resample("M", level="real_date").last()
 
     @classmethod
     def tearDownClass(self) -> None:
