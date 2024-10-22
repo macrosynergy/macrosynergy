@@ -54,15 +54,15 @@ class SignalOptimizer(BasePanelLearner):
 
     Notes
     -----
-    The `SignalOptimizer` class is used to predict the response variable, usually an asset
-    class return panel, based on a panel of features that are lagged by a specified number
-    of periods. This is done in a sequential manner, by specifying the size of an initial
-    training set, choosing an optimal model out of a provided collection (with associated
-    hyperparameters), forecasting the (possibly) forward return panel, and then expanding
-    the training set to include the previously forward realized returns. The process
-    continues until the end of the dataset is reached.
+    The `SignalOptimizer` class is used to predict the response variable, usually a panel
+    of asset class returns, based on a panel of features that are lagged by a specified
+    number of periods. This is done in a sequential manner, by specifying the size of an
+    initial training set, choosing an optimal model out of a provided collection
+    (with associated hyperparameters), forecasting the return panel, and then expanding
+    the training set to include the now-realized returns. The process continues until the
+    end of the dataset is reached.
 
-    In addition to storing the forecasts, this class also stores useful information for
+    In addition to storing forecasts, this class also stores useful information for
     analysis such as the models selected at each point in time, the feature coefficients
     and intercepts (where relevant) of selected models, as well as the features
     selected by any feature selection modules.
@@ -71,16 +71,21 @@ class SignalOptimizer(BasePanelLearner):
     collection of models and associated hyperparameters to choose from, an HPO is run
     - currently only grid search and random search are supported - to determine the
     optimal choice. This is done by providing a collection of `scikit-learn` compatible
-    scoring functions, as well as a collection of `scikit-learn` compatible cross-validation
-    splitters. At each point in time, the cross-validation folds are the union of the folds
-    produced by each splitter provided. Each scorer is evaluated on each test fold and
-    summarised across test folds by either the mean, median or through a custom function
-    provided by the user. This results in multiple scores for each model and hyperparameter
-    combination. In order to make a final choice, a composite score for each model and
-    hyperparameter combination is calculated by adjusting scores for each scorer by the
-    minimum and maximum scores across all models and hyperparameters, for that scorer.
-    This makes scores across scorers comparable, so that the average score across adjusted
-    scores can be used as a meaningful estimate of each model's generalization ability.
+    scoring functions, as well as a collection of `scikit-learn` compatible
+    cross-validation splitters and scorers. At each point in time, the cross-validation
+    folds are the union of the folds produced by each splitter provided. Each scorer is
+    evaluated on each test fold and summarised across test folds by either a custom
+    function provided by the user or a common string i.e. 'mean'.
+
+    Consequently, each model and hyperparameter combination has an associated collection
+    of scores induced by different metrics, in units of those scorers. In order to form a
+    composite score for each hyperparameter, the scores must be normalized across
+    model/hyperparameter combinations. This makes scores across scorers comparable, so
+    that the average score across adjusted scores can be used as a meaningful estimate
+    of each model's generalization ability. Finally, a composite score for each model and
+    hyperparameter combination is calculated by averaging the adjusted scores across all
+    scorers.
+
     The optimal model is the one with the largest composite score.
     """
 
@@ -286,7 +291,7 @@ class SignalOptimizer(BasePanelLearner):
         for pipeline_name, idx, forecasts in prediction_data:
             forecasts_df.loc[idx, name] = forecasts
 
-        forecasts_df = forecasts_df.groupby(level=0).ffill()
+        forecasts_df = forecasts_df.groupby(level=0).ffill().dropna()
 
         if self.blacklist is not None:
             for cross_section, periods in self.blacklist.items():
@@ -416,6 +421,43 @@ class SignalOptimizer(BasePanelLearner):
         timestamp,
         adjusted_test_index,
     ):
+        """
+        Stores characteristics of the optimal model at each retraining date.
+
+        Parameters
+        ----------
+        pipeline_name : str
+            Name of the signal optimization process.
+        optimal_model : RegressorMixin, ClassifierMixin or Pipeline
+            Optimal model selected at each retraining date.
+        optimal_model_name : str
+            Name of the optimal model.
+        optimal_model_score : float
+            Cross-validation score for the optimal model.
+        optimal_model_params : dict
+            Chosen hyperparameters for the optimal model.
+        inner_splitters_adj : dict
+            Dictionary of adjusted inner splitters.
+        X_train : pd.DataFrame
+            Training feature matrix.
+        y_train : pd.Series
+            Training response variable.
+        X_test : pd.DataFrame
+            Test feature matrix.
+        y_test : pd.Series
+            Test response variable.
+        timestamp : pd.Timestamp
+            Timestamp of the retraining date.
+        adjusted_test_index : pd.MultiIndex
+            Adjusted test index to account for lagged features.
+
+        Returns
+        -------
+        dict
+            Dictionary containing the optimal model, model choice data, feature
+            coefficients, intercepts, selected features and correlations between
+            inputs to pipelines and those entered into a final model.
+        """
         if optimal_model is not None:
             if hasattr(optimal_model, "create_signal"):
                 if callable(getattr(optimal_model, "create_signal")):
@@ -505,34 +547,23 @@ class SignalOptimizer(BasePanelLearner):
             # Calculate correlation between each original feature in X_train and
             # the transformed features in X_train_transformed
             if isinstance(X_train_transformed, pd.DataFrame):
-                ftr_corr_data = [
-                    [
-                        timestamp,
-                        optimal_model,
-                        final_feature_name,
-                        input_feature_name,
-                        np.corrcoef(
-                            X_train_transformed.values[:, idx],
-                            X_train[input_feature_name],
-                        )[0, 1],
-                    ]
-                    for idx, final_feature_name in enumerate(feature_names)
-                    for input_feature_name in X_train.columns
+                X_train_transformed = X_train_transformed.values
+
+            ftr_corr_data = [
+                [
+                    timestamp,
+                    pipeline_name,
+                    final_feature_name,
+                    input_feature_name,
+                    np.corrcoef(
+                        X_train_transformed[:, idx],
+                        X_train[input_feature_name],
+                    )[0, 1],
                 ]
-            else:
-                ftr_corr_data = [
-                    [
-                        timestamp,
-                        pipeline_name,
-                        final_feature_name,
-                        input_feature_name,
-                        np.corrcoef(
-                            X_train_transformed[:, idx], X_train[input_feature_name]
-                        )[0, 1],
-                    ]
-                    for idx, final_feature_name in enumerate(feature_names)
-                    for input_feature_name in X_train.columns
-                ]
+                for idx, final_feature_name in enumerate(feature_names)
+                for input_feature_name in X_train.columns
+            ]
+
         elif self.store_correlations and optimal_model is None:
             ftr_corr_data = [
                 [
@@ -555,8 +586,8 @@ class SignalOptimizer(BasePanelLearner):
         Parameters
         ----------
         name : str or list, optional
-            Label(s) of signal optimization process(es). Default is all stored in the class
-            instance.
+            Label(s) of signal optimization process(es). Default is all stored in the
+            class instance.
 
         Returns
         -------
@@ -590,8 +621,8 @@ class SignalOptimizer(BasePanelLearner):
         Parameters
         ----------
         name: str or list, optional
-            Label(s) of signal optimization process(es). Default is all stored in the class
-            instance.
+            Label(s) of signal optimization process(es). Default is all stored in the
+            class instance.
 
         Returns
         -------
@@ -618,7 +649,7 @@ class SignalOptimizer(BasePanelLearner):
                     )
             return self.selected_ftrs[self.selected_ftrs.name.isin(name)]
 
-    def get_ftr_coefficients(self, name=None):
+    def get_feature_coefficients(self, name=None):
         """
         Returns feature coefficients for a given pipeline.
 
@@ -991,7 +1022,7 @@ class SignalOptimizer(BasePanelLearner):
         if len(figsize) != 2:
             raise ValueError("The figsize argument must be a tuple of length 2.")
         for element in figsize:
-            if not isinstance(element, numbers.Number) and not isinstance(
+            if not isinstance(element, numbers.Number) or isinstance(
                 element, bool
             ):
                 raise TypeError(
@@ -1044,7 +1075,7 @@ class SignalOptimizer(BasePanelLearner):
                 run calculate_predictions() first.
                 """
             )
-        ftrcoef_df = self.get_ftr_coefficients(name)
+        ftrcoef_df = self.get_feature_coefficients(name)
         if ftrcoef_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
                 f"""There are no non-NA coefficients for the pipeline {name}.
@@ -1101,7 +1132,7 @@ class SignalOptimizer(BasePanelLearner):
         sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
-        ftrcoef_df = self.get_ftr_coefficients(name)
+        ftrcoef_df = self.get_feature_coefficients(name)
         ftrcoef_df = ftrcoef_df.set_index("real_date")
         ftrcoef_df = ftrcoef_df.iloc[:, 1:]
 
@@ -1251,7 +1282,7 @@ class SignalOptimizer(BasePanelLearner):
                 run calculate_predictions() first.
                 """
             )
-        ftrcoef_df = self.get_ftr_coefficients(name)
+        ftrcoef_df = self.get_feature_coefficients(name)
         if ftrcoef_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
                 f"""There are no non-NA coefficients for the pipeline {name}.
@@ -1316,7 +1347,7 @@ class SignalOptimizer(BasePanelLearner):
         sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
-        ftrcoef_df = self.get_ftr_coefficients(name)
+        ftrcoef_df = self.get_feature_coefficients(name)
         years = ftrcoef_df["real_date"].dt.year
         years.name = "year"
         ftrcoef_df.drop(columns=["real_date", "name"], inplace=True)
@@ -1352,6 +1383,7 @@ class SignalOptimizer(BasePanelLearner):
         pos_coefs = avg_coefs.clip(lower=0)
         neg_coefs = avg_coefs.clip(upper=0)
 
+        ax = None
         # Create stacked bar plot
         if pos_coefs.sum().any():
             ax = pos_coefs.plot(
@@ -1392,6 +1424,70 @@ class SignalOptimizer(BasePanelLearner):
         plt.tight_layout()
         plt.show()
 
+    def _checks_feature_selection_heatmap(
+        self,
+        name: str,
+        title=None,
+        ftrs_renamed=None,
+        figsize=(12, 8),
+    ):
+        """
+        Checks for the feature_selection_heatmap method.
+
+        Parameters
+        ----------
+        name : str
+            Name of the previously run signal optimization process.
+        title : str, optional
+            Title of the heatmap. Default is None. This creates a figure title of the form
+            "Feature Selection Heatmap for {name}".
+        ftrs_renamed : dict, optional
+            Dictionary to rename the feature names for visualisation in the plot axis.
+            Default is None, which uses the original feature names.
+        figsize : tuple of floats or ints, optional
+            Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        """
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.selected_ftrs.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
+        if title is None:
+            title = f"Feature Selection Heatmap for {name}"
+        if not isinstance(title, str):
+            raise TypeError("The figure title must be a string.")
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, (int, float)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
+        if ftrs_renamed is not None:
+            if not isinstance(ftrs_renamed, dict):
+                raise TypeError("The ftrs_renamed argument must be a dictionary.")
+            for key, value in ftrs_renamed.items():
+                if not isinstance(key, str):
+                    raise TypeError(
+                        "The keys of the ftrs_renamed dictionary must be strings."
+                    )
+                if not isinstance(value, str):
+                    raise TypeError(
+                        "The values of the ftrs_renamed dictionary must be strings."
+                    )
+                if key not in self.X.columns:
+                    raise ValueError(
+                        f"""The key {key} in the ftrs_renamed dictionary is not a feature 
+                        in the pipeline {name}.
+                        """
+                    )
+
 
 if __name__ == "__main__":
     from sklearn.linear_model import LinearRegression
@@ -1402,6 +1498,7 @@ if __name__ == "__main__":
         ExpandingKFoldPanelSplit,
         RollingKFoldPanelSplit,
         regression_balanced_accuracy,
+        SignWeightedLinearRegression,
     )
     from macrosynergy.management.simulate import make_qdf
 
@@ -1436,6 +1533,8 @@ if __name__ == "__main__":
         ),
     }
 
+    # Signal optimizer with single metric and inner splitter
+
     so = SignalOptimizer(
         df=dfd,
         xcats=["CRY", "GROWTH", "INFL", "XR"],
@@ -1447,22 +1546,60 @@ if __name__ == "__main__":
         name="LR",
         models={
             "LR": LinearRegression(),
-            "LA": LinearRegression(),
+            "SWLS": SignWeightedLinearRegression(),
         },
         hyperparameters={
-            "LR": {"fit_intercept": [True, False], "positive": [True, False]},
-            "LA": {"fit_intercept": [True, False]},
+            "LR": {"fit_intercept": [True, False]},
+            "SWLS": {"fit_intercept": [True, False]},
+        },
+        scorers={
+            "r2": make_scorer(r2_score),
+        },
+        inner_splitters={
+            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
+        },
+        search_type="grid",
+        cv_summary="mean",
+        n_jobs_outer=1,
+        n_jobs_inner=1,
+    )
+
+    # Now run a pipeline with changes from the default
+
+    so = SignalOptimizer(
+        df=dfd,
+        xcats=["CRY", "GROWTH", "INFL", "XR"],
+        cids=cids,
+        blacklist=black,
+    )
+
+    so.calculate_predictions(
+        name="LR",
+        models={
+            "LR": LinearRegression(),
+            "SWLS": SignWeightedLinearRegression(),
+        },
+        hyperparameters={
+            "LR": {"fit_intercept": [True, False]},
+            "SWLS": {"fit_intercept": [True, False]},
         },
         scorers={
             "r2": make_scorer(r2_score),
             "bac": make_scorer(regression_balanced_accuracy),
         },
         inner_splitters={
-            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
-            "RollingKFold": RollingKFoldPanelSplit(n_splits=5),
+            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=2),
+            "RollingKFold": RollingKFoldPanelSplit(n_splits=2),
         },
         search_type="grid",
-        cv_summary="median",
+        normalize_fold_results=True,
+        cv_summary="mean-std",
+        test_size=3,
+        max_periods=24,
+        split_functions={
+            "ExpandingKFold": None,
+            "RollingKFold": lambda n: n // 12,
+        },
         n_jobs_outer=1,
         n_jobs_inner=1,
     )
