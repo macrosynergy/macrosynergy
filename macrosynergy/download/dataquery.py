@@ -27,6 +27,7 @@ from macrosynergy.download.exceptions import (
     InvalidResponseError,
     HeartbeatError,
     NoContentError,
+    AttributesOutOfSyncError
     KNOWN_EXCEPTIONS,
 )
 from macrosynergy.management.utils import (
@@ -111,10 +112,12 @@ def validate_response(
             raise InvalidResponseError(f"Response is empty.\n{error_str}")
         if 'links' in response_dict:
             if not check_attributes_in_sync(response_dict):
-                raise InvalidResponseError(f"Attributes are not in sync.\n{error_str}")
+                raise AttributesOutOfSyncError(f"Attributes are not in sync.\n{error_str}")
         return response_dict
     except Exception as exc:
         if isinstance(exc, KeyboardInterrupt):
+            raise exc
+        if isinstance(exc, AttributesOutOfSyncError):
             raise exc
 
         raise InvalidResponseError(error_str + f"Error parsing response as JSON: {exc}")
