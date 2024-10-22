@@ -2080,6 +2080,84 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"feature_selection_heatmap raised an exception: {e}")
 
+    def test_types_correlations_heatmap(self):
+
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+        )
+        so.calculate_predictions(
+            name="test",
+            models=self.pipelines,
+            scorers=self.scorers,
+            hyperparameters=self.pipeline_hyperparameters,
+            search_type="grid",
+            n_jobs_outer=1,
+            n_jobs_inner=1,
+            inner_splitters=self.single_inner_splitter,
+            store_correlations=True,
+        )
+
+        with self.assertRaises(TypeError):
+            so.correlations_heatmap(name="test")
+        with self.assertRaises(TypeError):
+            so.correlations_heatmap(name=1, feature_name="Feature 1")
+        with self.assertRaises(TypeError):
+            so.correlations_heatmap(name="test", feature_name=1)
+        with self.assertRaises(ValueError):
+            so.correlations_heatmap(name="invalid", feature_name="Feature 1")
+        with self.assertRaises(ValueError):
+            so.correlations_heatmap(name="test", feature_name="invalid")
+        # title
+        with self.assertRaises(TypeError):
+            so.correlations_heatmap(name="test", feature_name="Feature 1", title=1)
+        # figsize
+        with self.assertRaises(TypeError):
+            so.correlations_heatmap(
+                name="test", feature_name="Feature 1", figsize="invalid"
+            )
+        with self.assertRaises(ValueError):
+            so.correlations_heatmap(
+                name="test", feature_name="Feature 1", figsize=(1, 2, 3)
+            )
+        with self.assertRaises(TypeError):
+            so.correlations_heatmap(
+                name="test", feature_name="Feature 1", figsize=(1, "invalid")
+            )
+        with self.assertRaises(TypeError):
+            so.correlations_heatmap(
+                name="test", feature_name="Feature 1", figsize=(1, True)
+            )
+        # cap
+        with self.assertRaises(TypeError):
+            so.correlations_heatmap(name="test", feature_name="Feature 1", cap="invalid")
+        with self.assertRaises(ValueError):
+            so.correlations_heatmap(name="test", feature_name="Feature 1", cap=-1)
+        # ftrs_renamed
+        with self.assertRaises(TypeError):
+            so.correlations_heatmap(
+                name="test", feature_name="Feature 1", ftrs_renamed="invalid"
+            )
+        with self.assertRaises(TypeError):
+            so.correlations_heatmap(
+                name="test", feature_name="Feature 1", ftrs_renamed={1: "ftr1"}
+            )
+        with self.assertRaises(TypeError):
+            so.correlations_heatmap(
+                name="test", feature_name="Feature 1", ftrs_renamed={"ftr1": 1}
+            )
+        with self.assertRaises(ValueError):
+            so.correlations_heatmap(
+                name="test", feature_name="Feature 1", ftrs_renamed={"ftr1": "ftr2"}
+            )
+
+    def test_valid_correlations_heatmap(self):
+        so = self.so_with_calculated_preds
+        try:
+            so.feature_selection_heatmap(name="test")
+        except Exception as e:
+            self.fail(f"feature_selection_heatmap raised an exception: {e}")
+
     def test_types_coefs_timeplot(self):
         so = self.so_with_calculated_preds
         # Test that a wrong signal name raises an error
@@ -2343,4 +2421,4 @@ def _get_X_y(so: SignalOptimizer):
 if __name__ == "__main__":
     Test = TestAll()
     Test.setUpClass()
-    Test.test_get_feature_correlations()
+    Test.test_types_correlations_heatmap()

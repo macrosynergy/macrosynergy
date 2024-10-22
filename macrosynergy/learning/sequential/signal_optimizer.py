@@ -1022,7 +1022,7 @@ class SignalOptimizer(BasePanelLearner):
         if len(figsize) != 2:
             raise ValueError("The figsize argument must be a tuple of length 2.")
         for element in figsize:
-            if not isinstance(element, numbers.Number) and not isinstance(
+            if not isinstance(element, numbers.Number) or isinstance(
                 element, bool
             ):
                 raise TypeError(
