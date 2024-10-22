@@ -1251,15 +1251,10 @@ class BasePanelLearner(ABC):
             )
         if not isinstance(cap, int):
             raise TypeError("The cap must be an integer.")
-        if cap <= 0:
+        if cap < 0:
             raise ValueError("The cap must be greater than zero.")
-        if cap > 20:
-            warnings.warn(
-                f"The maximum number of models to display is 20. The cap has been set to "
-                "20.",
-                RuntimeWarning,
-            )
-            cap = 20
+        if cap > 10:
+            raise ValueError("The cap must be 10 or lower.")
 
         if title is None:
             title = f"Model Selection Heatmap for {name}"
