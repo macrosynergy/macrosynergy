@@ -819,12 +819,12 @@ class CategoryRelations(object):
                     ser_labs = df_labs["cid"] + " " + df_labs["real_date"]
                 else:
                     ser_labs = df_labs["cid"] + " "
-                    ser_labs += df_labs["real_date"].dt.year.astype(str)
+                    ser_labs += df_labs["real_date"].dt.year.astype('object')
                     if self.freq == "Q":
-                        ser_labs += "Q" + df_labs["real_date"].dt.quarter.astype(str)
+                        ser_labs += "Q" + df_labs["real_date"].dt.quarter.astype('object')
 
                     elif self.freq == "M":
-                        ser_labs += "-" + df_labs["real_date"].dt.month.astype(str)
+                        ser_labs += "-" + df_labs["real_date"].dt.month.astype('object')
 
                 for i in range(self.df.shape[0]):
                     ax.text(
