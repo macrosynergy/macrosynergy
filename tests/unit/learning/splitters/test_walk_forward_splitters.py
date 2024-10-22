@@ -376,8 +376,7 @@ class TestExpandingFrequency(unittest.TestCase):
                 if expansion_freq == "W" or expansion_freq == "M":
                     self.assertEqual(n_unique_test_dates, 1)
                 elif expansion_freq == "Q":
-                    self.assertLessEqual(n_unique_test_dates, 3)
-                    self.assertGreater(n_unique_test_dates, 0)
+                    self.assertGreaterEqual(n_unique_test_dates, 3)
         
 
     def test_types_visualise_splits(self):
