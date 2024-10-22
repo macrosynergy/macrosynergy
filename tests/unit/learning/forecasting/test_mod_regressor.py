@@ -18,6 +18,7 @@ from sklearn.linear_model import LinearRegression
 
 from parameterized import parameterized
 
+
 class TestModifiedLinearRegression(unittest.TestCase):
     @classmethod
     def setUpClass(self):
@@ -67,27 +68,69 @@ class TestModifiedLinearRegression(unittest.TestCase):
         self.assertRaises(ValueError, ModifiedLinearRegression, method="string")
         self.assertRaises(ValueError, ModifiedLinearRegression, method="invalid_method")
         # fit_intercept
-        self.assertRaises(TypeError, ModifiedLinearRegression, method="analytic", fit_intercept=1)
-        self.assertRaises(TypeError, ModifiedLinearRegression, method="bootstrap", fit_intercept=1)
+        self.assertRaises(
+            TypeError, ModifiedLinearRegression, method="analytic", fit_intercept=1
+        )
+        self.assertRaises(
+            TypeError, ModifiedLinearRegression, method="bootstrap", fit_intercept=1
+        )
         # positive
-        self.assertRaises(TypeError, ModifiedLinearRegression, method="analytic", positive=1)
-        self.assertRaises(TypeError, ModifiedLinearRegression, method="bootstrap", positive=1)
+        self.assertRaises(
+            TypeError, ModifiedLinearRegression, method="analytic", positive=1
+        )
+        self.assertRaises(
+            TypeError, ModifiedLinearRegression, method="bootstrap", positive=1
+        )
         # error_offset
-        self.assertRaises(TypeError, ModifiedLinearRegression, method="analytic", error_offset="hello")
-        self.assertRaises(TypeError, ModifiedLinearRegression, method="bootstrap", error_offset="hello")
-        self.assertRaises(ValueError, ModifiedLinearRegression, method="analytic", error_offset=-1)
-        self.assertRaises(ValueError, ModifiedLinearRegression, method="bootstrap", error_offset=-1)
+        self.assertRaises(
+            TypeError, ModifiedLinearRegression, method="analytic", error_offset="hello"
+        )
+        self.assertRaises(
+            TypeError,
+            ModifiedLinearRegression,
+            method="bootstrap",
+            error_offset="hello",
+        )
+        self.assertRaises(
+            ValueError, ModifiedLinearRegression, method="analytic", error_offset=-1
+        )
+        self.assertRaises(
+            ValueError, ModifiedLinearRegression, method="bootstrap", error_offset=-1
+        )
         # bootstrap_panel
-        self.assertRaises(TypeError, ModifiedLinearRegression, method="bootstrap", bootstrap_method=1)
-        self.assertRaises(ValueError, ModifiedLinearRegression, method="bootstrap", bootstrap_method="string")
+        self.assertRaises(
+            TypeError, ModifiedLinearRegression, method="bootstrap", bootstrap_method=1
+        )
+        self.assertRaises(
+            ValueError,
+            ModifiedLinearRegression,
+            method="bootstrap",
+            bootstrap_method="string",
+        )
         # bootstrap_iters
-        self.assertRaises(TypeError, ModifiedLinearRegression, method="bootstrap", bootstrap_iters="string")
-        self.assertRaises(ValueError, ModifiedLinearRegression, method="bootstrap", bootstrap_iters=-1)
+        self.assertRaises(
+            TypeError,
+            ModifiedLinearRegression,
+            method="bootstrap",
+            bootstrap_iters="string",
+        )
+        self.assertRaises(
+            ValueError, ModifiedLinearRegression, method="bootstrap", bootstrap_iters=-1
+        )
         # resample_ratio
-        self.assertRaises(TypeError, ModifiedLinearRegression, method="bootstrap", resample_ratio="string")
-        self.assertRaises(ValueError, ModifiedLinearRegression, method="bootstrap", resample_ratio=-1)
+        self.assertRaises(
+            TypeError,
+            ModifiedLinearRegression,
+            method="bootstrap",
+            resample_ratio="string",
+        )
+        self.assertRaises(
+            ValueError, ModifiedLinearRegression, method="bootstrap", resample_ratio=-1
+        )
         # analytic_method
-        self.assertRaises(TypeError, ModifiedLinearRegression, method="analytic", analytic_method=1)
+        self.assertRaises(
+            TypeError, ModifiedLinearRegression, method="analytic", analytic_method=1
+        )
 
     def test_valid_init(self):
         # Check defaults set correctly
@@ -168,8 +211,10 @@ class TestModifiedLinearRegression(unittest.TestCase):
         self.assertRaises(ValueError, mlr.fit, X=self.X, y=self.y_nan)
 
     def test_valid_fit(self):
-        """ ModifiedLinearRegression with usual standard errors """
-        mlr1 = ModifiedLinearRegression(method="analytic", error_offset=1e-2, fit_intercept = False)
+        """ModifiedLinearRegression with usual standard errors"""
+        mlr1 = ModifiedLinearRegression(
+            method="analytic", error_offset=1e-2, fit_intercept=False
+        )
         mlr1.fit(self.X, self.y)
         self.assertIsInstance(mlr1.coef_, np.ndarray)
         self.assertIsInstance(mlr1.intercept_, numbers.Number)
@@ -180,55 +225,95 @@ class TestModifiedLinearRegression(unittest.TestCase):
         p = self.X.shape[1]
         y_hat = lr.predict(self.X)
         residuals = self.y - y_hat
-        sigma2 = np.sum(residuals ** 2) / (n - p)
+        sigma2 = np.sum(residuals**2) / (n - p)
         XTX = np.matmul(self.X.T.values, self.X.values)
         XTX_inv = np.linalg.inv(XTX)
         ses = np.sqrt(sigma2 * np.diag(XTX_inv))
-        coef_adj = lr.coef_ / (ses+1e-2)
+        coef_adj = lr.coef_ / (ses + 1e-2)
         np.testing.assert_array_almost_equal(mlr1.coef_, coef_adj, decimal=4)
 
         """ ModifiedLinearRegression with usual HC3 errors """
-        mlr2 = ModifiedLinearRegression(method="analytic", error_offset=1e-2, analytic_method="White", fit_intercept=False)
+        mlr2 = ModifiedLinearRegression(
+            method="analytic",
+            error_offset=1e-2,
+            analytic_method="White",
+            fit_intercept=False,
+        )
         mlr2.fit(self.X, self.y)
         self.assertIsInstance(mlr2.coef_, np.ndarray)
         self.assertIsInstance(mlr2.intercept_, numbers.Number)
         self.assertEqual(mlr2.intercept_, 0)
         # determine theoretical standard errors
         hat_matrix = self.X.values @ XTX_inv @ self.X.T.values
-        ses = np.sqrt(np.diag(XTX_inv @ (self.X.values.T @ np.diag(residuals ** 2 / (1 - np.diag(hat_matrix))**2) @ self.X.values) @ XTX_inv))
-        coef_adj = lr.coef_ / (ses+1e-2)
+        ses = np.sqrt(
+            np.diag(
+                XTX_inv
+                @ (
+                    self.X.values.T
+                    @ np.diag(residuals**2 / (1 - np.diag(hat_matrix)) ** 2)
+                    @ self.X.values
+                )
+                @ XTX_inv
+            )
+        )
+        coef_adj = lr.coef_ / (ses + 1e-2)
         np.testing.assert_array_almost_equal(mlr2.coef_, coef_adj, decimal=4)
 
         """ ModifiedLinearRegression with panel bootstrap errors """
-        mlr3 = ModifiedLinearRegression(method="bootstrap", bootstrap_method="panel", bootstrap_iters=100, fit_intercept=False)
+        mlr3 = ModifiedLinearRegression(
+            method="bootstrap",
+            bootstrap_method="panel",
+            bootstrap_iters=100,
+            fit_intercept=False,
+        )
         mlr3.fit(self.X, self.y)
         self.assertIsInstance(mlr3.coef_, np.ndarray)
         self.assertIsInstance(mlr3.intercept_, numbers.Number)
         self.assertEqual(mlr3.intercept_, 0)
-        
+
         # ModifiedLinearRegression with period bootstrap
-        ml4 = ModifiedLinearRegression(method="bootstrap", bootstrap_method="period", bootstrap_iters=100, fit_intercept=False)
+        ml4 = ModifiedLinearRegression(
+            method="bootstrap",
+            bootstrap_method="period",
+            bootstrap_iters=100,
+            fit_intercept=False,
+        )
         ml4.fit(self.X, self.y)
         self.assertIsInstance(ml4.coef_, np.ndarray)
         self.assertIsInstance(ml4.intercept_, numbers.Number)
         self.assertEqual(ml4.intercept_, 0)
 
         # ModifiedLinearRegression with cross-sectional bootstrap
-        mlr5 = ModifiedLinearRegression(method="bootstrap", bootstrap_method="cross", bootstrap_iters=100, fit_intercept=False)
+        mlr5 = ModifiedLinearRegression(
+            method="bootstrap",
+            bootstrap_method="cross",
+            bootstrap_iters=100,
+            fit_intercept=False,
+        )
         mlr5.fit(self.X, self.y)
         self.assertIsInstance(mlr5.coef_, np.ndarray)
         self.assertIsInstance(mlr5.intercept_, numbers.Number)
         self.assertEqual(mlr5.intercept_, 0)
 
         # ModifiedLinearRegression with period_per_cross bootstrap
-        mlr6 = ModifiedLinearRegression(method="bootstrap", bootstrap_method="period_per_cross", bootstrap_iters=100, fit_intercept=False)
+        mlr6 = ModifiedLinearRegression(
+            method="bootstrap",
+            bootstrap_method="period_per_cross",
+            bootstrap_iters=100,
+            fit_intercept=False,
+        )
         mlr6.fit(self.X, self.y)
         self.assertIsInstance(mlr6.coef_, np.ndarray)
         self.assertIsInstance(mlr6.intercept_, numbers.Number)
         self.assertEqual(mlr6.intercept_, 0)
-        
+
         # ModifiedLinearRegression with cross_per_period bootstrap
-        mlr7 = ModifiedLinearRegression(method="bootstrap", bootstrap_method="cross_per_period", bootstrap_iters=100, fit_intercept = False)
+        mlr7 = ModifiedLinearRegression(
+            method="bootstrap",
+            bootstrap_method="cross_per_period",
+            bootstrap_iters=100,
+            fit_intercept=False,
+        )
         mlr7.fit(self.X, self.y)
         self.assertIsInstance(mlr7.coef_, np.ndarray)
         self.assertIsInstance(mlr7.intercept_, numbers.Number)
@@ -257,7 +342,9 @@ class TestModifiedLinearRegression(unittest.TestCase):
         y_pred = mlr.create_signal(self.X)
         self.assertIsInstance(y_pred, np.ndarray)
         self.assertEqual(len(y_pred), len(self.y))
-        np.testing.assert_array_equal(y_pred, mlr.intercept_ + np.matmul(self.X, mlr.coef_))
+        np.testing.assert_array_equal(
+            y_pred, mlr.intercept_ + np.matmul(self.X, mlr.coef_)
+        )
 
     def test_types_create_signal(self):
         mlr = ModifiedLinearRegression(method="analytic")
@@ -267,6 +354,7 @@ class TestModifiedLinearRegression(unittest.TestCase):
         self.assertRaises(TypeError, mlr.create_signal, X="string")
         self.assertRaises(ValueError, mlr.create_signal, X=self.X_nan)
         self.assertRaises(ValueError, mlr.create_signal, X=self.X_nan.reset_index())
+
 
 class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
     @classmethod
@@ -311,35 +399,116 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
         self.y_nan = self.y.copy()
         self.y_nan.iloc[0] = np.nan
 
-        self.sign_weights = SignWeightedLinearRegression()._calculate_sign_weights(self.y)
+        self.sign_weights = SignWeightedLinearRegression()._calculate_sign_weights(
+            self.y
+        )
 
     def test_types_init(self):
         # method
         self.assertRaises(TypeError, ModifiedSignWeightedLinearRegression, method=1)
-        self.assertRaises(ValueError, ModifiedSignWeightedLinearRegression, method="string")
-        self.assertRaises(ValueError, ModifiedSignWeightedLinearRegression, method="invalid_method")
+        self.assertRaises(
+            ValueError, ModifiedSignWeightedLinearRegression, method="string"
+        )
+        self.assertRaises(
+            ValueError, ModifiedSignWeightedLinearRegression, method="invalid_method"
+        )
         # fit_intercept
-        self.assertRaises(TypeError, ModifiedSignWeightedLinearRegression, method="analytic", fit_intercept=1)
-        self.assertRaises(TypeError, ModifiedSignWeightedLinearRegression, method="bootstrap", fit_intercept=1)
+        self.assertRaises(
+            TypeError,
+            ModifiedSignWeightedLinearRegression,
+            method="analytic",
+            fit_intercept=1,
+        )
+        self.assertRaises(
+            TypeError,
+            ModifiedSignWeightedLinearRegression,
+            method="bootstrap",
+            fit_intercept=1,
+        )
         # positive
-        self.assertRaises(TypeError, ModifiedSignWeightedLinearRegression, method="analytic", positive=1)
-        self.assertRaises(TypeError, ModifiedSignWeightedLinearRegression, method="bootstrap", positive=1)
+        self.assertRaises(
+            TypeError,
+            ModifiedSignWeightedLinearRegression,
+            method="analytic",
+            positive=1,
+        )
+        self.assertRaises(
+            TypeError,
+            ModifiedSignWeightedLinearRegression,
+            method="bootstrap",
+            positive=1,
+        )
         # error_offset
-        self.assertRaises(TypeError, ModifiedSignWeightedLinearRegression, method="analytic", error_offset="hello")
-        self.assertRaises(TypeError, ModifiedSignWeightedLinearRegression, method="bootstrap", error_offset="hello")
-        self.assertRaises(ValueError, ModifiedSignWeightedLinearRegression, method="analytic", error_offset=-1)
-        self.assertRaises(ValueError, ModifiedSignWeightedLinearRegression, method="bootstrap", error_offset=-1)
+        self.assertRaises(
+            TypeError,
+            ModifiedSignWeightedLinearRegression,
+            method="analytic",
+            error_offset="hello",
+        )
+        self.assertRaises(
+            TypeError,
+            ModifiedSignWeightedLinearRegression,
+            method="bootstrap",
+            error_offset="hello",
+        )
+        self.assertRaises(
+            ValueError,
+            ModifiedSignWeightedLinearRegression,
+            method="analytic",
+            error_offset=-1,
+        )
+        self.assertRaises(
+            ValueError,
+            ModifiedSignWeightedLinearRegression,
+            method="bootstrap",
+            error_offset=-1,
+        )
         # bootstrap_panel
-        self.assertRaises(TypeError, ModifiedSignWeightedLinearRegression, method="bootstrap", bootstrap_method=1)
-        self.assertRaises(ValueError, ModifiedSignWeightedLinearRegression, method="bootstrap", bootstrap_method="string")
+        self.assertRaises(
+            TypeError,
+            ModifiedSignWeightedLinearRegression,
+            method="bootstrap",
+            bootstrap_method=1,
+        )
+        self.assertRaises(
+            ValueError,
+            ModifiedSignWeightedLinearRegression,
+            method="bootstrap",
+            bootstrap_method="string",
+        )
         # bootstrap_iters
-        self.assertRaises(TypeError, ModifiedSignWeightedLinearRegression, method="bootstrap", bootstrap_iters="string")
-        self.assertRaises(ValueError, ModifiedSignWeightedLinearRegression, method="bootstrap", bootstrap_iters=-1)
+        self.assertRaises(
+            TypeError,
+            ModifiedSignWeightedLinearRegression,
+            method="bootstrap",
+            bootstrap_iters="string",
+        )
+        self.assertRaises(
+            ValueError,
+            ModifiedSignWeightedLinearRegression,
+            method="bootstrap",
+            bootstrap_iters=-1,
+        )
         # resample_ratio
-        self.assertRaises(TypeError, ModifiedSignWeightedLinearRegression, method="bootstrap", resample_ratio="string")
-        self.assertRaises(ValueError, ModifiedSignWeightedLinearRegression, method="bootstrap", resample_ratio=-1)
+        self.assertRaises(
+            TypeError,
+            ModifiedSignWeightedLinearRegression,
+            method="bootstrap",
+            resample_ratio="string",
+        )
+        self.assertRaises(
+            ValueError,
+            ModifiedSignWeightedLinearRegression,
+            method="bootstrap",
+            resample_ratio=-1,
+        )
         # analytic_method
-        self.assertRaises(TypeError, ModifiedSignWeightedLinearRegression, method="analytic", analytic_method=1)
+        self.assertRaises(
+            TypeError,
+            ModifiedSignWeightedLinearRegression,
+            method="analytic",
+            analytic_method=1,
+        )
 
     def test_valid_init(self):
         # Check defaults set correctly
@@ -420,8 +589,10 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
         self.assertRaises(ValueError, mlr.fit, X=self.X, y=self.y_nan)
 
     def test_valid_fit(self):
-        """ ModifiedSignWeightedLinearRegression with usual standard errors """
-        mlr1 = ModifiedSignWeightedLinearRegression(method="analytic", error_offset=1e-2, fit_intercept = False)
+        """ModifiedSignWeightedLinearRegression with usual standard errors"""
+        mlr1 = ModifiedSignWeightedLinearRegression(
+            method="analytic", error_offset=1e-2, fit_intercept=False
+        )
         mlr1.fit(self.X, self.y)
         self.assertIsInstance(mlr1.coef_, np.ndarray)
         self.assertIsInstance(mlr1.intercept_, numbers.Number)
@@ -430,60 +601,87 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
         sqrt_weight_matrix = np.diag(np.sqrt(self.sign_weights))
         X_adj = np.matmul(sqrt_weight_matrix, self.X.values)
         y_adj = np.matmul(sqrt_weight_matrix, self.y.values)
-        lr = LinearRegression(fit_intercept = False).fit(X_adj, y_adj)
+        lr = LinearRegression(fit_intercept=False).fit(X_adj, y_adj)
         n = X_adj.shape[0]
         p = X_adj.shape[1]
         y_hat = lr.predict(X_adj)
         residuals = y_adj - y_hat
-        sigma2 = np.sum(residuals ** 2) / (n - p)
+        sigma2 = np.sum(residuals**2) / (n - p)
         XTX = np.matmul(X_adj.T, X_adj)
         XTX_inv = np.linalg.inv(XTX)
         ses = sigma2 * np.diag(XTX_inv)
-        coef_adj = lr.coef_ / (np.sqrt(ses)+1e-2)
+        coef_adj = lr.coef_ / (np.sqrt(ses) + 1e-2)
         np.testing.assert_array_almost_equal(mlr1.coef_, coef_adj, decimal=4)
 
         """ ModifiedSignWeightedLinearRegression with HC3 errors """
-        mlr2 = ModifiedSignWeightedLinearRegression(method="analytic", error_offset=1e-2, analytic_method="White", fit_intercept = False)
+        mlr2 = ModifiedSignWeightedLinearRegression(
+            method="analytic",
+            error_offset=1e-2,
+            analytic_method="White",
+            fit_intercept=False,
+        )
         mlr2.fit(self.X, self.y)
         self.assertIsInstance(mlr2.coef_, np.ndarray)
         self.assertIsInstance(mlr2.intercept_, numbers.Number)
         self.assertEqual(mlr2.intercept_, 0)
         # determine theoretical standard errors
         hat_matrix = X_adj @ XTX_inv @ X_adj.T
-        Omega = X_adj.T @ np.diag(residuals ** 2 / (1 - np.diag(hat_matrix))**2) @ X_adj
+        Omega = X_adj.T @ np.diag(residuals**2 / (1 - np.diag(hat_matrix)) ** 2) @ X_adj
         ses = np.sqrt(np.diag(XTX_inv @ Omega @ XTX_inv))
-        coef_adj = lr.coef_ / (ses+1e-2)
+        coef_adj = lr.coef_ / (ses + 1e-2)
         np.testing.assert_array_almost_equal(mlr2.coef_, coef_adj, decimal=4)
 
         # ModifiedLinearRegression with panel bootstrap
-        mlr3 = ModifiedLinearRegression(method="bootstrap", bootstrap_method="panel", bootstrap_iters=100)
+        mlr3 = ModifiedLinearRegression(
+            method="bootstrap", bootstrap_method="panel", bootstrap_iters=100
+        )
         mlr3.fit(self.X, self.y)
         self.assertIsInstance(mlr3.coef_, np.ndarray)
         self.assertIsInstance(mlr3.intercept_, numbers.Number)
-        
+
         # ModifiedSignWeightedLinearRegression with period bootstrap
-        ml4 = ModifiedSignWeightedLinearRegression(method="bootstrap", bootstrap_method="period", bootstrap_iters=100, fit_intercept=False)
+        ml4 = ModifiedSignWeightedLinearRegression(
+            method="bootstrap",
+            bootstrap_method="period",
+            bootstrap_iters=100,
+            fit_intercept=False,
+        )
         ml4.fit(self.X, self.y)
         self.assertIsInstance(ml4.coef_, np.ndarray)
         self.assertIsInstance(ml4.intercept_, numbers.Number)
         self.assertEqual(ml4.intercept_, 0)
 
         # ModifiedSignWeightedLinearRegression with cross-sectional bootstrap
-        mlr5 = ModifiedSignWeightedLinearRegression(method="bootstrap", bootstrap_method="cross", fit_intercept = False, bootstrap_iters=100)
+        mlr5 = ModifiedSignWeightedLinearRegression(
+            method="bootstrap",
+            bootstrap_method="cross",
+            fit_intercept=False,
+            bootstrap_iters=100,
+        )
         mlr5.fit(self.X, self.y)
         self.assertIsInstance(mlr5.coef_, np.ndarray)
         self.assertIsInstance(mlr5.intercept_, numbers.Number)
         self.assertEqual(mlr5.intercept_, 0)
 
         # ModifiedSignWeightedLinearRegression with period_per_cross bootstrap
-        mlr6 = ModifiedSignWeightedLinearRegression(method="bootstrap", bootstrap_method="period_per_cross", fit_intercept=False, bootstrap_iters=100)
+        mlr6 = ModifiedSignWeightedLinearRegression(
+            method="bootstrap",
+            bootstrap_method="period_per_cross",
+            fit_intercept=False,
+            bootstrap_iters=100,
+        )
         mlr6.fit(self.X, self.y)
         self.assertIsInstance(mlr6.coef_, np.ndarray)
         self.assertIsInstance(mlr6.intercept_, numbers.Number)
         self.assertEqual(mlr6.intercept_, 0)
 
         # ModifiedSignWeightedLinearRegression with cross_per_period bootstrap
-        mlr7 = ModifiedSignWeightedLinearRegression(method="bootstrap", fit_intercept = False, bootstrap_method="cross_per_period", bootstrap_iters=100)
+        mlr7 = ModifiedSignWeightedLinearRegression(
+            method="bootstrap",
+            fit_intercept=False,
+            bootstrap_method="cross_per_period",
+            bootstrap_iters=100,
+        )
         mlr7.fit(self.X, self.y)
         self.assertIsInstance(mlr7.coef_, np.ndarray)
         self.assertIsInstance(mlr7.intercept_, numbers.Number)
@@ -491,7 +689,11 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
 
     @parameterized.expand(itertools.product([None, "White"], [True, False]))
     def test_types_predict(self, analytic_method, fit_intercept):
-        mlr = ModifiedSignWeightedLinearRegression(method="analytic", fit_intercept=fit_intercept, analytic_method=analytic_method)
+        mlr = ModifiedSignWeightedLinearRegression(
+            method="analytic",
+            fit_intercept=fit_intercept,
+            analytic_method=analytic_method,
+        )
         mlr.fit(self.X, self.y)
         # X
         self.assertRaises(TypeError, mlr.predict, X=1)
@@ -501,7 +703,11 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
 
     @parameterized.expand(itertools.product([None, "White"], [True, False]))
     def test_valid_predict(self, analytic_method, fit_intercept):
-        mlr = ModifiedSignWeightedLinearRegression(method="analytic", fit_intercept = fit_intercept, analytic_method=analytic_method)
+        mlr = ModifiedSignWeightedLinearRegression(
+            method="analytic",
+            fit_intercept=fit_intercept,
+            analytic_method=analytic_method,
+        )
         mlr.fit(self.X, self.y)
         y_pred = mlr.predict(self.X)
         self.assertIsInstance(y_pred, np.ndarray)
@@ -510,22 +716,33 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
 
     @parameterized.expand(itertools.product([None, "White"], [True, False]))
     def test_valid_create_signal(self, analytic_method, fit_intercept):
-        mlr = ModifiedSignWeightedLinearRegression(method="analytic", fit_intercept=fit_intercept, analytic_method=analytic_method)
+        mlr = ModifiedSignWeightedLinearRegression(
+            method="analytic",
+            fit_intercept=fit_intercept,
+            analytic_method=analytic_method,
+        )
         mlr.fit(self.X, self.y)
         y_pred = mlr.create_signal(self.X)
         self.assertIsInstance(y_pred, np.ndarray)
         self.assertEqual(len(y_pred), len(self.y))
-        np.testing.assert_array_equal(y_pred, mlr.intercept_ + np.matmul(self.X, mlr.coef_))
+        np.testing.assert_array_equal(
+            y_pred, mlr.intercept_ + np.matmul(self.X, mlr.coef_)
+        )
 
     @parameterized.expand(itertools.product([None, "White"], [True, False]))
     def test_types_create_signal(self, analytic_method, fit_intercept):
-        mlr = ModifiedSignWeightedLinearRegression(method="analytic", fit_intercept=fit_intercept, analytic_method=analytic_method)
+        mlr = ModifiedSignWeightedLinearRegression(
+            method="analytic",
+            fit_intercept=fit_intercept,
+            analytic_method=analytic_method,
+        )
         mlr.fit(self.X, self.y)
         # X
         self.assertRaises(TypeError, mlr.create_signal, X=1)
         self.assertRaises(TypeError, mlr.create_signal, X="string")
         self.assertRaises(ValueError, mlr.create_signal, X=self.X_nan)
         self.assertRaises(ValueError, mlr.create_signal, X=self.X_nan.reset_index())
+
 
 class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
     @classmethod
@@ -568,40 +785,141 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
         self.y_nan = self.y.copy()
         self.y_nan.iloc[0] = np.nan
 
-        self.time_weights = TimeWeightedLinearRegression(half_life = 12)._calculate_time_weights(self.y)
+        self.time_weights = TimeWeightedLinearRegression(
+            half_life=12
+        )._calculate_time_weights(self.y)
 
     def test_types_init(self):
         # method
         self.assertRaises(TypeError, ModifiedTimeWeightedLinearRegression, method=1)
-        self.assertRaises(ValueError, ModifiedTimeWeightedLinearRegression, method="string")
-        self.assertRaises(ValueError, ModifiedTimeWeightedLinearRegression, method="invalid_method")
+        self.assertRaises(
+            ValueError, ModifiedTimeWeightedLinearRegression, method="string"
+        )
+        self.assertRaises(
+            ValueError, ModifiedTimeWeightedLinearRegression, method="invalid_method"
+        )
         # fit_intercept
-        self.assertRaises(TypeError, ModifiedTimeWeightedLinearRegression, method="analytic", fit_intercept=1)
-        self.assertRaises(TypeError, ModifiedTimeWeightedLinearRegression, method="bootstrap", fit_intercept=1)
+        self.assertRaises(
+            TypeError,
+            ModifiedTimeWeightedLinearRegression,
+            method="analytic",
+            fit_intercept=1,
+        )
+        self.assertRaises(
+            TypeError,
+            ModifiedTimeWeightedLinearRegression,
+            method="bootstrap",
+            fit_intercept=1,
+        )
         # positive
-        self.assertRaises(TypeError, ModifiedTimeWeightedLinearRegression, method="analytic", positive=1)
-        self.assertRaises(TypeError, ModifiedTimeWeightedLinearRegression, method="bootstrap", positive=1)
+        self.assertRaises(
+            TypeError,
+            ModifiedTimeWeightedLinearRegression,
+            method="analytic",
+            positive=1,
+        )
+        self.assertRaises(
+            TypeError,
+            ModifiedTimeWeightedLinearRegression,
+            method="bootstrap",
+            positive=1,
+        )
         # half_life
-        self.assertRaises(TypeError, ModifiedTimeWeightedLinearRegression, method="analytic", half_life="string")
-        self.assertRaises(ValueError, ModifiedTimeWeightedLinearRegression, method="analytic", half_life=-1)
-        self.assertRaises(TypeError, ModifiedTimeWeightedLinearRegression, method="bootstrap", half_life="string")
-        self.assertRaises(ValueError, ModifiedTimeWeightedLinearRegression, method="bootstrap", half_life=-1)
+        self.assertRaises(
+            TypeError,
+            ModifiedTimeWeightedLinearRegression,
+            method="analytic",
+            half_life="string",
+        )
+        self.assertRaises(
+            ValueError,
+            ModifiedTimeWeightedLinearRegression,
+            method="analytic",
+            half_life=-1,
+        )
+        self.assertRaises(
+            TypeError,
+            ModifiedTimeWeightedLinearRegression,
+            method="bootstrap",
+            half_life="string",
+        )
+        self.assertRaises(
+            ValueError,
+            ModifiedTimeWeightedLinearRegression,
+            method="bootstrap",
+            half_life=-1,
+        )
         # error_offset
-        self.assertRaises(TypeError, ModifiedTimeWeightedLinearRegression, method="analytic", error_offset="hello")
-        self.assertRaises(TypeError, ModifiedTimeWeightedLinearRegression, method="bootstrap", error_offset="hello")
-        self.assertRaises(ValueError, ModifiedTimeWeightedLinearRegression, method="analytic", error_offset=-1)
-        self.assertRaises(ValueError, ModifiedTimeWeightedLinearRegression, method="bootstrap", error_offset=-1)
+        self.assertRaises(
+            TypeError,
+            ModifiedTimeWeightedLinearRegression,
+            method="analytic",
+            error_offset="hello",
+        )
+        self.assertRaises(
+            TypeError,
+            ModifiedTimeWeightedLinearRegression,
+            method="bootstrap",
+            error_offset="hello",
+        )
+        self.assertRaises(
+            ValueError,
+            ModifiedTimeWeightedLinearRegression,
+            method="analytic",
+            error_offset=-1,
+        )
+        self.assertRaises(
+            ValueError,
+            ModifiedTimeWeightedLinearRegression,
+            method="bootstrap",
+            error_offset=-1,
+        )
         # bootstrap_panel
-        self.assertRaises(TypeError, ModifiedTimeWeightedLinearRegression, method="bootstrap", bootstrap_method=1)
-        self.assertRaises(ValueError, ModifiedTimeWeightedLinearRegression, method="bootstrap", bootstrap_method="string")
+        self.assertRaises(
+            TypeError,
+            ModifiedTimeWeightedLinearRegression,
+            method="bootstrap",
+            bootstrap_method=1,
+        )
+        self.assertRaises(
+            ValueError,
+            ModifiedTimeWeightedLinearRegression,
+            method="bootstrap",
+            bootstrap_method="string",
+        )
         # bootstrap_iters
-        self.assertRaises(TypeError, ModifiedTimeWeightedLinearRegression, method="bootstrap", bootstrap_iters="string")
-        self.assertRaises(ValueError, ModifiedTimeWeightedLinearRegression, method="bootstrap", bootstrap_iters=-1)
+        self.assertRaises(
+            TypeError,
+            ModifiedTimeWeightedLinearRegression,
+            method="bootstrap",
+            bootstrap_iters="string",
+        )
+        self.assertRaises(
+            ValueError,
+            ModifiedTimeWeightedLinearRegression,
+            method="bootstrap",
+            bootstrap_iters=-1,
+        )
         # resample_ratio
-        self.assertRaises(TypeError, ModifiedTimeWeightedLinearRegression, method="bootstrap", resample_ratio="string")
-        self.assertRaises(ValueError, ModifiedTimeWeightedLinearRegression, method="bootstrap", resample_ratio=-1)
+        self.assertRaises(
+            TypeError,
+            ModifiedTimeWeightedLinearRegression,
+            method="bootstrap",
+            resample_ratio="string",
+        )
+        self.assertRaises(
+            ValueError,
+            ModifiedTimeWeightedLinearRegression,
+            method="bootstrap",
+            resample_ratio=-1,
+        )
         # analytic_method
-        self.assertRaises(TypeError, ModifiedTimeWeightedLinearRegression, method="analytic", analytic_method=1)
+        self.assertRaises(
+            TypeError,
+            ModifiedTimeWeightedLinearRegression,
+            method="analytic",
+            analytic_method=1,
+        )
 
     def test_valid_init(self):
         # Check defaults set correctly
@@ -688,8 +1006,10 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
         self.assertRaises(ValueError, mlr.fit, X=self.X, y=self.y_nan)
 
     def test_valid_fit(self):
-        """ ModifiedTimeWeightedLinearRegression with usual standard errors """
-        mlr1 = ModifiedTimeWeightedLinearRegression(method="analytic", half_life = 12, error_offset=1e-2, fit_intercept = False)
+        """ModifiedTimeWeightedLinearRegression with usual standard errors"""
+        mlr1 = ModifiedTimeWeightedLinearRegression(
+            method="analytic", half_life=12, error_offset=1e-2, fit_intercept=False
+        )
         mlr1.fit(self.X, self.y)
         self.assertIsInstance(mlr1.coef_, np.ndarray)
         self.assertIsInstance(mlr1.intercept_, numbers.Number)
@@ -698,60 +1018,95 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
         sqrt_weight_matrix = np.diag(np.sqrt(self.time_weights))
         X_adj = np.matmul(sqrt_weight_matrix, self.X.values)
         y_adj = np.matmul(sqrt_weight_matrix, self.y.values)
-        lr = LinearRegression(fit_intercept = False).fit(X_adj, y_adj)
+        lr = LinearRegression(fit_intercept=False).fit(X_adj, y_adj)
         n = X_adj.shape[0]
         p = X_adj.shape[1]
         y_hat = lr.predict(X_adj)
         residuals = y_adj - y_hat
-        sigma2 = np.sum(residuals ** 2) / (n - p)
+        sigma2 = np.sum(residuals**2) / (n - p)
         XTX = np.matmul(X_adj.T, X_adj)
         XTX_inv = np.linalg.inv(XTX)
         ses = sigma2 * np.diag(XTX_inv)
-        coef_adj = lr.coef_ / (np.sqrt(ses)+1e-2)
+        coef_adj = lr.coef_ / (np.sqrt(ses) + 1e-2)
         np.testing.assert_array_almost_equal(mlr1.coef_, coef_adj, decimal=4)
 
         """ ModifiedTimeWeightedLinearRegression with HC3 errors """
-        mlr2 = ModifiedTimeWeightedLinearRegression(method="analytic", half_life = 12, error_offset=1e-2, analytic_method="White", fit_intercept = False)
+        mlr2 = ModifiedTimeWeightedLinearRegression(
+            method="analytic",
+            half_life=12,
+            error_offset=1e-2,
+            analytic_method="White",
+            fit_intercept=False,
+        )
         mlr2.fit(self.X, self.y)
         self.assertIsInstance(mlr2.coef_, np.ndarray)
         self.assertIsInstance(mlr2.intercept_, numbers.Number)
         self.assertEqual(mlr2.intercept_, 0)
         # determine theoretical standard errors
         hat_matrix = X_adj @ XTX_inv @ X_adj.T
-        Omega = X_adj.T @ np.diag(residuals ** 2 / (1 - np.diag(hat_matrix))**2) @ X_adj
+        Omega = X_adj.T @ np.diag(residuals**2 / (1 - np.diag(hat_matrix)) ** 2) @ X_adj
         ses = np.sqrt(np.diag(XTX_inv @ Omega @ XTX_inv))
-        coef_adj = lr.coef_ / (ses+1e-2)
+        coef_adj = lr.coef_ / (ses + 1e-2)
         np.testing.assert_array_almost_equal(mlr2.coef_, coef_adj, decimal=4)
 
         """ ModifiedTimeWeightedLinearRegression with panel bootstrap errors """
-        mlr3 = ModifiedTimeWeightedLinearRegression(method="bootstrap", half_life = 12, bootstrap_method="panel", bootstrap_iters=100)
+        mlr3 = ModifiedTimeWeightedLinearRegression(
+            method="bootstrap",
+            half_life=12,
+            bootstrap_method="panel",
+            bootstrap_iters=100,
+        )
         mlr3.fit(self.X, self.y)
         self.assertIsInstance(mlr3.coef_, np.ndarray)
         self.assertIsInstance(mlr3.intercept_, numbers.Number)
-        
+
         # ModifiedTimeWeightedLinearRegression with period bootstrap
-        ml4 = ModifiedTimeWeightedLinearRegression(method="bootstrap", half_life = 12, bootstrap_method="period", bootstrap_iters=100, fit_intercept=False)
+        ml4 = ModifiedTimeWeightedLinearRegression(
+            method="bootstrap",
+            half_life=12,
+            bootstrap_method="period",
+            bootstrap_iters=100,
+            fit_intercept=False,
+        )
         ml4.fit(self.X, self.y)
         self.assertIsInstance(ml4.coef_, np.ndarray)
         self.assertIsInstance(ml4.intercept_, numbers.Number)
         self.assertEqual(ml4.intercept_, 0)
 
         # ModifiedTimeWeightedLinearRegression with cross-sectional bootstrap
-        mlr5 = ModifiedTimeWeightedLinearRegression(method="bootstrap", half_life = 12, bootstrap_method="cross", fit_intercept = False, bootstrap_iters=100)
+        mlr5 = ModifiedTimeWeightedLinearRegression(
+            method="bootstrap",
+            half_life=12,
+            bootstrap_method="cross",
+            fit_intercept=False,
+            bootstrap_iters=100,
+        )
         mlr5.fit(self.X, self.y)
         self.assertIsInstance(mlr5.coef_, np.ndarray)
         self.assertIsInstance(mlr5.intercept_, numbers.Number)
         self.assertEqual(mlr5.intercept_, 0)
 
         # ModifiedTimeWeightedLinearRegression with period_per_cross bootstrap
-        mlr6 = ModifiedTimeWeightedLinearRegression(method="bootstrap", half_life = 12, bootstrap_method="period_per_cross", fit_intercept=False, bootstrap_iters=100)
+        mlr6 = ModifiedTimeWeightedLinearRegression(
+            method="bootstrap",
+            half_life=12,
+            bootstrap_method="period_per_cross",
+            fit_intercept=False,
+            bootstrap_iters=100,
+        )
         mlr6.fit(self.X, self.y)
         self.assertIsInstance(mlr6.coef_, np.ndarray)
         self.assertIsInstance(mlr6.intercept_, numbers.Number)
         self.assertEqual(mlr6.intercept_, 0)
 
         # ModifiedTimeWeightedLinearRegression with cross_per_period bootstrap
-        mlr7 = ModifiedTimeWeightedLinearRegression(method="bootstrap", half_life = 12, fit_intercept = False, bootstrap_method="cross_per_period", bootstrap_iters=100)
+        mlr7 = ModifiedTimeWeightedLinearRegression(
+            method="bootstrap",
+            half_life=12,
+            fit_intercept=False,
+            bootstrap_method="cross_per_period",
+            bootstrap_iters=100,
+        )
         mlr7.fit(self.X, self.y)
         self.assertIsInstance(mlr7.coef_, np.ndarray)
         self.assertIsInstance(mlr7.intercept_, numbers.Number)
@@ -759,7 +1114,12 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
 
     @parameterized.expand(itertools.product([None, "White"], [True, False]))
     def test_types_predict(self, analytic_method, fit_intercept):
-        mlr = ModifiedTimeWeightedLinearRegression(method="analytic", half_life = 12, fit_intercept=fit_intercept, analytic_method=analytic_method)
+        mlr = ModifiedTimeWeightedLinearRegression(
+            method="analytic",
+            half_life=12,
+            fit_intercept=fit_intercept,
+            analytic_method=analytic_method,
+        )
         mlr.fit(self.X, self.y)
         # X
         self.assertRaises(TypeError, mlr.predict, X=1)
@@ -769,7 +1129,12 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
 
     @parameterized.expand(itertools.product([None, "White"], [True, False]))
     def test_valid_predict(self, analytic_method, fit_intercept):
-        mlr = ModifiedTimeWeightedLinearRegression(method="analytic", half_life = 12, fit_intercept = fit_intercept, analytic_method=analytic_method)
+        mlr = ModifiedTimeWeightedLinearRegression(
+            method="analytic",
+            half_life=12,
+            fit_intercept=fit_intercept,
+            analytic_method=analytic_method,
+        )
         mlr.fit(self.X, self.y)
         y_pred = mlr.predict(self.X)
         self.assertIsInstance(y_pred, np.ndarray)
@@ -778,16 +1143,28 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
 
     @parameterized.expand(itertools.product([None, "White"], [True, False]))
     def test_valid_create_signal(self, analytic_method, fit_intercept):
-        mlr = ModifiedTimeWeightedLinearRegression(method="analytic", half_life = 12, fit_intercept=fit_intercept, analytic_method=analytic_method)
+        mlr = ModifiedTimeWeightedLinearRegression(
+            method="analytic",
+            half_life=12,
+            fit_intercept=fit_intercept,
+            analytic_method=analytic_method,
+        )
         mlr.fit(self.X, self.y)
         y_pred = mlr.create_signal(self.X)
         self.assertIsInstance(y_pred, np.ndarray)
         self.assertEqual(len(y_pred), len(self.y))
-        np.testing.assert_array_equal(y_pred, mlr.intercept_ + np.matmul(self.X, mlr.coef_))
+        np.testing.assert_array_equal(
+            y_pred, mlr.intercept_ + np.matmul(self.X, mlr.coef_)
+        )
 
     @parameterized.expand(itertools.product([None, "White"], [True, False]))
     def test_types_create_signal(self, analytic_method, fit_intercept):
-        mlr = ModifiedTimeWeightedLinearRegression(method="analytic", half_life = 12, fit_intercept=fit_intercept, analytic_method=analytic_method)
+        mlr = ModifiedTimeWeightedLinearRegression(
+            method="analytic",
+            half_life=12,
+            fit_intercept=fit_intercept,
+            analytic_method=analytic_method,
+        )
         mlr.fit(self.X, self.y)
         # X
         self.assertRaises(TypeError, mlr.create_signal, X=1)
