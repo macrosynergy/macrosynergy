@@ -378,8 +378,11 @@ def rename_xcats(
 
     # Validate `xcat_map`
     if xcat_map is not None:
-        if not all(
-            isinstance(k, str) and isinstance(v, str) for k, v in xcat_map.items()
+        if not (
+            isinstance(xcat_map, dict)
+            and all(
+                isinstance(k, str) and isinstance(v, str) for k, v in xcat_map.items()
+            )
         ):
             raise TypeError(
                 "`xcat_map` must be a dictionary with string keys and values."
@@ -414,9 +417,21 @@ def rename_xcats(
         if var_ is not None:
             curr_func = name_
 
-    df["xcat"] = df["xcat"].cat.rename_categories(
-        {cat: funcs[curr_func](cat) for cat in select_xcats}
-    )
+    if fmt_string is not None:
+        if fmt_string.count("{}") != 1:
+            raise ValueError(
+                "The `fmt_string` must contain exactly one pair of curly braces."
+            )
+
+    if name_all is not None:
+        xc_col = df["xcat"].astype(str)
+        xc_col = xc_col.replace({cat: funcs[curr_func](cat) for cat in select_xcats})
+        df["xcat"] = pd.Categorical(xc_col, categories=list(set(xc_col)))
+
+    else:
+        df["xcat"] = df["xcat"].cat.rename_categories(
+            {cat: funcs[curr_func](cat) for cat in select_xcats}
+        )
 
     return df
 
