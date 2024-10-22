@@ -1246,5 +1246,36 @@ class TestRenameXCATs(unittest.TestCase):
             rename_xcats(qdf, fmt_string="new_{xcat}_name_")
 
 
+class TestQDFClass(unittest.TestCase):
+    def test_qdf_basic(self):
+        tickers = helper_random_tickers(10)
+        test_df: pd.DataFrame = make_test_df(tickers=tickers, metrics=JPMAQS_METRICS)
+
+        qdf = QuantamentalDataFrame(test_df.copy())
+        in_dtypes = test_df.dtypes.to_dict()
+
+        qdf_copy = qdf.copy()
+        qdf_copy[["cid", "xcat"]] = qdf_copy[["cid", "xcat"]].astype("object")
+
+        self.assertTrue(qdf_copy.equals(test_df))
+
+        self.assertTrue(qdf.dtypes.to_dict()["cid"].name == "category")
+        self.assertTrue(qdf.dtypes.to_dict()["xcat"].name == "category")
+
+        for col in qdf.columns:
+            if col not in ["cid", "xcat"]:
+                self.assertTrue(qdf[col].dtype == in_dtypes[col])
+
+    def test_qdf_str_cols(self):
+        tickers = helper_random_tickers(10)
+        test_df: pd.DataFrame = make_test_df(tickers=tickers, metrics=JPMAQS_METRICS)
+
+        qdf = QuantamentalDataFrame(test_df, categorical=False)
+
+        self.assertTrue(qdf.equals(test_df))
+        self.assertTrue(qdf.dtypes.to_dict()["cid"].name == "object")
+        self.assertTrue(qdf.dtypes.to_dict()["xcat"].name == "object")
+
+
 if __name__ == "__main__":
     unittest.main()
