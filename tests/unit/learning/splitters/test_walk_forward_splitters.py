@@ -286,7 +286,48 @@ class TestExpandingFrequency(unittest.TestCase):
         matplotlib.use(self.mpl_backend)
 
     def test_types_init(self):
-        pass 
+        # expansion_freq
+        with self.assertRaises(TypeError):
+            splitter = ExpandingFrequencyPanelSplit(expansion_freq=1)
+        with self.assertRaises(ValueError):
+            splitter = ExpandingFrequencyPanelSplit(expansion_freq="1")
+        # test_freq
+        with self.assertRaises(TypeError):
+            splitter = ExpandingFrequencyPanelSplit(test_freq=1)
+        with self.assertRaises(ValueError):
+            splitter = ExpandingFrequencyPanelSplit(test_freq="1")
+        # min_cids
+        with self.assertRaises(TypeError):
+            splitter = ExpandingFrequencyPanelSplit(min_cids="1Y")
+        with self.assertRaises(TypeError):
+            splitter = ExpandingFrequencyPanelSplit(min_cids=1.0)
+        with self.assertRaises(ValueError):
+            splitter = ExpandingFrequencyPanelSplit(min_cids=0)
+        with self.assertRaises(ValueError):
+            splitter = ExpandingFrequencyPanelSplit(min_cids=-1)
+        # min_periods 
+        with self.assertRaises(TypeError):
+            splitter = ExpandingFrequencyPanelSplit(min_periods="1Y")
+        with self.assertRaises(TypeError):
+            splitter = ExpandingFrequencyPanelSplit(min_periods=1.0)
+        with self.assertRaises(ValueError):
+            splitter = ExpandingFrequencyPanelSplit(min_periods=0)
+        with self.assertRaises(ValueError):
+            splitter = ExpandingFrequencyPanelSplit(min_periods=-1)
+        # start_date 
+        with self.assertRaises(TypeError):
+            splitter = ExpandingFrequencyPanelSplit(start_date=1)
+        with self.assertRaises(ValueError):
+            splitter = ExpandingFrequencyPanelSplit(start_date="2020-01d-01")
+        # max_periods 
+        with self.assertRaises(TypeError):
+            splitter = ExpandingFrequencyPanelSplit(max_periods="1Y")
+        with self.assertRaises(TypeError):
+            splitter = ExpandingFrequencyPanelSplit(max_periods=1.0)
+        with self.assertRaises(ValueError):
+            splitter = ExpandingFrequencyPanelSplit(max_periods=0)
+        with self.assertRaises(ValueError):
+            splitter = ExpandingFrequencyPanelSplit(max_periods=-1)
 
     def test_valid_init(self):
         # Ensure default values set correctly
@@ -315,7 +356,18 @@ class TestExpandingFrequency(unittest.TestCase):
         self.assertEqual(splitter.max_periods, 12*3)
 
     def test_types_split(self):
-        pass
+        splitter = ExpandingFrequencyPanelSplit()
+        # Test invalid types for X
+        with self.assertRaises(TypeError):
+            next(splitter.split(X="a", y=self.y))
+        with self.assertRaises(ValueError):
+            next(splitter.split(X=self.X.reset_index(), y=self.y))
+
+        # Test invalid types for y
+        with self.assertRaises(TypeError):
+            next(splitter.split(X=self.X, y="a"))
+        with self.assertRaises(ValueError):
+            next(splitter.split(X=self.X, y=self.y.reset_index(drop=True)))
 
     @parameterized.expand(itertools.product(["W", "M", "Q"], [1, 2]))
     def test_valid_split(self, expansion_freq, min_cids):
@@ -380,42 +432,26 @@ class TestExpandingFrequency(unittest.TestCase):
         
 
     def test_types_visualise_splits(self):
-        pass 
+        splitter = ExpandingFrequencyPanelSplit()
+        with self.assertRaises(TypeError):
+            splitter.visualise_splits(X="a", y=self.y)
+        with self.assertRaises(ValueError):
+            splitter.visualise_splits(X=self.X.reset_index(), y=self.y)
 
-    def test_valid_visualise_splits(self):
-        pass
+        with self.assertRaises(TypeError):
+            splitter.visualise_splits(X=self.X, y="a")
+        with self.assertRaises(ValueError):
+            splitter.visualise_splits(X=self.X, y=self.y.reset_index(drop=True))
 
-def make_simple_df(
-    start1="2020-01-01",
-    start2="2020-01-01",
-    periods1=10,
-    periods2=10,
-    freq1="D",
-    freq2="D",
-):
-    dates_cid1 = pd.date_range(start=start1, periods=periods1, freq=freq1)
-    dates_cid2 = pd.date_range(start=start2, periods=periods2, freq=freq2)
-
-    # Create a MultiIndex for each cid with the respective dates
-    multiindex_cid1 = pd.MultiIndex.from_product(
-        [["cid1"], dates_cid1], names=["cid", "real_date"]
-    )
-    multiindex_cid2 = pd.MultiIndex.from_product(
-        [["cid2"], dates_cid2], names=["cid", "real_date"]
-    )
-
-    # Concatenate the MultiIndexes
-    multiindex = multiindex_cid1.append(multiindex_cid2)
-
-    # Initialize a DataFrame with the MultiIndex and columns xcat1 and xcat2
-    # and random data.
-    df = pd.DataFrame(
-        np.random.rand(len(multiindex), 2),
-        index=multiindex,
-        columns=["xcat1", "xcat2"],
-    )
-
-    X = df.drop(columns=["xcat2"])
-    y = df["xcat2"]
-
-    return X, y
+    @parameterized.expand(itertools.product(["W", "M", "Q"], [1, 2]))
+    def test_valid_visualise_splits(self, expansion_freq, min_cids):
+        splitter = ExpandingFrequencyPanelSplit(
+            expansion_freq = expansion_freq,
+            test_freq = expansion_freq,
+            min_cids = min_cids,
+            min_periods = 2,
+        )
+        try:
+            splitter.visualise_splits(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(f"Unexpected exception: {e}")    
