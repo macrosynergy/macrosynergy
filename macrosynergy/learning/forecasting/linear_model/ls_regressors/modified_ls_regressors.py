@@ -11,22 +11,23 @@ from macrosynergy.learning.forecasting.linear_model.ls_regressors.weighted_ls_re
     TimeWeightedLinearRegression,
 )
 
+
 class ModifiedLinearRegression(BaseModifiedRegressor):
     def __init__(
         self,
         method,
-        fit_intercept = True,
-        positive = False,
-        error_offset = 1e-2,
-        bootstrap_method = "panel",
-        bootstrap_iters = 1000,
-        resample_ratio = 1,
-        analytic_method = None,
+        fit_intercept=True,
+        positive=False,
+        error_offset=1e-2,
+        bootstrap_method="panel",
+        bootstrap_iters=1000,
+        resample_ratio=1,
+        analytic_method=None,
     ):
         """
         Modified OLS linear regression model. Estimated coefficients are divided
         by estimated standard errors to form an auxiliary factor model.
-        
+
         Parameters
         ----------
         method : str
@@ -38,13 +39,13 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
             Whether to constrain the coefficients to be positive. Default is False.
         error_offset : float, default = 1e-2
             Small offset to add to estimated standard errors in order to prevent
-            small denominators during the coefficient adjustment. 
+            small denominators during the coefficient adjustment.
         bootstrap_method : str, default = "panel"
             Method used to modify coefficients, when `method = bootstrap`.
             Accepted values are "panel", "period", "cross", "cross_per_period",
-            "period_per_cross". 
+            "period_per_cross".
         bootstrap_iters : int, default = 1000
-            Number of bootstrap iterations to determine standard errors, used 
+            Number of bootstrap iterations to determine standard errors, used
             only when `method = bootstrap`.
         resample_ratio : numbers.Number, default = 1
             Ratio of resampling units in each bootstrap dataset, used only
@@ -52,15 +53,15 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
             the panel component to be resampled.
         analytic_method : str, default = None
             The analytic method used to determine standard errors. If `method = analytic`,
-            the default standard error expressions for an OLS linear regression model 
+            the default standard error expressions for an OLS linear regression model
             are used. If `analytic_method = "White"`, the heteroskedasticity-robust
-            White estimator is used to estimate the standard errors. 
+            White estimator is used to estimate the standard errors.
         """
         # Checks
         if not isinstance(fit_intercept, bool):
             raise TypeError("fit_intercept must be a boolean.")
         if not isinstance(positive, bool):
-            raise TypeError("positive must be a boolean.") 
+            raise TypeError("positive must be a boolean.")
         self.fit_intercept = fit_intercept
         self.positive = positive
 
@@ -81,7 +82,7 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         model,
         X,
         y,
-        analytic_method = None,
+        analytic_method=None,
     ):
         """
         Adjust the coefficients of the OLS linear regression model
@@ -107,14 +108,14 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
 
         Notes
         -----
-        By default, the calculated standard errors use the usual standard 
+        By default, the calculated standard errors use the usual standard
         error expression for OLS linear regression models under the assumption
         of multivariate normality, homoskedasticity and zero mean of the model errors.
-        If `analytic_method = "White"`, the HC3 White estimator is used. 
+        If `analytic_method = "White"`, the HC3 White estimator is used.
 
         References
         ----------
-        [1] https://online.stat.psu.edu/stat462/node/131/ 
+        [1] https://online.stat.psu.edu/stat462/node/131/
         [2] https://en.wikipedia.org/wiki/Heteroskedasticity-consistent_standard_errors
         """
         # Checks
@@ -166,7 +167,7 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
 
         # Adjust the coefficients and intercepts by the standard errors
         coef = model.coef_ / (coef_se + self.error_offset)
-                              
+
         intercept = model.intercept_ / (intercept_se + self.error_offset)
 
         return intercept, coef
@@ -188,18 +189,19 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
             )
 
         return self
-    
+
+
 class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
     def __init__(
         self,
         method,
-        fit_intercept = True,
-        positive = False,
-        error_offset = 1e-2,
-        bootstrap_method = "panel",
-        bootstrap_iters = 1000,
-        resample_ratio = 1,
-        analytic_method = None,
+        fit_intercept=True,
+        positive=False,
+        error_offset=1e-2,
+        bootstrap_method="panel",
+        bootstrap_iters=1000,
+        resample_ratio=1,
+        analytic_method=None,
     ):
         """
         Modified SWLS linear regression model. Estimated coefficients are divided
@@ -216,13 +218,13 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
             Whether to constrain the coefficients to be positive. Default is False.
         error_offset : float, default = 1e-2
             Small offset to add to estimated standard errors in order to prevent
-            small denominators during the coefficient adjustment. 
+            small denominators during the coefficient adjustment.
         bootstrap_method : str, default = "panel"
             Method used to modify coefficients, when `method = bootstrap`.
             Accepted values are "panel", "period", "cross", "cross_per_period",
-            "period_per_cross". 
+            "period_per_cross".
         bootstrap_iters : int, default = 1000
-            Number of bootstrap iterations to determine standard errors, used 
+            Number of bootstrap iterations to determine standard errors, used
             only when `method = bootstrap`.
         resample_ratio : numbers.Number, default = 1
             Ratio of resampling units in each bootstrap dataset, used only
@@ -230,9 +232,9 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
             the panel component to be resampled.
         analytic_method : str, default = None
             The analytic method used to determine standard errors. If `method = analytic`,
-            the default standard error expressions for an OLS linear regression model 
+            the default standard error expressions for an OLS linear regression model
             are used. If `analytic_method = "White"`, the heteroskedasticity-robust
-            White estimator is used to estimate the standard errors. 
+            White estimator is used to estimate the standard errors.
         """
         self.fit_intercept = fit_intercept
         self.positive = positive
@@ -254,7 +256,7 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
         model,
         X,
         y,
-        analytic_method = None,
+        analytic_method=None,
     ):
         """
         Adjust the coefficients of the SWLS linear regression model
@@ -289,9 +291,9 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
         where:
             - :math: `X` is the input feature matrix, possibly with a column of
                 ones representing the choice of an intercept.
-            - :math: `W` is the positive-definite, symmetric weight matrix, a 
+            - :math: `W` is the positive-definite, symmetric weight matrix, a
                 diagonal matrix with sample weights along the main diagonal.
-            - :math: `y` is the dependent variable vector. 
+            - :math: `y` is the dependent variable vector.
 
         Since `W` is a positive-definite, symmetric matrix, it has a square root
         equal to the diagonal matrix with square roots of the sample weights along
@@ -312,7 +314,7 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
                 raise TypeError("analytic_method must be a string.")
             if analytic_method not in ["White"]:
                 raise ValueError("analytic_method must be 'White'.")
-            
+
         if self.fit_intercept:
             X_new = np.column_stack((np.ones(len(X)), X.values))
         else:
@@ -351,7 +353,7 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
             raise NotImplementedError(
                 "Currently, only the standard and White standard errors are implemented"
             )
-        
+
         if self.fit_intercept:
             coef_se = se[1:]
             intercept_se = se[0]
@@ -383,19 +385,20 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
             )
 
         return self
-    
+
+
 class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
     def __init__(
         self,
         method,
-        fit_intercept = True,
-        positive = False,
-        half_life = 252,
-        error_offset = 1e-2,
-        bootstrap_method = "panel",
-        bootstrap_iters = 1000,
-        resample_ratio = 1,
-        analytic_method = None,
+        fit_intercept=True,
+        positive=False,
+        half_life=252,
+        error_offset=1e-2,
+        bootstrap_method="panel",
+        bootstrap_iters=1000,
+        resample_ratio=1,
+        analytic_method=None,
     ):
         """
         Modified TWLS linear regression model. Estimated coefficients are divided
@@ -415,13 +418,13 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
             used to calculate the sample weights.
         error_offset : float, default = 1e-2
             Small offset to add to estimated standard errors in order to prevent
-            small denominators during the coefficient adjustment. 
+            small denominators during the coefficient adjustment.
         bootstrap_method : str, default = "panel"
             Method used to modify coefficients, when `method = bootstrap`.
             Accepted values are "panel", "period", "cross", "cross_per_period",
-            "period_per_cross". 
+            "period_per_cross".
         bootstrap_iters : int, default = 1000
-            Number of bootstrap iterations to determine standard errors, used 
+            Number of bootstrap iterations to determine standard errors, used
             only when `method = bootstrap`.
         resample_ratio : numbers.Number, default = 1
             Ratio of resampling units in each bootstrap dataset, used only
@@ -429,9 +432,9 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
             the panel component to be resampled.
         analytic_method : str, default = None
             The analytic method used to determine standard errors. If `method = analytic`,
-            the default standard error expressions for an OLS linear regression model 
+            the default standard error expressions for an OLS linear regression model
             are used. If `analytic_method = "White"`, the heteroskedasticity-robust
-            White estimator is used to estimate the standard errors. 
+            White estimator is used to estimate the standard errors.
         """
         self.fit_intercept = fit_intercept
         self.positive = positive
@@ -439,7 +442,9 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
 
         super().__init__(
             model=TimeWeightedLinearRegression(
-                fit_intercept=self.fit_intercept, positive=self.positive, half_life=self.half_life
+                fit_intercept=self.fit_intercept,
+                positive=self.positive,
+                half_life=self.half_life,
             ),
             method=method,
             error_offset=error_offset,
@@ -489,9 +494,9 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
         where:
             - :math: `X` is the input feature matrix, possibly with a column of
                 ones representing the choice of an intercept.
-            - :math: `W` is the positive-definite, symmetric weight matrix, a 
+            - :math: `W` is the positive-definite, symmetric weight matrix, a
                 diagonal matrix with sample weights along the main diagonal.
-            - :math: `y` is the dependent variable vector. 
+            - :math: `y` is the dependent variable vector.
 
         Since `W` is a positive-definite, symmetric matrix, it has a square root
         equal to the diagonal matrix with square roots of the sample weights along
@@ -512,7 +517,7 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
                 raise TypeError("analytic_method must be a string.")
             if analytic_method not in ["White"]:
                 raise ValueError("analytic_method must be 'White'.")
-            
+
         if self.fit_intercept:
             X_new = np.column_stack((np.ones(len(X)), X.values))
         else:
@@ -551,7 +556,7 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
             raise NotImplementedError(
                 "Currently, only the standard and White standard errors are implemented"
             )
-        
+
         if self.fit_intercept:
             coef_se = se[1:]
             intercept_se = se[0]
@@ -579,7 +584,9 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
         if "fit_intercept" in params or "positive" in params or "half_life" in params:
             # Re-initialize the SignWeightedLinearRegression instance with updated parameters
             self.model = TimeWeightedLinearRegression(
-                fit_intercept=self.fit_intercept, positive=self.positive, half_life=self.half_life
+                fit_intercept=self.fit_intercept,
+                positive=self.positive,
+                half_life=self.half_life,
             )
 
         return self

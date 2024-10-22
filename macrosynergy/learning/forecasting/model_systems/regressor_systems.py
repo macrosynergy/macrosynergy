@@ -14,7 +14,7 @@ from macrosynergy.management.validation import _validate_Xy_learning
 
 class LinearRegressionSystem(BaseRegressionSystem):
     """
-    Cross-sectional system of linear regression models. 
+    Cross-sectional system of linear regression models.
 
     Parameters
     ----------
@@ -25,7 +25,7 @@ class LinearRegressionSystem(BaseRegressionSystem):
     positive : bool, default=False
         Whether to enforce positive coefficients for each regression.
     data_freq : str, default='D'
-        Training set data frequency for resampling. 
+        Training set data frequency for resampling.
         Accepted values are 'D' for daily, 'W' for weekly, 'M' for monthly and
         'Q' for quarterly.
     min_xs_samples : int, default=2
@@ -45,20 +45,22 @@ class LinearRegressionSystem(BaseRegressionSystem):
     estimation models, since choosing the underlying data frequency is of interest in
     quant analysis.
     """
+
     def __init__(
         self,
-        roll = None,
-        fit_intercept = True,
-        positive = False,
-        data_freq = "D",
-        min_xs_samples = 2,
+        roll=None,
+        fit_intercept=True,
+        positive=False,
+        data_freq="D",
+        min_xs_samples=2,
     ):
         # Call the parent class constructor
         super().__init__(roll=roll, data_freq=data_freq, min_xs_samples=min_xs_samples)
 
         # Additional checks
         self._check_init_params(
-            fit_intercept, positive,
+            fit_intercept,
+            positive,
         )
 
         # Additional attributes
@@ -98,7 +100,9 @@ class LinearRegressionSystem(BaseRegressionSystem):
         self.intercepts_[section] = model.intercept_
 
     def _check_init_params(
-        self, fit_intercept, positive,
+        self,
+        fit_intercept,
+        positive,
     ):
         """
         Parameter checks for the LinearRegressionSystem constructor.
@@ -118,7 +122,7 @@ class LinearRegressionSystem(BaseRegressionSystem):
 
 class LADRegressionSystem(BaseRegressionSystem):
     """
-    Cross-sectional system of LAD regression models. 
+    Cross-sectional system of LAD regression models.
 
     Parameters
     ----------
@@ -129,7 +133,7 @@ class LADRegressionSystem(BaseRegressionSystem):
     positive : bool, default=False
         Whether to enforce positive coefficients for each regression.
     data_freq : str, default='D'
-        Training set data frequency for resampling. 
+        Training set data frequency for resampling.
         Accepted values are 'D' for daily, 'W' for weekly, 'M' for monthly and
         'Q' for quarterly.
     min_xs_samples : int, default=2
@@ -152,18 +156,19 @@ class LADRegressionSystem(BaseRegressionSystem):
 
     def __init__(
         self,
-        roll = None,
-        fit_intercept = True,
-        positive = False,
-        data_freq = "D",
-        min_xs_samples = 2,
+        roll=None,
+        fit_intercept=True,
+        positive=False,
+        data_freq="D",
+        min_xs_samples=2,
     ):
         # Call the parent class constructor
         super().__init__(roll=roll, data_freq=data_freq, min_xs_samples=min_xs_samples)
 
         # Additional checks
         self._check_init_params(
-            fit_intercept, positive,
+            fit_intercept,
+            positive,
         )
 
         # Additional attributes
@@ -203,7 +208,9 @@ class LADRegressionSystem(BaseRegressionSystem):
         self.intercepts_[section] = model.intercept_
 
     def _check_init_params(
-        self, fit_intercept, positive,
+        self,
+        fit_intercept,
+        positive,
     ):
         """
         Parameter checks for the LADRegressionSystem constructor.
@@ -223,7 +230,7 @@ class LADRegressionSystem(BaseRegressionSystem):
 
 class RidgeRegressionSystem(BaseRegressionSystem):
     """
-    Cross-sectional system of ridge regression models. 
+    Cross-sectional system of ridge regression models.
 
     Parameters
     ----------
@@ -236,7 +243,7 @@ class RidgeRegressionSystem(BaseRegressionSystem):
     positive : bool, default=False
         Whether to enforce positive coefficients for each regression.
     data_freq : str, default='D'
-        Training set data frequency for resampling. 
+        Training set data frequency for resampling.
         Accepted values are 'D' for daily, 'W' for weekly, 'M' for monthly and
         'Q' for quarterly.
     min_xs_samples : int, default=2
@@ -278,7 +285,11 @@ class RidgeRegressionSystem(BaseRegressionSystem):
 
         # Checks
         self._check_init_params(
-            alpha, fit_intercept, positive, tol, solver,
+            alpha,
+            fit_intercept,
+            positive,
+            tol,
+            solver,
         )
 
         # Additional attributes
@@ -383,7 +394,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
     Parameters
     ----------
     correlation_lookback : int or None, default=None
-        The lookback of the rolling window for correlation estimation. 
+        The lookback of the rolling window for correlation estimation.
     correlation_type : str, default='pearson'
         The type of correlation to be calculated. Accepted values are 'pearson', 'kendall'
         and 'spearman'.
@@ -393,7 +404,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         The type of window to use for the volatility calculation. Accepted values are
         'rolling' and 'exponential'.
     data_freq : str, default='D'
-        Training set data frequency for resampling. 
+        Training set data frequency for resampling.
         Accepted values are 'D' for daily, 'W' for weekly, 'M' for monthly and
         'Q' for quarterly.
     min_xs_samples : int, default=2
@@ -402,9 +413,9 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
 
     Notes
     -----
-    This class is specifically designed for market beta estimation based on the 
+    This class is specifically designed for market beta estimation based on the
     decomposition of the beta into correlation and volatility components in univariate
-    analysis. 
+    analysis.
 
     Separate estimators are fit for each cross-section, but evaluation is performed
     over the panel. Consequently, the results of a hyperparameter search will choose
@@ -515,7 +526,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
                 "The number of features in X does not match the number of "
                 "features in the training data."
             )
-        
+
         predictions = pd.Series(index=X.index, data=0)
 
         return predictions
@@ -569,7 +580,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         # to the next cross-section
         if num_dates < self.volatility_lookback:
             return False
-        
+
         return True
 
     def _check_init_params(
