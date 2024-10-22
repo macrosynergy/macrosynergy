@@ -568,10 +568,12 @@ class BasePanelLearner(ABC):
                     cv_summary, axis=1
                 )
 
-        # Now apply min-max scaling to the summary scores
-        scaler = StandardScaler()
+        # Now apply standard scaling to the summary scores
         summary_cols = [f"{scorer}_summary" for scorer in scorers.keys()]
-        cv_results[summary_cols] = scaler.fit_transform(cv_results[summary_cols])
+        
+        if len(scorers) > 1:
+            scaler = StandardScaler()
+            cv_results[summary_cols] = scaler.fit_transform(cv_results[summary_cols])
 
         # Now average the summary scores for each scorer
         cv_results["final_score"] = cv_results[summary_cols].mean(axis=1)
