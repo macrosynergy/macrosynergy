@@ -319,6 +319,27 @@ class TestMethods(unittest.TestCase):
         with self.assertRaises(ValueError):
             qdf_from_timseries(ts, xcat="X")
 
+    def test_add_ticker_column(self):
+        test_df: pd.DataFrame = make_test_df()
+        test_df = add_ticker_column(test_df)
+
+        tickers = test_df["cid"] + "_" + test_df["xcat"]
+        self.assertTrue((test_df["ticker"] == tickers).all())
+
+        # test with non QuantamentalDataFrame
+        with self.assertRaises(TypeError):
+            add_ticker_column(test_df.rename(columns={"cid": "xid"}))
+
+        ## test with categorical df
+        test_df = make_test_df()
+        test_df = QuantamentalDataFrame(test_df)
+
+        tickers = test_df["cid"].astype(str) + "_" + test_df["xcat"].astype(str)
+
+        test_df = add_ticker_column(test_df)
+
+        self.assertTrue((test_df["ticker"] == tickers).all())
+
 
 class TestQDFMethods(unittest.TestCase):
     def test_drop_nan_series(self):
@@ -750,10 +771,10 @@ class TestUpdateDF(unittest.TestCase):
         )
 
         self.assertTrue(new_df.equals(expected_df))
-        
+
         self.assertRaises(TypeError, update_df, 1, dfa)
         self.assertRaises(TypeError, update_df, dfa, 1)
-        self.assertRaises(TypeError, update_df, dfa, dfa, 'string')
+        self.assertRaises(TypeError, update_df, dfa, dfa, "string")
 
     def test_update_df_with_nans(self):
         tickers = helper_random_tickers(20)
@@ -800,6 +821,62 @@ class TestUpdateDF(unittest.TestCase):
 
         test_df = update_df(empty_df, dfb)
         self.assertTrue(test_df.equals(dfb))
+
+    def test_update_categories(self):
+
+        cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
+        xcatsa = ["FX", "IR", "EQ"]
+        xcatsb = ["FX", "PPP", "IR"]
+
+        cargs = dict(cids=cids, metrics=JPMAQS_METRICS, style="linear")
+
+        dfa = make_test_df(xcats=xcatsa, **cargs)
+        dfb = make_test_df(xcats=xcatsb, **cargs)
+
+        # select USD_FX and EUR_FX and make their values -5000
+        for im, mt in enumerate(JPMAQS_METRICS):
+            dfb.loc[(dfb["cid"] == "USD") & (dfb["xcat"] == "FX"), mt] = -1e3 * (im + 1)
+            dfb.loc[(dfb["cid"] == "EUR") & (dfb["xcat"] == "FX"), mt] = -1e3 * (im + 1)
+
+        qdfa = QuantamentalDataFrame(dfa)
+        qdfb = QuantamentalDataFrame(dfb)
+
+        new_df = update_df(qdfa, qdfb, xcat_replace=True)
+
+        # check that the values of USD_FX and EUR_FX are -5000
+        for im, mt in enumerate(JPMAQS_METRICS):
+            found_values = new_df.loc[
+                (new_df["cid"].isin(["USD", "EUR"])) & (new_df["xcat"] == "FX"), mt
+            ].unique()
+
+            self.assertEqual(len(found_values), 1)
+            self.assertEqual(found_values[0], -1e3 * (im + 1))
+
+        direct_call = update_categories(qdfa, qdfb)
+
+        self.assertTrue(new_df.equals(direct_call))
+
+    def test_update_categories_no_overlap(self):
+        cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
+        xcatsa = ["FX", "IR", "EQ"]
+        xcatsb = ["CDS", "PPP", "GDP"]
+
+        cargs = dict(cids=cids, metrics=JPMAQS_METRICS, style="linear")
+
+        dfa = make_test_df(xcats=xcatsa, **cargs)
+        dfb = make_test_df(xcats=xcatsb, **cargs)
+
+        qdfa = QuantamentalDataFrame(dfa)
+        qdfb = QuantamentalDataFrame(dfb)
+
+        new_df = update_df(qdfa, qdfb, xcat_replace=True)
+
+        expected_df = update_df(qdfa, qdfb)
+
+        self.assertTrue(new_df.equals(expected_df))
+
+        self.assertRaises(TypeError, update_categories, 1, dfa)
+        self.assertRaises(TypeError, update_categories, dfa, 1)
 
 
 class TestConcatQDFs(unittest.TestCase):
@@ -935,6 +1012,232 @@ class TestConcatQDFs(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             concat_qdfs(1)
+
+
+class TestRenameXCATs(unittest.TestCase):
+    def test_rename_xcats_xcat_map(self):
+        cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
+        xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
+
+        dfo = make_test_df(cids=cids, xcats=xcats)
+        qdf = QuantamentalDataFrame(dfo)
+
+        xcat_map = {xc: xc[::-1] for xc in xcats}
+
+        new_df = rename_xcats(qdf, xcat_map)
+
+        found_xcats = new_df["xcat"].unique()
+        for fxc in found_xcats:
+            self.assertTrue(fxc[::-1] in xcats)
+            self.assertEqual(xcats.count(fxc[::-1]), 1)
+
+        self.assertTrue(new_df.equals(qdf))
+        dfo_copy = dfo.copy()
+        dfo_copy["xcat"] = dfo_copy["xcat"].map(xcat_map)
+        self.assertTrue(new_df.equals(QuantamentalDataFrame(dfo_copy)))
+
+    def test_rename_xcats_postfix(self):
+        cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
+        xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
+
+        dfo = make_test_df(cids=cids, xcats=xcats)
+        qdf = QuantamentalDataFrame(dfo)
+
+        postfix = "_new"
+        new_df = rename_xcats(qdf, postfix=postfix)
+
+        found_xcats: List[str] = new_df["xcat"].unique().tolist()
+        for fxc in found_xcats:
+            self.assertTrue(fxc.endswith(postfix))
+            self.assertEqual(xcats.count(fxc[: -len(postfix)]), 1)
+
+        self.assertTrue(new_df.equals(qdf))
+        dfo_copy = dfo.copy()
+        dfo_copy["xcat"] = dfo_copy["xcat"] + postfix
+        self.assertTrue(new_df.equals(QuantamentalDataFrame(dfo_copy)))
+
+        qdf = QuantamentalDataFrame(dfo)
+
+        postfix = "_new"
+        sel_xcats = ["EQ", "PPP"]
+
+        new_df = rename_xcats(qdf, select_xcats=sel_xcats, postfix=postfix)
+
+        found_xcats = new_df["xcat"].unique().tolist()
+
+        for fxc in found_xcats:
+            if fxc not in xcats:
+                self.assertTrue(fxc.endswith(postfix))
+                self.assertTrue(fxc[: -len(postfix)] in sel_xcats)
+
+        unchanged_dfo = dfo[~dfo["xcat"].isin(sel_xcats)]
+        unchanged_new = new_df[~new_df["xcat"].str.endswith(postfix)]
+
+        self.assertTrue(unchanged_dfo.eq(unchanged_new).all().all())
+
+    def test_rename_xcats_prefix(self):
+        cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
+        xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
+
+        dfo = make_test_df(cids=cids, xcats=xcats)
+        qdf = QuantamentalDataFrame(dfo)
+
+        prefix = "new_"
+        new_df = rename_xcats(qdf, prefix=prefix)
+
+        found_xcats: List[str] = new_df["xcat"].unique().tolist()
+        for fxc in found_xcats:
+            self.assertTrue(fxc.startswith(prefix))
+            self.assertEqual(xcats.count(fxc[len(prefix) :]), 1)
+
+        self.assertTrue(new_df.equals(qdf))
+        dfo_copy = dfo.copy()
+        dfo_copy["xcat"] = prefix + dfo_copy["xcat"]
+        self.assertTrue(new_df.equals(QuantamentalDataFrame(dfo_copy)))
+
+        qdf = QuantamentalDataFrame(dfo)
+
+        prefix = "new_"
+        sel_xcats = ["FX", "IR"]
+
+        new_df = rename_xcats(qdf, select_xcats=sel_xcats, prefix=prefix)
+
+        found_xcats = new_df["xcat"].unique().tolist()
+
+        for fxc in found_xcats:
+            if fxc not in xcats:
+                self.assertTrue(fxc.startswith(prefix))
+                self.assertTrue(fxc[len(prefix) :] in sel_xcats)
+
+        unchanged_dfo = dfo[~dfo["xcat"].isin(sel_xcats)]
+        unchanged_new = new_df[~new_df["xcat"].str.startswith(prefix)]
+
+        self.assertTrue(unchanged_dfo.eq(unchanged_new).all().all())
+
+    def test_rename_xcats_name_all(self):
+        cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
+        xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
+
+        dfo = make_test_df(cids=cids, xcats=xcats)
+        qdf = QuantamentalDataFrame(dfo)
+
+        new_name = "new_name"
+        new_df = rename_xcats(qdf, name_all=new_name)
+
+        found_xcats: List[str] = new_df["xcat"].unique().tolist()
+        for fxc in found_xcats:
+            self.assertEqual(fxc, new_name)
+
+        self.assertTrue(new_df.equals(qdf))
+        dfo_copy = dfo.copy()
+        dfo_copy["xcat"] = new_name
+        self.assertTrue(new_df.equals(QuantamentalDataFrame(dfo_copy)))
+
+        qdf = QuantamentalDataFrame(dfo)
+
+        new_name = "new_name"
+        sel_xcats = ["CDS", "FX"]
+
+        new_df = rename_xcats(qdf, select_xcats=sel_xcats, name_all=new_name)
+
+        found_xcats = new_df["xcat"].unique().tolist()
+
+        for fxc in found_xcats:
+            if fxc not in xcats:
+                self.assertEqual(fxc, new_name)
+
+        unchanged_dfo = dfo[~dfo["xcat"].isin(sel_xcats)]
+        unchanged_new = new_df[new_df["xcat"] != new_name]
+
+        self.assertTrue(unchanged_dfo.eq(unchanged_new).all().all())
+
+    def test_rename_xcats_fmt_string(self):
+        cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
+        xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
+
+        dfo = make_test_df(cids=cids, xcats=xcats)
+        qdf = QuantamentalDataFrame(dfo)
+
+        fmt_string = "new_{}_name"
+        new_df = rename_xcats(qdf, fmt_string=fmt_string)
+
+        found_xcats: List[str] = new_df["xcat"].unique().tolist()
+
+        for fxc in found_xcats:
+            self.assertTrue(fxc.startswith("new_"))
+            self.assertTrue(fxc.endswith("_name"))
+            self.assertTrue(fxc[4:-5] in xcats)
+
+        self.assertTrue(new_df.equals(qdf))
+
+        # now only with a selected xcat
+        qdf = QuantamentalDataFrame(dfo)
+
+        fmt_string = "new_{}_name"
+        sel_xcats = ["CDS", "FX"]
+
+        new_df = rename_xcats(qdf, select_xcats=sel_xcats, fmt_string=fmt_string)
+
+        found_xcats = new_df["xcat"].unique().tolist()
+
+        for fxc in found_xcats:
+            if fxc not in xcats:
+                self.assertTrue(fxc.startswith("new_"))
+                self.assertTrue(fxc.endswith("_name"))
+                og_xcat = fxc[4:-5]
+                self.assertTrue(og_xcat in sel_xcats)
+
+        unchanged_dfo = dfo[~dfo["xcat"].isin(sel_xcats)]
+        unchanged_new = new_df[~new_df["xcat"].str.startswith("new_")]
+
+        self.assertTrue(unchanged_dfo.eq(unchanged_new).all().all())
+
+    def test_rename_xcats_errors(self):
+        cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
+        xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
+        dfo = make_test_df(cids=cids, xcats=xcats)
+        qdf = QuantamentalDataFrame(dfo)
+
+        # provide non-qdf
+        with self.assertRaises(TypeError):
+            rename_xcats(dfo.rename(columns={"cid": "xid"}), name_all="new_name")
+
+        # provide xcat_map and select_xcats
+        with self.assertRaises(ValueError):
+            rename_xcats(
+                qdf,
+                xcat_map={"FX": "new_name"},
+                select_xcats=["IR"],
+                name_all="new_name",
+            )
+
+        # provide non-dict xcat_map
+        with self.assertRaises(TypeError):
+            rename_xcats(qdf, xcat_map=1)
+
+        # provide non-str dict xcat_map
+        with self.assertRaises(TypeError):
+            rename_xcats(qdf, xcat_map={"FX": 1})
+
+        # provide select_xcats with postfix and prefix
+        with self.assertRaises(ValueError):
+            rename_xcats(qdf, select_xcats=["FX"], prefix="new_", postfix="_new")
+
+        # provide select_xcats with name_all and fmt_string
+        with self.assertRaises(ValueError):
+            rename_xcats(
+                qdf, select_xcats=["FX"], name_all="new_name", fmt_string="new_{}_name"
+            )
+
+        # provide with non-compatible fmt string
+        with self.assertRaises(ValueError):
+            rename_xcats(qdf, fmt_string="new_name")
+
+        with self.assertRaises(ValueError):
+            rename_xcats(qdf, fmt_string="new_{}_name_{}")
+
+        with self.assertRaises(ValueError):
+            rename_xcats(qdf, fmt_string="new_{xcat}_name_")
 
 
 if __name__ == "__main__":
