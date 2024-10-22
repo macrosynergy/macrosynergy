@@ -27,7 +27,7 @@ from macrosynergy.download.exceptions import (
     InvalidResponseError,
     HeartbeatError,
     NoContentError,
-    AttributesOutOfSyncError
+    AttributesOutOfSyncError,
     KNOWN_EXCEPTIONS,
 )
 from macrosynergy.management.utils import (
