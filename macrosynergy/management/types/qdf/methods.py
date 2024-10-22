@@ -349,6 +349,18 @@ def add_ticker_column(
     return df
 
 
+def _add_index_str_column(
+    df: pd.DataFrame,
+    column_name: str,
+    fill_value: str,
+) -> pd.DataFrame:
+    """
+    Add an index column to the DataFrame with a specified fill value.
+    """
+    df[column_name] = pd.Categorical.from_codes([0] * len(df), categories=[fill_value])
+    return df
+
+
 def rename_xcats(
     df: QuantamentalDataFrameBase,
     xcat_map: Optional[Dict[str, str]] = None,
@@ -406,18 +418,6 @@ def rename_xcats(
         {cat: funcs[curr_func](cat) for cat in select_xcats}
     )
 
-    return df
-
-
-def _add_index_str_column(
-    df: pd.DataFrame,
-    column_name: str,
-    fill_value: str,
-) -> pd.DataFrame:
-    """
-    Add an index column to the DataFrame with a specified fill value.
-    """
-    df[column_name] = pd.Categorical.from_codes([0] * len(df), categories=[fill_value])
     return df
 
 
