@@ -1235,6 +1235,33 @@ class TestAll(unittest.TestCase):
                 split_functions={"ExpandingKFold": 1},
             )
 
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                store_correlations=1,
+            )
+
+        # If store_correlations is True, then models must be pipelines
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                store_correlations=True,
+            )
+
     def test_valid_calculate_predictions(self):
         # Test that the function runs without error and prediction dataframe is as expected
         outer_splitter = list(
@@ -1781,6 +1808,33 @@ class TestAll(unittest.TestCase):
         self.assertIsInstance(ftr_corr_data, list)
         self.assertTrue(len(ftr_corr_data) == 0)
 
+    def test_get_feature_correlations(self):
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+        )
+        so.store_correlations = True
+        so.calculate_predictions(
+            name="test",
+            models=self.pipelines,
+            scorers=self.scorers,
+            hyperparameters=self.pipeline_hyperparameters,
+            search_type="grid",
+            n_jobs_outer=1,
+            n_jobs_inner=1,
+            inner_splitters=self.single_inner_splitter,
+            store_correlations=True,
+        )
+        ftr_corr_df = so.get_feature_correlations(name="test")
+
+        self.assertIsInstance(ftr_corr_df, pd.DataFrame)
+        self.assertTrue(ftr_corr_df.shape[1] == 5)
+        self.assertTrue(ftr_corr_df.columns[0] == "real_date")
+        self.assertTrue(ftr_corr_df.columns[1] == "name")
+        self.assertTrue(ftr_corr_df.columns[2] == "predictor_input")
+        self.assertTrue(ftr_corr_df.columns[3] == "pipeline_input")
+        self.assertTrue(ftr_corr_df.columns[4] == "pearson")
+
     def test_types_get_optimized_signals(self):
         so = self.so_with_calculated_preds
 
@@ -1905,20 +1959,20 @@ class TestAll(unittest.TestCase):
         so = self.so_with_calculated_preds
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
-            so.get_ftr_coefficients(name="test2")
+            so.get_feature_coefficients(name="test2")
         with self.assertRaises(ValueError):
-            so.get_ftr_coefficients(name=["test", "test2"])
+            so.get_feature_coefficients(name=["test", "test2"])
         # Test that the wrong dtype of a signal name raises an error
         with self.assertRaises(TypeError):
-            so.get_ftr_coefficients(name=1)
+            so.get_feature_coefficients(name=1)
         with self.assertRaises(TypeError):
-            so.get_ftr_coefficients(name={})
+            so.get_feature_coefficients(name={})
 
     def test_valid_get_ftr_coefficients(self):
         so = self.so_with_calculated_preds
         # Test that running get_ftr_coefficients on pipeline "test" works
         try:
-            ftr_coefficients = so.get_ftr_coefficients(name="test")
+            ftr_coefficients = so.get_feature_coefficients(name="test")
         except Exception as e:
             self.fail(f"get_ftr_coefficients raised an exception: {e}")
         # Test that the output is as expected
@@ -1933,7 +1987,7 @@ class TestAll(unittest.TestCase):
 
         # Test that running get_ftr_coefficients without a name works
         try:
-            ftr_coefficients = so.get_ftr_coefficients()
+            ftr_coefficients = so.get_feature_coefficients()
         except Exception as e:
             self.fail(f"get_selected_features raised an exception: {e}")
         # Test that the output is as expected
@@ -2207,7 +2261,7 @@ class TestAll(unittest.TestCase):
         legend = ax.get_legend()
         labels = sorted([text.get_text() for text in legend.get_texts()])
         # Check that the legend is correct
-        ftrcoef_df = so.get_ftr_coefficients(name="test")
+        ftrcoef_df = so.get_feature_coefficients(name="test")
         ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
         ftrcoef_df = ftrcoef_df.drop(columns=["real_date", "name"])
         ftrcoef_df = ftrcoef_df.rename(columns=ftr_dict)
@@ -2242,7 +2296,7 @@ class TestAll(unittest.TestCase):
             so.coefs_timeplot(name="test")
         # Test that if no signals have been calculated, an error is raised
         with self.assertRaises(ValueError):
-            so.get_ftr_coefficients(name="test")
+            so.get_feature_coefficients(name="test")
         # Test that if no signals have been calculated, an error is raised
         with self.assertRaises(ValueError):
             so.get_intercepts(name="test")
@@ -2289,4 +2343,4 @@ def _get_X_y(so: SignalOptimizer):
 if __name__ == "__main__":
     Test = TestAll()
     Test.setUpClass()
-    Test.test_types_calculate_predictions()
+    Test.test_get_feature_correlations()
