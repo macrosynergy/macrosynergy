@@ -305,7 +305,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         if self.InitializedAsCategorical:
             return result
 
-        result.columns = result.columns.astype(str)
+        result.columns = result.columns.astype('object')
         return result
 
     @classmethod
