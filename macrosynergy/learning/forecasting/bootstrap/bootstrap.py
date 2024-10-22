@@ -8,19 +8,20 @@ from abc import ABC
 
 from typing import Union, Optional
 
+
 class BasePanelBootstrap(ABC):
     def __init__(
         self,
-        bootstrap_method = "panel",
-        resample_ratio = 1,
-        max_features = None,
+        bootstrap_method="panel",
+        resample_ratio=1,
+        max_features=None,
     ):
         """
         Construct bootstrap datasets over a panel.
 
         Parameters
         ----------
-        bootstrap_method : str 
+        bootstrap_method : str
             Method to bootstrap the data. Current options are "panel",
             "period", "cross", "cross_per_period" and "period_per_cross".
             Default is "panel".
@@ -33,7 +34,7 @@ class BasePanelBootstrap(ABC):
             This can be used to increase the variation between bootstrap datasets.
             Default is None and currently not implemented.
         """
-        # Checks 
+        # Checks
         self._check_boot_params(
             bootstrap_method=bootstrap_method,
             resample_ratio=resample_ratio,
@@ -81,39 +82,39 @@ class BasePanelBootstrap(ABC):
         real_dates = index_array[:, 1]
         unique_real_dates = np.unique(real_dates)
 
-        # Create a bootstrap dataset 
+        # Create a bootstrap dataset
         if self.bootstrap_method == "panel":
             X_resampled, y_resampled = self._panel_bootstrap(
-                X = X,
-                y = y,
+                X=X,
+                y=y,
             )
 
         elif self.bootstrap_method == "period":
-             X_resampled, y_resampled = self._period_bootstrap(
-                X = X,
-                y = y,
-                unique_real_dates = unique_real_dates,
+            X_resampled, y_resampled = self._period_bootstrap(
+                X=X,
+                y=y,
+                unique_real_dates=unique_real_dates,
             )
 
         elif self.bootstrap_method == "cross":
             X_resampled, y_resampled = self._cross_bootstrap(
-                X = X,
-                y = y,
-                unique_cross_sections = unique_cross_sections,
+                X=X,
+                y=y,
+                unique_cross_sections=unique_cross_sections,
             )
 
         elif self.bootstrap_method == "cross_per_period":
             X_resampled, y_resampled = self._cross_per_period_bootstrap(
-                X = X,
-                y = y,
-                unique_cross_sections = unique_cross_sections,
+                X=X,
+                y=y,
+                unique_cross_sections=unique_cross_sections,
             )
 
         elif self.bootstrap_method == "period_per_cross":
             X_resampled, y_resampled = self._period_per_cross_bootstrap(
-                X = X,
-                y = y,
-                unique_real_dates = unique_real_dates,
+                X=X,
+                y=y,
+                unique_real_dates=unique_real_dates,
             )
 
         return X_resampled, y_resampled
@@ -121,7 +122,7 @@ class BasePanelBootstrap(ABC):
     def _panel_bootstrap(
         self,
         X,
-        y,      
+        y,
     ):
         """
         Generate a bootstrap dataset by resampling the panel.
@@ -149,7 +150,7 @@ class BasePanelBootstrap(ABC):
         y_resampled = y.iloc[bootstrap_idx]
 
         return X_resampled, y_resampled
-    
+
     def _period_bootstrap(
         self,
         X,
@@ -183,7 +184,7 @@ class BasePanelBootstrap(ABC):
         )
 
         # Obtain a {count: [periods]} dictionary so that the new panel can be efficiently
-        # constructed by looping through the counts instead of the periods. 
+        # constructed by looping through the counts instead of the periods.
         period_counts = dict(Counter(bootstrap_periods))
         count_to_periods = defaultdict(list)
         for period, count in period_counts.items():
@@ -206,9 +207,7 @@ class BasePanelBootstrap(ABC):
             )
             y_resampled = np.append(
                 y_resampled,
-                np.tile(
-                    y[y.index.get_level_values(1).isin(periods)].values, count
-                ),
+                np.tile(y[y.index.get_level_values(1).isin(periods)].values, count),
             )
             index_resampled.extend(
                 X[X.index.get_level_values(1).isin(periods)].index.tolist() * count
@@ -221,18 +220,18 @@ class BasePanelBootstrap(ABC):
 
         # Convert resampled datasets to pandas dataframes
         X_resampled = pd.DataFrame(
-            data = X_resampled,
-            index = index_resampled,
-            columns = X.columns,
+            data=X_resampled,
+            index=index_resampled,
+            columns=X.columns,
         )
         y_resampled = pd.Series(
-            data = y_resampled,
-            index = index_resampled,
-            name = y.name,
+            data=y_resampled,
+            index=index_resampled,
+            name=y.name,
         )
 
         return X_resampled, y_resampled
-    
+
     def _cross_bootstrap(
         self,
         X,
@@ -250,7 +249,7 @@ class BasePanelBootstrap(ABC):
             Dependent variable.
         unique_cross_sections : np.ndarray of str
             Unique cross-sections in the panel.
-        
+
         Returns
         -------
         X_resampled : pd.DataFrame
@@ -266,7 +265,7 @@ class BasePanelBootstrap(ABC):
         )
 
         # Obtain a {count: [cross_sections]} dictionary so that the new panel can be efficiently
-        # constructed by looping through the counts instead of the periods. 
+        # constructed by looping through the counts instead of the periods.
         cross_section_counts = dict(Counter(bootstrap_cross_sections))
         count_to_cross_sections = defaultdict(list)
         for cross_section, count in cross_section_counts.items():
@@ -293,7 +292,8 @@ class BasePanelBootstrap(ABC):
                 ),
             )
             index_resampled.extend(
-                X[X.index.get_level_values(0).isin(cross_sections)].index.tolist() * count
+                X[X.index.get_level_values(0).isin(cross_sections)].index.tolist()
+                * count
             )
 
         # reconstruct index
@@ -303,28 +303,28 @@ class BasePanelBootstrap(ABC):
 
         # Convert resampled datasets to pandas dataframes
         X_resampled = pd.DataFrame(
-            data = X_resampled,
-            index = index_resampled,
-            columns = X.columns,
+            data=X_resampled,
+            index=index_resampled,
+            columns=X.columns,
         )
         y_resampled = pd.Series(
-            data = y_resampled,
-            index = index_resampled,
-            name = y.name,
+            data=y_resampled,
+            index=index_resampled,
+            name=y.name,
         )
 
         return X_resampled, y_resampled
-    
+
     def _cross_per_period_bootstrap(
         self,
         X,
         y,
-        unique_cross_sections,      
+        unique_cross_sections,
     ):
         """
-        Generate a bootstrap dataset by resampling cross-sections within each 
+        Generate a bootstrap dataset by resampling cross-sections within each
         period in the panel.
-        
+
         Parameters
         ----------
         X : pd.DataFrame
@@ -346,17 +346,17 @@ class BasePanelBootstrap(ABC):
         y_resampled = y.loc[X_resampled.index]
 
         return X_resampled, y_resampled
-    
+
     def _period_per_cross_bootstrap(
         self,
         X,
         y,
-        unique_real_dates,      
+        unique_real_dates,
     ):
         """
         Generate a bootstrap dataset by resampling periods within each
         cross-section in the panel.
-        
+
         Parameters
         ----------
         X : pd.DataFrame
@@ -382,7 +382,7 @@ class BasePanelBootstrap(ABC):
     def _check_create_bootstrap_dataset_params(
         self,
         X,
-        y,        
+        y,
     ):
         """
         Method to check the validity of the input parameters for create_bootstrap_dataset.
@@ -431,7 +431,7 @@ class BasePanelBootstrap(ABC):
                 "The indices of the feature matrix X and the target vector y don't "
                 "match."
             )
-        
+
     def _check_boot_params(
         self,
         bootstrap_method,
@@ -482,11 +482,11 @@ class BasePanelBootstrap(ABC):
             raise ValueError("resample_ratio must be greater than 0.")
         if resample_ratio > 1:
             raise ValueError("resample_ratio must be less than or equal to 1.")
-        
+
         # max_features
         if max_features is not None:
             raise NotImplementedError("max_features is not implemented yet.")
-        
+
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf

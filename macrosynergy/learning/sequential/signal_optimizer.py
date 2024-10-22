@@ -840,6 +840,22 @@ class SignalOptimizer(BasePanelLearner):
         ftrs_renamed=None,
         figsize=(12, 8),
     ):
+        """
+        Checks for the feature_selection_heatmap method.
+
+        Parameters
+        ----------
+        name : str
+            Name of the previously run signal optimization process.
+        title : str, optional
+            Title of the heatmap. Default is None. This creates a figure title of the form
+            "Feature Selection Heatmap for {name}".
+        ftrs_renamed : dict, optional
+            Dictionary to rename the feature names for visualisation in the plot axis.
+            Default is None, which uses the original feature names.
+        figsize : tuple of floats or ints, optional
+            Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        """
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
         if name not in self.selected_ftrs.name.unique():
@@ -1424,42 +1440,35 @@ class SignalOptimizer(BasePanelLearner):
         plt.tight_layout()
         plt.show()
 
-    def _checks_feature_selection_heatmap(
-        self,
-        name: str,
-        title=None,
-        ftrs_renamed=None,
-        figsize=(12, 8),
-    ):
+    def nsplits_timeplot(self, name, title=None, figsize=(10, 6)):
         """
-        Checks for the feature_selection_heatmap method.
+        Method to plot the time series for the number of cross-validation splits used
+        by the signal optimizer.
 
         Parameters
         ----------
         name : str
             Name of the previously run signal optimization process.
         title : str, optional
-            Title of the heatmap. Default is None. This creates a figure title of the form
-            "Feature Selection Heatmap for {name}".
-        ftrs_renamed : dict, optional
-            Dictionary to rename the feature names for visualisation in the plot axis.
-            Default is None, which uses the original feature names.
+            Title of the plot. Default is None. This creates a figure title of the form
+            "Stacked bar plot of model coefficients: {name}".
         figsize : tuple of floats or ints, optional
-            Tuple of floats or ints denoting the figure size. Default is (12, 8).
+            Tuple of floats or ints denoting the figure size. Default is (10, 6).
         """
+        # Checks
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
-        if name not in self.selected_ftrs.name.unique():
+        if name not in self.chosen_models.name.unique():
             raise ValueError(
                 f"""The pipeline name {name} is not in the list of already-calculated 
                 pipelines. Please check the pipeline name carefully. If correct, please 
                 run calculate_predictions() first.
                 """
             )
-        if title is None:
-            title = f"Feature Selection Heatmap for {name}"
-        if not isinstance(title, str):
-            raise TypeError("The figure title must be a string.")
+        models_df = self.get_optimal_models(name)
+
+        if not isinstance(title, str) and title is not None:
+            raise TypeError("The title must be a string.")
         if not isinstance(figsize, tuple):
             raise TypeError("The figsize argument must be a tuple.")
         if len(figsize) != 2:
@@ -1469,25 +1478,26 @@ class SignalOptimizer(BasePanelLearner):
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
-        if ftrs_renamed is not None:
-            if not isinstance(ftrs_renamed, dict):
-                raise TypeError("The ftrs_renamed argument must be a dictionary.")
-            for key, value in ftrs_renamed.items():
-                if not isinstance(key, str):
-                    raise TypeError(
-                        "The keys of the ftrs_renamed dictionary must be strings."
-                    )
-                if not isinstance(value, str):
-                    raise TypeError(
-                        "The values of the ftrs_renamed dictionary must be strings."
-                    )
-                if key not in self.X.columns:
-                    raise ValueError(
-                        f"""The key {key} in the ftrs_renamed dictionary is not a feature 
-                        in the pipeline {name}.
-                        """
-                    )
 
+        # Set the style
+        sns.set_style("darkgrid")
+
+        # Reshape dataframe for plotting
+        models_df = models_df.set_index("real_date").sort_index()
+        models_df = models_df.loc[:, "n_splits_used"]
+        models_df_expanded = pd.DataFrame(models_df.tolist(), index=models_df.index)
+
+        # Create time series plot
+        # TODO: extend the number of splits line until the first date that the number of splits is incremented
+        # This translates into vertical lines at each increment date as opposed to linear interpolation between them.
+        fig, ax = plt.subplots()
+        models_df_expanded.plot(ax=ax, figsize=figsize)
+        if title is not None:
+            plt.title(title)
+        else:
+            plt.title(f"Number of CV splits for pipeline: {name}")
+
+        plt.show()
 
 if __name__ == "__main__":
     from sklearn.linear_model import LinearRegression
@@ -1529,7 +1539,7 @@ if __name__ == "__main__":
         ),
         "CAD": (
             pd.Timestamp(year=2015, month=1, day=1),
-            pd.Timestamp(year=2100, month=1, day=1),
+            pd.Timestamp(year=2016, month=1, day=1),
         ),
     }
 
@@ -1557,12 +1567,15 @@ if __name__ == "__main__":
         },
         inner_splitters={
             "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
+            "SecondSplit": ExpandingKFoldPanelSplit(n_splits=5),
         },
         search_type="grid",
         cv_summary="mean",
         n_jobs_outer=1,
         n_jobs_inner=1,
     )
+    
+    so.nsplits_timeplot(name="LR", splitter="ExpandingKFold")
 
     # Now run a pipeline with changes from the default
 
