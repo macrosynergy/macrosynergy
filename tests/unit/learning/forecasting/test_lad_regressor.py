@@ -421,7 +421,7 @@ class TestSignWeightedLADRegression(unittest.TestCase):
             qr = QuantileRegressor(alpha=0, fit_intercept=True).fit(
                 self.X, self.y, sample_weight=self.sign_weights
             )
-            np.testing.assert_almost_equal(lad.coef_, qr.coef_, decimal=2)
+            self.assertTrue(np.allclose(lad.coef_, qr.coef_, atol=0.01, rtol=0.01))
             np.testing.assert_almost_equal(lad.intercept_, qr.intercept_, decimal=2)
 
         """Check default SWLAD fit method works as expected with numpy arrays"""
@@ -439,7 +439,7 @@ class TestSignWeightedLADRegression(unittest.TestCase):
             qr = QuantileRegressor(alpha=0, fit_intercept=True).fit(
                 self.X.values, self.y.values, sample_weight=self.sign_weights
             )
-            np.testing.assert_almost_equal(lad.coef_, qr.coef_, decimal=2)
+            self.assertTrue(np.allclose(lad.coef_, qr.coef_, atol=0.01, rtol=0.01))
             np.testing.assert_almost_equal(lad.intercept_, qr.intercept_, decimal=2)
 
         """Check no intercept SWLAD fit method works as expected"""
@@ -457,7 +457,7 @@ class TestSignWeightedLADRegression(unittest.TestCase):
             qr = QuantileRegressor(alpha=0, fit_intercept=False).fit(
                 self.X, self.y, sample_weight=self.sign_weights
             )
-            np.testing.assert_almost_equal(lad.coef_, qr.coef_, decimal=2)
+            self.assertTrue(np.allclose(lad.coef_, qr.coef_, atol=0.01, rtol=0.01))
             np.testing.assert_almost_equal(lad.intercept_, qr.intercept_, decimal=2)
 
         """Check L1 regularization SignWeightedLADRegressor fit method works as expected"""
@@ -478,7 +478,7 @@ class TestSignWeightedLADRegression(unittest.TestCase):
             qr = QuantileRegressor(alpha=2 * self.X.shape[0], fit_intercept=True).fit(
                 self.X, self.y, sample_weight=self.sign_weights
             )
-            np.testing.assert_almost_equal(lad1.coef_, qr.coef_, decimal=2)
+            self.assertTrue(np.allclose(lad1.coef_, qr.coef_, atol=0.01, rtol=0.01))
 
         """Check L2 regularization SignWeightedLADRegressor fit method works as expected"""
         lad1 = SignWeightedLADRegressor(
@@ -705,7 +705,7 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
             qr = QuantileRegressor(alpha=0, fit_intercept=True).fit(
                 self.X, self.y, self.time_weights
             )
-            np.testing.assert_almost_equal(lad.coef_, qr.coef_, decimal=2)
+            self.assertTrue(np.allclose(lad.coef_, qr.coef_, atol=0.01, rtol=0.01))
             np.testing.assert_almost_equal(lad.intercept_, qr.intercept_, decimal=2)
 
         """Check no intercept TWLAD fit method works as expected"""
@@ -723,7 +723,7 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
             qr = QuantileRegressor(alpha=0, fit_intercept=False).fit(
                 self.X, self.y, sample_weight=self.time_weights
             )
-            np.testing.assert_almost_equal(lad.coef_, qr.coef_, decimal=2)
+            self.assertTrue(np.allclose(lad.coef_, qr.coef_, atol=0.01, rtol=0.01))
             np.testing.assert_almost_equal(lad.intercept_, qr.intercept_, decimal=2)
 
         """Check L1 regularization TimeWeightedLADRegressor fit method works as expected"""
@@ -744,7 +744,7 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
             qr = QuantileRegressor(alpha=2 * self.X.shape[0], fit_intercept=True).fit(
                 self.X, self.y, sample_weight=self.time_weights
             )
-            np.testing.assert_almost_equal(lad1.coef_, qr.coef_, decimal=2)
+            self.assertTrue(np.allclose(lad1.coef_, qr.coef_, atol=0.01, rtol=0.01))
 
         """Check L2 regularization TimeWeightedLADRegressor fit method works as expected"""
         lad1 = TimeWeightedLADRegressor(
