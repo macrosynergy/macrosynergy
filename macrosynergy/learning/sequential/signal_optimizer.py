@@ -840,6 +840,22 @@ class SignalOptimizer(BasePanelLearner):
         ftrs_renamed=None,
         figsize=(12, 8),
     ):
+        """
+        Checks for the feature_selection_heatmap method.
+
+        Parameters
+        ----------
+        name : str
+            Name of the previously run signal optimization process.
+        title : str, optional
+            Title of the heatmap. Default is None. This creates a figure title of the form
+            "Feature Selection Heatmap for {name}".
+        ftrs_renamed : dict, optional
+            Dictionary to rename the feature names for visualisation in the plot axis.
+            Default is None, which uses the original feature names.
+        figsize : tuple of floats or ints, optional
+            Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        """
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
         if name not in self.selected_ftrs.name.unique():
@@ -1423,70 +1439,6 @@ class SignalOptimizer(BasePanelLearner):
         # Display plot
         plt.tight_layout()
         plt.show()
-
-    def _checks_feature_selection_heatmap(
-        self,
-        name: str,
-        title=None,
-        ftrs_renamed=None,
-        figsize=(12, 8),
-    ):
-        """
-        Checks for the feature_selection_heatmap method.
-
-        Parameters
-        ----------
-        name : str
-            Name of the previously run signal optimization process.
-        title : str, optional
-            Title of the heatmap. Default is None. This creates a figure title of the form
-            "Feature Selection Heatmap for {name}".
-        ftrs_renamed : dict, optional
-            Dictionary to rename the feature names for visualisation in the plot axis.
-            Default is None, which uses the original feature names.
-        figsize : tuple of floats or ints, optional
-            Tuple of floats or ints denoting the figure size. Default is (12, 8).
-        """
-        if not isinstance(name, str):
-            raise TypeError("The pipeline name must be a string.")
-        if name not in self.selected_ftrs.name.unique():
-            raise ValueError(
-                f"""The pipeline name {name} is not in the list of already-calculated 
-                pipelines. Please check the pipeline name carefully. If correct, please 
-                run calculate_predictions() first.
-                """
-            )
-        if title is None:
-            title = f"Feature Selection Heatmap for {name}"
-        if not isinstance(title, str):
-            raise TypeError("The figure title must be a string.")
-        if not isinstance(figsize, tuple):
-            raise TypeError("The figsize argument must be a tuple.")
-        if len(figsize) != 2:
-            raise ValueError("The figsize argument must be a tuple of length 2.")
-        for element in figsize:
-            if not isinstance(element, (int, float)):
-                raise TypeError(
-                    "The elements of the figsize tuple must be floats or ints."
-                )
-        if ftrs_renamed is not None:
-            if not isinstance(ftrs_renamed, dict):
-                raise TypeError("The ftrs_renamed argument must be a dictionary.")
-            for key, value in ftrs_renamed.items():
-                if not isinstance(key, str):
-                    raise TypeError(
-                        "The keys of the ftrs_renamed dictionary must be strings."
-                    )
-                if not isinstance(value, str):
-                    raise TypeError(
-                        "The values of the ftrs_renamed dictionary must be strings."
-                    )
-                if key not in self.X.columns:
-                    raise ValueError(
-                        f"""The key {key} in the ftrs_renamed dictionary is not a feature 
-                        in the pipeline {name}.
-                        """
-                    )
 
 
 if __name__ == "__main__":
