@@ -649,7 +649,7 @@ class SignalOptimizer(BasePanelLearner):
                     )
             return self.selected_ftrs[self.selected_ftrs.name.isin(name)]
 
-    def get_ftr_coefficients(self, name=None):
+    def get_feature_coefficients(self, name=None):
         """
         Returns feature coefficients for a given pipeline.
 
@@ -1075,7 +1075,7 @@ class SignalOptimizer(BasePanelLearner):
                 run calculate_predictions() first.
                 """
             )
-        ftrcoef_df = self.get_ftr_coefficients(name)
+        ftrcoef_df = self.get_feature_coefficients(name)
         if ftrcoef_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
                 f"""There are no non-NA coefficients for the pipeline {name}.
@@ -1132,7 +1132,7 @@ class SignalOptimizer(BasePanelLearner):
         sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
-        ftrcoef_df = self.get_ftr_coefficients(name)
+        ftrcoef_df = self.get_feature_coefficients(name)
         ftrcoef_df = ftrcoef_df.set_index("real_date")
         ftrcoef_df = ftrcoef_df.iloc[:, 1:]
 
@@ -1282,7 +1282,7 @@ class SignalOptimizer(BasePanelLearner):
                 run calculate_predictions() first.
                 """
             )
-        ftrcoef_df = self.get_ftr_coefficients(name)
+        ftrcoef_df = self.get_feature_coefficients(name)
         if ftrcoef_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
                 f"""There are no non-NA coefficients for the pipeline {name}.
@@ -1347,7 +1347,7 @@ class SignalOptimizer(BasePanelLearner):
         sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
-        ftrcoef_df = self.get_ftr_coefficients(name)
+        ftrcoef_df = self.get_feature_coefficients(name)
         years = ftrcoef_df["real_date"].dt.year
         years.name = "year"
         ftrcoef_df.drop(columns=["real_date", "name"], inplace=True)
@@ -1383,6 +1383,7 @@ class SignalOptimizer(BasePanelLearner):
         pos_coefs = avg_coefs.clip(lower=0)
         neg_coefs = avg_coefs.clip(upper=0)
 
+        ax = None
         # Create stacked bar plot
         if pos_coefs.sum().any():
             ax = pos_coefs.plot(
