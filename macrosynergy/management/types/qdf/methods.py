@@ -43,7 +43,8 @@ def change_column_format(
         try:
             if col not in df.columns:
                 raise ValueError(f"Column '{col}' not found in DataFrame.")
-            df[col] = df[col].astype(dtype)
+            if not df[col].dtype == dtype:
+                df[col] = df[col].astype(dtype)
         except Exception as exc:
             warnings.warn(f"Could not convert column {col} to {dtype}. Error: {exc}")
 

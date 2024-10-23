@@ -1512,6 +1512,8 @@ if __name__ == "__main__":
         SignWeightedLinearRegression,
     )
     from macrosynergy.management.simulate import make_qdf
+    from macrosynergy.learning.model_evaluation.scorers.scorers import neg_mean_abs_corr
+    from macrosynergy.management.types import QuantamentalDataFrame
 
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
@@ -1545,7 +1547,7 @@ if __name__ == "__main__":
     }
 
     # Signal optimizer with single metric and inner splitter
-
+    # dfd = QuantamentalDataFrame(dfd)
     so = SignalOptimizer(
         df=dfd,
         xcats=["CRY", "GROWTH", "INFL", "XR"],
@@ -1564,7 +1566,7 @@ if __name__ == "__main__":
             "SWLS": {"fit_intercept": [True, False]},
         },
         scorers={
-            "r2": make_scorer(r2_score),
+            "r2": neg_mean_abs_corr,
         },
         inner_splitters={
             "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),

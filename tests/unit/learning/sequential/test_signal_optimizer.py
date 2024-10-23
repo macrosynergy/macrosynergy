@@ -129,7 +129,7 @@ class TestAll(unittest.TestCase):
             },
         }
         self.scorers = {
-            "r2": make_scorer(r2_score),
+            "r2": neg_mean_abs_corr,
             "bac": make_scorer(regression_balanced_accuracy),
         }
         # # instantiate some splitters
