@@ -1566,7 +1566,7 @@ if __name__ == "__main__":
             "SWLS": {"fit_intercept": [True, False]},
         },
         scorers={
-            "r2": neg_mean_abs_corr,
+            "r2": make_scorer(r2_score),
         },
         inner_splitters={
             "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),

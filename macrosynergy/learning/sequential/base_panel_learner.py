@@ -103,7 +103,7 @@ class BasePanelLearner(ABC):
             .dropna()
             .sort_index()
         )
-
+        df_long.index.names = ['cid', 'real_date']
         # Create X and y
         self.X = df_long.iloc[:, :-1]
         self.y = df_long.iloc[:, -1]

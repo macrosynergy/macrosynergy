@@ -829,7 +829,6 @@ def categories_df(
     )
     assert len(xcat_aggs) == 2, aggs_len
 
-    if years is 
     assert not (years is not None) & (
         lag != 0
     ), "Lags cannot be applied to year groups."
