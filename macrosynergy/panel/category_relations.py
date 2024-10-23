@@ -14,6 +14,7 @@ import warnings
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import categories_df
 from macrosynergy.management.utils import apply_slip as apply_slip_util
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 class CategoryRelations(object):
@@ -113,8 +114,11 @@ class CategoryRelations(object):
             raise TypeError("val must be a string.")
         if not {"cid", "xcat", "real_date", val}.issubset(set(df.columns)):
             raise ValueError(
-                "`df` must have columns 'cid', 'xcat', 'real_date' and `val`."
+                f"`df` must have columns 'cid', 'xcat', 'real_date' and `{val}`."
             )
+        df = QuantamentalDataFrame(df)
+        self._as_categorical = df.InitializedAsCategorical
+
         if not isinstance(xcats, (list, tuple)):
             raise TypeError("`xcats` must be a list or a tuple.")
         elif not len(xcats) == 2:
@@ -816,9 +820,9 @@ class CategoryRelations(object):
 
                 df_labs = self.df.dropna().index.to_frame(index=False)
                 if self.years is not None:
-                    ser_labs = df_labs["cid"] + " " + df_labs["real_date"]
+                    ser_labs = df_labs["cid"].astype('object') + " " + df_labs["real_date"]
                 else:
-                    ser_labs = df_labs["cid"] + " "
+                    ser_labs = df_labs["cid"].astype('object') + " "
                     ser_labs += df_labs["real_date"].dt.year.astype('object')
                     if self.freq == "Q":
                         ser_labs += "Q" + df_labs["real_date"].dt.quarter.astype('object')

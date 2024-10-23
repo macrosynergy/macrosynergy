@@ -87,8 +87,8 @@ def standardise_dataframe(
         df["real_date"],
         format="%Y-%m-%d",
     ).astype("datetime64[ns]")
-    df["cid"] = df["cid"].astype('object')
-    df["xcat"] = df["xcat"].astype('object')
+    df["cid"] = df["cid"].astype("object")
+    df["xcat"] = df["xcat"].astype("object")
     # sort by cid, xcat and real_date to allow viewing stacked timeseries easily
     df = (
         df.drop_duplicates(subset=idx_cols, keep="last")
@@ -146,7 +146,7 @@ def drop_nan_series(
         raise TypeError("Error: The raise_warning argument must be a boolean.")
 
     df_orig: pd.DataFrame = df.copy()
-    for cd, xc in df_orig.groupby(["cid", "xcat"]).groups:
+    for cd, xc in df_orig.groupby(["cid", "xcat"], observed=True).groups:
         sel_series: pd.Series = df_orig[
             (df_orig["cid"] == cd) & (df_orig["xcat"] == xc)
         ][column]
@@ -707,7 +707,7 @@ def categories_df_aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
 
     """
 
-    dfx = dfx.groupby(["xcat", "cid", "custom_date"])
+    dfx = dfx.groupby(["xcat", "cid", "custom_date"], observed=True)
     dfx = dfx.aggregate(xcat_agg, numeric_only=True).reset_index()
 
     if "real_date" in dfx.columns:
