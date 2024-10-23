@@ -4,6 +4,7 @@ Collection of custom scikit-learn transformer classes.
 
 import datetime
 import warnings
+import numbers
 from typing import Any, Optional, Union
 
 import numpy as np
@@ -1026,6 +1027,102 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
 
         return calc
 
+class PanelPCA(BaseEstimator, TransformerMixin):
+    def __init__(self, n_components = None, kaiser_criterion=False, adjust_signs = False):
+        """
+        PCA transformer for panel data. If kaiser_criterion is True,
+        this overrides `n_components`.
+
+        :param <int> n_components: Number of components to keep. If None, all components are kept.
+        :param <bool> kaiser_criterion: If True, only components with eigenvalues greater or equal to one are kept.
+        :param <bool> adjust_signs: If True, adjust signs of eigenvectors so that projected training features
+            are positively correlated with a provided target variable. This is useful for consistency
+            when used in a sequential learning pipeline through time. 
+        """
+        if n_components is not None:
+            if not isinstance(n_components, numbers.Number) or isinstance(n_components, bool):
+                raise TypeError("n_components must be a number or None.")
+            if n_components <= 0:
+                raise ValueError("n_components must be greater than 0.")
+            
+        if not isinstance(kaiser_criterion, bool):
+            raise TypeError("kaiser_criterion must be a boolean.")
+        
+        if not isinstance(adjust_signs, bool):
+            raise TypeError("adjust_signs must be a boolean.")
+        
+        self.n_components = n_components
+        self.kaiser_criterion = kaiser_criterion
+        self.adjust_signs = adjust_signs
+        
+    def fit(self, X, y=None):
+        """
+        Fit method to determine an eigenbasis for the PCA.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, pd.Series]> y: Pandas dataframe or series of targets.
+            This is only used to adjust the signs of principal components to allow
+            for greater consistency during sequential learning. 
+        """
+        if self.adjust_signs:
+            if y is None:
+                raise ValueError(
+                    "If `adjust_signs` is True, a target variable must be provided. "
+                    "PCA is an unsupervised method, so providing a target variable "
+                    "does not affect the PCA. Eigenvectors, however, are unique up to "
+                    "its sign, meaning that a target variable can be used to ensure "
+                    "consistency in the signs of the eigenvectors through time and over repeated runs."
+                )
+            
+        # Estimate covariance matrix and perform eigendecomposition
+        covariance_matrix = X.cov()
+        evals, evecs = np.linalg.eigh(covariance_matrix.values)
+
+        # Sort eigenvalues and eigenvectors by descending eigenvalue order
+        sorted_idx = np.argsort(evals)[::-1]
+
+        # Store eigenvalues and eigenvectors
+        self.adjusted_evals = evals[sorted_idx]
+        self.adjusted_evecs = evecs[:, sorted_idx]
+
+        if self.kaiser_criterion:
+            # Get eigenvalues greater or equal to one
+            mask = (self.adjusted_evals >= 1)
+            self.adjusted_evals = self.adjusted_evals[mask]
+            self.adjusted_evecs = self.adjusted_evecs[:,mask]
+        elif isinstance(self.n_components, int):
+            # Keep first n_components components
+            self.adjusted_evals = self.adjusted_evals[:self.n_components]
+            self.adjusted_evecs = self.adjusted_evecs[:,:self.n_components]
+        elif isinstance(self.n_components, float):
+            # Keep components that explain a certain percentage of difference. 
+            variance_explained = self.adjusted_evals / np.sum(self.adjusted_evals)
+            cumulative_variance_explained = np.cumsum(variance_explained)
+            mask = (cumulative_variance_explained <= self.n_components)
+            self.adjusted_evals = self.adjusted_evals[mask]
+            self.adjusted_evecs = self.adjusted_evecs[:,mask]
+
+        # Adjust signs of eigenvectors so that projected data is positively correlated with y
+        if y is not None:
+            y = y.values
+            for i in range(self.adjusted_evecs.shape[1]):
+                if np.corrcoef(X.values @ self.adjusted_evecs[:,i], y)[0,1] < 0:
+                    self.adjusted_evecs[:,i] *= -1
+
+        return self
+            
+    def transform(self, X):
+        """
+        Transform method to project the input features onto the principal components.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        """
+        return pd.DataFrame(
+            index = X.index,
+            columns = [f"PCA {i+1}" for i in range(self.adjusted_evecs.shape[1])],
+            data = X.values @ self.adjusted_evecs
+        )
+
 
 if __name__ == "__main__":
     import macrosynergy.management as msm
@@ -1079,6 +1176,10 @@ if __name__ == "__main__":
         y[y.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
         y[y.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
     )
+
+    transformer = PanelPCA(n_components = 2, adjust_signs=True)
+    transformer.fit(X_train, y_train)
+    print(transformer.transform(X_test))
 
     selector = ZnScoreAverager(neutral="zero", use_signs=False)
     selector.fit(X_train, y_train)
