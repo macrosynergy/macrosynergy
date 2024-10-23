@@ -44,7 +44,7 @@ class BetaEstimator(BasePanelLearner):
             raise ValueError(
                 "df must have columns 'cid', 'xcat', 'real_date' and 'value'."
             )
-            
+
         # cids checks
         if cids is not None:
             if not isinstance(cids, list):
@@ -54,13 +54,13 @@ class BetaEstimator(BasePanelLearner):
             for cid in cids:
                 if cid not in df["cid"].unique():
                     raise ValueError(f"{cid} not in the dataframe.")
-                
+
         if not isinstance(benchmark_return, str):
             raise TypeError("benchmark_return must be a string.")
-            
+
         # Create pseudo-panel
         dfx = pd.DataFrame(columns=["real_date", "cid", "xcat", "value"])
-        
+
         self.benchmark_return = benchmark_return
         self.benchmark_cid, self.benchmark_xcat = benchmark_return.split("_", 1)
 
@@ -207,7 +207,9 @@ class BetaEstimator(BasePanelLearner):
             value_name="value",
         )
 
-        self.betas = pd.concat((self.betas, stored_betas_long), axis=0).astype(
+        self.betas = pd.concat(
+            (self.betas if self.betas.size != 0 else None, stored_betas_long), axis=0
+        ).astype(
             {
                 "cid": "object",
                 "real_date": "datetime64[ns]",
@@ -216,7 +218,11 @@ class BetaEstimator(BasePanelLearner):
             }
         )
         self.hedged_returns = pd.concat(
-            (self.hedged_returns, stored_hrets_long), axis=0
+            (
+                self.hedged_returns if self.hedged_returns.size != 0 else None,
+                stored_hrets_long,
+            ),
+            axis=0,
         ).astype(
             {
                 "cid": "object",
@@ -233,7 +239,7 @@ class BetaEstimator(BasePanelLearner):
         )
         self.chosen_models = pd.concat(
             (
-                self.chosen_models,
+                self.chosen_models if self.chosen_models.size != 0 else None,
                 model_df_long,
             ),
             axis=0,
@@ -298,9 +304,11 @@ class BetaEstimator(BasePanelLearner):
 
 
 if __name__ == "__main__":
-    from macrosynergy.learning import (ExpandingKFoldPanelSplit,
-                                       LinearRegressionSystem,
-                                       neg_mean_abs_corr)
+    from macrosynergy.learning import (
+        ExpandingKFoldPanelSplit,
+        LinearRegressionSystem,
+        neg_mean_abs_corr,
+    )
     from macrosynergy.management.simulate import make_qdf
 
     # Simulate a panel dataset of benchmark and contract returns

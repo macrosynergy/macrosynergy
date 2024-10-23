@@ -306,7 +306,9 @@ class SignalOptimizer(BasePanelLearner):
             id_vars=["cid", "real_date"],
             var_name="xcat",
         )
-        self.preds = pd.concat((self.preds, forecasts_df_long), axis=0).astype(
+        self.preds = pd.concat(
+            (self.preds if self.preds.size != 0 else None, forecasts_df_long), axis=0
+        ).astype(
             {
                 "cid": "object",
                 "real_date": "datetime64[ns]",
@@ -322,7 +324,7 @@ class SignalOptimizer(BasePanelLearner):
         )
         self.chosen_models = pd.concat(
             (
-                self.chosen_models,
+                self.chosen_models if self.chosen_models.size != 0 else None,
                 model_df_long,
             ),
             axis=0,
@@ -346,7 +348,7 @@ class SignalOptimizer(BasePanelLearner):
         ftr_coef_types["name"] = "object"
         self.ftr_coefficients = pd.concat(
             (
-                self.ftr_coefficients,
+                self.ftr_coefficients if self.ftr_coefficients.size != 0 else None,
                 coef_df_long,
             ),
             axis=0,
@@ -358,7 +360,7 @@ class SignalOptimizer(BasePanelLearner):
         )
         self.intercepts = pd.concat(
             (
-                self.intercepts,
+                self.intercepts if self.intercepts.size != 0 else None,
                 intercept_df_long,
             ),
             axis=0,
@@ -380,7 +382,7 @@ class SignalOptimizer(BasePanelLearner):
 
         self.selected_ftrs = pd.concat(
             (
-                self.selected_ftrs,
+                self.selected_ftrs if self.selected_ftrs.size != 0 else None,
                 ftr_select_df_long,
             ),
             axis=0,
@@ -392,7 +394,7 @@ class SignalOptimizer(BasePanelLearner):
 
         self.ftr_corr = pd.concat(
             (
-                self.ftr_corr,
+                self.ftr_corr if self.ftr_corr.size != 0 else None,
                 ftr_corr_df_long,
             ),
             axis=0,
@@ -1038,9 +1040,7 @@ class SignalOptimizer(BasePanelLearner):
         if len(figsize) != 2:
             raise ValueError("The figsize argument must be a tuple of length 2.")
         for element in figsize:
-            if not isinstance(element, numbers.Number) or isinstance(
-                element, bool
-            ):
+            if not isinstance(element, numbers.Number) or isinstance(element, bool):
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
@@ -1499,6 +1499,7 @@ class SignalOptimizer(BasePanelLearner):
 
         plt.show()
 
+
 if __name__ == "__main__":
     from sklearn.linear_model import LinearRegression
     from sklearn.metrics import make_scorer, r2_score
@@ -1574,51 +1575,51 @@ if __name__ == "__main__":
         n_jobs_outer=1,
         n_jobs_inner=1,
     )
-    
-    so.nsplits_timeplot(name="LR", splitter="ExpandingKFold")
 
-    # Now run a pipeline with changes from the default
+    # so.nsplits_timeplot(name="LR", splitter="ExpandingKFold")
 
-    so = SignalOptimizer(
-        df=dfd,
-        xcats=["CRY", "GROWTH", "INFL", "XR"],
-        cids=cids,
-        blacklist=black,
-    )
+    # # Now run a pipeline with changes from the default
 
-    so.calculate_predictions(
-        name="LR",
-        models={
-            "LR": LinearRegression(),
-            "SWLS": SignWeightedLinearRegression(),
-        },
-        hyperparameters={
-            "LR": {"fit_intercept": [True, False]},
-            "SWLS": {"fit_intercept": [True, False]},
-        },
-        scorers={
-            "r2": make_scorer(r2_score),
-            "bac": make_scorer(regression_balanced_accuracy),
-        },
-        inner_splitters={
-            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=2),
-            "RollingKFold": RollingKFoldPanelSplit(n_splits=2),
-        },
-        search_type="grid",
-        normalize_fold_results=True,
-        cv_summary="mean-std",
-        test_size=3,
-        max_periods=24,
-        split_functions={
-            "ExpandingKFold": None,
-            "RollingKFold": lambda n: n // 12,
-        },
-        n_jobs_outer=1,
-        n_jobs_inner=1,
-    )
+    # so = SignalOptimizer(
+    #     df=dfd,
+    #     xcats=["CRY", "GROWTH", "INFL", "XR"],
+    #     cids=cids,
+    #     blacklist=black,
+    # )
 
-    so.models_heatmap(name="LR")
-    so.feature_selection_heatmap(name="LR")
-    so.coefs_timeplot(name="LR")
-    so.intercepts_timeplot(name="LR")
-    so.coefs_stackedbarplot(name="LR")
+    # so.calculate_predictions(
+    #     name="LR",
+    #     models={
+    #         "LR": LinearRegression(),
+    #         "SWLS": SignWeightedLinearRegression(),
+    #     },
+    #     hyperparameters={
+    #         "LR": {"fit_intercept": [True, False]},
+    #         "SWLS": {"fit_intercept": [True, False]},
+    #     },
+    #     scorers={
+    #         "r2": make_scorer(r2_score),
+    #         "bac": make_scorer(regression_balanced_accuracy),
+    #     },
+    #     inner_splitters={
+    #         "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=2),
+    #         "RollingKFold": RollingKFoldPanelSplit(n_splits=2),
+    #     },
+    #     search_type="grid",
+    #     normalize_fold_results=True,
+    #     cv_summary="mean-std",
+    #     test_size=3,
+    #     max_periods=24,
+    #     split_functions={
+    #         "ExpandingKFold": None,
+    #         "RollingKFold": lambda n: n // 12,
+    #     },
+    #     n_jobs_outer=1,
+    #     n_jobs_inner=1,
+    # )
+
+    # so.models_heatmap(name="LR")
+    # so.feature_selection_heatmap(name="LR")
+    # so.coefs_timeplot(name="LR")
+    # so.intercepts_timeplot(name="LR")
+    # so.coefs_stackedbarplot(name="LR")
