@@ -12,19 +12,18 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from joblib import Parallel, delayed
-from sklearn.base import RegressorMixin, ClassifierMixin
-from sklearn.model_selection import BaseCrossValidator, GridSearchCV, RandomizedSearchCV
+from sklearn.base import ClassifierMixin, RegressorMixin
+from sklearn.model_selection import (BaseCrossValidator, GridSearchCV,
+                                     RandomizedSearchCV)
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from tqdm.auto import tqdm
 
 from macrosynergy.compat import JOBLIB_RETURN_AS
-from macrosynergy.learning.splitters import (
-    BasePanelSplit,
-    ExpandingFrequencyPanelSplit,
-    ExpandingIncrementPanelSplit,
-)
+from macrosynergy.learning.splitters import (ExpandingFrequencyPanelSplit,
+                                             ExpandingIncrementPanelSplit)
 from macrosynergy.management import categories_df
+from macrosynergy.management.types.qdf import QuantamentalDataFrame
 
 
 class BasePanelLearner(ABC):
@@ -78,7 +77,7 @@ class BasePanelLearner(ABC):
         self._check_init(df, xcats, cids, start, end, blacklist, freq, lag, xcat_aggs)
 
         # Attributes
-        self.df = df
+        self.df = QuantamentalDataFrame(df)
         self.xcats = xcats
         self.cids = cids
         self.start = start
