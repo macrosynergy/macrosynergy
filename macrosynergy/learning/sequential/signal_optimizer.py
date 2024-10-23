@@ -306,7 +306,9 @@ class SignalOptimizer(BasePanelLearner):
             id_vars=["cid", "real_date"],
             var_name="xcat",
         )
-        self.preds = pd.concat((self.preds, forecasts_df_long), axis=0).astype(
+        self.preds = pd.concat(
+            (self.preds if self.preds.size != 0 else None, forecasts_df_long), axis=0
+        ).astype(
             {
                 "cid": "object",
                 "real_date": "datetime64[ns]",
@@ -322,7 +324,7 @@ class SignalOptimizer(BasePanelLearner):
         )
         self.chosen_models = pd.concat(
             (
-                self.chosen_models,
+                self.chosen_models if self.chosen_models.size != 0 else None,
                 model_df_long,
             ),
             axis=0,
@@ -346,7 +348,7 @@ class SignalOptimizer(BasePanelLearner):
         ftr_coef_types["name"] = "object"
         self.ftr_coefficients = pd.concat(
             (
-                self.ftr_coefficients,
+                self.ftr_coefficients if self.ftr_coefficients.size != 0 else None,
                 coef_df_long,
             ),
             axis=0,
@@ -358,7 +360,7 @@ class SignalOptimizer(BasePanelLearner):
         )
         self.intercepts = pd.concat(
             (
-                self.intercepts,
+                self.intercepts if self.intercepts.size != 0 else None,
                 intercept_df_long,
             ),
             axis=0,
@@ -380,7 +382,7 @@ class SignalOptimizer(BasePanelLearner):
 
         self.selected_ftrs = pd.concat(
             (
-                self.selected_ftrs,
+                self.selected_ftrs if self.selected_ftrs.size != 0 else None,
                 ftr_select_df_long,
             ),
             axis=0,
@@ -392,7 +394,7 @@ class SignalOptimizer(BasePanelLearner):
 
         self.ftr_corr = pd.concat(
             (
-                self.ftr_corr,
+                self.ftr_corr if self.ftr_corr.size != 0 else None,
                 ftr_corr_df_long,
             ),
             axis=0,
@@ -1038,9 +1040,7 @@ class SignalOptimizer(BasePanelLearner):
         if len(figsize) != 2:
             raise ValueError("The figsize argument must be a tuple of length 2.")
         for element in figsize:
-            if not isinstance(element, numbers.Number) or isinstance(
-                element, bool
-            ):
+            if not isinstance(element, numbers.Number) or isinstance(element, bool):
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
@@ -1440,6 +1440,65 @@ class SignalOptimizer(BasePanelLearner):
         plt.tight_layout()
         plt.show()
 
+    def nsplits_timeplot(self, name, title=None, figsize=(10, 6)):
+        """
+        Method to plot the time series for the number of cross-validation splits used
+        by the signal optimizer.
+
+        Parameters
+        ----------
+        name : str
+            Name of the previously run signal optimization process.
+        title : str, optional
+            Title of the plot. Default is None. This creates a figure title of the form
+            "Stacked bar plot of model coefficients: {name}".
+        figsize : tuple of floats or ints, optional
+            Tuple of floats or ints denoting the figure size. Default is (10, 6).
+        """
+        # Checks
+        if not isinstance(name, str):
+            raise TypeError("The pipeline name must be a string.")
+        if name not in self.chosen_models.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated 
+                pipelines. Please check the pipeline name carefully. If correct, please 
+                run calculate_predictions() first.
+                """
+            )
+        models_df = self.get_optimal_models(name)
+
+        if not isinstance(title, str) and title is not None:
+            raise TypeError("The title must be a string.")
+        if not isinstance(figsize, tuple):
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if not isinstance(element, (int, float)):
+                raise TypeError(
+                    "The elements of the figsize tuple must be floats or ints."
+                )
+
+        # Set the style
+        sns.set_style("darkgrid")
+
+        # Reshape dataframe for plotting
+        models_df = models_df.set_index("real_date").sort_index()
+        models_df = models_df.loc[:, "n_splits_used"]
+        models_df_expanded = pd.DataFrame(models_df.tolist(), index=models_df.index)
+
+        # Create time series plot
+        # TODO: extend the number of splits line until the first date that the number of splits is incremented
+        # This translates into vertical lines at each increment date as opposed to linear interpolation between them.
+        fig, ax = plt.subplots()
+        models_df_expanded.plot(ax=ax, figsize=figsize)
+        if title is not None:
+            plt.title(title)
+        else:
+            plt.title(f"Number of CV splits for pipeline: {name}")
+
+        plt.show()
+
 
 if __name__ == "__main__":
     from sklearn.linear_model import LinearRegression
@@ -1481,7 +1540,7 @@ if __name__ == "__main__":
         ),
         "CAD": (
             pd.Timestamp(year=2015, month=1, day=1),
-            pd.Timestamp(year=2100, month=1, day=1),
+            pd.Timestamp(year=2016, month=1, day=1),
         ),
     }
 
@@ -1509,6 +1568,7 @@ if __name__ == "__main__":
         },
         inner_splitters={
             "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
+            "SecondSplit": ExpandingKFoldPanelSplit(n_splits=5),
         },
         search_type="grid",
         cv_summary="mean",
@@ -1516,48 +1576,50 @@ if __name__ == "__main__":
         n_jobs_inner=1,
     )
 
-    # Now run a pipeline with changes from the default
+    # so.nsplits_timeplot(name="LR", splitter="ExpandingKFold")
 
-    so = SignalOptimizer(
-        df=dfd,
-        xcats=["CRY", "GROWTH", "INFL", "XR"],
-        cids=cids,
-        blacklist=black,
-    )
+    # # Now run a pipeline with changes from the default
 
-    so.calculate_predictions(
-        name="LR",
-        models={
-            "LR": LinearRegression(),
-            "SWLS": SignWeightedLinearRegression(),
-        },
-        hyperparameters={
-            "LR": {"fit_intercept": [True, False]},
-            "SWLS": {"fit_intercept": [True, False]},
-        },
-        scorers={
-            "r2": make_scorer(r2_score),
-            "bac": make_scorer(regression_balanced_accuracy),
-        },
-        inner_splitters={
-            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=2),
-            "RollingKFold": RollingKFoldPanelSplit(n_splits=2),
-        },
-        search_type="grid",
-        normalize_fold_results=True,
-        cv_summary="mean-std",
-        test_size=3,
-        max_periods=24,
-        split_functions={
-            "ExpandingKFold": None,
-            "RollingKFold": lambda n: n // 12,
-        },
-        n_jobs_outer=1,
-        n_jobs_inner=1,
-    )
+    # so = SignalOptimizer(
+    #     df=dfd,
+    #     xcats=["CRY", "GROWTH", "INFL", "XR"],
+    #     cids=cids,
+    #     blacklist=black,
+    # )
 
-    so.models_heatmap(name="LR")
-    so.feature_selection_heatmap(name="LR")
-    so.coefs_timeplot(name="LR")
-    so.intercepts_timeplot(name="LR")
-    so.coefs_stackedbarplot(name="LR")
+    # so.calculate_predictions(
+    #     name="LR",
+    #     models={
+    #         "LR": LinearRegression(),
+    #         "SWLS": SignWeightedLinearRegression(),
+    #     },
+    #     hyperparameters={
+    #         "LR": {"fit_intercept": [True, False]},
+    #         "SWLS": {"fit_intercept": [True, False]},
+    #     },
+    #     scorers={
+    #         "r2": make_scorer(r2_score),
+    #         "bac": make_scorer(regression_balanced_accuracy),
+    #     },
+    #     inner_splitters={
+    #         "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=2),
+    #         "RollingKFold": RollingKFoldPanelSplit(n_splits=2),
+    #     },
+    #     search_type="grid",
+    #     normalize_fold_results=True,
+    #     cv_summary="mean-std",
+    #     test_size=3,
+    #     max_periods=24,
+    #     split_functions={
+    #         "ExpandingKFold": None,
+    #         "RollingKFold": lambda n: n // 12,
+    #     },
+    #     n_jobs_outer=1,
+    #     n_jobs_inner=1,
+    # )
+
+    # so.models_heatmap(name="LR")
+    # so.feature_selection_heatmap(name="LR")
+    # so.coefs_timeplot(name="LR")
+    # so.intercepts_timeplot(name="LR")
+    # so.coefs_stackedbarplot(name="LR")

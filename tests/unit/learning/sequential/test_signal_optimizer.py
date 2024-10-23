@@ -2497,6 +2497,37 @@ class TestAll(unittest.TestCase):
             so.models_heatmap(name="test")
         except Exception as e:
             self.fail(f"models_heatmap raised an exception: {e}")
+            
+    def test_types_nsplits_timeplot(self):
+        so = self.so_with_calculated_preds
+
+        with self.assertRaises(TypeError):
+            so.nsplits_timeplot(name=1)
+        with self.assertRaises(ValueError):
+            so.nsplits_timeplot(name="invalid")
+        # title
+        with self.assertRaises(TypeError):
+            so.nsplits_timeplot(name="test", title=1)
+        # figsize
+        with self.assertRaises(TypeError):
+            so.nsplits_timeplot(name="test", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so.nsplits_timeplot(name="test", figsize=1)
+        with self.assertRaises(TypeError):
+            so.nsplits_timeplot(name="test", figsize=(1.5, "e"))
+        with self.assertRaises(ValueError):
+            so.nsplits_timeplot(name="test", figsize=(0,))
+        with self.assertRaises(ValueError):
+            so.nsplits_timeplot(name="test", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
+            so.nsplits_timeplot(name="test", figsize=(2, -1))
+
+    def test_valid_nsplits_timeplot(self):
+        so = self.so_with_calculated_preds
+        try:
+            so.nsplits_timeplot(name="test")
+        except Exception as e:
+            self.fail(f"feature_selection_heatmap raised an exception: {e}")
 
 
 def _get_X_y(so: SignalOptimizer):
