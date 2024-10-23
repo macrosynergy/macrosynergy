@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import warnings
 import datetime
+import numbers
 
 from sklearn.base import BaseEstimator, TransformerMixin
 
@@ -268,6 +269,140 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         """
 
         return X.groupby(level="real_date").count().expanding().sum().to_numpy()
+    
+class PanelPCA(BaseEstimator, TransformerMixin):
+    def __init__(self, n_components = None, kaiser_criterion=False, adjust_signs = False):
+        """
+        PCA transformer for panel data.
+
+        Parameters
+        ----------
+        n_components : int, float, or None, default=None
+            Number of components to keep. If None, all components are kept.
+            If an integer, keep the first `n_components` components.
+            If a float, keep the top components that explain the percentage of variance
+            specified by the float.
+        kaiser_criterion : bool, default=False
+            If True, only components with eigenvalues greater or equal to one are kept.
+        adjust_signs : bool, default=False
+            If True, adjust signs of eigenvectors so that projected training features
+            are positively correlated with a provided target variable. This is useful for
+            consistency when used in a sequential learning pipeline through time.
+
+        Notes
+        -----
+        (P)rinicpal (C)omponent (A)nalysis is an unsupervised method that projects an
+        input feature matrix onto a new basis of orthogonal vectors, called principal
+        components. This basis is chosen to be the directions of maximal variability within
+        the estimated covariance matrix of the input features. The principal components are
+        ordered by the amount of variance they explain. Typically, the first few components
+        can be attributed to "signal" whilst the remaining components are "noise".
+
+        Most modern implementations use the singular value decomposition (SVD) to perform
+        PCA. We estimate a covariance matrix because it follows that an alternative 
+        covariance estimator can be used for PCA, which may affect results. However, this
+        behaviour will be introduced in a future release.
+        """
+        if n_components is not None:
+            if not isinstance(n_components, numbers.Number) or isinstance(n_components, bool):
+                raise TypeError("n_components must be a number or None.")
+            if n_components <= 0:
+                raise ValueError("n_components must be greater than 0.")
+            
+        if not isinstance(kaiser_criterion, bool):
+            raise TypeError("kaiser_criterion must be a boolean.")
+        
+        if not isinstance(adjust_signs, bool):
+            raise TypeError("adjust_signs must be a boolean.")
+        
+        self.n_components = n_components
+        self.kaiser_criterion = kaiser_criterion
+        self.adjust_signs = adjust_signs
+        
+    def fit(self, X, y=None):
+        """
+        Fit method to determine an eigenbasis for the PCA.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
+        y : pd.DataFrame, pd.Series or np.ndarray, default=None
+            Target variable.
+
+        Notes
+        -----
+        The target variable `y` is only ever used to adjust the signs
+        of the eigenvectors to ensure consistency of eigenvector signs
+        when retrained over time. This does not affect the PCA itself.
+        """
+        if self.adjust_signs:
+            if y is None:
+                raise ValueError(
+                    "If `adjust_signs` is True, a target variable must be provided. "
+                    "PCA is an unsupervised method, so providing a target variable "
+                    "does not affect the PCA. Eigenvectors, however, are unique up to "
+                    "its sign, meaning that a target variable can be used to ensure "
+                    "consistency in the signs of the eigenvectors through time and over repeated runs."
+                )
+            
+        # Estimate covariance matrix and perform eigendecomposition
+        covariance_matrix = X.cov()
+        evals, evecs = np.linalg.eigh(covariance_matrix.values)
+
+        # Sort eigenvalues and eigenvectors by descending eigenvalue order
+        sorted_idx = np.argsort(evals)[::-1]
+
+        # Store eigenvalues and eigenvectors
+        self.adjusted_evals = evals[sorted_idx]
+        self.adjusted_evecs = evecs[:, sorted_idx]
+
+        if self.kaiser_criterion:
+            # Get eigenvalues greater or equal to one
+            mask = (self.adjusted_evals >= 1)
+            self.adjusted_evals = self.adjusted_evals[mask]
+            self.adjusted_evecs = self.adjusted_evecs[:,mask]
+        elif isinstance(self.n_components, int):
+            # Keep first n_components components
+            self.adjusted_evals = self.adjusted_evals[:self.n_components]
+            self.adjusted_evecs = self.adjusted_evecs[:,:self.n_components]
+        elif isinstance(self.n_components, float):
+            # Keep components that explain a certain percentage of difference. 
+            variance_explained = self.adjusted_evals / np.sum(self.adjusted_evals)
+            cumulative_variance_explained = np.cumsum(variance_explained)
+            mask = (cumulative_variance_explained <= self.n_components)
+            self.adjusted_evals = self.adjusted_evals[mask]
+            self.adjusted_evecs = self.adjusted_evecs[:,mask]
+
+        # Adjust signs of eigenvectors so that projected data is positively correlated with y
+        if y is not None:
+            # TODO: make sure this works for all possible input types
+            y = y.values
+            for i in range(self.adjusted_evecs.shape[1]):
+                if np.corrcoef(X.values @ self.adjusted_evecs[:,i], y)[0,1] < 0:
+                    self.adjusted_evecs[:,i] *= -1
+
+        return self
+            
+    def transform(self, X):
+        """
+        Project input features onto the principal components.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix.
+
+        Returns
+        -------
+        pd.DataFrame
+            Projected features.
+        """
+        return pd.DataFrame(
+            index = X.index,
+            columns = [f"PCA {i+1}" for i in range(self.adjusted_evecs.shape[1])],
+            data = X.values @ self.adjusted_evecs
+        )
     
 if __name__ == "__main__":
     import numpy as np
