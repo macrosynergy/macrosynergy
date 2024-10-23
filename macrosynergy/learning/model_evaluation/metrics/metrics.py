@@ -272,8 +272,14 @@ def panel_significance_probability(
         raise ValueError("y_true inner index must be datetime")
 
     # y_pred
-    if not isinstance(y_pred, pd.Series):
-        raise TypeError("y_pred must be a pd.Series")
+    if not isinstance(y_pred, (pd.Series, np.ndarray)):
+        raise TypeError("y_pred must be either pd.Series or np.ndarray")
+    if isinstance(y_pred, np.ndarray):
+        if y_pred.ndim != 1:
+            raise ValueError(
+                "y_pred must be 1-dimensional for 'panel_significance_probability'"
+            )
+        y_pred = pd.Series(y_pred, index=y_true.index)
     if not y_pred.index.nlevels == 2:
         raise ValueError("y_pred must be multi-indexed with two levels")
     if not y_pred.index.get_level_values(0).dtype == "object":
@@ -284,6 +290,8 @@ def panel_significance_probability(
         raise ValueError("y_true and y_pred must have the same length")
     if not y_true.index.equals(y_pred.index):
         raise ValueError("y_true and y_pred must have the same index")
+    if y_pred.isnull().values.any():
+        return 0
 
     re = RandomEffects(fit_intercept=False).fit(y_true, y_pred)
     pval = re.pvals.to_numpy().item()
