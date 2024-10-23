@@ -87,8 +87,8 @@ def standardise_dataframe(
         df["real_date"],
         format="%Y-%m-%d",
     ).astype("datetime64[ns]")
-    df["cid"] = df["cid"].astype('object')
-    df["xcat"] = df["xcat"].astype('object')
+    df["cid"] = df["cid"].astype("object")
+    df["xcat"] = df["xcat"].astype("object")
     # sort by cid, xcat and real_date to allow viewing stacked timeseries easily
     df = (
         df.drop_duplicates(subset=idx_cols, keep="last")
@@ -707,7 +707,7 @@ def categories_df_aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
 
     """
 
-    dfx = dfx.groupby(["xcat", "cid", "custom_date"])
+    dfx = dfx.groupby(["xcat", "cid", "custom_date"], observed=True)
     dfx = dfx.aggregate(xcat_agg, numeric_only=True).reset_index()
 
     if "real_date" in dfx.columns:

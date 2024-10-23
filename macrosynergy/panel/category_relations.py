@@ -820,9 +820,9 @@ class CategoryRelations(object):
 
                 df_labs = self.df.dropna().index.to_frame(index=False)
                 if self.years is not None:
-                    ser_labs = df_labs["cid"] + " " + df_labs["real_date"]
+                    ser_labs = df_labs["cid"].astype('object') + " " + df_labs["real_date"]
                 else:
-                    ser_labs = df_labs["cid"] + " "
+                    ser_labs = df_labs["cid"].astype('object') + " "
                     ser_labs += df_labs["real_date"].dt.year.astype('object')
                     if self.freq == "Q":
                         ser_labs += "Q" + df_labs["real_date"].dt.quarter.astype('object')

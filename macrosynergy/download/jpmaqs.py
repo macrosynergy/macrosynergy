@@ -159,7 +159,7 @@ def timeseries_to_qdf(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
         return None
 
     df = QuantamentalDataFrame.from_long_df(
-        df=df,
+        df=df.dropna().reset_index(drop=True),
         value_column=metric,
         cid=cid,
         xcat=xcat,
@@ -1341,7 +1341,7 @@ if __name__ == "__main__":
             start_date=start_date,
             end_date=end_date,
             show_progress=True,
-            report_time_taken=True
+            report_time_taken=True,
         )
         print(data.info())
         print(data)
