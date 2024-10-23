@@ -1038,6 +1038,11 @@ class PanelPCA(BaseEstimator, TransformerMixin):
         :param <bool> adjust_signs: If True, adjust signs of eigenvectors so that projected training features
             are positively correlated with a provided target variable. This is useful for consistency
             when used in a sequential learning pipeline through time. 
+
+        .. note::
+
+          This class is still **experimental**: the predictions
+          and the API might change without any deprecation cycle.
         """
         if n_components is not None:
             if not isinstance(n_components, numbers.Number) or isinstance(n_components, bool):
