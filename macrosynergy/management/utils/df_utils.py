@@ -707,7 +707,7 @@ def categories_df_aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
 
     """
 
-    dfx = dfx.groupby(["xcat", "cid", "custom_date"])
+    dfx = dfx.groupby(["xcat", "cid", "custom_date"], observed=True)
     dfx = dfx.aggregate(xcat_agg, numeric_only=True).reset_index()
 
     if "real_date" in dfx.columns:
