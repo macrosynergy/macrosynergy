@@ -17,6 +17,7 @@ from .transformers import (
     PanelMinMaxScaler,
     PanelStandardScaler,
     FeatureAverager,
+    PanelPCA,
 )
 from .metrics import (
     neg_mean_abs_corr,
@@ -71,6 +72,7 @@ __all__ = [
     "PanelMinMaxScaler",
     "PanelStandardScaler",
     "ZnScoreAverager",
+    "PanelPCA",
     # metrics
     "neg_mean_abs_corr",
     "panel_significance_probability",
