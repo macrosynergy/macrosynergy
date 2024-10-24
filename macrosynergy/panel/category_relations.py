@@ -642,7 +642,7 @@ class CategoryRelations(object):
         elif separator == "cids" and not single_scatter:
             assert isinstance(single_chart, bool)
 
-            dfx_copy = dfx.reset_index()
+            dfx_copy = dfx.reset_index().rename(columns={"level_0": "cid"})
             n_cids = len(dfx_copy["cid"].unique())
 
             error_cids = (
