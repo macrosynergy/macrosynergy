@@ -39,6 +39,7 @@ from .df_utils import (
     get_eops,
     get_sops,
     merge_categories,
+    estimate_release_frequency,
 )
 
 from .sparse import (
@@ -99,6 +100,7 @@ __all__ = [
     "get_eops",
     "get_sops",
     "merge_categories",
+    "estimate_release_frequency",
     # Sparse Indicators
     "create_delta_data",
     "calculate_score_on_sparse_indicator",
