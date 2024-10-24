@@ -43,6 +43,8 @@ class MissingDataError(ExceptionAdapter):
 class NoContentError(ExceptionAdapter):
     """Raised when no data is returned from a request."""
 
+class AttributesOutOfSyncError(ExceptionAdapter):
+    """Raised when the attributes of the ticker are out of sync with the database."""
 
 KNOWN_EXCEPTIONS = [
     requests.exceptions.ConnectionError,
