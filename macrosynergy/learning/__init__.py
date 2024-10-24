@@ -16,6 +16,7 @@ from .preprocessing import (
     PanelStandardScaler,
     BasePanelScaler,
     BasePanelSelector,
+    PanelPCA,
 )
 from .model_evaluation import (
     neg_mean_abs_corr,
@@ -67,6 +68,7 @@ __all__ = [
     "PanelMinMaxScaler",
     "PanelStandardScaler",
     "ZnScoreAverager",
+    "PanelPCA",
     # metrics
     "neg_mean_abs_corr",
     "panel_significance_probability",
