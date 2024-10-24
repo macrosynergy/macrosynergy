@@ -954,6 +954,17 @@ def categories_df(
         dfc = pd.concat(df_output)
         dfc = dfc.pivot(index=("cid", "real_date"), columns="xcat", values=val)
 
+        if dfc.index.dtypes["cid"].name == "category":
+            # in case the incoming DF has a categorical index it, the index needs to be
+            # converted to object type to avoid issues downstream
+            new_outer_index = dfc.index.levels[0].astype("object")
+            new_index = pd.MultiIndex(
+                levels=[new_outer_index, dfc.index.levels[1]],
+                codes=dfc.index.codes,
+                names=dfc.index.names,
+            )
+            dfc.index = new_index
+
     # Adjusted to account for multiple signals requested. If the DataFrame is
     # two-dimensional, signal & a return, NaN values will be handled inside other
     # functionality, as categories_df() is simply a support function. If the parameter
