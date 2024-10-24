@@ -1207,6 +1207,59 @@ def get_sops(
     )
 
 
+def concat_categorical(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
+    """
+    Concatenate two DataFrames with categorical columns.
+
+    The dtypes of the of the second DataFrame will be cast to the dtypes of the first.
+    The columns of the DataFrames must be identical.
+
+    :param <pd.DataFrame> df1: The first DataFrame.
+    :param <pd.DataFrame> df2: The second DataFrame.
+
+    :return <pd.DataFrame>: The concatenated DataFrame with the same columns as the
+        input.
+    """
+    if not isinstance(df1, pd.DataFrame) or not isinstance(df2, pd.DataFrame):
+        raise TypeError("Both DataFrames must be pandas DataFrames.")
+
+    if not df1.columns.equals(df2.columns):
+        raise ValueError("The columns of the two DataFrames must be identical.")
+
+    # Explicitly set or create categorical columns based on the data in model_df_long
+    for col in df1.select_dtypes(include="category").columns:
+        df2[col] = df2[col].astype("category")
+
+    non_categorical_cols = df1.select_dtypes(exclude="category").columns
+    df2[non_categorical_cols] = df2[non_categorical_cols].astype(
+        df1[non_categorical_cols].dtypes.to_dict()
+    )
+    # If one DataFrame is None, return the other (if both are None, return None)
+    if df1.empty:
+        return df2.reset_index(drop=True) if df2 is not None else None
+    if df2 is None or df2.empty:
+        return df1.reset_index(drop=True)
+    categorical_cols = list(
+        set(df1.select_dtypes(include="category").columns).union(
+            df2.select_dtypes(include="category").columns
+        )
+    )
+    for col in categorical_cols:
+        # Find the combined categories from both DataFrames for the current column
+        combined_categories = pd.Categorical(
+            df1[col].cat.categories.union(df2[col].cat.categories)
+        )
+
+        # Re-assign the categorical column with the combined categories to both DataFrames
+        df1[col] = pd.Categorical(df1[col], categories=combined_categories)
+        df2[col] = pd.Categorical(df2[col], categories=combined_categories)
+
+    # Concatenate the two DataFrames and reset the index
+    concatenated_df = pd.concat([df1, df2], axis=0, ignore_index=True)
+
+    return concatenated_df
+
+
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
 
