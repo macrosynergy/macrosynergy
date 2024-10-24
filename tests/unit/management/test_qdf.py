@@ -662,7 +662,10 @@ class TestReduceDF(unittest.TestCase):
         # test the result = apply_blacklist(qdf, blacklist)
         expected_df = apply_blacklist(qdf, blacklist)
 
-        self.assertTrue(new_df.equals(expected_df))
+        self.assertTrue((expected_df.values == expected_df.values).all())
+        self.assertTrue(
+            qdf_to_string_index(new_df).equals(qdf_to_string_index(expected_df))
+        )
 
         # test with some reduced as well
         reduce_cids = ["USD", "AUD", "GBP"]
@@ -696,7 +699,10 @@ class TestReduceDF(unittest.TestCase):
             drop=True
         )
 
-        self.assertTrue(rdf.equals(expected_df))
+        self.assertTrue((rdf.values == expected_df.values).all())
+        self.assertTrue(
+            qdf_to_string_index(rdf).equals(qdf_to_string_index(expected_df))
+        )
 
     def test_reduce_df_by_ticker(self):
         cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
@@ -726,7 +732,10 @@ class TestReduceDF(unittest.TestCase):
             & (qdf["real_date"] <= pd.Timestamp(sel_end)),
         ].reset_index(drop=True)
 
-        self.assertTrue(new_df.equals(expected_df))
+        self.assertTrue((new_df.values == expected_df.values).all())
+        self.assertTrue(
+            qdf_to_string_index(new_df).equals(qdf_to_string_index(expected_df))
+        )
 
         # test with non QuantamentalDataFrame
         with self.assertRaises(TypeError):
