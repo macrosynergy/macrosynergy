@@ -8,48 +8,6 @@ from macrosynergy.learning import ZnScoreAverager
 
 from sklearn.base import TransformerMixin
 
-class TestLassoSelector(unittest.TestCase):
-    @classmethod
-    def setUpClass(self):
-        # Generate data with true linear relationship
-        self.cids = ["AUD", "CAD", "GBP", "USD"]
-        xcats = ["XR", "CPI", "GROWTH", "RIR"]
-
-        df_cids = pd.DataFrame(index=self.cids, columns=["earliest", "latest"])
-        df_cids.loc["AUD"] = ["2019-01-01", "2020-12-31"]
-        df_cids.loc["CAD"] = ["2019-01-01", "2020-12-31"]
-        df_cids.loc["GBP"] = ["2019-01-01", "2020-12-31"]
-        df_cids.loc["USD"] = ["2019-01-01", "2020-12-31"]
-
-        tuples = []
-
-        for cid in self.cids:
-            # get list of all eligible dates
-            sdate = df_cids.loc[cid]["earliest"]
-            edate = df_cids.loc[cid]["latest"]
-            all_days = pd.date_range(sdate, edate)
-            work_days = all_days[all_days.weekday < 5]
-            for work_day in work_days:
-                tuples.append((cid, work_day))
-
-        n_samples = len(tuples)
-        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
-        labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
-        df = pd.DataFrame(
-            data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
-            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
-            columns=xcats,
-            dtype=np.float32,
-        )
-
-        self.X = df.drop(columns="XR")
-        self.y = df["XR"]
-
-        self.X_nan = self.X.copy()
-        self.X_nan["nan_col"] = np.nan
-        self.y_nan = self.y.copy()
-        self.y_nan.iloc[0] = np.nan
-
 class TestZnScoreAverager(unittest.TestCase):
     @classmethod
     def setUpClass(self):
