@@ -1,6 +1,6 @@
 from .transformers import (
     ZnScoreAverager,
-    PanelPCA,s
+    PanelPCA,
 )
 
 __all__ = [
