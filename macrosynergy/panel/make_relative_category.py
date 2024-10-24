@@ -12,6 +12,7 @@ from typing import List, Set
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.types import QuantamentalDataFrame
 import warnings
 
 
@@ -116,10 +117,6 @@ def make_relative_category(
     """
 
     col_names = ["cid", "xcat", "real_date", "value"]
-    col_error = f"The DataFrame must contain the necessary columns: {col_names}."
-    if not set(col_names).issubset(set(df.columns)):
-        raise ValueError(col_error)
-
     operations = {
         "divide": pd.Series.div,
         "subtract": pd.Series.sub,
@@ -148,8 +145,7 @@ def make_relative_category(
     else:
         rel_xcats_dict = {x: x + postfix for x in xcats}
 
-    df = df.loc[:, col_names]
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    df = QuantamentalDataFrame(df)
     # Intersect parameter set to False. Therefore, cross-sections across the categories can vary.
     if basket:
         all_xcats: List[str] = list(set(xcats).union(set(basket)))
@@ -219,8 +215,11 @@ def make_relative_category(
         dfa["value"] = operations[rel_meth](dfa["value"], dfa["value_bm"], axis=0)
 
         # cleaning
-        df_new = dfa.drop(columns=["value_bm", "count"]).assign(cid=cid)
-        df_new["xcat"] = df_new["xcat"].map(rel_xcats_dict)
+        df_new = dfa.drop(columns=["value_bm", "count"])
+        df_new["xcat"] = df_new["xcat"].map(rel_xcats_dict).astype("category")
+        df_new["cid"] = pd.Categorical.from_codes(
+            codes=[0] * len(df_new), categories=[cid]
+        )
 
         if (
             df_new.sort_values(["xcat", "real_date"])[col_names].isna().all().all()
@@ -231,7 +230,10 @@ def make_relative_category(
 
         df_list.append(df_new.sort_values(["xcat", "real_date"])[col_names])
 
-    return pd.concat(df_list).reset_index(drop=True)
+    return QuantamentalDataFrame(
+        pd.concat(df_list).reset_index(drop=True),
+        categorical=df.InitializedAsCategorical,
+    )
 
 
 if __name__ == "__main__":

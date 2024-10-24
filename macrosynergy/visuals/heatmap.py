@@ -316,7 +316,12 @@ class Heatmap(Plotter):
         vmax: float = max(1, df[metric].max())
         vmin: float = min(0, df[metric].min())
 
-        df = df.pivot_table(index=y_axis_column, columns=x_axis_column, values=metric)
+        df = df.pivot_table(
+            index=y_axis_column,
+            columns=x_axis_column,
+            values=metric,
+            observed=True,
+        )
 
         if figsize is None:
             figsize = (

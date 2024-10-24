@@ -5,8 +5,10 @@ Function for calculating historic volatility of quantamental data.
 import numpy as np
 import pandas as pd
 from typing import List, Optional, Dict, Any
+import warnings
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df, standardise_dataframe, get_eops
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def expo_weights(lback_periods: int = 21, half_life: int = 11):
@@ -135,9 +137,7 @@ def historic_vol(
         'cid', 'xcat', 'real_date' and 'value'.
     """
 
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-    df = df[["cid", "xcat", "real_date", "value"]]
-    in_df = df.copy()
+    df: QuantamentalDataFrame = QuantamentalDataFrame(df)
     est_freq = est_freq.lower()
     assert lback_meth in ["xma", "ma"], (
         "Lookback method must be either 'xma' "
@@ -255,25 +255,38 @@ def historic_vol(
         dfwa = dfwa.astype(float).reindex(dfw.index).ffill(limit=fills[est_freq])
 
     df_out = dfwa.unstack().reset_index().rename({0: "value"}, axis=1)
-    df_out["xcat"] = xcat + postfix
 
-    # iteratively ensure that each cid has the same date entries as the input df
-    out_dfs: List[pd.DataFrame] = []
+    # Create an initial mask for all rows to keep
+    keep_mask = pd.Series(False, index=df_out.index)
+
+    # Iterate over each cid and mark valid rows
     for cid in cids:
+        # Get the date range for the current 'cid' in the original df
+        loc_bools = df["cid"] == cid
+        if df[loc_bools].empty:
+            warnings.warn(f"No data for {cid}_{xcat}. Skipping.")
+            continue
+        min_date = df.loc[loc_bools, "real_date"].min()
+        max_date = df.loc[loc_bools, "real_date"].max()
+
+        # Generate valid date range for the current 'cid'
+        valid_dates = pd.bdate_range(start=min_date, end=max_date)
+
+        # Update the keep_mask for rows corresponding to current 'cid' with valid dates
         sel_bools = df_out["cid"] == cid
-        in_df_start = in_df["cid"] == cid
-        sel_dts = df_out["real_date"].isin(
-            (
-                pd.bdate_range(
-                    start=in_df.loc[in_df_start, "real_date"].min(),
-                    end=in_df.loc[in_df_start, "real_date"].max(),
-                )
-            )
-        )
+        sel_dts = df_out["real_date"].isin(valid_dates)
 
-        out_dfs.append(df_out.loc[sel_bools & sel_dts])
+        keep_mask |= sel_bools & sel_dts
 
-    return standardise_dataframe(pd.concat(out_dfs))
+    # Apply the mask to df_out
+    df_out = df_out[keep_mask].reset_index(drop=True)
+
+    df_out = QuantamentalDataFrame.from_long_df(
+        df=df_out,
+        xcat=xcat + postfix,
+        categorical=df.InitializedAsCategorical,
+    )
+    return standardise_dataframe(df_out)
 
 
 if __name__ == "__main__":
