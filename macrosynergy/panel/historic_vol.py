@@ -5,6 +5,7 @@ Function for calculating historic volatility of quantamental data.
 import numpy as np
 import pandas as pd
 from typing import List, Optional, Dict, Any
+import warnings
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df, standardise_dataframe, get_eops
 from macrosynergy.management.types import QuantamentalDataFrame
@@ -261,8 +262,12 @@ def historic_vol(
     # Iterate over each cid and mark valid rows
     for cid in cids:
         # Get the date range for the current 'cid' in the original df
-        min_date = df.loc[df["cid"] == cid, "real_date"].min()
-        max_date = df.loc[df["cid"] == cid, "real_date"].max()
+        loc_bools = df["cid"] == cid
+        if df[loc_bools].empty:
+            warnings.warn(f"No data for {cid}_{xcat}. Skipping.")
+            continue
+        min_date = df.loc[loc_bools, "real_date"].min()
+        max_date = df.loc[loc_bools, "real_date"].max()
 
         # Generate valid date range for the current 'cid'
         valid_dates = pd.bdate_range(start=min_date, end=max_date)
