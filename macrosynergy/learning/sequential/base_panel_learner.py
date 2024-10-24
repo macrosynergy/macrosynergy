@@ -565,10 +565,15 @@ class BasePanelLearner(ABC):
                     cv_summary, axis=1
                 )
 
+
         # Now scale the summary scores for each scorer
         scaler = StandardScaler()
+
         summary_cols = [f"{scorer}_summary" for scorer in scorers.keys()]
-        cv_results[summary_cols] = scaler.fit_transform(cv_results[summary_cols])
+        
+        if len(scorers) > 1:
+            scaler = StandardScaler()
+            cv_results[summary_cols] = scaler.fit_transform(cv_results[summary_cols])
 
         # Now average the summary scores for each scorer
         cv_results["final_score"] = cv_results[summary_cols].mean(axis=1)
@@ -1251,15 +1256,10 @@ class BasePanelLearner(ABC):
             )
         if not isinstance(cap, int):
             raise TypeError("The cap must be an integer.")
-        if cap <= 0:
+        if cap < 0:
             raise ValueError("The cap must be greater than zero.")
-        if cap > 20:
-            warnings.warn(
-                f"The maximum number of models to display is 20. The cap has been set to "
-                "20.",
-                RuntimeWarning,
-            )
-            cap = 20
+        if cap > 10:
+            raise ValueError("The cap must be 10 or lower.")
 
         if title is None:
             title = f"Model Selection Heatmap for {name}"

@@ -6,12 +6,13 @@ from abc import ABC, abstractmethod
 from sklearn.base import BaseEstimator, RegressorMixin
 from macrosynergy.management.validation import _validate_Xy_learning
 
+
 class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
     def __init__(
         self,
-        roll = None,
-        data_freq = "D",
-        min_xs_samples = 2,
+        roll=None,
+        data_freq="D",
+        min_xs_samples=2,
     ):
         """
         Base class for systems of regressors.
@@ -34,9 +35,9 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
 
         Notes
         -----
-        Systems of regressors are used to fit a different regression model on each 
+        Systems of regressors are used to fit a different regression model on each
         cross-section of a panel. This is useful when one believes the within-group
-        relationships are sufficiently different to warrant separate models, or when 
+        relationships are sufficiently different to warrant separate models, or when
         Simpson's paradox is a concern.
 
         A concern with this approach, however, is that the number of samples in each
@@ -48,7 +49,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             raise TypeError("roll must be an integer or None.")
         if (roll is not None) and (roll <= 0):
             raise ValueError("roll must be a positive integer.")
-        
+
         if not isinstance(data_freq, str):
             raise TypeError("The data_freq argument must be a string.")
         if data_freq not in ["D", "W", "M", "Q"]:
@@ -59,7 +60,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             raise TypeError("The min_xs_samples argument must be an integer.")
         if min_xs_samples < 2:
             raise ValueError("The min_xs_samples argument must be at least 2.")
-        
+
         self.roll = roll
         self.data_freq = data_freq
         self.min_xs_samples = min_xs_samples
@@ -137,7 +138,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         X,
     ):
         """
-        Make predictions over a panel dataset based on trained observation-specific 
+        Make predictions over a panel dataset based on trained observation-specific
         models.
 
         Parameters
@@ -242,7 +243,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             The identifier of the cross-section.
         model : RegressorMixin
             The fitted regression model.
-        
+
         Notes
         ------
         Must be overridden.
@@ -305,10 +306,10 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             .sum()
             .copy()
         )
-    
+
     def _check_fit_params(self, X, y):
         """
-        Input checks for the fit method parameters. 
+        Input checks for the fit method parameters.
 
         Parameters
         ----------
@@ -327,8 +328,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             raise TypeError("The inner index of X must be datetime.date.")
         if not isinstance(y, (pd.DataFrame, pd.Series, np.ndarray)):
             raise TypeError(
-                "The y argument must be a pandas DataFrame, Series or "
-                "numpy array."
+                "The y argument must be a pandas DataFrame, Series or " "numpy array."
             )
         if len(X) != len(y):
             raise ValueError("The number of samples in X and y must match.")

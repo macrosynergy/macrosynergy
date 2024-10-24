@@ -3,15 +3,19 @@ import numpy as np
 import pandas as pd
 
 from sklearn.linear_model import LinearRegression, Ridge, Lasso
-from macrosynergy.learning.forecasting.weighted_regressors import SignWeightedRegressor, TimeWeightedRegressor
+from macrosynergy.learning.forecasting.weighted_regressors import (
+    SignWeightedRegressor,
+    TimeWeightedRegressor,
+)
+
 
 class SignWeightedLinearRegression(SignWeightedRegressor):
     def __init__(
         self,
-        fit_intercept = True,
-        positive = False,
-        alpha = 0,
-        shrinkage_type = "l1",
+        fit_intercept=True,
+        positive=False,
+        alpha=0,
+        shrinkage_type="l1",
     ):
         """
         Linear regression with sign-weighted L2 loss.
@@ -58,18 +62,22 @@ class SignWeightedLinearRegression(SignWeightedRegressor):
             raise TypeError("shrinkage_type must be a string.")
         if shrinkage_type not in ["l1", "l2"]:
             raise ValueError("Invalid shrinkage_type. Must be 'l1' or 'l2'.")
-        
+
         if alpha == 0:
             super().__init__(
-                model = LinearRegression(fit_intercept=fit_intercept, positive=positive),
+                model=LinearRegression(fit_intercept=fit_intercept, positive=positive),
             )
         elif shrinkage_type == "l1":
             super().__init__(
-                model = Lasso(fit_intercept=fit_intercept, positive=positive, alpha=alpha),
+                model=Lasso(
+                    fit_intercept=fit_intercept, positive=positive, alpha=alpha
+                ),
             )
         elif shrinkage_type == "l2":
             super().__init__(
-                model = Ridge(fit_intercept=fit_intercept, positive=positive, alpha=alpha),
+                model=Ridge(
+                    fit_intercept=fit_intercept, positive=positive, alpha=alpha
+                ),
             )
 
         self.fit_intercept = fit_intercept
@@ -79,9 +87,9 @@ class SignWeightedLinearRegression(SignWeightedRegressor):
 
     def set_params(self, **params):
         super().set_params(**params)
-        
+
         relevant_params = {"fit_intercept", "positive", "alpha", "shrinkage_type"}
-        
+
         if relevant_params.intersection(params):
             if self.alpha == 0:
                 self.model = LinearRegression(
@@ -100,18 +108,18 @@ class SignWeightedLinearRegression(SignWeightedRegressor):
                     positive=self.positive,
                     alpha=self.alpha,
                 )
-        
+
         return self
 
 
 class TimeWeightedLinearRegression(TimeWeightedRegressor):
     def __init__(
         self,
-        fit_intercept = True,
-        positive = False,
-        half_life = 21 * 12,
-        alpha = 0,
-        shrinkage_type = "l1",
+        fit_intercept=True,
+        positive=False,
+        half_life=21 * 12,
+        alpha=0,
+        shrinkage_type="l1",
     ):
         """
         Linear regression with time-weighted L2 loss.
@@ -163,14 +171,14 @@ class TimeWeightedLinearRegression(TimeWeightedRegressor):
             raise TypeError("half_life must be a number.")
         if half_life <= 0:
             raise ValueError("half_life must be positive.")
-        
+
         if alpha == 0:
             model = LinearRegression(fit_intercept=fit_intercept, positive=positive)
         elif shrinkage_type == "l1":
             model = Lasso(fit_intercept=fit_intercept, positive=positive, alpha=alpha)
         elif shrinkage_type == "l2":
             model = Ridge(fit_intercept=fit_intercept, positive=positive, alpha=alpha)
-        
+
         super().__init__(model=model, half_life=half_life)
         self.fit_intercept = fit_intercept
         self.positive = positive
@@ -179,9 +187,9 @@ class TimeWeightedLinearRegression(TimeWeightedRegressor):
 
     def set_params(self, **params):
         super().set_params(**params)
-        
+
         relevant_params = {"fit_intercept", "positive", "alpha", "shrinkage_type"}
-        
+
         if relevant_params.intersection(params):
             if self.alpha == 0:
                 self.model = LinearRegression(
@@ -200,9 +208,10 @@ class TimeWeightedLinearRegression(TimeWeightedRegressor):
                     positive=self.positive,
                     alpha=self.alpha,
                 )
-        
+
         return self
-    
+
+
 if __name__ == "__main__":
     import macrosynergy.management as msm
     from macrosynergy.management.simulate import make_qdf
@@ -256,7 +265,7 @@ if __name__ == "__main__":
 
     # Fit SWLS - regularization
     model = SignWeightedLinearRegression(
-        fit_intercept=True, positive=False, alpha=.01, shrinkage_type="l1"
+        fit_intercept=True, positive=False, alpha=0.01, shrinkage_type="l1"
     )
     model.fit(X_train, y_train)
     print(f"Intercept: {model.intercept_}, Coefficients: {model.coef_}")
@@ -270,7 +279,11 @@ if __name__ == "__main__":
 
     # Fit TWLS - regularization
     model = TimeWeightedLinearRegression(
-        fit_intercept=True, positive=False, half_life = 36, alpha=.01, shrinkage_type="l1"
+        fit_intercept=True,
+        positive=False,
+        half_life=36,
+        alpha=0.01,
+        shrinkage_type="l1",
     )
     model.fit(X_train, y_train)
     print(f"Intercept: {model.intercept_}, Coefficients: {model.coef_}")
