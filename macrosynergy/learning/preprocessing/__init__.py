@@ -13,6 +13,7 @@ from .scalers import (
 
 from .transformers import (
     ZnScoreAverager,
+    PanelPCA,
 )
 
 __all__ = [
@@ -26,5 +27,6 @@ __all__ = [
     "PanelMinMaxScaler",
     "PanelStandardScaler",
     # transformers
+    "PanelPCA",
     "ZnScoreAverager",
 ]
