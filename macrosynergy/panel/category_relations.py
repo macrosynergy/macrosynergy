@@ -819,6 +819,8 @@ class CategoryRelations(object):
                 assert self.freq in ["A", "Q", "M"], error_freq
 
                 df_labs = self.df.dropna().index.to_frame(index=False)
+                if "cid" not in df_labs.columns:
+                    df_labs = df_labs.rename(columns={0: "cid"})
                 if self.years is not None:
                     ser_labs = df_labs["cid"].astype('object') + " " + df_labs["real_date"]
                 else:
