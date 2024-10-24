@@ -51,6 +51,9 @@ class SignalOptimizer(BasePanelLearner):
     xcat_aggs : list, optional
         List of aggregation functions to apply to the features, used when `freq` is not
         `D`. Default is ["last", "sum"].
+    generate_labels : callable, optional
+        Function to transform the response variable into either alternative regression
+        targets or classification labels. Default is None.
 
     Notes
     -----
@@ -100,6 +103,7 @@ class SignalOptimizer(BasePanelLearner):
         freq="M",
         lag=1,
         xcat_aggs=["last", "sum"],
+        generate_labels = None,
     ):
         # Run checks and necessary dataframe massaging
         super().__init__(
@@ -112,6 +116,7 @@ class SignalOptimizer(BasePanelLearner):
             freq=freq,
             lag=lag,
             xcat_aggs=xcat_aggs,
+            generate_labels=generate_labels,
         )
 
         # Create forecast dataframe index
