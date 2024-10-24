@@ -635,6 +635,7 @@ class Basket(object):
                 dfw_wgs = dfw_wgs[[single_ticker]]
 
             if facet_grid:
+                dfw_wgs.columns.name = "ticker"
                 df_stack = dfw_wgs.stack().to_frame("value").reset_index()
                 df_stack = df_stack.sort_values(["ticker", "real_date"])
                 no_contracts = dfw_wgs.shape[1]
