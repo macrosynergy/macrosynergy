@@ -12,6 +12,7 @@ from sklearn.ensemble import VotingRegressor
 from macrosynergy.learning import ExpandingFrequencyPanelSplit
 from macrosynergy.learning.sequential import BasePanelLearner
 from macrosynergy.management import categories_df, reduce_df, update_df
+from macrosynergy.management.utils.df_utils import concat_categorical
 
 
 class BetaEstimator(BasePanelLearner):
@@ -237,21 +238,7 @@ class BetaEstimator(BasePanelLearner):
             columns=self.chosen_models.columns,
             data=model_choice_data,
         )
-        self.chosen_models = pd.concat(
-            (
-                self.chosen_models if self.chosen_models.size != 0 else None,
-                model_df_long,
-            ),
-            axis=0,
-        ).astype(
-            {
-                "real_date": "datetime64[ns]",
-                "name": "object",
-                "model_type": "object",
-                "hparams": "object",
-                "n_splits_used": "object",
-            }
-        )
+        self.chosen_models = concat_categorical(self.chosen_models, model_df_long)
 
     def store_split_data(
         self,

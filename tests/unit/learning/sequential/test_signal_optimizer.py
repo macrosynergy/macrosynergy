@@ -32,6 +32,8 @@ from macrosynergy.management.utils.df_utils import categories_df
 class TestAll(unittest.TestCase):
     @classmethod
     def setUpClass(self):
+        np.random.seed(0)
+        
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
         self.mock_show = patch("matplotlib.pyplot.show").start()
@@ -129,7 +131,7 @@ class TestAll(unittest.TestCase):
             },
         }
         self.scorers = {
-            "r2": neg_mean_abs_corr,
+            "r2": make_scorer(r2_score),
             "bac": make_scorer(regression_balanced_accuracy),
         }
         # # instantiate some splitters
@@ -204,18 +206,47 @@ class TestAll(unittest.TestCase):
                     "hparams",
                     "n_splits_used",
                 ]
+            ).astype(
+                {
+                    "real_date": "datetime64[ns]",
+                    "name": "category",
+                    "model_type": "category",
+                    "score": "float32",
+                    "hparams": "object",
+                    "n_splits_used": "object",
+                }
             ),
         )
         pd.testing.assert_frame_equal(
             so.preds,
-            pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]),
+            pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]).astype(
+                {
+                    "cid": "category",
+                    "real_date": "datetime64[ns]",
+                    "xcat": "category",
+                    "value": "float32",
+                }
+            ),
         )
         pd.testing.assert_frame_equal(
             so.ftr_coefficients,
-            pd.DataFrame(columns=["real_date", "name"] + list(so.X.columns)),
+            pd.DataFrame(columns=["real_date", "name"] + list(so.X.columns)).astype(
+                {
+                    **{col: "float32" for col in self.X.columns},
+                    "real_date": "datetime64[ns]",
+                    "name": "category",
+                }
+            ),
         )
         pd.testing.assert_frame_equal(
-            so.intercepts, pd.DataFrame(columns=["real_date", "name", "intercepts"])
+            so.intercepts,
+            pd.DataFrame(columns=["real_date", "name", "intercepts"]).astype(
+                {
+                    "real_date": "datetime64[ns]",
+                    "name": "category",
+                    "intercepts": "float32",
+                }
+            ),
         )
 
         min_date = min(so.unique_date_levels)
@@ -2497,7 +2528,7 @@ class TestAll(unittest.TestCase):
             so.models_heatmap(name="test")
         except Exception as e:
             self.fail(f"models_heatmap raised an exception: {e}")
-            
+
     def test_types_nsplits_timeplot(self):
         so = self.so_with_calculated_preds
 
@@ -2545,6 +2576,13 @@ def _get_X_y(so: SignalOptimizer):
         )
         .dropna()
         .sort_index()
+    )
+    df_long.index.names = ["cid", "real_date"]
+    new_outer_level = df_long.index.levels[0].astype("object")
+    df_long.index = pd.MultiIndex(
+        levels=[new_outer_level, df_long.index.levels[1]],
+        codes=df_long.index.codes,
+        names=df_long.index.names,
     )
     X = df_long.iloc[:, :-1]
     y = df_long.iloc[:, -1]

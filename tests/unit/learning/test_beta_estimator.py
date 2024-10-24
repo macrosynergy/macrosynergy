@@ -107,6 +107,15 @@ class TestBetaEstimator(unittest.TestCase):
                     "hparams",
                     "n_splits_used",
                 ],
+            ).astype(
+                {
+                    "real_date": "datetime64[ns]",
+                    "name": "category",
+                    "model_type": "category",
+                    "score": "float32",
+                    "hparams": "object",
+                    "n_splits_used": "object",
+                }
             ),
         )
 
@@ -142,7 +151,7 @@ class TestBetaEstimator(unittest.TestCase):
         ).dropna()
         X = dfx_long[[self.benchmark_return.split("_", maxsplit=1)[1]]]
         X.columns.name = None
-        X = X.astype('float32')
+        X = X.astype("float32")
         y = dfx_long[self.xcat]
 
         assert_frame_equal(be.X, X)

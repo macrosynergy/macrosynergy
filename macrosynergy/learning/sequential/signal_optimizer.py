@@ -17,6 +17,7 @@ from sklearn.pipeline import Pipeline
 from macrosynergy.learning import ExpandingIncrementPanelSplit
 from macrosynergy.learning.sequential import BasePanelLearner
 from macrosynergy.management.utils import concat_categorical
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 class SignalOptimizer(BasePanelLearner):
@@ -600,7 +601,12 @@ class SignalOptimizer(BasePanelLearner):
                         calculate_predictions() first.
                         """
                     )
-            return self.preds[self.preds.xcat.isin(name)]
+            # return self.preds[self.preds.xcat.isin(name)]
+            signals_df = QuantamentalDataFrame(
+                df=self.preds[self.preds.xcat.isin(name)],
+                categorical=self.df.InitializedAsCategorical,
+            )
+            return signals_df
 
     def get_selected_features(self, name=None):
         """
@@ -932,7 +938,9 @@ class SignalOptimizer(BasePanelLearner):
 
         # Sort this dataframe based on the average correlation with each feature in
         # pipeline_input
-        avg_corr = correlations.groupby("pipeline_input")["pearson"].mean()
+        avg_corr = correlations.groupby("pipeline_input", observed=True)[
+            "pearson"
+        ].mean()
         avg_corr = avg_corr.sort_values(ascending=False)
         if cap is not None:
             avg_corr = avg_corr.head(cap)
@@ -1381,7 +1389,7 @@ class SignalOptimizer(BasePanelLearner):
         if ftrs_renamed is not None:
             ftrcoef_df.rename(columns=ftrs_renamed, inplace=True)
 
-        avg_coefs = ftrcoef_df.groupby("year").mean()
+        avg_coefs = ftrcoef_df.groupby("year", observed=True).mean()
         pos_coefs = avg_coefs.clip(lower=0)
         neg_coefs = avg_coefs.clip(upper=0)
 
@@ -1564,6 +1572,7 @@ if __name__ == "__main__":
         n_jobs_inner=1,
     )
 
+    pass
     # so.nsplits_timeplot(name="LR", splitter="ExpandingKFold")
 
     # # Now run a pipeline with changes from the default
