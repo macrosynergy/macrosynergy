@@ -200,6 +200,11 @@ def reduce_df(
     xcats_found = sorted(set(df["xcat"].unique()))
     cids_found = sorted(set(df["cid"].unique()))
     df = df.drop_duplicates().reset_index(drop=True)
+
+    # drop any categories that are not in the df
+    df["cid"] = pd.Categorical(df["cid"], categories=cids_found)
+    df["xcat"] = pd.Categorical(df["xcat"], categories=xcats_found)
+
     if out_all:
         return df, xcats_found, cids_found
     else:
@@ -237,7 +242,16 @@ def reduce_df_by_ticker(
 
     df = df[ticker_series.isin(tickers)]
 
-    return df.reset_index(drop=True)
+    cids_found = sorted(set(df["cid"].unique()))
+    xcats_found = sorted(set(df["xcat"].unique()))
+
+    # dropping categories that are not in the df
+    df["cid"] = pd.Categorical(df["cid"], categories=cids_found)
+    df["xcat"] = pd.Categorical(df["xcat"], categories=xcats_found)
+
+    df = df.drop_duplicates().reset_index(drop=True)
+
+    return df
 
 
 def update_df(
