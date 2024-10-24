@@ -605,7 +605,7 @@ class SignalOptimizer(BasePanelLearner):
             signals_df = QuantamentalDataFrame(
                 df=self.preds[self.preds.xcat.isin(name)],
                 categorical=self.df.InitializedAsCategorical,
-            )
+            ).to_original_dtypes()
             return signals_df
 
     def get_selected_features(self, name=None):

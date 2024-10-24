@@ -90,11 +90,26 @@ class TestBetaEstimator(unittest.TestCase):
         self.assertEqual(be.benchmark_xcat, self.benchmark_xcat)
 
         assert_frame_equal(
-            be.betas, pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
+            be.betas,
+            pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]).astype(
+                {
+                    "cid": "category",
+                    "real_date": "datetime64[ns]",
+                    "xcat": "category",
+                    "value": "float32",
+                }
+            ),
         )
         assert_frame_equal(
             be.hedged_returns,
-            pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]),
+            pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]).astype(
+                {
+                    "cid": "category",
+                    "real_date": "datetime64[ns]",
+                    "xcat": "category",
+                    "value": "float32",
+                }
+            ),
         )
         assert_frame_equal(
             be.chosen_models,
