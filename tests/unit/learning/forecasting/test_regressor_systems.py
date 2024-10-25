@@ -805,15 +805,226 @@ class TestRidgeRegressionSystem(unittest.TestCase):
         )
 
         self.X = df.drop(columns="XR")
+        self.X_nan = self.X.copy()
+        self.X_nan["nan_col"] = np.nan
+
         self.y = df["XR"]
+        self.y_nan = self.y.copy()
+        self.y_nan.iloc[0] = np.nan
+
+    def test_types_fit(self):
+        """
+        Test validity of parameters entered into the fit method.
+        """
+        model = RidgeRegressionSystem()
+        # X
+        self.assertRaises(TypeError, model.fit, X=1, y=self.y)
+        self.assertRaises(TypeError, model.fit, X="string", y=self.y)
+        self.assertRaises(ValueError, model.fit, X=self.X.reset_index(), y=self.y)
+        self.assertRaises(ValueError, model.fit, X=self.X_nan, y=self.y)
+        # y
+        self.assertRaises(TypeError, model.fit, X=self.X, y=1)
+        self.assertRaises(TypeError, model.fit, X=self.X, y="string")
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y.reset_index())
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y_nan)
+
+    @parameterized.expand([True])#, False])
+    def test_valid_fit(self, single_feature):
+        """ Check the model fits are as expected """
+        cross_sections = self.X.index.get_level_values(0).unique()
+        param_names = ["roll", "alpha", "fit_intercept", "positive", "data_freq", "min_xs_samples"]
+        param_values = list(
+            itertools.product(
+                [None, 21, 21 * 6, 21 * 12], # roll
+                [0.0, 0.5, 1.0, 2.0], # alpha
+                [True, False], # fit_intercept
+                [True, False], # positive
+                [None, "unadjusted"], # data_freq
+                [2, 21*15], # min_xs_samples
+            )
+        )
+        for params in param_values:
+            param_dict = {name: param for name, param in zip(param_names, params)}
+            if param_dict["positive"]:
+                param_dict["solver"] = "lbfgs"
+            else:
+                param_dict["solver"] = "lsqr"
+            system_model = RidgeRegressionSystem().set_params(**param_dict)
+            if single_feature:
+                system_model.fit(pd.DataFrame(self.X.iloc[:,0]), self.y)
+            else:
+                system_model.fit(pd.DataFrame(self.X), self.y)
+            system_coefs = system_model.coefs_
+            system_intercepts = system_model.intercepts_
+            for cid in cross_sections:
+                model = Ridge().set_params(**{key: value for key, value in param_dict.items() if key in ["fit_intercept", "positive", "alpha"]})
+                unique_dates = sorted(self.X.xs(cid).index.unique())
+                if params[5] > len(unique_dates):
+                    continue
+                if params[0] is not None:
+                    roll_dates = unique_dates[-params[0]:]
+                    if len(roll_dates) >= len(unique_dates):
+                        continue
+                    if single_feature:
+                        X = self.X.iloc[:,0][self.X.index.get_level_values(1).isin(roll_dates)]
+                        y = self.y[self.y.index.get_level_values(1).isin(roll_dates)]
+                    else:
+                        X = self.X[self.X.index.get_level_values(1).isin(roll_dates)] 
+                        y = self.y[self.y.index.get_level_values(1).isin(roll_dates)]
+                else:
+                    if single_feature:
+                        X =  self.X.iloc[:,0]
+                        y = self.y
+                    else:
+                        X = self.X
+                        y = self.y
+
+                if single_feature:
+                    model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
+                else:
+                    model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
+                # Check that the model coefficients and intercepts are the same
+                np.testing.assert_almost_equal(model.intercept_, system_intercepts[cid], decimal=3)
+                np.testing.assert_almost_equal(model.coef_, system_coefs[cid], decimal=3)
+
+        # Now test that weekly frequency works as expected
+        param_values = list(
+            itertools.product(
+                [None, 5*3, 5*6, 5*12], # roll
+                [0.0, 0.5, 1.0, 2.0], # alpha
+                [True, False], # fit_intercept
+                [True, False], # positive
+                ["W"], # data_freq
+                [2, 5 * 15], # min_xs_samples
+            )
+        )
+
+        for params in param_values:
+            param_dict = {name: param for name, param in zip(param_names, params)}
+            if param_dict["positive"]:
+                param_dict["solver"] = "lbfgs"
+            else:
+                param_dict["solver"] = "lsqr"
+            system_model = RidgeRegressionSystem().set_params(**param_dict)
+            if single_feature:
+                system_model.fit(pd.DataFrame(self.X.iloc[:,0]), self.y)
+            else:
+                system_model.fit(pd.DataFrame(self.X), self.y)
+            system_coefs = system_model.coefs_
+            system_intercepts = system_model.intercepts_
+            for cid in cross_sections:
+                # First downsample the data to weekly
+                X = self.X.groupby(
+                    [
+                        pd.Grouper(level="cid"),
+                        pd.Grouper(level="real_date", freq="W"),
+                    ]
+                ).sum()
+                y = self.y.groupby(
+                    [
+                        pd.Grouper(level="cid"),
+                        pd.Grouper(level="real_date", freq="W"),
+                    ]
+                ).sum()
+                model = Ridge().set_params(**{key: value for key, value in param_dict.items() if key in ["fit_intercept", "positive", "alpha"]})
+                unique_dates = sorted(X.xs(cid).index.unique())
+                if params[5] > len(unique_dates):
+                    continue
+                if params[0] is not None:
+                    roll_dates = unique_dates[-params[0]:]
+                    if len(roll_dates) >= len(unique_dates):
+                        continue
+                    if single_feature:
+                        X = X.iloc[:,0][X.index.get_level_values(1).isin(roll_dates)]
+                        y = y[y.index.get_level_values(1).isin(roll_dates)]
+                    else:
+                        X = X[X.index.get_level_values(1).isin(roll_dates)] 
+                        y = y[y.index.get_level_values(1).isin(roll_dates)]
+                else:
+                    if single_feature:
+                        X =  X.iloc[:,0]
+
+                if single_feature:
+                    model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
+                else:
+                    model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
+                # Check that the model coefficients and intercepts are the same
+                np.testing.assert_almost_equal(model.intercept_, system_intercepts[cid], decimal=3)
+                np.testing.assert_almost_equal(model.coef_, system_coefs[cid],decimal=3)
+
+        # Now test that monthly frequency works as expected
+        param_values = list(
+            itertools.product(
+                [None, 6, 12], # roll
+                [0.0, 0.5, 1.0, 2.0], # alpha
+                [True, False], # fit_intercept
+                [True, False], # positive
+                ["M"], # data_freq
+                [2, 15], # min_xs_samples
+            )
+        )
+
+        for params in param_values:
+            param_dict = {name: param for name, param in zip(param_names, params)}
+            if param_dict["positive"]:
+                param_dict["solver"] = "lbfgs"
+            else:
+                param_dict["solver"] = "lsqr"
+            system_model = RidgeRegressionSystem().set_params(**param_dict)
+            if single_feature:
+                system_model.fit(pd.DataFrame(self.X.iloc[:,0]), self.y)
+            else:
+                system_model.fit(pd.DataFrame(self.X), self.y)
+            system_coefs = system_model.coefs_
+            system_intercepts = system_model.intercepts_
+            for cid in cross_sections:
+                # First downsample the data to weekly
+                X = self.X.groupby(
+                    [
+                        pd.Grouper(level="cid"),
+                        pd.Grouper(level="real_date", freq="M"),
+                    ]
+                ).sum()
+                y = self.y.groupby(
+                    [
+                        pd.Grouper(level="cid"),
+                        pd.Grouper(level="real_date", freq="M"),
+                    ]
+                ).sum()
+                model = Ridge().set_params(**{key: value for key, value in param_dict.items() if key in ["fit_intercept", "positive", "alpha"]})
+                unique_dates = sorted(X.xs(cid).index.unique())
+                if params[5] > len(unique_dates):
+                    continue
+                if params[0] is not None:
+                    unique_dates = sorted(y.xs(cid).index.unique())
+                    roll_dates = unique_dates[-params[0]:]
+                    if len(roll_dates) >= len(unique_dates):
+                        continue
+                    if single_feature:
+                        X = X.iloc[:,0][X.index.get_level_values(1).isin(roll_dates)]
+                        y = y[y.index.get_level_values(1).isin(roll_dates)]
+                    else:
+                        X = X[X.index.get_level_values(1).isin(roll_dates)] 
+                        y = y[y.index.get_level_values(1).isin(roll_dates)]
+                else:
+                    if single_feature:
+                        X =  X.iloc[:,0]
+
+                if single_feature:
+                    model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
+                else:
+                    model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
+                # Check that the model coefficients and intercepts are the same
+                np.testing.assert_almost_equal(model.intercept_, system_intercepts[cid], decimal=3)
+                np.testing.assert_almost_equal(model.coef_, system_coefs[cid],decimal=3)
 
     def test_check_init_params(self):
         # Test default params
         model = RidgeRegressionSystem()
-        self.assertEqual(model.roll, None)
+        self.assertEqual(model.roll, "full")
         self.assertEqual(model.fit_intercept, True)
         self.assertEqual(model.positive, False)
-        self.assertEqual(model.data_freq, "D")
+        self.assertEqual(model.data_freq, None)
         self.assertEqual(model.min_xs_samples, 2)
         self.assertEqual(model.alpha, 1.0)
         np.testing.assert_almost_equal(model.tol, 0.0001)
@@ -840,11 +1051,12 @@ class TestRidgeRegressionSystem(unittest.TestCase):
         self.assertEqual(model.solver, "auto")
 
     def test_invalid_params(self):
-
         with self.assertRaises(TypeError):
             RidgeRegressionSystem(roll=5.5)
         with self.assertRaises(ValueError):
             RidgeRegressionSystem(roll=-5)
+        with self.assertRaises(TypeError):
+            RidgeRegressionSystem(roll=None)
         with self.assertRaises(TypeError):
             RidgeRegressionSystem(fit_intercept="False")
         with self.assertRaises(TypeError):
@@ -867,19 +1079,32 @@ class TestRidgeRegressionSystem(unittest.TestCase):
             RidgeRegressionSystem(solver="unknown")
 
     @parameterized.expand(
-        [(5, True, False, "D", 2), (5, False, True, "D", 2), (5, True, True, "M", 2)]
+        [(5, True, False, "unadjusted", 2), (5, False, True, "unadjusted", 2), (5, True, True, "M", 2)]
     )
     def test_valid_init(self, roll, fit_intercept, positive, data_freq, min_xs_samples):
 
         # Test default params
         try:
-            RidgeRegressionSystem()
+            model = RidgeRegressionSystem()
         except Exception as e:
             self.fail(
                 "RidgeRegressionSystem constructor raised an exception: {}".format(e)
             )
+        self.assertEqual(model.roll, "full")
+        self.assertEqual(model.fit_intercept, True)
+        self.assertEqual(model.positive, False)
+        self.assertEqual(model.data_freq, None)
+        self.assertEqual(model.min_xs_samples, 2)
+        self.assertEqual(model.alpha, 1.0)
+        self.assertEqual(model.tol, 0.0001)
+        self.assertEqual(model.solver, "lsqr")
+        self.assertIsInstance(model, RidgeRegressionSystem)
+        self.assertIsInstance(model, BaseRegressionSystem)
+        self.assertIsInstance(model, RegressorMixin)
+        self.assertIsInstance(model, BaseEstimator)
+
         try:
-            RidgeRegressionSystem(
+            model = RidgeRegressionSystem(
                 roll=roll,
                 fit_intercept=fit_intercept,
                 positive=positive,
@@ -890,11 +1115,42 @@ class TestRidgeRegressionSystem(unittest.TestCase):
             self.fail(
                 "RidgeRegressionSystem constructor raised an exception: {}".format(e)
             )
+        self.assertEqual(model.roll, roll)
+        self.assertEqual(model.fit_intercept, fit_intercept)
+        self.assertEqual(model.positive, positive)
+        self.assertEqual(model.data_freq, data_freq)
+        self.assertEqual(model.min_xs_samples, min_xs_samples)
+        self.assertEqual(model.alpha, 1.0)
+        self.assertEqual(model.tol, 0.0001)
+        self.assertEqual(model.solver, "lsqr")
+        self.assertIsInstance(model, RidgeRegressionSystem)
+        self.assertIsInstance(model, BaseRegressionSystem)
+        self.assertIsInstance(model, RegressorMixin)
+        self.assertIsInstance(model, BaseEstimator)
 
-    def test_create_model(self):
-        model = RidgeRegressionSystem()
+    @parameterized.expand(
+        [
+            ("full", 0.5, True, False, "unadjusted", 2, "lsqr"),
+            ("full", 0.5, False, False, "unadjusted", 2, "lsqr"),
+            ("full", 0.5, False, True, "unadjusted", 2, "lbfgs"),
+            ("full", 0.5, True, True, "unadjusted", 2, "lbfgs"),
+            (5, 2.0, True, False, "unadjusted", 2, "lsqr"),
+            (5, 2.0, False, False, "unadjusted", 2, "lsqr"),
+            (5, 2.0, False, True, "unadjusted", 2, "lbfgs"),
+            (5, 2.0, True, True, "unadjusted", 2, "lbfgs"),
+            (21, 1.0, True, False, "unadjusted", 2, "lsqr"),
+            (21, 1.0, False, False, "unadjusted", 2, "lsqr"),
+            (21, 1.0, False, True, "unadjusted", 2, "lbfgs"),
+            (21, 1.0, True, True, "unadjusted", 2, "lbfgs"),
+        ]
+    )
+    def test_create_model(self, roll, alpha, fit_intercept, positive, data_freq, min_xs_samples, solver):
+        model = RidgeRegressionSystem(roll=roll, alpha = alpha, fit_intercept=fit_intercept, positive=positive, data_freq=data_freq, min_xs_samples=min_xs_samples, solver = solver)
         self.assertIsInstance(model.create_model(), Ridge)
-
+        self.assertEqual(model.create_model().fit_intercept, fit_intercept)
+        self.assertEqual(model.create_model().positive, positive)
+        self.assertEqual(model.create_model().alpha, alpha)
+        self.assertEqual(model.create_model().solver, solver)
 
 class TestCorrelationVolatilitySystem(unittest.TestCase):
     @classmethod
