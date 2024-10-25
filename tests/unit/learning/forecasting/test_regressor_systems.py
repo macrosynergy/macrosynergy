@@ -259,9 +259,6 @@ class TestLinearRegressionSystem(unittest.TestCase):
                 np.testing.assert_almost_equal(model.intercept_, system_intercepts[cid], decimal=5)
                 np.testing.assert_almost_equal(model.coef_, system_coefs[cid],decimal=5)
 
-    def test_types_predict(self):
-        pass
-
     def test_valid_predict(self):
         pass
 
@@ -398,6 +395,26 @@ class TestLinearRegressionSystem(unittest.TestCase):
         model.fit(self.X, self.y)
         self.assertRaises(TypeError, model.predict, X=1)
         self.assertRaises(ValueError, model.predict, X=pd.DataFrame())
+        lad = LinearRegressionSystem().fit(self.X, self.y)
+        self.assertRaises(TypeError, lad.predict, X=1)
+        self.assertRaises(TypeError, lad.predict, X="X")
+        self.assertRaises(ValueError, lad.predict, X=self.X.iloc[:, :-1])
+        self.assertRaises(ValueError, lad.predict, X=self.X_nan)
+        self.assertRaises(TypeError, lad.predict, X=self.X_nan.values)
+
+    def test_valid_predict(self):
+        lad = LinearRegressionSystem().fit(self.X, self.y)
+        y_pred_system = lad.predict(self.X)
+        self.assertIsInstance(y_pred_system, pd.Series)
+        self.assertEqual(len(y_pred_system), len(self.y))
+
+        # Loop through all cross sections and check that the predictions are correct
+        for cid in self.X.index.get_level_values(0).unique():
+            X = self.X.xs(cid, level=0)
+            y = self.y.xs(cid, level=0)
+            lad = LinearRegression().fit(X, y)
+            y_pred_lad = lad.predict(X)
+            np.testing.assert_almost_equal(y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=5)
 
 
 
@@ -651,10 +668,26 @@ class TestLADRegressionSystem(unittest.TestCase):
                 np.testing.assert_almost_equal(model.coef_, system_coefs[cid],decimal=5)
 
     def test_types_predict(self):
-        pass
+        lad = LADRegressionSystem().fit(self.X, self.y)
+        self.assertRaises(TypeError, lad.predict, X=1)
+        self.assertRaises(TypeError, lad.predict, X="X")
+        self.assertRaises(ValueError, lad.predict, X=self.X.iloc[:, :-1])
+        self.assertRaises(ValueError, lad.predict, X=self.X_nan)
+        self.assertRaises(TypeError, lad.predict, X=self.X_nan.values)
 
     def test_valid_predict(self):
-        pass
+        lad = LADRegressionSystem().fit(self.X, self.y)
+        y_pred_system = lad.predict(self.X)
+        self.assertIsInstance(y_pred_system, pd.Series)
+        self.assertEqual(len(y_pred_system), len(self.y))
+
+        # Loop through all cross sections and check that the predictions are correct
+        for cid in self.X.index.get_level_values(0).unique():
+            X = self.X.xs(cid, level=0)
+            y = self.y.xs(cid, level=0)
+            lad = LADRegressor().fit(X, y)
+            y_pred_lad = lad.predict(X)
+            np.testing.assert_almost_equal(y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=5)
 
     def test_check_init_params(self):
         # Test default params
@@ -1152,6 +1185,29 @@ class TestRidgeRegressionSystem(unittest.TestCase):
         self.assertEqual(model.create_model().alpha, alpha)
         self.assertEqual(model.create_model().solver, solver)
 
+    def test_types_predict(self):
+        model = RidgeRegressionSystem()
+        model.fit(self.X, self.y)
+        # X
+        self.assertRaises(TypeError, model.predict, X=1)
+        self.assertRaises(TypeError, model.predict, X="string")
+        self.assertRaises(ValueError, model.predict, X=self.X.reset_index())
+        self.assertRaises(ValueError, model.predict, X=self.X_nan)
+
+    def test_valid_predict(self):
+        lad = RidgeRegressionSystem().fit(self.X, self.y)
+        y_pred_system = lad.predict(self.X)
+        self.assertIsInstance(y_pred_system, pd.Series)
+        self.assertEqual(len(y_pred_system), len(self.y))
+
+        # Loop through all cross sections and check that the predictions are correct
+        for cid in self.X.index.get_level_values(0).unique():
+            X = self.X.xs(cid, level=0)
+            y = self.y.xs(cid, level=0)
+            lad = Ridge().fit(X, y)
+            y_pred_lad = lad.predict(X)
+            np.testing.assert_almost_equal(y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=5)
+            
 class TestCorrelationVolatilitySystem(unittest.TestCase):
     @classmethod
     def setUpClass(self):
