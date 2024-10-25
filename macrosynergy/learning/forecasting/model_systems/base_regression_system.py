@@ -289,7 +289,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         """
         if num_dates < min_xs_samples:
             return False
-        
+
         return True
 
     def _downsample_by_data_freq(self, df):

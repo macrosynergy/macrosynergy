@@ -30,18 +30,18 @@ class LinearRegressionSystem(BaseRegressionSystem):
         entire available history.
     min_xs_samples : int, default=2
         The minimum number of samples required in each cross-section training set
-        for a regression model to be fitted on that cross-section. If `data_freq` is 
+        for a regression model to be fitted on that cross-section. If `data_freq` is
         None, this parameter is specified in units of the underlying dataset frequency.
         Otherwise, this parameter should be expressed in unites of the frequency specified
         in `data_freq`.
     data_freq : str, optional
         Training set data frequency for resampling. This is primarily to be used within
-        the context of market beta estimation in the `BetaEstimator` class in 
+        the context of market beta estimation in the `BetaEstimator` class in
         `macrosynergy.learning`, allowing for cross-validation of the underlying dataset
         frequency for good beta estimation. Accepted strings are 'unadjusted' to use the
         native dataset frequency, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
-        It is recommended to set this parameter to 'W', 'M' or 'Q' only when 
-        the native dataset frequency is greater. 
+        It is recommended to set this parameter to 'W', 'M' or 'Q' only when
+        the native dataset frequency is greater.
 
     Notes
     -----
@@ -59,11 +59,11 @@ class LinearRegressionSystem(BaseRegressionSystem):
 
     def __init__(
         self,
-        fit_intercept = True,
-        positive = False,
-        roll = "full",
-        min_xs_samples = 2,
-        data_freq = None,
+        fit_intercept=True,
+        positive=False,
+        roll="full",
+        min_xs_samples=2,
+        data_freq=None,
     ):
         # Call the parent class constructor
         super().__init__(roll=roll, data_freq=data_freq, min_xs_samples=min_xs_samples)
@@ -148,18 +148,18 @@ class LADRegressionSystem(BaseRegressionSystem):
         entire available history.
     min_xs_samples : int, default=2
         The minimum number of samples required in each cross-section training set
-        for a regression model to be fitted on that cross-section. If `data_freq` is 
+        for a regression model to be fitted on that cross-section. If `data_freq` is
         None, this parameter is specified in units of the underlying dataset frequency.
         Otherwise, this parameter should be expressed in unites of the frequency specified
         in `data_freq`.
     data_freq : str, optional
         Training set data frequency for resampling. This is primarily to be used within
-        the context of market beta estimation in the `BetaEstimator` class in 
+        the context of market beta estimation in the `BetaEstimator` class in
         `macrosynergy.learning`, allowing for cross-validation of the underlying dataset
         frequency for good beta estimation. Accepted strings are 'unadjusted' to use the
         native dataset frequency, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
-        It is recommended to set this parameter to 'W', 'M' or 'Q' only when 
-        the native dataset frequency is greater. 
+        It is recommended to set this parameter to 'W', 'M' or 'Q' only when
+        the native dataset frequency is greater.
 
     Notes
     -----
@@ -177,11 +177,11 @@ class LADRegressionSystem(BaseRegressionSystem):
 
     def __init__(
         self,
-        fit_intercept = True,
-        positive = False,
-        roll = "full",
-        min_xs_samples = 2,
-        data_freq = None,
+        fit_intercept=True,
+        positive=False,
+        roll="full",
+        min_xs_samples=2,
+        data_freq=None,
     ):
         # Call the parent class constructor
         super().__init__(roll=roll, data_freq=data_freq, min_xs_samples=min_xs_samples)
@@ -273,18 +273,18 @@ class RidgeRegressionSystem(BaseRegressionSystem):
         'lsqr', 'sparse_cg', 'sag', 'saga' and 'lbfgs'.
     min_xs_samples : int, default=2
         The minimum number of samples required in each cross-section training set
-        for a regression model to be fitted on that cross-section. If `data_freq` is 
+        for a regression model to be fitted on that cross-section. If `data_freq` is
         None, this parameter is specified in units of the underlying dataset frequency.
         Otherwise, this parameter should be expressed in unites of the frequency specified
         in `data_freq`.
     data_freq : str, optional
         Training set data frequency for resampling. This is primarily to be used within
-        the context of market beta estimation in the `BetaEstimator` class in 
+        the context of market beta estimation in the `BetaEstimator` class in
         `macrosynergy.learning`, allowing for cross-validation of the underlying dataset
         frequency for good beta estimation. Accepted strings are 'unadjusted' to use the
         native dataset frequency, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
-        It is recommended to set this parameter to 'W', 'M' or 'Q' only when 
-        the native dataset frequency is greater. 
+        It is recommended to set this parameter to 'W', 'M' or 'Q' only when
+        the native dataset frequency is greater.
 
     Notes
     -----
@@ -302,14 +302,14 @@ class RidgeRegressionSystem(BaseRegressionSystem):
 
     def __init__(
         self,
-        fit_intercept = True,
-        positive = False,
-        alpha = 1.0,
-        tol = 1e-4,
-        solver = "lsqr",
-        roll = "full",
-        min_xs_samples = 2,
-        data_freq = None,
+        fit_intercept=True,
+        positive=False,
+        alpha=1.0,
+        tol=1e-4,
+        solver="lsqr",
+        roll="full",
+        min_xs_samples=2,
+        data_freq=None,
     ):
         # Call the parent class constructor
         super().__init__(roll=roll, data_freq=data_freq, min_xs_samples=min_xs_samples)
@@ -445,18 +445,18 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         'rolling' and 'exponential'.
     min_xs_samples : int, default=2
         The minimum number of samples required in each cross-section training set
-        for a regression model to be fitted on that cross-section. If `data_freq` is 
+        for a regression model to be fitted on that cross-section. If `data_freq` is
         None, this parameter is specified in units of the underlying dataset frequency.
         Otherwise, this parameter should be expressed in unites of the frequency specified
         in `data_freq`.
     data_freq : str, optional
         Training set data frequency for resampling. This is primarily to be used within
-        the context of market beta estimation in the `BetaEstimator` class in 
+        the context of market beta estimation in the `BetaEstimator` class in
         `macrosynergy.learning`, allowing for cross-validation of the underlying dataset
         frequency for good beta estimation. Accepted strings are 'unadjusted' to use the
         native dataset frequency, 'W' for weekly, 'M' for monthly and 'Q' for quarterly.
-        It is recommended to set this parameter to 'W', 'M' or 'Q' only when 
-        the native dataset frequency is greater. 
+        It is recommended to set this parameter to 'W', 'M' or 'Q' only when
+        the native dataset frequency is greater.
 
     Notes
     -----
@@ -472,15 +472,17 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
 
     def __init__(
         self,
-        correlation_lookback = "full",
-        correlation_type = "pearson",
-        volatility_lookback = "full",
-        volatility_window_type = "rolling",
-        min_xs_samples = 2,
-        data_freq = None,
+        correlation_lookback="full",
+        correlation_type="pearson",
+        volatility_lookback="full",
+        volatility_window_type="rolling",
+        min_xs_samples=2,
+        data_freq=None,
     ):
         # Call the parent class constructor
-        super().__init__(roll="full", data_freq=data_freq, min_xs_samples=min_xs_samples)
+        super().__init__(
+            roll="full", data_freq=data_freq, min_xs_samples=min_xs_samples
+        )
 
         # Additional checks
         self._check_init_params(
@@ -537,15 +539,23 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         # Now estimate local standard deviations of both the benchmark and contract returns
         if self.volatility_lookback == "full":
             X_section_std = X_section.values[:, 0].std(ddof=1)
-            y_section_std = y_section.values.std(ddof=1) 
+            y_section_std = y_section.values.std(ddof=1)
         else:
             if self.volatility_window_type == "rolling":
-                X_section_std = X_section.values[-self.volatility_lookback:, 0].std(ddof=1)
-                y_section_std = y_section.values[-self.volatility_lookback:].std(ddof=1)
+                X_section_std = X_section.values[-self.volatility_lookback :, 0].std(
+                    ddof=1
+                )
+                y_section_std = y_section.values[-self.volatility_lookback :].std(
+                    ddof=1
+                )
             elif self.volatility_window_type == "exponential":
                 alpha = 2 / (self.volatility_lookback + 1)
-                weights = np.array([(1 - alpha) ** i for i in range(len(X_section))][::-1])
-                X_section_std = np.sqrt(np.cov(X_section.iloc[:,0].values.flatten(), aweights=weights))
+                weights = np.array(
+                    [(1 - alpha) ** i for i in range(len(X_section))][::-1]
+                )
+                X_section_std = np.sqrt(
+                    np.cov(X_section.iloc[:, 0].values.flatten(), aweights=weights)
+                )
                 y_section_std = np.sqrt(np.cov(y_section.values, aweights=weights))
 
         # Get beta estimate and store it
@@ -655,10 +665,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             return False
         # If the volatility lookback is greater than the number of available dates, skip
         # to the next cross-section
-        if (
-            self.volatility_lookback != "full"
-            and num_dates <= self.volatility_lookback
-        ):
+        if self.volatility_lookback != "full" and num_dates <= self.volatility_lookback:
             return False
 
         return True
@@ -689,7 +696,9 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         if isinstance(correlation_lookback, int) and correlation_lookback <= 0:
             raise ValueError("correlation_lookback must be a positive integer.")
         if isinstance(correlation_lookback, str) and correlation_lookback != "full":
-            raise ValueError("correlation_lookback must be 'full' or a positive integer.")
+            raise ValueError(
+                "correlation_lookback must be 'full' or a positive integer."
+            )
         if not isinstance(correlation_type, str):
             raise TypeError("correlation_type must be a string.")
         if correlation_type not in ["pearson", "kendall", "spearman"]:
@@ -701,7 +710,9 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         if isinstance(volatility_lookback, int) and volatility_lookback <= 0:
             raise ValueError("volatility_lookback must be a positive integer.")
         if isinstance(volatility_lookback, str) and volatility_lookback != "full":
-            raise ValueError("volatility_lookback must be 'full' or a positive integer.")
+            raise ValueError(
+                "volatility_lookback must be 'full' or a positive integer."
+            )
         if not isinstance(volatility_window_type, str):
             raise TypeError("volatility_window_type must be a string.")
         if volatility_window_type not in ["rolling", "exponential"]:
