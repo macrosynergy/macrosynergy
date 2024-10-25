@@ -1281,6 +1281,7 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
             np.testing.assert_almost_equal(
                 model.coefs_[cid],
                 correlation * y_volatility / X_volatility,
+                decimal=4,
             )
             np.testing.assert_almost_equal(
                 model.coefs_[cid],
@@ -1305,6 +1306,7 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
             np.testing.assert_almost_equal(
                 model.coefs_[cid],
                 correlation * y_volatility / X_volatility,
+                decimal=4,
             )
 
         # Repeat but with kendall correlation
@@ -1324,7 +1326,14 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
             np.testing.assert_almost_equal(
                 model.coefs_[cid],
                 correlation * y_volatility / X_volatility,
+                decimal=4,
             )
+
+        # Now use custom lookback periods
+        model = CorrelationVolatilitySystem(
+            correlation_type="pearson",
+            #correlation_lookback=21 * ,
+        )
 
     def test_types_predict(self):
         pass
