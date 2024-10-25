@@ -1355,13 +1355,100 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
                 X_volatility = X_cid.iloc[:,0].tail(21).std()
                 y_volatility = y_cid.tail(21).std()
             elif volatility_window_type == "exponential":
-                X_volatility = X_cid.iloc[:,0].ewm(span=21, adjust=False).std().iloc[-1]
-                y_volatility = y_cid.ewm(span=21, adjust=False).std().iloc[-1]
+                X_volatility = X_cid.iloc[:,0].ewm(span=21, adjust=True).std().iloc[-1]
+                y_volatility = y_cid.ewm(span=21, adjust=True).std().iloc[-1]
             np.testing.assert_almost_equal(
                 model.coefs_[cid],
                 correlation * y_volatility / X_volatility,
                 decimal=4,
             )
+
+        # Test weekly frequency
+        model = CorrelationVolatilitySystem(
+            correlation_type=correlation_type,
+            correlation_lookback=4 * 12, # Assume roughly 4 weeks in a month
+            volatility_lookback=4, # Assume roughly 4 weeks in a month
+            volatility_window_type=volatility_window_type,
+            data_freq="W",
+        )
+        model.fit(self.X, self.y)
+        self.assertIsInstance(model.coefs_, dict)
+        self.assertEqual(len(model.coefs_), 4)
+        self.assertEqual(set(model.coefs_.keys()), set(self.X.index.unique(level=0)))
+
+        cross_sections  = self.X.index.unique(level=0)
+        for cid in cross_sections:
+            # First downsample the data to weekly
+            X = self.X.groupby(
+                [
+                    pd.Grouper(level="cid"),
+                    pd.Grouper(level="real_date", freq="W"),
+                ]
+            ).sum()
+            y = self.y.groupby(
+                [
+                    pd.Grouper(level="cid"),
+                    pd.Grouper(level="real_date", freq="W"),
+                ]
+            ).sum()
+            X_cid = X.xs(cid)
+            y_cid = y.xs(cid)
+            correlation = X_cid.tail(4 * 12).iloc[:,0].corr(y_cid.tail(4 * 12), method=correlation_type)
+            if volatility_window_type == "rolling":
+                X_volatility = X_cid.iloc[:,0].tail(4).std()
+                y_volatility = y_cid.tail(4).std()
+            elif volatility_window_type == "exponential":
+                X_volatility = X_cid.iloc[:,0].ewm(span=4, adjust=True).std().iloc[-1]
+                y_volatility = y_cid.ewm(span=4, adjust=True).std().iloc[-1]
+            np.testing.assert_almost_equal(
+                model.coefs_[cid],
+                correlation * y_volatility / X_volatility,
+                decimal=4,
+            )
+
+        # Test monthly frequency
+        model = CorrelationVolatilitySystem(
+            correlation_type=correlation_type,
+            correlation_lookback=6, # Use 6-month correlation
+            volatility_lookback=3, # Use 3-month volatility
+            volatility_window_type=volatility_window_type,
+            data_freq="M",
+        )
+        model.fit(self.X, self.y)
+        self.assertIsInstance(model.coefs_, dict)
+        self.assertEqual(len(model.coefs_), 4)
+        self.assertEqual(set(model.coefs_.keys()), set(self.X.index.unique(level=0)))
+
+        cross_sections  = self.X.index.unique(level=0)
+        for cid in cross_sections:
+            # First downsample the data to monthly
+            X = self.X.groupby(
+                [
+                    pd.Grouper(level="cid"),
+                    pd.Grouper(level="real_date", freq="M"),
+                ]
+            ).sum()
+            y = self.y.groupby(
+                [
+                    pd.Grouper(level="cid"),
+                    pd.Grouper(level="real_date", freq="M"),
+                ]
+            ).sum()
+            X_cid = X.xs(cid)
+            y_cid = y.xs(cid)
+            correlation = X_cid.tail(6).iloc[:,0].corr(y_cid.tail(6), method=correlation_type)
+            if volatility_window_type == "rolling":
+                X_volatility = X_cid.iloc[:,0].tail(3).std()
+                y_volatility = y_cid.tail(3).std()
+            elif volatility_window_type == "exponential":
+                X_volatility = X_cid.iloc[:,0].ewm(span=3, adjust=True).std().iloc[-1]
+                y_volatility = y_cid.ewm(span=3, adjust=True).std().iloc[-1]
+            np.testing.assert_almost_equal(
+                model.coefs_[cid],
+                correlation * y_volatility / X_volatility,
+                decimal=4,
+            )
+
 
     def test_types_predict(self):
         pass
