@@ -521,7 +521,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
                 y_section_ranked = np.argsort(np.argsort(y_section.values))
                 corr = np.corrcoef(X_section_ranked, y_section_ranked)[0, 1]
             elif self.correlation_type == "kendall":
-                corr = stats.kendalltau(X_section.values[:, 0], y_section.values).statistic
+                corr = stats.kendalltau(X_section.values[:, 0], y_section.values)[0]
         else:
             X_section_corr = X_section.values[-self.correlation_lookback :, 0]
             y_section_corr = y_section.values[-self.correlation_lookback :]
@@ -532,7 +532,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
                 y_section_ranked = np.argsort(np.argsort(y_section_corr))
                 corr = np.corrcoef(X_section_ranked, y_section_ranked)[0, 1]
             elif self.correlation_type == "kendall":
-                corr = stats.kendalltau(X_section_corr, y_section_corr).statistic
+                corr = stats.kendalltau(X_section_corr, y_section_corr)[0]
 
         # Now estimate local standard deviations of both the benchmark and contract returns
         if self.volatility_lookback == "full":
