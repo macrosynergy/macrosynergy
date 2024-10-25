@@ -1245,3 +1245,89 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
             CorrelationVolatilitySystem(min_xs_samples=3.5)
         with self.assertRaises(ValueError):
             CorrelationVolatilitySystem(min_xs_samples=-8)
+
+    def test_types_fit(self):
+        """ 
+        Check the types of the parameters entered into the fit method.
+        """
+        model = CorrelationVolatilitySystem()
+        # X
+        self.assertRaises(TypeError, model.fit, X=1, y=self.y)
+        self.assertRaises(TypeError, model.fit, X="string", y=self.y)
+        self.assertRaises(ValueError, model.fit, X=self.X.reset_index(), y=self.y)
+        self.assertRaises(ValueError, model.fit, X=self.X_nan, y=self.y)
+        # y
+        self.assertRaises(TypeError, model.fit, X=self.X, y=1)
+        self.assertRaises(TypeError, model.fit, X=self.X, y="string")
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y.reset_index())
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y_nan)
+
+    def test_valid_fit(self):
+        """ Check the model fits are as expected """
+        # First check the default parameters yield expected coefficients
+        model = CorrelationVolatilitySystem()
+        model.fit(self.X, self.y)
+        self.assertIsInstance(model.coefs_, dict)
+        self.assertEqual(len(model.coefs_), 4)
+        self.assertEqual(set(model.coefs_.keys()), set(self.X.index.unique(level=0)))
+
+        cross_sections  = self.X.index.unique(level=0)
+        for cid in cross_sections:
+            X_cid = self.X.xs(cid)
+            y_cid = self.y.xs(cid)
+            correlation = X_cid.iloc[:,0].corr(y_cid, method="pearson")
+            X_volatility = X_cid.iloc[:,0].std()
+            y_volatility = y_cid.std()
+            np.testing.assert_almost_equal(
+                model.coefs_[cid],
+                correlation * y_volatility / X_volatility,
+            )
+            np.testing.assert_almost_equal(
+                model.coefs_[cid],
+                LinearRegression().fit(X_cid.iloc[:,0].values.reshape(-1, 1), y_cid).coef_[0],
+                decimal=4,
+            )
+
+        # Repeat but with spearman correlation
+        model = CorrelationVolatilitySystem(correlation_type="spearman")
+        model.fit(self.X, self.y)
+        self.assertIsInstance(model.coefs_, dict)
+        self.assertEqual(len(model.coefs_), 4)
+        self.assertEqual(set(model.coefs_.keys()), set(self.X.index.unique(level=0)))
+
+        cross_sections  = self.X.index.unique(level=0)
+        for cid in cross_sections:
+            X_cid = self.X.xs(cid)
+            y_cid = self.y.xs(cid)
+            correlation = X_cid.iloc[:,0].corr(y_cid, method="spearman")
+            X_volatility = X_cid.iloc[:,0].std()
+            y_volatility = y_cid.std()
+            np.testing.assert_almost_equal(
+                model.coefs_[cid],
+                correlation * y_volatility / X_volatility,
+            )
+
+        # Repeat but with kendall correlation
+        model = CorrelationVolatilitySystem(correlation_type="kendall")
+        model.fit(self.X, self.y)
+        self.assertIsInstance(model.coefs_, dict)
+        self.assertEqual(len(model.coefs_), 4)
+        self.assertEqual(set(model.coefs_.keys()), set(self.X.index.unique(level=0)))
+
+        cross_sections  = self.X.index.unique(level=0)
+        for cid in cross_sections:
+            X_cid = self.X.xs(cid)
+            y_cid = self.y.xs(cid)
+            correlation = X_cid.iloc[:,0].corr(y_cid, method="kendall")
+            X_volatility = X_cid.iloc[:,0].std()
+            y_volatility = y_cid.std()
+            np.testing.assert_almost_equal(
+                model.coefs_[cid],
+                correlation * y_volatility / X_volatility,
+            )
+
+    def test_types_predict(self):
+        pass
+
+    def test_valid_predict(self):
+        pass
