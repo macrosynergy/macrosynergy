@@ -584,7 +584,7 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
             raise TypeError("The outer index of X must be strings.")
         if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
-        if X.columns != self.feature_names_in_:
+        if not np.all(X.columns == self.feature_names_in_):
             raise ValueError(
                 "The input feature matrix must have the same columns as the",
                 "training feature matrix.",

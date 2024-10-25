@@ -1451,7 +1451,19 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
 
 
     def test_types_predict(self):
-        pass
+        model = CorrelationVolatilitySystem()
+        model.fit(self.X, self.y)
+        # X
+        self.assertRaises(TypeError, model.predict, X=1)
+        self.assertRaises(TypeError, model.predict, X="string")
+        self.assertRaises(ValueError, model.predict, X=self.X.reset_index())
+        self.assertRaises(ValueError, model.predict, X=self.X_nan)
 
     def test_valid_predict(self):
-        pass
+        # Check that the predict method returns the expected values (series of zeros)
+        model = CorrelationVolatilitySystem()
+        model.fit(self.X, self.y)
+        predictions = model.predict(self.X)
+        self.assertIsInstance(predictions, pd.Series)
+        self.assertEqual(len(predictions), len(self.y))
+        np.testing.assert_almost_equal(predictions.values, 0, decimal=4)        
