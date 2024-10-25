@@ -84,47 +84,61 @@ class TestLinearRegressionSystem(unittest.TestCase):
         self.assertRaises(ValueError, model.fit, X=self.X, y=self.y.reset_index())
         self.assertRaises(ValueError, model.fit, X=self.X, y=self.y_nan)
 
-    @parameterized.expand([True])#, False])
+    @parameterized.expand([True])  # , False])
     def test_valid_fit(self, single_feature):
-        """ Check the model fits are as expected """
+        """Check the model fits are as expected"""
         cross_sections = self.X.index.get_level_values(0).unique()
-        param_names = ["roll", "fit_intercept", "positive", "data_freq", "min_xs_samples"]
+        param_names = [
+            "roll",
+            "fit_intercept",
+            "positive",
+            "data_freq",
+            "min_xs_samples",
+        ]
         param_values = list(
             itertools.product(
-                [None, 21, 21 * 6, 21 * 12], # roll
-                [True, False], # fit_intercept
-                [True, False], # positive
-                [None, "unadjusted"], # data_freq
-                [2, 21*15], # min_xs_samples
+                [None, 21, 21 * 6, 21 * 12],  # roll
+                [True, False],  # fit_intercept
+                [True, False],  # positive
+                [None, "unadjusted"],  # data_freq
+                [2, 21 * 15],  # min_xs_samples
             )
         )
         for params in param_values:
             param_dict = {name: param for name, param in zip(param_names, params)}
             system_model = LinearRegressionSystem().set_params(**param_dict)
             if single_feature:
-                system_model.fit(pd.DataFrame(self.X.iloc[:,0]), self.y)
+                system_model.fit(pd.DataFrame(self.X.iloc[:, 0]), self.y)
             # else:
             #     system_model.fit(pd.DataFrame(self.X), self.y)
             system_coefs = system_model.coefs_
             system_intercepts = system_model.intercepts_
             for cid in cross_sections:
-                model = LinearRegression().set_params(**{key: value for key, value in param_dict.items() if key in ["fit_intercept", "positive"]})
+                model = LinearRegression().set_params(
+                    **{
+                        key: value
+                        for key, value in param_dict.items()
+                        if key in ["fit_intercept", "positive"]
+                    }
+                )
                 unique_dates = sorted(self.X.xs(cid).index.unique())
                 if params[4] > len(unique_dates):
                     continue
                 if params[0] is not None:
-                    roll_dates = unique_dates[-params[0]:]
+                    roll_dates = unique_dates[-params[0] :]
                     if len(roll_dates) >= len(unique_dates):
                         continue
                     if single_feature:
-                        X = self.X.iloc[:,0][self.X.index.get_level_values(1).isin(roll_dates)]
+                        X = self.X.iloc[:, 0][
+                            self.X.index.get_level_values(1).isin(roll_dates)
+                        ]
                         y = self.y[self.y.index.get_level_values(1).isin(roll_dates)]
                     # else:
-                    #     X = self.X[self.X.index.get_level_values(1).isin(roll_dates)] 
+                    #     X = self.X[self.X.index.get_level_values(1).isin(roll_dates)]
                     #     y = self.y[self.y.index.get_level_values(1).isin(roll_dates)]
                 else:
                     if single_feature:
-                        X =  self.X.iloc[:,0]
+                        X = self.X.iloc[:, 0]
                         y = self.y
                     # else:
                     #     X = self.X
@@ -141,11 +155,11 @@ class TestLinearRegressionSystem(unittest.TestCase):
         # Now test that weekly frequency works as expected
         param_values = list(
             itertools.product(
-                [None, 5*3, 5*6, 5*12], # roll
-                [True, False], # fit_intercept
-                [True, False], # positive
-                ["W"], # data_freq
-                [2], # min_xs_samples
+                [None, 5 * 3, 5 * 6, 5 * 12],  # roll
+                [True, False],  # fit_intercept
+                [True, False],  # positive
+                ["W"],  # data_freq
+                [2],  # min_xs_samples
             )
         )
 
@@ -153,7 +167,7 @@ class TestLinearRegressionSystem(unittest.TestCase):
             param_dict = {name: param for name, param in zip(param_names, params)}
             system_model = LinearRegressionSystem().set_params(**param_dict)
             if single_feature:
-                system_model.fit(pd.DataFrame(self.X.iloc[:,0]), self.y)
+                system_model.fit(pd.DataFrame(self.X.iloc[:, 0]), self.y)
             else:
                 system_model.fit(pd.DataFrame(self.X), self.y)
             system_coefs = system_model.coefs_
@@ -172,40 +186,50 @@ class TestLinearRegressionSystem(unittest.TestCase):
                         pd.Grouper(level="real_date", freq="W"),
                     ]
                 ).sum()
-                model = LinearRegression().set_params(**{key: value for key, value in param_dict.items() if key in ["fit_intercept", "positive"]})
+                model = LinearRegression().set_params(
+                    **{
+                        key: value
+                        for key, value in param_dict.items()
+                        if key in ["fit_intercept", "positive"]
+                    }
+                )
                 unique_dates = sorted(X.xs(cid).index.unique())
                 if params[4] > len(unique_dates):
                     continue
                 if params[0] is not None:
-                    roll_dates = unique_dates[-params[0]:]
+                    roll_dates = unique_dates[-params[0] :]
                     if len(roll_dates) >= len(unique_dates):
                         continue
                     if single_feature:
-                        X = X.iloc[:,0][X.index.get_level_values(1).isin(roll_dates)]
+                        X = X.iloc[:, 0][X.index.get_level_values(1).isin(roll_dates)]
                         y = y[y.index.get_level_values(1).isin(roll_dates)]
                     else:
-                        X = X[X.index.get_level_values(1).isin(roll_dates)] 
+                        X = X[X.index.get_level_values(1).isin(roll_dates)]
                         y = y[y.index.get_level_values(1).isin(roll_dates)]
                 else:
                     if single_feature:
-                        X =  X.iloc[:,0]
+                        X = X.iloc[:, 0]
 
                 if single_feature:
                     model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
                 else:
                     model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
                 # Check that the model coefficients and intercepts are the same
-                np.testing.assert_almost_equal(model.intercept_, system_intercepts[cid], decimal=5)
-                np.testing.assert_almost_equal(model.coef_, system_coefs[cid],decimal=5)
+                np.testing.assert_almost_equal(
+                    model.intercept_, system_intercepts[cid], decimal=5
+                )
+                np.testing.assert_almost_equal(
+                    model.coef_, system_coefs[cid], decimal=5
+                )
 
         # Now test that monthly frequency works as expected
         param_values = list(
             itertools.product(
-                [None, 6, 12], # roll
-                [True, False], # fit_intercept
-                [True, False], # positive
-                ["M"], # data_freq
-                [2], # min_xs_samples
+                [None, 6, 12],  # roll
+                [True, False],  # fit_intercept
+                [True, False],  # positive
+                ["M"],  # data_freq
+                [2],  # min_xs_samples
             )
         )
 
@@ -213,7 +237,7 @@ class TestLinearRegressionSystem(unittest.TestCase):
             param_dict = {name: param for name, param in zip(param_names, params)}
             system_model = LinearRegressionSystem().set_params(**param_dict)
             if single_feature:
-                system_model.fit(pd.DataFrame(self.X.iloc[:,0]), self.y)
+                system_model.fit(pd.DataFrame(self.X.iloc[:, 0]), self.y)
             else:
                 system_model.fit(pd.DataFrame(self.X), self.y)
             system_coefs = system_model.coefs_
@@ -232,32 +256,42 @@ class TestLinearRegressionSystem(unittest.TestCase):
                         pd.Grouper(level="real_date", freq="M"),
                     ]
                 ).sum()
-                model = LinearRegression().set_params(**{key: value for key, value in param_dict.items() if key in ["fit_intercept", "positive"]})
+                model = LinearRegression().set_params(
+                    **{
+                        key: value
+                        for key, value in param_dict.items()
+                        if key in ["fit_intercept", "positive"]
+                    }
+                )
                 unique_dates = sorted(X.xs(cid).index.unique())
                 if params[4] > len(unique_dates):
                     continue
                 if params[0] is not None:
                     unique_dates = sorted(y.xs(cid).index.unique())
-                    roll_dates = unique_dates[-params[0]:]
+                    roll_dates = unique_dates[-params[0] :]
                     if len(roll_dates) >= len(unique_dates):
                         continue
                     if single_feature:
-                        X = X.iloc[:,0][X.index.get_level_values(1).isin(roll_dates)]
+                        X = X.iloc[:, 0][X.index.get_level_values(1).isin(roll_dates)]
                         y = y[y.index.get_level_values(1).isin(roll_dates)]
                     else:
-                        X = X[X.index.get_level_values(1).isin(roll_dates)] 
+                        X = X[X.index.get_level_values(1).isin(roll_dates)]
                         y = y[y.index.get_level_values(1).isin(roll_dates)]
                 else:
                     if single_feature:
-                        X =  X.iloc[:,0]
+                        X = X.iloc[:, 0]
 
                 if single_feature:
                     model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
                 else:
                     model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
                 # Check that the model coefficients and intercepts are the same
-                np.testing.assert_almost_equal(model.intercept_, system_intercepts[cid], decimal=5)
-                np.testing.assert_almost_equal(model.coef_, system_coefs[cid],decimal=5)
+                np.testing.assert_almost_equal(
+                    model.intercept_, system_intercepts[cid], decimal=5
+                )
+                np.testing.assert_almost_equal(
+                    model.coef_, system_coefs[cid], decimal=5
+                )
 
     def test_valid_predict(self):
         pass
@@ -312,7 +346,11 @@ class TestLinearRegressionSystem(unittest.TestCase):
             LinearRegressionSystem(min_xs_samples=3.7)
 
     @parameterized.expand(
-        [(5, True, False, "unadjusted", 2), (5, False, True, "unadjusted", 2), (5, True, True, "M", 2)]
+        [
+            (5, True, False, "unadjusted", 2),
+            (5, False, True, "unadjusted", 2),
+            (5, True, True, "M", 2),
+        ]
     )
     def test_valid_init(self, roll, fit_intercept, positive, data_freq, min_xs_samples):
         # Test default params
@@ -370,8 +408,16 @@ class TestLinearRegressionSystem(unittest.TestCase):
             (21, True, True, "unadjusted", 2),
         ]
     )
-    def test_create_model(self, roll, fit_intercept, positive, data_freq, min_xs_samples):
-        model = LinearRegressionSystem(roll=roll, fit_intercept=fit_intercept, positive=positive, data_freq=data_freq, min_xs_samples=min_xs_samples)
+    def test_create_model(
+        self, roll, fit_intercept, positive, data_freq, min_xs_samples
+    ):
+        model = LinearRegressionSystem(
+            roll=roll,
+            fit_intercept=fit_intercept,
+            positive=positive,
+            data_freq=data_freq,
+            min_xs_samples=min_xs_samples,
+        )
         self.assertIsInstance(model.create_model(), LinearRegression)
         self.assertEqual(model.create_model().fit_intercept, fit_intercept)
         self.assertEqual(model.create_model().positive, positive)
@@ -389,7 +435,7 @@ class TestLinearRegressionSystem(unittest.TestCase):
         y_pred = model.predict(self.X)
         self.assertIsInstance(y_pred, pd.Series)
         self.assertEqual(len(y_pred), len(self.y))
-        
+
     def test_types_predict(self):
         model = LinearRegressionSystem()
         model.fit(self.X, self.y)
@@ -414,8 +460,9 @@ class TestLinearRegressionSystem(unittest.TestCase):
             y = self.y.xs(cid, level=0)
             lad = LinearRegression().fit(X, y)
             y_pred_lad = lad.predict(X)
-            np.testing.assert_almost_equal(y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=5)
-
+            np.testing.assert_almost_equal(
+                y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=5
+            )
 
 
 class TestLADRegressionSystem(unittest.TestCase):
@@ -455,7 +502,7 @@ class TestLADRegressionSystem(unittest.TestCase):
         self.X = df.drop(columns="XR")
         self.X_nan = self.X.copy()
         self.X_nan["nan_col"] = np.nan
-        
+
         self.y = df["XR"]
         self.y_nan = self.y.copy()
         self.y_nan.iloc[0] = np.nan
@@ -492,47 +539,61 @@ class TestLADRegressionSystem(unittest.TestCase):
         self.assertRaises(ValueError, model.fit, X=self.X, y=self.y.reset_index())
         self.assertRaises(ValueError, model.fit, X=self.X, y=self.y_nan)
 
-    @parameterized.expand([True])#, False])
+    @parameterized.expand([True])  # , False])
     def test_valid_fit(self, single_feature):
-        """ Check the model fits are as expected """
+        """Check the model fits are as expected"""
         cross_sections = self.X.index.get_level_values(0).unique()
-        param_names = ["roll", "fit_intercept", "positive", "data_freq", "min_xs_samples"]
+        param_names = [
+            "roll",
+            "fit_intercept",
+            "positive",
+            "data_freq",
+            "min_xs_samples",
+        ]
         param_values = list(
             itertools.product(
-                [None, 21, 21 * 6, 21 * 12], # roll
-                [True, False], # fit_intercept
-                [True, False], # positive
-                [None, "unadjusted"], # data_freq
-                [2, 21*15], # min_xs_samples
+                [None, 21, 21 * 6, 21 * 12],  # roll
+                [True, False],  # fit_intercept
+                [True, False],  # positive
+                [None, "unadjusted"],  # data_freq
+                [2, 21 * 15],  # min_xs_samples
             )
         )
         for params in param_values:
             param_dict = {name: param for name, param in zip(param_names, params)}
             system_model = LADRegressionSystem().set_params(**param_dict)
             if single_feature:
-                system_model.fit(pd.DataFrame(self.X.iloc[:,0]), self.y)
+                system_model.fit(pd.DataFrame(self.X.iloc[:, 0]), self.y)
             # else:
             #     system_model.fit(pd.DataFrame(self.X), self.y)
             system_coefs = system_model.coefs_
             system_intercepts = system_model.intercepts_
             for cid in cross_sections:
-                model = LADRegressor().set_params(**{key: value for key, value in param_dict.items() if key in ["fit_intercept", "positive"]})
+                model = LADRegressor().set_params(
+                    **{
+                        key: value
+                        for key, value in param_dict.items()
+                        if key in ["fit_intercept", "positive"]
+                    }
+                )
                 unique_dates = sorted(self.X.xs(cid).index.unique())
                 if params[4] > len(unique_dates):
                     continue
                 if params[0] is not None:
-                    roll_dates = unique_dates[-params[0]:]
+                    roll_dates = unique_dates[-params[0] :]
                     if len(roll_dates) >= len(unique_dates):
                         continue
                     if single_feature:
-                        X = self.X.iloc[:,0][self.X.index.get_level_values(1).isin(roll_dates)]
+                        X = self.X.iloc[:, 0][
+                            self.X.index.get_level_values(1).isin(roll_dates)
+                        ]
                         y = self.y[self.y.index.get_level_values(1).isin(roll_dates)]
                     # else:
-                    #     X = self.X[self.X.index.get_level_values(1).isin(roll_dates)] 
+                    #     X = self.X[self.X.index.get_level_values(1).isin(roll_dates)]
                     #     y = self.y[self.y.index.get_level_values(1).isin(roll_dates)]
                 else:
                     if single_feature:
-                        X =  self.X.iloc[:,0]
+                        X = self.X.iloc[:, 0]
                         y = self.y
                     # else:
                     #     X = self.X
@@ -549,11 +610,11 @@ class TestLADRegressionSystem(unittest.TestCase):
         # Now test that weekly frequency works as expected
         param_values = list(
             itertools.product(
-                [None, 5*3, 5*6, 5*12], # roll
-                [True, False], # fit_intercept
-                [True, False], # positive
-                ["W"], # data_freq
-                [2], # min_xs_samples
+                [None, 5 * 3, 5 * 6, 5 * 12],  # roll
+                [True, False],  # fit_intercept
+                [True, False],  # positive
+                ["W"],  # data_freq
+                [2],  # min_xs_samples
             )
         )
 
@@ -561,7 +622,7 @@ class TestLADRegressionSystem(unittest.TestCase):
             param_dict = {name: param for name, param in zip(param_names, params)}
             system_model = LADRegressionSystem().set_params(**param_dict)
             if single_feature:
-                system_model.fit(pd.DataFrame(self.X.iloc[:,0]), self.y)
+                system_model.fit(pd.DataFrame(self.X.iloc[:, 0]), self.y)
             else:
                 system_model.fit(pd.DataFrame(self.X), self.y)
             system_coefs = system_model.coefs_
@@ -580,40 +641,50 @@ class TestLADRegressionSystem(unittest.TestCase):
                         pd.Grouper(level="real_date", freq="W"),
                     ]
                 ).sum()
-                model = LADRegressor().set_params(**{key: value for key, value in param_dict.items() if key in ["fit_intercept", "positive"]})
+                model = LADRegressor().set_params(
+                    **{
+                        key: value
+                        for key, value in param_dict.items()
+                        if key in ["fit_intercept", "positive"]
+                    }
+                )
                 unique_dates = sorted(X.xs(cid).index.unique())
                 if params[4] > len(unique_dates):
                     continue
                 if params[0] is not None:
-                    roll_dates = unique_dates[-params[0]:]
+                    roll_dates = unique_dates[-params[0] :]
                     if len(roll_dates) >= len(unique_dates):
                         continue
                     if single_feature:
-                        X = X.iloc[:,0][X.index.get_level_values(1).isin(roll_dates)]
+                        X = X.iloc[:, 0][X.index.get_level_values(1).isin(roll_dates)]
                         y = y[y.index.get_level_values(1).isin(roll_dates)]
                     else:
-                        X = X[X.index.get_level_values(1).isin(roll_dates)] 
+                        X = X[X.index.get_level_values(1).isin(roll_dates)]
                         y = y[y.index.get_level_values(1).isin(roll_dates)]
                 else:
                     if single_feature:
-                        X =  X.iloc[:,0]
+                        X = X.iloc[:, 0]
 
                 if single_feature:
                     model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
                 else:
                     model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
                 # Check that the model coefficients and intercepts are the same
-                np.testing.assert_almost_equal(model.intercept_, system_intercepts[cid], decimal=5)
-                np.testing.assert_almost_equal(model.coef_, system_coefs[cid],decimal=5)
+                np.testing.assert_almost_equal(
+                    model.intercept_, system_intercepts[cid], decimal=5
+                )
+                np.testing.assert_almost_equal(
+                    model.coef_, system_coefs[cid], decimal=5
+                )
 
         # Now test that monthly frequency works as expected
         param_values = list(
             itertools.product(
-                [None, 6, 12], # roll
-                [True, False], # fit_intercept
-                [True, False], # positive
-                ["M"], # data_freq
-                [2], # min_xs_samples
+                [None, 6, 12],  # roll
+                [True, False],  # fit_intercept
+                [True, False],  # positive
+                ["M"],  # data_freq
+                [2],  # min_xs_samples
             )
         )
 
@@ -621,7 +692,7 @@ class TestLADRegressionSystem(unittest.TestCase):
             param_dict = {name: param for name, param in zip(param_names, params)}
             system_model = LADRegressionSystem().set_params(**param_dict)
             if single_feature:
-                system_model.fit(pd.DataFrame(self.X.iloc[:,0]), self.y)
+                system_model.fit(pd.DataFrame(self.X.iloc[:, 0]), self.y)
             else:
                 system_model.fit(pd.DataFrame(self.X), self.y)
             system_coefs = system_model.coefs_
@@ -640,32 +711,42 @@ class TestLADRegressionSystem(unittest.TestCase):
                         pd.Grouper(level="real_date", freq="M"),
                     ]
                 ).sum()
-                model = LADRegressor().set_params(**{key: value for key, value in param_dict.items() if key in ["fit_intercept", "positive"]})
+                model = LADRegressor().set_params(
+                    **{
+                        key: value
+                        for key, value in param_dict.items()
+                        if key in ["fit_intercept", "positive"]
+                    }
+                )
                 unique_dates = sorted(X.xs(cid).index.unique())
                 if params[4] > len(unique_dates):
                     continue
                 if params[0] is not None:
                     unique_dates = sorted(y.xs(cid).index.unique())
-                    roll_dates = unique_dates[-params[0]:]
+                    roll_dates = unique_dates[-params[0] :]
                     if len(roll_dates) >= len(unique_dates):
                         continue
                     if single_feature:
-                        X = X.iloc[:,0][X.index.get_level_values(1).isin(roll_dates)]
+                        X = X.iloc[:, 0][X.index.get_level_values(1).isin(roll_dates)]
                         y = y[y.index.get_level_values(1).isin(roll_dates)]
                     else:
-                        X = X[X.index.get_level_values(1).isin(roll_dates)] 
+                        X = X[X.index.get_level_values(1).isin(roll_dates)]
                         y = y[y.index.get_level_values(1).isin(roll_dates)]
                 else:
                     if single_feature:
-                        X =  X.iloc[:,0]
+                        X = X.iloc[:, 0]
 
                 if single_feature:
                     model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
                 else:
                     model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
                 # Check that the model coefficients and intercepts are the same
-                np.testing.assert_almost_equal(model.intercept_, system_intercepts[cid], decimal=5)
-                np.testing.assert_almost_equal(model.coef_, system_coefs[cid],decimal=5)
+                np.testing.assert_almost_equal(
+                    model.intercept_, system_intercepts[cid], decimal=5
+                )
+                np.testing.assert_almost_equal(
+                    model.coef_, system_coefs[cid], decimal=5
+                )
 
     def test_types_predict(self):
         lad = LADRegressionSystem().fit(self.X, self.y)
@@ -687,7 +768,9 @@ class TestLADRegressionSystem(unittest.TestCase):
             y = self.y.xs(cid, level=0)
             lad = LADRegressor().fit(X, y)
             y_pred_lad = lad.predict(X)
-            np.testing.assert_almost_equal(y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=5)
+            np.testing.assert_almost_equal(
+                y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=5
+            )
 
     def test_check_init_params(self):
         # Test default params
@@ -739,7 +822,11 @@ class TestLADRegressionSystem(unittest.TestCase):
             LADRegressionSystem(min_xs_samples=3.7)
 
     @parameterized.expand(
-        [(5, True, False, "unadjusted", 2), (5, False, True, "unadjusted", 2), (5, True, True, "M", 2)]
+        [
+            (5, True, False, "unadjusted", 2),
+            (5, False, True, "unadjusted", 2),
+            (5, True, True, "M", 2),
+        ]
     )
     def test_valid_init(self, roll, fit_intercept, positive, data_freq, min_xs_samples):
         # Test default params
@@ -796,8 +883,16 @@ class TestLADRegressionSystem(unittest.TestCase):
             (21, True, True, "unadjusted", 2),
         ]
     )
-    def test_create_model(self, roll, fit_intercept, positive, data_freq, min_xs_samples):
-        model = LADRegressionSystem(roll=roll, fit_intercept=fit_intercept, positive=positive, data_freq=data_freq, min_xs_samples=min_xs_samples)
+    def test_create_model(
+        self, roll, fit_intercept, positive, data_freq, min_xs_samples
+    ):
+        model = LADRegressionSystem(
+            roll=roll,
+            fit_intercept=fit_intercept,
+            positive=positive,
+            data_freq=data_freq,
+            min_xs_samples=min_xs_samples,
+        )
         self.assertIsInstance(model.create_model(), LADRegressor)
         self.assertEqual(model.create_model().fit_intercept, fit_intercept)
         self.assertEqual(model.create_model().positive, positive)
@@ -861,19 +956,26 @@ class TestRidgeRegressionSystem(unittest.TestCase):
         self.assertRaises(ValueError, model.fit, X=self.X, y=self.y.reset_index())
         self.assertRaises(ValueError, model.fit, X=self.X, y=self.y_nan)
 
-    @parameterized.expand([True])#, False])
+    @parameterized.expand([True])  # , False])
     def test_valid_fit(self, single_feature):
-        """ Check the model fits are as expected """
+        """Check the model fits are as expected"""
         cross_sections = self.X.index.get_level_values(0).unique()
-        param_names = ["roll", "alpha", "fit_intercept", "positive", "data_freq", "min_xs_samples"]
+        param_names = [
+            "roll",
+            "alpha",
+            "fit_intercept",
+            "positive",
+            "data_freq",
+            "min_xs_samples",
+        ]
         param_values = list(
             itertools.product(
-                [None, 21, 21 * 6, 21 * 12], # roll
-                [0.0, 0.5, 1.0, 2.0], # alpha
-                [True, False], # fit_intercept
-                [True, False], # positive
-                [None, "unadjusted"], # data_freq
-                [2, 21*15], # min_xs_samples
+                [None, 21, 21 * 6, 21 * 12],  # roll
+                [0.0, 0.5, 1.0, 2.0],  # alpha
+                [True, False],  # fit_intercept
+                [True, False],  # positive
+                [None, "unadjusted"],  # data_freq
+                [2, 21 * 15],  # min_xs_samples
             )
         )
         for params in param_values:
@@ -884,29 +986,37 @@ class TestRidgeRegressionSystem(unittest.TestCase):
                 param_dict["solver"] = "lsqr"
             system_model = RidgeRegressionSystem().set_params(**param_dict)
             if single_feature:
-                system_model.fit(pd.DataFrame(self.X.iloc[:,0]), self.y)
+                system_model.fit(pd.DataFrame(self.X.iloc[:, 0]), self.y)
             else:
                 system_model.fit(pd.DataFrame(self.X), self.y)
             system_coefs = system_model.coefs_
             system_intercepts = system_model.intercepts_
             for cid in cross_sections:
-                model = Ridge().set_params(**{key: value for key, value in param_dict.items() if key in ["fit_intercept", "positive", "alpha"]})
+                model = Ridge().set_params(
+                    **{
+                        key: value
+                        for key, value in param_dict.items()
+                        if key in ["fit_intercept", "positive", "alpha"]
+                    }
+                )
                 unique_dates = sorted(self.X.xs(cid).index.unique())
                 if params[5] > len(unique_dates):
                     continue
                 if params[0] is not None:
-                    roll_dates = unique_dates[-params[0]:]
+                    roll_dates = unique_dates[-params[0] :]
                     if len(roll_dates) >= len(unique_dates):
                         continue
                     if single_feature:
-                        X = self.X.iloc[:,0][self.X.index.get_level_values(1).isin(roll_dates)]
+                        X = self.X.iloc[:, 0][
+                            self.X.index.get_level_values(1).isin(roll_dates)
+                        ]
                         y = self.y[self.y.index.get_level_values(1).isin(roll_dates)]
                     else:
-                        X = self.X[self.X.index.get_level_values(1).isin(roll_dates)] 
+                        X = self.X[self.X.index.get_level_values(1).isin(roll_dates)]
                         y = self.y[self.y.index.get_level_values(1).isin(roll_dates)]
                 else:
                     if single_feature:
-                        X =  self.X.iloc[:,0]
+                        X = self.X.iloc[:, 0]
                         y = self.y
                     else:
                         X = self.X
@@ -917,18 +1027,22 @@ class TestRidgeRegressionSystem(unittest.TestCase):
                 else:
                     model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
                 # Check that the model coefficients and intercepts are the same
-                np.testing.assert_almost_equal(model.intercept_, system_intercepts[cid], decimal=3)
-                np.testing.assert_almost_equal(model.coef_, system_coefs[cid], decimal=3)
+                np.testing.assert_almost_equal(
+                    model.intercept_, system_intercepts[cid], decimal=3
+                )
+                np.testing.assert_almost_equal(
+                    model.coef_, system_coefs[cid], decimal=3
+                )
 
         # Now test that weekly frequency works as expected
         param_values = list(
             itertools.product(
-                [None, 5*3, 5*6, 5*12], # roll
-                [0.0, 0.5, 1.0, 2.0], # alpha
-                [True, False], # fit_intercept
-                [True, False], # positive
-                ["W"], # data_freq
-                [2, 5 * 15], # min_xs_samples
+                [None, 5 * 3, 5 * 6, 5 * 12],  # roll
+                [0.0, 0.5, 1.0, 2.0],  # alpha
+                [True, False],  # fit_intercept
+                [True, False],  # positive
+                ["W"],  # data_freq
+                [2, 5 * 15],  # min_xs_samples
             )
         )
 
@@ -940,7 +1054,7 @@ class TestRidgeRegressionSystem(unittest.TestCase):
                 param_dict["solver"] = "lsqr"
             system_model = RidgeRegressionSystem().set_params(**param_dict)
             if single_feature:
-                system_model.fit(pd.DataFrame(self.X.iloc[:,0]), self.y)
+                system_model.fit(pd.DataFrame(self.X.iloc[:, 0]), self.y)
             else:
                 system_model.fit(pd.DataFrame(self.X), self.y)
             system_coefs = system_model.coefs_
@@ -959,41 +1073,51 @@ class TestRidgeRegressionSystem(unittest.TestCase):
                         pd.Grouper(level="real_date", freq="W"),
                     ]
                 ).sum()
-                model = Ridge().set_params(**{key: value for key, value in param_dict.items() if key in ["fit_intercept", "positive", "alpha"]})
+                model = Ridge().set_params(
+                    **{
+                        key: value
+                        for key, value in param_dict.items()
+                        if key in ["fit_intercept", "positive", "alpha"]
+                    }
+                )
                 unique_dates = sorted(X.xs(cid).index.unique())
                 if params[5] > len(unique_dates):
                     continue
                 if params[0] is not None:
-                    roll_dates = unique_dates[-params[0]:]
+                    roll_dates = unique_dates[-params[0] :]
                     if len(roll_dates) >= len(unique_dates):
                         continue
                     if single_feature:
-                        X = X.iloc[:,0][X.index.get_level_values(1).isin(roll_dates)]
+                        X = X.iloc[:, 0][X.index.get_level_values(1).isin(roll_dates)]
                         y = y[y.index.get_level_values(1).isin(roll_dates)]
                     else:
-                        X = X[X.index.get_level_values(1).isin(roll_dates)] 
+                        X = X[X.index.get_level_values(1).isin(roll_dates)]
                         y = y[y.index.get_level_values(1).isin(roll_dates)]
                 else:
                     if single_feature:
-                        X =  X.iloc[:,0]
+                        X = X.iloc[:, 0]
 
                 if single_feature:
                     model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
                 else:
                     model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
                 # Check that the model coefficients and intercepts are the same
-                np.testing.assert_almost_equal(model.intercept_, system_intercepts[cid], decimal=3)
-                np.testing.assert_almost_equal(model.coef_, system_coefs[cid],decimal=3)
+                np.testing.assert_almost_equal(
+                    model.intercept_, system_intercepts[cid], decimal=3
+                )
+                np.testing.assert_almost_equal(
+                    model.coef_, system_coefs[cid], decimal=3
+                )
 
         # Now test that monthly frequency works as expected
         param_values = list(
             itertools.product(
-                [None, 6, 12], # roll
-                [0.0, 0.5, 1.0, 2.0], # alpha
-                [True, False], # fit_intercept
-                [True, False], # positive
-                ["M"], # data_freq
-                [2, 15], # min_xs_samples
+                [None, 6, 12],  # roll
+                [0.0, 0.5, 1.0, 2.0],  # alpha
+                [True, False],  # fit_intercept
+                [True, False],  # positive
+                ["M"],  # data_freq
+                [2, 15],  # min_xs_samples
             )
         )
 
@@ -1005,7 +1129,7 @@ class TestRidgeRegressionSystem(unittest.TestCase):
                 param_dict["solver"] = "lsqr"
             system_model = RidgeRegressionSystem().set_params(**param_dict)
             if single_feature:
-                system_model.fit(pd.DataFrame(self.X.iloc[:,0]), self.y)
+                system_model.fit(pd.DataFrame(self.X.iloc[:, 0]), self.y)
             else:
                 system_model.fit(pd.DataFrame(self.X), self.y)
             system_coefs = system_model.coefs_
@@ -1024,32 +1148,42 @@ class TestRidgeRegressionSystem(unittest.TestCase):
                         pd.Grouper(level="real_date", freq="M"),
                     ]
                 ).sum()
-                model = Ridge().set_params(**{key: value for key, value in param_dict.items() if key in ["fit_intercept", "positive", "alpha"]})
+                model = Ridge().set_params(
+                    **{
+                        key: value
+                        for key, value in param_dict.items()
+                        if key in ["fit_intercept", "positive", "alpha"]
+                    }
+                )
                 unique_dates = sorted(X.xs(cid).index.unique())
                 if params[5] > len(unique_dates):
                     continue
                 if params[0] is not None:
                     unique_dates = sorted(y.xs(cid).index.unique())
-                    roll_dates = unique_dates[-params[0]:]
+                    roll_dates = unique_dates[-params[0] :]
                     if len(roll_dates) >= len(unique_dates):
                         continue
                     if single_feature:
-                        X = X.iloc[:,0][X.index.get_level_values(1).isin(roll_dates)]
+                        X = X.iloc[:, 0][X.index.get_level_values(1).isin(roll_dates)]
                         y = y[y.index.get_level_values(1).isin(roll_dates)]
                     else:
-                        X = X[X.index.get_level_values(1).isin(roll_dates)] 
+                        X = X[X.index.get_level_values(1).isin(roll_dates)]
                         y = y[y.index.get_level_values(1).isin(roll_dates)]
                 else:
                     if single_feature:
-                        X =  X.iloc[:,0]
+                        X = X.iloc[:, 0]
 
                 if single_feature:
                     model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
                 else:
                     model.fit(pd.DataFrame(X).xs(cid, level=0), y.xs(cid, level=0))
                 # Check that the model coefficients and intercepts are the same
-                np.testing.assert_almost_equal(model.intercept_, system_intercepts[cid], decimal=3)
-                np.testing.assert_almost_equal(model.coef_, system_coefs[cid],decimal=3)
+                np.testing.assert_almost_equal(
+                    model.intercept_, system_intercepts[cid], decimal=3
+                )
+                np.testing.assert_almost_equal(
+                    model.coef_, system_coefs[cid], decimal=3
+                )
 
     def test_check_init_params(self):
         # Test default params
@@ -1112,7 +1246,11 @@ class TestRidgeRegressionSystem(unittest.TestCase):
             RidgeRegressionSystem(solver="unknown")
 
     @parameterized.expand(
-        [(5, True, False, "unadjusted", 2), (5, False, True, "unadjusted", 2), (5, True, True, "M", 2)]
+        [
+            (5, True, False, "unadjusted", 2),
+            (5, False, True, "unadjusted", 2),
+            (5, True, True, "M", 2),
+        ]
     )
     def test_valid_init(self, roll, fit_intercept, positive, data_freq, min_xs_samples):
 
@@ -1177,8 +1315,18 @@ class TestRidgeRegressionSystem(unittest.TestCase):
             (21, 1.0, True, True, "unadjusted", 2, "lbfgs"),
         ]
     )
-    def test_create_model(self, roll, alpha, fit_intercept, positive, data_freq, min_xs_samples, solver):
-        model = RidgeRegressionSystem(roll=roll, alpha = alpha, fit_intercept=fit_intercept, positive=positive, data_freq=data_freq, min_xs_samples=min_xs_samples, solver = solver)
+    def test_create_model(
+        self, roll, alpha, fit_intercept, positive, data_freq, min_xs_samples, solver
+    ):
+        model = RidgeRegressionSystem(
+            roll=roll,
+            alpha=alpha,
+            fit_intercept=fit_intercept,
+            positive=positive,
+            data_freq=data_freq,
+            min_xs_samples=min_xs_samples,
+            solver=solver,
+        )
         self.assertIsInstance(model.create_model(), Ridge)
         self.assertEqual(model.create_model().fit_intercept, fit_intercept)
         self.assertEqual(model.create_model().positive, positive)
@@ -1206,8 +1354,11 @@ class TestRidgeRegressionSystem(unittest.TestCase):
             y = self.y.xs(cid, level=0)
             lad = Ridge().fit(X, y)
             y_pred_lad = lad.predict(X)
-            np.testing.assert_almost_equal(y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=5)
-            
+            np.testing.assert_almost_equal(
+                y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=5
+            )
+
+
 class TestCorrelationVolatilitySystem(unittest.TestCase):
     @classmethod
     def setUpClass(self):
@@ -1303,7 +1454,7 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
             CorrelationVolatilitySystem(min_xs_samples=-8)
 
     def test_types_fit(self):
-        """ 
+        """
         Check the types of the parameters entered into the fit method.
         """
         model = CorrelationVolatilitySystem()
@@ -1319,7 +1470,7 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
         self.assertRaises(ValueError, model.fit, X=self.X, y=self.y_nan)
 
     def test_valid_fit(self):
-        """ Check the model fits are as expected """
+        """Check the model fits are as expected"""
         # First check the default parameters yield expected coefficients
         model = CorrelationVolatilitySystem()
         model.fit(self.X, self.y)
@@ -1327,12 +1478,12 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
         self.assertEqual(len(model.coefs_), 4)
         self.assertEqual(set(model.coefs_.keys()), set(self.X.index.unique(level=0)))
 
-        cross_sections  = self.X.index.unique(level=0)
+        cross_sections = self.X.index.unique(level=0)
         for cid in cross_sections:
             X_cid = self.X.xs(cid)
             y_cid = self.y.xs(cid)
-            correlation = X_cid.iloc[:,0].corr(y_cid, method="pearson")
-            X_volatility = X_cid.iloc[:,0].std()
+            correlation = X_cid.iloc[:, 0].corr(y_cid, method="pearson")
+            X_volatility = X_cid.iloc[:, 0].std()
             y_volatility = y_cid.std()
             np.testing.assert_almost_equal(
                 model.coefs_[cid],
@@ -1341,7 +1492,9 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
             )
             np.testing.assert_almost_equal(
                 model.coefs_[cid],
-                LinearRegression().fit(X_cid.iloc[:,0].values.reshape(-1, 1), y_cid).coef_[0],
+                LinearRegression()
+                .fit(X_cid.iloc[:, 0].values.reshape(-1, 1), y_cid)
+                .coef_[0],
                 decimal=4,
             )
 
@@ -1352,12 +1505,12 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
         self.assertEqual(len(model.coefs_), 4)
         self.assertEqual(set(model.coefs_.keys()), set(self.X.index.unique(level=0)))
 
-        cross_sections  = self.X.index.unique(level=0)
+        cross_sections = self.X.index.unique(level=0)
         for cid in cross_sections:
             X_cid = self.X.xs(cid)
             y_cid = self.y.xs(cid)
-            correlation = X_cid.iloc[:,0].corr(y_cid, method="spearman")
-            X_volatility = X_cid.iloc[:,0].std()
+            correlation = X_cid.iloc[:, 0].corr(y_cid, method="spearman")
+            X_volatility = X_cid.iloc[:, 0].std()
             y_volatility = y_cid.std()
             np.testing.assert_almost_equal(
                 model.coefs_[cid],
@@ -1372,12 +1525,12 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
         self.assertEqual(len(model.coefs_), 4)
         self.assertEqual(set(model.coefs_.keys()), set(self.X.index.unique(level=0)))
 
-        cross_sections  = self.X.index.unique(level=0)
+        cross_sections = self.X.index.unique(level=0)
         for cid in cross_sections:
             X_cid = self.X.xs(cid)
             y_cid = self.y.xs(cid)
-            correlation = X_cid.iloc[:,0].corr(y_cid, method="kendall")
-            X_volatility = X_cid.iloc[:,0].std()
+            correlation = X_cid.iloc[:, 0].corr(y_cid, method="kendall")
+            X_volatility = X_cid.iloc[:, 0].std()
             y_volatility = y_cid.std()
             np.testing.assert_almost_equal(
                 model.coefs_[cid],
@@ -1385,7 +1538,11 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
                 decimal=4,
             )
 
-    @parameterized.expand(itertools.product(["pearson", "spearman", "kendall"], ["rolling", "exponential"]))
+    @parameterized.expand(
+        itertools.product(
+            ["pearson", "spearman", "kendall"], ["rolling", "exponential"]
+        )
+    )
     def test_valid_fit_custom(self, correlation_type, volatility_window_type):
         """
         Test validity of fit method with custom parameters.
@@ -1402,16 +1559,20 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
         self.assertEqual(len(model.coefs_), 4)
         self.assertEqual(set(model.coefs_.keys()), set(self.X.index.unique(level=0)))
 
-        cross_sections  = self.X.index.unique(level=0)
+        cross_sections = self.X.index.unique(level=0)
         for cid in cross_sections:
             X_cid = self.X.xs(cid)
             y_cid = self.y.xs(cid)
-            correlation = X_cid.tail(21 * 12).iloc[:,0].corr(y_cid.tail(21 * 12), method=correlation_type)
+            correlation = (
+                X_cid.tail(21 * 12)
+                .iloc[:, 0]
+                .corr(y_cid.tail(21 * 12), method=correlation_type)
+            )
             if volatility_window_type == "rolling":
-                X_volatility = X_cid.iloc[:,0].tail(21).std()
+                X_volatility = X_cid.iloc[:, 0].tail(21).std()
                 y_volatility = y_cid.tail(21).std()
             elif volatility_window_type == "exponential":
-                X_volatility = X_cid.iloc[:,0].ewm(span=21, adjust=True).std().iloc[-1]
+                X_volatility = X_cid.iloc[:, 0].ewm(span=21, adjust=True).std().iloc[-1]
                 y_volatility = y_cid.ewm(span=21, adjust=True).std().iloc[-1]
             np.testing.assert_almost_equal(
                 model.coefs_[cid],
@@ -1422,8 +1583,8 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
         # Test weekly frequency
         model = CorrelationVolatilitySystem(
             correlation_type=correlation_type,
-            correlation_lookback=4 * 12, # Assume roughly 4 weeks in a month
-            volatility_lookback=4, # Assume roughly 4 weeks in a month
+            correlation_lookback=4 * 12,  # Assume roughly 4 weeks in a month
+            volatility_lookback=4,  # Assume roughly 4 weeks in a month
             volatility_window_type=volatility_window_type,
             data_freq="W",
         )
@@ -1432,7 +1593,7 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
         self.assertEqual(len(model.coefs_), 4)
         self.assertEqual(set(model.coefs_.keys()), set(self.X.index.unique(level=0)))
 
-        cross_sections  = self.X.index.unique(level=0)
+        cross_sections = self.X.index.unique(level=0)
         for cid in cross_sections:
             # First downsample the data to weekly
             X = self.X.groupby(
@@ -1449,12 +1610,16 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
             ).sum()
             X_cid = X.xs(cid)
             y_cid = y.xs(cid)
-            correlation = X_cid.tail(4 * 12).iloc[:,0].corr(y_cid.tail(4 * 12), method=correlation_type)
+            correlation = (
+                X_cid.tail(4 * 12)
+                .iloc[:, 0]
+                .corr(y_cid.tail(4 * 12), method=correlation_type)
+            )
             if volatility_window_type == "rolling":
-                X_volatility = X_cid.iloc[:,0].tail(4).std()
+                X_volatility = X_cid.iloc[:, 0].tail(4).std()
                 y_volatility = y_cid.tail(4).std()
             elif volatility_window_type == "exponential":
-                X_volatility = X_cid.iloc[:,0].ewm(span=4, adjust=True).std().iloc[-1]
+                X_volatility = X_cid.iloc[:, 0].ewm(span=4, adjust=True).std().iloc[-1]
                 y_volatility = y_cid.ewm(span=4, adjust=True).std().iloc[-1]
             np.testing.assert_almost_equal(
                 model.coefs_[cid],
@@ -1465,8 +1630,8 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
         # Test monthly frequency
         model = CorrelationVolatilitySystem(
             correlation_type=correlation_type,
-            correlation_lookback=6, # Use 6-month correlation
-            volatility_lookback=3, # Use 3-month volatility
+            correlation_lookback=6,  # Use 6-month correlation
+            volatility_lookback=3,  # Use 3-month volatility
             volatility_window_type=volatility_window_type,
             data_freq="M",
         )
@@ -1475,7 +1640,7 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
         self.assertEqual(len(model.coefs_), 4)
         self.assertEqual(set(model.coefs_.keys()), set(self.X.index.unique(level=0)))
 
-        cross_sections  = self.X.index.unique(level=0)
+        cross_sections = self.X.index.unique(level=0)
         for cid in cross_sections:
             # First downsample the data to monthly
             X = self.X.groupby(
@@ -1492,19 +1657,20 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
             ).sum()
             X_cid = X.xs(cid)
             y_cid = y.xs(cid)
-            correlation = X_cid.tail(6).iloc[:,0].corr(y_cid.tail(6), method=correlation_type)
+            correlation = (
+                X_cid.tail(6).iloc[:, 0].corr(y_cid.tail(6), method=correlation_type)
+            )
             if volatility_window_type == "rolling":
-                X_volatility = X_cid.iloc[:,0].tail(3).std()
+                X_volatility = X_cid.iloc[:, 0].tail(3).std()
                 y_volatility = y_cid.tail(3).std()
             elif volatility_window_type == "exponential":
-                X_volatility = X_cid.iloc[:,0].ewm(span=3, adjust=True).std().iloc[-1]
+                X_volatility = X_cid.iloc[:, 0].ewm(span=3, adjust=True).std().iloc[-1]
                 y_volatility = y_cid.ewm(span=3, adjust=True).std().iloc[-1]
             np.testing.assert_almost_equal(
                 model.coefs_[cid],
                 correlation * y_volatility / X_volatility,
                 decimal=4,
             )
-
 
     def test_types_predict(self):
         model = CorrelationVolatilitySystem()
@@ -1522,4 +1688,4 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
         predictions = model.predict(self.X)
         self.assertIsInstance(predictions, pd.Series)
         self.assertEqual(len(predictions), len(self.y))
-        np.testing.assert_almost_equal(predictions.values, 0, decimal=4)        
+        np.testing.assert_almost_equal(predictions.values, 0, decimal=4)
