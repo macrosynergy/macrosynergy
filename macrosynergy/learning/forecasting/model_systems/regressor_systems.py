@@ -544,8 +544,8 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
                 y_section_std = y_section.values[-self.volatility_lookback:].std(ddof=1)
             elif self.volatility_window_type == "exponential":
                 alpha = 2 / (self.volatility_lookback + 1)
-                weights = np.array([(1 - alpha) ** i for i in range(self.volatility_lookback)][::-1])
-                X_section_std = np.sqrt(np.cov(X_section.values.flatten(), aweights=weights))
+                weights = np.array([(1 - alpha) ** i for i in range(len(X_section))][::-1])
+                X_section_std = np.sqrt(np.cov(X_section.iloc[:,0].values.flatten(), aweights=weights))
                 y_section_std = np.sqrt(np.cov(y_section.values, aweights=weights))
 
         # Get beta estimate and store it

@@ -1329,11 +1329,39 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
                 decimal=4,
             )
 
-        # Now use custom lookback periods
+    @parameterized.expand(itertools.product(["pearson", "spearman", "kendall"], ["rolling", "exponential"]))
+    def test_valid_fit_custom(self, correlation_type, volatility_window_type):
+        """
+        Test validity of fit method with custom parameters.
+        These tests use non-full lookback windows.
+        """
         model = CorrelationVolatilitySystem(
-            correlation_type="pearson",
-            #correlation_lookback=21 * ,
+            correlation_type=correlation_type,
+            correlation_lookback=21 * 12,
+            volatility_lookback=21,
+            volatility_window_type=volatility_window_type,
         )
+        model.fit(self.X, self.y)
+        self.assertIsInstance(model.coefs_, dict)
+        self.assertEqual(len(model.coefs_), 4)
+        self.assertEqual(set(model.coefs_.keys()), set(self.X.index.unique(level=0)))
+
+        cross_sections  = self.X.index.unique(level=0)
+        for cid in cross_sections:
+            X_cid = self.X.xs(cid)
+            y_cid = self.y.xs(cid)
+            correlation = X_cid.tail(21 * 12).iloc[:,0].corr(y_cid.tail(21 * 12), method=correlation_type)
+            if volatility_window_type == "rolling":
+                X_volatility = X_cid.iloc[:,0].tail(21).std()
+                y_volatility = y_cid.tail(21).std()
+            elif volatility_window_type == "exponential":
+                X_volatility = X_cid.iloc[:,0].ewm(span=21, adjust=False).std().iloc[-1]
+                y_volatility = y_cid.ewm(span=21, adjust=False).std().iloc[-1]
+            np.testing.assert_almost_equal(
+                model.coefs_[cid],
+                correlation * y_volatility / X_volatility,
+                decimal=4,
+            )
 
     def test_types_predict(self):
         pass
