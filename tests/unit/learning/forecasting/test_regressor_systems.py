@@ -1187,16 +1187,21 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
         )
 
         self.X = df.drop(columns="XR")
+        self.X_nan = self.X.copy()
+        self.X_nan["nan_col"] = np.nan
+
         self.y = df["XR"]
+        self.y_nan = self.y.copy()
+        self.y_nan.iloc[0] = np.nan
 
     def test_check_init_params(self):
         # Test default params
         model = CorrelationVolatilitySystem()
-        self.assertEqual(model.correlation_lookback, None)
+        self.assertEqual(model.correlation_lookback, "full")
         self.assertEqual(model.correlation_type, "pearson")
-        self.assertEqual(model.volatility_lookback, 21)
+        self.assertEqual(model.volatility_lookback, "full")
         self.assertEqual(model.volatility_window_type, "rolling")
-        self.assertEqual(model.data_freq, "D")
+        self.assertEqual(model.data_freq, None)
         self.assertEqual(model.min_xs_samples, 2)
 
         # Test custom params
@@ -1216,7 +1221,6 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
         self.assertEqual(model.min_xs_samples, 10)
 
     def test_invalid_params(self):
-
         with self.assertRaises(TypeError):
             CorrelationVolatilitySystem(correlation_lookback=5.5)
         with self.assertRaises(ValueError):
@@ -1225,7 +1229,7 @@ class TestCorrelationVolatilitySystem(unittest.TestCase):
             CorrelationVolatilitySystem(correlation_type=2)
         with self.assertRaises(ValueError):
             CorrelationVolatilitySystem(correlation_type="Invalid")
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             CorrelationVolatilitySystem(volatility_lookback="5")
         with self.assertRaises(ValueError):
             CorrelationVolatilitySystem(volatility_lookback=-1)
