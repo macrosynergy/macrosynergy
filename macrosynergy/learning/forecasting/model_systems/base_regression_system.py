@@ -105,10 +105,6 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         self.n_features_in_ = X.shape[1]
         self.feature_names_in_ = X.columns
 
-        # Create data structures to store model information for each cross-section
-        self.coefs_ = {}
-        self.intercepts_ = {}
-
         # Downsample data frequency if necessary
         if (self.data_freq is not None) and (self.data_freq != "unadjusted"):
             X = self._downsample_by_data_freq(X)
