@@ -568,6 +568,35 @@ class TestSignWeightedLADRegression(unittest.TestCase):
         self.assertTrue(isinstance(pred, np.ndarray))
         self.assertTrue(len(pred) == self.X.shape[0])
 
+    def test_valid_set_params(self):
+        ls = SignWeightedLADRegressor()
+        ls.set_params(fit_intercept = False, positive = True, alpha = 0.1, shrinkage_type = "l2")
+        self.assertEqual(ls.fit_intercept, False)
+        self.assertEqual(ls.positive, True)
+        self.assertEqual(ls.alpha, 0.1)
+        self.assertEqual(ls.shrinkage_type, "l2")
+        self.assertEqual(ls.model.fit_intercept, False)
+        self.assertEqual(ls.model.positive, True)
+        self.assertEqual(ls.model.alpha, 0.1)
+
+        ls = SignWeightedLADRegressor()
+        ls.set_params(fit_intercept = False, positive = True, alpha = 0.2, shrinkage_type = "l1")
+        self.assertEqual(ls.fit_intercept, False)
+        self.assertEqual(ls.positive, True)
+        self.assertEqual(ls.alpha, 0.2)
+        self.assertEqual(ls.shrinkage_type, "l1")
+        self.assertEqual(ls.model.fit_intercept, False)
+        self.assertEqual(ls.model.positive, True)
+        self.assertEqual(ls.model.alpha, 0.2)
+
+        ls = SignWeightedLADRegressor()
+        ls.set_params(fit_intercept = False, positive = True, alpha = 0, shrinkage_type = "l2")
+        self.assertEqual(ls.fit_intercept, False)
+        self.assertEqual(ls.positive, True)
+        self.assertEqual(ls.alpha, 0)
+        self.assertEqual(ls.shrinkage_type, "l2")
+        self.assertEqual(ls.model.fit_intercept, False)
+        self.assertEqual(ls.model.positive, True)
 
 class TestTimeWeightedLADRegression(unittest.TestCase):
     @classmethod
@@ -802,6 +831,39 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
             )
         self.assertTrue(isinstance(pred, np.ndarray))
         self.assertTrue(len(pred) == self.X.shape[0])
+
+    def test_valid_set_params(self):
+        ls = TimeWeightedLADRegressor()
+        ls.set_params(fit_intercept = False, positive = True, alpha = 0.1, half_life = 3, shrinkage_type = "l2")
+        self.assertEqual(ls.fit_intercept, False)
+        self.assertEqual(ls.positive, True)
+        self.assertEqual(ls.alpha, 0.1)
+        self.assertEqual(ls.half_life, 3)
+        self.assertEqual(ls.shrinkage_type, "l2")
+        self.assertEqual(ls.model.fit_intercept, False)
+        self.assertEqual(ls.model.positive, True)
+        self.assertEqual(ls.model.alpha, 0.1)
+
+        ls = TimeWeightedLADRegressor()
+        ls.set_params(fit_intercept = False, positive = True, half_life = 6, alpha = 0.2, shrinkage_type = "l1")
+        self.assertEqual(ls.fit_intercept, False)
+        self.assertEqual(ls.positive, True)
+        self.assertEqual(ls.alpha, 0.2)
+        self.assertEqual(ls.half_life, 6)
+        self.assertEqual(ls.shrinkage_type, "l1")
+        self.assertEqual(ls.model.fit_intercept, False)
+        self.assertEqual(ls.model.positive, True)
+        self.assertEqual(ls.model.alpha, 0.2)
+
+        ls = TimeWeightedLADRegressor()
+        ls.set_params(fit_intercept = False, positive = True, half_life = 12, alpha = 0, shrinkage_type = "l2")
+        self.assertEqual(ls.fit_intercept, False)
+        self.assertEqual(ls.positive, True)
+        self.assertEqual(ls.alpha, 0)
+        self.assertEqual(ls.half_life, 12)
+        self.assertEqual(ls.shrinkage_type, "l2")
+        self.assertEqual(ls.model.fit_intercept, False)
+        self.assertEqual(ls.model.positive, True)
 
 
 if __name__ == "__main__":
