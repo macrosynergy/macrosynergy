@@ -171,6 +171,7 @@ class BetaEstimator(BasePanelLearner):
         # Checks
         # TODO
 
+        self.hedged_return_xcat = hedged_return_xcat
         # Create pandas dataframes to store betas and hedged returns
         stored_betas = pd.DataFrame(
             index=self.forecast_idxs, columns=[beta_xcat], data=np.nan, dtype="float32"
@@ -222,34 +223,23 @@ class BetaEstimator(BasePanelLearner):
         for cid, real_date, xcat, value in beta_data:
             stored_betas.loc[(cid, real_date), xcat] = value
             
-        # stored_hedged_returns = pd.DataFrame(
-        #     index=self.forecast_idxs,
-        #     columns=[hedged_return_xcat],
-        #     data=np.nan,
-        #     dtype="float32",
-        # )
-        for cid, real_date, xcat, value in hedged_return_data:
-            stored_hedged_returns.loc[(cid, real_date), hedged_return_xcat] = value
-
         stored_betas = stored_betas.groupby(level=0, observed=True).ffill().dropna()
-        stored_hedged_returns = stored_hedged_returns.dropna()
+
         stored_betas_long = pd.melt(
             frame=stored_betas.reset_index(),
             id_vars=["cid", "real_date"],
             var_name="xcat",
             value_name="value",
         )
-        stored_hrets_long = pd.melt(
-            frame=stored_hedged_returns.reset_index(),
-            id_vars=["cid", "real_date"],
-            var_name="xcat",
-            value_name="value",
-        )
+
+        hedged_returns = pd.DataFrame(hedged_return_data, columns=["cid", "real_date", "xcat", "value"]).sort_values(['real_date', 'cid', 'xcat'])
+        betas = pd.DataFrame(beta_data, columns=["cid", "real_date", "xcat", "value"])
+        x = hedged_returns[~hedged_returns[['cid', 'xcat', 'real_date']].duplicated()]
 
         self.betas = concat_categorical(self.betas, stored_betas_long)
         self.hedged_returns = concat_categorical(
             self.hedged_returns,
-            stored_hrets_long,
+            hedged_returns,
         )
 
         # Store model selection data
@@ -298,14 +288,16 @@ class BetaEstimator(BasePanelLearner):
             for cid, beta in betas.items()
         ]
 
+        # TODO: handle case where no optimal model is found
         # Now calculate the induced hedged returns
+
         betas_series = pd.Series(betas)
         XB = X_test.mul(betas_series, level=0, axis=0)
         hedged_returns = y_test.values.reshape(-1, 1) - XB.values.reshape(-1, 1)
         hedged_returns_data = [
-            [idx[0].split("v")[0], idx[1]] + [pipeline_name] + [hedged_returns[i].item()]
+            [idx[0].split("v")[0], idx[1]] + [self.hedged_return_xcat] + [hedged_returns[i].item()]
             for i, (idx, _) in enumerate(y_test.items())
-        ]
+        ]        
         return {"betas": betas_list, "hedged_returns": hedged_returns_data}
 
     def evaluate_hedged_returns(
@@ -713,8 +705,8 @@ if __name__ == "__main__":
     df_cids.loc["USD"] = ["2015-01-01", "2020-12-31", 0, 1]
 
     df_xcats = pd.DataFrame(index=xcats, columns=cols)
-    df_xcats.loc["BENCH_XR"] = ["2015-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc["CONTRACT_XR"] = ["2015-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["BENCH_XR"] = ["2015-01-01", "2019-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CONTRACT_XR"] = ["2015-01-01", "2019-12-31", 0.1, 1, 0, 0.3]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
@@ -724,7 +716,7 @@ if __name__ == "__main__":
         df=dfd,
         xcats="CONTRACT_XR",
         benchmark_return="USD_BENCH_XR",
-        cids=cids,
+        cids=['AUD'],
     )
 
     models = {
@@ -750,7 +742,7 @@ if __name__ == "__main__":
         n_jobs_inner=1,
     )
 
-    be.models_heatmap(name="BETA_NSA")
+    # be.models_heatmap(name="BETA_NSA")
 
     # evaluation_df = be.evaluate_hedged_returns(
     #     correlation_types=["pearson", "spearman", "kendall"],

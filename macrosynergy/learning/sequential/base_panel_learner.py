@@ -143,6 +143,8 @@ class BasePanelLearner(ABC):
             }
         )
 
+        self.timestamps = []
+
     def run(
         self,
         name,
