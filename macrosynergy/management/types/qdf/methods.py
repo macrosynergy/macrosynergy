@@ -160,10 +160,10 @@ def _sync_df_categories(
     existing_xcats = df["xcat"].cat.categories
 
     if set(found_cids) != set(existing_cids):
-        df["cid"] = pd.Categorical(df["cid"], categories=found_cids)
+        df.loc[:, "cid"] = df["cid"].astype("category")
 
     if set(found_xcats) != set(existing_xcats):
-        df["xcat"] = pd.Categorical(df["xcat"], categories=found_xcats)
+        df.loc[:, "xcat"] = df["xcat"].astype("category")
 
     return df
 
