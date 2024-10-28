@@ -13,12 +13,12 @@ from sklearn.exceptions import ConvergenceWarning
 class LADRegressor(BaseEstimator, RegressorMixin):
     def __init__(
         self,
-        fit_intercept = True,
-        positive = False,
-        alpha = 0,
-        shrinkage_type = "l1",
-        tol = None,
-        maxiter = None,
+        fit_intercept=True,
+        positive=False,
+        alpha=0,
+        shrinkage_type="l1",
+        tol=None,
+        maxiter=None,
     ):
         r"""
         Linear regression with L1 loss.
@@ -131,11 +131,13 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             bounds = [(None, None)] * n_cols
 
         # Set initial weights
-        init_weights = (np.zeros(n_cols) if not self.fit_intercept else np.zeros(n_cols - 1))
+        init_weights = (
+            np.zeros(n_cols) if not self.fit_intercept else np.zeros(n_cols - 1)
+        )
         if self.fit_intercept:
             init_intercept = np.mean(y)
             init_weights = np.concatenate(([init_intercept], init_weights))
-            
+
         optim_results = minimize(
             fun=partial(
                 self._l1_loss,
@@ -221,7 +223,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 "The number of features in the input feature matrix must match the number "
                 "of model coefficients."
             )
-        
+
         if isinstance(X, pd.DataFrame):
             if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
                 raise ValueError(
@@ -427,7 +429,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                     "The dependent variable for the LADRegressor must not contain any "
                     "missing values."
                 )
-        
+
         if len(X) != len(y):
             raise ValueError(
                 "The number of samples in the input feature matrix must match the number "
