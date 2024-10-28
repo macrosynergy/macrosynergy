@@ -822,15 +822,19 @@ class CategoryRelations(object):
                 if "cid" not in df_labs.columns:
                     df_labs = df_labs.rename(columns={0: "cid"})
                 if self.years is not None:
-                    ser_labs = df_labs["cid"].astype('object') + " " + df_labs["real_date"]
+                    ser_labs = (
+                        df_labs["cid"].astype("object") + " " + df_labs["real_date"]
+                    )
                 else:
-                    ser_labs = df_labs["cid"].astype('object') + " "
-                    ser_labs += df_labs["real_date"].dt.year.astype('string')
+                    ser_labs = df_labs["cid"].astype("object") + " "
+                    ser_labs += df_labs["real_date"].dt.year.astype("string")
                     if self.freq == "Q":
-                        ser_labs += "Q" + df_labs["real_date"].dt.quarter.astype('string')
+                        ser_labs += "Q" + df_labs["real_date"].dt.quarter.astype(
+                            "string"
+                        )
 
                     elif self.freq == "M":
-                        ser_labs += "-" + df_labs["real_date"].dt.month.astype('string')
+                        ser_labs += "-" + df_labs["real_date"].dt.month.astype("string")
 
                 for i in range(self.df.shape[0]):
                     ax.text(
