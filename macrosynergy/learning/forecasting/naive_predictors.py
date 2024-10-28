@@ -33,6 +33,12 @@ class NaiveRegressor(BaseEstimator, RegressorMixin):
             The input feature matrix.
         y : pd.DataFrame, pd.Series or np.ndarray
             The target variable.
+
+        Returns
+        -------
+        self
+            The fitted model.
+            
         Notes
         -----
         This method involves fully trusting one's priors and thus requires no learning

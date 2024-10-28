@@ -1,19 +1,12 @@
 import numpy as np
 import pandas as pd
-import datetime
 import numbers
 
-from sklearn.linear_model import LinearRegression
 from sklearn.base import RegressorMixin, BaseEstimator, clone
 
 from macrosynergy.learning.forecasting.bootstrap import BasePanelBootstrap
-from macrosynergy.learning.forecasting.linear_model.ls_regressors import (
-    SignWeightedLinearRegression,
-    TimeWeightedLinearRegression,
-)
 
-from abc import ABC, abstractmethod
-from typing import Union, Optional
+from abc import ABC
 
 
 class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, ABC):
@@ -69,20 +62,23 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, A
 
         Notes
         -----
-        Parametric regression models are fit by finding optimal "parameters" that
+        Parametric regression models are fit by finding optimal parameters that
         minimize a loss function. In the frequentist statistics framework, "true"
         population-wide values exist for these parameters, which can only be
         estimated from sampled data. Consequently, our parameter estimates can be
         considered to be realizations from a random variable, and hence subject to
-        variation depending on the data that was sampled. Broadly speaking,
-        the greater the amount of independent data sampled, the smaller the
-        variation in parameter estimates. In other words,
+        sampling variation. Broadly speaking, the greater the amount of independent data
+        sampled, the smaller the variation in parameter estimates. In other words,
+        parameter estimates are more unreliable when less data is seen during training.
+        By estimating the standard deviation of their sampling distributions - a.k.a.
+        their "standard errors" - we can adjust our model coefficients to account for
+        lack of statistical precision.
 
         In our modified parametric regression models, each estimated parameter is
-        adjusted by the estimated standard error. This means that greater volatility
-        in a parameter estimate due to lack of data is accounted for by reducing
-        the magnitude of this estimate, whilst greater certainty in the precision of
-        the estimate is reflected by inflating a regression coefficient.
+        divided by the estimated standard error (plus an offset). This means that greater
+        volatility in a parameter estimate due to lack of data is accounted for by
+        reducing the magnitude of this estimate, whilst greater certainty in the precision
+        of the estimate is reflected by inflating a regression coefficient.
 
         Use of this class is only recommended for linear models, since these
         regression models are interpretable and the coefficient adjustment can
@@ -91,7 +87,7 @@ class BaseModifiedRegressor(BaseEstimator, RegressorMixin, BasePanelBootstrap, A
         whose coefficients we are less confident in. For a more complex function,
         for instance a neural network, amending model coefficients can be disastrous;
         it would be unclear how such adjustment would affect the downstream performance
-        of the neural network. As a consequence, this class should be used with care
+        of the model. As a consequence, this class should be used with care
         and we recommend its use for linear models only.
         """
         # Checks
