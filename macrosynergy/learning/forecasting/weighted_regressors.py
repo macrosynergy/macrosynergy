@@ -5,16 +5,17 @@ from sklearn.base import BaseEstimator, RegressorMixin
 
 import numbers
 
+
 class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
     def __init__(
         self,
         model,
-        sign_weighted = False,
-        time_weighted = False,
-        half_life = 12 * 21,
+        sign_weighted=False,
+        time_weighted=False,
+        half_life=12 * 21,
     ):
         """
-        Weighted regressor model to prioritize contribution from certain samples over
+        Weighted regression model to prioritize contribution from certain samples over
         others during training.
 
         Parameters
@@ -22,7 +23,7 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
         model : RegressorMixin
             The underlying model to be trained with weighted sample contributions.
         sign_weighted : bool, optional
-            Flag to weight samples based on the frequency of the label's sign in a 
+            Flag to weight samples based on the frequency of the label's sign in a
             training set.
         time_weighted : bool, optional
             Flag to weight samples based on the recency of the sample.
@@ -30,6 +31,18 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
             Half-life of the exponential decay function used to calculate the time weights.
             This should be expressed in units of the native dataset frequency. Default is
             12 * 21, which corresponds to a half-life of 1-year for a daily dataset.
+
+        Notes
+        -----
+        Sign-weighted regression models are useful when the dependent (return) variable
+        has a directional bias. By assigning higher weights to the less frequent class,
+        the model is encouraged to learn equally from both positive and negative return
+        samples, irrespective of class imbalance.
+
+        Time-weighted regression models are useful when the practitioner holds the prior
+        that more recent samples are more informative than older samples. By assigning
+        exponentially decaying weights to samples based on their recency, the model is
+        encouraged to prioritize newer information.
         """
         # Checks
         self._check_init_params(model, sign_weighted, time_weighted, half_life)
@@ -38,7 +51,7 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
         self.model = model
         self.sign_weighted = sign_weighted
         self.time_weighted = time_weighted
-        self.half_life = (None if not time_weighted else half_life)
+        self.half_life = None if not time_weighted else half_life
 
     def fit(
         self,
@@ -47,7 +60,7 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
     ):
         """
         Learn optimal weighted regression parameters.
-        
+
         Parameters
         ----------
         X : pd.DataFrame or np.ndarray
@@ -74,11 +87,11 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
     def predict(self, X):
         """
         Predict dependent variable using the fitted weighted regression model.
-        
+
         Parameters
         ----------
         X : pd.DataFrame or numpy array
-            Input feature matrix. 
+            Input feature matrix.
 
         Returns
         -------
@@ -143,7 +156,7 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
         targets,
     ):
         """
-        Calculate balanced inverse frequency weights for positive and negative signs 
+        Calculate balanced inverse frequency weights for positive and negative signs
         in the target vector.
 
         Parameters
@@ -172,7 +185,7 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
         """
         Calculate exponentially decaying weights based on the recency of the sample in the
         panel.
-        
+
         Parameters
         ----------
         targets : pd.Series or pd.DataFrame
@@ -191,7 +204,7 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
         sample_weights = targets.index.get_level_values(1).map(weight_map).to_numpy()
 
         return sample_weights
-    
+
     def _check_init_params(
         self,
         model,
@@ -207,21 +220,13 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
                 "The model parameter must be an instance of a sklearn regressor."
             )
         if not isinstance(sign_weighted, bool):
-            raise TypeError(
-                "The sign_weighted parameter must be a boolean."
-            )
+            raise TypeError("The sign_weighted parameter must be a boolean.")
         if not isinstance(time_weighted, bool):
-            raise TypeError(
-                "The time_weighted parameter must be a boolean."
-            )
+            raise TypeError("The time_weighted parameter must be a boolean.")
         if not isinstance(half_life, numbers.Number) or isinstance(half_life, bool):
-            raise TypeError(
-                "The half_life parameter must be a number."
-            )
+            raise TypeError("The half_life parameter must be a number.")
         if half_life <= 0:
-            raise ValueError(
-                "The half_life parameter must be a positive number."
-            )
+            raise ValueError("The half_life parameter must be a positive number.")
 
     def _check_fit_params(
         self,
@@ -277,7 +282,7 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
                 "The number of samples in the input feature matrix must match the number "
                 "of samples in the target vector."
             )
-        
+
         # Joint X and y checks
         if len(X) != len(y):
             raise ValueError(
@@ -290,13 +295,10 @@ class BaseWeightedRegressor(BaseEstimator, RegressorMixin):
                     "When time weighting is enabled, the target vector and input feature "
                     "matrix must have the same index."
                 )
-            
-class SignWeightedRegressor(BaseWeightedRegressor):
 
-    def __init__(
-        self,
-        model
-    ):
+
+class SignWeightedRegressor(BaseWeightedRegressor):
+    def __init__(self, model):
         """
         Regressor with sign-weighted sample weights.
 
