@@ -753,6 +753,7 @@ def _categories_df_explanatory_df(
 
         dfw_explanatory[xcat] = explanatory_col
 
+    dfw_explanatory.index.names = ["cid", "real_date"]
     return dfw_explanatory
 
 
