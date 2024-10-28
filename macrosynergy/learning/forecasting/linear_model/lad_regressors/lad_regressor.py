@@ -450,7 +450,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 raise ValueError("The sample weights must be a 1D numpy array.")
             for w in sample_weight:
                 if not isinstance(w, numbers.Number):
-                    raise TypeError(
+                    raise ValueError(
                         "All elements of the sample weights must be numeric."
                     )
             if len(sample_weight) != X.shape[0]:
