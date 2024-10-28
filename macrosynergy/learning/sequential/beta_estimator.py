@@ -173,17 +173,6 @@ class BetaEstimator(BasePanelLearner):
 
         self.hedged_return_xcat = hedged_return_xcat
         # Create pandas dataframes to store betas and hedged returns
-        stored_betas = pd.DataFrame(
-            index=self.forecast_idxs, columns=[beta_xcat], data=np.nan, dtype="float32"
-        )
-        
-        # TODO: DELETE
-        stored_hedged_returns = pd.DataFrame(
-            index=self.forecast_idxs,
-            columns=[hedged_return_xcat],
-            data=np.nan,
-            dtype="float32",
-        )
 
         # Set up outer splitter
         outer_splitter = ExpandingFrequencyPanelSplit(
@@ -219,10 +208,13 @@ class BetaEstimator(BasePanelLearner):
             hedged_return_data.extend(split_result["hedged_returns"])
             model_choice_data.append(split_result["model_choice"])
 
+        stored_betas = pd.DataFrame(
+            index=self.forecast_idxs, columns=[beta_xcat], data=np.nan, dtype="float32"
+        )
         # Create quantamental dataframes of betas and hedged returns
         for cid, real_date, xcat, value in beta_data:
             stored_betas.loc[(cid, real_date), xcat] = value
-            
+
         stored_betas = stored_betas.groupby(level=0, observed=True).ffill().dropna()
 
         stored_betas_long = pd.melt(
@@ -232,9 +224,9 @@ class BetaEstimator(BasePanelLearner):
             value_name="value",
         )
 
-        hedged_returns = pd.DataFrame(hedged_return_data, columns=["cid", "real_date", "xcat", "value"]).sort_values(['real_date', 'cid', 'xcat'])
-        betas = pd.DataFrame(beta_data, columns=["cid", "real_date", "xcat", "value"])
-        x = hedged_returns[~hedged_returns[['cid', 'xcat', 'real_date']].duplicated()]
+        hedged_returns = pd.DataFrame(
+            hedged_return_data, columns=["cid", "real_date", "xcat", "value"]
+        ).sort_values(["real_date", "cid", "xcat"])
 
         self.betas = concat_categorical(self.betas, stored_betas_long)
         self.hedged_returns = concat_categorical(
@@ -295,9 +287,11 @@ class BetaEstimator(BasePanelLearner):
         XB = X_test.mul(betas_series, level=0, axis=0)
         hedged_returns = y_test.values.reshape(-1, 1) - XB.values.reshape(-1, 1)
         hedged_returns_data = [
-            [idx[0].split("v")[0], idx[1]] + [self.hedged_return_xcat] + [hedged_returns[i].item()]
+            [idx[0].split("v")[0], idx[1]]
+            + [self.hedged_return_xcat]
+            + [hedged_returns[i].item()]
             for i, (idx, _) in enumerate(y_test.items())
-        ]        
+        ]
         return {"betas": betas_list, "hedged_returns": hedged_returns_data}
 
     def evaluate_hedged_returns(
@@ -716,7 +710,7 @@ if __name__ == "__main__":
         df=dfd,
         xcats="CONTRACT_XR",
         benchmark_return="USD_BENCH_XR",
-        cids=['AUD'],
+        cids=["AUD"],
     )
 
     models = {
