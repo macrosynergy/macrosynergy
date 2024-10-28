@@ -47,9 +47,11 @@ class TestLADRegressor(unittest.TestCase):
         )
 
         self.X = df.drop(columns="XR")
+        self.X_numpy = self.X.values
         self.X_nan = self.X.copy()
         self.X_nan["nan_col"] = np.nan
         self.y = df["XR"]
+        self.y_numpy = self.y.values
         self.y_nan = self.y.copy()
         self.y_nan.iloc[0] = np.nan
 
@@ -105,19 +107,71 @@ class TestLADRegressor(unittest.TestCase):
         self.assertEqual(lad.maxiter, 100)
 
     def test_types_fit(self):
-        # X
+        # X - when a dataframe
         lad = LADRegressor()
         self.assertRaises(TypeError, lad.fit, X=1, y=self.y)
         self.assertRaises(TypeError, lad.fit, X="X", y=self.y)
         self.assertRaises(ValueError, lad.fit, X=self.X.reset_index(), y=self.y)
         self.assertRaises(ValueError, lad.fit, X=self.X_nan, y=self.y)
         self.assertRaises(ValueError, lad.fit, X=self.X_nan.values, y=self.y)
-        # y
+        # X - when a numpy array
+        self.assertRaises(ValueError, lad.fit, X=self.X.reset_index().values, y=self.y)
+        self.assertRaises(
+            ValueError, lad.fit, X=self.X_nan.reset_index(drop=True).values, y=self.y
+        )
+        # y - when a series
         self.assertRaises(TypeError, lad.fit, X=self.X, y=1)
         self.assertRaises(TypeError, lad.fit, X=self.X, y="y")
-        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y.reset_index())
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y.reset_index()["cid"])
         self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y_nan)
         self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y_nan.values)
+        # y - when a dataframe
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y.reset_index())
+        self.assertRaises(
+            ValueError, lad.fit, X=self.X, y=pd.DataFrame(self.y.reset_index()["cid"])
+        )
+        self.assertRaises(
+            ValueError,
+            lad.fit,
+            X=self.X,
+            y=pd.DataFrame(self.y_nan.reset_index(drop=True)),
+        )
+        # y - when a numpy array
+        self.assertRaises(
+            ValueError, lad.fit, X=self.X.values, y=np.zeros((len(self.X), 2))
+        )
+        self.assertRaises(
+            ValueError, lad.fit, X=self.X.values, y=np.array(["hello"] * len(self.X))
+        )
+        self.assertRaises(
+            ValueError, lad.fit, X=self.X.values, y=np.array([np.nan] * len(self.X))
+        )
+
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y[:-1])
+
+        # sample_weight
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y, sample_weight=1)
+        self.assertRaises(
+            ValueError,
+            lad.fit,
+            X=self.X,
+            y=self.y,
+            sample_weight=np.ones((len(self.X), 2), dtype=int),
+        )
+        self.assertRaises(
+            ValueError,
+            lad.fit,
+            X=self.X,
+            y=self.y,
+            sample_weight=np.array(["hello"] * len(self.X)),
+        )
+        self.assertRaises(
+            ValueError,
+            lad.fit,
+            X=self.X,
+            y=self.y,
+            sample_weight=np.array([1] * (len(self.X) - 1)),
+        )
 
     def test_valid_fit(self):
         """Check default LADRegressor fit method works as expected"""
@@ -228,11 +282,41 @@ class TestLADRegressor(unittest.TestCase):
 
     def test_types_predict(self):
         lad = LADRegressor().fit(self.X, self.y)
+        # X - when a dataframe
         self.assertRaises(TypeError, lad.predict, X=1)
         self.assertRaises(TypeError, lad.predict, X="X")
         self.assertRaises(ValueError, lad.predict, X=self.X.iloc[:, :-1])
-        self.assertRaises(ValueError, lad.predict, X=self.X_nan)
         self.assertRaises(ValueError, lad.predict, X=self.X_nan.values)
+        self.assertRaises(
+            ValueError,
+            lad.predict,
+            X=pd.DataFrame(
+                data = np.array([["hello"] * self.X.shape[1]] * self.X.shape[0]),
+                columns = self.X.columns,
+                index = self.X.index,
+            ),
+        )
+        self.assertRaises(
+            ValueError,
+            lad.predict,
+            X=pd.DataFrame(
+                data = np.array([[np.nan] * self.X.shape[1]] * self.X.shape[0]),
+                columns = self.X.columns,
+                index = self.X.index,
+            ),
+        )
+        # X - when a numpy array
+        self.assertRaises(ValueError, lad.predict, X=np.expand_dims(self.X_numpy, 0))
+        self.assertRaises(
+            ValueError,
+            lad.predict,
+            X=np.array([["hello"] * self.X.shape[1]] * self.X.shape[0])
+        )
+        self.assertRaises(
+            ValueError,
+            lad.predict,
+            X=np.array([[np.nan] * self.X.shape[1]] * self.X.shape[0])
+        )
 
     def test_valid_predict(self):
         """Check default LADRegressor predict method works as expected"""
@@ -568,6 +652,40 @@ class TestSignWeightedLADRegression(unittest.TestCase):
         self.assertTrue(isinstance(pred, np.ndarray))
         self.assertTrue(len(pred) == self.X.shape[0])
 
+    def test_valid_set_params(self):
+        ls = SignWeightedLADRegressor()
+        ls.set_params(
+            fit_intercept=False, positive=True, alpha=0.1, shrinkage_type="l2"
+        )
+        self.assertEqual(ls.fit_intercept, False)
+        self.assertEqual(ls.positive, True)
+        self.assertEqual(ls.alpha, 0.1)
+        self.assertEqual(ls.shrinkage_type, "l2")
+        self.assertEqual(ls.model.fit_intercept, False)
+        self.assertEqual(ls.model.positive, True)
+        self.assertEqual(ls.model.alpha, 0.1)
+
+        ls = SignWeightedLADRegressor()
+        ls.set_params(
+            fit_intercept=False, positive=True, alpha=0.2, shrinkage_type="l1"
+        )
+        self.assertEqual(ls.fit_intercept, False)
+        self.assertEqual(ls.positive, True)
+        self.assertEqual(ls.alpha, 0.2)
+        self.assertEqual(ls.shrinkage_type, "l1")
+        self.assertEqual(ls.model.fit_intercept, False)
+        self.assertEqual(ls.model.positive, True)
+        self.assertEqual(ls.model.alpha, 0.2)
+
+        ls = SignWeightedLADRegressor()
+        ls.set_params(fit_intercept=False, positive=True, alpha=0, shrinkage_type="l2")
+        self.assertEqual(ls.fit_intercept, False)
+        self.assertEqual(ls.positive, True)
+        self.assertEqual(ls.alpha, 0)
+        self.assertEqual(ls.shrinkage_type, "l2")
+        self.assertEqual(ls.model.fit_intercept, False)
+        self.assertEqual(ls.model.positive, True)
+
 
 class TestTimeWeightedLADRegression(unittest.TestCase):
     @classmethod
@@ -802,6 +920,57 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
             )
         self.assertTrue(isinstance(pred, np.ndarray))
         self.assertTrue(len(pred) == self.X.shape[0])
+
+    def test_valid_set_params(self):
+        ls = TimeWeightedLADRegressor()
+        ls.set_params(
+            fit_intercept=False,
+            positive=True,
+            alpha=0.1,
+            half_life=3,
+            shrinkage_type="l2",
+        )
+        self.assertEqual(ls.fit_intercept, False)
+        self.assertEqual(ls.positive, True)
+        self.assertEqual(ls.alpha, 0.1)
+        self.assertEqual(ls.half_life, 3)
+        self.assertEqual(ls.shrinkage_type, "l2")
+        self.assertEqual(ls.model.fit_intercept, False)
+        self.assertEqual(ls.model.positive, True)
+        self.assertEqual(ls.model.alpha, 0.1)
+
+        ls = TimeWeightedLADRegressor()
+        ls.set_params(
+            fit_intercept=False,
+            positive=True,
+            half_life=6,
+            alpha=0.2,
+            shrinkage_type="l1",
+        )
+        self.assertEqual(ls.fit_intercept, False)
+        self.assertEqual(ls.positive, True)
+        self.assertEqual(ls.alpha, 0.2)
+        self.assertEqual(ls.half_life, 6)
+        self.assertEqual(ls.shrinkage_type, "l1")
+        self.assertEqual(ls.model.fit_intercept, False)
+        self.assertEqual(ls.model.positive, True)
+        self.assertEqual(ls.model.alpha, 0.2)
+
+        ls = TimeWeightedLADRegressor()
+        ls.set_params(
+            fit_intercept=False,
+            positive=True,
+            half_life=12,
+            alpha=0,
+            shrinkage_type="l2",
+        )
+        self.assertEqual(ls.fit_intercept, False)
+        self.assertEqual(ls.positive, True)
+        self.assertEqual(ls.alpha, 0)
+        self.assertEqual(ls.half_life, 12)
+        self.assertEqual(ls.shrinkage_type, "l2")
+        self.assertEqual(ls.model.fit_intercept, False)
+        self.assertEqual(ls.model.positive, True)
 
 
 if __name__ == "__main__":

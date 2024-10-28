@@ -4,6 +4,8 @@ import scipy.stats as stats
 
 from sklearn.base import RegressorMixin
 
+from macrosynergy.learning.forecasting.model_systems import BaseRegressionSystem
+
 def neg_mean_abs_corr(
     estimator,
     X_test,
@@ -52,6 +54,77 @@ def neg_mean_abs_corr(
     This function is a specialised scorer to evaluate the quality of a hedge within the
     `BetaEstimator` class in the `macrosynergy.learning` subpackage.
     """
+    # Checks
+    # estimator
+    if not isinstance(estimator, BaseRegressionSystem):
+        raise TypeError(
+            "estimator must be an instance of BaseRegressionSystem."
+        )
+    if estimator.models_ is None:
+        raise ValueError(
+            "estimator must be a fitted model."
+        )
+    
+    # X_test
+    if not isinstance(X_test, pd.DataFrame):
+        raise TypeError(
+            "X_test must be a pandas DataFrame."
+        )
+    if X_test.ndim != 2:
+        raise ValueError(
+            "X_test must be a 2-dimensional DataFrame."
+        )
+    if X_test.shape[1] != 1:
+        raise ValueError(
+            "X_test must have only one column."
+        )
+    if not isinstance(X_test.index, pd.MultiIndex):
+        raise ValueError(
+            "X_test must be multi-indexed."
+        )
+    # TODO: replace below with categorical dtype for cross sections
+    if not X_test.index.get_level_values(0).dtype == "object":
+        raise TypeError("The outer index of X_test must be strings.")
+    if not X_test.index.get_level_values(1).dtype == "datetime64[ns]":
+        raise TypeError("The inner index of X_test must be datetime.date.")
+    if not X_test.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+        raise ValueError(
+            "The input feature matrix column for neg_mean_abs_corr",
+            " must be numeric.",
+        )
+    if X_test.isnull().values.any():
+        raise ValueError(
+            "The input feature matrix for neg_mean_abs_corr must not contain any "
+            "missing values."
+        )
+    
+    # y_test
+    if not isinstance(y_test, pd.Series):
+        raise TypeError(
+            "y_test must be a pandas Series."
+        )
+    if not isinstance(y_test.index, pd.MultiIndex):
+        raise ValueError(
+            "y_test must be multi-indexed."
+        )
+    if not y_test.index.get_level_values(0).dtype == "object":
+        raise TypeError("The outer index of y_test must be strings.")
+    if not y_test.index.get_level_values(1).dtype == "datetime64[ns]":
+        raise TypeError("The inner index of y_test must be datetime.date.")
+    if not y_test.index.equals(X_test.index):
+        raise ValueError(
+            "y_test and X_test must have the same index."
+        )
+    if not pd.api.types.is_numeric_dtype(y_test):
+        raise ValueError(
+            "The input target vector for neg_mean_abs_corr",
+            " must be numeric.",
+        )
+    if y_test.isnull().values.any():
+        raise ValueError(
+            "The input target vector for neg_mean_abs_corr must not contain any "
+            "missing values."
+        )
     # Obtain key information 
     market_returns = X_test.iloc[:,0].copy() 
     contract_returns = y_test.copy()

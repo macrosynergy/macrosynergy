@@ -308,6 +308,8 @@ class PanelPCA(BaseEstimator, TransformerMixin):
                 raise TypeError("n_components must be a number or None.")
             if n_components <= 0:
                 raise ValueError("n_components must be greater than 0.")
+            if isinstance(n_components, float) and n_components > 1:
+                raise ValueError("If n_components is a float, it must be between 0 and 1.")
             
         if not isinstance(kaiser_criterion, bool):
             raise TypeError("kaiser_criterion must be a boolean.")
@@ -318,6 +320,8 @@ class PanelPCA(BaseEstimator, TransformerMixin):
         self.n_components = n_components
         self.kaiser_criterion = kaiser_criterion
         self.adjust_signs = adjust_signs
+        self.n_features_in_ = None
+        self.feature_names_in_ = None
         
     def fit(self, X, y=None):
         """
@@ -336,16 +340,11 @@ class PanelPCA(BaseEstimator, TransformerMixin):
         of the eigenvectors to ensure consistency of eigenvector signs
         when retrained over time. This does not affect the PCA itself.
         """
-        if self.adjust_signs:
-            if y is None:
-                raise ValueError(
-                    "If `adjust_signs` is True, a target variable must be provided. "
-                    "PCA is an unsupervised method, so providing a target variable "
-                    "does not affect the PCA. Eigenvectors, however, are unique up to "
-                    "its sign, meaning that a target variable can be used to ensure "
-                    "consistency in the signs of the eigenvectors through time and over repeated runs."
-                )
-            
+        # Checks
+        self._check_fit_params(X, y)
+        self.n_features_in_ = X.shape[1]
+        self.feature_names_in_ = X.columns
+
         # Estimate covariance matrix and perform eigendecomposition
         covariance_matrix = X.cov()
         evals, evecs = np.linalg.eigh(covariance_matrix.values)
@@ -375,9 +374,15 @@ class PanelPCA(BaseEstimator, TransformerMixin):
             self.adjusted_evecs = self.adjusted_evecs[:,mask]
 
         # Adjust signs of eigenvectors so that projected data is positively correlated with y
-        if y is not None:
-            # TODO: make sure this works for all possible input types
-            y = y.values
+        if self.adjust_signs:
+            # Convert y to numpy array
+            if isinstance(y, pd.Series):
+                y = y.values
+            elif isinstance(y, pd.DataFrame):
+                y = y.values.reshape(-1)
+            
+            # Calculate correlation between projected data and y
+            # If correlation is negative, flip the sign of the eigenvector
             for i in range(self.adjusted_evecs.shape[1]):
                 if np.corrcoef(X.values @ self.adjusted_evecs[:,i], y)[0,1] < 0:
                     self.adjusted_evecs[:,i] *= -1
@@ -398,11 +403,117 @@ class PanelPCA(BaseEstimator, TransformerMixin):
         pd.DataFrame
             Projected features.
         """
+        # Checks
+        self._check_transform_params(X)
+
+        # Project data onto the principal components
         return pd.DataFrame(
             index = X.index,
             columns = [f"PCA {i+1}" for i in range(self.adjusted_evecs.shape[1])],
             data = X.values @ self.adjusted_evecs
         )
+    
+    def _check_fit_params(self, X, y):
+        """
+        Checks the input data for the fit method.
+
+        Parameters
+        ----------
+        X : pandas.DataFrame
+            The feature matrix.
+        y : pandas.Series or pandas.DataFrame
+            The target vector.
+        """
+        # Checks only necessary on X
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError(
+                "Input feature matrix for the selector must be a pandas dataframe. ",
+                "If used as part of an sklearn pipeline, ensure that previous steps ",
+                "return a pandas dataframe.",
+            )
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise ValueError(
+                "All columns in the input feature matrix for PanelPCA",
+                " must be numeric."
+            )
+        if X.isnull().values.any():
+            raise ValueError(
+                "The input feature matrix for PanelPCA must not contain any "
+                "missing values."
+            )
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("The input feature matrix for X must be multi-indexed.")
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
+            raise TypeError("The inner index of X must be datetime.date.")
+        
+        # Checks on y only necessary if adjust_signs is True
+        if self.adjust_signs:
+            if y is None:
+                raise ValueError(
+                    "If `adjust_signs` is True, a target variable must be provided. "
+                    "PCA is an unsupervised method, so providing a target variable "
+                    "does not affect the PCA. Eigenvectors, however, are unique up to "
+                    "its sign, meaning that a target variable can be used to ensure "
+                    "consistency in the signs of the eigenvectors through time and over repeated runs."
+                )
+            else:
+                if not isinstance(y, (pd.Series, pd.DataFrame, np.ndarray)):
+                    raise TypeError("y must be a pandas Series, DataFrame, or numpy array.")
+                if not y.shape[0] == X.shape[0]:
+                    raise ValueError("y must have the same number of rows as X.")
+                if not isinstance(y, np.ndarray):
+                    if not np.issubdtype(y.values.dtype, np.number):
+                        raise ValueError("The target vector must be numeric.")
+                    if y.isnull().values.any():
+                        raise ValueError("The target vector must not contain any missing values.")
+                else:
+                    if not np.issubdtype(y.dtype, np.number):
+                        raise ValueError("The target vector must be numeric.")
+                    if np.isnan(y).any():
+                        raise ValueError("The target vector must not contain any missing values.")
+                    
+    def _check_transform_params(self, X):
+        """
+        Input checks for the transform method.
+
+        Parameters
+        ----------
+        X : pandas.DataFrame
+            The feature matrix.
+        """
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError(
+                "Input feature matrix for the PanelPCA must be a pandas dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas dataframe."
+            )
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise ValueError(
+                "All columns in the input feature matrix for PanelPCA",
+                " must be numeric."
+            )
+        if X.isnull().values.any():
+            raise ValueError(
+                "The input feature matrix for PanelPCA must not contain any "
+                "missing values."
+            )
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
+            raise TypeError("The inner index of X must be datetime.date.")
+        
+        if X.shape[1] != self.n_features_in_:
+            raise ValueError(
+                "The input feature matrix must have the same number of columns as the "
+                "training feature matrix."
+            )
+        if not X.columns.equals(self.feature_names_in_):
+            raise ValueError(
+                "The input feature matrix must have the same columns as the training "
+                "feature matrix."
+            )
     
 if __name__ == "__main__":
     import numpy as np
