@@ -10,8 +10,8 @@ import pandas as pd
 import scipy.stats as stats
 from parameterized import parameterized
 from sklearn.decomposition import PCA
-from sklearn.linear_model import Lasso, LinearRegression, Ridge
-from sklearn.metrics import make_scorer, r2_score
+from sklearn.linear_model import Lasso, LinearRegression, Ridge, LogisticRegression
+from sklearn.metrics import make_scorer, r2_score, accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -1523,6 +1523,56 @@ class TestAll(unittest.TestCase):
         self.assertTrue(len(df7.cid.unique()) == 4)
         self.assertTrue(df7.real_date.min() == first_date)
         self.assertTrue(df7.real_date.max() == last_date)
+
+        # Test generate_labels works with a logistic regression
+        so8 = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+            blacklist=self.black_valid,
+            generate_labels=lambda x: -1 if x < 0 else 1,
+        )
+
+        try:
+            so8.calculate_predictions(
+                name="test",
+                models={
+                    "LogReg": LogisticRegression(),
+                },
+                scorers={"ACC": make_scorer(accuracy_score), "BAC": make_scorer(balanced_accuracy_score)},
+                hyperparameters={
+                    "LogReg": {
+                        "fit_intercept": [True, False],
+                        "C": stats.expon(),
+                    },
+                },
+                search_type="prior",
+                n_iter=4,
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.inner_splitters,
+                normalize_fold_results=True,
+                cv_summary="mean-std",
+                split_functions={
+                    "ExpandingKFold": None,
+                    "RollingKFold": lambda n: (
+                        n // 24
+                    ),  # Increases by one every two years
+                },
+                test_size=3,
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+        df8 = so8.preds.copy()
+        self.assertIsInstance(df8, pd.DataFrame)
+        if len(df8.xcat.unique()) != 1:
+            self.fail("The signal dataframe should only contain one xcat")
+        self.assertEqual(df8.xcat.unique()[0], "test")
+        self.assertTrue(len(df8.cid.unique()) == 4)
+        self.assertTrue(df8.real_date.min() == first_date)
+        self.assertTrue(df8.real_date.max() == last_date)
+        self.assertTrue(len(df8.value.value_counts()) == 2)
+
 
     def test_types_run(self):
         # Training set only
