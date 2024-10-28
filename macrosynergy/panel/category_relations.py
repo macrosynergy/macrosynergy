@@ -987,7 +987,6 @@ if __name__ == "__main__":
         ylab="Next month's return on 2-year IRS return, vol-targeted position, %",
         coef_box="lower left",
         ncol=2,
-        single_plot=True,
     )
 
     # Passing Axes object for a subplot
