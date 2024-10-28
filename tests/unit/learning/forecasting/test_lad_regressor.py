@@ -47,9 +47,11 @@ class TestLADRegressor(unittest.TestCase):
         )
 
         self.X = df.drop(columns="XR")
+        self.X_numpy = self.X.values
         self.X_nan = self.X.copy()
         self.X_nan["nan_col"] = np.nan
         self.y = df["XR"]
+        self.y_numpy = self.y.values
         self.y_nan = self.y.copy()
         self.y_nan.iloc[0] = np.nan
 
@@ -105,19 +107,38 @@ class TestLADRegressor(unittest.TestCase):
         self.assertEqual(lad.maxiter, 100)
 
     def test_types_fit(self):
-        # X
+        # X - when a dataframe
         lad = LADRegressor()
         self.assertRaises(TypeError, lad.fit, X=1, y=self.y)
         self.assertRaises(TypeError, lad.fit, X="X", y=self.y)
         self.assertRaises(ValueError, lad.fit, X=self.X.reset_index(), y=self.y)
         self.assertRaises(ValueError, lad.fit, X=self.X_nan, y=self.y)
         self.assertRaises(ValueError, lad.fit, X=self.X_nan.values, y=self.y)
-        # y
+        # X - when a numpy array
+        self.assertRaises(ValueError, lad.fit, X=self.X.reset_index().values, y=self.y)
+        self.assertRaises(ValueError, lad.fit, X=self.X_nan.reset_index(drop=True).values, y=self.y)
+        # y - when a series
         self.assertRaises(TypeError, lad.fit, X=self.X, y=1)
         self.assertRaises(TypeError, lad.fit, X=self.X, y="y")
-        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y.reset_index())
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y.reset_index()["cid"])
         self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y_nan)
         self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y_nan.values)
+        # y - when a dataframe
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y.reset_index())
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=pd.DataFrame(self.y.reset_index()["cid"]))
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=pd.DataFrame(self.y_nan.reset_index(drop=True)))
+        # y - when a numpy array
+        self.assertRaises(ValueError, lad.fit, X=self.X.values, y=np.zeros((len(self.X),2)))
+        self.assertRaises(ValueError, lad.fit, X=self.X.values, y=np.array(["hello"] * len(self.X)))
+        self.assertRaises(ValueError, lad.fit, X=self.X.values, y=np.array([np.nan] * len(self.X)))
+
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y[:-1])
+
+        # sample_weight
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y, sample_weight=1)
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y, sample_weight=np.ones((len(self.X), 2), dtype=int))
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y, sample_weight=np.array(["hello"] * len(self.X)))
+        self.assertRaises(ValueError, lad.fit, X=self.X, y=self.y, sample_weight=np.array([1] * (len(self.X)-1)))
 
     def test_valid_fit(self):
         """Check default LADRegressor fit method works as expected"""
