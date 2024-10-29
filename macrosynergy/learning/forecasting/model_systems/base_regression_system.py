@@ -27,10 +27,10 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             units of the data frequency provided in the `data_freq` argument.
         min_xs_samples : int, default=2
             The minimum number of samples required in each cross-section training set for
-            a regression model to be fitted for that cross-section. If `data_freq` is None,
-            this parameter is specified in terms of the native dataset frequency.
-            Otherwise, this parameter should be expressed in units of the frequency
-            specified in the `data_freq` argument.
+            a regression model to be fitted for that cross-section. If `data_freq` is None
+            or "unadjusted", this parameter is specified in terms of the native dataset
+            frequency. Otherwise, this parameter should be expressed in units of the
+            frequency specified in the `data_freq` argument.
         data_freq : str, optional
             Training set data frequency. This is primarily to be used within the context
             of market beta estimation in the `BetaEstimator` class in
