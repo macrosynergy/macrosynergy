@@ -1274,9 +1274,11 @@ class JPMaQSDownload(DataQueryInterface):
             if dataframe_format == "qdf":
                 assert isinstance(data, QuantamentalDataFrame)
 
-        return pd.DataFrame(
-            QuantamentalDataFrame(data, categorical=categorical_dataframe)
-        )
+                return pd.DataFrame(
+                    QuantamentalDataFrame(data, categorical=categorical_dataframe)
+                )
+
+        return data
 
 
 def custom_download(
