@@ -284,7 +284,7 @@ def _check_df_for_missing_cid_data(
     ]
 
     rcids = [c for c in cids if c in found_cids]  # to preserve order
-    return df, rcids, _xcat
+    return QuantamentalDataFrame(df), rcids, _xcat
 
 
 def _check_weights_and_signs(
