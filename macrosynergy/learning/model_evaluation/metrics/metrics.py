@@ -23,7 +23,6 @@ def create_panel_metric(
 
     Parameters
     ----------
-
     y_true : pd.Series of shape (n_samples,)
         True regression labels.
     y_pred : array-like of shape (n_samples,)
@@ -307,8 +306,8 @@ def sharpe_ratio(
     type="panel",
 ):
     """
-    Sharpe ratio of a strategy where the trader goes long when the predictions are
-    positive and short when the predictions are negative.
+    Sharpe ratio of a strategy where the trader goes long by a single unit when the
+    predictions are positive and short by a single unit when the predictions are negative.
 
     Parameters
     ----------
@@ -435,7 +434,7 @@ def sortino_ratio(
 ):
     """
     Sortino ratio of a strategy where the trader goes long when the predictions are
-    positive and short when the predictions are negative.
+    positive by a single unit and short by a single unit when the predictions are negative.
 
     Parameters
     ----------
@@ -678,10 +677,6 @@ def _check_metric_params(
     type : str
         The panel dimension over which to compute the metric. Options are "panel",
         "cross_section" and "time_periods".
-
-    Returns
-    -------
-    None
     """
     # y_true
     if not isinstance(y_true, pd.Series):
