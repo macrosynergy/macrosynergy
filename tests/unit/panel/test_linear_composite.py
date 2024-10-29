@@ -8,7 +8,7 @@ from macrosynergy.management.simulate import make_test_df
 
 
 class TestAll(unittest.TestCase):
-    def generate_test_dfs(self) -> pd.DataFrame:
+    def setUp(self) -> pd.DataFrame:
         self.cids: List[str] = ["AUD", "CAD", "GBP"]
         self.xcats: List[str] = ["CRY", "XR", "INFL"]
 
@@ -27,7 +27,6 @@ class TestAll(unittest.TestCase):
         No return values are checked.
         """
 
-        self.generate_test_dfs()
         rdf: pd.DataFrame = linear_composite(
             df=self.dfd,
             cids=self.cids[0],
@@ -145,8 +144,6 @@ class TestAll(unittest.TestCase):
         Meant to test the "xcat_agg" mode of the linear_composite function.
         (i.e. engaging `_linear_composite_xcat_agg()`)
         """
-
-        self.generate_test_dfs()
 
         all_cids: List[str] = ["AUD", "CAD", "GBP"]
         all_xcats: List[str] = ["XR", "CRY", "INFL"]
@@ -353,7 +350,6 @@ class TestAll(unittest.TestCase):
         Meant to test the "cid_agg" mode of the linear_composite function.
         (i.e. engaging `_linear_composite_cid_agg()`)
         """
-        self.generate_test_dfs()
 
         all_cids: List[str] = ["AUD", "CAD", "GBP"]
         all_xcats: List[str] = ["XR", "CRY", "INFL"]
@@ -680,6 +676,56 @@ class TestAll(unittest.TestCase):
         self.assertTrue(
             np.all(rdf[rdf["real_date"] != "2000-01-17"]["value"].values == 0)
         )
+
+    def test_linear_composite_weights_and_signs(self):
+        """
+        Meant to test the "cid_agg" mode of the linear_composite function.
+        (i.e. engaging `_linear_composite_cid_agg()` and `_check_weights_and_signs()`)
+        """
+        long_cids_list = ["AUD", "CAD", "GBP", "JPY", "USD", "EUR", "INR", "CNY"]
+        tickers = [f"{c}_TESTXCAT" for c in long_cids_list]
+        test_xcats = ["TESTXCAT", "ZEROXCAT"]
+
+        ticker_values = [(-n) ** 3 for n in range(len(tickers))]
+        expected_values = []
+        df_list = []
+        for cid, ticker, exval in zip(long_cids_list, tickers, ticker_values):
+            df = make_test_df(tickers=[ticker])
+            df["value"] = exval
+            df_list.append(df)
+            df = make_test_df(cids=[cid], xcats=["ZEROXCAT"])
+            df["value"] = 0
+            df_list.append(df)
+            expected_values += [exval / 2]
+
+        extra_cids = ["ECID1", "ECID2"]
+        extra_xcats = ["eXCAT1", "eXCAT2"]
+        df_list.append(make_test_df(cids=extra_cids, xcats=extra_xcats))
+
+        df = pd.concat(df_list)
+
+        # test that when passed for xcat agg mode, the results come back as it is
+        rdf = linear_composite(
+            df=df,
+            xcats=test_xcats,
+            cids=long_cids_list,
+        )
+
+        for cid, exval in zip(long_cids_list, expected_values):
+            vx = rdf[(rdf["cid"] == cid)]["value"].unique().tolist()
+            self.assertTrue(vx == [exval])
+
+        # test that wehn extra cids are passed, the results come back as it is
+        long_extra_cids_list = long_cids_list + extra_cids
+        rdf = linear_composite(
+            df=df,
+            xcats=test_xcats,
+            cids=long_extra_cids_list,
+        )
+
+        for cid, exval in zip(long_cids_list, expected_values):
+            vx = rdf[(rdf["cid"] == cid)]["value"].unique().tolist()
+            self.assertTrue(vx == [exval])
 
 
 if __name__ == "__main__":
