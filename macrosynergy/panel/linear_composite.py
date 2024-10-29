@@ -314,11 +314,17 @@ def _check_weights_and_signs(
     vtype = "xcats" if xcat_agg else "cids"
 
     if len(found_var) != len(specified_var):
+        missing_var = list(set(specified_var) - set(found_var))
+
         for i, ws in enumerate(ws_arr):
             if isinstance(ws, str):
                 continue
-            if np.allclose(ws, 1):
+            if np.allclose(np.array(ws) / ws[0], 1):  # if the weights are all the same
                 ws_arr[i] = [1] * len(found_var)
+                warnings.warn(
+                    f"The provided data is missing some {vtype}. Reassigning all {ws_names[i]} to the 1s (equal)"
+                    f" Missing {vtype}: {missing_var}"
+                )
             else:
                 raise ValueError(
                     err_msg.format(
@@ -329,9 +335,15 @@ def _check_weights_and_signs(
                     )
                 )
 
+        # remove the cid or xcat from the list of cids or xcats
+        if xcat_agg:
+            xcats = found_xcats
+        else:
+            cids = found_cids
+
     weights, signs = ws_arr
 
-    return weights, signs
+    return cids, xcats, weights, signs
 
 
 def _check_args(
@@ -623,7 +635,7 @@ def linear_composite(
     if len(remaining_xcats) == 1 and len(remaining_cids) < len(cids) and not _xcat_agg:
         raise ValueError(err_inc_cids)
 
-    weights, signs = _check_weights_and_signs(
+    cids, xcats, weights, signs = _check_weights_and_signs(
         df=df,
         cids=cids,
         xcats=xcats,
