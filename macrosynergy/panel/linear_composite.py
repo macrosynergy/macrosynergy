@@ -237,7 +237,9 @@ def _check_df_for_missing_cid_data(
     cids: List[str],
     weights: Union[str, List[float]],
     signs: List[float],
-) -> QuantamentalDataFrame:
+) -> Tuple[
+    QuantamentalDataFrame, List[str], str, Union[str, List[float], None], List[float]
+]:
     """
     Check the DataFrame for missing `cid` data and drop them if necessary and return the
     DataFrame with the missing `cid` data dropped.
@@ -284,7 +286,7 @@ def _check_df_for_missing_cid_data(
     ]
 
     rcids = [c for c in cids if c in found_cids]  # to preserve order
-    return QuantamentalDataFrame(df), rcids, _xcat
+    return QuantamentalDataFrame(df), rcids, _xcat, weights, signs
 
 
 def _check_weights_and_signs(
@@ -647,7 +649,7 @@ def linear_composite(
         )
 
     else:  # mode == "cid_agg" -- single xcat
-        df, cids, _xcat = _check_df_for_missing_cid_data(
+        df, cids, _xcat, weights, signs = _check_df_for_missing_cid_data(
             df=df, cids=cids, weights=weights, signs=signs
         )
 
