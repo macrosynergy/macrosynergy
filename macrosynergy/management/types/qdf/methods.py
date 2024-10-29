@@ -154,17 +154,8 @@ def _sync_df_categories(
     if not check_is_categorical(df):
         return df
 
-    found_cids = set(df["cid"].unique())
-    found_xcats = set(df["xcat"].unique())
-
-    existing_cids = df["cid"].cat.categories
-    existing_xcats = df["xcat"].cat.categories
-
-    if set(found_cids) != set(existing_cids):
-        df.loc[:, "cid"] = df["cid"].astype("category")
-
-    if set(found_xcats) != set(existing_xcats):
-        df.loc[:, "xcat"] = df["xcat"].astype("category")
+    df["cid"] = df["cid"].cat.remove_unused_categories().astype("category")
+    df["xcat"] = df["xcat"].cat.remove_unused_categories().astype("category")
 
     return df
 

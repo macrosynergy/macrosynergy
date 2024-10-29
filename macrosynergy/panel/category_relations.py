@@ -117,7 +117,6 @@ class CategoryRelations(object):
                 f"`df` must have columns 'cid', 'xcat', 'real_date' and `{val}`."
             )
         df = QuantamentalDataFrame(df)
-        self._as_categorical = df.InitializedAsCategorical
 
         if not isinstance(xcats, (list, tuple)):
             raise TypeError("`xcats` must be a list or a tuple.")
