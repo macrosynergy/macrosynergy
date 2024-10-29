@@ -2,10 +2,8 @@
 Base class for feature selection on panel data.
 """
 
-import numpy as np
 import pandas as pd
 
-import datetime
 import warnings
 
 from sklearn.base import BaseEstimator
@@ -19,14 +17,12 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
     """
     Base class for statistical feature selection over a panel.
     """
+
     def __init__(self):
-        """
-        Initialize selector class.
-        """
         self.n_features_in_ = None
         self.feature_names_in_ = None
 
-    def fit(self, X, y = None):
+    def fit(self, X, y=None):
         """
         Learn optimal features based on a training set pair (X, y).
 
@@ -136,9 +132,7 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
                 "return a pandas dataframe.",
             )
         if not isinstance(X.index, pd.MultiIndex):
-            raise ValueError(
-                "The input dataframe must be multi-indexed."
-            )
+            raise ValueError("The input dataframe must be multi-indexed.")
         if not X.index.nlevels == 2:
             raise ValueError("X must be multi-indexed with two levels.")
         if not X.index.get_level_values(0).dtype == "object":
@@ -148,7 +142,7 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
         if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
             raise ValueError(
                 "All columns in the input feature matrix for a panel selector ",
-                "must be numeric."
+                "must be numeric.",
             )
         if X.isnull().values.any():
             raise ValueError(
@@ -171,9 +165,7 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
                         "series or single-column dataframe.",
                     )
             if not isinstance(y.index, pd.MultiIndex):
-                raise ValueError(
-                    "The target vector must be multi-indexed."
-                )
+                raise ValueError("The target vector must be multi-indexed.")
             if not y.index.nlevels == 2:
                 raise ValueError("y must be multi-indexed with two levels.")
             if not y.index.get_level_values(0).dtype == "object":
@@ -217,14 +209,14 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
         if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
             raise ValueError(
                 "All columns in the input feature matrix for a panel selector ",
-                "must be numeric."
+                "must be numeric.",
             )
         if X.isnull().values.any():
             raise ValueError(
                 "The input feature matrix for a panel selector must not contain any "
                 "missing values."
             )
-        
+
         if X.shape[1] != self.n_features_in_:
             raise ValueError(
                 "The input feature matrix must have the same number of columns as the "
