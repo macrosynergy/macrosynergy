@@ -231,6 +231,7 @@ class SignalReturnRelations:
         if len(self.signs) != len(self.sigs):
             raise ValueError("Signs must have a length equal to signals")
 
+        self.xcats = self.rets + self.sigs
         self.df = reduce_df(
             df,
             xcats=self.xcats,

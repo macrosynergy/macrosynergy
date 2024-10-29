@@ -140,7 +140,7 @@ def _type_checks(
             "`tickers` cannot be specified if `cids` & `xcats` are specified"
         )
 
-    found_tickers: List[str] = (df["cid"] + "_" + df["xcat"]).unique().tolist()
+    found_tickers: List[str] = QuantamentalDataFrame(df).list_tickers()
 
     if bool(tickers):
         # check if there are only two

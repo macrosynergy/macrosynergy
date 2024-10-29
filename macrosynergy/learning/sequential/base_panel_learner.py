@@ -38,6 +38,7 @@ class BasePanelLearner(ABC):
         freq="M",
         lag=1,
         xcat_aggs=["last", "sum"],
+        generate_labels=None,
     ):
         """
         Initialize a sequential learning process over a panel.
@@ -72,10 +73,23 @@ class BasePanelLearner(ABC):
             specified in the freq parameter. The first parameter pertains to all
             independent variable downsampling, whilst the second corresponds with the
             target category. Default is ["last", "sum"].
+        generate_labels : callable, optional
+            Function to transform the dependent variable, usually into
+            classification labels. Default is None.
         """
         # Checks
-        self._check_init(df, xcats, cids, start, end, blacklist, freq, lag, xcat_aggs)
-
+        self._check_init(
+            df,
+            xcats,
+            cids,
+            start,
+            end,
+            blacklist,
+            freq,
+            lag,
+            xcat_aggs,
+            generate_labels,
+        )
         # Attributes
         self.df = QuantamentalDataFrame(df)
         self.xcats = xcats
@@ -86,6 +100,7 @@ class BasePanelLearner(ABC):
         self.freq = freq
         self.lag = lag
         self.xcat_aggs = xcat_aggs
+        self.generate_labels = generate_labels
 
         # Create long-format dataframe
         df_long = (
@@ -114,6 +129,9 @@ class BasePanelLearner(ABC):
         # Create X and y
         self.X = df_long.iloc[:, :-1]
         self.y = df_long.iloc[:, -1]
+
+        if self.generate_labels is not None:
+            self.y = self.y.apply(self.generate_labels)
 
         # Store necessary index information
         self.index = self.X.index
@@ -237,7 +255,11 @@ class BasePanelLearner(ABC):
                 n_splits_add=(
                     {
                         splitter_name: (
-                            int(np.ceil(split_function(iteration * outer_splitter.test_size)))
+                            int(
+                                np.ceil(
+                                    split_function(iteration * outer_splitter.test_size)
+                                )
+                            )
                             if split_function is not None
                             else 0
                         )
@@ -582,12 +604,11 @@ class BasePanelLearner(ABC):
                     cv_summary, axis=1
                 )
 
-
         # Now scale the summary scores for each scorer
         scaler = StandardScaler()
 
         summary_cols = [f"{scorer}_summary" for scorer in scorers.keys()]
-        
+
         if len(scorers) > 1:
             scaler = StandardScaler()
             cv_results[summary_cols] = scaler.fit_transform(cv_results[summary_cols])
@@ -848,6 +869,7 @@ class BasePanelLearner(ABC):
         freq,
         lag,
         xcat_aggs,
+        generate_labels,
     ):
         """
         Checks for the constructor.
@@ -873,6 +895,9 @@ class BasePanelLearner(ABC):
         xcat_aggs : list
             List of aggregation functions to apply to the independent and
             dependent variables respectively.
+        generate_labels : callable, optional
+            Function to generate labels for a supervised learning process.
+            Default is None.
         """
         # Dataframe checks
         if not isinstance(df, pd.DataFrame):
@@ -978,6 +1003,12 @@ class BasePanelLearner(ABC):
             raise ValueError("All elements in xcat_aggs must be strings.")
         if len(xcat_aggs) != 2:
             raise ValueError("xcat_aggs must have exactly two elements.")
+        
+        # generate_labels checks
+        if generate_labels is not None:
+            if not callable(generate_labels):
+                raise TypeError("generate_labels must be a callable.")
+
 
     def _check_run(
         self,
@@ -1047,7 +1078,7 @@ class BasePanelLearner(ABC):
             raise TypeError("inner splitters should be specified as a dictionary")
         if inner_splitters == {}:
             raise ValueError("The inner splitters dictionary cannot be empty.")
-        
+
         for names in inner_splitters.keys():
             if not isinstance(names, str):
                 raise ValueError(
@@ -1184,14 +1215,19 @@ class BasePanelLearner(ABC):
                 raise ValueError("The n_iter argument must be greater than zero.")
         elif n_iter is not None and not isinstance(n_iter, int):
             raise ValueError("n_iter must only be used if search_type is 'prior'.")
-        
+
         # normalize_fold_results
         if not isinstance(normalize_fold_results, bool):
             raise TypeError("normalize_fold_results must be a boolean.")
         if normalize_fold_results:
             if search_type == "grid":
                 for model in hyperparameters.keys():
-                    num_models = sum([len(hyperparameters[model][hparam]) for hparam in hyperparameters[model].keys()])
+                    num_models = sum(
+                        [
+                            len(hyperparameters[model][hparam])
+                            for hparam in hyperparameters[model].keys()
+                        ]
+                    )
                     if num_models < 2:
                         raise ValueError(
                             "normalize_fold_results cannot be True if there are less than 2 candidate models. "

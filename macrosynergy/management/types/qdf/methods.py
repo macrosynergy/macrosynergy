@@ -148,6 +148,27 @@ def apply_blacklist(
     return df.reset_index(drop=True)
 
 
+def _sync_df_categories(
+    df: QuantamentalDataFrameBase,
+) -> QuantamentalDataFrameBase:
+    if not check_is_categorical(df):
+        return df
+
+    found_cids = set(df["cid"].unique())
+    found_xcats = set(df["xcat"].unique())
+
+    existing_cids = df["cid"].cat.categories
+    existing_xcats = df["xcat"].cat.categories
+
+    if set(found_cids) != set(existing_cids):
+        df.loc[:, "cid"] = df["cid"].astype("category")
+
+    if set(found_xcats) != set(existing_xcats):
+        df.loc[:, "xcat"] = df["xcat"].astype("category")
+
+    return df
+
+
 def reduce_df(
     df: QuantamentalDataFrameBase,
     cids: Optional[List[str]] = None,
@@ -200,7 +221,11 @@ def reduce_df(
 
     xcats_found = sorted(set(df["xcat"].unique()))
     cids_found = sorted(set(df["cid"].unique()))
+
+    df = _sync_df_categories(df)
+
     df = df.drop_duplicates().reset_index(drop=True)
+
     if out_all:
         return df, xcats_found, cids_found
     else:
@@ -238,7 +263,9 @@ def reduce_df_by_ticker(
 
     df = df[ticker_series.isin(tickers)]
 
-    return df.reset_index(drop=True)
+    df = _sync_df_categories(df)
+
+    return df.drop_duplicates().reset_index(drop=True)
 
 
 def update_df(

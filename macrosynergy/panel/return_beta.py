@@ -336,6 +336,8 @@ def return_beta(
     dfh_w.columns = ["hedge"]
 
     # --- Merge time series and calculate re-balancing dates.
+    if isinstance(dfp_w.columns.dtype, pd.CategoricalDtype):
+        dfp_w.columns = dfp_w.columns.astype("object")
 
     dfw = pd.merge(dfp_w, dfh_w, how="inner", on="real_date")
     br = dfw["hedge"]
