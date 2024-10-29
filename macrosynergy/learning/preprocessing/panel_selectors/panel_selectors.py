@@ -2,13 +2,11 @@ import numbers
 
 import numpy as np
 import pandas as pd
-import scipy.stats as stats
-from sklearn.exceptions import NotFittedError
-from sklearn.linear_model import Lars, enet_path, lars_path, lasso_path
-from statsmodels.tools.tools import add_constant
+from sklearn.linear_model import Lars, lars_path
 
-from macrosynergy.learning.preprocessing.panel_selectors.base_panel_selector import \
-    BasePanelSelector
+from macrosynergy.learning.preprocessing.panel_selectors.base_panel_selector import (
+    BasePanelSelector,
+)
 from macrosynergy.learning.random_effects import RandomEffects
 
 
@@ -23,6 +21,38 @@ class LarsSelector(BasePanelSelector):
             Number of factors to select.
         fit_intercept : bool, default=False
             Whether to fit an intercept term in the LARS model.
+
+        Notes
+        -----
+        The Least Angle Regression (LARS) algorithm was designed to fit high dimensional
+        linear models. It is a means of estimating the covariates to include in the model,
+        as well as associated coefficients. LARS can be considered to be a continuous
+        equivalent to forward selection.
+
+        The algorithm is described in detail in [1]_ and is implemented in the
+        `scikit-learn` library [2]_. It works as follows:
+
+        1. Set coefficients to zero.
+        2. Find the covariate that has the highest correlation with the target variable.
+        3. Increase the coefficient of this covariate in a stepwise fashion, recording
+            the residual at each step. Stop when another covariate is as correlated with
+            the residuals as the current one.
+        4. Add this second covariate to the model and the compute the two-variable OLS
+            solution.
+        5. Increase the coefficients of the two covariates in a stepwise fashion towards
+            the OLS solution, recording the residuals at each step. Stop when another
+            covariate is as correlated with the residuals as the current ones.
+        6. Add this third covariate to the model and compute the three-variable OLS
+            solution.
+        7. Iterate this process until the desired number of covariates have been selected.
+
+        References
+        ----------
+        .. [1] Efron, B., Hastie, T., Johnstone, I. and Tibshirani, R., 2004.
+            Least angle regression.
+            https://arxiv.org/abs/math/0406456
+        .. [2] https://scikit-learn.org/dev/modules/linear_model.html#least-angle-regression
+
         """
         # Checks
         if not isinstance(fit_intercept, bool):
@@ -48,6 +78,11 @@ class LarsSelector(BasePanelSelector):
             The feature matrix.
         y : pandas.Series or pandas.DataFrame
             The target vector.
+
+        Returns
+        -------
+        mask : list
+            Boolean mask of selected features.
         """
         lars = Lars(fit_intercept=self.fit_intercept, n_nonzero_coefs=self.n_factors)
         lars.fit(X.values, y.values.reshape(-1, 1))
@@ -67,6 +102,28 @@ class LassoSelector(BasePanelSelector):
             Number of factors to select.
         positive : bool
             Whether to constrain the LASSO coefficients to be positive.
+
+        Notes
+        -----
+        The Least Absolute Shrinkage and Selection Operator (LASSO) [1]_ is a linear model
+        that estimates sparse coefficients. This means that some encouragement is given
+        for the model to set some coefficients to zero. Hence, the LASSO can be said to
+        perform feature selection. It transpires that the LARS algorithm [2]_
+        (see `LarsSelector`) can be used to track the LASSO coefficients as the user-defined
+        sparsity level is increased. Consequently, we use the LARS algorithm to
+        compute the LASSO paths and select the desired number of factors. See [3]_ for
+        the `scikit-learn` documentation on the LASSO-LARS model fit.
+
+        References
+        ----------
+        .. [1] Tibshirani, R., 1996. Regression shrinkage and selection via the lasso.
+            Journal of the Royal Statistical Society Series B: Statistical Methodology,
+            58(1), pp.267-288.
+            https://www.jstor.org/stable/2346178
+        .. [2] Efron, B., Hastie, T., Johnstone, I. and Tibshirani, R., 2004.
+            Least angle regression.
+            https://arxiv.org/abs/math/0406456
+        .. [3] https://scikit-learn.org/dev/modules/generated/sklearn.linear_model.LassoLars.html
         """
         # Checks
         if not isinstance(n_factors, int):
@@ -92,6 +149,11 @@ class LassoSelector(BasePanelSelector):
             The feature matrix.
         y : pandas.Series or pandas.DataFrame
             The target vector.
+
+        Returns
+        -------
+        mask : np.ndarray
+            Boolean mask of selected features.
         """
         # Obtain coefficient paths with dimensions (n_features, n_alphas)
         _, _, coefs_path = lars_path(
@@ -107,17 +169,46 @@ class LassoSelector(BasePanelSelector):
 
 
 class MapSelector(BasePanelSelector):
-    def __init__(self, significance_level=0.05, positive=False):
+    def __init__(self, n_factors=None, significance_level=0.05, positive=False):
         """
         Univariate statistical feature selection using the Macrosynergy panel test.
 
         Parameters
         ----------
+        n_factors : int, optional
+            Number of factors to select.
         significance_level : float, default=0.05
             Significance level.
         positive : bool, default=False
             Whether to only keep features with positive estimated model coefficients.
+
+        Notes
+        -----
+        The Macrosynergy panel test is a univariate test that estimates the significance
+        of a relationship between each feature and the target variable, over a panel.
+        This test accounts for cross-sectional correlations. Often, different
+        cross-sections in a panel are highly correlated - particularly in the case of
+        dependent variable return data. This violates the assumption of independence
+        in the usual z-test or t-test, from which the usual p-values are derived. As a
+        consequence, probabilities of significance can be overstated.
+
+        In the Macrosynergy panel test, a Wald test is used to compare the null hypothesis
+        of an intercept + period-specific random effects model against the alternative
+        hypothesis of an intercept + period-specific random effects model + the feature
+        of interest. This works because the null-alternative hypotheses are nested models.
+        The model in the null hypothesis accounts for the cross-sectional correlations
+        that exist in each time period. Rejecting this model in favour of the alternative
+        model indicates that the feature of interest is significant, accounting for those
+        cross-sectional correlations.
         """
+        # Checks
+        if n_factors is not None:
+            if not isinstance(n_factors, int):
+                raise TypeError("The 'n_factors' parameter must be an integer.")
+            if n_factors <= 0:
+                raise ValueError(
+                    "The 'n_factors' parameter must be a positive integer."
+                )
         if not isinstance(significance_level, numbers.Number):
             raise TypeError("The significance_level must be a float.")
         if (significance_level < 0) or (significance_level > 1):
@@ -127,6 +218,7 @@ class MapSelector(BasePanelSelector):
 
         self.significance_level = significance_level
         self.positive = positive
+        self.n_factors = n_factors
 
     def determine_features(self, X, y):
         """
@@ -145,20 +237,32 @@ class MapSelector(BasePanelSelector):
             Boolean mask of selected features.
         """
         # Iterate through each feature and perform the panel test
-        mask = []
+        factor_pvals = []
+
         for col in self.feature_names_in_:
             ftr = X[col]
-
             re = RandomEffects(fit_intercept=True).fit(ftr, y)
             est = re.params[col]
             pval = re.pvals[col]
-            if pval < self.significance_level:
-                if self.positive:
-                    mask.append(est > 0)
-                else:
-                    mask.append(True)
+            factor_pvals.append(pval)
+
+        if self.n_factors is not None:
+            # Return a mask of factors with `n_factors` smallest p_values
+            mask = np.argsort(factor_pvals)[: self.n_factors]
+        else:
+            if self.positive:
+                # Return a mask of factors with positive estimated coefficients and
+                # p_values < significance_level
+                mask = [
+                    True if ((est > 0) and (pval < self.significance_level)) else False
+                    for est in factor_pvals
+                ]
             else:
-                mask.append(False)
+                # Return as mask of factors with p_values < significance_level
+                mask = [
+                    True if pval < self.significance_level else False
+                    for pval in factor_pvals
+                ]
 
         return np.array(mask)
 
@@ -226,3 +330,11 @@ if __name__ == "__main__":
     print(f"Lasso 3-factors, with intercept: {lasso.get_feature_names_out()}")
 
     print(lasso.transform(X_train))
+
+    # Map selector
+    map_selector = MapSelector(n_factors=2).fit(X_train, y_train)
+    print(f"Map 2-factors: {map_selector.get_feature_names_out()}")
+    map_selector = MapSelector(significance_level=0.2).fit(X_train, y_train)
+    print(f"Map significance 0.2: {map_selector.get_feature_names_out()}")
+
+    print(map_selector.transform(X_train))
