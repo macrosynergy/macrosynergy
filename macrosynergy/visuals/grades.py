@@ -1,5 +1,5 @@
 """
-Functions for visualizing data grading and blacklisted periods from a quantamental 
+Functions for visualizing data grading and blacklisted periods from a quantamental
 DataFrame.
 """
 

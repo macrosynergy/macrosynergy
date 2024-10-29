@@ -53,6 +53,8 @@ def check_availability(
     if not isinstance(missing_recent, bool):
         raise TypeError(f"<bool> object expected and not {type(missing_recent)}.")
 
+    df = QuantamentalDataFrame(df)
+
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
     if dfx.empty:
         raise ValueError(
@@ -126,7 +128,9 @@ def check_startyears(df: pd.DataFrame):
     """
     df: pd.DataFrame = df.copy()
     df = df.dropna(how="any")
-    df_starts = df[["cid", "xcat", "real_date"]].groupby(["cid", "xcat"]).min()
+    df_starts = (
+        df[["cid", "xcat", "real_date"]].groupby(["cid", "xcat"], observed=True).min()
+    )
     df_starts["real_date"] = pd.DatetimeIndex(df_starts.loc[:, "real_date"]).year
 
     return df_starts.unstack().loc[:, "real_date"].astype(int, errors="ignore")

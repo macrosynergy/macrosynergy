@@ -11,6 +11,7 @@ from packaging import version
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def view_ranges(
@@ -59,7 +60,7 @@ def view_ranges(
     for more information on the legend parameters `loc` and `bbox_to_anchor`.
     """
 
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    df = QuantamentalDataFrame(df)
 
     possible_xcats = set(df["xcat"])
     missing_xcats = set(xcats).difference(possible_xcats)

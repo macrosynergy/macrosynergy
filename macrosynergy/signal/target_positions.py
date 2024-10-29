@@ -7,6 +7,7 @@ import pandas as pd
 from typing import List, Union
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel.historic_vol import historic_vol
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.panel.basket import Basket
@@ -168,7 +169,7 @@ def cs_unit_returns(
     df_c_rets.dropna(how="all", inplace=True)
 
     df_rets = df_c_rets.stack().to_frame("value").reset_index()
-    df_rets["xcat"] = ret
+    df_rets = QuantamentalDataFrame.from_long_df(df_rets, xcat=ret)
 
     cols = ["cid", "xcat", "real_date", "value"]
 
@@ -416,7 +417,8 @@ def target_positions(
     """
 
     # A. Initial checks
-
+    df = QuantamentalDataFrame(df)
+    _as_categorical = df.InitializedAsCategorical
     if basket_names:
         df_c_wgts, baskets = weight_dataframes(df=df, basket_names=basket_names)
         df_c_wgts = iter(df_c_wgts)
@@ -525,9 +527,8 @@ def target_positions(
         df_mods_copy *= v  # modified signal x sigrel = post-VT position.
 
         df_posi = df_mods_copy.stack(**PD_FUTURE_STACK).to_frame("value").reset_index()
-        df_posi = df_posi.fillna(0)
-        df_posi["xcat"] = k
-        df_posi = df_posi.sort_values(["cid", "xcat", "real_date"])[cols]
+        df_posi["value"] = df_posi["value"].fillna(0)
+        df_posi = QuantamentalDataFrame.from_long_df(df_posi, xcat=k)
         df_pos_cons.append(df_posi)
 
     # Consolidate the positions across the formed panels and baskets (baskets will be a
@@ -536,13 +537,14 @@ def target_positions(
         df_pos_cons = consolidate_positions(df_pos_cons, ctypes)
     df_tpos = pd.concat(df_pos_cons, axis=0, ignore_index=True)
 
-    df_tpos["xcat"] += "_" + posname
-    df_tpos = df_tpos[cols]
-
+    df_tpos = QuantamentalDataFrame(df_tpos).rename_xcats(postfix=f"_{posname}")
     df_tpos = reduce_df(df=df_tpos, xcats=None, cids=None, start=start, end=end)
-    df_tpos = df_tpos.sort_values(["cid", "xcat", "real_date"])[cols]
 
-    return df_tpos.reset_index(drop=True)
+    df_tpos = df_tpos.reset_index(drop=True)
+    df_tpos = QuantamentalDataFrame(
+        df_tpos, _initialized_as_categorical=_as_categorical
+    ).to_original_dtypes()
+    return df_tpos
 
 
 if __name__ == "__main__":
