@@ -184,9 +184,9 @@ class MapSelector(BasePanelSelector):
 
         Notes
         -----
-        The Macrosynergy panel test is a univariate test that estimates the significance
-        of a relationship between each feature and the target variable, over a panel.
-        This test accounts for cross-sectional correlations. Often, different
+        The Macrosynergy panel test [1]_ is a univariate test that estimates the
+        significance of a relationship between each feature and the target variable, over
+        a panel. This test accounts for cross-sectional correlations. Often, different
         cross-sections in a panel are highly correlated - particularly in the case of
         dependent variable return data. This violates the assumption of independence
         in the usual z-test or t-test, from which the usual p-values are derived. As a
@@ -200,6 +200,12 @@ class MapSelector(BasePanelSelector):
         that exist in each time period. Rejecting this model in favour of the alternative
         model indicates that the feature of interest is significant, accounting for those
         cross-sectional correlations.
+
+        References
+        ----------
+        .. [1] Gholkar, Rushil and Sueppel, Ralph, 2023.
+            Testing macro trading factors.
+            https://macrosynergy.com/research/testing-macro-trading-factors/
         """
         # Checks
         if n_factors is not None:
