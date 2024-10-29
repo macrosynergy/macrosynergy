@@ -60,6 +60,8 @@ def make_blacklist(
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("df must be a standardized quantamental dataframe")
 
+    df = QuantamentalDataFrame(df)
+
     dfd = reduce_df(df=df, xcats=[xcat], cids=cids, start=start, end=end)
 
     if "value" not in dfd.columns:
