@@ -701,3 +701,77 @@ def _check_metric_params(
         raise ValueError(
             "Invalid type. Options are 'panel', 'cross_section' and 'time_periods'"
         )
+
+
+if __name__ == "__main__":
+    import macrosynergy.management as msm
+    from macrosynergy.management.simulate import make_qdf
+    from sklearn.linear_model import LinearRegression
+
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["XR", "BMXR"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2012-01-01", "2020-12-31", 0, 1]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["XR"] = ["2012-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["BMXR"] = ["2012-01-01", "2020-12-31", 1, 2, 0.95, 1]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    Xy = msm.categories_df(
+        df=dfd, xcats=xcats, cids=cids, freq="M", lag=1, xcat_aggs=["last", "sum"]
+    ).dropna()
+    X = Xy.iloc[:, :-1]
+    y = Xy.iloc[:, -1]
+
+    lr = LinearRegression()
+    lr.fit(X, y)
+
+    # Accuracies
+    print(
+        "\nAccuracy over panel: "
+        f"{regression_accuracy(y, lr.predict(X), type='panel')}"
+    )
+    print(
+        "Cross-sectional accuracy: "
+        f"{regression_accuracy(y, lr.predict(X), type='cross_section')}"
+    )
+    print(
+        "Periodic accuracy: "
+        f"{regression_accuracy(y, lr.predict(X), type='time_periods')}"
+    )
+
+    # Un-annualized Sharpe ratios
+    print(
+        "\nUn-annualized Sharpe over panel: "
+        f"{sharpe_ratio(y, lr.predict(X), type='panel')}"
+    )
+    print(
+        "Cross-sectional un-annualized Sharpe: "
+        f"{sharpe_ratio(y, lr.predict(X), type='cross_section')}"
+    )
+    print(
+        "Periodic un-annualized Sharpe: "
+        f"{sharpe_ratio(y, lr.predict(X), type='time_periods')}"
+    )
+
+    # Kendall correlation
+    print(
+        "\nKendall correlation over panel: "
+        f"{correlation_coefficient(y, lr.predict(X), correlation_type='kendall', type='panel')}"
+    )
+    print(
+        "Cross-sectional Kendall correlation: "
+        f"{correlation_coefficient(y, lr.predict(X), correlation_type='kendall', type='cross_section')}"
+    )
+    print(
+        "Periodic Kendall correlation: "
+        f"{correlation_coefficient(y, lr.predict(X), correlation_type='kendall', type='time_periods')}"
+    )
