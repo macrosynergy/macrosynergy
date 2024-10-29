@@ -69,12 +69,6 @@ class BasePanelBootstrap(ABC):
         y_resampled : pd.DataFrame or pd.Series
             Bootstrap resampled dependent variable.
         """
-        # Checks
-        self._check_create_bootstrap_dataset_params(
-            X,
-            y,
-        )
-
         # Store index information in numpy arrays
         index_array = np.array(X.index.tolist())
         cross_sections = index_array[:, 0]
@@ -378,59 +372,6 @@ class BasePanelBootstrap(ABC):
         y_resampled = y.loc[X_resampled.index]
 
         return X_resampled, y_resampled
-
-    def _check_create_bootstrap_dataset_params(
-        self,
-        X,
-        y,
-    ):
-        """
-        Method to check the validity of the input parameters for create_bootstrap_dataset.
-
-        Parameters
-        ----------
-        X : pd.DataFrame
-            Input feature matrix
-        y : pd.DataFrame or pd.Series
-            Dependent variable.
-        """
-        # Checks
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError(
-                "Input feature matrix must be a pandas dataframe. "
-                "If used as part of an sklearn pipeline, ensure that previous steps "
-                "return a pandas dataframe."
-            )
-        if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
-            raise TypeError(
-                "Target vector must be a pandas series or dataframe. "
-                "If used as part of an sklearn pipeline, ensure that previous steps "
-                "return a pandas series or dataframe."
-            )
-        if isinstance(y, pd.DataFrame) and y.shape[1] != 1:
-            raise ValueError(
-                "The target dataframe must have only one column. If used as part of "
-                "an sklearn pipeline, ensure that previous steps return a pandas "
-                "series or dataframe."
-            )
-
-        if not isinstance(X.index, pd.MultiIndex):
-            raise ValueError("X must be multi-indexed.")
-        if not isinstance(y.index, pd.MultiIndex):
-            raise ValueError("y must be multi-indexed.")
-        if not X.index.get_level_values(0).dtype == "object":
-            raise TypeError("The outer index of X must be strings.")
-        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
-            raise TypeError("The inner index of X must be datetime.date.")
-        if not y.index.get_level_values(0).dtype == "object":
-            raise TypeError("The outer index of y must be strings.")
-        if not y.index.get_level_values(1).dtype == "datetime64[ns]":
-            raise TypeError("The inner index of y must be datetime.date.")
-        if not X.index.equals(y.index):
-            raise ValueError(
-                "The indices of the feature matrix X and the target vector y don't "
-                "match."
-            )
 
     def _check_boot_params(
         self,

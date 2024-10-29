@@ -10,28 +10,34 @@ from macrosynergy.management.validation import _validate_Xy_learning
 class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
     def __init__(
         self,
-        roll=None,
-        data_freq="D",
+        roll="full",
         min_xs_samples=2,
+        data_freq=None,
     ):
         """
         Base class for systems of regressors.
 
         Parameters
         ----------
-        roll : int, default=None
-            The lookback of the rolling window for the regression. If None,
-            the entire cross-sectional history is used for each regression. This should
-            be specified in units of the data frequency, possibly adjusted by the
-            data_freq attribute.
-        data_freq : str, default="D"
-            Training set data frequency. This is primarily to be used within the context
-            of market beta estimation in the MarketBetaEstimator class in
-            `macrosynergy.learning`. Accepted strings are 'D' for daily, 'W' for weekly,
-            'M' for monthly and 'Q' for quarterly.
+        roll : int or str, default = "full"
+            The lookback of the rolling window for the regression. If "full",
+            the entire cross-sectional history is used for each regression. Otherwise,
+            this should be specified in units of the data frequency. If `data_freq` is not
+            None or "unadjusted", then an integer value for `roll` should be expressed in
+            units of the data frequency provided in the `data_freq` argument.
         min_xs_samples : int, default=2
             The minimum number of samples required in each cross-section training set for
-            a regression model to be fitted.
+            a regression model to be fitted for that cross-section. If `data_freq` is None,
+            this parameter is specified in terms of the native dataset frequency.
+            Otherwise, this parameter should be expressed in units of the frequency
+            specified in the `data_freq` argument.
+        data_freq : str, optional
+            Training set data frequency. This is primarily to be used within the context
+            of market beta estimation in the `BetaEstimator` class in
+            `macrosynergy.learning`, allowing one to cross-validate the underlying data
+            frequency for good beta estimation. Accepted strings are 'unadjusted', 'W' for
+            weekly, 'M' for monthly and 'Q' for quarterly. It is recommended to set this
+            parameter to "W", "M" or "Q" only when the native dataset frequency is greater.
 
         Notes
         -----
@@ -45,27 +51,34 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         dealing with low-frequency macro quantamental data.
         """
         # Checks
-        if (roll is not None) and (not isinstance(roll, int)):
-            raise TypeError("roll must be an integer or None.")
-        if (roll is not None) and (roll <= 0):
-            raise ValueError("roll must be a positive integer.")
-
-        if not isinstance(data_freq, str):
-            raise TypeError("The data_freq argument must be a string.")
-        if data_freq not in ["D", "W", "M", "Q"]:
+        if not isinstance(roll, (str, int)):
+            raise TypeError("roll must be either a string or integer.")
+        if isinstance(roll, str) and roll != "full":
+            raise ValueError("roll must equal `full` when a string is specified.")
+        if isinstance(roll, int) and roll <= 1:
             raise ValueError(
-                "Invalid data frequency. Accepted values are 'D', 'W', 'M' and 'Q'."
+                "roll must be greater than 1 when an integer is specified."
             )
+
         if not isinstance(min_xs_samples, int):
             raise TypeError("The min_xs_samples argument must be an integer.")
         if min_xs_samples < 2:
             raise ValueError("The min_xs_samples argument must be at least 2.")
 
+        if data_freq is not None:
+            if not isinstance(data_freq, str):
+                raise TypeError("The data_freq argument must be a string.")
+            if data_freq not in ["unadjusted", "W", "M", "Q"]:
+                raise ValueError(
+                    "data_freq must be one of 'unadjusted', 'W', 'M' or 'Q'."
+                )
+
+        # Set attributes
         self.roll = roll
         self.data_freq = data_freq
         self.min_xs_samples = min_xs_samples
 
-        self.models_ = {}
+        self.models_ = None
 
     def fit(
         self,
@@ -79,31 +92,38 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         ----------
         X : pd.DataFrame
             Input feature matrix.
-        y : Union[pd.DataFrame, pd.Series, numpy.ndarray]
+        y : pd.Series, pd.DataFrame or np.ndarray
             Target variable.
+
+        Returns
+        -------
+        self : BaseRegressionSystem
+            Fitted regression system object.
         """
         # Checks
-        self._check_fit_params(X, y)
-        self.n_ = X.shape[1]
-        # Adjust the data frequency of the input data if necessary
-        min_xs_samples = self.select_data_freq()
-        cross_sections = X.index.get_level_values(0).unique()
-        X = self._downsample_by_data_freq(X)
-        y = self._downsample_by_data_freq(y)
+        y = self._check_fit_params(X, y)
+        self.n_features_in_ = X.shape[1]
+        self.feature_names_in_ = X.columns
+        self.models_ = {}
 
-        # Fit a model on each cross-section
+        # Downsample data frequency if necessary
+        if (self.data_freq is not None) and (self.data_freq != "unadjusted"):
+            X = self._downsample_by_data_freq(X)
+            y = self._downsample_by_data_freq(y)
+
+        # Iterate over cross-sections and fit a regression model on each
+        cross_sections = X.index.unique(level=0)
         for section in cross_sections:
-            X_section = X[X.index.get_level_values(0) == section]
-            y_section = y[y.index.get_level_values(0) == section]
+            X_section = X.xs(section, level=0, drop_level=False)
+            y_section = y.xs(section, level=0, drop_level=False)
             unique_dates = sorted(X_section.index.unique())
             num_dates = len(unique_dates)
-            # Check if there are enough samples to fit a model
-            if not self._check_xs_dates(min_xs_samples, num_dates):
+            # Skip cross-sections with insufficient samples
+            if not self._check_xs_dates(self.min_xs_samples, num_dates):
                 continue
-            # If a roll is specified, then adjust the dates accordingly
-            # Only do this if the number of dates is greater than the roll
-            if self.roll:
-                if num_dates < self.roll:
+            # Roll the data if necessary
+            if self.roll and self.roll != "full":
+                if num_dates <= self.roll:
                     continue
                 else:
                     X_section, y_section = self.roll_dates(
@@ -160,15 +180,29 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             raise TypeError("The outer index of X must be strings.")
         if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
-        if self.n_ != X.shape[1]:
+        if not np.all(X.columns == self.feature_names_in_):
             raise ValueError(
-                "The number of features in X does not match the number of "
-                "features in the training data."
+                "The input feature matrix must have the same columns as the",
+                "training feature matrix.",
+            )
+        if len(X.columns) != self.n_features_in_:
+            raise ValueError(
+                "The input feature matrix must have the same number of",
+                "columns as the training feature matrix.",
+            )
+        if X.isnull().values.any():
+            raise ValueError(
+                "The input feature matrix must not contain any missing values."
+            )
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise ValueError(
+                "All columns in the input feature matrix for regression systems",
+                " must be numeric.",
             )
 
         predictions = pd.Series(index=X.index, data=np.nan)
 
-        # Check whether each test cross-section has an associated model
+        # Store predictions for each test cross-section, if an existing model is available
         cross_sections = predictions.index.get_level_values(0).unique()
         for idx, section in enumerate(cross_sections):
             if section in self.models_.keys():
@@ -205,32 +239,8 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         mask = X_section.index.isin(right_dates)
         X_section = X_section[mask]
         y_section = y_section[mask]
+
         return X_section, y_section
-
-    def select_data_freq(self):
-        """
-        Adjust cross-sectional availability requirement when frequency resampling
-        is applied.
-
-        Returns
-        -------
-        min_xs_samples : int
-            The minimum number of samples required in each cross-section training set for
-            a regression model to be fitted.
-        """
-        if self.data_freq == "D":
-            min_xs_samples = self.min_xs_samples
-        elif self.data_freq == "W":
-            min_xs_samples = self.min_xs_samples // 5
-        elif self.data_freq == "M":
-            min_xs_samples = self.min_xs_samples // 21
-        elif self.data_freq == "Q":
-            min_xs_samples = self.min_xs_samples // 63
-        else:
-            raise ValueError(
-                "Invalid data frequency. Accepted values are 'D', 'W', 'M' and 'Q'."
-            )
-        return min_xs_samples
 
     @abstractmethod
     def store_model_info(self, section, model):
@@ -280,6 +290,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         """
         if num_dates < min_xs_samples:
             return False
+
         return True
 
     def _downsample_by_data_freq(self, df):
@@ -315,9 +326,10 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         ----------
         X : pd.DataFrame
             Input feature matrix.
-        y : Union[pd.DataFrame, pd.Series, numpy.ndarray]
+        y : pd.Series, pd.DataFrame or np.ndarray
             Target variable.
         """
+        # X
         if not isinstance(X, pd.DataFrame):
             raise TypeError("The X argument must be a pandas DataFrame.")
         if not isinstance(X.index, pd.MultiIndex):
@@ -326,9 +338,20 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             raise TypeError("The outer index of X must be strings.")
         if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise ValueError(
+                "All columns in the input feature matrix for regression systems",
+                " must be numeric.",
+            )
+        if X.isnull().values.any():
+            raise ValueError(
+                "The input feature matrix for regression systems must not contain any "
+                "missing values."
+            )
+
         if not isinstance(y, (pd.DataFrame, pd.Series, np.ndarray)):
             raise TypeError(
-                "The y argument must be a pandas DataFrame, Series or " "numpy array."
+                "The y argument must be a pandas DataFrame, Series or numpy array."
             )
         if len(X) != len(y):
             raise ValueError("The number of samples in X and y must match.")
@@ -339,3 +362,19 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             if y.ndim == 2 and y.shape[1] != 1:
                 raise ValueError("y must have only one column.")
             y = pd.Series(y, index=X.index)
+        if not isinstance(y, np.ndarray):
+            if not np.issubdtype(y.values.dtype, np.number):
+                raise ValueError("The target vector must be numeric.")
+            if y.isnull().values.any():
+                raise ValueError(
+                    "The target vector must not contain any missing values."
+                )
+        else:
+            if not np.issubdtype(y.dtype, np.number):
+                raise ValueError("The target vector must be numeric.")
+            if np.isnan(y).any():
+                raise ValueError(
+                    "The target vector must not contain any missing values."
+                )
+
+        return y

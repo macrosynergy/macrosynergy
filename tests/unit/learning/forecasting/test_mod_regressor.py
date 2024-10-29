@@ -194,10 +194,40 @@ class TestModifiedLinearRegression(unittest.TestCase):
         self.assertRaises(TypeError, mlr.fit, X=1, y=self.y)
         self.assertRaises(TypeError, mlr.fit, X="string", y=self.y)
         self.assertRaises(ValueError, mlr.fit, X=self.X_nan, y=self.y)
+        self.assertRaises(
+            ValueError, mlr.fit, X=self.X.reset_index(drop=True), y=self.y
+        )
+        self.assertRaises(
+            ValueError,
+            mlr.fit,
+            X=pd.DataFrame(
+                data=np.zeros((self.X.shape[0], 2)),
+                index=self.X.reset_index().set_index(["RIR", "real_date"]),
+            ),
+            y=self.y,
+        )
+        self.assertRaises(
+            ValueError,
+            mlr.fit,
+            X=pd.DataFrame(
+                data=np.zeros((self.X.shape[0], 2)),
+                index=self.X.reset_index().set_index(["cid", "RIR"]),
+            ),
+            y=self.y,
+        )
         # y
         self.assertRaises(TypeError, mlr.fit, X=self.X, y=1)
         self.assertRaises(TypeError, mlr.fit, X=self.X, y="string")
         self.assertRaises(ValueError, mlr.fit, X=self.X, y=self.y_nan)
+        self.assertRaises(
+            ValueError, mlr.fit, X=self.X, y=self.y.reset_index(drop=True)
+        )
+        self.assertRaises(
+            ValueError,
+            mlr.fit,
+            X=self.X,
+            y=pd.DataFrame(data=np.ones((self.y.shape[0], 2)), index=self.y.index),
+        )
 
         # Repeat for the bootstrap
         mlr = ModifiedLinearRegression(method="bootstrap")
@@ -354,6 +384,29 @@ class TestModifiedLinearRegression(unittest.TestCase):
         self.assertRaises(TypeError, mlr.create_signal, X="string")
         self.assertRaises(ValueError, mlr.create_signal, X=self.X_nan)
         self.assertRaises(ValueError, mlr.create_signal, X=self.X_nan.reset_index())
+
+    def test_valid_set_params(self):
+        mlr = ModifiedLinearRegression(method="analytic")
+        mlr.set_params(fit_intercept=False, positive=True, error_offset=1e-3)
+        self.assertEqual(mlr.fit_intercept, False)
+        self.assertEqual(mlr.positive, True)
+        self.assertEqual(mlr.error_offset, 1e-3)
+        self.assertEqual(mlr.model.fit_intercept, False)
+        self.assertEqual(mlr.model.positive, True)
+        mlr.set_params(
+            method="bootstrap",
+            bootstrap_method="period",
+            bootstrap_iters=100,
+            resample_ratio=0.5,
+            fit_intercept=False,
+            positive=True,
+        )
+        self.assertEqual(mlr.method, "bootstrap")
+        self.assertEqual(mlr.bootstrap_method, "period")
+        self.assertEqual(mlr.bootstrap_iters, 100)
+        self.assertEqual(mlr.resample_ratio, 0.5)
+        self.assertEqual(mlr.fit_intercept, False)
+        self.assertEqual(mlr.positive, True)
 
 
 class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
@@ -742,6 +795,31 @@ class TestModifiedSignWeightedLinearRegression(unittest.TestCase):
         self.assertRaises(TypeError, mlr.create_signal, X="string")
         self.assertRaises(ValueError, mlr.create_signal, X=self.X_nan)
         self.assertRaises(ValueError, mlr.create_signal, X=self.X_nan.reset_index())
+
+    def test_valid_set_params(self):
+        mlr = ModifiedSignWeightedLinearRegression(method="analytic")
+        mlr.set_params(fit_intercept=False, positive=True, error_offset=1e-3)
+        self.assertEqual(mlr.fit_intercept, False)
+        self.assertEqual(mlr.positive, True)
+        self.assertEqual(mlr.error_offset, 1e-3)
+        self.assertEqual(mlr.model.fit_intercept, False)
+        self.assertEqual(mlr.model.positive, True)
+        mlr.set_params(
+            method="bootstrap",
+            bootstrap_method="period",
+            bootstrap_iters=100,
+            resample_ratio=0.5,
+            fit_intercept=False,
+            positive=False,
+        )
+        self.assertEqual(mlr.method, "bootstrap")
+        self.assertEqual(mlr.bootstrap_method, "period")
+        self.assertEqual(mlr.bootstrap_iters, 100)
+        self.assertEqual(mlr.resample_ratio, 0.5)
+        self.assertEqual(mlr.fit_intercept, False)
+        self.assertEqual(mlr.positive, False)
+        self.assertEqual(mlr.model.fit_intercept, False)
+        self.assertEqual(mlr.model.positive, False)
 
 
 class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
@@ -1171,3 +1249,32 @@ class TestModifiedTimeWeightedLinearRegression(unittest.TestCase):
         self.assertRaises(TypeError, mlr.create_signal, X="string")
         self.assertRaises(ValueError, mlr.create_signal, X=self.X_nan)
         self.assertRaises(ValueError, mlr.create_signal, X=self.X_nan.reset_index())
+
+    def test_valid_set_params(self):
+        mlr = ModifiedTimeWeightedLinearRegression(method="analytic")
+        mlr.set_params(
+            fit_intercept=False, positive=True, half_life=12, error_offset=1e-3
+        )
+        self.assertEqual(mlr.fit_intercept, False)
+        self.assertEqual(mlr.positive, True)
+        self.assertEqual(mlr.half_life, 12)
+        self.assertEqual(mlr.error_offset, 1e-3)
+        self.assertEqual(mlr.model.fit_intercept, False)
+        self.assertEqual(mlr.model.positive, True)
+        mlr.set_params(
+            method="bootstrap",
+            bootstrap_method="period",
+            bootstrap_iters=100,
+            resample_ratio=0.5,
+            fit_intercept=False,
+            positive=False,
+        )
+        self.assertEqual(mlr.method, "bootstrap")
+        self.assertEqual(mlr.bootstrap_method, "period")
+        self.assertEqual(mlr.bootstrap_iters, 100)
+        self.assertEqual(mlr.resample_ratio, 0.5)
+        self.assertEqual(mlr.fit_intercept, False)
+        self.assertEqual(mlr.positive, False)
+        self.assertEqual(mlr.model.fit_intercept, False)
+        self.assertEqual(mlr.model.positive, False)
+        self.assertEqual(mlr.half_life, 12)

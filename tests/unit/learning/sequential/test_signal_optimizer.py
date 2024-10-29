@@ -10,8 +10,8 @@ import pandas as pd
 import scipy.stats as stats
 from parameterized import parameterized
 from sklearn.decomposition import PCA
-from sklearn.linear_model import Lasso, LinearRegression, Ridge
-from sklearn.metrics import make_scorer, r2_score
+from sklearn.linear_model import Lasso, LinearRegression, Ridge, LogisticRegression
+from sklearn.metrics import make_scorer, r2_score, accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -175,8 +175,12 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         matplotlib.use(self.mpl_backend)
 
-    @parameterized.expand(itertools.product([True, False], [True, False]))
-    def test_valid_init(self, use_blacklist, use_cids):
+    @parameterized.expand(
+        itertools.product(
+            [True, False], [True, False], [None, lambda x: -1 if x < 0 else 1]
+        )
+    )
+    def test_valid_init(self, use_blacklist, use_cids, generate_labels):
         try:
             blacklist = self.black_valid if use_blacklist else None
             cids = self.cids if use_cids else None
@@ -185,13 +189,17 @@ class TestAll(unittest.TestCase):
                 xcats=self.xcats,
                 cids=cids,
                 blacklist=blacklist,
+                generate_labels=generate_labels,
             )
         except Exception as e:
             self.fail(f"Instantiation of the SignalOptimizer raised an exception: {e}")
         self.assertIsInstance(so, SignalOptimizer)
         X, y, df_long = _get_X_y(so)
         pd.testing.assert_frame_equal(so.X, X)
-        pd.testing.assert_series_equal(so.y, y)
+        if generate_labels:
+            pd.testing.assert_series_equal(so.y, y.apply(generate_labels))
+        else:
+            pd.testing.assert_series_equal(so.y, y)
 
         pd.testing.assert_frame_equal(
             so.chosen_models,
@@ -373,6 +381,19 @@ class TestAll(unittest.TestCase):
                 df=self.df,
                 xcats=self.xcats,
                 xcat_aggs=[1, 2],
+            )
+        # generate_labels should be a callable or None
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                generate_labels=1,
+            )
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                generate_labels="invalid",
             )
 
     def test_types_calculate_predictions(self):
@@ -1503,6 +1524,56 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df7.real_date.min() == first_date)
         self.assertTrue(df7.real_date.max() == last_date)
 
+        # Test generate_labels works with a logistic regression
+        so8 = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+            blacklist=self.black_valid,
+            generate_labels=lambda x: -1 if x < 0 else 1,
+        )
+
+        try:
+            so8.calculate_predictions(
+                name="test",
+                models={
+                    "LogReg": LogisticRegression(),
+                },
+                scorers={"ACC": make_scorer(accuracy_score), "BAC": make_scorer(balanced_accuracy_score)},
+                hyperparameters={
+                    "LogReg": {
+                        "fit_intercept": [True, False],
+                        "C": stats.expon(),
+                    },
+                },
+                search_type="prior",
+                n_iter=4,
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.inner_splitters,
+                normalize_fold_results=True,
+                cv_summary="mean-std",
+                split_functions={
+                    "ExpandingKFold": None,
+                    "RollingKFold": lambda n: (
+                        n // 24
+                    ),  # Increases by one every two years
+                },
+                test_size=3,
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+        df8 = so8.preds.copy()
+        self.assertIsInstance(df8, pd.DataFrame)
+        if len(df8.xcat.unique()) != 1:
+            self.fail("The signal dataframe should only contain one xcat")
+        self.assertEqual(df8.xcat.unique()[0], "test")
+        self.assertTrue(len(df8.cid.unique()) == 4)
+        self.assertTrue(df8.real_date.min() == first_date)
+        self.assertTrue(df8.real_date.max() == last_date)
+        self.assertTrue(len(df8.value.value_counts()) == 2)
+
+
     def test_types_run(self):
         # Training set only
         so = SignalOptimizer(
@@ -2497,7 +2568,7 @@ class TestAll(unittest.TestCase):
             so.models_heatmap(name="test")
         except Exception as e:
             self.fail(f"models_heatmap raised an exception: {e}")
-            
+
     def test_types_nsplits_timeplot(self):
         so = self.so_with_calculated_preds
 
