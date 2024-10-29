@@ -87,7 +87,6 @@ def impute_panel(
         incomplete_df.loc[mask, "mean_val"]
     )
 
-    # return incomplete_df.loc[:, complete_df.columns]
     return QuantamentalDataFrame(
         incomplete_df[:, complete_df.columns],
         categorical=_as_categorical,
