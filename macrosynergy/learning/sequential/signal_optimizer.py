@@ -589,7 +589,7 @@ class SignalOptimizer(BasePanelLearner):
             Pandas dataframe in JPMaQS format of working daily predictions.
         """
         if name is None:
-            return self.preds
+            preds = self.preds
         else:
             if isinstance(name, str):
                 name = [name]
@@ -606,12 +606,13 @@ class SignalOptimizer(BasePanelLearner):
                         calculate_predictions() first.
                         """
                     )
-            # return self.preds[self.preds.xcat.isin(name)]
-            signals_df = QuantamentalDataFrame(
-                df=self.preds[self.preds.xcat.isin(name)],
-                categorical=self.df.InitializedAsCategorical,
-            ).to_original_dtypes()
-            return signals_df
+            preds = self.preds[self.preds.xcat.isin(name)]
+        # return self.preds[self.preds.xcat.isin(name)]
+        signals_df = QuantamentalDataFrame(
+            df=preds,
+            categorical=self.df.InitializedAsCategorical,
+        ).to_original_dtypes()
+        return signals_df
 
     def get_selected_features(self, name=None):
         """
@@ -1576,7 +1577,7 @@ if __name__ == "__main__":
         n_jobs_outer=1,
         n_jobs_inner=1,
     )
-
+    sig = so.get_optimized_signals("LR")
     pass
     # so.nsplits_timeplot(name="LR", splitter="ExpandingKFold")
 
