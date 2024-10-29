@@ -175,5 +175,5 @@ if __name__ == "__main__":
     ridge.fit(X, y)
     print(
         "\nNegative mean absolute correlation: "
-        f"{neg_mean_abs_corr(ridge, X, y, correlation_type="pearson")}"
+        f"{neg_mean_abs_corr(ridge, X, y, correlation_type='pearson')}"
     )
