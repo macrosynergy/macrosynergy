@@ -6,6 +6,7 @@ from sklearn.linear_model import LinearRegression, Ridge
 
 from macrosynergy.learning.forecasting import LADRegressor
 
+
 class LinearRegressionSystem(BaseRegressionSystem):
     """
     Cross-sectional system of linear regression models for panel data.
@@ -24,9 +25,9 @@ class LinearRegressionSystem(BaseRegressionSystem):
     min_xs_samples : int, default=2
         The minimum number of samples required in each cross-section training set
         for a regression model to be fitted on that cross-section. If `data_freq` is
-        None, this parameter is specified in units of the underlying dataset frequency.
-        Otherwise, this parameter should be expressed in unites of the frequency specified
-        in `data_freq`.
+        None or `unadjusted`, this parameter is specified in units of the underlying
+        dataset frequency. Otherwise, this parameter should be expressed in units of the
+        frequency specified in `data_freq`.
     data_freq : str, optional
         Training set data frequency for resampling. This is primarily to be used within
         the context of market beta estimation in the `BetaEstimator` class in
@@ -142,9 +143,9 @@ class LADRegressionSystem(BaseRegressionSystem):
     min_xs_samples : int, default=2
         The minimum number of samples required in each cross-section training set
         for a regression model to be fitted on that cross-section. If `data_freq` is
-        None, this parameter is specified in units of the underlying dataset frequency.
-        Otherwise, this parameter should be expressed in unites of the frequency specified
-        in `data_freq`.
+        None or 'unadjusted', this parameter is specified in units of the underlying
+        dataset frequency. Otherwise, this parameter should be expressed in unites of the
+        frequency specified in `data_freq`.
     data_freq : str, optional
         Training set data frequency for resampling. This is primarily to be used within
         the context of market beta estimation in the `BetaEstimator` class in
@@ -267,9 +268,9 @@ class RidgeRegressionSystem(BaseRegressionSystem):
     min_xs_samples : int, default=2
         The minimum number of samples required in each cross-section training set
         for a regression model to be fitted on that cross-section. If `data_freq` is
-        None, this parameter is specified in units of the underlying dataset frequency.
-        Otherwise, this parameter should be expressed in unites of the frequency specified
-        in `data_freq`.
+        None or 'unadjusted', this parameter is specified in units of the underlying
+        dataset frequency. Otherwise, this parameter should be expressed in unites of the
+        frequency specified in `data_freq`.
     data_freq : str, optional
         Training set data frequency for resampling. This is primarily to be used within
         the context of market beta estimation in the `BetaEstimator` class in
@@ -422,8 +423,8 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         The lookback of the rolling window for correlation estimation.
         If "full", the entire cross-sectional history is used. Otherwise, this parameter
         should be an integer specified in the native dataset frequency. If `data_freq` is
-        not None, this parameter should be expressed in units of the frequency specified
-        in `data_freq`.
+        not None or 'unadjusted', this parameter should be expressed in units of the
+        frequency specified in `data_freq`.
     correlation_type : str, default='pearson'
         The type of correlation to be calculated. Accepted values are 'pearson', 'kendall'
         and 'spearman'.
@@ -431,17 +432,17 @@ class CorrelationVolatilitySystem(BaseRegressionSystem):
         The lookback of the rolling window for volatility estimation.
         If "full", the entire cross-sectional history is used. Otherwise, this parameter
         should be an integer specified in the native dataset frequency. If `data_freq` is
-        not None, this parameter should be expressed in units of the frequency specified
-        in `data_freq`.
+        not None or 'unadjusted', this parameter should be expressed in units of the
+        frequency specified in `data_freq`.
     volatility_window_type : str, default='rolling'
         The type of window to use for the volatility calculation. Accepted values are
         'rolling' and 'exponential'.
     min_xs_samples : int, default=2
         The minimum number of samples required in each cross-section training set
         for a regression model to be fitted on that cross-section. If `data_freq` is
-        None, this parameter is specified in units of the underlying dataset frequency.
-        Otherwise, this parameter should be expressed in unites of the frequency specified
-        in `data_freq`.
+        None or 'unadjusted', this parameter is specified in units of the underlying
+        dataset frequency. Otherwise, this parameter should be expressed in unites of the
+        frequency specified in `data_freq`.
     data_freq : str, optional
         Training set data frequency for resampling. This is primarily to be used within
         the context of market beta estimation in the `BetaEstimator` class in
