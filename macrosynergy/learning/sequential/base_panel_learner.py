@@ -118,13 +118,6 @@ class BasePanelLearner(ABC):
             .dropna()
             .sort_index()
         )
-        df_long.index.names = ['cid', 'real_date']
-        new_outer_level = df_long.index.levels[0].astype('object')  # Change the dtype to 'object'
-        df_long.index = pd.MultiIndex(
-            levels=[new_outer_level, df_long.index.levels[1]],  # Keep the inner level as it is
-            codes=df_long.index.codes,
-            names=df_long.index.names
-        )
 
         # Create X and y
         self.X = df_long.iloc[:, :-1]

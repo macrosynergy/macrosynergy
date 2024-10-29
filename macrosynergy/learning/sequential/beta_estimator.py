@@ -226,7 +226,7 @@ class BetaEstimator(BasePanelLearner):
 
         hedged_returns = pd.DataFrame(
             hedged_return_data, columns=["cid", "real_date", "xcat", "value"]
-        ).sort_values(["real_date", "cid", "xcat"])
+        ).sort_values(["real_date", "cid", "xcat"]).dropna()
 
         self.betas = concat_categorical(self.betas, stored_betas_long)
         self.hedged_returns = concat_categorical(
@@ -736,7 +736,7 @@ if __name__ == "__main__":
         n_jobs_inner=1,
     )
 
-    # be.models_heatmap(name="BETA_NSA")
+    be.models_heatmap(name="BETA_NSA")
 
     # evaluation_df = be.evaluate_hedged_returns(
     #     correlation_types=["pearson", "spearman", "kendall"],
