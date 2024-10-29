@@ -55,8 +55,6 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             if not isinstance(df, QuantamentalDataFrame):
                 raise ValueError("Input must be a standardised Quantamental DataFrame.")
 
-        super().__init__(df)
-
         if type(df) is QuantamentalDataFrame:
             if _initialized_as_categorical is None:
                 _initialized_as_categorical = df.InitializedAsCategorical
@@ -64,6 +62,8 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             if df.columns.tolist() != get_col_sort_order(df):
                 df = df[get_col_sort_order(df)]
         _check_cat = check_is_categorical(self)
+
+        super().__init__(df)
         if _initialized_as_categorical is None:
             self.InitializedAsCategorical = _check_cat
         else:
