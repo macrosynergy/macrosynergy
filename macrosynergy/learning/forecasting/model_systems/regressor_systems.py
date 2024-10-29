@@ -1,7 +1,3 @@
-from abc import ABC, abstractmethod
-from typing import Union, Optional
-import datetime
-
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
@@ -9,9 +5,6 @@ from macrosynergy.learning.forecasting.model_systems import BaseRegressionSystem
 from sklearn.linear_model import LinearRegression, Ridge
 
 from macrosynergy.learning.forecasting import LADRegressor
-
-from macrosynergy.management.validation import _validate_Xy_learning
-
 
 class LinearRegressionSystem(BaseRegressionSystem):
     """
