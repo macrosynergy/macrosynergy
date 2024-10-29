@@ -80,7 +80,6 @@ def linear_composite_cid_agg(
     """Linear composite of various cids for a given xcat across all periods."""
     if isinstance(weights, str):
         weights_df: pd.DataFrame = df[(df["xcat"] == weights)]
-        # df = df[(df["xcat"] != weights)].copy()
         weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(
             level=1
         )
@@ -141,8 +140,6 @@ def linear_composite_cid_agg(
     else:
         out_df["cid"] = new_cid
         out_df["xcat"] = xcat
-
-    # out_df = out_df[["cid", "xcat", "real_date", "value"]]
 
     return out_df
 
