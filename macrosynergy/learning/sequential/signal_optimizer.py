@@ -321,7 +321,7 @@ class SignalOptimizer(BasePanelLearner):
         intercept_data = []
         ftr_selection_data = []
         ftr_corr_data = []
-        results = list(results)
+
         for split_result in results:
             prediction_data.append(split_result["predictions"])
             model_choice_data.append(split_result["model_choice"])
