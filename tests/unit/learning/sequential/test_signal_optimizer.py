@@ -32,6 +32,8 @@ from macrosynergy.management.utils.df_utils import categories_df
 class TestAll(unittest.TestCase):
     @classmethod
     def setUpClass(self):
+        np.random.seed(0)
+        
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
         self.mock_show = patch("matplotlib.pyplot.show").start()
@@ -212,18 +214,47 @@ class TestAll(unittest.TestCase):
                     "hparams",
                     "n_splits_used",
                 ]
+            ).astype(
+                {
+                    "real_date": "datetime64[ns]",
+                    "name": "category",
+                    "model_type": "category",
+                    "score": "float32",
+                    "hparams": "object",
+                    "n_splits_used": "object",
+                }
             ),
         )
         pd.testing.assert_frame_equal(
             so.preds,
-            pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]),
+            pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]).astype(
+                {
+                    "cid": "category",
+                    "real_date": "datetime64[ns]",
+                    "xcat": "category",
+                    "value": "float32",
+                }
+            ),
         )
         pd.testing.assert_frame_equal(
             so.ftr_coefficients,
-            pd.DataFrame(columns=["real_date", "name"] + list(so.X.columns)),
+            pd.DataFrame(columns=["real_date", "name"] + list(so.X.columns)).astype(
+                {
+                    **{col: "float32" for col in self.X.columns},
+                    "real_date": "datetime64[ns]",
+                    "name": "category",
+                }
+            ),
         )
         pd.testing.assert_frame_equal(
-            so.intercepts, pd.DataFrame(columns=["real_date", "name", "intercepts"])
+            so.intercepts,
+            pd.DataFrame(columns=["real_date", "name", "intercepts"]).astype(
+                {
+                    "real_date": "datetime64[ns]",
+                    "name": "category",
+                    "intercepts": "float32",
+                }
+            ),
         )
 
         min_date = min(so.unique_date_levels)
@@ -1948,8 +1979,8 @@ class TestAll(unittest.TestCase):
         df1 = so.get_optimized_signals(name="test")
         self.assertIsInstance(df1, pd.DataFrame)
         self.assertEqual(df1.shape[1], 4)
-        self.assertEqual(df1.columns[0], "cid")
-        self.assertEqual(df1.columns[1], "real_date")
+        self.assertEqual(df1.columns[0], "real_date")
+        self.assertEqual(df1.columns[1], "cid")
         self.assertEqual(df1.columns[2], "xcat")
         self.assertEqual(df1.columns[3], "value")
         self.assertEqual(df1.xcat.unique()[0], "test")
@@ -1968,8 +1999,8 @@ class TestAll(unittest.TestCase):
         df2 = so.get_optimized_signals(name="test2")
         self.assertIsInstance(df2, pd.DataFrame)
         self.assertEqual(df2.shape[1], 4)
-        self.assertEqual(df2.columns[0], "cid")
-        self.assertEqual(df2.columns[1], "real_date")
+        self.assertEqual(df2.columns[0], "real_date")
+        self.assertEqual(df2.columns[1], "cid")
         self.assertEqual(df2.columns[2], "xcat")
         self.assertEqual(df2.columns[3], "value")
         self.assertEqual(df2.xcat.unique()[0], "test2")
@@ -1977,8 +2008,8 @@ class TestAll(unittest.TestCase):
         df3 = so.get_optimized_signals()
         self.assertIsInstance(df3, pd.DataFrame)
         self.assertEqual(df3.shape[1], 4)
-        self.assertEqual(df3.columns[0], "cid")
-        self.assertEqual(df3.columns[1], "real_date")
+        self.assertEqual(df3.columns[0], "real_date")
+        self.assertEqual(df3.columns[1], "cid")
         self.assertEqual(df3.columns[2], "xcat")
         self.assertEqual(df3.columns[3], "value")
         self.assertEqual(len(df3.xcat.unique()), 2)
@@ -1986,8 +2017,8 @@ class TestAll(unittest.TestCase):
         df4 = so.get_optimized_signals(name=["test", "test2"])
         self.assertIsInstance(df4, pd.DataFrame)
         self.assertEqual(df4.shape[1], 4)
-        self.assertEqual(df4.columns[0], "cid")
-        self.assertEqual(df4.columns[1], "real_date")
+        self.assertEqual(df4.columns[0], "real_date")
+        self.assertEqual(df4.columns[1], "cid")
         self.assertEqual(df4.columns[2], "xcat")
         self.assertEqual(df4.columns[3], "value")
         self.assertEqual(len(df4.xcat.unique()), 2)
@@ -2616,6 +2647,13 @@ def _get_X_y(so: SignalOptimizer):
         )
         .dropna()
         .sort_index()
+    )
+    df_long.index.names = ["cid", "real_date"]
+    new_outer_level = df_long.index.levels[0].astype("object")
+    df_long.index = pd.MultiIndex(
+        levels=[new_outer_level, df_long.index.levels[1]],
+        codes=df_long.index.codes,
+        names=df_long.index.names,
     )
     X = df_long.iloc[:, :-1]
     y = df_long.iloc[:, -1]
