@@ -2,14 +2,15 @@ from macrosynergy.learning.preprocessing.scalers.base_panel_scaler import (
     BasePanelScaler,
 )
 
+
 class PanelMinMaxScaler(BasePanelScaler):
     """
     Scale and translate panel features to lie within the range [0,1].
 
     Notes
     -----
-    This class is designed to replicate scikit-learn's MinMaxScaler() class, with the
-    additional option to scale within cross-sections. Unlike the MinMaxScaler() class,
+    This class is designed to replicate scikit-learn's `MinMaxScaler()` class, with the
+    additional option to scale within cross-sections. Unlike the `MinMaxScaler()` class,
     dataframes are always returned, preserving the multi-indexing of the inputs.
     """
 
@@ -137,6 +138,7 @@ class PanelStandardScaler(BasePanelScaler):
             else:
                 return X[feature]
 
+
 if __name__ == "__main__":
     import numpy as np
     import pandas as pd
@@ -145,6 +147,7 @@ if __name__ == "__main__":
         categories_df,
         make_qdf,
     )
+
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
@@ -181,7 +184,9 @@ if __name__ == "__main__":
     train = categories_df(
         df=dfd, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
     ).dropna()
-    train = train[train.index.get_level_values(1) >= pd.Timestamp(year=2005,month=8,day=1)]
+    train = train[
+        train.index.get_level_values(1) >= pd.Timestamp(year=2005, month=8, day=1)
+    ]
 
     X_train = train.drop(columns=["XR"])
     y_train = train["XR"]
