@@ -4,7 +4,7 @@ Sequential learning over a panel.
 
 import numbers
 import warnings
-from abc import ABC, abstractmethod
+from abc import ABC
 from functools import partial
 
 import matplotlib.pyplot as plt
@@ -20,7 +20,6 @@ from tqdm.auto import tqdm
 
 from macrosynergy.compat import JOBLIB_RETURN_AS
 from macrosynergy.learning.splitters import (
-    BasePanelSplit,
     ExpandingFrequencyPanelSplit,
     ExpandingIncrementPanelSplit,
 )
