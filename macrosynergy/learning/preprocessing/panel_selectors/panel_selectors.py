@@ -254,7 +254,12 @@ class MapSelector(BasePanelSelector):
 
         if self.n_factors is not None:
             # Return a mask of factors with `n_factors` smallest p_values
-            mask = np.argsort(factor_pvals)[: self.n_factors]
+            factor_indexes = np.argsort(factor_pvals)[: self.n_factors]
+            mask = [
+                True if idx in factor_indexes else False
+                for idx in range(len(factor_pvals))
+            ]
+
         else:
             if self.positive:
                 # Return a mask of factors with positive estimated coefficients and
