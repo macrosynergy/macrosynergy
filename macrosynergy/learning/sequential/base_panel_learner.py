@@ -1104,44 +1104,19 @@ class BasePanelLearner(ABC):
                 raise ValueError(
                     "The keys of the hyperparameters dictionary must be strings."
                 )
-            if not isinstance(pipe_params, dict):
-                raise ValueError(
-                    "The values of the hyperparameters dictionary must be dictionaries."
-                )
-            if pipe_params != {}:
-                for hparam_key, hparam_values in pipe_params.items():
-                    if not isinstance(hparam_key, str):
+            if isinstance(pipe_params, dict):
+                self._check_hyperparam_grid(search_type, pipe_params)
+            elif isinstance(pipe_params, list):
+                for param_set in pipe_params:
+                    if not isinstance(param_set, dict):
                         raise ValueError(
-                            "The keys of the inner hyperparameters dictionaries must be "
-                            "strings."
+                            "The values of the hyperparameters dictionary must be dictionaries or lists."
                         )
-                    if search_type == "grid":
-                        if not isinstance(hparam_values, list):
-                            raise ValueError(
-                                "The values of the inner hyperparameters dictionaries must be "
-                                "lists if hparam_type is 'grid'."
-                            )
-                        if len(hparam_values) == 0:
-                            raise ValueError(
-                                "The values of the inner hyperparameters dictionaries cannot be "
-                                "empty lists."
-                            )
-                    elif search_type == "prior":
-                        # hparam_values must either be a list or a scipy.stats distribution
-                        # create typeerror
-                        if isinstance(hparam_values, list):
-                            if len(hparam_values) == 0:
-                                raise ValueError(
-                                    "The values of the inner hyperparameters dictionaries cannot "
-                                    "be empty lists."
-                                )
-                        else:
-                            if not hasattr(hparam_values, "rvs"):
-                                raise ValueError(
-                                    "Invalid random hyperparameter search dictionary element "
-                                    f"for hyperparameter {hparam_key}. The dictionary values "
-                                    "must be scipy.stats distributions."
-                                )
+                    self._check_hyperparam_grid(search_type, param_set)
+            else:
+                raise ValueError(
+                    "The values of the hyperparameters dictionary must be dictionaries or lists."
+                )
         # Check that the keys of the hyperparameter grid match those in the models dict
         if sorted(hyperparameters.keys()) != sorted(models.keys()):
             raise ValueError(
@@ -1283,6 +1258,42 @@ class BasePanelLearner(ABC):
                 raise ValueError(
                     "n_jobs_inner must be greater than zero or equal to -1."
                 )
+
+    def _check_hyperparam_grid(self, search_type, pipe_params):
+        if pipe_params != {}:
+            for hparam_key, hparam_values in pipe_params.items():
+                if not isinstance(hparam_key, str):
+                    raise ValueError(
+                            "The keys of the inner hyperparameters dictionaries must be "
+                            "strings."
+                        )
+                if search_type == "grid":
+                    if not isinstance(hparam_values, list):
+                        raise ValueError(
+                                "The values of the inner hyperparameters dictionaries must be "
+                                "lists if hparam_type is 'grid'."
+                            )
+                    if len(hparam_values) == 0:
+                        raise ValueError(
+                                "The values of the inner hyperparameters dictionaries cannot be "
+                                "empty lists."
+                            )
+                elif search_type == "prior":
+                        # hparam_values must either be a list or a scipy.stats distribution
+                        # create typeerror
+                    if isinstance(hparam_values, list):
+                        if len(hparam_values) == 0:
+                            raise ValueError(
+                                    "The values of the inner hyperparameters dictionaries cannot "
+                                    "be empty lists."
+                                )
+                    else:
+                        if not hasattr(hparam_values, "rvs"):
+                            raise ValueError(
+                                    "Invalid random hyperparameter search dictionary element "
+                                    f"for hyperparameter {hparam_key}. The dictionary values "
+                                    "must be scipy.stats distributions."
+                                )
 
     def _checks_models_heatmap(
         self,
