@@ -20,6 +20,52 @@ PD_FUTURE_STACK = (
 )
 
 
+def _missing_cids_xcats_str(
+    df: QuantamentalDataFrame,
+    cids: List[str],
+    xcats: List[str],
+) -> str:
+
+    output_strs: List[str] = []
+
+    found_cids = df["cid"].unique().tolist()
+    found_xcats = df["xcat"].unique().tolist()
+
+    if set(cids) != set(found_cids):
+        missing_cids = list(set(cids) - set(found_cids))
+    else:
+        missing_cids = []
+
+    if set(xcats) != set(found_xcats):
+        missing_xcats = list(set(xcats) - set(found_xcats))
+    else:
+        missing_xcats = []
+
+    xcat_dict: Dict[str, str] = {}
+    for xc in xcats:
+        miss_cids = list(
+            set(cids) - set(df.loc[df["xcat"] == xc, "cid"].unique().tolist())
+        )
+        if miss_cids:
+            xcat_dict[xc] = miss_cids
+
+    if missing_cids:
+        output_strs.append(f"Missing cids: {missing_cids}")
+    if missing_xcats:
+        output_strs.append(f"Missing xcats: {missing_xcats}")
+
+    if xcat_dict:
+        output_strs.append(
+            "The following `cids` are missing for the respective `xcats`:"
+        )
+        longest_xc = max([len(xc) for xc in xcat_dict.keys()])
+        for _xc, _cids in xcat_dict.items():
+            msg = f"{_xc}: " + " " * (longest_xc - len(_xc)) + " " + str(_cids)
+            output_strs.append(msg)
+
+    return "\n".join(output_strs)
+
+
 def _linear_composite_basic(
     data_df: pd.DataFrame,
     weights_df: pd.DataFrame,
@@ -284,66 +330,6 @@ def _check_df_for_missing_cid_data(
 
     rcids = [c for c in cids if c in found_cids]  # to preserve order
     return QuantamentalDataFrame(df), rcids, _xcat, weights, signs
-
-
-def _check_weights_and_signs(
-    df: QuantamentalDataFrame,
-    cids: List[str],
-    xcats: List[str],
-    weights: Union[str, List[float]],
-    signs: List[float],
-    xcat_agg: bool,
-) -> Tuple[QuantamentalDataFrame, List[str], List[float]]:
-    found_cids: List[str] = df["cid"].unique().tolist()
-    found_xcats: List[str] = df["xcat"].unique().tolist()
-    found_cids = [c for c in cids if c in found_cids]  # to preserve order
-    found_xcats = [x for x in xcats if x in found_xcats]  # to preserve order
-
-    # if len of found_cids!=len of cids
-    err_msg = (
-        "Some `{vtype}` are missing in `df`. `{wtype}` could not be re-assigned.\n"
-        "Available {vtype}: {found_vtypes}\n"
-        "Requested {vtype}: {vtypes}"
-    )
-
-    ws_arr = [weights, signs]
-    ws_names = ["weights", "signs"]
-
-    found_var = found_xcats if xcat_agg else found_cids
-    specified_var = xcats if xcat_agg else cids
-    vtype = "xcats" if xcat_agg else "cids"
-
-    if len(found_var) != len(specified_var):
-        missing_var = list(set(specified_var) - set(found_var))
-
-        for i, ws in enumerate(ws_arr):
-            if isinstance(ws, str):
-                continue
-            if np.allclose(np.array(ws) / ws[0], 1):  # if the weights are all the same
-                ws_arr[i] = [1] * len(found_var)
-                warnings.warn(
-                    f"The provided data is missing some {vtype}. Reassigning all {ws_names[i]} to the 1s (equal)"
-                    f" Missing {vtype}: {missing_var}"
-                )
-            else:
-                raise ValueError(
-                    err_msg.format(
-                        vtype=vtype,
-                        wtype=ws_names[i],
-                        found_vtypes=found_var,
-                        vtypes=specified_var,
-                    )
-                )
-
-        # remove the cid or xcat from the list of cids or xcats
-        if xcat_agg:
-            xcats = found_xcats
-        else:
-            cids = found_cids
-
-    weights, signs = ws_arr
-
-    return cids, xcats, weights, signs
 
 
 def _check_args(
@@ -631,18 +617,13 @@ def linear_composite(
         intersect=False,
         out_all=True,
     )
-    err_inc_cids = "Not all `{vtype}` have complete data required for the calculation."
-    if len(remaining_xcats) == 1 and len(remaining_cids) < len(cids) and not _xcat_agg:
-        raise ValueError(err_inc_cids)
 
-    cids, xcats, weights, signs = _check_weights_and_signs(
-        df=df,
-        cids=cids,
-        xcats=xcats,
-        weights=weights,
-        signs=signs,
-        xcat_agg=_xcat_agg,
-    )
+    if len(remaining_cids) < len(cids) and not _xcat_agg:
+        missing_cids_xcats_str = _missing_cids_xcats_str(df=df, cids=cids, xcats=xcats)
+        raise ValueError(
+            "Not all `cids` have complete `xcat` data required for the calculation.\n"
+            f"{missing_cids_xcats_str}"
+        )
 
     if _xcat_agg:
         df = _populate_missing_xcat_series(df)
