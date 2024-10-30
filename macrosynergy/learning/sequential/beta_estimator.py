@@ -224,9 +224,13 @@ class BetaEstimator(BasePanelLearner):
             value_name="value",
         )
 
-        hedged_returns = pd.DataFrame(
-            hedged_return_data, columns=["cid", "real_date", "xcat", "value"]
-        ).sort_values(["real_date", "cid", "xcat"]).dropna()
+        hedged_returns = (
+            pd.DataFrame(
+                hedged_return_data, columns=["cid", "real_date", "xcat", "value"]
+            )
+            .sort_values(["real_date", "cid", "xcat"])
+            .dropna()
+        )
 
         self.betas = concat_categorical(self.betas, stored_betas_long)
         self.hedged_returns = concat_categorical(
@@ -296,7 +300,7 @@ class BetaEstimator(BasePanelLearner):
 
     def evaluate_hedged_returns(
         self,
-        hedged_rets: Optional[Union[str, List[str]]] = None,
+        hedged_return_xcat: Optional[Union[str, List[str]]] = None,
         cids: Optional[Union[str, List[str]]] = None,
         correlation_types: Union[str, List[str]] = "pearson",
         title: Optional[str] = None,
@@ -317,7 +321,7 @@ class BetaEstimator(BasePanelLearner):
 
         Parameters
         ----------
-        hedged_rets:
+        hedged_return_xcat:
             String or list of strings denoting the hedged returns to be
             evaluated. Default is None, which evaluates all hedged returns within the class instance.
         cids:
@@ -349,34 +353,22 @@ class BetaEstimator(BasePanelLearner):
             computed hedged returns.
         """
         # Checks
-        self._checks_evaluate_hedged_returns(
-            correlation_types=correlation_types,
-            hedged_rets=hedged_rets,
-            cids=cids,
-            start=start,
-            end=end,
-            blacklist=blacklist,
-            freqs=freqs,
+        correlation_types, hedged_return_xcat, cids, freqs = (
+            self._checks_evaluate_hedged_returns(
+                correlation_types=correlation_types,
+                hedged_return_xcat=hedged_return_xcat,
+                cids=cids,
+                start=start,
+                end=end,
+                blacklist=blacklist,
+                freqs=freqs,
+            )
         )
-
-        # Parameter handling
-        if isinstance(correlation_types, str):
-            correlation_types = [correlation_types]
-        if hedged_rets is None:
-            hedged_rets = list(self.hedged_returns["xcat"].unique())
-        elif isinstance(hedged_rets, str):
-            hedged_rets = [hedged_rets]
-        if cids is None:
-            cids = list(self.hedged_returns["cid"].unique())
-        elif isinstance(cids, str):
-            cids = [cids]
-        if isinstance(freqs, str):
-            freqs = [freqs]
 
         # Construct a quantamental dataframe comprising specified hedged returns as well
         # as the unhedged returns and the benchmark return specified in the class instance
         hedged_df = self.hedged_returns[
-            (self.hedged_returns["xcat"].isin(hedged_rets))
+            (self.hedged_returns["xcat"].isin(hedged_return_xcat))
             & (self.hedged_returns["cid"].isin(cids))
         ]
         unhedged_df = self.df[
@@ -397,7 +389,7 @@ class BetaEstimator(BasePanelLearner):
             # Extract unhedged and hedged returns
             dfa = reduce_df(
                 df=combined_df,
-                xcats=hedged_rets + [self.xcat],
+                xcats=hedged_return_xcat + [self.xcat],
                 cids=[cid],
             )
             # Extract benchmark returns
@@ -417,7 +409,7 @@ class BetaEstimator(BasePanelLearner):
         for freq in freqs:
             Xy_long = categories_df(
                 df=dfx,
-                xcats=hedged_rets + [self.xcat, self.benchmark_xcat],
+                xcats=hedged_return_xcat + [self.xcat, self.benchmark_xcat],
                 cids=[f"{cid}v{self.benchmark_cid}" for cid in cids],
                 start=start,
                 end=end,
@@ -430,7 +422,7 @@ class BetaEstimator(BasePanelLearner):
         # For each xcat and frequency, calculate the mean absolute correlations
         # between the benchmark return and the (hedged and unhedged) market returns
         df_rows = []
-        for xcat in hedged_rets + [self.xcat]:
+        for xcat in hedged_return_xcat + [self.xcat]:
             for freq, Xy_long in zip(freqs, Xy_long_freq):
                 calculated_correlations = []
                 for correlation in correlation_types:
@@ -445,7 +437,7 @@ class BetaEstimator(BasePanelLearner):
                 df_rows.append(calculated_correlations)
         # Create underlying dataframe to store the results
         multiindex = pd.MultiIndex.from_product(
-            [[self.benchmark_return], hedged_rets + [self.xcat], freqs],
+            [[self.benchmark_return], hedged_return_xcat + [self.xcat], freqs],
             names=["benchmark return", "return category", "frequency"],
         )
         corr_df = pd.DataFrame(
@@ -461,126 +453,104 @@ class BetaEstimator(BasePanelLearner):
     def _checks_evaluate_hedged_returns(
         self,
         correlation_types: Union[str, List[str]],
-        hedged_rets: Optional[Union[str, List[str]]],
+        hedged_return_xcat: Optional[Union[str, List[str]]],
         cids: Optional[Union[str, List[str]]],
         start: Optional[str],
         end: Optional[str],
         blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]],
         freqs: Optional[Union[str, List[str]]],
     ):
-        # correlation_types checks
-        if (correlation_types is not None) and (
-            not isinstance(correlation_types, (str, list))
+        if isinstance(correlation_types, str):
+            correlation_types = [correlation_types]
+        elif not isinstance(correlation_types, list):
+            raise TypeError("correlation_types must be a string or a list")
+        if not all(
+            isinstance(correlation_type, str) for correlation_type in correlation_types
         ):
-            raise TypeError("correlation_types must be a string or a list of strings.")
-        if isinstance(correlation_types, list):
-            if not all(
-                isinstance(correlation_type, str)
-                for correlation_type in correlation_types
-            ):
-                raise TypeError("All elements in correlation_types must be strings.")
-            if not all(
-                correlation_type in ["pearson", "spearman", "kendall"]
-                for correlation_type in correlation_types
-            ):
-                raise ValueError(
-                    "All elements in correlation_types must be one of 'pearson', 'spearman' or 'kendall'."
-                )
+            raise TypeError("All elements in correlation_types must be strings.")
+        if not all(
+            correlation_type in ["pearson", "spearman", "kendall"]
+            for correlation_type in correlation_types
+        ):
+            raise ValueError(
+                "All elements in correlation_types must be one of 'pearson', 'spearman' or 'kendall'."
+            )
+
+        if hedged_return_xcat is None:
+            hedged_return_xcat = list(self.hedged_returns["xcat"].unique())
         else:
-            if correlation_types not in ["pearson", "spearman", "kendall"]:
+            if isinstance(hedged_return_xcat, str):
+                hedged_return_xcat = [hedged_return_xcat]
+            elif not isinstance(hedged_return_xcat, list):
+                raise TypeError("hedged_return_xcat must be a string or a list")
+            if not all(isinstance(xcat, str) for xcat in hedged_return_xcat):
+                raise TypeError(
+                    "All elements in hedged_return_xcat, when a list, must be strings."
+                )
+            if not (
+                set(hedged_return_xcat).issubset(self.hedged_returns["xcat"].unique())
+            ):
                 raise ValueError(
-                    "correlation_types must be one of 'pearson', 'spearman' or 'kendall'."
+                    "hedged_return_xcat must be a valid hedged return category within the class instance."
                 )
 
-        # hedged_rets checks
-        if hedged_rets is not None:
-            if not isinstance(hedged_rets, (str, list)):
-                raise TypeError("hedged_rets must be a string or a list of strings.")
-            if isinstance(hedged_rets, list):
-                if not all(isinstance(hedged_ret, str) for hedged_ret in hedged_rets):
-                    raise TypeError("All elements in hedged_rets must be strings.")
-                if not all(
-                    hedged_ret in self.hedged_returns["xcat"].unique()
-                    for hedged_ret in hedged_rets
-                ):
-                    raise ValueError(
-                        "All hedged_rets must be valid hedged return categories within the class instance."
-                    )
-            else:
-                if hedged_rets not in self.hedged_returns["xcat"].unique():
-                    raise ValueError(
-                        "hedged_rets must be a valid hedged return category within the class instance."
-                    )
+        if cids is None:
+            cids = list(self.hedged_returns["cid"].unique())
+        else:
+            if isinstance(cids, str):
+                cids = [cids]
+            elif not isinstance(cids, list):
+                raise TypeError("cids must be a string or a list")
+            if not all(isinstance(cid, str) for cid in cids):
+                raise TypeError("All elements in cids must be strings.")
+            if not all(cid in self.hedged_returns["cid"].unique() for cid in cids):
+                raise ValueError(
+                    "All cids must be valid cross-section identifiers within the class instance."
+                )
 
-        # cids checks
-        if cids is not None:
-            if not isinstance(cids, (str, list)):
-                raise TypeError("cids must be a string or a list of strings.")
-            if isinstance(cids, list):
-                if not all(isinstance(cid, str) for cid in cids):
-                    raise TypeError("All elements in cids must be strings.")
-                if not all(cid in self.cids for cid in cids):
-                    raise ValueError(
-                        "All cids must be valid cross-section identifiers within the class instance."
-                    )
-            else:
-                if cids not in self.cids:
-                    raise ValueError(
-                        "cids must be a valid cross-section identifier within the class instance."
-                    )
+        if start is not None and not isinstance(start, str):
+            raise TypeError("start must be a string.")
 
-        # start checks
-        if start is not None:
-            if not isinstance(start, str):
-                raise TypeError("start must be a string.")
+        if end is not None and not isinstance(end, str):
+            raise TypeError("end must be a string.")
 
-        # end checks
-        if end is not None:
-            if not isinstance(end, str):
-                raise TypeError("end must be a string.")
-
-        # blacklist checks
         if blacklist is not None:
             if not isinstance(blacklist, dict):
                 raise TypeError("The blacklist argument must be a dictionary.")
-            for key, value in blacklist.items():
-                # check keys are strings
-                if not isinstance(key, str):
-                    raise TypeError(
-                        "The keys of the blacklist argument must be strings."
-                    )
-                # check values of tuples of length two
-                if not isinstance(value, tuple):
-                    raise TypeError(
-                        "The values of the blacklist argument must be tuples."
-                    )
-                if len(value) != 2:
-                    raise ValueError(
-                        "The values of the blacklist argument must be tuples of length "
-                        "two."
-                    )
-                # ensure each of the dates in the dictionary are timestamps
-                for date in value:
-                    if not isinstance(date, pd.Timestamp):
-                        raise TypeError(
-                            "The values of the blacklist argument must be tuples of "
-                            "pandas Timestamps."
-                        )
+            if len(blacklist) == 0:
+                raise ValueError("The blacklist argument must not be empty.")
+            if not all([isinstance(key, str) for key in blacklist.keys()]):
+                raise TypeError("The keys of the blacklist argument must be strings.")
+            if not all([isinstance(value, tuple) for value in blacklist.values()]):
+                raise TypeError("The values of the blacklist argument must be tuples.")
+            if not all([len(value) == 2 for value in blacklist.values()]):
+                raise ValueError(
+                    "The values of the blacklist argument must be tuples of length two."
+                )
+            if not all(
+                [
+                    isinstance(date, pd.Timestamp)
+                    for value in blacklist.values()
+                    for date in value
+                ]
+            ):
+                raise TypeError(
+                    "The values of the blacklist argument must be tuples of pandas Timestamps."
+                )
 
         # freqs checks
-        if freqs is not None:
-            if not isinstance(freqs, (str, list)):
-                raise TypeError("freqs must be a string or a list of strings.")
-            if isinstance(freqs, list):
-                if not all(isinstance(freq, str) for freq in freqs):
-                    raise TypeError("All elements in freqs must be strings.")
-                if not all(freq in ["D", "W", "M", "Q"] for freq in freqs):
-                    raise ValueError(
-                        "All elements in freqs must be one of 'D', 'W', 'M' or 'Q'."
-                    )
-            else:
-                if freqs not in ["D", "W", "M", "Q"]:
-                    raise ValueError("freqs must be one of 'D', 'W', 'M' or 'Q'.")
+        if isinstance(freqs, str):
+            freqs = [freqs]
+        elif not isinstance(freqs, list):
+            raise TypeError("freqs must be a string or a list of strings")
+        if not all(isinstance(freq, str) for freq in freqs):
+            raise TypeError("All elements in freqs must be strings.")
+        if not all(freq in ["D", "W", "M", "Q"] for freq in freqs):
+            raise ValueError(
+                "All elements in freqs must be one of 'D', 'W', 'M' or 'Q'."
+            )
+
+        return correlation_types, hedged_return_xcat, cids, freqs
 
     def get_hedged_returns(
         self,
@@ -603,7 +573,9 @@ class BetaEstimator(BasePanelLearner):
             A dataframe of out-of-sample hedged returns derived from beta estimation processes.
         """
         # Checks
-        self._checks_get_hedged_returns(hedged_return_xcat=hedged_return_xcat)
+        hedged_return_xcat = self._checks_get_hedged_returns(
+            hedged_return_xcat=hedged_return_xcat
+        )
 
         if hedged_return_xcat is None:
             hedged_returns = self.hedged_returns
@@ -623,12 +595,19 @@ class BetaEstimator(BasePanelLearner):
         if hedged_return_xcat is not None:
             if isinstance(hedged_return_xcat, str):
                 hedged_return_xcat = [hedged_return_xcat]
-            if not isinstance(hedged_return_xcat, list):
+            elif not isinstance(hedged_return_xcat, list):
                 raise TypeError("hedged_return_xcat must be a string or a list")
             if not all(isinstance(xcat, str) for xcat in hedged_return_xcat):
                 raise TypeError(
                     "All elements in hedged_return_xcat, when a list, must be strings."
                 )
+            if not (
+                set(hedged_return_xcat).issubset(self.hedged_returns["xcat"].unique())
+            ):
+                raise ValueError(
+                    "hedged_return_xcat must be a valid hedged return category within the class instance."
+                )
+        return hedged_return_xcat
 
     def get_betas(
         self,
@@ -651,7 +630,7 @@ class BetaEstimator(BasePanelLearner):
             A dataframe of estimated betas derived from beta estimation processes.
         """
         # Checks
-        self._checks_get_betas(beta_xcat=beta_xcat)
+        beta_xcat = self._checks_get_betas(beta_xcat=beta_xcat)
 
         if beta_xcat is None:
             betas = self.betas
@@ -675,6 +654,11 @@ class BetaEstimator(BasePanelLearner):
                 raise TypeError(
                     "All elements in beta_xcat, when a list, must be strings."
                 )
+            if not (set(beta_xcat).issubset(self.betas["xcat"].unique())):
+                raise ValueError(
+                    "beta_xcat must be a valid beta category within the class instance."
+                )
+        return beta_xcat
 
 
 if __name__ == "__main__":
