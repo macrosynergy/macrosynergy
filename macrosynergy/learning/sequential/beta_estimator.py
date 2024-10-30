@@ -375,6 +375,7 @@ class BetaEstimator(BasePanelLearner):
             )
         )
 
+        cids_v_benchmark = [f"{cid}v{self.benchmark_cid}" for cid in cids]
         # Construct a quantamental dataframe comprising specified hedged returns as well
         # as the unhedged returns and the benchmark return specified in the class instance
         hedged_df = self.hedged_returns[
@@ -382,24 +383,27 @@ class BetaEstimator(BasePanelLearner):
             & (self.hedged_returns["cid"].isin(cids))
         ]
         unhedged_df = self.df[
-            (self.df["xcat"].isin(self.xcats)) & (self.df["cid"].isin(cids))
+            (self.df["xcat"].isin(self.xcats)) & (self.df["cid"].isin(cids_v_benchmark))
         ]
         benchmark_df = self.df[
             (self.df["xcat"] == self.benchmark_xcat)
-            & (self.df["cid"] == self.benchmark_cid)
+            & (self.df["cid"] == f"{self.benchmark_cid}v{self.benchmark_cid}")
         ]
-        combined_df = pd.concat([hedged_df, unhedged_df], axis=0)
+
+        cid_mapping = dict(zip(cids, cids_v_benchmark))
+        hedged_df["cid"] = hedged_df["cid"].replace(cid_mapping)
+        combined_df = concat_categorical(hedged_df, unhedged_df)
 
         # Create a pseudo-panel to match contract return cross-sections with a replicated
         # benchmark return. This is multi-indexed by (new cid, real_date). The columns
         # are the named hedged returns, with the final column being the benchmark category.
         dfx = pd.DataFrame(columns=["real_date", "cid", "xcat", "value"])
 
-        for cid in cids:
+        for cid in cids_v_benchmark:
             # Extract unhedged and hedged returns
             dfa = reduce_df(
                 df=combined_df,
-                xcats=hedged_return_xcat + [self.xcats],
+                xcats=hedged_return_xcat + self.xcats,
                 cids=[cid],
             )
             # Extract benchmark returns
@@ -409,8 +413,7 @@ class BetaEstimator(BasePanelLearner):
                 cids=[self.benchmark_cid],
             )
             # Combine and rename cross-section
-            df_cid = pd.concat([dfa, dfb], axis=0)
-            df_cid["cid"] = f"{cid}v{self.benchmark_cid}"
+            df_cid = concat_categorical(dfa, dfb)
 
             dfx = update_df(dfx, df_cid)
 
@@ -419,8 +422,8 @@ class BetaEstimator(BasePanelLearner):
         for freq in freqs:
             Xy_long = categories_df(
                 df=dfx,
-                xcats=hedged_return_xcat + [self.xcats, self.benchmark_xcat],
-                cids=[f"{cid}v{self.benchmark_cid}" for cid in cids],
+                xcats=hedged_return_xcat + self.xcats,
+                cids=[cid for cid in cids_v_benchmark],
                 start=start,
                 end=end,
                 blacklist=blacklist,
@@ -432,7 +435,8 @@ class BetaEstimator(BasePanelLearner):
         # For each xcat and frequency, calculate the mean absolute correlations
         # between the benchmark return and the (hedged and unhedged) market returns
         df_rows = []
-        for xcat in hedged_return_xcat + [self.xcats]:
+        xcats_non_benchmark = [xcat for xcat in self.xcats if xcat != self.benchmark_xcat]
+        for xcat in hedged_return_xcat + xcats_non_benchmark:
             for freq, Xy_long in zip(freqs, Xy_long_freq):
                 calculated_correlations = []
                 for correlation in correlation_types:
@@ -447,18 +451,16 @@ class BetaEstimator(BasePanelLearner):
                 df_rows.append(calculated_correlations)
         # Create underlying dataframe to store the results
         multiindex = pd.MultiIndex.from_product(
-            [[self.benchmark_return], hedged_return_xcat + [self.xcats], freqs],
+            [[self.benchmark_return], hedged_return_xcat + xcats_non_benchmark, freqs],
             names=["benchmark return", "return category", "frequency"],
         )
         corr_df = pd.DataFrame(
-            columns=["|" + correlation + "|" for correlation in correlation_types],
+            columns=[correlation for correlation in correlation_types],
             index=multiindex,
             data=df_rows,
         )
 
-        return QuantamentalDataFrame(
-            corr_df, _initialized_as_categorical=self.df.InitializedAsCategorical
-        ).to_original_dtypes()
+        return corr_df
 
     def _checks_evaluate_hedged_returns(
         self,
@@ -505,7 +507,7 @@ class BetaEstimator(BasePanelLearner):
                 )
 
         if cids is None:
-            cids = self.cids
+            cids = self.hedged_returns["cid"].unique().tolist()
         else:
             if isinstance(cids, str):
                 cids = [cids]
@@ -513,7 +515,7 @@ class BetaEstimator(BasePanelLearner):
                 raise TypeError("cids must be a string or a list")
             if not all(isinstance(cid, str) for cid in cids):
                 raise TypeError("All elements in cids must be strings.")
-            if not all(cid in self.cids for cid in cids):
+            if not all(cid in self.hedged_returns["cid"].unique() for cid in cids):
                 raise ValueError(
                     "All cids must be valid cross-section identifiers within the class instance."
                 )
@@ -671,6 +673,33 @@ class BetaEstimator(BasePanelLearner):
                     "beta_xcat must be a valid beta category within the class instance."
                 )
         return beta_xcat
+    
+    def _get_mean_abs_corrs(
+        self,
+        xcat: str,
+        cids: str,
+        df: pd.DataFrame,
+        correlation: pd.DataFrame,
+    ):
+        """
+        Private helper method to calculate the mean absolute correlation between a column
+        'xcat' in a dataframe 'df' and the benchmark return (the last column) across all
+        cross-sections in 'cids'. The correlation is calculated using the method specified
+        in 'correlation'.
+        """
+        # Get relevant columns
+        df_subset = df[[xcat, self.benchmark_xcat]].dropna()
+
+        # Create inner function to calculate the correlation for a given cross-section
+        # This is done so that one can groupby cross-section and apply this function directly
+
+        def calculate_correlation(group):
+            return abs(group[xcat].corr(group[self.benchmark_xcat], method=correlation))
+
+        # Calculate the mean absolute correlation over all cross sections
+        mean_abs_corr = df_subset.groupby("cid", observed=True).apply(calculate_correlation).mean()
+
+        return mean_abs_corr
 
 
 if __name__ == "__main__":
@@ -706,7 +735,7 @@ if __name__ == "__main__":
         df=dfd,
         xcats="CONTRACT_XR",
         benchmark_return="USD_BENCH_XR",
-        cids=["AUD"],
+        cids=["AUD", "USD"],
     )
 
     models = {
@@ -732,11 +761,10 @@ if __name__ == "__main__":
         n_jobs_inner=1,
     )
 
+    evaluation_df = be.evaluate_hedged_returns(
+        correlation_types=["pearson", "spearman", "kendall"],
+        freqs=["W", "M", "Q"],
+    )
+
     be.models_heatmap(name="BETA_NSA")
-
-    # evaluation_df = be.evaluate_hedged_returns(
-    #     correlation_types=["pearson", "spearman", "kendall"],
-    #     freqs=["W", "M", "Q"],
-    # )
-
     # print(evaluation_df)

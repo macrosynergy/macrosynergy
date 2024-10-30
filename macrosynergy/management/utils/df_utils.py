@@ -1235,7 +1235,7 @@ def concat_categorical(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     if not isinstance(df1, pd.DataFrame) or not isinstance(df2, pd.DataFrame):
         raise TypeError("Both DataFrames must be pandas DataFrames.")
 
-    if not df1.columns.equals(df2.columns):
+    if not (set(df1.columns) == set(df2.columns)):
         raise ValueError("The columns of the two DataFrames must be identical.")
 
     # Explicitly set or create categorical columns based on the data in model_df_long

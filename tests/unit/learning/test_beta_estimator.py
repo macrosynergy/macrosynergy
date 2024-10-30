@@ -485,29 +485,28 @@ class TestBetaEstimator(unittest.TestCase):
     def test_evaluate_hedged_returns(self):
 
         be = self.be
-        be.evaluate_hedged_returns(
+        corr_df = be.evaluate_hedged_returns(
             correlation_types=["spearman", "pearson"],
             hedged_return_xcat=self.hedged_return_xcat,
-            cids=["AUDvUSD", "USDvUSD"],
+            cids=self.cids,
             start="2018-01-01",
             end="2020-12-31",
             # blacklist={"AUD": ("2019-01-01", "2019-12-31")},
             freqs=["M", "Q"],
         )
 
-        # # Check that the output is a dataframe
-        # self.assertIsInstance(be.hedged_returns_eval, pd.DataFrame)
-        # self.assertEqual(
-        #     be.hedged_returns_eval.columns.to_list(),
-        #     ["cid", "correlation_type", "start", "end", "freq", "correlation"],
-        # )
-        # self.assertEqual(
-        #     be.hedged_returns_eval.correlation_type.unique().tolist(),
-        #     ["spearman", "pearson"],
-        # )
-        # self.assertEqual(be.hedged_returns_eval.cid.unique().tolist(), self.cids)
-        # self.assertEqual(be.hedged_returns_eval.freq.unique().tolist(), ["M", "Q"])
-        # self.assertTrue(all(~be.hedged_returns_eval.correlation.isna()))
+        self.assertTrue(isinstance(corr_df, pd.DataFrame))
+        self.assertEqual(
+            corr_df.index.get_level_values(0).unique()[0], self.benchmark_return
+        )
+        self.assertTrue(
+            self.hedged_return_xcat in corr_df.index.get_level_values(1).unique()
+        )
+        self.assertTrue(self.xcat[0] in corr_df.index.get_level_values(1).unique())
+        self.assertTrue(
+            {"M", "Q"}.issubset(set(corr_df.index.get_level_values(2).unique()))
+        )
+        self.assertTrue({"spearman", "pearson"}.issubset(set(corr_df.columns.unique())))
 
 
 if __name__ == "__main__":
