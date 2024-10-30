@@ -481,10 +481,33 @@ class TestBetaEstimator(unittest.TestCase):
             be.evaluate_hedged_returns(freqs="A")
         with self.assertRaises(ValueError):
             be.evaluate_hedged_returns(freqs=["Q", "A"])
-            
-    
-    # def test_evaluate_hedged_returns(self):
-        
+
+    def test_evaluate_hedged_returns(self):
+
+        be = self.be
+        be.evaluate_hedged_returns(
+            correlation_types=["spearman", "pearson"],
+            hedged_return_xcat=self.hedged_return_xcat,
+            cids=["AUDvUSD", "USDvUSD"],
+            start="2018-01-01",
+            end="2020-12-31",
+            # blacklist={"AUD": ("2019-01-01", "2019-12-31")},
+            freqs=["M", "Q"],
+        )
+
+        # # Check that the output is a dataframe
+        # self.assertIsInstance(be.hedged_returns_eval, pd.DataFrame)
+        # self.assertEqual(
+        #     be.hedged_returns_eval.columns.to_list(),
+        #     ["cid", "correlation_type", "start", "end", "freq", "correlation"],
+        # )
+        # self.assertEqual(
+        #     be.hedged_returns_eval.correlation_type.unique().tolist(),
+        #     ["spearman", "pearson"],
+        # )
+        # self.assertEqual(be.hedged_returns_eval.cid.unique().tolist(), self.cids)
+        # self.assertEqual(be.hedged_returns_eval.freq.unique().tolist(), ["M", "Q"])
+        # self.assertTrue(all(~be.hedged_returns_eval.correlation.isna()))
 
 
 if __name__ == "__main__":

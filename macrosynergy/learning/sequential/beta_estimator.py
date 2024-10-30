@@ -61,6 +61,16 @@ class BetaEstimator(BasePanelLearner):
         if not isinstance(benchmark_return, str):
             raise TypeError("benchmark_return must be a string.")
 
+        if isinstance(xcats, str):
+            xcats = [xcats]
+        elif isinstance(xcats, list):
+            if not all(isinstance(xcat, str) for xcat in xcats):
+                raise TypeError("All elements in xcats must be strings.")
+            elif len(xcats) != 1:
+                raise ValueError("xcats must be a string or a list of a single xcat.")
+        else:
+            raise TypeError("xcats must be a string or a list of a single xcat.")
+
         # Create pseudo-panel
         dfx = pd.DataFrame(columns=["real_date", "cid", "xcat", "value"])
 
@@ -372,7 +382,7 @@ class BetaEstimator(BasePanelLearner):
             & (self.hedged_returns["cid"].isin(cids))
         ]
         unhedged_df = self.df[
-            (self.df["xcat"] == self.xcat) & (self.df["cid"].isin(cids))
+            (self.df["xcat"].isin(self.xcats)) & (self.df["cid"].isin(cids))
         ]
         benchmark_df = self.df[
             (self.df["xcat"] == self.benchmark_xcat)
@@ -389,7 +399,7 @@ class BetaEstimator(BasePanelLearner):
             # Extract unhedged and hedged returns
             dfa = reduce_df(
                 df=combined_df,
-                xcats=hedged_return_xcat + [self.xcat],
+                xcats=hedged_return_xcat + [self.xcats],
                 cids=[cid],
             )
             # Extract benchmark returns
@@ -409,7 +419,7 @@ class BetaEstimator(BasePanelLearner):
         for freq in freqs:
             Xy_long = categories_df(
                 df=dfx,
-                xcats=hedged_return_xcat + [self.xcat, self.benchmark_xcat],
+                xcats=hedged_return_xcat + [self.xcats, self.benchmark_xcat],
                 cids=[f"{cid}v{self.benchmark_cid}" for cid in cids],
                 start=start,
                 end=end,
@@ -422,7 +432,7 @@ class BetaEstimator(BasePanelLearner):
         # For each xcat and frequency, calculate the mean absolute correlations
         # between the benchmark return and the (hedged and unhedged) market returns
         df_rows = []
-        for xcat in hedged_return_xcat + [self.xcat]:
+        for xcat in hedged_return_xcat + [self.xcats]:
             for freq, Xy_long in zip(freqs, Xy_long_freq):
                 calculated_correlations = []
                 for correlation in correlation_types:
@@ -437,7 +447,7 @@ class BetaEstimator(BasePanelLearner):
                 df_rows.append(calculated_correlations)
         # Create underlying dataframe to store the results
         multiindex = pd.MultiIndex.from_product(
-            [[self.benchmark_return], hedged_return_xcat + [self.xcat], freqs],
+            [[self.benchmark_return], hedged_return_xcat + [self.xcats], freqs],
             names=["benchmark return", "return category", "frequency"],
         )
         corr_df = pd.DataFrame(
@@ -495,7 +505,7 @@ class BetaEstimator(BasePanelLearner):
                 )
 
         if cids is None:
-            cids = list(self.hedged_returns["cid"].unique())
+            cids = self.cids
         else:
             if isinstance(cids, str):
                 cids = [cids]
@@ -503,7 +513,7 @@ class BetaEstimator(BasePanelLearner):
                 raise TypeError("cids must be a string or a list")
             if not all(isinstance(cid, str) for cid in cids):
                 raise TypeError("All elements in cids must be strings.")
-            if not all(cid in self.hedged_returns["cid"].unique() for cid in cids):
+            if not all(cid in self.cids for cid in cids):
                 raise ValueError(
                     "All cids must be valid cross-section identifiers within the class instance."
                 )
@@ -521,7 +531,9 @@ class BetaEstimator(BasePanelLearner):
                 raise ValueError("The blacklist argument must not be empty.")
             if not all([isinstance(key, str) for key in blacklist.keys()]):
                 raise TypeError("The keys of the blacklist argument must be strings.")
-            if not all([isinstance(value, tuple) for value in blacklist.values()]):
+            if not all(
+                [isinstance(value, (list, tuple)) for value in blacklist.values()]
+            ):
                 raise TypeError("The values of the blacklist argument must be tuples.")
             if not all([len(value) == 2 for value in blacklist.values()]):
                 raise ValueError(
