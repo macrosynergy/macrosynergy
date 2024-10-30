@@ -2,8 +2,6 @@
 Base classes for panel cross-validation splitters.
 """
 
-from typing import List, Tuple
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -19,14 +17,20 @@ from abc import ABC, abstractmethod
 
 class BasePanelSplit(BaseCrossValidator, ABC):
     """
-    Abstract base class for a generic panel cross-validator.
+    Generic cross-validation class for panel data.
 
-    Provides the necessary visualisation methods for all panel splitters, for
-    explainability and debugging purposes.
+    Notes
+    -----
+    This class is designed to provide a common interface for cross-validation on panel
+    data. Much of the logic can be written in subclasses, but this base class contains
+    the necessary code to visualise the splits for each cross-section in the panel.
     """
 
     @abstractmethod
     def __init__(self):
+        """
+        Constructor for the base class.
+        """
         pass
 
     def get_n_splits(self, X=None, y=None, groups=None):
@@ -80,7 +84,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
 
         Returns
         -------
-        xranges : List[Tuple[pd.Timestamp, pd.Timedelta]]
+        xranges : tuple
             List of tuples of the form (start date, length of contiguous dates).
         """
         xranges = []
@@ -160,12 +164,12 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         splits = list(self.split(X, y))
 
         # Set up plotting labels and figure
-        split_idxs: List[int] = (
+        split_idxs: list = (
             [0, len(splits) // 4, len(splits) // 2, 3 * len(splits) // 4, -1]
             if self.n_splits > 5
             else [i for i in range(self.n_splits)]
         )
-        split_titles: List[str] = (
+        split_titles: list = (
             [
                 "Initial split",
                 "Quarter progress",
@@ -195,11 +199,11 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                     Xy.iloc[splits[split_idx][1]].index.get_level_values(0) == cs
                 ].index.get_level_values(1)
 
-                xranges_train: List[Tuple[pd.Timestamp, pd.Timedelta]] = (
-                    self._calculate_xranges(cs_train_dates, real_dates, freq_offset)
+                xranges_train: list = self._calculate_xranges(
+                    cs_train_dates, real_dates, freq_offset
                 )
-                xranges_test: List[Tuple[pd.Timestamp, pd.Timedelta]] = (
-                    self._calculate_xranges(cs_test_dates, real_dates, freq_offset)
+                xranges_test: list = self._calculate_xranges(
+                    cs_test_dates, real_dates, freq_offset
                 )
 
                 plot_components.append(
@@ -301,11 +305,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
 
 class WalkForwardPanelSplit(BasePanelSplit, ABC):
     """
-    Base class for a generic walk-forward panel cross-validator.
-
-    Provides train/test indices to split a panel into train/test sets. Following an
-    initial training set construction, a forward test set is created. The training and
-    test set pair evolves over time by walking forward through the panel.
+    Generic walk-forward panel cross-validator.
 
     Parameters
     ----------
@@ -317,14 +317,20 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
         Minimum number of time periods required for the first training set. Either
         start_date or (min_cids, min_periods) must be provided. If both are
         provided, start_date takes precedence.
-    start_date : Optional[str]
+    start_date : str, optional
         The targeted final date in the initial training set in ISO 8601 format.
         Default is None. Either start_date or (min_cids, min_periods) must be provided.
         If both are provided, start_date takes precedence.
-    max_periods : Optional[int]
+    max_periods : int, optional
         The maximum number of time periods in each training set. If the maximum is
         exceeded, the earliest periods are cut off. This effectively creates rolling
         training sets. Default is None.
+
+    Notes
+    -----
+    Provides train/test indices to split a panel into train/test sets. Following an
+    initial training set construction, a forward test set is created. The training and
+    test set pair evolves over time by walking forward through the panel.
     """
 
     def __init__(
@@ -358,9 +364,9 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
             Minimum number of cross-sections required for the first training set.
         min_periods : int
             Minimum number of time periods required for the first training set.
-        start_date : Optional[str]
+        start_date : str
             The targeted final date in the initial training set in ISO 8601 format.
-        max_periods : Optional[int]
+        max_periods : int
             The maximum number of time periods in each training set.
         """
         # min_cids
@@ -406,7 +412,7 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
             dates must be in datetime format. Otherwise the dataframe must be in wide
             format: each feature is a column.
 
-        y : Union[pd.DataFrame, pd.Series]
+        y : pd.DataFrame or pd.Series
             Pandas dataframe or series of a target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format. If a dataframe
             is provided, the target variable must be the sole column.
@@ -444,6 +450,22 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
 
 class KFoldPanelSplit(BasePanelSplit, ABC):
     def __init__(self, n_splits=5, min_n_splits=2):
+        """
+        Generic K-Fold cross-validator for panel data.
+
+        Parameters
+        ----------
+        n_splits : int
+            Number of splits to generate.
+        min_n_splits : int
+            Minimum number of splits allowed.
+
+        Notes
+        -----
+        Provides train/test indices to split a panel into train/test sets. The panel is
+        divided into n_splits consecutive folds. Each fold is then used once as a
+        validation fold whilst a proportion of the other folds are used as training data.
+        """
         # Checks
         if not isinstance(n_splits, int):
             raise TypeError(f"n_splits must be an integer. Got {type(n_splits)}.")
