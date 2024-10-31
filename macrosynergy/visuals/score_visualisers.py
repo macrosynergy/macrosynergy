@@ -12,6 +12,7 @@ from macrosynergy.management.utils.df_utils import (
     update_df,
     _map_to_business_day_frequency,
 )
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel import linear_composite, make_zn_scores
 
 
@@ -110,7 +111,7 @@ class ScoreVisualisers:
         if no_zn_scores:
             self.postfix = ""
         self.xcat_comp = xcat_comp + self.postfix
-
+        df = QuantamentalDataFrame(df)
         self.df = self._create_df(
             df,
             xcats,

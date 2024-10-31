@@ -8,6 +8,7 @@ from typing import List, Set
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.types import QuantamentalDataFrame
 import warnings
 
 
@@ -114,9 +115,6 @@ def make_relative_value(
     """
 
     col_names = ["cid", "xcat", "real_date", "value"]
-    col_error = f"The DataFrame must contain the necessary columns: {col_names}."
-    if not set(col_names).issubset(set(df.columns)):
-        raise ValueError(col_error)
 
     operations = {
         "divide": pd.DataFrame.div,
@@ -146,9 +144,7 @@ def make_relative_value(
 
         rel_xcats_dict = dict(zip(xcats, rel_xcats))
 
-    df = df.loc[:, col_names]
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-
+    df = QuantamentalDataFrame(df)
     # Intersect parameter set to False. Therefore, cross-sections across the categories
     # can vary.
     all_cids: List[str] = []
@@ -209,7 +205,7 @@ def make_relative_value(
             bm = dfb.groupby(by="real_date").mean(numeric_only=True)
         elif len(basket) == 1:
             # Relative value is mapped against a single cross-section.
-            bm = dfb.set_index("real_date")["value"]
+            bm = dfb.set_index("real_date")[["value"]]
         else:
             # Category is not defined over all cross-sections in the basket and
             # 'complete_cross' equals True.
@@ -224,8 +220,14 @@ def make_relative_value(
         # cross-section, remove the dates from the DataFrame.
         dfw = dfw[dfw.count(axis=1) > 1]
         # The time-index will be delimited by the respective category.
-        dfa = pd.merge(dfw, bm, how="left", left_index=True, right_index=True)
-
+        if isinstance(dfw.columns, pd.CategoricalIndex):
+            if "value" not in dfw.columns.categories:
+                dfw.columns = dfw.columns.add_categories(["value"])
+            dfw["value"] = bm["value"]
+            dfa = dfw
+            dfw = dfw.drop("value", axis=1)
+        else:
+            dfa = pd.merge(dfw, bm, how="left", left_index=True, right_index=True)
         dfo: pd.DataFrame = operations[rel_meth](dfa[dfw.columns], dfa["value"], axis=0)
 
         # Re-stack.
@@ -247,7 +249,10 @@ def make_relative_value(
 
         df_list.append(df_new.sort_values(["cid", "real_date"])[col_names])
 
-    return pd.concat(df_list).reset_index(drop=True)
+    return QuantamentalDataFrame(
+        pd.concat(df_list).reset_index(drop=True),
+        categorical=df.InitializedAsCategorical,
+    )
 
 
 if __name__ == "__main__":

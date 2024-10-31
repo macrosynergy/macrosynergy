@@ -114,7 +114,7 @@ def _linear_composite_basic(
 
 
 def linear_composite_cid_agg(
-    df: pd.DataFrame,
+    df: QuantamentalDataFrame,
     xcat: str,
     cids: List[str],
     weights: Union[str, List[float]],
@@ -124,10 +124,8 @@ def linear_composite_cid_agg(
     new_cid="GLB",
 ):
     """Linear composite of various cids for a given xcat across all periods."""
-
     if isinstance(weights, str):
-        weights_df: pd.DataFrame = df[(df["xcat"] == weights)].copy()
-        df = df[(df["xcat"] != weights)].copy()
+        weights_df: pd.DataFrame = df[(df["xcat"] == weights)]
         weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(
             level=1
         )
@@ -180,14 +178,20 @@ def linear_composite_cid_agg(
         complete=complete_cids,
         mode="cid_agg",
     )
-    out_df["cid"] = new_cid
-    out_df["xcat"] = xcat
-    out_df = out_df[["cid", "xcat", "real_date", "value"]]
+
+    if df.is_categorical():
+        out_df = QuantamentalDataFrame.from_timeseries(
+            out_df.set_index("real_date")["value"], ticker=f"{new_cid}_{xcat}"
+        )
+    else:
+        out_df["cid"] = new_cid
+        out_df["xcat"] = xcat
+
     return out_df
 
 
 def linear_composite_xcat_agg(
-    df: pd.DataFrame,
+    df: QuantamentalDataFrame,
     xcats: List[str],
     weights: List[float],
     signs: List[float],
@@ -218,8 +222,15 @@ def linear_composite_xcat_agg(
         complete=complete_xcats,
         mode="xcat_agg",
     )
-    out_df["xcat"] = new_xcat
-    out_df = out_df[["cid", "xcat", "real_date", "value"]]
+    if df.is_categorical():
+        # add a new column called xcat with the new_xcat value
+        out_df["xcat"] = pd.Categorical.from_codes(
+            codes=[0] * len(out_df), categories=[new_xcat]
+        )
+        out_df = QuantamentalDataFrame(out_df)
+    else:
+        out_df["xcat"] = new_xcat
+
     return out_df
 
 
@@ -243,19 +254,35 @@ def _populate_missing_xcat_series(
             found_xcats_set - set(df.loc[df["cid"] == cidx, "xcat"].unique())
         )
         if missing_xcats:
+
             warnings.warn(wrn_msg.format(cidx=cidx, missing_xcats=missing_xcats))
             for xc in missing_xcats:
-                dct = {"cid": cidx, "xcat": xc, "real_date": dt_range, "value": np.NaN}
-                df = pd.concat([df, pd.DataFrame(data=dct)])
+                if df.is_categorical():
+                    df.add_nan_series(
+                        ticker=f"{cidx}_{xc}",
+                        start=dt_range.min(),
+                        end=dt_range.max(),
+                    )
+                else:
+                    dct = {
+                        "cid": cidx,
+                        "xcat": xc,
+                        "real_date": dt_range,
+                        "value": np.NaN,
+                    }
+                    df = pd.concat([df, pd.DataFrame(data=dct)])
 
     return df
 
 
 def _check_df_for_missing_cid_data(
     df: QuantamentalDataFrame,
+    cids: List[str],
     weights: Union[str, List[float]],
     signs: List[float],
-) -> QuantamentalDataFrame:
+) -> Tuple[
+    QuantamentalDataFrame, List[str], str, Union[str, List[float], None], List[float]
+]:
     """
     Check the DataFrame for missing `cid` data and drop them if necessary and return the
     DataFrame with the missing `cid` data dropped.
@@ -301,7 +328,68 @@ def _check_df_for_missing_cid_data(
         0
     ]
 
-    return df, found_cids, _xcat
+    rcids = [c for c in cids if c in found_cids]  # to preserve order
+    return QuantamentalDataFrame(df), rcids, _xcat, weights, signs
+
+
+def _check_weights_and_signs(
+    df: QuantamentalDataFrame,
+    cids: List[str],
+    xcats: List[str],
+    weights: Union[str, List[float]],
+    signs: List[float],
+    xcat_agg: bool,
+) -> Tuple[QuantamentalDataFrame, List[str], List[float]]:
+    found_cids: List[str] = df["cid"].unique().tolist()
+    found_xcats: List[str] = df["xcat"].unique().tolist()
+    found_cids = [c for c in cids if c in found_cids]  # to preserve order
+    found_xcats = [x for x in xcats if x in found_xcats]  # to preserve order
+
+    # if len of found_cids!=len of cids
+    err_msg = (
+        "Some `{vtype}` are missing in `df`. `{wtype}` could not be re-assigned.\n"
+        "Available {vtype}: {found_vtypes}\n"
+        "Requested {vtype}: {vtypes}"
+    )
+
+    ws_arr = [weights, signs]
+    ws_names = ["weights", "signs"]
+
+    found_var = found_xcats if xcat_agg else found_cids
+    specified_var = xcats if xcat_agg else cids
+    vtype = "xcats" if xcat_agg else "cids"
+
+    if len(found_var) != len(specified_var):
+        missing_var = list(set(specified_var) - set(found_var))
+
+        for i, ws in enumerate(ws_arr):
+            if isinstance(ws, str):
+                continue
+            if np.allclose(np.array(ws) / ws[0], 1):  # if the weights are all the same
+                ws_arr[i] = [1] * len(found_var)
+                warnings.warn(
+                    f"The provided data is missing some {vtype}. Reassigning all {ws_names[i]} to the 1s (equal)"
+                    f" Missing {vtype}: {missing_var}"
+                )
+            else:
+                raise ValueError(
+                    err_msg.format(
+                        vtype=vtype,
+                        wtype=ws_names[i],
+                        found_vtypes=found_var,
+                        vtypes=specified_var,
+                    )
+                )
+
+        # remove the cid or xcat from the list of cids or xcats
+        if xcat_agg:
+            xcats = found_xcats
+        else:
+            cids = found_cids
+
+    weights, signs = ws_arr
+
+    return cids, xcats, weights, signs
 
 
 def _check_args(
@@ -569,7 +657,8 @@ def linear_composite(
     )
 
     # update local variables
-
+    df = QuantamentalDataFrame(df)
+    result_as_categorical = df.InitializedAsCategorical
     _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
 
     df: pd.DataFrame
@@ -599,7 +688,7 @@ def linear_composite(
     if _xcat_agg:
         df = _populate_missing_xcat_series(df)
 
-        return linear_composite_xcat_agg(
+        result_df: QuantamentalDataFrame = linear_composite_xcat_agg(
             df=df,
             xcats=xcats,
             weights=weights,
@@ -610,11 +699,11 @@ def linear_composite(
         )
 
     else:  # mode == "cid_agg" -- single xcat
-        df, cids, _xcat = _check_df_for_missing_cid_data(
-            df=df, weights=weights, signs=signs
+        df, cids, _xcat, weights, signs = _check_df_for_missing_cid_data(
+            df=df, cids=cids, weights=weights, signs=signs
         )
 
-        return linear_composite_cid_agg(
+        result_df: QuantamentalDataFrame = linear_composite_cid_agg(
             df=df,
             xcat=_xcat,
             cids=cids,
@@ -624,6 +713,8 @@ def linear_composite(
             complete_cids=complete_cids,
             new_cid=new_cid,
         )
+
+    return QuantamentalDataFrame(result_df, categorical=result_as_categorical)
 
 
 if __name__ == "__main__":
@@ -670,7 +761,7 @@ if __name__ == "__main__":
     lc_cid = linear_composite(
         df=df, xcats="XR", weights="INFL", normalize_weights=False
     )
-
+    df = QuantamentalDataFrame(df)
     lc_xcat = linear_composite(
         df=df,
         cids=["AUD", "CAD"],

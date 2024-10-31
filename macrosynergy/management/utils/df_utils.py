@@ -23,6 +23,20 @@ import functools
 IDX_COLS_SORT_ORDER = ["cid", "xcat", "real_date"]
 
 
+def is_categorical_qdf(df: pd.DataFrame) -> bool:
+    """
+    Check if a column in a DataFrame is categorical.
+
+    :param <pd.DataFrame> df: The DataFrame to be checked.
+    :param <str> column: The column to be checked.
+    :return <bool>: True if the column is categorical, False otherwise.
+    """
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
+
+    return all([df[col].dtype.name == "category" for col in ["cid", "xcat"]])
+
+
 def standardise_dataframe(
     df: pd.DataFrame, verbose: bool = False
 ) -> QuantamentalDataFrame:
@@ -64,14 +78,17 @@ def standardise_dataframe(
         if len(df.columns) < 4:
             raise ValueError(fail_str)
 
+    if isinstance(df, QuantamentalDataFrame) and type(df) is QuantamentalDataFrame:
+        return QuantamentalDataFrame(df)
+
     # Convert date and ensure specific columns are strings in one step
     # 'datetime64[ns]' is the default dtype for datetime columns in pandas
     df["real_date"] = pd.to_datetime(
         df["real_date"],
         format="%Y-%m-%d",
     ).astype("datetime64[ns]")
-    df["cid"] = df["cid"].astype(str)
-    df["xcat"] = df["xcat"].astype(str)
+    df["cid"] = df["cid"].astype("object")
+    df["xcat"] = df["xcat"].astype("object")
     # sort by cid, xcat and real_date to allow viewing stacked timeseries easily
     df = (
         df.drop_duplicates(subset=idx_cols, keep="last")
@@ -116,6 +133,9 @@ def drop_nan_series(
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a Quantamental DataFrame.")
 
+    if type(df) is QuantamentalDataFrame:
+        return df.drop_nan_series(column=column, raise_warning=raise_warning)
+
     if not column in df.columns:
         raise ValueError(f"Column {column} not present in DataFrame.")
 
@@ -126,7 +146,7 @@ def drop_nan_series(
         raise TypeError("Error: The raise_warning argument must be a boolean.")
 
     df_orig: pd.DataFrame = df.copy()
-    for cd, xc in df_orig.groupby(["cid", "xcat"]).groups:
+    for cd, xc in df_orig.groupby(["cid", "xcat"], observed=True).groups:
         sel_series: pd.Series = df_orig[
             (df_orig["cid"] == cd) & (df_orig["xcat"] == xc)
         ][column]
@@ -156,6 +176,9 @@ def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFr
     """
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
+
+    if type(df) is QuantamentalDataFrame:
+        return df.to_wide(value_column=value_column)
 
     if not isinstance(value_column, str):
         raise TypeError("Argument `value_column` must be a string.")
@@ -311,7 +334,10 @@ def apply_slip(
     else:
         sel_tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
 
-    df["ticker"] = df["cid"] + "_" + df["xcat"]
+    if is_categorical_qdf(df):
+        df = QuantamentalDataFrame(df).add_ticker_column()
+    else:
+        df["ticker"] = df["cid"] + "_" + df["xcat"]
     err_str = (
         "Tickers targetted for applying slip are not present in the DataFrame.\n"
         "Missing tickers: {tickers}"
@@ -330,7 +356,7 @@ def apply_slip(
     for col in metrics:
         tks_isin = df["ticker"].isin(sel_tickers)
         df.loc[tks_isin, col] = df.loc[tks_isin, col].astype(float)
-        df.loc[tks_isin, col] = df.groupby("ticker")[col].shift(slip)
+        df.loc[tks_isin, col] = df.groupby("ticker", observed=True)[col].shift(slip)
 
     df = df.drop(columns=["ticker"]).reset_index(drop=True)
     assert isinstance(df, QuantamentalDataFrame), "Failed to apply slip."
@@ -381,7 +407,7 @@ def downsample_df_on_real_date(
     non_groupby_columns = list(set(df.columns) - set(groupby_columns) - {"real_date"})
     res = (
         df.set_index("real_date")
-        .groupby(groupby_columns)[non_groupby_columns]
+        .groupby(groupby_columns, observed=True)[non_groupby_columns]
         .resample(freq)
     )
     if PD_OLD_RESAMPLE:
@@ -432,6 +458,9 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     error_message = f"The added DataFrame must be a Quantamental Dataframe."
     if not isinstance(df_add, QuantamentalDataFrame):
         raise TypeError(error_message)
+
+    if type(df) is QuantamentalDataFrame:
+        return df.update_df(df_add=df_add, xcat_replace=xcat_replace)
 
     error_message = (
         "The two Quantamental DataFrames must share at least "
@@ -540,6 +569,20 @@ def reduce_df(
         (for out_all True) DataFrame and available and selected xcats and cids.
     """
 
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("Argument `df` must be a standardised Quantamental DataFrame.")
+
+    if type(df) is QuantamentalDataFrame:
+        return df.reduce_df(
+            cids=cids,
+            xcats=xcats,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            out_all=out_all,
+            intersect=intersect,
+        )
+
     if xcats is not None:
         if not isinstance(xcats, list):
             xcats = [xcats]
@@ -610,6 +653,13 @@ def reduce_df_by_ticker(
 
     :return <pd.Dataframe>: reduced dataframe that also removes duplicates
     """
+    if type(df) is QuantamentalDataFrame:
+        return df.reduce_df_by_ticker(
+            tickers=ticks,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+        )
 
     dfx = df.copy()
 
@@ -657,7 +707,7 @@ def categories_df_aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
 
     """
 
-    dfx = dfx.groupby(["xcat", "cid", "custom_date"])
+    dfx = dfx.groupby(["xcat", "cid", "custom_date"], observed=True)
     dfx = dfx.aggregate(xcat_agg, numeric_only=True).reset_index()
 
     if "real_date" in dfx.columns:
@@ -695,10 +745,15 @@ def _categories_df_explanatory_df(
             explanatory_col = dfw[xcat].sum(min_count=1)
 
         if lag > 0:
-            explanatory_col = explanatory_col.groupby(level=0).shift(lag)
+            explanatory_col: pd.Series
+            explanatory_col = explanatory_col.groupby(
+                level=0,
+                observed=True,
+            ).shift(lag)
 
         dfw_explanatory[xcat] = explanatory_col
 
+    dfw_explanatory.index.names = ["cid", "real_date"]
     return dfw_explanatory
 
 
@@ -838,7 +893,8 @@ def categories_df(
             [
                 pd.Grouper(level="cid"),
                 pd.Grouper(level="real_date", freq=freq),
-            ]
+            ],
+            observed=True,
         )
 
         dfw_explanatory = _categories_df_explanatory_df(
@@ -898,6 +954,17 @@ def categories_df(
 
         dfc = pd.concat(df_output)
         dfc = dfc.pivot(index=("cid", "real_date"), columns="xcat", values=val)
+
+    if dfc.index.dtypes["cid"].name == "category":
+        # in case the incoming DF has a categorical index it, the index needs to be
+        # converted to object type to avoid issues downstream
+        new_outer_index = dfc.index.levels[0].astype("object")
+        new_index = pd.MultiIndex(
+            levels=[new_outer_index, dfc.index.levels[1]],
+            codes=dfc.index.codes,
+            names=dfc.index.names,
+        )
+        dfc.index = new_index
 
     # Adjusted to account for multiple signals requested. If the DataFrame is
     # two-dimensional, signal & a return, NaN values will be handled inside other
@@ -1150,6 +1217,59 @@ def get_sops(
         freq=freq,
         direction=direction,
     )
+
+
+def concat_categorical(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
+    """
+    Concatenate two DataFrames with categorical columns.
+
+    The dtypes of the of the second DataFrame will be cast to the dtypes of the first.
+    The columns of the DataFrames must be identical.
+
+    :param <pd.DataFrame> df1: The first DataFrame.
+    :param <pd.DataFrame> df2: The second DataFrame.
+
+    :return <pd.DataFrame>: The concatenated DataFrame with the same columns as the
+        input.
+    """
+    if not isinstance(df1, pd.DataFrame) or not isinstance(df2, pd.DataFrame):
+        raise TypeError("Both DataFrames must be pandas DataFrames.")
+
+    if not (set(df1.columns) == set(df2.columns)):
+        raise ValueError("The columns of the two DataFrames must be identical.")
+
+    # Explicitly set or create categorical columns based on the data in model_df_long
+    for col in df1.select_dtypes(include="category").columns:
+        df2[col] = df2[col].astype("category")
+
+    non_categorical_cols = df1.select_dtypes(exclude="category").columns
+    df2[non_categorical_cols] = df2[non_categorical_cols].astype(
+        df1[non_categorical_cols].dtypes.to_dict()
+    )
+    # If one DataFrame is None, return the other (if both are None, return None)
+    if df1.empty:
+        return df2.reset_index(drop=True) if df2 is not None else None
+    if df2 is None or df2.empty:
+        return df1.reset_index(drop=True)
+    categorical_cols = list(
+        set(df1.select_dtypes(include="category").columns).union(
+            df2.select_dtypes(include="category").columns
+        )
+    )
+    for col in categorical_cols:
+        # Find the combined categories from both DataFrames for the current column
+        combined_categories = pd.Categorical(
+            df1[col].cat.categories.union(df2[col].cat.categories)
+        )
+
+        # Re-assign the categorical column with the combined categories to both DataFrames
+        df1[col] = pd.Categorical(df1[col], categories=combined_categories)
+        df2[col] = pd.Categorical(df2[col], categories=combined_categories)
+
+    # Concatenate the two DataFrames and reset the index
+    concatenated_df = pd.concat([df1, df2], axis=0, ignore_index=True)
+
+    return concatenated_df
 
 
 if __name__ == "__main__":

@@ -154,8 +154,6 @@ def hedge_calculator(
 
     df_hr = df_hr.set_index("real_date", drop=True).shift(1).reset_index(level=0)
 
-    df_hr["cid"] = cross_section
-
     return df_hr
 
 
@@ -190,7 +188,8 @@ def adjusted_returns(
 
     hedged_returns = hedge_pivot.multiply(br_df)
     adj_rets = dfw - hedged_returns
-
+    if isinstance(df_hedge["cid"].dtype, pd.CategoricalDtype):
+        adj_rets.columns = pd.Categorical(adj_rets.columns)
     df_stack = adj_rets.stack().reset_index(name="value")
     df_stack.columns = ["real_date", "cid", "value"]
 
@@ -267,11 +266,9 @@ def return_beta(
     """
 
     # Value checks
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError(f"Expected DataFrame but received <{type(df)}>.")
-    df: QuantamentalDataFrame = standardise_dataframe(df)
+    df: QuantamentalDataFrame = QuantamentalDataFrame(df)
 
-    all_tix = np.unique(df["cid"] + "_" + df["xcat"])
+    all_tix = df.list_tickers()
     bm_error = f"Benchmark return ticker {benchmark_return} is not in the DataFrame."
     if not benchmark_return in all_tix:
         raise ValueError(bm_error)
@@ -339,6 +336,8 @@ def return_beta(
     dfh_w.columns = ["hedge"]
 
     # --- Merge time series and calculate re-balancing dates.
+    if isinstance(dfp_w.columns.dtype, pd.CategoricalDtype):
+        dfp_w.columns = dfp_w.columns.astype("object")
 
     dfw = pd.merge(dfp_w, dfh_w, how="inner", on="real_date")
     br = dfw["hedge"]
@@ -362,17 +361,17 @@ def return_beta(
             min_obs=min_obs,
             max_obs=max_obs,
         )
+        df_hr = QuantamentalDataFrame.from_long_df(df_hr, cid=c, xcat=xcat + ratio_name)
         aggregate.append(df_hr)
 
-    df_hedge = pd.concat(aggregate, ignore_index=True)
-
-    df_hedge["xcat"] = xcat + ratio_name
+    df_hedge = QuantamentalDataFrame.from_qdf_list(aggregate)
 
     if hedged_returns:
         df_hreturn = adjusted_returns(df_hedge=df_hedge, dfw=dfw, benchmark_return=br)
-        df_hreturn = df_hreturn.sort_values(["cid", "real_date"])
-        df_hreturn["xcat"] = xcat + "_" + hr_name
-        df_hedge = pd.concat([df_hedge, df_hreturn], ignore_index=True)
+        df_hreturn = QuantamentalDataFrame.from_long_df(
+            df=df_hreturn, xcat=xcat + "_" + hr_name
+        )
+        df_hedge = df_hedge.update_df(df_hreturn)
 
     return standardise_dataframe(df_hedge)
 
