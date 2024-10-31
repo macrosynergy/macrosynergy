@@ -51,7 +51,7 @@ class Plotter(metaclass=PlotterMetaClass):
     This class does not implement any plotting functionality, but provides a shared
     interface for the plotter classes, and some common functionality - currently just the
     filtering of the DataFrame.
-    Parameters
+
     :param <pd.DataFrame> df: A DataFrame with the following columns:
         'cid', 'xcat', 'real_date', and at least one metric from -
         'value', 'grading', 'eop_lag', or 'mop_lag'.

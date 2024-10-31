@@ -22,7 +22,6 @@ class Heatmap(Plotter):
     Class for plotting time series data as a heatmap.
     Inherits from `macrosynergy.visuals.plotter.Plotter`.
 
-    Parameters
     :param <pd.DataFrame> df: A DataFrame with the following columns:
         'cid', 'xcat', 'real_date', and at least one metric from -
         'value', 'grading', 'eop_lag', or 'mop_lag'.
@@ -95,7 +94,6 @@ class Heatmap(Plotter):
         Plots a DataFrame as a heatmap with the columns along the x-axis and
         rows along the y-axis.
 
-        Parameters
         :param <Tuple> figsize: tuple specifying the size of the figure. Default is
             (12, 8).
         :param <str> x_axis_label: label for x-axis.
