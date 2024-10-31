@@ -11,16 +11,22 @@ from macrosynergy.management import make_qdf
 
 class RandomEffects(BaseEstimator):
     """
-    A custom sklearn estimator that fits a random effects model.
+    Random effects model for inference on panel data.
+
+    Parameters
+    ----------
+    group_col : str
+        The column of a multi-indexed pandas dataframe to group by, for placing of 
+        random effects. 
+    fit_intercept : bool
+        Whether or not to fit an intercept term. 
+
+    Notes
+    -----
+    A random effects model is a way of ...
     """
 
     def __init__(self, group_col: str = "real_date", fit_intercept: bool = True):
-        """
-        Initialize the RandomEffects estimator.
-
-        :param group_col: The column of a Pandas MultiIndexed DataFrame to group by.
-        :param fit_intercept: Whether to fit an intercept term.
-        """
         if not isinstance(group_col, str):
             raise TypeError("group_col must be a string.")
         if not isinstance(fit_intercept, bool):

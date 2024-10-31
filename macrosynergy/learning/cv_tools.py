@@ -30,6 +30,12 @@ def panel_cv_scores(
     """
     Returns a dataframe of cross-validation scores.
 
+    Parameters
+    ----------
+
+    Notes
+    -----
+
     :param <pd.DataFrame> X: Dataframe of features multi-indexed by (cross-section, date).
         The dataframe must be in wide format: each feature is a column.  The dates must
         be in datetime format.
