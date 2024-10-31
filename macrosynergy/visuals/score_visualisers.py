@@ -21,7 +21,6 @@ class ScoreVisualisers:
     Class to visualize the scores and linear composite of specified categories and
     cross-sections.
 
-    Parameters
     :param <pd.DataFrame> df: A standardized JPMaQS with the following columns:
         'cid', 'xcat', 'real_date', and at least one metric from -
         'value', 'grading', 'eop_lag', or 'mop_lag'.
@@ -292,7 +291,6 @@ class ScoreVisualisers:
         """
         View heatmap of the scores at the specified or latest available date.
 
-        Parameters
         :param <List[str]> cids: A list of cross-section identifiers to select from the
             DataFrame. If None, all cross-sections in the frame are selected.
         :param <List[str]> xcats: A list of category tickers to select from the DataFrame.
@@ -402,7 +400,6 @@ class ScoreVisualisers:
         """
         View the evolution of the scores for the specified xcat and cids.
 
-        Parameters
         :param <str> xcat: The category to view the evolution of.
         :param <str> freq: The frequency of the evolution. Must be 'Q', 'A', or 'BA'.
         :param <List[str]> cids: A list of cross-section identifiers to select from the
@@ -524,7 +521,6 @@ class ScoreVisualisers:
         """
         View the evolution of the scores for the specified cid and xcats.
 
-        Parameters
         :param <str> cid: The cross-section to view the evolution of.
         :param <List[str]> xcats: A list of category tickers to select from the DataFrame.
             If None, all are selected.

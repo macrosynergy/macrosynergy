@@ -230,7 +230,6 @@ def generate_lines(sig_len: int, style: str = "linear") -> Union[np.ndarray, Lis
     """
     Returns a numpy array of a line with a given length.
 
-    Parameters
     :param <int> sig_len: The number of elements in the returned array.
     :param <str> style: The style of the line. Default `'linear'`. Current choices are:
         `linear`, `decreasing-linear`, `sharp-hill`, `four-bit-sine`, `sine`, `cosine`,
@@ -336,7 +335,6 @@ def make_test_df(
     These values are simple lines, or waves that are easy to identify
     and differentiate in a plot.
 
-    Parameters
 
     :param <List[str]> cids: A list of strings for cids.
     :param <List[str]> xcats: A list of strings for xcats.
