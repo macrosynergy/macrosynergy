@@ -3,7 +3,10 @@ import numpy as np
 import pandas as pd
 from typing import List, Tuple, Union, Dict, Any
 
-from macrosynergy.panel.linear_composite import linear_composite
+from macrosynergy.panel.linear_composite import (
+    linear_composite,
+    _missing_cids_xcats_str,
+)
 from macrosynergy.management.simulate import make_test_df
 
 
@@ -676,6 +679,43 @@ class TestAll(unittest.TestCase):
         self.assertTrue(
             np.all(rdf[rdf["real_date"] != "2000-01-17"]["value"].values == 0)
         )
+
+    def test_linear_composite_err_msg(self):
+
+        cids = ["AUD", "CAD", "GBP"]
+        xcats = ["XR", "CRY", "INFL"]
+
+        df = make_test_df(cids=cids, xcats=xcats)
+
+        # Test Case 1 - test if a missing xcat is included in the error message
+        df_test = df[~((df["cid"] == "AUD") & (df["xcat"] == "XR"))].reset_index(
+            drop=TrueF
+        )
+
+        err_str = _missing_cids_xcats_str(
+            df=df_test,
+            cids=cids,
+            xcats=xcats,
+        )
+
+        expc_start = "The following `cids` are missing for the respective `xcats`:"
+        self.assertTrue(err_str.startswith(expc_start))
+        self.assertTrue(err_str.endswith("XR:  ['AUD']"))
+
+        # test with complete xcat missing
+        df_test = df[~(df["xcat"] == "XR")].reset_index(drop=True)
+
+        err_str = _missing_cids_xcats_str(
+            df=df_test,
+            cids=cids,
+            xcats=xcats,
+        )
+
+        expc_start = f"Missing xcats: {['XR']}"
+        self.assertTrue(err_str.startswith(expc_start))
+
+        expc_end = "XR:  ['AUD', 'CAD', 'GBP']"
+        self.assertTrue(err_str.split("\n")[-1] == expc_end)
 
 
 if __name__ == "__main__":
