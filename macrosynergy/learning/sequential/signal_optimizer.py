@@ -16,6 +16,8 @@ from sklearn.pipeline import Pipeline
 
 from macrosynergy.learning import ExpandingIncrementPanelSplit
 from macrosynergy.learning.sequential import BasePanelLearner
+from macrosynergy.management.utils import concat_categorical
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 class SignalOptimizer(BasePanelLearner):
@@ -128,13 +130,41 @@ class SignalOptimizer(BasePanelLearner):
         )
 
         # Create initial dataframes to store relevant quantities from the learning process
-        self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
+        self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]).astype(
+            {
+                "cid": "category",
+                "real_date": "datetime64[ns]",
+                "xcat": "category",
+                "value": "float32",
+            }
+        )
         self.ftr_coefficients = pd.DataFrame(
             columns=["real_date", "name"] + list(self.X.columns)
+        ).astype(
+            {
+                **{col: "float32" for col in self.X.columns},
+                "real_date": "datetime64[ns]",
+                "name": "category",
+            }
         )
-        self.intercepts = pd.DataFrame(columns=["real_date", "name", "intercepts"])
+        self.intercepts = pd.DataFrame(
+            columns=["real_date", "name", "intercepts"]
+        ).astype(
+            {
+                "real_date": "datetime64[ns]",
+                "name": "category",
+                "intercepts": "float32",
+            }
+        )
+
         self.selected_ftrs = pd.DataFrame(
             columns=["real_date", "name"] + list(self.X.columns)
+        ).astype(
+            {
+                **{col: "int" for col in self.X.columns},
+                "real_date": "datetime64[ns]",
+                "name": "category",
+            }
         )
 
         self.store_correlations = False
@@ -148,6 +178,14 @@ class SignalOptimizer(BasePanelLearner):
                 "pipeline_input",
                 "pearson",
             ]
+        ).astype(
+            {
+                "real_date": "datetime64[ns]",
+                "name": "category",
+                "predictor_input": "category",
+                "pipeline_input": "category",
+                "pearson": "float",
+            }
         )
 
     def calculate_predictions(
@@ -311,107 +349,56 @@ class SignalOptimizer(BasePanelLearner):
             id_vars=["cid", "real_date"],
             var_name="xcat",
         )
-        self.preds = pd.concat(
-            (self.preds if self.preds.size != 0 else None, forecasts_df_long), axis=0
-        ).astype(
-            {
-                "cid": "object",
-                "real_date": "datetime64[ns]",
-                "xcat": "object",
-                "value": np.float32,
-            }
+        self.preds = concat_categorical(
+            df1=self.preds,
+            df2=forecasts_df_long,
         )
 
         # Store model selection data
         model_df_long = pd.DataFrame(
-            columns=self.chosen_models.columns,
-            data=model_choice_data,
+            data=model_choice_data, columns=self.chosen_models.columns
         )
-        self.chosen_models = pd.concat(
-            (
-                self.chosen_models if self.chosen_models.size != 0 else None,
-                model_df_long,
-            ),
-            axis=0,
-        ).astype(
-            {
-                "real_date": "datetime64[ns]",
-                "name": "object",
-                "model_type": "object",
-                "score": "float32",
-                "hparams": "object",
-                "n_splits_used": "object",
-            }
+        self.chosen_models = concat_categorical(
+            df1=self.chosen_models,
+            df2=model_df_long,
         )
 
         # Store feature coefficients
         coef_df_long = pd.DataFrame(
             columns=self.ftr_coefficients.columns, data=ftr_coef_data
         )
-        ftr_coef_types = {col: "float32" for col in self.X.columns}
-        ftr_coef_types["real_date"] = "datetime64[ns]"
-        ftr_coef_types["name"] = "object"
-        self.ftr_coefficients = pd.concat(
-            (
-                self.ftr_coefficients if self.ftr_coefficients.size != 0 else None,
-                coef_df_long,
-            ),
-            axis=0,
-        ).astype(ftr_coef_types)
+        self.ftr_coefficients = concat_categorical(
+            self.ftr_coefficients,
+            coef_df_long,
+        )
 
         # Store intercept
         intercept_df_long = pd.DataFrame(
             columns=self.intercepts.columns, data=intercept_data
         )
-        self.intercepts = pd.concat(
-            (
-                self.intercepts if self.intercepts.size != 0 else None,
-                intercept_df_long,
-            ),
-            axis=0,
-        ).astype(
-            {
-                "real_date": "datetime64[ns]",
-                "name": "object",
-                "intercepts": "float32",
-            }
+        self.intercepts = concat_categorical(
+            self.intercepts,
+            intercept_df_long,
         )
 
         # Store selected features
         ftr_select_df_long = pd.DataFrame(
             columns=self.selected_ftrs.columns, data=ftr_selection_data
         )
-        ftr_selection_types = {col: "int" for col in self.X.columns}
-        ftr_selection_types["real_date"] = "datetime64[ns]"
-        ftr_selection_types["name"] = "object"
-
-        self.selected_ftrs = pd.concat(
-            (
-                self.selected_ftrs if self.selected_ftrs.size != 0 else None,
-                ftr_select_df_long,
-            ),
-            axis=0,
-        ).astype(ftr_selection_types)
+        self.selected_ftrs = concat_categorical(
+            self.selected_ftrs,
+            ftr_select_df_long,
+        )
 
         ftr_corr_df_long = pd.DataFrame(
             columns=self.ftr_corr.columns, data=ftr_corr_data
         )
 
-        self.ftr_corr = pd.concat(
-            (
-                self.ftr_corr if self.ftr_corr.size != 0 else None,
-                ftr_corr_df_long,
-            ),
-            axis=0,
-        ).astype(
-            {
-                "real_date": "datetime64[ns]",
-                "name": "object",
-                "predictor_input": "object",
-                "pipeline_input": "object",
-                "pearson": "float",
-            }
+        self.ftr_corr = concat_categorical(
+            self.ftr_corr,
+            ftr_corr_df_long,
         )
+        pass
 
     def store_split_data(
         self,
@@ -602,7 +589,7 @@ class SignalOptimizer(BasePanelLearner):
             Pandas dataframe in JPMaQS format of working daily predictions.
         """
         if name is None:
-            return self.preds
+            preds = self.preds
         else:
             if isinstance(name, str):
                 name = [name]
@@ -619,7 +606,13 @@ class SignalOptimizer(BasePanelLearner):
                         calculate_predictions() first.
                         """
                     )
-            return self.preds[self.preds.xcat.isin(name)]
+            preds = self.preds[self.preds.xcat.isin(name)]
+        # return self.preds[self.preds.xcat.isin(name)]
+        signals_df = QuantamentalDataFrame(
+            df=preds,
+            categorical=self.df.InitializedAsCategorical,
+        ).to_original_dtypes()
+        return signals_df
 
     def get_selected_features(self, name=None):
         """
@@ -951,7 +944,9 @@ class SignalOptimizer(BasePanelLearner):
 
         # Sort this dataframe based on the average correlation with each feature in
         # pipeline_input
-        avg_corr = correlations.groupby("pipeline_input")["pearson"].mean()
+        avg_corr = correlations.groupby("pipeline_input", observed=True)[
+            "pearson"
+        ].mean()
         avg_corr = avg_corr.sort_values(ascending=False)
         if cap is not None:
             avg_corr = avg_corr.head(cap)
@@ -1400,7 +1395,7 @@ class SignalOptimizer(BasePanelLearner):
         if ftrs_renamed is not None:
             ftrcoef_df.rename(columns=ftrs_renamed, inplace=True)
 
-        avg_coefs = ftrcoef_df.groupby("year").mean()
+        avg_coefs = ftrcoef_df.groupby("year", observed=True).mean()
         pos_coefs = avg_coefs.clip(lower=0)
         neg_coefs = avg_coefs.clip(upper=0)
 
@@ -1517,6 +1512,8 @@ if __name__ == "__main__":
         SignWeightedLinearRegression,
     )
     from macrosynergy.management.simulate import make_qdf
+    from macrosynergy.learning.model_evaluation.scorers.scorers import neg_mean_abs_corr
+    from macrosynergy.management.types import QuantamentalDataFrame
 
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
@@ -1550,7 +1547,7 @@ if __name__ == "__main__":
     }
 
     # Signal optimizer with single metric and inner splitter
-
+    # dfd = QuantamentalDataFrame(dfd)
     so = SignalOptimizer(
         df=dfd,
         xcats=["CRY", "GROWTH", "INFL", "XR"],
@@ -1580,7 +1577,8 @@ if __name__ == "__main__":
         n_jobs_outer=1,
         n_jobs_inner=1,
     )
-
+    sig = so.get_optimized_signals("LR")
+    pass
     # so.nsplits_timeplot(name="LR", splitter="ExpandingKFold")
 
     # # Now run a pipeline with changes from the default

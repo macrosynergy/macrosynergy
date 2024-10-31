@@ -12,19 +12,18 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from joblib import Parallel, delayed
-from sklearn.base import RegressorMixin, ClassifierMixin
-from sklearn.model_selection import BaseCrossValidator, GridSearchCV, RandomizedSearchCV
+from sklearn.base import ClassifierMixin, RegressorMixin
+from sklearn.model_selection import (BaseCrossValidator, GridSearchCV,
+                                     RandomizedSearchCV)
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from tqdm.auto import tqdm
 
 from macrosynergy.compat import JOBLIB_RETURN_AS
-from macrosynergy.learning.splitters import (
-    BasePanelSplit,
-    ExpandingFrequencyPanelSplit,
-    ExpandingIncrementPanelSplit,
-)
+from macrosynergy.learning.splitters import (ExpandingFrequencyPanelSplit,
+                                             ExpandingIncrementPanelSplit)
 from macrosynergy.management import categories_df
+from macrosynergy.management.types.qdf import QuantamentalDataFrame
 
 
 class BasePanelLearner(ABC):
@@ -92,7 +91,7 @@ class BasePanelLearner(ABC):
             generate_labels,
         )
         # Attributes
-        self.df = df
+        self.df = QuantamentalDataFrame(df)
         self.xcats = xcats
         self.cids = cids
         self.start = start
@@ -144,7 +143,18 @@ class BasePanelLearner(ABC):
                 "hparams",
                 "n_splits_used",
             ]
+        ).astype(
+            {
+                "real_date": "datetime64[ns]",
+                "name": "category",
+                "model_type": "category",
+                "score": "float32",
+                "hparams": "object",
+                "n_splits_used": "object",
+            }
         )
+
+        self.timestamps = []
 
     def run(
         self,
