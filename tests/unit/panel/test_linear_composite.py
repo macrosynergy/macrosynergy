@@ -689,7 +689,7 @@ class TestAll(unittest.TestCase):
 
         # Test Case 1 - test if a missing xcat is included in the error message
         df_test = df[~((df["cid"] == "AUD") & (df["xcat"] == "XR"))].reset_index(
-            drop=TrueF
+            drop=True
         )
 
         err_str = _missing_cids_xcats_str(
