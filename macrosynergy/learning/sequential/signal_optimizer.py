@@ -16,7 +16,7 @@ from sklearn.pipeline import Pipeline
 
 from macrosynergy.learning import ExpandingIncrementPanelSplit
 from macrosynergy.learning.sequential import BasePanelLearner
-from macrosynergy.management.utils import concat_categorical
+from macrosynergy.management.utils import concat_categorical, _insert_as_categorical
 from macrosynergy.management.types import QuantamentalDataFrame
 
 
@@ -105,7 +105,7 @@ class SignalOptimizer(BasePanelLearner):
         freq="M",
         lag=1,
         xcat_aggs=["last", "sum"],
-        generate_labels = None,
+        generate_labels=None,
     ):
         # Run checks and necessary dataframe massaging
         super().__init__(
@@ -130,10 +130,10 @@ class SignalOptimizer(BasePanelLearner):
         )
 
         # Create initial dataframes to store relevant quantities from the learning process
-        self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]).astype(
+        self.preds = pd.DataFrame(columns=["real_date", "cid", "xcat", "value"]).astype(
             {
-                "cid": "category",
                 "real_date": "datetime64[ns]",
+                "cid": "category",
                 "xcat": "category",
                 "value": "float32",
             }
@@ -331,7 +331,7 @@ class SignalOptimizer(BasePanelLearner):
             ftr_corr_data.extend(split_result["ftr_corr"])
 
         # Create quantamental dataframe of forecasts
-        for pipeline_name, idx, forecasts in prediction_data:
+        for idx, forecasts in prediction_data:
             forecasts_df.loc[idx, name] = forecasts
 
         forecasts_df = forecasts_df.groupby(level=0).ffill().dropna()
@@ -344,9 +344,10 @@ class SignalOptimizer(BasePanelLearner):
                         (cross_section_key, slice(periods[0], periods[1])), :
                     ] = np.nan
 
+        forecasts_df.columns = forecasts_df.columns.astype("category")
         forecasts_df_long = pd.melt(
             frame=forecasts_df.reset_index(),
-            id_vars=["cid", "real_date"],
+            id_vars=["real_date", "cid"],
             var_name="xcat",
         )
         self.preds = concat_categorical(
@@ -356,8 +357,11 @@ class SignalOptimizer(BasePanelLearner):
 
         # Store model selection data
         model_df_long = pd.DataFrame(
-            data=model_choice_data, columns=self.chosen_models.columns
-        )
+            columns=[col for col in self.chosen_models.columns if col != "name"],
+            data=model_choice_data,
+        ).astype({"model_type": "category"})
+        model_df_long = _insert_as_categorical(model_df_long, "name", name, 1)
+
         self.chosen_models = concat_categorical(
             df1=self.chosen_models,
             df2=model_df_long,
@@ -365,8 +369,10 @@ class SignalOptimizer(BasePanelLearner):
 
         # Store feature coefficients
         coef_df_long = pd.DataFrame(
-            columns=self.ftr_coefficients.columns, data=ftr_coef_data
+            columns=[col for col in self.ftr_coefficients.columns if col != "name"],
+            data=ftr_coef_data,
         )
+        coef_df_long = _insert_as_categorical(coef_df_long, "name", name, 1)
         self.ftr_coefficients = concat_categorical(
             self.ftr_coefficients,
             coef_df_long,
@@ -374,8 +380,10 @@ class SignalOptimizer(BasePanelLearner):
 
         # Store intercept
         intercept_df_long = pd.DataFrame(
-            columns=self.intercepts.columns, data=intercept_data
+            columns=[col for col in self.intercepts.columns if col != "name"],
+            data=intercept_data,
         )
+        intercept_df_long = _insert_as_categorical(intercept_df_long, "name", name, 1)
         self.intercepts = concat_categorical(
             self.intercepts,
             intercept_df_long,
@@ -383,8 +391,10 @@ class SignalOptimizer(BasePanelLearner):
 
         # Store selected features
         ftr_select_df_long = pd.DataFrame(
-            columns=self.selected_ftrs.columns, data=ftr_selection_data
+            columns=[col for col in self.selected_ftrs.columns if col != "name"],
+            data=ftr_selection_data,
         )
+        ftr_select_df_long = _insert_as_categorical(ftr_select_df_long, "name", name, 1)
         self.selected_ftrs = concat_categorical(
             self.selected_ftrs,
             ftr_select_df_long,
@@ -398,7 +408,6 @@ class SignalOptimizer(BasePanelLearner):
             self.ftr_corr,
             ftr_corr_df_long,
         )
-        pass
 
     def store_split_data(
         self,
@@ -461,7 +470,7 @@ class SignalOptimizer(BasePanelLearner):
         else:
             preds = np.zeros(X_test.shape[0])
 
-        prediction_data = [pipeline_name, adjusted_test_index, preds]
+        prediction_data = [adjusted_test_index, preds]
 
         feature_names = np.array(X_train.columns)
         if isinstance(optimal_model, Pipeline):
@@ -505,10 +514,10 @@ class SignalOptimizer(BasePanelLearner):
         # Get feature selection information
         if len(feature_names) == X_train.shape[1]:
             # Then all features were selected
-            ftr_selection_data = [timestamp, pipeline_name] + [1 for _ in feature_names]
+            ftr_selection_data = [timestamp] + [1 for _ in feature_names]
         else:
             # Then some features were excluded
-            ftr_selection_data = [timestamp, pipeline_name] + [
+            ftr_selection_data = [timestamp] + [
                 1 if name in feature_names else 0 for name in np.array(X_train.columns)
             ]
 
@@ -518,8 +527,8 @@ class SignalOptimizer(BasePanelLearner):
 
         # Store data
         split_result = {
-            "ftr_coefficients": [timestamp, pipeline_name] + coefs,
-            "intercepts": [timestamp, pipeline_name, intercepts],
+            "ftr_coefficients": [timestamp] + coefs,
+            "intercepts": [timestamp, intercepts],
             "selected_ftrs": ftr_selection_data,
             "predictions": prediction_data,
             "ftr_corr": ftr_corr_data,

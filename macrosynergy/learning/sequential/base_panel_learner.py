@@ -716,7 +716,7 @@ class BasePanelLearner(ABC):
             optim_score = (-np.inf,)
             optim_params = ({},)
 
-        data = [timestamp, pipeline_name, optim_name, optim_score, optim_params]
+        data = [timestamp, optim_name, optim_score, optim_params]
 
         n_splits = {
             splitter_name: splitter.n_splits

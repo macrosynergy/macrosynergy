@@ -357,7 +357,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             raise ValueError("The number of samples in X and y must match.")
         if isinstance(y, np.ndarray):
             # This can happen during sklearn's GridSearch when a voting regressor is used
-            if y.ndim != 1 or y.ndim != 2:
+            if y.ndim != 1 and y.ndim != 2:
                 raise ValueError("y must be a 1D or 2D array.")
             if y.ndim == 2 and y.shape[1] != 1:
                 raise ValueError("y must have only one column.")
