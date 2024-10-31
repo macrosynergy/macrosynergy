@@ -42,7 +42,7 @@ def _missing_cids_xcats_str(
         missing_xcats = []
 
     xcat_dict: Dict[str, str] = {}
-    for xc in xcats:
+    for xc in sorted(xcats):
         miss_cids = list(
             set(cids) - set(df.loc[df["xcat"] == xc, "cid"].unique().tolist())
         )
@@ -60,7 +60,7 @@ def _missing_cids_xcats_str(
         )
         longest_xc = max([len(xc) for xc in xcat_dict.keys()])
         for _xc, _cids in xcat_dict.items():
-            msg = f"{_xc}: " + " " * (longest_xc - len(_xc)) + " " + str(_cids)
+            msg = f"{_xc}: " + " " * (longest_xc - len(_xc)) + " " + str(sorted(_cids))
             output_strs.append(msg)
 
     return "\n".join(output_strs)
