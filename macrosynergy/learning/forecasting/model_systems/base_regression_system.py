@@ -116,6 +116,9 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         for section in cross_sections:
             X_section = X.xs(section, level=0, drop_level=False)
             y_section = y.xs(section, level=0, drop_level=False)
+            # X_section = X.loc[section]
+            # y_section = y.loc[section]
+            
             unique_dates = sorted(X_section.index.unique())
             num_dates = len(unique_dates)
             # Skip cross-sections with insufficient samples
@@ -236,9 +239,16 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             Target variable for the cross-section, adjusted for the rolling window.
         """
         right_dates = unique_dates[-roll:]
-        mask = X_section.index.isin(right_dates)
-        X_section = X_section[mask]
-        y_section = y_section[mask]
+        # mask = X_section.index.isin(right_dates)
+        # X_section = X_section[mask]
+        # y_section = y_section[mask]
+
+        # return X_section, y_section
+        common_index = X_section.index.intersection(right_dates)
+
+        # Filter X_section and y_section directly
+        X_section = X_section.reindex(common_index)
+        y_section = y_section.reindex(common_index)
 
         return X_section, y_section
 

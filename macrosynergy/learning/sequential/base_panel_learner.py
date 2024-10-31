@@ -13,15 +13,16 @@ import pandas as pd
 import seaborn as sns
 from joblib import Parallel, delayed
 from sklearn.base import ClassifierMixin, RegressorMixin
-from sklearn.model_selection import (BaseCrossValidator, GridSearchCV,
-                                     RandomizedSearchCV)
+from sklearn.model_selection import BaseCrossValidator, GridSearchCV, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from tqdm.auto import tqdm
 
 from macrosynergy.compat import JOBLIB_RETURN_AS
-from macrosynergy.learning.splitters import (ExpandingFrequencyPanelSplit,
-                                             ExpandingIncrementPanelSplit)
+from macrosynergy.learning.splitters import (
+    ExpandingFrequencyPanelSplit,
+    ExpandingIncrementPanelSplit,
+)
 from macrosynergy.management import categories_df
 from macrosynergy.management.types.qdf import QuantamentalDataFrame
 
@@ -232,40 +233,43 @@ class BasePanelLearner(ABC):
         train_test_splits = list(outer_splitter.split(self.X, self.y))
 
         # Return list of results
-        optim_results = Parallel(n_jobs=n_jobs_outer, **JOBLIB_RETURN_AS)(
-            delayed(self._worker)(
-                name=name,
-                train_idx=train_idx,
-                test_idx=test_idx,
-                inner_splitters=inner_splitters,
-                models=models,
-                hyperparameters=hyperparameters,
-                scorers=scorers,
-                cv_summary=cv_summary,
-                search_type=search_type,
-                normalize_fold_results=normalize_fold_results,
-                n_iter=n_iter,
-                n_splits_add=(
-                    {
-                        splitter_name: (
-                            int(
-                                np.ceil(
-                                    split_function(iteration * outer_splitter.test_size)
+        optim_results = tqdm(
+            Parallel(n_jobs=n_jobs_outer, **JOBLIB_RETURN_AS)(
+                delayed(self._worker)(
+                    name=name,
+                    train_idx=train_idx,
+                    test_idx=test_idx,
+                    inner_splitters=inner_splitters,
+                    models=models,
+                    hyperparameters=hyperparameters,
+                    scorers=scorers,
+                    cv_summary=cv_summary,
+                    search_type=search_type,
+                    normalize_fold_results=normalize_fold_results,
+                    n_iter=n_iter,
+                    n_splits_add=(
+                        {
+                            splitter_name: (
+                                int(
+                                    np.ceil(
+                                        split_function(
+                                            iteration * outer_splitter.test_size
+                                        )
+                                    )
                                 )
+                                if split_function is not None
+                                else 0
                             )
-                            if split_function is not None
-                            else 0
-                        )
-                        for splitter_name, split_function in split_functions.items()
-                    }
-                    if split_functions is not None
-                    else None
-                ),
-                n_jobs_inner=n_jobs_inner,
-            )
-            for iteration, (train_idx, test_idx) in tqdm(
-                enumerate(train_test_splits), total=len(train_test_splits)
-            )
+                            for splitter_name, split_function in split_functions.items()
+                        }
+                        if split_functions is not None
+                        else None
+                    ),
+                    n_jobs_inner=n_jobs_inner,
+                )
+                for iteration, (train_idx, test_idx) in enumerate(train_test_splits)
+            ),
+            total=len(train_test_splits),
         )
 
         return optim_results
@@ -996,12 +1000,11 @@ class BasePanelLearner(ABC):
             raise ValueError("All elements in xcat_aggs must be strings.")
         if len(xcat_aggs) != 2:
             raise ValueError("xcat_aggs must have exactly two elements.")
-        
+
         # generate_labels checks
         if generate_labels is not None:
             if not callable(generate_labels):
                 raise TypeError("generate_labels must be a callable.")
-
 
     def _check_run(
         self,
@@ -1264,36 +1267,36 @@ class BasePanelLearner(ABC):
             for hparam_key, hparam_values in pipe_params.items():
                 if not isinstance(hparam_key, str):
                     raise ValueError(
-                            "The keys of the inner hyperparameters dictionaries must be "
-                            "strings."
-                        )
+                        "The keys of the inner hyperparameters dictionaries must be "
+                        "strings."
+                    )
                 if search_type == "grid":
                     if not isinstance(hparam_values, list):
                         raise ValueError(
-                                "The values of the inner hyperparameters dictionaries must be "
-                                "lists if hparam_type is 'grid'."
-                            )
+                            "The values of the inner hyperparameters dictionaries must be "
+                            "lists if hparam_type is 'grid'."
+                        )
                     if len(hparam_values) == 0:
                         raise ValueError(
-                                "The values of the inner hyperparameters dictionaries cannot be "
-                                "empty lists."
-                            )
+                            "The values of the inner hyperparameters dictionaries cannot be "
+                            "empty lists."
+                        )
                 elif search_type == "prior":
-                        # hparam_values must either be a list or a scipy.stats distribution
-                        # create typeerror
+                    # hparam_values must either be a list or a scipy.stats distribution
+                    # create typeerror
                     if isinstance(hparam_values, list):
                         if len(hparam_values) == 0:
                             raise ValueError(
-                                    "The values of the inner hyperparameters dictionaries cannot "
-                                    "be empty lists."
-                                )
+                                "The values of the inner hyperparameters dictionaries cannot "
+                                "be empty lists."
+                            )
                     else:
                         if not hasattr(hparam_values, "rvs"):
                             raise ValueError(
-                                    "Invalid random hyperparameter search dictionary element "
-                                    f"for hyperparameter {hparam_key}. The dictionary values "
-                                    "must be scipy.stats distributions."
-                                )
+                                "Invalid random hyperparameter search dictionary element "
+                                f"for hyperparameter {hparam_key}. The dictionary values "
+                                "must be scipy.stats distributions."
+                            )
 
     def _checks_models_heatmap(
         self,

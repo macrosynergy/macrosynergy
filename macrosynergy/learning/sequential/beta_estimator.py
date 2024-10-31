@@ -132,7 +132,7 @@ class BetaEstimator(BasePanelLearner):
         # Create initial dataframes to store estimated betas and OOS hedged returns
         self.betas = pd.DataFrame(columns=["real_date", "cid", "xcat", "value"]).astype(
             {
-                "real_date": "datetime64[ns]",
+                "real_date": "datetime64[s]",
                 "cid": "category",
                 "xcat": "category",
                 "value": "float32",
@@ -142,7 +142,7 @@ class BetaEstimator(BasePanelLearner):
             columns=["real_date", "cid", "xcat", "value"]
         ).astype(
             {
-                "real_date": "datetime64[ns]",
+                "real_date": "datetime64[s]",
                 "cid": "category",
                 "xcat": "category",
                 "value": "float32",
