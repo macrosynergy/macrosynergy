@@ -20,6 +20,52 @@ PD_FUTURE_STACK = (
 )
 
 
+def _missing_cids_xcats_str(
+    df: QuantamentalDataFrame,
+    cids: List[str],
+    xcats: List[str],
+) -> str:
+
+    output_strs: List[str] = []
+
+    found_cids = df["cid"].unique().tolist()
+    found_xcats = df["xcat"].unique().tolist()
+
+    if set(cids) != set(found_cids):
+        missing_cids = list(set(cids) - set(found_cids))
+    else:
+        missing_cids = []
+
+    if set(xcats) != set(found_xcats):
+        missing_xcats = list(set(xcats) - set(found_xcats))
+    else:
+        missing_xcats = []
+
+    xcat_dict: Dict[str, str] = {}
+    for xc in sorted(xcats):
+        miss_cids = list(
+            set(cids) - set(df.loc[df["xcat"] == xc, "cid"].unique().tolist())
+        )
+        if miss_cids:
+            xcat_dict[xc] = miss_cids
+
+    if missing_cids:
+        output_strs.append(f"Missing cids: {missing_cids}")
+    if missing_xcats:
+        output_strs.append(f"Missing xcats: {missing_xcats}")
+
+    if xcat_dict:
+        output_strs.append(
+            "The following `cids` are missing for the respective `xcats`:"
+        )
+        longest_xc = max([len(xc) for xc in xcat_dict.keys()])
+        for _xc, _cids in xcat_dict.items():
+            msg = f"{_xc}: " + " " * (longest_xc - len(_xc)) + " " + str(sorted(_cids))
+            output_strs.append(msg)
+
+    return "\n".join(output_strs)
+
+
 def _linear_composite_basic(
     data_df: pd.DataFrame,
     weights_df: pd.DataFrame,
@@ -542,9 +588,12 @@ def linear_composite(
         intersect=False,
         out_all=True,
     )
-    if len(remaining_xcats) == 1 and len(remaining_cids) < len(cids) and not _xcat_agg:
+
+    if len(remaining_cids) < len(cids) and not _xcat_agg:
+        missing_cids_xcats_str = _missing_cids_xcats_str(df=df, cids=cids, xcats=xcats)
         raise ValueError(
-            "Not all `cids` have complete `xcat` data required for the calculation."
+            "Not all `cids` have complete `xcat` data required for the calculation.\n"
+            f"{missing_cids_xcats_str}"
         )
 
     if _xcat_agg:
