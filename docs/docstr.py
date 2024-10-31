@@ -206,7 +206,7 @@ def format_docstring_section(
             if ix < len(dirtextlist) - 1:
                 dtext += "\n"
 
-            new_ds += dtext
+            new_ds += dtext + "\n"
         output += new_ds + "\n\n"
 
     output = output.rstrip()
