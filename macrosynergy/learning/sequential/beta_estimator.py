@@ -187,6 +187,13 @@ class BetaEstimator(BasePanelLearner):
         # Checks
         # TODO
 
+        if hedged_return_xcat in self.hedged_returns["xcat"].unique():
+            self.hedged_returns = self.hedged_returns[
+                ~self.hedged_returns["xcat"].isin([hedged_return_xcat])
+            ]
+        if beta_xcat in self.betas["xcat"].unique():
+            self.betas = self.betas[~self.betas["xcat"].isin([beta_xcat])]
+
         self.hedged_return_xcat = hedged_return_xcat
         # Create pandas dataframes to store betas and hedged returns
 

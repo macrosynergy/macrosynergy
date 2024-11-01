@@ -283,10 +283,18 @@ class SignalOptimizer(BasePanelLearner):
             )
         self.store_correlations = store_correlations
 
-        # First create pandas dataframes to store the forecasts
-        forecasts_df = pd.DataFrame(
-            index=self.forecast_idxs, columns=[name], data=np.nan, dtype="float32"
-        )
+        if name in self.preds.xcat.unique():
+            self.preds = self.preds[self.preds.xcat != name]
+        if name in self.ftr_coefficients.name.unique():
+            self.ftr_coefficients = self.ftr_coefficients[
+                self.ftr_coefficients.name != name
+            ]
+        if name in self.intercepts.name.unique():
+            self.intercepts = self.intercepts[self.intercepts.name != name]
+        if name in self.selected_ftrs.name.unique():
+            self.selected_ftrs = self.selected_ftrs[self.selected_ftrs.name != name]
+        if name in self.ftr_corr.name.unique():
+            self.ftr_corr = self.ftr_corr[self.ftr_corr.name != name]
 
         # Set up outer splitter
         outer_splitter = ExpandingIncrementPanelSplit(
@@ -330,6 +338,10 @@ class SignalOptimizer(BasePanelLearner):
             ftr_selection_data.append(split_result["selected_ftrs"])
             ftr_corr_data.extend(split_result["ftr_corr"])
 
+        # First create pandas dataframes to store the forecasts
+        forecasts_df = pd.DataFrame(
+            index=self.forecast_idxs, columns=[name], data=np.nan, dtype="float32"
+        )
         # Create quantamental dataframe of forecasts
         for idx, forecasts in prediction_data:
             forecasts_df.loc[idx, name] = forecasts

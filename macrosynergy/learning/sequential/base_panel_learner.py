@@ -229,6 +229,9 @@ class BasePanelLearner(ABC):
             n_jobs_inner=n_jobs_inner,
         )
 
+        if name in self.chosen_models.name.unique():
+            self.chosen_models = self.chosen_models[~(self.chosen_models.name == name)]
+
         # Determine all outer splits and run the learning process in parallel
         train_test_splits = list(outer_splitter.split(self.X, self.y))
 
@@ -503,7 +506,7 @@ class BasePanelLearner(ABC):
                     RuntimeWarning,
                 )
                 continue
-            
+
             score = self._model_selection(
                 search_object.cv_results_,
                 cv_summary,
@@ -717,7 +720,12 @@ class BasePanelLearner(ABC):
             optimal_model_score = np.float32("-inf")
             optimal_model_params = {}
 
-        data = [timestamp, optimal_model_name, optimal_model_score, optimal_model_params]
+        data = [
+            timestamp,
+            optimal_model_name,
+            optimal_model_score,
+            optimal_model_params,
+        ]
 
         n_splits = {
             splitter_name: splitter.n_splits
