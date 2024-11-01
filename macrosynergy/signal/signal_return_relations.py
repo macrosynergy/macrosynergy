@@ -326,6 +326,17 @@ class SignalReturnRelations:
 
         Parameters
         ----------
+        ret : str
+            return category. Default is None, in which case the first return category will
+            be used.
+        sigs : str, List[str]
+            signal category. Default is None, in which case all signals will be used.
+        freq : str
+            frequency to be used in analysis. Default is None, in which case the first
+            frequency will be used.
+        agg_sig : str
+            aggregation method to be used in analysis. Default is None, in which case the
+            first aggregation method will be used.
         type : str
             type of segment over which bars are drawn. Either "cross_section" (default),
             "years" or "signals".
