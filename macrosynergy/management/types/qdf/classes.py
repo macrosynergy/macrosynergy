@@ -27,11 +27,8 @@ from .base import QuantamentalDataFrameBase
 
 class QuantamentalDataFrame(QuantamentalDataFrameBase):
     """
-    Type extension of `pd.DataFrame` for Quantamental DataFrames.
-
-    Usage:
-    >>> df: pd.DataFrame = load_data()
-    >>> qdf = QuantamentalDataFrame(df)
+    Type extension of `pd.DataFrame` for Quantamental DataFrames.  Usage: >>> df:
+    pd.DataFrame = load_data() >>> qdf = QuantamentalDataFrame(df)
     """
 
     # @property
@@ -110,6 +107,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         Converts the QuantamentalDataFrame to its original dtypes (using the
         `InitialisedAsCategorical` attribute).
         """
+
         if self.InitializedAsCategorical:
             return self.to_categorical()
         return self.to_string_type()
@@ -336,10 +334,11 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         categorical: bool = True,
     ) -> "QuantamentalDataFrame":
         """
-        Convert a long DataFrame to a QuantamentalDataFrame. This is useful when the DataFrame
-        may contain only a CID or XCAT column, or in cases where the CID and XCAT columns are
-        not named as such.
+        Convert a long DataFrame to a QuantamentalDataFrame. This is useful when the
+        DataFrame may contain only a CID or XCAT column, or in cases where the CID and
+        XCAT columns are not named as such.
         """
+
         # does the real_date column exist?
         if real_date_column not in df.columns:
             raise ValueError(f"No `{real_date_column}` column found in the DataFrame.")

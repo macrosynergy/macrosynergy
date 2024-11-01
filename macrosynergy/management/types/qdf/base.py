@@ -37,7 +37,7 @@ class QuantamentalDataFrameMeta(type):
             )
             result = result and correct_date_type
 
-        except: # noqa
+        except:  # noqa
             result: bool = False
         finally:
             return result
@@ -45,9 +45,8 @@ class QuantamentalDataFrameMeta(type):
 
 class QuantamentalDataFrameBase(pd.DataFrame, metaclass=QuantamentalDataFrameMeta):
     """
-    Base class to extend `pd.DataFrame` for Quantamental DataFrames.
-
-    This class is a parent class to macrosynergy.types.QuantamentalDataFrame.
+    Base class to extend `pd.DataFrame` for Quantamental DataFrames.  This class is a
+    parent class to macrosynergy.types.QuantamentalDataFrame.
     """
 
     IndexCols: List[str] = ["real_date", "cid", "xcat"]
