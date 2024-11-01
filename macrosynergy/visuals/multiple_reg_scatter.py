@@ -33,32 +33,50 @@ def multiple_reg_scatter(
     """
     Visualize the results of a multiple regression analysis across categories.
 
-    :param <List[CategoryRelations]> cat_rels: list of CategoryRelations objects.
-    :param <int> ncol: number of columns in the grid. Default is 0, which will be set to
-        the length of cat_rels.
-    :param <int> nrow: number of rows in the grid. Default is 0, which will be set to 1.
-    :param <Tuple[float]> figsize: size of the figure. Default is (20, 15).
-    :param <str> title: title of the figure. Default is an empty string.
-    :param <str> xlab: label of the x-axis. Default is an empty string.
-    :param <str> ylab: label of the y-axis. Default is an empty string.
-    :param <bool> fit_reg: if True (default) a linear regression line is fitted to the
-        data.
-    :param <int> reg_ci: confidence interval for the regression line. Default is 95.
-    :param <int> reg_order: order of the regression line. Default is 1.
-    :param <bool> reg_robust: if True (default is False) robust standard errors are used.
-    :param <str> coef_box: if not None, a box with the coefficients of the regression is
-        displayed. Default is None.
-    :param <int> coef_box_font_size: font size of the coefficients box. Default is 12. If
-        set to 0 it automatically sets the fontsize according to matplotlib.
-    :param <str> prob_est: method to estimate the probability. Default is 'pool'.
-    :param <int> separator: allows categorizing the scatter analysis by
-            integer. This is done by setting it to a year [2010, for instance] which will
-            subsequently split the time-period into the sample before (not including) that
-            year and from (including) that year.
-    :param <bool> single_chart: if True (default is False) all the data is plotted in a
-        single chart. If False, a grid of charts is created.
-    :param <List[str]> subplot_titles: list of titles for each subplot. Default is None.
+    Parameters
+    ----------
+    cat_rels : List[CategoryRelations]
+        list of CategoryRelations objects.
+    ncol : int
+        number of columns in the grid. Default is 0, which will be set to the length of
+        cat_rels.
+    nrow : int
+        number of rows in the grid. Default is 0, which will be set to 1.
+    figsize : Tuple[float]
+        size of the figure. Default is (20, 15).
+    title : str
+        title of the figure. Default is an empty string.
+    xlab : str
+        label of the x-axis. Default is an empty string.
+    ylab : str
+        label of the y-axis. Default is an empty string.
+    fit_reg : bool
+        if True (default) a linear regression line is fitted to the data.
+    reg_ci : int
+        confidence interval for the regression line. Default is 95.
+    reg_order : int
+        order of the regression line. Default is 1.
+    reg_robust : bool
+        if True (default is False) robust standard errors are used.
+    coef_box : str
+        if not None, a box with the coefficients of the regression is displayed. Default
+        is None.
+    coef_box_font_size : int
+        font size of the coefficients box. Default is 12. If set to 0 it automatically
+        sets the fontsize according to matplotlib.
+    prob_est : str
+        method to estimate the probability. Default is 'pool'.
+    separator : int
+        allows categorizing the scatter analysis by integer. This is done by setting it
+        to a year [2010, for instance] which will subsequently split the time-period into
+        the sample before (not including) that year and from (including) that year.
+    single_chart : bool
+        if True (default is False) all the data is plotted in a single chart. If False,
+        a grid of charts is created.
+    subplot_titles : List[str]
+        list of titles for each subplot. Default is None.
     """
+
     sns.set_theme(style="whitegrid")
     if ncol == 0:
         ncol = len(cat_rels)

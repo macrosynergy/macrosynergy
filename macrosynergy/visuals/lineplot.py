@@ -1,6 +1,6 @@
 """
-A subclass inheriting from `macrosynergy.visuals.plotter.Plotter`,
-designed to plot time series data on a line plot.
+A subclass inheriting from `macrosynergy.visuals.plotter.Plotter`, designed to plot time
+series data on a line plot.
 """
 
 import pandas as pd
@@ -14,22 +14,27 @@ from macrosynergy.management.simulate import make_test_df
 
 class LinePlot(Plotter):
     """
-    Class for plotting time series data on a line plot.
-    Inherits from `macrosynergy.visuals.plotter.Plotter`.
+    Class for plotting time series data on a line plot. Inherits from
+    `macrosynergy.visuals.plotter.Plotter`.
 
-    :param <pd.DataFrame> df: A DataFrame with the following columns:
-        'cid', 'xcat', 'real_date', and at least one metric from -
-        'value', 'grading', 'eop_lag', or 'mop_lag'.
-    :param <List[str]> cids: A list of cids to select from the DataFrame.
-        If None, all cids are selected.
-    :param <List[str]> xcats: A list of xcats to select from the DataFrame.
-        If None, all xcats are selected.
-    :param <List[str]> metrics: A list of metrics to select from the DataFrame.
-        If None, all metrics are selected.
-    :param <str> start_date: ISO-8601 formatted date. Select data from
-        this date onwards. If None, all dates are selected.
-    :param <str> end_date: ISO-8601 formatted date. Select data up to
-        and including this date. If None, all dates are selected.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        A DataFrame with the following columns: 'cid', 'xcat', 'real_date', and at least
+        one metric from - 'value', 'grading', 'eop_lag', or 'mop_lag'.
+    cids : List[str]
+        A list of cids to select from the DataFrame. If None, all cids are selected.
+    xcats : List[str]
+        A list of xcats to select from the DataFrame. If None, all xcats are selected.
+    metrics : List[str]
+        A list of metrics to select from the DataFrame. If None, all metrics are
+        selected.
+    start_date : str
+        ISO-8601 formatted date. Select data from this date onwards. If None, all dates
+        are selected.
+    end_date : str
+        ISO-8601 formatted date. Select data up to and including this date. If None, all
+        dates are selected.
     """
 
     def __init__(
