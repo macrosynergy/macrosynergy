@@ -174,30 +174,26 @@ def reduce_df(
     """
     Filter DataFrame by `cids`, `xcats`, and `start` & `end` dates.
     """
-    if isinstance(cids, str):
-        cids = [cids]
-    if isinstance(xcats, str):
-        xcats = [xcats]
+    if xcats is not None:
+        if not isinstance(xcats, list):
+            xcats = [xcats]
 
-    if start is not None:
-        df = df.loc[df["real_date"] >= pd.to_datetime(start)]
-    if end is not None:
-        df = df.loc[df["real_date"] <= pd.to_datetime(end)]
+    if start:
+        df = df[df["real_date"] >= pd.to_datetime(start)]
+
+    if end:
+        df = df[df["real_date"] <= pd.to_datetime(end)]
 
     if blacklist is not None:
         df = apply_blacklist(df, blacklist)
-
-    if cids is None:
-        cids = sorted(df["cid"].unique())
-    else:
-        cids_in_df = df["cid"].unique()
-        cids = [cid for cid in cids if cid in cids_in_df]
 
     if xcats is None:
         xcats = sorted(df["xcat"].unique())
     else:
         xcats_in_df = df["xcat"].unique()
         xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
+
+    df = df[df["xcat"].isin(xcats)]
 
     if intersect:
         cids_in_df = set.intersection(
@@ -206,18 +202,20 @@ def reduce_df(
     else:
         cids_in_df = df["cid"].unique()
 
-    df = df[df["xcat"].isin(xcats)]
-    df = df[df["cid"].isin(cids)]
+    if cids is None:
+        cids = sorted(cids_in_df)
+    else:
+        cids = [cids] if isinstance(cids, str) else cids
+        cids = [cid for cid in cids if cid in cids_in_df]
 
-    xcats_found = [xcat for xcat in xcats if xcat in df["xcat"].unique()]
-    cids_found = [cid for cid in cids if cid in df["cid"].unique()]
+    df = df[df["cid"].isin(cids)]
 
     df = _sync_df_categories(df)
 
     df = df.drop_duplicates().reset_index(drop=True)
 
     if out_all:
-        return df, xcats_found, cids_found
+        return df, xcats, cids
     else:
         return df
 
