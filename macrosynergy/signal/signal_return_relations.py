@@ -750,7 +750,7 @@ class SignalReturnRelations:
                 s_date = intersection_df.index[0]
                 e_date = intersection_df.index[-1]
 
-                final_df.loc[(cid_name, s_date) : (cid_name, e_date), signal] = (
+                final_df.loc[(cid_name, s_date):(cid_name, e_date), signal] = (
                     intersection_df.to_numpy()
                 )
                 storage.append(final_df)
@@ -1193,10 +1193,10 @@ class SignalReturnRelations:
                 [
                     self.__output_table__(
                         cs_type="years", ret=ret, sig=sig, srt=False
-                    ).iloc[:3,],
+                    ).iloc[:3],
                     self.__output_table__(
                         cs_type="cids", ret=ret, sig=sig, srt=False
-                    ).iloc[1:3,],
+                    ).iloc[1:3],
                 ],
                 axis=0,
             )
