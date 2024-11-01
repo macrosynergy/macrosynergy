@@ -215,7 +215,7 @@ def reduce_df(
     df = df.drop_duplicates().reset_index(drop=True)
 
     if out_all:
-        return df, xcats, cids
+        return df, xcats, sorted(cids)
     else:
         return df
 

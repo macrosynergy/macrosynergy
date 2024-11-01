@@ -738,7 +738,7 @@ def reduce_df(
     df = df[df["cid"].isin(cids)]
 
     if out_all:
-        return df.drop_duplicates(), xcats, cids
+        return df.drop_duplicates(), xcats, sorted(cids)
     else:
         return df.drop_duplicates()
 
