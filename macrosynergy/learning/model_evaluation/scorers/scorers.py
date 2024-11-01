@@ -1,16 +1,19 @@
+from collections import defaultdict
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
 
 from sklearn.base import RegressorMixin
+from sklearn.ensemble import VotingRegressor
 
 from macrosynergy.learning.forecasting.model_systems import BaseRegressionSystem
+
 
 def neg_mean_abs_corr(
     estimator,
     X_test,
     y_test,
-    correlation_type = "pearson",
+    correlation_type="pearson",
 ):
     """
     Negative mean absolute correlation between a time series of benchmark returns and a
@@ -19,19 +22,19 @@ def neg_mean_abs_corr(
     Parameters
     ----------
     estimator : BaseRegressionSystem
-        A fitted `scikit-learn` regression object with separate linear models for each 
+        A fitted `scikit-learn` regression object with separate linear models for each
         cross-section of returns, regressed against a time series of benchmark risk basket
         returns. It is expected to possess a `coefs_` dictionary attribute with keys
         corresponding to the cross-sections of returns and values corresponding to the
         estimated coefficients of the linear model for each cross-section.
     X_test : pd.DataFrame
-        Risk-basket returns replicated for each cross-section of returns in `y_test`. 
-    y_test : pd.Series 
+        Risk-basket returns replicated for each cross-section of returns in `y_test`.
+    y_test : pd.Series
         Panel of financial contract returns.
     correlation_type : str
         Type of correlation to compute between each hedged return
         series and the risk basket return series. Default is "pearson".
-        Alternatives are "spearman" and "kendall". 
+        Alternatives are "spearman" and "kendall".
 
     Returns
     -------
@@ -41,7 +44,7 @@ def neg_mean_abs_corr(
 
     Notes
     -----
-    For each cross-section :math:`c` in `X_test`, hedged returns are calculated by 
+    For each cross-section :math:`c` in `X_test`, hedged returns are calculated by
     subtracting :math:`X_{test, c} \\cdot \\text{coefs_}[c]` from each `y_{test, c}`.
     Following this, the negative mean absolute correlation over cross-sections can be
     calculated:
@@ -56,32 +59,32 @@ def neg_mean_abs_corr(
     """
     # Checks
     # estimator
-    if not isinstance(estimator, BaseRegressionSystem):
+    if isinstance(estimator, BaseRegressionSystem):
+        if estimator.models_ is None:
+            raise ValueError("estimator must be a fitted model.")
+    elif isinstance(estimator, VotingRegressor):
+        if not all(
+            isinstance(est, BaseRegressionSystem) for est in estimator.estimators_
+        ):
+            raise TypeError(
+                "estimator must be a VotingRegressor with BaseRegressionSystem estimators."
+            )
+        if not all(est.models_ is not None for est in estimator.estimators_):
+            raise ValueError("estimator must be a VotingRegressor with fitted models.")
+    else:
         raise TypeError(
-            "estimator must be an instance of BaseRegressionSystem."
+            "estimator must be a BaseRegressionSystem or VotingRegressor object."
         )
-    if estimator.models_ is None:
-        raise ValueError(
-            "estimator must be a fitted model."
-        )
-    
+
     # X_test
     if not isinstance(X_test, pd.DataFrame):
-        raise TypeError(
-            "X_test must be a pandas DataFrame."
-        )
+        raise TypeError("X_test must be a pandas DataFrame.")
     if X_test.ndim != 2:
-        raise ValueError(
-            "X_test must be a 2-dimensional DataFrame."
-        )
+        raise ValueError("X_test must be a 2-dimensional DataFrame.")
     if X_test.shape[1] != 1:
-        raise ValueError(
-            "X_test must have only one column."
-        )
+        raise ValueError("X_test must have only one column.")
     if not isinstance(X_test.index, pd.MultiIndex):
-        raise ValueError(
-            "X_test must be multi-indexed."
-        )
+        raise ValueError("X_test must be multi-indexed.")
     # TODO: replace below with categorical dtype for cross sections
     if not X_test.index.get_level_values(0).dtype == "object":
         raise TypeError("The outer index of X_test must be strings.")
@@ -97,24 +100,18 @@ def neg_mean_abs_corr(
             "The input feature matrix for neg_mean_abs_corr must not contain any "
             "missing values."
         )
-    
+
     # y_test
     if not isinstance(y_test, pd.Series):
-        raise TypeError(
-            "y_test must be a pandas Series."
-        )
+        raise TypeError("y_test must be a pandas Series.")
     if not isinstance(y_test.index, pd.MultiIndex):
-        raise ValueError(
-            "y_test must be multi-indexed."
-        )
+        raise ValueError("y_test must be multi-indexed.")
     if not y_test.index.get_level_values(0).dtype == "object":
         raise TypeError("The outer index of y_test must be strings.")
     if not y_test.index.get_level_values(1).dtype == "datetime64[ns]":
         raise TypeError("The inner index of y_test must be datetime.date.")
     if not y_test.index.equals(X_test.index):
-        raise ValueError(
-            "y_test and X_test must have the same index."
-        )
+        raise ValueError("y_test and X_test must have the same index.")
     if not pd.api.types.is_numeric_dtype(y_test):
         raise ValueError(
             "The input target vector for neg_mean_abs_corr",
@@ -125,11 +122,25 @@ def neg_mean_abs_corr(
             "The input target vector for neg_mean_abs_corr must not contain any "
             "missing values."
         )
-    # Obtain key information 
-    market_returns = X_test.iloc[:,0].copy() 
+    # Obtain key information
+    market_returns = X_test.iloc[:, 0].copy()
     contract_returns = y_test.copy()
     unique_cross_sections = X_test.index.get_level_values(0).unique()
-    estimated_coefs = estimator.coefs_
+    
+    # Handle voting regressor case later
+    if isinstance(estimator, VotingRegressor):
+        estimators = estimator.estimators_
+        coefs_list = [est.coefs_ for est in estimators]
+        sum_dict = defaultdict(lambda: [0, 0])
+
+        for coefs in coefs_list:
+            for key, value in coefs.items():
+                sum_dict[key][0] += value
+                sum_dict[key][1] += 1
+
+        estimated_coefs = {key: sum / count for key, (sum, count) in sum_dict.items()}
+    else:
+        estimated_coefs = estimator.coefs_
 
     running_sum = 0
     xs_count = 0
@@ -139,9 +150,7 @@ def neg_mean_abs_corr(
             xs_count += 1
             # Get cross-section returns and matched risk basket returns
             contract_returns_c = contract_returns.xs(cross_section)
-            market_returns_c = market_returns.xs(
-                cross_section
-            )
+            market_returns_c = market_returns.xs(cross_section)
             hedged_returns_c = (
                 contract_returns_c - estimated_coefs[cross_section] * market_returns_c
             )
@@ -153,13 +162,13 @@ def neg_mean_abs_corr(
             else:
                 # Use Kendall
                 abs_corr = abs(stats.kendalltau(hedged_returns_c, market_returns_c)[0])
-            # Update running sum 
+            # Update running sum
             running_sum += abs_corr
         else:
-            # Then a model wasn't estimated for this cross-section 
+            # Then a model wasn't estimated for this cross-section
             continue
 
     if xs_count == 0:
-        return np.nan 
+        return np.nan
     else:
-        return - running_sum / xs_count
+        return -running_sum / xs_count

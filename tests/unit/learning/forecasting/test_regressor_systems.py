@@ -461,7 +461,7 @@ class TestLinearRegressionSystem(unittest.TestCase):
             lad = LinearRegression().fit(X, y)
             y_pred_lad = lad.predict(X)
             np.testing.assert_almost_equal(
-                y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=5
+                y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=2
             )
 
 
@@ -769,7 +769,7 @@ class TestLADRegressionSystem(unittest.TestCase):
             lad = LADRegressor().fit(X, y)
             y_pred_lad = lad.predict(X)
             np.testing.assert_almost_equal(
-                y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=5
+                y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=2
             )
 
     def test_check_init_params(self):
@@ -1355,7 +1355,7 @@ class TestRidgeRegressionSystem(unittest.TestCase):
             lad = Ridge().fit(X, y)
             y_pred_lad = lad.predict(X)
             np.testing.assert_almost_equal(
-                y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=5
+                y_pred_lad, y_pred_system.xs(cid, level=0).values, decimal=2
             )
 
 

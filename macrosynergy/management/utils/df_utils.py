@@ -1437,6 +1437,21 @@ def concat_categorical(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     return concatenated_df
 
 
+def _insert_as_categorical(df, column_name, category_name, column_idx):
+    """
+    Inserts a column into a dataframe as a categorical column.
+    """
+    df.insert(
+        column_idx,
+        column_name,
+        pd.Categorical(
+            [category_name] * df.shape[0],
+            categories=[category_name],
+        ),
+    )
+    return df
+
+
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
 
