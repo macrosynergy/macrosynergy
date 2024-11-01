@@ -167,12 +167,12 @@ def get_expression_from_wide_df(
 
 def timeseries_to_qdf(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
     """
-    Converts a dictionary of time series to a QuantamentalDataFrame.
+    Converts a dictionary containing a time-series to a QuantamentalDataFrame.
 
     Parameters
     ----------
     timeseries : Dict[str, Any]
-        A dictionary of time series.
+        A dictionary containing a time-series.
 
 
     Returns
@@ -208,12 +208,12 @@ def timeseries_to_column(
     timeseries: Dict[str, Any], errors: str = "ignore"
 ) -> pd.DataFrame:
     """
-    Converts a dictionary of time series to a DataFrame with a single column.
+    Converts a dictionary containing a time-series to a DataFrame with a single column.
 
     Parameters
     ----------
     timeseries : Dict[str, Any]
-        A dictionary of time series.
+        A dictionary containing a time series.
 
     errors : str
         The error handling method to use. If 'raise', then invalid items in the list
@@ -687,12 +687,6 @@ class JPMaQSDownload(DataQueryInterface):
 
     ValueError
         if provided arguments are invalid or semantically incorrect.
-
-
-    Returns
-    -------
-    JPMaQSDownload
-        JPMaQSDownload object
     """
 
     def __init__(
@@ -1090,6 +1084,9 @@ class JPMaQSDownload(DataQueryInterface):
         page_size: int = 1000,
         verbose: bool = True,
     ) -> List[str]:
+        """
+        Get the JPMaQS catalogue.
+        """
         return super().get_catalogue(group_id, page_size, verbose)
 
     def download_all_to_disk(

@@ -391,12 +391,6 @@ class OAuth(object):
 
     Exception
         other exceptions may be raised by underlying functions.
-
-
-    Returns
-    -------
-    OAuth
-        OAuth object.
     """
 
     def __init__(
@@ -545,12 +539,6 @@ class CertAuth(object):
 
     Exception
         other exceptions may be raised by underlying functions.
-
-
-    Returns
-    -------
-    CertAuth
-        CertAuth object.
     """
 
     def __init__(
@@ -776,12 +764,6 @@ class DataQueryInterface(object):
 
     Exception
         other exceptions may be raised by underlying functions.
-
-
-    Returns
-    -------
-    DataQueryInterface
-        DataQueryInterface object.
     """
 
     def __init__(
