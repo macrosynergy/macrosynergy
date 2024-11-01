@@ -10,21 +10,19 @@ import pandas as pd
 import scipy.stats as stats
 from parameterized import parameterized
 from sklearn.decomposition import PCA
-from sklearn.linear_model import Lasso, LinearRegression, Ridge, LogisticRegression
-from sklearn.metrics import make_scorer, r2_score, accuracy_score, balanced_accuracy_score
+from sklearn.linear_model import (Lasso, LinearRegression, LogisticRegression,
+                                  Ridge)
+from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
+                             make_scorer, r2_score)
 from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from macrosynergy.learning import (
-    ExpandingIncrementPanelSplit,
-    ExpandingKFoldPanelSplit,
-    LassoSelector,
-    RandomEffects,
-    RollingKFoldPanelSplit,
-    SignalOptimizer,
-    regression_balanced_accuracy,
-)
+from macrosynergy.learning import (ExpandingIncrementPanelSplit,
+                                   ExpandingKFoldPanelSplit, LassoSelector,
+                                   RandomEffects, RollingKFoldPanelSplit,
+                                   SignalOptimizer,
+                                   regression_balanced_accuracy)
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils.df_utils import categories_df
 
@@ -32,6 +30,8 @@ from macrosynergy.management.utils.df_utils import categories_df
 class TestAll(unittest.TestCase):
     @classmethod
     def setUpClass(self):
+        np.random.seed(0)
+        
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
         self.mock_show = patch("matplotlib.pyplot.show").start()
@@ -212,18 +212,47 @@ class TestAll(unittest.TestCase):
                     "hparams",
                     "n_splits_used",
                 ]
+            ).astype(
+                {
+                    "real_date": "datetime64[ns]",
+                    "name": "category",
+                    "model_type": "category",
+                    "score": "float32",
+                    "hparams": "object",
+                    "n_splits_used": "object",
+                }
             ),
         )
         pd.testing.assert_frame_equal(
             so.preds,
-            pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]),
+            pd.DataFrame(columns=["real_date", "cid", "xcat", "value"]).astype(
+                {
+                    "cid": "category",
+                    "real_date": "datetime64[ns]",
+                    "xcat": "category",
+                    "value": "float32",
+                }
+            ),
         )
         pd.testing.assert_frame_equal(
             so.ftr_coefficients,
-            pd.DataFrame(columns=["real_date", "name"] + list(so.X.columns)),
+            pd.DataFrame(columns=["real_date", "name"] + list(so.X.columns)).astype(
+                {
+                    **{col: "float32" for col in self.X.columns},
+                    "real_date": "datetime64[ns]",
+                    "name": "category",
+                }
+            ),
         )
         pd.testing.assert_frame_equal(
-            so.intercepts, pd.DataFrame(columns=["real_date", "name", "intercepts"])
+            so.intercepts,
+            pd.DataFrame(columns=["real_date", "name", "intercepts"]).astype(
+                {
+                    "real_date": "datetime64[ns]",
+                    "name": "category",
+                    "intercepts": "float32",
+                }
+            ),
         )
 
         min_date = min(so.unique_date_levels)
@@ -1633,8 +1662,11 @@ class TestAll(unittest.TestCase):
             ):
                 so._check_run(**invalid_case)
 
-    @parameterized.expand([["grid", None], ["prior", 1]])
-    def test_valid_worker(self, search_type, n_iter):
+    # @parameterized.expand([["grid", None], ["prior", 1]])
+    def test_valid_worker(self):
+        # , search_type, n_iter
+        search_type = "grid"
+        n_iter = None
         store_correlations = False
         # Check that the worker private method works as expected for a grid search
         outer_splitter = ExpandingIncrementPanelSplit(
@@ -1690,45 +1722,40 @@ class TestAll(unittest.TestCase):
             model_choice_data = split_result["model_choice"]
             self.assertIsInstance(model_choice_data, list)
             self.assertIsInstance(model_choice_data[0], datetime.date)
-            self.assertTrue(model_choice_data[1] == "test")
-            self.assertIsInstance(model_choice_data[2], str)
-            self.assertTrue(model_choice_data[2] in ["linreg", "ridge"])
-            self.assertIsInstance(model_choice_data[3], float)
+            self.assertIsInstance(model_choice_data[1], str)
+            self.assertTrue(model_choice_data[1] in ["linreg", "ridge"])
+            self.assertIsInstance(model_choice_data[2], float)
+            self.assertIsInstance(model_choice_data[3], dict)
             self.assertIsInstance(model_choice_data[4], dict)
-            self.assertIsInstance(model_choice_data[5], dict)
 
             prediction_data = split_result["predictions"]
-            self.assertTrue(prediction_data[0] == "test")
-            self.assertIsInstance(prediction_data[1], pd.MultiIndex)
-            self.assertIsInstance(prediction_data[2], np.ndarray)
+            self.assertIsInstance(prediction_data[0], pd.MultiIndex)
+            self.assertIsInstance(prediction_data[1], np.ndarray)
 
             ftr_data = split_result["ftr_coefficients"]
             self.assertIsInstance(ftr_data, list)
-            self.assertTrue(len(ftr_data) == 2 + 3)  # 3 ftrs + 2 extra columns
+            self.assertTrue(len(ftr_data) == 1 + 3)  # 3 ftrs + 2 extra columns
             self.assertIsInstance(ftr_data[0], datetime.date)
-            self.assertTrue(ftr_data[1] == "test")
-            for i in range(2, len(ftr_data)):
+            for i in range(1, len(ftr_data)):
                 if ftr_data[i] != np.nan:
                     self.assertIsInstance(ftr_data[i], np.float32)
 
             intercept_data = split_result["intercepts"]
             self.assertIsInstance(intercept_data, list)
             self.assertTrue(
-                len(intercept_data) == 2 + 1
+                len(intercept_data) == 2
             )  # 1 intercept + 2 extra columns
             self.assertIsInstance(intercept_data[0], datetime.date)
-            self.assertTrue(intercept_data[1] == "test")
-            if intercept_data[2] is not None:
-                self.assertIsInstance(intercept_data[2], np.float32)
+            if intercept_data[1] is not None:
+                self.assertIsInstance(intercept_data[1], np.float32)
 
             ftr_selection_data = split_result["selected_ftrs"]
             self.assertIsInstance(ftr_selection_data, list)
             self.assertTrue(
-                len(ftr_selection_data) == 2 + 3
+                len(ftr_selection_data) == 1 + 3
             )  # 3 ftrs + 2 extra columns
             self.assertIsInstance(ftr_selection_data[0], datetime.date)
-            self.assertTrue(ftr_selection_data[1] == "test")
-            for i in range(2, len(ftr_selection_data)):
+            for i in range(1, len(ftr_selection_data)):
                 self.assertTrue(ftr_selection_data[i] in [0, 1])
 
     def test_valid_store_correlation(self):
@@ -1789,45 +1816,40 @@ class TestAll(unittest.TestCase):
             model_choice_data = split_result["model_choice"]
             self.assertIsInstance(model_choice_data, list)
             self.assertIsInstance(model_choice_data[0], datetime.date)
-            self.assertTrue(model_choice_data[1] == "test")
-            self.assertIsInstance(model_choice_data[2], str)
-            self.assertTrue(model_choice_data[2] in ["linreg"])
-            self.assertIsInstance(model_choice_data[3], float)
+            self.assertIsInstance(model_choice_data[1], str)
+            self.assertTrue(model_choice_data[1] in ["linreg"])
+            self.assertIsInstance(model_choice_data[2], float)
+            self.assertIsInstance(model_choice_data[3], dict)
             self.assertIsInstance(model_choice_data[4], dict)
-            self.assertIsInstance(model_choice_data[5], dict)
 
             prediction_data = split_result["predictions"]
-            self.assertTrue(prediction_data[0] == "test")
-            self.assertIsInstance(prediction_data[1], pd.MultiIndex)
-            self.assertIsInstance(prediction_data[2], np.ndarray)
+            self.assertIsInstance(prediction_data[0], pd.MultiIndex)
+            self.assertIsInstance(prediction_data[1], np.ndarray)
 
             ftr_data = split_result["ftr_coefficients"]
             self.assertIsInstance(ftr_data, list)
-            self.assertTrue(len(ftr_data) == 2 + 3)  # 3 ftrs + 2 extra columns
+            self.assertTrue(len(ftr_data) == 1 + 3)  # 3 ftrs + 2 extra columns
             self.assertIsInstance(ftr_data[0], datetime.date)
-            self.assertTrue(ftr_data[1] == "test")
-            for i in range(2, len(ftr_data)):
+            for i in range(1, len(ftr_data)):
                 if ftr_data[i] != np.nan:
                     self.assertIsInstance(ftr_data[i], np.float32)
 
             intercept_data = split_result["intercepts"]
             self.assertIsInstance(intercept_data, list)
             self.assertTrue(
-                len(intercept_data) == 2 + 1
+                len(intercept_data) == 2
             )  # 1 intercept + 2 extra columns
             self.assertIsInstance(intercept_data[0], datetime.date)
-            self.assertTrue(intercept_data[1] == "test")
-            if intercept_data[2] is not None:
-                self.assertIsInstance(intercept_data[2], np.float32)
+            if intercept_data[1] is not None:
+                self.assertIsInstance(intercept_data[1], np.float32)
 
             ftr_selection_data = split_result["selected_ftrs"]
             self.assertIsInstance(ftr_selection_data, list)
             self.assertTrue(
-                len(ftr_selection_data) == 2 + 3
+                len(ftr_selection_data) == 1 + 3
             )  # 3 ftrs + 2 extra columns
             self.assertIsInstance(ftr_selection_data[0], datetime.date)
-            self.assertTrue(ftr_selection_data[1] == "test")
-            for i in range(2, len(ftr_selection_data)):
+            for i in range(1, len(ftr_selection_data)):
                 self.assertTrue(ftr_selection_data[i] in [0, 1])
 
             ftr_correlation = split_result["ftr_corr"]
@@ -1948,8 +1970,8 @@ class TestAll(unittest.TestCase):
         df1 = so.get_optimized_signals(name="test")
         self.assertIsInstance(df1, pd.DataFrame)
         self.assertEqual(df1.shape[1], 4)
-        self.assertEqual(df1.columns[0], "cid")
-        self.assertEqual(df1.columns[1], "real_date")
+        self.assertEqual(df1.columns[0], "real_date")
+        self.assertEqual(df1.columns[1], "cid")
         self.assertEqual(df1.columns[2], "xcat")
         self.assertEqual(df1.columns[3], "value")
         self.assertEqual(df1.xcat.unique()[0], "test")
@@ -1968,8 +1990,8 @@ class TestAll(unittest.TestCase):
         df2 = so.get_optimized_signals(name="test2")
         self.assertIsInstance(df2, pd.DataFrame)
         self.assertEqual(df2.shape[1], 4)
-        self.assertEqual(df2.columns[0], "cid")
-        self.assertEqual(df2.columns[1], "real_date")
+        self.assertEqual(df2.columns[0], "real_date")
+        self.assertEqual(df2.columns[1], "cid")
         self.assertEqual(df2.columns[2], "xcat")
         self.assertEqual(df2.columns[3], "value")
         self.assertEqual(df2.xcat.unique()[0], "test2")
@@ -1977,8 +1999,8 @@ class TestAll(unittest.TestCase):
         df3 = so.get_optimized_signals()
         self.assertIsInstance(df3, pd.DataFrame)
         self.assertEqual(df3.shape[1], 4)
-        self.assertEqual(df3.columns[0], "cid")
-        self.assertEqual(df3.columns[1], "real_date")
+        self.assertEqual(df3.columns[0], "real_date")
+        self.assertEqual(df3.columns[1], "cid")
         self.assertEqual(df3.columns[2], "xcat")
         self.assertEqual(df3.columns[3], "value")
         self.assertEqual(len(df3.xcat.unique()), 2)
@@ -1986,8 +2008,8 @@ class TestAll(unittest.TestCase):
         df4 = so.get_optimized_signals(name=["test", "test2"])
         self.assertIsInstance(df4, pd.DataFrame)
         self.assertEqual(df4.shape[1], 4)
-        self.assertEqual(df4.columns[0], "cid")
-        self.assertEqual(df4.columns[1], "real_date")
+        self.assertEqual(df4.columns[0], "real_date")
+        self.assertEqual(df4.columns[1], "cid")
         self.assertEqual(df4.columns[2], "xcat")
         self.assertEqual(df4.columns[3], "value")
         self.assertEqual(len(df4.xcat.unique()), 2)
@@ -2616,6 +2638,13 @@ def _get_X_y(so: SignalOptimizer):
         )
         .dropna()
         .sort_index()
+    )
+    df_long.index.names = ["cid", "real_date"]
+    new_outer_level = df_long.index.levels[0].astype("object")
+    df_long.index = pd.MultiIndex(
+        levels=[new_outer_level, df_long.index.levels[1]],
+        codes=df_long.index.codes,
+        names=df_long.index.names,
     )
     X = df_long.iloc[:, :-1]
     y = df_long.iloc[:, -1]

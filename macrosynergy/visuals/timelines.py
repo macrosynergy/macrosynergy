@@ -1,17 +1,8 @@
 """
 Function for visualising a facet grid of time line charts of one or more categories
-```python
-import macrosynergy.visuals as msv
-...
-msv.view.timelines(
-    df,
-    xcats=["FXXR", "EQXR", "IR"],
-    cids=["USD", "EUR", "GBP"]
-)
-...
-
-msv.FacetPlot(df).lineplot(cid_grid=True)
-```
+```python import macrosynergy.visuals as msv ... msv.view.timelines( df, xcats=["FXXR",
+"EQXR", "IR"], cids=["USD", "EUR", "GBP"] ) ...
+msv.FacetPlot(df).lineplot(cid_grid=True) ```
 """
 
 from typing import List, Optional, Tuple
@@ -53,50 +44,70 @@ def timelines(
     height: Number = 3.0,
     legend_fontsize: int = 12,
 ):
-    """Displays a facet grid of time line charts of one or more categories.
+    """
+    Displays a facet grid of time line charts of one or more categories.
 
     Parameters
-    :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcat', 'real_date' and at least one column with values of interest.
-    :param <List[str]> xcats: extended categories to plot. Default is all in DataFrame.
-    :param <List[str]> cids: cross sections to plot. Default is all in DataFrame.
-        If this contains only one cross section a single line chart is created.
-    :param <bool> intersect: if True only retains cids that are available for all xcats.
-        Default is False.
-    :param <str> val: name of column that contains the values of interest.
-        Default is 'value'.
-    :param <bool> cumsum: plot cumulative sum of the values over time. Default is False.
-    :param <str> start: earliest date in ISO format. Default is earliest date available.
-    :param <str> end: latest date in ISO format. Default is latest date available.
-    :param <int> ncol: number of columns in facet grid. Default is 3.
-    :param <int> legend_ncol: number of columns in legend. Default is 1.
-    :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
-    :param <bool> all_xticks:  if True x-axis tick labels are added to all plots in grid.
-        Default is False, i.e only the lowest row displays the labels.
-    :param <bool> xcat_grid: if True, shows a facet grid of line charts for each xcat
-        for a single cross section. Default is False, only one cross section is allowed
-        with this option.
-    :param <List[str]> xcat_labels: labels to be used for xcats. If not defined, the
-        labels will be identical to extended categories.
-    :param <bool> single_chart: if True, all lines are plotted in a single chart.
-    :param <str> title: chart heading. Default is no title.
-    :param <float> title_adj: parameter that sets top of figure to accommodate title.
-        Default is 0.95.
-    :param <float> title_xadj: parameter that sets x position of title. Default is 0.5.
-    :param <int> title_fontsize: font size of title. Default is 16.
-    :param <float> label_adj: parameter that sets bottom of figure to fit the label.
-        Default is 0.05.
-    :param <bool> cs_mean: if True this adds a line of cross-sectional averages to
-        the line charts. This is only allowed for function calls with a single
-        category. Default is False.
-    :param <Tuple[Number, Number]> size: two-element tuple setting width/height
-        of single cross section plot. Default is (12, 7). This is irrelevant for facet
-        grid.
-    :param <Number> aspect: width-height ratio for plots in facet. Default is 1.7.
-    :param <Number> height: height of plots in facet. Default is 3.
-    :param <int> legend_fontsize: font size of legend. Default is 12.
-
+    ----------
+    df : pd.Dataframe
+        standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
+        and at least one column with values of interest.
+    xcats : List[str]
+        extended categories to plot. Default is all in DataFrame.
+    cids : List[str]
+        cross sections to plot. Default is all in DataFrame. If this contains only one
+        cross section a single line chart is created.
+    intersect : bool
+        if True only retains cids that are available for all xcats. Default is False.
+    val : str
+        name of column that contains the values of interest. Default is 'value'.
+    cumsum : bool
+        plot cumulative sum of the values over time. Default is False.
+    start : str
+        earliest date in ISO format. Default is earliest date available.
+    end : str
+        latest date in ISO format. Default is latest date available.
+    ncol : int
+        number of columns in facet grid. Default is 3.
+    legend_ncol : int
+        number of columns in legend. Default is 1.
+    same_y : bool
+        if True (default) all plots in facet grid share same y axis.
+    all_xticks : bool
+        if True x-axis tick labels are added to all plots in grid. Default is False, i.e
+        only the lowest row displays the labels.
+    xcat_grid : bool
+        if True, shows a facet grid of line charts for each xcat for a single cross
+        section. Default is False, only one cross section is allowed with this option.
+    xcat_labels : List[str]
+        labels to be used for xcats. If not defined, the labels will be identical to
+        extended categories.
+    single_chart : bool
+        if True, all lines are plotted in a single chart.
+    title : str
+        chart heading. Default is no title.
+    title_adj : float
+        parameter that sets top of figure to accommodate title. Default is 0.95.
+    title_xadj : float
+        parameter that sets x position of title. Default is 0.5.
+    title_fontsize : int
+        font size of title. Default is 16.
+    label_adj : float
+        parameter that sets bottom of figure to fit the label. Default is 0.05.
+    cs_mean : bool
+        if True this adds a line of cross-sectional averages to the line charts. This is
+        only allowed for function calls with a single category. Default is False.
+    size : Tuple[Number, Number]
+        two-element tuple setting width/height of single cross section plot. Default is
+        (12, 7). This is irrelevant for facet grid.
+    aspect : Number
+        width-height ratio for plots in facet. Default is 1.7.
+    height : Number
+        height of plots in facet. Default is 3.
+    legend_fontsize : int
+        font size of legend. Default is 12.
     """
+
     if not isinstance(df, pd.DataFrame):
         raise TypeError("`df` must be a pandas DataFrame.")
 
@@ -220,7 +231,6 @@ def timelines(
             start=start,
             end=end,
         ) as fp:
-
             fp.lineplot(
                 share_y=same_y,
                 share_x=not all_xticks,

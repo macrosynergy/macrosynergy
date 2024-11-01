@@ -1,6 +1,9 @@
+from collections import defaultdict
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
+
+from sklearn.ensemble import VotingRegressor
 
 from macrosynergy.learning.forecasting.model_systems import BaseRegressionSystem
 
@@ -55,10 +58,22 @@ def neg_mean_abs_corr(
     """
     # Checks
     # estimator
-    if not isinstance(estimator, BaseRegressionSystem):
-        raise TypeError("estimator must be an instance of BaseRegressionSystem.")
-    if estimator.models_ is None:
-        raise ValueError("estimator must be a fitted model.")
+    if isinstance(estimator, BaseRegressionSystem):
+        if estimator.models_ is None:
+            raise ValueError("estimator must be a fitted model.")
+    elif isinstance(estimator, VotingRegressor):
+        if not all(
+            isinstance(est, BaseRegressionSystem) for est in estimator.estimators_
+        ):
+            raise TypeError(
+                "estimator must be a VotingRegressor with BaseRegressionSystem estimators."
+            )
+        if not all(est.models_ is not None for est in estimator.estimators_):
+            raise ValueError("estimator must be a VotingRegressor with fitted models.")
+    else:
+        raise TypeError(
+            "estimator must be a BaseRegressionSystem or VotingRegressor object."
+        )
 
     # X_test
     if not isinstance(X_test, pd.DataFrame):
@@ -109,7 +124,21 @@ def neg_mean_abs_corr(
     market_returns = X_test.iloc[:, 0].copy()
     contract_returns = y_test.copy()
     unique_cross_sections = X_test.index.get_level_values(0).unique()
-    estimated_coefs = estimator.coefs_
+    
+    # Handle voting regressor case later
+    if isinstance(estimator, VotingRegressor):
+        estimators = estimator.estimators_
+        coefs_list = [est.coefs_ for est in estimators]
+        sum_dict = defaultdict(lambda: [0, 0])
+
+        for coefs in coefs_list:
+            for key, value in coefs.items():
+                sum_dict[key][0] += value
+                sum_dict[key][1] += 1
+
+        estimated_coefs = {key: sum / count for key, (sum, count) in sum_dict.items()}
+    else:
+        estimated_coefs = estimator.coefs_
 
     running_sum = 0
     xs_count = 0

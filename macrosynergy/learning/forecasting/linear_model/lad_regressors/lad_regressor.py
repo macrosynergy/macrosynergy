@@ -138,19 +138,14 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             init_intercept = np.mean(y)
             init_weights = np.concatenate(([init_intercept], init_weights))
 
+        X = X if isinstance(X, np.ndarray) else X.values
+        y = y.squeeze() if isinstance(y, np.ndarray) else y.values.squeeze()
+
         optim_results = minimize(
             fun=partial(
                 self._l1_loss,
-                X=(X if isinstance(X, np.ndarray) else X.values),
-                y=(
-                    y.squeeze()
-                    if isinstance(y, np.ndarray)
-                    else (
-                        y.values.squeeze()
-                        if isinstance(y, pd.DataFrame)
-                        else y.values.squeeze()
-                    )
-                ),
+                X=X,
+                y=y,
                 sample_weight=sample_weight,
                 alpha=self.alpha,
                 shrinkage_type=self.shrinkage_type,
@@ -159,7 +154,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             method="SLSQP",
             bounds=bounds,
             tol=self.tol,
-            options=(None if self.maxiter is None else {"maxiter": self.maxiter}),
+            options={"maxiter": self.maxiter} if self.maxiter else None,
         )
 
         # Handle optimization results

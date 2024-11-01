@@ -12,6 +12,7 @@ from macrosynergy.management.utils import (
     reduce_df,
     _map_to_business_day_frequency,
 )
+from macrosynergy.management.types import QuantamentalDataFrame
 from numbers import Number
 
 
@@ -26,21 +27,27 @@ def expanding_stat(
     """
     Compute statistic based on an expanding sample.
 
-    :param <pd.Dataframe> df: Daily-frequency time series DataFrame.
-    :param <pd.DatetimeIndex> dates_iter: controls the frequency of the neutral &
-        mean absolute deviation calculations.
-    :param <str, Number> stat: statistical method to be applied. This is typically 'mean',
-        or 'median'.
-    :param <bool> sequential: if True (default) the statistic is estimated sequentially.
-        If this set to false a single value is calculated per time series, based on
-        the full sample.
-    :param <int> min_obs: minimum required observations for calculation of the
-        statistic in days.
-    :param <bool> iis: if set to True, the values of the initial interval determined
-        by min_obs will be estimated in-sample, based on the full initial sample.
+    Parameters
+    ----------
+    df : pd.Dataframe
+        Daily-frequency time series DataFrame.
+    dates_iter : pd.DatetimeIndex
+        controls the frequency of the neutral & mean absolute deviation calculations.
+    stat : str, Number
+        statistical method to be applied. This is typically 'mean', or 'median'.
+    sequential : bool
+        if True (default) the statistic is estimated sequentially. If this set to false
+        a single value is calculated per time series, based on the full sample.
+    min_obs : int
+        minimum required observations for calculation of the statistic in days.
+    iis : bool
+        if set to True, the values of the initial interval determined by min_obs will be
+        estimated in-sample, based on the full initial sample.
 
-    :return <pd.DataFrame> df_out: Time series dataframe of the chosen statistic across
-        all columns
+    Returns
+    -------
+    pd.DataFrame
+        Time series dataframe of the chosen statistic across all columns
     """
 
     df_out = pd.DataFrame(np.nan, index=df.index, columns=["value"])
@@ -119,60 +126,71 @@ def make_zn_scores(
     """
     Computes z-scores for a panel around a neutral level ("zn scores").
 
-    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
-        'cid', 'xcat', 'real_date' and 'value'.
-    :param <str> xcat:  extended category for which the zn_score is calculated.
-    :param <List[str]> cids: cross sections for which zn_scores are calculated; default
-        is all available for category.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date in
-        df is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date in df is
-        used.
-    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
-        the calculation of zn-scores.
-        This means that not only are there no zn-score values calculated for these
-        periods, but also that they are not used for the scoring of other periods.
-        N.B.: The argument is a dictionary with cross-sections as keys and tuples of
-        start and end dates of the blacklist periods in ISO formats as values.
-        If one cross section has multiple blacklist periods, numbers are added to the
-        keys (i.e. TRY_1, TRY_2, etc.)
-    :param <bool> sequential: if True (default) score parameters (neutral level and
-        mean absolute deviation) are estimated sequentially with concurrently
-        available information only.
-    :param <int> min_obs: the minimum number of observations required to calculate
-        zn_scores. Default is 261. The parameter is only applicable if the "sequential"
-        parameter is set to True. Otherwise the neutral level and the mean absolute
-        deviation are both computed in-sample and will use the full sample.
-    :param <bool> iis: if True (default) zn-scores are also calculated for the initial
-        sample period defined by min-obs on an in-sample basis to avoid losing history.
-        This is irrelevant if sequential is set to False.
-    :param <str, Number> neutral: method to determine neutral level. Default is 'zero'.
-        Alternatives are 'mean', 'median' or a number.
-    :param <str> est_freq: the frequency at which mean absolute deviations or means are
-        are re-estimated. The options are daily, weekly, monthly & quarterly: "D", "W",
-        "M", "Q". Default is daily. Re-estimation is performed at period end.
-    :param <float> thresh: threshold value beyond which scores are winsorized,
-        i.e. contained at that threshold. The threshold is the maximum absolute
-        score value that the function is allowed to produce. The minimum threshold is 1
-        mean absolute deviation.
-    :param <float> pan_weight: weight of panel (versus individual cross section) for
-        calculating the z-score parameters, i.e. the neutral level and the mean absolute
-        deviation. Default is 1, i.e. panel data are the basis for the parameters.
-        Lowest possible value is 0, i.e. parameters are all specific to cross section.
-    :param <str> postfix: string appended to category name for output; default is "ZN".
+    Parameters
+    ----------
+    df : pd.Dataframe
+        standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
+        'real_date' and 'value'.
+    xcat : str
+        extended category for which the zn_score is calculated.
+    cids : List[str]
+        cross sections for which zn_scores are calculated; default is all available for
+        category.
+    start : str
+        earliest date in ISO format. Default is None and earliest date in df is used.
+    end : str
+        latest date in ISO format. Default is None and latest date in df is used.
+    blacklist : dict
+        cross-sections with date ranges that should be excluded from the calculation of
+        zn-scores. This means that not only are there no zn-score values calculated for
+        these periods, but also that they are not used for the scoring of other periods.
+    sequential : bool
+        if True (default) score parameters (neutral level and mean absolute deviation)
+        are estimated sequentially with concurrently available information only.
+    min_obs : int
+        the minimum number of observations required to calculate zn_scores. Default is
+        261. The parameter is only applicable if the "sequential" parameter is set to True.
+        Otherwise the neutral level and the mean absolute deviation are both computed in-
+        sample and will use the full sample.
+    iis : bool
+        if True (default) zn-scores are also calculated for the initial sample period
+        defined by min-obs on an in-sample basis to avoid losing history. This is irrelevant
+        if sequential is set to False.
+    neutral : str, Number
+        method to determine neutral level. Default is 'zero'. Alternatives are 'mean',
+        'median' or a number.
+    est_freq : str
+        the frequency at which mean absolute deviations or means are are re-estimated.
+        The options are daily, weekly, monthly & quarterly: "D", "W", "M", "Q". Default is
+        daily. Re-estimation is performed at period end.
+    thresh : float
+        threshold value beyond which scores are winsorized, i.e. contained at that
+        threshold. The threshold is the maximum absolute score value that the function is
+        allowed to produce. The minimum threshold is 1 mean absolute deviation.
+    pan_weight : float
+        weight of panel (versus individual cross section) for calculating the z-score
+        parameters, i.e. the neutral level and the mean absolute deviation. Default is 1,
+        i.e. panel data are the basis for the parameters. Lowest possible value is 0, i.e.
+        parameters are all specific to cross section.
+    postfix : str
+        string appended to category name for output; default is "ZN".
 
-    :return <pd.Dataframe>: standardized DataFrame with the zn-scores of the chosen xcat:
-        'cid', 'xcat', 'real_date' and 'value'.
+    Returns
+    -------
+    pd.Dataframe
+        standardized DataFrame with the zn-scores of the chosen xcat: 'cid', 'xcat',
+        'real_date' and 'value'.
+
+
+    .. note::
+        The argument is a dictionary with cross-sections as keys and tuples of start
+        and end dates of the blacklist periods in ISO formats as values. If one cross
+        section has multiple blacklist periods, numbers are added to the keys (i.e. TRY_1,
+        TRY_2, etc.)
     """
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError("The `df` parameter must be a DataFrame object.")
-    df = df.copy()
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     expected_columns = ["cid", "xcat", "real_date", "value"]
-    col_error = f"The DataFrame must contain the necessary columns: {expected_columns}."
-    if not set(expected_columns).issubset(set(df.columns)):
-        raise ValueError(col_error)
+    df = QuantamentalDataFrame(df[expected_columns])
 
     # --- Assertions
     err: str = (
@@ -217,7 +235,6 @@ def make_zn_scores(
     # --- Prepare re-estimation dates and time-series DataFrame.
 
     # Remove any additional metrics defined in the DataFrame.
-    df = df.loc[:, expected_columns]
     if cids is not None:
         missing_cids = set(cids).difference(set(df["cid"]))
         if missing_cids:
@@ -310,24 +327,33 @@ def make_zn_scores(
     # --- Reformatting of output into standardised DataFrame.
 
     df_out = dfw_zns.stack().to_frame("value").reset_index()
-    df_out["xcat"] = xcat + postfix
+    df_out = QuantamentalDataFrame.from_long_df(
+        df=df_out,
+        xcat=xcat + postfix,
+        categorical=df.InitializedAsCategorical,
+    )
 
-    col_names = ["cid", "xcat", "real_date", "value"]
-    df_out = df_out.sort_values(["cid", "real_date"])[col_names]
-
-    return df_out[df.columns].reset_index(drop=True)
+    return df_out
 
 
 def _get_expanding_count(X: pd.DataFrame, min_periods: int = 1):
     """
     Helper method to get the number of non-NaN values in each expanding window.
 
-    :param <pd.DataFrame> X: Pandas dataframe of input features.
-    :param <int> min_periods: Minimum number of observations in window required to have
-        a value (otherwise result is 0.).
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Pandas dataframe of input features.
+    min_periods : int
+        Minimum number of observations in window required to have a value (otherwise
+        result is 0.).
 
-    :return <np.ndarray>: Numpy array of expanding counts.
+    Returns
+    -------
+    np.ndarray
+        Numpy array of expanding counts.
     """
+
     return X.expanding(min_periods).count().sum(1).to_numpy()
 
 

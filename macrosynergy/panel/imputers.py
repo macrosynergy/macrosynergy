@@ -1,29 +1,43 @@
 import numpy as np
 import pandas as pd
 
-from macrosynergy.management import update_df
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def impute_panel(
-    df: pd.DataFrame, cids: list, xcats: list, threshold: float = 0.5
+    df: pd.DataFrame,
+    cids: list,
+    xcats: list,
+    threshold: float = 0.5,
 ) -> pd.DataFrame:
     """
-    Imputes missing values for each category in a long-format panel dataset by a
-    cross-sectional mean, conditional on the number of available cross-sections at each
-    concerned date exceeding a fraction `threshold` of the total number of cross-sections.
+    Imputes missing values for each category in a long-format panel dataset by a cross-
+    sectional mean, conditional on the number of available cross-sections at each
+    concerned date exceeding a fraction `threshold` of the total number of cross-
+    sections.
 
-    :param <pd.DataFrame> df: the long-format panel dataset
-    :param <list> cids: the list of cross sections to be considered in the imputation
-    :param <list> xcats: the list of categories to be imputed
-    :param <float> threshold: the fraction of available cross-sections at each date
+    Parameters
+    ----------
+    df : pd.DataFrame
+        the long-format panel dataset
+    cids : list
+        the list of cross sections to be considered in the imputation
+    xcats : list
+        the list of categories to be imputed
+    threshold : float
+        the fraction of available cross-sections at each date
 
-    :return <pd.DataFrame>: the imputed long-format panel data, with the relevant xcats and cids
+    Returns
+    -------
+    pd.DataFrame
+        the imputed long-format panel data, with the relevant xcats and cids
+
 
     .. note::
-
-      This class is still **experimental**: the predictions
-      and the API might change without any deprecation cycle.
+        This class is still **experimental**: the predictions and the API might change
+        without any deprecation cycle.
     """
+
     # Checks
     if not isinstance(df, pd.DataFrame):
         raise TypeError("The input `df` must be a pandas DataFrame.")
@@ -37,7 +51,8 @@ def impute_panel(
     if not 0 <= threshold <= 1:
         raise ValueError("The input `threshold` must be between 0 and 1.")
 
-    complete_df = df.copy()
+    complete_df = QuantamentalDataFrame(df)
+    _as_categorical = complete_df.InitializedAsCategorical
     complete_df = complete_df.set_index(["cid", "real_date", "xcat"])
     full_idx = pd.MultiIndex.from_frame(
         pd.concat(
@@ -83,4 +98,7 @@ def impute_panel(
         incomplete_df.loc[mask, "mean_val"]
     )
 
-    return incomplete_df.loc[:, complete_df.columns]
+    return QuantamentalDataFrame(
+        incomplete_df[:, complete_df.columns],
+        categorical=_as_categorical,
+    )

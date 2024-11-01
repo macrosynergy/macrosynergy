@@ -4,7 +4,6 @@ import pandas as pd
 import datetime
 from abc import ABC, abstractmethod
 from sklearn.base import BaseEstimator, RegressorMixin
-from macrosynergy.management.validation import _validate_Xy_learning
 
 
 class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
@@ -116,6 +115,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
         for section in cross_sections:
             X_section = X.xs(section, level=0, drop_level=False)
             y_section = y.xs(section, level=0, drop_level=False)
+
             unique_dates = sorted(X_section.index.unique())
             num_dates = len(unique_dates)
             # Skip cross-sections with insufficient samples
@@ -236,9 +236,11 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             Target variable for the cross-section, adjusted for the rolling window.
         """
         right_dates = unique_dates[-roll:]
-        mask = X_section.index.isin(right_dates)
-        X_section = X_section[mask]
-        y_section = y_section[mask]
+        
+        common_index = X_section.index.intersection(right_dates)
+
+        X_section = X_section.reindex(common_index)
+        y_section = y_section.reindex(common_index)
 
         return X_section, y_section
 
@@ -357,7 +359,7 @@ class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):
             raise ValueError("The number of samples in X and y must match.")
         if isinstance(y, np.ndarray):
             # This can happen during sklearn's GridSearch when a voting regressor is used
-            if y.ndim != 1 or y.ndim != 2:
+            if y.ndim != 1 and y.ndim != 2:
                 raise ValueError("y must be a 1D or 2D array.")
             if y.ndim == 2 and y.shape[1] != 1:
                 raise ValueError("y must have only one column.")

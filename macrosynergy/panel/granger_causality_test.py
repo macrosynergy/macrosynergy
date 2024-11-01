@@ -1,7 +1,6 @@
 """
-Run Granger Causality Test on a standardized quantamental dataframe.
-
-**NOTE: This module is under development, and is not yet ready for production use.**
+Run Granger Causality Test on a standardized quantamental dataframe.  **NOTE: This
+module is under development, and is not yet ready for production use.**
 """
 
 import warnings
@@ -69,9 +68,14 @@ def _get_tickers(
     the function forms the list of tickers from the `cids` and `xcats` such that the
     order of the formed tickers is preserved.
 
-    :param <List[str]> tickers: A list of tickers.
-    :param <Union[str, List[str]]> cids: One or two cids.
-    :param <Union[str, List[str]]> xcats: One or two xcats.
+    Parameters
+    ----------
+    tickers : List[str]
+        A list of tickers.
+    cids : Union[str, List[str]]
+        One or two cids.
+    xcats : Union[str, List[str]]
+        One or two xcats.
     """
 
     if tickers is not None:
@@ -98,12 +102,20 @@ def _type_checks(
     metric: str,
 ) -> bool:
     """
-    Does type checks on the inputs to `granger_causality_test`.
-    All inputs are checked for type and value errors.
+    Does type checks on the inputs to `granger_causality_test`. All inputs are checked
+    for type and value errors.
 
-    :return <bool>: True if all type checks pass.
-    :raises <TypeError>: If any of the inputs are of the wrong type.
-    :raises <ValueError>: If any of the input values are invalid.
+    Raises
+    ------
+    TypeError
+        If any of the inputs are of the wrong type.
+    ValueError
+        If any of the input values are invalid.
+
+    Returns
+    -------
+    bool
+        True if all type checks pass.
     """
 
     if not isinstance(df, QuantamentalDataFrame):
@@ -140,7 +152,7 @@ def _type_checks(
             "`tickers` cannot be specified if `cids` & `xcats` are specified"
         )
 
-    found_tickers: List[str] = (df["cid"] + "_" + df["xcat"]).unique().tolist()
+    found_tickers: List[str] = QuantamentalDataFrame(df).list_tickers()
 
     if bool(tickers):
         # check if there are only two
@@ -209,44 +221,62 @@ def granger_causality_test(
     metric: str = "value",
 ) -> Dict[Any, Any]:
     """
-    Run Granger Causality Test on a standardized quantamental dataframe.
-    Since the Graner Causality Test is a pairwise test, only two tickers can be specified.
-    Specify either `tickers` or `cids` & `xcats`. When specifying `cids` & `xcats`, the
-    user may input one `cid` and two `xcats`; or two `cids` and one `xcat` to yield two
-    tickers. The function forms the list of tickers from the `cids` and `xcats` such that
-    the order of the formed tickers is preserved. The order of the tickers is important
-    as the first ticker is the one that is tested to Granger cause the second ticker.
-    The function tests whether the first ticker Granger causes the second ticker.
+    Run Granger Causality Test on a standardized quantamental dataframe. Since the
+    Graner Causality Test is a pairwise test, only two tickers can be specified. Specify
+    either `tickers` or `cids` & `xcats`. When specifying `cids` & `xcats`, the user may
+    input one `cid` and two `xcats`; or two `cids` and one `xcat` to yield two tickers.
+    The function forms the list of tickers from the `cids` and `xcats` such that the
+    order of the formed tickers is preserved. The order of the tickers is important as
+    the first ticker is the one that is tested to Granger cause the second ticker. The
+    function tests whether the first ticker Granger causes the second ticker.
 
-    :param <pd.DataFrame> df: A standardized quantamental dataframe.
-    :param <List[str]> tickers: A list of tickers to run the test on. A maximum of two
-        tickers can be specified.
-    :param <Union[str, List[str]]> cids: One or two cids to run the test on. If two cids
-        are specified, then only one xcat can be specified. If one cid is specified, then
-        two xcats can be specified.
-    :param <Union[str, List[str]]> xcats: One or two xcats to run the test on. If two
-        xcats are specified, then only one cid can be specified. If one xcat is specified,
-        then two cids can be specified.
-    :param <Union[int, List[int]]> max_lag: If `max_lag` is an integer, then the function
-        computes the test for all lags up to `max_lag`. If `max_lag` is a list of
-        integers, then the function computes the test only for lags specified in the list.
-    :param <bool> add_constant: Whether to add a constant to the regression.
-    :param <str> freq: The frequency to downsample the data to. Must be one of "D", "W",
-        "M", "Q", "A". Default is "M".
-    :param <str> agg: The aggregation method to use when downsampling the data. Must be
-        one of "mean" (default), "median", "min", "max", "first" or "last".
-    :param <str> start: The start date of the data. Must be a valid ISO date. If not
-        specified, the earliest date in `df` is used.
-    :param <str> end: The end date of the data. Must be a valid ISO date. If not
-        specified, the latest date in `df` is used.
-    :param <str> metric: The metric to run the test on. Must be a column in `df`.
-        Default is "value".
+    Parameters
+    ----------
+    df : pd.DataFrame
+        A standardized quantamental dataframe.
+    tickers : List[str]
+        A list of tickers to run the test on. A maximum of two tickers can be specified.
+    cids : Union[str, List[str]]
+        One or two cids to run the test on. If two cids are specified, then only one
+        xcat can be specified. If one cid is specified, then two xcats can be specified.
+    xcats : Union[str, List[str]]
+        One or two xcats to run the test on. If two xcats are specified, then only one
+        cid can be specified. If one xcat is specified, then two cids can be specified.
+    max_lag : Union[int, List[int]]
+        If `max_lag` is an integer, then the function computes the test for all lags up
+        to `max_lag`. If `max_lag` is a list of integers, then the function computes the
+        test only for lags specified in the list.
+    add_constant : bool
+        Whether to add a constant to the regression.
+    freq : str
+        The frequency to downsample the data to. Must be one of "D", "W", "M", "Q", "A".
+        Default is "M".
+    agg : str
+        The aggregation method to use when downsampling the data. Must be one of "mean"
+        (default), "median", "min", "max", "first" or "last".
+    start : str
+        The start date of the data. Must be a valid ISO date. If not specified, the
+        earliest date in `df` is used.
+    end : str
+        The end date of the data. Must be a valid ISO date. If not specified, the latest
+        date in `df` is used.
+    metric : str
+        The metric to run the test on. Must be a column in `df`. Default is "value".
 
-    :return <Dict[Any, Any]>: A dictionary containing the results of the Granger Causality
-        Test. The keys are the lags and the values are the results of the test.
-    :raises <TypeError>: If any of the inputs are of the wrong type.
-    :raises <ValueError>: If any of the input values are invalid.
+    Raises
+    ------
+    TypeError
+        If any of the inputs are of the wrong type.
+    ValueError
+        If any of the input values are invalid.
+
+    Returns
+    -------
+    Dict[Any, Any]
+        A dictionary containing the results of the Granger Causality Test. The keys are
+        the lags and the values are the results of the test.
     """
+
     ## Check inputs
 
     _type_checks(
@@ -265,13 +295,15 @@ def granger_causality_test(
     ## value checks for `freq` and `agg` are implicitly checked in downstream functions
 
     ## Copy df to prevent side effects
-    df: QuantamentalDataFrame = df.copy()
+    df: QuantamentalDataFrame = QuantamentalDataFrame(df)
 
     ## Construct tickers from the `cids` and `xcats` if `tickers` is not specified
     tickers: List[str] = _get_tickers(tickers=tickers, cids=cids, xcats=xcats)
 
     ## Reduce df
-    df: pd.DataFrame = reduce_df_by_ticker(df=df, ticks=tickers, start=start, end=end)
+    df: QuantamentalDataFrame = reduce_df_by_ticker(
+        df=df, ticks=tickers, start=start, end=end
+    )
 
     # Downsample df
     freq = freq.upper()
@@ -281,7 +313,7 @@ def granger_causality_test(
     )
 
     # Pivot df
-    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df, value_column=metric)
+    df_wide: pd.DataFrame = QuantamentalDataFrame(df).to_wide(value_column=metric)
 
     # there must only be two columns in df_wide
     assert len(df_wide.columns) == 2, "df_wide must have only two columns"

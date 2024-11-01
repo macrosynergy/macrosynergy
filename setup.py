@@ -11,8 +11,8 @@ if sys.version_info[:2] < (3, 7):
 
 MAJOR = 0
 MINOR = 1
-MICRO = 37
-ISRELEASED = True
+MICRO = 38
+ISRELEASED = False
 VERSION = "%d.%d.%d" % (MAJOR, MINOR, MICRO)
 
 if sys.version_info >= (3, 13):

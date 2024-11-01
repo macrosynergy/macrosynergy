@@ -33,6 +33,9 @@ def change_column_format(
     cols: List[str],
     dtype: Any,
 ) -> QuantamentalDataFrameBase:
+    """
+    Change the format of columns in a DataFrame.
+    """
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("`df` must be a pandas DataFrame.")
 
@@ -43,7 +46,8 @@ def change_column_format(
         try:
             if col not in df.columns:
                 raise ValueError(f"Column '{col}' not found in DataFrame.")
-            df[col] = df[col].astype(dtype)
+            if not df[col].dtype == dtype:
+                df[col] = df[col].astype(dtype)
         except Exception as exc:
             warnings.warn(f"Could not convert column {col} to {dtype}. Error: {exc}")
 
@@ -53,6 +57,9 @@ def change_column_format(
 def qdf_to_categorical(
     df: QuantamentalDataFrameBase,
 ) -> QuantamentalDataFrameBase:
+    """
+    Convert the index columns ("cid", "xcat") of a DataFrame to categorical format.
+    """
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("`df` must be a pandas DataFrame.")
 
@@ -63,6 +70,9 @@ def qdf_to_categorical(
 def qdf_to_string_index(
     df: QuantamentalDataFrameBase,
 ) -> QuantamentalDataFrameBase:
+    """
+    Convert the index columns ("cid", "xcat") of a DataFrame to string format.
+    """
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("`df` must be a pandas DataFrame.")
 
@@ -71,6 +81,9 @@ def qdf_to_string_index(
 
 
 def check_is_categorical(df: QuantamentalDataFrameBase) -> bool:
+    """
+    Check if the index columns of a DataFrame are categorical.
+    """
     return all(
         df[col].dtype.name == "category"
         for col in QuantamentalDataFrameBase._StrIndexCols
@@ -150,20 +163,14 @@ def apply_blacklist(
 def _sync_df_categories(
     df: QuantamentalDataFrameBase,
 ) -> QuantamentalDataFrameBase:
+    """
+    Sync the categories of the DataFrame with the data.
+    """
     if not check_is_categorical(df):
         return df
 
-    found_cids = set(df["cid"].unique())
-    found_xcats = set(df["xcat"].unique())
-
-    existing_cids = df["cid"].cat.categories
-    existing_xcats = df["xcat"].cat.categories
-
-    if set(found_cids) != set(existing_cids):
-        df["cid"] = pd.Categorical(df["cid"], categories=found_cids)
-
-    if set(found_xcats) != set(existing_xcats):
-        df["xcat"] = pd.Categorical(df["xcat"], categories=found_xcats)
+    df["cid"] = df["cid"].cat.remove_unused_categories().astype("category")
+    df["xcat"] = df["xcat"].cat.remove_unused_categories().astype("category")
 
     return df
 
@@ -182,30 +189,26 @@ def reduce_df(
     """
     Filter DataFrame by `cids`, `xcats`, and `start` & `end` dates.
     """
-    if isinstance(cids, str):
-        cids = [cids]
-    if isinstance(xcats, str):
-        xcats = [xcats]
+    if xcats is not None:
+        if not isinstance(xcats, list):
+            xcats = [xcats]
 
-    if start is not None:
-        df = df.loc[df["real_date"] >= pd.to_datetime(start)]
-    if end is not None:
-        df = df.loc[df["real_date"] <= pd.to_datetime(end)]
+    if start:
+        df = df[df["real_date"] >= pd.to_datetime(start)]
+
+    if end:
+        df = df[df["real_date"] <= pd.to_datetime(end)]
 
     if blacklist is not None:
         df = apply_blacklist(df, blacklist)
-
-    if cids is None:
-        cids = sorted(df["cid"].unique())
-    else:
-        cids_in_df = df["cid"].unique()
-        cids = sorted(c for c in cids if c in cids_in_df)
 
     if xcats is None:
         xcats = sorted(df["xcat"].unique())
     else:
         xcats_in_df = df["xcat"].unique()
-        xcats = sorted(x for x in xcats if x in xcats_in_df)
+        xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
+
+    df = df[df["xcat"].isin(xcats)]
 
     if intersect:
         cids_in_df = set.intersection(
@@ -213,20 +216,21 @@ def reduce_df(
         )
     else:
         cids_in_df = df["cid"].unique()
-    cids = sorted(c for c in cids if c in cids_in_df)
 
-    df = df[df["xcat"].isin(xcats)]
+    if cids is None:
+        cids = sorted(cids_in_df)
+    else:
+        cids = [cids] if isinstance(cids, str) else cids
+        cids = [cid for cid in cids if cid in cids_in_df]
+
     df = df[df["cid"].isin(cids)]
-
-    xcats_found = sorted(set(df["xcat"].unique()))
-    cids_found = sorted(set(df["cid"].unique()))
 
     df = _sync_df_categories(df)
 
     df = df.drop_duplicates().reset_index(drop=True)
 
     if out_all:
-        return df, xcats_found, cids_found
+        return df, xcats, sorted(cids)
     else:
         return df
 
@@ -276,6 +280,7 @@ def update_df(
     Append a standard DataFrame to a standard base DataFrame with ticker replacement on
     the intersection.
     """
+
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("`df` must be a QuantamentalDataFrame.")
     if not isinstance(df_add, QuantamentalDataFrameBase):
@@ -397,6 +402,13 @@ def rename_xcats(
     name_all: Optional[str] = None,
     fmt_string: Optional[str] = None,
 ) -> QuantamentalDataFrameBase:
+    """
+    Rename the xcats in a DataFrame based on a mapping or a format string. Only one of
+    `xcat_map` or `select_xcats` must be provided. If `name_all` is provided, all xcats
+    will be renamed to this value.
+
+    NOTE: This function maintains the datatype of the xcat column as a categorical.
+    """
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("`df` must be a QuantamentalDataFrame.")
 
@@ -473,7 +485,9 @@ def create_empty_categorical_qdf(
     end_date: Optional[str] = None,
     categorical: bool = True,
 ) -> QuantamentalDataFrameBase:
-
+    """
+    Create an empty QuantamentalDataFrame with categorical index columns.
+    """
     if not all(isinstance(m, str) for m in metrics):
         raise TypeError("`metrics` must be a list of strings.")
 
@@ -547,9 +561,10 @@ def drop_nan_series(
     df: QuantamentalDataFrameBase, column: str = "value", raise_warning: bool = False
 ) -> QuantamentalDataFrameBase:
     """
-    Drops any series that are entirely NaNs.
-    Raises a user warning if any series are dropped.
+    Drops any series that are entirely NaNs. Raises a user warning if any series are
+    dropped.
     """
+
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("Argument `df` must be a Quantamental DataFrame.")
 
@@ -620,7 +635,10 @@ def qdf_from_timseries(
 def concat_qdfs(
     qdf_list: List[QuantamentalDataFrameBase],
 ) -> QuantamentalDataFrameBase:
-
+    """
+    Concatenate a list of QuantamentalDataFrames into a single QuantamentalDataFrame. 
+    Converts the index columns to categorical format, if not already categorical.
+    """
     if not isinstance(qdf_list, list):
         raise TypeError("`qdfs_list` must be a list of QuantamentalDataFrames.")
 
@@ -630,7 +648,8 @@ def concat_qdfs(
     if len(qdf_list) == 0:
         raise ValueError("`qdfs_list` is empty.")
 
-    qdf_list = [qdf_to_categorical(qdf) for qdf in qdf_list]
+    for iq, qdf in enumerate(qdf_list):
+        qdf_list[iq] = qdf_to_categorical(qdf)
 
     comb_cids = pd.api.types.union_categoricals(
         [qdf["cid"].unique() for qdf in qdf_list]
@@ -650,6 +669,10 @@ def concat_qdfs(
     def _convert_to_single_metric_qdfs(
         qdf: QuantamentalDataFrameBase,
     ) -> QuantamentalDataFrameBase:
+        """
+        Convert a QuantamentalDataFrame with multiple metrics to multiple
+        QuantamentalDataFrames with a single metric.
+        """
         return [
             qdf[[*QuantamentalDataFrameBase.IndexCols, metric]]
             for metric in qdf.columns.difference(QuantamentalDataFrameBase.IndexCols)

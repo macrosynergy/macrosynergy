@@ -7,6 +7,7 @@ import pandas as pd
 from typing import List, Union
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel.historic_vol import historic_vol
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.panel.basket import Basket
@@ -19,11 +20,18 @@ def weight_dataframes(df: pd.DataFrame, basket_names: Union[str, List[str]] = No
     Helper function used to break up the original dataframe and create the wide weight
     dataframes.
 
-    :param <pd.Dataframe> df: standardized DataFrame.
-    :param <str or List[str]> basket_names: string or list of basket names.
+    Parameters
+    ----------
+    df : pd.Dataframe
+        standardized DataFrame.
+    basket_names : str or List[str]
+        string or list of basket names.
 
-    :return <List[pd.DataFrames], dict>:
+    Returns
+    -------
+    List[pd.DataFrames], dict
     """
+
     if isinstance(basket_names, str):
         basket_names = [basket_names]
 
@@ -71,33 +79,42 @@ def modify_signals(
     Calculate modified cross-section signals based on zn-scoring (proportionate method)
     or conversion to signs (digital method).
 
-    :param <pd.Dataframe> df: standardized DataFrame containing the following columns:
-        'cid', 'xcat', 'real_date' and 'value'.
-    :param <List[str]> cids: cross sections of markets or currency areas in which
-        positions should be taken.
-    :param <str> xcat_sig: category that serves as signal across markets.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date
-        for which the signal category is available is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date
-        for which the signal category is available is used.
-    :param <str> scale: method to translate signals into target positions:
-        [1] Default is 'prop', means proportionate. In this case zn-scoring is applied
-            to the signal based on the panel, with the neutral level set at zero.
-            A 1 SD value translates into a USD1 position in the contract.
-        [2] Method 'dig' means 'digital' and sets the individual position to either USD1
-            long or short, depending on the sign of the signal.
-            Note that a signal of zero translates into a position of zero.
-    :param <int> min_obs: the minimum number of observations required to calculate
-        zn_scores. Default is 252.
-        Note: For the initial period of the signal time series in-sample
-        zn-scoring is used.
-    :param <float> thresh: threshold value beyond which zn-scores for propotionate
-        position taking are winsorized. The threshold is the maximum absolute
-        score value in standard deviations. The minimum is 1 standard deviation.
+    Parameters
+    ----------
+    df : pd.Dataframe
+        standardized DataFrame containing the following columns: 'cid', 'xcat',
+        'real_date' and 'value'.
+    cids : List[str]
+        cross sections of markets or currency areas in which positions should be taken.
+    xcat_sig : str
+        category that serves as signal across markets.
+    start : str
+        earliest date in ISO format. Default is None and earliest date for which the
+        signal category is available is used.
+    end : str
+        latest date in ISO format. Default is None and latest date for which the signal
+        category is available is used.
+    scale : str
+        method to translate signals into target positions: [1] Default is 'prop', means
+        proportionate. In this case zn-scoring is applied to the signal based on the panel,
+        with the neutral level set at zero. A 1 SD value translates into a USD1 position in
+        the contract. [2] Method 'dig' means 'digital' and sets the individual position to
+        either USD1 long or short, depending on the sign of the signal. Note that a signal
+        of zero translates into a position of zero.
+    min_obs : int
+        the minimum number of observations required to calculate zn_scores. Default is
+        252. Note: For the initial period of the signal time series in-sample zn-scoring is
+        used.
+    thresh : float
+        threshold value beyond which zn-scores for propotionate position taking are
+        winsorized. The threshold is the maximum absolute score value in standard
+        deviations. The minimum is 1 standard deviation.
 
-    :return <pd.Dataframe>: standardized dataframe, of modified signaks, using the
-        columns 'cid', 'xcat', 'real_date' and 'value'.
-
+    Returns
+    -------
+    pd.Dataframe
+        standardized dataframe, of modified signaks, using the columns 'cid', 'xcat',
+        'real_date' and 'value'.
     """
 
     options = ["prop", "dig"]
@@ -135,16 +152,24 @@ def cs_unit_returns(
     """
     Calculate returns of composite unit positions (that jointly depend on one signal).
 
-    :param <pd.Dataframe> df: standardized DataFrame containing the following columns:
-        'cid', 'xcat', 'real_date' and 'value'.
-    :param <List[str]> contract_returns: list of the contract return types.
-    :param <List[float]> sigrels: respective signal for each contract type.
-    :param <str> ret: postfix denoting the returns in % applied to the contract types.
+    Parameters
+    ----------
+    df : pd.Dataframe
+        standardized DataFrame containing the following columns: 'cid', 'xcat',
+        'real_date' and 'value'.
+    contract_returns : List[str]
+        list of the contract return types.
+    sigrels : List[float]
+        respective signal for each contract type.
+    ret : str
+        postfix denoting the returns in % applied to the contract types.
 
-    :return <pd.Dataframe>: standardized dataframe with the summed portfolio returns
-        which are used to calculate the evolving volatility, using the columns 'cid',
-        'xcat', 'real_date' and 'value'.
-
+    Returns
+    -------
+    pd.Dataframe
+        standardized dataframe with the summed portfolio returns which are used to
+        calculate the evolving volatility, using the columns 'cid', 'xcat', 'real_date' and
+        'value'.
     """
 
     error_message = "Each individual contract requires an associated signal."
@@ -168,7 +193,7 @@ def cs_unit_returns(
     df_c_rets.dropna(how="all", inplace=True)
 
     df_rets = df_c_rets.stack().to_frame("value").reset_index()
-    df_rets["xcat"] = ret
+    df_rets = QuantamentalDataFrame.from_long_df(df_rets, xcat=ret)
 
     cols = ["cid", "xcat", "real_date", "value"]
 
@@ -182,13 +207,20 @@ def basket_handler(
     Function designed to compute the target positions for the constituents of a basket.
     The function will return the corresponding basket dataframe of positions.
 
-    :param <pd.DataFrame> df_mods_w: target position dataframe. Will be multiplied by the
-        weight dataframe to establish the positions for the basket of constituents.
-    :param <pd.DataFrame> df_c_wgts: weight dataframe used to adjust the positions of
-        the basket of contracts.
-    :param <dict> contracts: the constituents that make up each basket.
+    Parameters
+    ----------
+    df_mods_w : pd.DataFrame
+        target position dataframe. Will be multiplied by the weight dataframe to
+        establish the positions for the basket of constituents.
+    df_c_wgts : pd.DataFrame
+        weight dataframe used to adjust the positions of the basket of contracts.
+    contracts : dict
+        the constituents that make up each basket.
 
-    :return <pd.Dataframe>: basket positions weight-adjusted.
+    Returns
+    -------
+    pd.Dataframe
+        basket positions weight-adjusted.
     """
 
     error_1 = "df_c_wgts expects to receive a pd.DataFrame."
@@ -230,11 +262,17 @@ def date_alignment(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
     Method used to align the panel position dataframe and the basket dataframe of
     weight-adjusted positions to the same timeframe.
 
-    :param <pd.DataFrame> panel_df:
-    :param <pd.DataFrame> basket_df:
+    Parameters
+    ----------
+    panel_df : pd.DataFrame
 
-    :return <Tuple[pd.DataFrame, pd.DataFrame]>: returns the two received dataframes
-        defined over the same period.
+    basket_df : pd.DataFrame
+
+
+    Returns
+    -------
+    Tuple[pd.DataFrame, pd.DataFrame]
+        returns the two received dataframes defined over the same period.
     """
 
     p_dates = panel_df["real_date"].to_numpy()
@@ -263,14 +301,20 @@ def date_alignment(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
 def consolidation_help(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
     """
     The function receives a panel dataframe and a basket of cross-sections of the same
-    contract type. Therefore, aim to consolidate the targeted positions across the shared
-    contracts.
+    contract type. Therefore, aim to consolidate the targeted positions across the
+    shared contracts.
 
-    :param <pd.DataFrame> panel_df:
-    :param <pd.DataFrame> basket_df:
+    Parameters
+    ----------
+    panel_df : pd.DataFrame
 
-    :return <Tuple[pd.DataFrame, pd.DataFrame]>: returns the consolidated and reduced
-        dataframes.
+    basket_df : pd.DataFrame
+
+
+    Returns
+    -------
+    Tuple[pd.DataFrame, pd.DataFrame]
+        returns the consolidated and reduced dataframes.
     """
 
     basket_cids = basket_df["cid"].unique()
@@ -305,10 +349,17 @@ def consolidate_positions(data_frames: List[pd.DataFrame], ctypes: List[str]):
     Method used to consolidate positions if baskets are used. The constituents of a
     basket will be a subset of one of the panels.
 
-    :param <List[pd.DataFrame]> data_frames: list of the target position dataframes.
-    :param <List[str]> ctypes:
+    Parameters
+    ----------
+    data_frames : List[pd.DataFrame]
+        list of the target position dataframes.
+    ctypes : List[str]
 
-    :return <List[pd.DataFrame]>: list of dataframes having consolidated positions.
+
+    Returns
+    -------
+    List[pd.DataFrame]
+        list of dataframes having consolidated positions.
     """
 
     no_ctypes = len(ctypes)
@@ -347,76 +398,92 @@ def target_positions(
     """
     Converts signals into contract-specific target positions.
 
-    :param <pd.Dataframe> df: standardized DataFrame containing at least the following
-        columns: 'cid', 'xcat', 'real_date' and 'value'.
-    :param <List[str]> cids: cross-sections of markets or currency areas in which
-        positions should be taken.
-    :param <str> xcat_sig: category that serves as signal across markets.
-    :param <List[str]> ctypes: contract types that are traded across markets. They should
-        correspond to return categories in the dataframe if the `ret` argument is
-        appended. Examples are 'FX' or 'EQ'.
-    :param <str or List[str]> basket_names: single string or list of the names of several
-        baskets. The weight dataframes will be appended to the main dataframe. Therefore,
-        use the basket name to isolate the corresponding weights. The default value for
-        the parameter is an empty list, which mean that no baskets are traded.
-    :param <List[float]> sigrels: values that translate the single signal into contract
-        type and basket signals in the order defined by keys.
-    :param <str> ret: postfix denoting the returns in % associated with contract types.
-        For JPMaQS derivatives return data this is typically "XR_NSA" (default).
-        Returns are required for volatility targeting.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date
-        for which the signal category is available is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date
-        for which the signal category is available is used.
-    :param <str> scale: method that translates signals into unit target positions:
-        [1] Default is 'prop' for proportionate. In this case zn-scoring is applied
-            to the signal based on the panel, with the neutral level set at zero.
-            A 1 SD value translates into a USD1 position in the contract.
-            This translation may apply winsorization through the `thresh` argument
-        [2] Method 'dig' means 'digital' and sets the individual position to either USD1
-            long or short, depending on the sign of the signal.
-            Note that a signal of zero translates into a position of zero.
-        Note that unit target positions may subsequently be calibrated to meet cross-
-        section volatility targets using the `cs_targ` argument.
-    :param <int> min_obs: the minimum number of observations required to calculate
-        zn_scores. Default is 252.
-        Note: For the initial minimum period of the signal time series in-sample
-        zn-scoring is used.
-    :param <float> thresh: threshold value beyond which zn-scores for proportionate
-        position taking are winsorized. The threshold is the maximum absolute
-        score value in standard deviations. The minimum is 1 standard deviation.
-    :param <float> cs_vtarg: Value for volatility targeting at the cross-section level.
-        The purpose of this operation is to relate signal to risk rather than notional.
-        Default is None and means no volatility targeting.
-        If a value is chosen then for each cross-section a unit position is defined as a
-        position for which the annual return standard deviation is equal to that value.
-        For example, a target of 10 and a cross-section signal of 0.5 standard deviations
-        would translate into a target position that carries a recent historical
-        annualized standard deviation of 5 dollars (or other currency units).
-    :param <int>  lback_periods: Number of lookback periods over which volatility is
-        calculated. Default is 21. Typically this refers to days.
-    :param <str> lback_meth: Lookback method to calculate the volatility.
-        Default is "ma", which means simple moving average.
-        Alternative is "ema", which means exponential moving average.
-    :param <int> half_life: Refers to the half-time for "xma". Default is 11.
-    :param <str> posname: postfix added to contract to denote position name.
+    Parameters
+    ----------
+    df : pd.Dataframe
+        standardized DataFrame containing at least the following columns: 'cid', 'xcat',
+        'real_date' and 'value'.
+    cids : List[str]
+        cross-sections of markets or currency areas in which positions should be taken.
+    xcat_sig : str
+        category that serves as signal across markets.
+    ctypes : List[str]
+        contract types that are traded across markets. They should correspond to return
+        categories in the dataframe if the `ret` argument is appended. Examples are 'FX' or
+        'EQ'.
+    basket_names : str or List[str]
+        single string or list of the names of several baskets. The weight dataframes
+        will be appended to the main dataframe. Therefore, use the basket name to isolate
+        the corresponding weights. The default value for the parameter is an empty list,
+        which mean that no baskets are traded.
+    sigrels : List[float]
+        values that translate the single signal into contract type and basket signals in
+        the order defined by keys.
+    ret : str
+        postfix denoting the returns in % associated with contract types. For JPMaQS
+        derivatives return data this is typically "XR_NSA" (default). Returns are required
+        for volatility targeting.
+    start : str
+        earliest date in ISO format. Default is None and earliest date for which the
+        signal category is available is used.
+    end : str
+        latest date in ISO format. Default is None and latest date for which the signal
+        category is available is used.
+    scale : str
+        method that translates signals into unit target positions: [1] Default is 'prop'
+        for proportionate. In this case zn-scoring is applied to the signal based on the
+        panel, with the neutral level set at zero. A 1 SD value translates into a USD1
+        position in the contract. This translation may apply winsorization through the
+        `thresh` argument [2] Method 'dig' means 'digital' and sets the individual position
+        to either USD1 long or short, depending on the sign of the signal. Note that a
+        signal of zero translates into a position of zero. Note that unit target positions
+        may subsequently be calibrated to meet cross- section volatility targets using the
+        `cs_targ` argument.
+    min_obs : int
+        the minimum number of observations required to calculate zn_scores. Default is
+        252. Note: For the initial minimum period of the signal time series in-sample zn-
+        scoring is used.
+    thresh : float
+        threshold value beyond which zn-scores for proportionate position taking are
+        winsorized. The threshold is the maximum absolute score value in standard
+        deviations. The minimum is 1 standard deviation.
+    cs_vtarg : float
+        Value for volatility targeting at the cross-section level. The purpose of this
+        operation is to relate signal to risk rather than notional. Default is None and
+        means no volatility targeting. If a value is chosen then for each cross-section a
+        unit position is defined as a position for which the annual return standard
+        deviation is equal to that value. For example, a target of 10 and a cross-section
+        signal of 0.5 standard deviations would translate into a target position that
+        carries a recent historical annualized standard deviation of 5 dollars (or other
+        currency units).
+    lback_periods : int
+        Number of lookback periods over which volatility is calculated. Default is 21.
+        Typically this refers to days.
+    lback_meth : str
+        Lookback method to calculate the volatility. Default is "ma", which means simple
+        moving average. Alternative is "ema", which means exponential moving average.
+    half_life : int
+        Refers to the half-time for "xma". Default is 11.
+    posname : str
+        postfix added to contract to denote position name.
 
-    :return <pd.Dataframe>: standardized dataframe with daily target positions
-        in USD, using the columns 'cid', 'xcat', 'real_date' and 'value'.
-
-    Note: A target position differs from a signal insofar as it is a dollar amount and
-        determines to what extent the size of signal (as opposed to direction) matters.
-        Further, if the modified signal has a NaN value, the target position will be
-        converted to zero: a position will not be taken given the signal was not
-        available for that respective date.
-        A target position also differs from an actual position in two ways. First,
-        the actual position can only be aligned with the target with some lag. Second,
-        the actual position will be affected by other considerations, such as
-        risk management and assets under management.
+    Returns
+    -------
+    pd.Dataframe
+        standardized dataframe with daily target positions in USD, using the columns
+        'cid', 'xcat', 'real_date' and 'value'.  Note: A target position differs from a
+        signal insofar as it is a dollar amount and determines to what extent the size of
+        signal (as opposed to direction) matters. Further, if the modified signal has a NaN
+        value, the target position will be converted to zero: a position will not be taken
+        given the signal was not available for that respective date. A target position also
+        differs from an actual position in two ways. First, the actual position can only be
+        aligned with the target with some lag. Second, the actual position will be affected
+        by other considerations, such as risk management and assets under management.
     """
 
     # A. Initial checks
-
+    df = QuantamentalDataFrame(df)
+    _as_categorical = df.InitializedAsCategorical
     if basket_names:
         df_c_wgts, baskets = weight_dataframes(df=df, basket_names=basket_names)
         df_c_wgts = iter(df_c_wgts)
@@ -525,9 +592,8 @@ def target_positions(
         df_mods_copy *= v  # modified signal x sigrel = post-VT position.
 
         df_posi = df_mods_copy.stack(**PD_FUTURE_STACK).to_frame("value").reset_index()
-        df_posi = df_posi.fillna(0)
-        df_posi["xcat"] = k
-        df_posi = df_posi.sort_values(["cid", "xcat", "real_date"])[cols]
+        df_posi["value"] = df_posi["value"].fillna(0)
+        df_posi = QuantamentalDataFrame.from_long_df(df_posi, xcat=k)
         df_pos_cons.append(df_posi)
 
     # Consolidate the positions across the formed panels and baskets (baskets will be a
@@ -536,13 +602,14 @@ def target_positions(
         df_pos_cons = consolidate_positions(df_pos_cons, ctypes)
     df_tpos = pd.concat(df_pos_cons, axis=0, ignore_index=True)
 
-    df_tpos["xcat"] += "_" + posname
-    df_tpos = df_tpos[cols]
-
+    df_tpos = QuantamentalDataFrame(df_tpos).rename_xcats(postfix=f"_{posname}")
     df_tpos = reduce_df(df=df_tpos, xcats=None, cids=None, start=start, end=end)
-    df_tpos = df_tpos.sort_values(["cid", "xcat", "real_date"])[cols]
 
-    return df_tpos.reset_index(drop=True)
+    df_tpos = df_tpos.reset_index(drop=True)
+    df_tpos = QuantamentalDataFrame(
+        df_tpos, _initialized_as_categorical=_as_categorical
+    ).to_original_dtypes()
+    return df_tpos
 
 
 if __name__ == "__main__":

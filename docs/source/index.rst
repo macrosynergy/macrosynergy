@@ -16,11 +16,12 @@ Macrosynergy Package Documentation
        signal,
    )
 
-The Macrosynergy package is a Python package that provides convenience
-functions for the analysis and transformation of quantamental indicators
-across many countries. It also offers some basic methods for testing the
-trading or investment value of quantamental strategies.
-
+The Macrosynergy package is a Python package that provides classes and functions for the 
+analysis and transformation of quantamental indicators, i.e., daily time series of 
+information states across multiple markets or countries. The package further offers 
+methods for developing and testing macro-quantamental signals with respect to their 
+predictive power and PnL generation. Principally, the functions can also be applied to 
+market and alternative data at daily frequencies.
 
 .. grid:: 3
 

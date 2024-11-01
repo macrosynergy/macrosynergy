@@ -1,7 +1,6 @@
 """
-Implementation of panel calculation functions for quantamental data.
-The functionality allows applying mathematical operations on time-series data.
-
+Implementation of panel calculation functions for quantamental data. The functionality
+allows applying mathematical operations on time-series data.
 """
 
 import numpy as np
@@ -10,6 +9,7 @@ from typing import List, Tuple
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.utils import drop_nan_series
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy import PYTHON_3_8_OR_LATER
 import re
 import random
@@ -22,10 +22,16 @@ def time_series_check(formula: str, index: int):
     category. Further, a boolean parameter is also returned to confirm the presence of a
     time-series operation.
 
-    :param <str> formula:
-    :param <int> index: starting index to iterate over.
+    Parameters
+    ----------
+    formula : str
 
-    :return <Tuple[int, bool]>:
+    index : int
+        starting index to iterate over.
+
+    Returns
+    -------
+    Tuple[int, bool]
     """
 
     check = lambda a, b, c: (
@@ -48,11 +54,19 @@ def xcat_isolator(expression: str, start_index: str, index: int):
     Split the category from the time-series operation. The function will return the
     respective category.
 
-    :param <str> expression:
-    :param <str> start_index: starting index to search over.
-    :param <int> index: defines the end of the search space over the expression.
+    Parameters
+    ----------
+    expression : str
 
-    :return <str>: xcat.
+    start_index : str
+        starting index to search over.
+    index : int
+        defines the end of the search space over the expression.
+
+    Returns
+    -------
+    str
+        xcat.
     """
 
     op_copy = expression[start_index : index + 1]
@@ -68,10 +82,17 @@ def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
     """
     Collect all categories used in the panel calculation.
 
-    :param <dict> ops: dictionary of panel calculation formulas.
+    Parameters
+    ----------
+    ops : dict
+        dictionary of panel calculation formulas.
 
-    :return <Tuple[List[str], List[str]]>: all_xcats_used, singles_used.
+    Returns
+    -------
+    Tuple[List[str], List[str]]
+        all_xcats_used, singles_used.
     """
+
     xcats_used: List[str] = []
     singles_used: List[str] = []
     for op in ops.values():
@@ -106,41 +127,44 @@ def panel_calculator(
     """
     Calculates new data panels through operations on existing panels.
 
-    :param <pd.Dataframe> df: standardized dataframe with following necessary columns:
-        'cid', 'xcat', 'real_date' and 'value'.
-    :param <List[str]> calcs:  list of formulas denoting operations on panels of
-        categories. Words in capital letters denote category panels.
-        Otherwise the formulas can include numpy functions and standard binary operators.
-        See notes below.
-    :param <List[str]> cids: cross sections over which the panels are defined.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date in
-        df is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date in df is
-        used.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from
-        the dataframe. If one cross section has several blacklist periods append numbers
-        to the cross-section code.
-    :param <dict> external_func: dictionary of external functions to be used in the panel
-        calculation. The key is the name of the function and the value is the function.
+    Parameters
+    ----------
+    df : pd.Dataframe
+        standardized dataframe with following necessary columns: 'cid', 'xcat',
+        'real_date' and 'value'.
+    calcs : List[str]
+        list of formulas denoting operations on panels of categories. Words in capital
+        letters denote category panels. Otherwise the formulas can include numpy functions
+        and standard binary operators. See notes below.
+    cids : List[str]
+        cross sections over which the panels are defined.
+    start : str
+        earliest date in ISO format. Default is None and earliest date in df is used.
+    end : str
+        latest date in ISO format. Default is None and latest date in df is used.
+    blacklist : dict
+        cross sections with date ranges that should be excluded from the dataframe. If
+        one cross section has several blacklist periods append numbers to the cross-section
+        code.
+    external_func : dict
+        dictionary of external functions to be used in the panel calculation. The key is
+        the name of the function and the value is the function.
 
-    :return <pd.Dataframe>: standardized dataframe with all new categories in standard
-        format, i.e the columns 'cid', 'xcat', 'real_date' and 'value'.
-
-    Notes:
-    Panel calculation strings can use numpy functions and unary/binary operators on
-    category panels. The category is indicated by capital letters, underscores
-    and numbers.
-    Panel category names that are not at the beginning or end of the string must always
-    have a space before and after the name.
-    Calculated category and panel operations must be separated by '='. Examples:
-        "NEWCAT = ( OLDCAT1 + 0.5) * OLDCAT2"
-        "NEWCAT = np.log( OLDCAT1 ) - np.abs( OLDCAT2 ) ** 1/2"
-    Panel calculation can also involve individual indicator series (to be applied
-    to all series in the panel by using th 'i' as prefix), such as:
-        "NEWCAT = OLDCAT1 - np.sqrt( iUSD_OLDCAT2 )"
-    If more than one new category is calculated, the resulting panels can be used
-    sequentially in the calculations, such as:
-        ["NEWCAT1 = 1 + OLDCAT1 / 100", "NEWCAT2 = OLDCAT2 * NEWCAT1"]
+    Returns
+    -------
+    pd.Dataframe
+        standardized dataframe with all new categories in standard format, i.e the
+        columns 'cid', 'xcat', 'real_date' and 'value'.  Notes: Panel calculation strings
+        can use numpy functions and unary/binary operators on category panels. The category
+        is indicated by capital letters, underscores and numbers. Panel category names that
+        are not at the beginning or end of the string must always have a space before and
+        after the name. Calculated category and panel operations must be separated by '='.
+        Examples: "NEWCAT = ( OLDCAT1 + 0.5) * OLDCAT2" "NEWCAT = np.log( OLDCAT1 ) -
+        np.abs( OLDCAT2 ) ** 1/2" Panel calculation can also involve individual indicator
+        series (to be applied to all series in the panel by using th 'i' as prefix), such
+        as: "NEWCAT = OLDCAT1 - np.sqrt( iUSD_OLDCAT2 )" If more than one new category is
+        calculated, the resulting panels can be used sequentially in the calculations, such
+        as: ["NEWCAT1 = 1 + OLDCAT1 / 100", "NEWCAT2 = OLDCAT2 * NEWCAT1"]
     """
 
     # A. Asserts
@@ -150,10 +174,8 @@ def panel_calculator(
     col_error = f"The DataFrame must contain the necessary columns: {cols}."
     assert set(cols).issubset(set(df.columns)), col_error
     # Removes any columns beyond the required.
-    df = df.loc[:, cols]
-
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-
+    df = QuantamentalDataFrame(df[cols])
+    _as_categorical = df.InitializedAsCategorical
     assert isinstance(calcs, list), "List of functions expected."
 
     error_formula = "Each formula in the panel calculation list must be a string."
@@ -199,7 +221,7 @@ def panel_calculator(
     )
 
     # E. Create all required wide dataframes with category names.
-
+    df = df.add_ticker_column()
     for xcat in old_xcats_used:
         dfxx = dfx[dfx["xcat"] == xcat]
         dfw = dfxx.pivot(index="real_date", columns="cid", values="value")
@@ -208,7 +230,7 @@ def panel_calculator(
 
     for single in singles_used:
         ticker = single[1:]
-        dfxx = df[(df["cid"] + "_" + df["xcat"]) == ticker]
+        dfxx = df[(df["ticker"]) == ticker]
         if dfxx.empty:
             raise ValueError(f"Ticker, {ticker}, missing from the dataframe.")
         else:
@@ -227,7 +249,7 @@ def panel_calculator(
         df_add = pd.melt(dfw_add.reset_index(), id_vars=["real_date"]).rename(
             {"variable": "cid"}, axis=1
         )
-        df_add["xcat"] = new_xcat
+        df_add = QuantamentalDataFrame.from_long_df(df_add, xcat=new_xcat)
         if new_xcat == list(ops.keys())[0]:
             df_out = df_add[cols]
         else:
@@ -238,6 +260,7 @@ def panel_calculator(
     if df_out.isna().any().any():
         df_out = drop_nan_series(df=df_out, raise_warning=True)
 
+    df_out = QuantamentalDataFrame(df_out, categorical=_as_categorical)
     return df_out
 
 
@@ -245,10 +268,17 @@ def _check_calcs(formulas: List[str]):
     """
     Check formulas for invalid characters in xcats.
 
-    :param <List[str]> calcs: list of formulas.
+    Parameters
+    ----------
+    calcs : List[str]
+        list of formulas.
 
-    :return <List[str]>: list of formulas.
+    Returns
+    -------
+    List[str]
+        list of formulas.
     """
+
     pattern = r"[-+*()/](?=i?[A-Z])|(?<=[A-Z])[-+*()/]"
 
     for formula in formulas:
@@ -265,14 +295,21 @@ def _replace_zeros(df: pd.DataFrame):
     """
     Replace zeros with NaNs in the dataframe.
 
-    :param <pd.DataFrame> df: dataframe to be cleaned.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        dataframe to be cleaned.
 
-    :return <pd.DataFrame>: cleaned dataframe.
+    Returns
+    -------
+    pd.DataFrame
+        cleaned dataframe.
     """
+
     if not PYTHON_3_8_OR_LATER:
         for col in df.columns:
             df[col] = df[col].replace(pd.NA, np.nan)
-            df[col] = df[col].astype('float64')
+            df[col] = df[col].astype("float64")
         return df
     else:
         return df
