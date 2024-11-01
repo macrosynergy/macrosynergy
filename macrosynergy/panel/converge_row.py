@@ -13,12 +13,12 @@ class ConvergeRow(object):
     ----------
     row : np.ndarray
         Array of weights.
-    max_weight : Float
+    max_weight : float
         Maximum weight.
-    margin : Float
+    margin : float
         Margin of error allowed in the convergence to within the upper-bound,
         "max_weight".
-    max_loops : Integer
+    max_loops : int
         Controls the accuracy: in theory, the greater the number of loops allowed, the
         more accurate the convergence. However, will only become significant if a tight
         margin is imposed: the "looser" the margin, the less likely the maximum number of
