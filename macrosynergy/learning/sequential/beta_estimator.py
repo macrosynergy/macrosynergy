@@ -10,6 +10,9 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import VotingRegressor
 
+from macrosynergy.learning.forecasting.model_systems.base_regression_system import (
+    BaseRegressionSystem,
+)
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.learning import ExpandingFrequencyPanelSplit
 from macrosynergy.learning.sequential import BasePanelLearner
@@ -285,10 +288,12 @@ class BetaEstimator(BasePanelLearner):
                 for key, value in coefs.items():
                     sum_dict[key][0] += value
                     sum_dict[key][1] += 1
-
             betas = {key: sum / count for key, (sum, count) in sum_dict.items()}
-        else:
+        elif isinstance(optimal_model, BaseRegressionSystem):
             betas = optimal_model.coefs_
+        else:
+            X_train.index.get_level_values(0).unique()
+            betas = {cid: np.nan for cid in X_train.index.get_level_values(0).unique()}
 
         betas_list = [
             [

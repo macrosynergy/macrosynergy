@@ -502,6 +502,8 @@ class BasePanelLearner(ABC):
                     f"Error running a hyperparameter search for {model_name}: {e}",
                     RuntimeWarning,
                 )
+                continue
+            
             score = self._model_selection(
                 search_object.cv_results_,
                 cv_summary,
@@ -706,21 +708,16 @@ class BasePanelLearner(ABC):
         """
         Store model selection information for training set (X_train, y_train)
         """
-        if optimal_model is not None:
-            optim_name = optimal_model_name
-            optim_score = optimal_model_score
-            optim_params = optimal_model_params
-        else:
+        if optimal_model is None:
             warnings.warn(
-                f"No model was selected for {optim_name} at time {timestamp}",
-                " Hence, resulting signals are set to zero.",
+                f"No model was selected at time {timestamp}",
                 RuntimeWarning,
             )
-            optim_name = ("None",)
-            optim_score = (-np.inf,)
-            optim_params = ({},)
+            optimal_model_name = ("None",)
+            optimal_model_score = (-np.inf,)
+            optimal_model_params = ({},)
 
-        data = [timestamp, optim_name, optim_score, optim_params]
+        data = [timestamp, optimal_model_name, optimal_model_score, optimal_model_params]
 
         n_splits = {
             splitter_name: splitter.n_splits
