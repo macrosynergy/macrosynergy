@@ -324,9 +324,7 @@ class NaivePnL:
             neutral level & standard deviation will use the cross-section of panels.
             'zn_score_cs': transforms signals to z-scores around zero based on cross-section
             alone. 'binary': transforms signals into uniform long/shorts (1/-1) across all
-            sections. N.B.: zn-score here means standardized score with zero being the
-            natural neutral level and standardization through division by mean absolute
-            value.
+            sections.
         sig_add : float
             add a constant to the signal after initial transformation. This allows to
             give PnLs a long or short bias relative to the signal score. Default is 0.
@@ -372,6 +370,12 @@ class NaivePnL:
             threshold. Therefore, the threshold is the maximum absolute score value that the
             function is allowed to produce. The minimum threshold is one standard deviation.
             Default is no threshold.
+
+
+        .. note::
+            zn-score here means standardized score with zero being the
+            natural neutral level and standardization through division by mean absolute
+            value.
         """
 
         for varx, name, typex in (
@@ -890,8 +894,7 @@ class NaivePnL:
         Parameters
         ----------
         pnl_name : str
-            name of naive PnL whose signals are displayed. N.B.: Signal is here is the
-            value that actually determines the concurrent PnL.
+            name of naive PnL whose signals are displayed.
         pnl_cids : List[str]
             cross-sections. Default is all available.
         start : str
@@ -910,6 +913,10 @@ class NaivePnL:
             label for the y-axis. Default is None.
         figsize : (float, float)
             width and height in inches. Default is (14, number of cross sections).
+
+
+        .. note::
+            Signal is here is the value that actually determines the concurrent PnL.
         """
 
         if not isinstance(pnl_name, str):
@@ -979,8 +986,7 @@ class NaivePnL:
         Parameters
         ----------
         pnl_name : str
-            name of the PnL whose signal is to be visualized. N.B.: The referenced
-            signal corresponds to the series that determines the concurrent PnL.
+            name of the PnL whose signal is to be visualized.
         freq : str
             frequency at which the signal is visualized. Default is monthly ('m'). The
             alternative is quarterly ('q').
@@ -992,6 +998,11 @@ class NaivePnL:
         y_label : str
             label for the y-axis. Default is the sum of standard deviations across the
             panel corresponding to the default signal transformation: 'zn_score_pan'.
+
+
+        .. note::
+            The referenced signal corresponds to the series that determines the concurrent
+            PnL.
         """
 
         assert isinstance(pnl_name, str), (
