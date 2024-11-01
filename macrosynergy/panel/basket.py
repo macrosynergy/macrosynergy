@@ -48,9 +48,12 @@ class Basket(object):
         code.
     ewgts : List[str]
         one or more postfixes that may identify exogenous weight categories. Similar to
-        return postfixes they are appended to base tickers.  N.B.: Each instance of the
-        class will update associated standardised DataFrames, containing return and carry
-        categories, and external weights.
+        return postfixes they are appended to base tickers.
+
+
+    .. note::
+        Each instance of the class will update associated standardised DataFrames,
+        containing return and carry categories, and external weights.
     """
 
     def __init__(
@@ -204,7 +207,11 @@ class Basket(object):
         Returns
         -------
         pd.DataFrame
-            Will return the modified weight DataFrame.  N.B.: If the maximum weight is
+            Will return the modified weight DataFrame.
+
+
+        .. note::
+            If the maximum weight is
             less than the equal weight weight, this replaces the computed weight with the
             equal weight. For instance, [np.nan, 0.63, np.nan, np.nan, 0.27] becomes
             [np.nan, 0.5, np.nan, np.nan, 0.5]. Otherwise, the function calls the
@@ -314,10 +321,13 @@ class Basket(object):
         Returns
         -------
         pd.DataFrame
-            Dataframe of weights.  N.B.: The rolling standard deviation will be
-            calculated either using the standard moving average (ma) or the exponential
-            moving average (xma). Both will require returns before a first weight can be
-            computed.
+            Dataframe of weights.
+
+
+        .. note::
+            The rolling standard deviation will be calculated either using the standard
+            moving average (ma) or the exponential moving average (xma). Both will require
+            returns before a first weight can be computed.
         """
 
         if lback_meth == "ma":

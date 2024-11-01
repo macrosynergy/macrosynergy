@@ -144,10 +144,6 @@ def make_zn_scores(
         cross-sections with date ranges that should be excluded from the calculation of
         zn-scores. This means that not only are there no zn-score values calculated for
         these periods, but also that they are not used for the scoring of other periods.
-        N.B.: The argument is a dictionary with cross-sections as keys and tuples of start
-        and end dates of the blacklist periods in ISO formats as values. If one cross
-        section has multiple blacklist periods, numbers are added to the keys (i.e. TRY_1,
-        TRY_2, etc.)
     sequential : bool
         if True (default) score parameters (neutral level and mean absolute deviation)
         are estimated sequentially with concurrently available information only.
@@ -184,6 +180,13 @@ def make_zn_scores(
     pd.Dataframe
         standardized DataFrame with the zn-scores of the chosen xcat: 'cid', 'xcat',
         'real_date' and 'value'.
+
+
+    .. note::
+        The argument is a dictionary with cross-sections as keys and tuples of start
+        and end dates of the blacklist periods in ISO formats as values. If one cross
+        section has multiple blacklist periods, numbers are added to the keys (i.e. TRY_1,
+        TRY_2, etc.)
     """
 
     expected_columns = ["cid", "xcat", "real_date", "value"]

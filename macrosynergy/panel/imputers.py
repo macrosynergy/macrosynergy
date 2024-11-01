@@ -30,7 +30,10 @@ def impute_panel(
     Returns
     -------
     pd.DataFrame
-        the imputed long-format panel data, with the relevant xcats and cids  .. note::
+        the imputed long-format panel data, with the relevant xcats and cids
+
+
+    .. note::
         This class is still **experimental**: the predictions and the API might change
         without any deprecation cycle.
     """

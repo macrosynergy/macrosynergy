@@ -348,10 +348,14 @@ class CategoryRelations(object):
         Returns
         -------
         pd.DataFrame
-            returns the same multi-index DataFrame.  N.B.: Outliers are classified as
-            any datapoint whose absolute value exceeds the predefined value specified in the
-            field self.xcat_trims. The values will be set to NaN, and subsequently excluded
-            from any regression modelling or correlation coefficients.
+            returns the same multi-index DataFrame.
+
+
+        .. note::
+            Outliers are classified as any datapoint whose absolute value exceeds the
+            predefined value specified in the field self.xcat_trims. The values will be
+            set to NaN, and subsequently excluded from any regression modelling or
+            correlation coefficients.
         """
 
         xcat_dict = dict(zip(xcats, xcat_trims))
@@ -378,7 +382,10 @@ class CategoryRelations(object):
         Returns
         -------
         List[tuple(float, float)]
-            N.B.: The method is able to handle multiple DataFrames, and will return the
+
+
+        .. note::
+            The method is able to handle multiple DataFrames, and will return the
             corresponding number of statistics held inside a List.
         """
 

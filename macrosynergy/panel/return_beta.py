@@ -242,8 +242,7 @@ def return_beta(
         standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
         and 'value.
     xcat : str
-        return category based on the type of positions that are to be hedged. N.B.: Each
-        cross-section of this category uses the same hedge asset/basket.
+        return category based on the type of positions that are to be hedged.
     cids : List[str]
         cross-sections of the returns for which hedge ratios are to be calculated.
         Default is all that are available in the dataframe.
@@ -291,10 +290,16 @@ def return_beta(
     QuantamentalDataFrame
         DataFrame with hedge ratio estimates that update at the chosen re-estimation
         frequency. Additionally, the dataframe can include the hedged returns if the
-        parameter `benchmark_return` has been set to True.  N.B.: A return beta is the
-        estimated sensitivity of the main return with respect to the asset used for hedging.
-        The ratio is recorded for the period after the estimation sample up until the next
-        re-estimation date.
+        parameter `benchmark_return` has been set to True.
+
+
+    .. note::
+        Each cross-section of this category uses the same hedge asset/basket.
+
+    .. note::
+        A return beta is the estimated sensitivity of the main return with respect to the
+        asset used for hedging. The ratio is recorded for the period after the estimation
+        sample up until the next re-estimation date.
     """
 
     # Value checks

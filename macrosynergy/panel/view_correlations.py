@@ -71,8 +71,7 @@ def correl_matrix(
         the category and the value is the lag or lags. If a category has multiple lags
         applied, pass in a list of lag values. The lag factor will be appended to the
         category name in the correlation matrix. If xcats_secondary is not none, this
-        parameter will specify lags for the categories in xcats. N.B.: Lags can include a 0
-        if the original should also be correlated.
+        parameter will specify lags for the categories in xcats.
     lags_secondary : dict
         optional dictionary of lags applied to the second set of categories if
         xcats_secondary is provided.
@@ -95,6 +94,10 @@ def correl_matrix(
         Arbitrary keyword arguments that are passed to seaborn.heatmap.  N.B:. The
         function displays the heatmap of a correlation matrix across categories or cross-
         sections (depending on which parameter has received multiple elements).
+
+
+    .. note::
+        Lags can include a 0 if the original should also be correlated.
     """
 
     msv.view_correlation(
