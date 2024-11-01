@@ -4,7 +4,6 @@ import pandas as pd
 import datetime
 from abc import ABC, abstractmethod
 from sklearn.base import BaseEstimator, RegressorMixin
-from macrosynergy.management.validation import _validate_Xy_learning
 
 
 class BaseRegressionSystem(BaseEstimator, RegressorMixin, ABC):

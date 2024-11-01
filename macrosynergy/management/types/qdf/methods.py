@@ -33,6 +33,9 @@ def change_column_format(
     cols: List[str],
     dtype: Any,
 ) -> QuantamentalDataFrameBase:
+    """
+    Change the format of columns in a DataFrame.
+    """
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("`df` must be a pandas DataFrame.")
 
@@ -54,6 +57,9 @@ def change_column_format(
 def qdf_to_categorical(
     df: QuantamentalDataFrameBase,
 ) -> QuantamentalDataFrameBase:
+    """
+    Convert the index columns ("cid", "xcat") of a DataFrame to categorical format.
+    """
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("`df` must be a pandas DataFrame.")
 
@@ -64,6 +70,9 @@ def qdf_to_categorical(
 def qdf_to_string_index(
     df: QuantamentalDataFrameBase,
 ) -> QuantamentalDataFrameBase:
+    """
+    Convert the index columns ("cid", "xcat") of a DataFrame to string format.
+    """
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("`df` must be a pandas DataFrame.")
 
@@ -72,6 +81,9 @@ def qdf_to_string_index(
 
 
 def check_is_categorical(df: QuantamentalDataFrameBase) -> bool:
+    """
+    Check if the index columns of a DataFrame are categorical.
+    """
     return all(
         df[col].dtype.name == "category"
         for col in QuantamentalDataFrameBase._StrIndexCols
@@ -151,6 +163,9 @@ def apply_blacklist(
 def _sync_df_categories(
     df: QuantamentalDataFrameBase,
 ) -> QuantamentalDataFrameBase:
+    """
+    Sync the categories of the DataFrame with the data.
+    """
     if not check_is_categorical(df):
         return df
 
@@ -387,6 +402,13 @@ def rename_xcats(
     name_all: Optional[str] = None,
     fmt_string: Optional[str] = None,
 ) -> QuantamentalDataFrameBase:
+    """
+    Rename the xcats in a DataFrame based on a mapping or a format string. Only one of
+    `xcat_map` or `select_xcats` must be provided. If `name_all` is provided, all xcats
+    will be renamed to this value.
+
+    NOTE: This function maintains the datatype of the xcat column as a categorical.
+    """
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("`df` must be a QuantamentalDataFrame.")
 
@@ -463,6 +485,9 @@ def create_empty_categorical_qdf(
     end_date: Optional[str] = None,
     categorical: bool = True,
 ) -> QuantamentalDataFrameBase:
+    """
+    Create an empty QuantamentalDataFrame with categorical index columns.
+    """
     if not all(isinstance(m, str) for m in metrics):
         raise TypeError("`metrics` must be a list of strings.")
 
@@ -610,6 +635,10 @@ def qdf_from_timseries(
 def concat_qdfs(
     qdf_list: List[QuantamentalDataFrameBase],
 ) -> QuantamentalDataFrameBase:
+    """
+    Concatenate a list of QuantamentalDataFrames into a single QuantamentalDataFrame. 
+    Converts the index columns to categorical format, if not already categorical.
+    """
     if not isinstance(qdf_list, list):
         raise TypeError("`qdfs_list` must be a list of QuantamentalDataFrames.")
 
@@ -619,7 +648,8 @@ def concat_qdfs(
     if len(qdf_list) == 0:
         raise ValueError("`qdfs_list` is empty.")
 
-    qdf_list = [qdf_to_categorical(qdf) for qdf in qdf_list]
+    for iq, qdf in enumerate(qdf_list):
+        qdf_list[iq] = qdf_to_categorical(qdf)
 
     comb_cids = pd.api.types.union_categoricals(
         [qdf["cid"].unique() for qdf in qdf_list]
@@ -639,6 +669,10 @@ def concat_qdfs(
     def _convert_to_single_metric_qdfs(
         qdf: QuantamentalDataFrameBase,
     ) -> QuantamentalDataFrameBase:
+        """
+        Convert a QuantamentalDataFrame with multiple metrics to multiple
+        QuantamentalDataFrames with a single metric.
+        """
         return [
             qdf[[*QuantamentalDataFrameBase.IndexCols, metric]]
             for metric in qdf.columns.difference(QuantamentalDataFrameBase.IndexCols)
