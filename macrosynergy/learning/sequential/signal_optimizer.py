@@ -469,9 +469,9 @@ class SignalOptimizer(BasePanelLearner):
         Returns
         -------
         dict
-            Dictionary containing the optimal model, model choice data, feature
-            coefficients, intercepts, selected features and correlations between
-            inputs to pipelines and those entered into a final model.
+            Dictionary containing the feature coefficients, intercepts, selected features
+            and correlations between inputs to pipelines and those entered into a final
+            model.
         """
         if optimal_model is not None:
             if hasattr(optimal_model, "create_signal"):
