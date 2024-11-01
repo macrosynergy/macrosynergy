@@ -191,13 +191,13 @@ def reduce_df(
         cids = sorted(df["cid"].unique())
     else:
         cids_in_df = df["cid"].unique()
-        cids = sorted(c for c in cids if c in cids_in_df)
+        cids = [cid for cid in cids if cid in cids_in_df]
 
     if xcats is None:
         xcats = sorted(df["xcat"].unique())
     else:
         xcats_in_df = df["xcat"].unique()
-        xcats = sorted(x for x in xcats if x in xcats_in_df)
+        xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
 
     if intersect:
         cids_in_df = set.intersection(
@@ -205,13 +205,12 @@ def reduce_df(
         )
     else:
         cids_in_df = df["cid"].unique()
-    cids = sorted(c for c in cids if c in cids_in_df)
 
     df = df[df["xcat"].isin(xcats)]
     df = df[df["cid"].isin(cids)]
 
-    xcats_found = sorted(set(df["xcat"].unique()))
-    cids_found = sorted(set(df["cid"].unique()))
+    xcats_found = [xcat for xcat in xcats if xcat in df["xcat"].unique()]
+    cids_found = [cid for cid in cids if cid in df["cid"].unique()]
 
     df = _sync_df_categories(df)
 
