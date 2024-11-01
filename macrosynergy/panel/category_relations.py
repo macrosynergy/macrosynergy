@@ -402,11 +402,7 @@ class CategoryRelations(object):
                 X = sm.add_constant(X)
                 y = df_i.loc[:, self.xcats[1]]
                 groups = df_i.reset_index().real_date
-                re = sm.MixedLM(
-                    y,
-                    X,
-                    groups,
-                ).fit(reml=False)  # random effects est
+                re = sm.MixedLM(y, X, groups).fit(reml=False)  # random effects est
                 pval = float(re.summary().tables[1].iloc[1, 3])
             row = [np.round(coeff, 3), np.round(1 - pval, 3)]
             cpl.append(row)
