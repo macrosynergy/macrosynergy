@@ -324,8 +324,8 @@ class MultiPnL:
 
     def _infer_return_by_xcat(self, pnl_xcat):
         """
-        Infer the return category from the xcat if not provided.  Throws an error is
-        there are multiple return categories for the xcat.
+        Infer the return category from the xcat if not provided. Throws an error if there
+        are multiple return categories for the xcat.
         """
 
         if pnl_xcat in self.composite_pnl_xcats:
