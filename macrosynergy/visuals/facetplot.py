@@ -314,8 +314,7 @@ class FacetPlot(Plotter):
             Create the facet grid such that each facet is an individual ticker. Each
             "row" contains plots for the same `cid`, and each "column" would contain plots
             for the same `xcat`. Therefore, this mode does not respect the `ncols` or
-            `attempt_square` arguments. NB: `facet_titles` and `legend` are overridden in
-            this mode.
+            `attempt_square` arguments.
         cids_mean : bool
             Used with `cid_grid` with a single `xcat`. If `True`, the mean of all `cids`
             for that `xcat` will be plotted on all charts. If `False`, only the specified
@@ -325,8 +324,7 @@ class FacetPlot(Plotter):
             specified will be plotted in each facet, as a red dashed line. This is useful
             for comparing a single series, such as a benchmark/average. Ensure that the
             comparison series is in the dataframe, and not filtered out when initializing
-            the `FacetPlot` object. Default is `None`. NB: `compare_series` can only be used
-            when the series is not removed by `reduce_df()` in the object initialization.
+            the `FacetPlot` object. Default is `None`.
         share_y : bool
             whether to share the y-axis across all plots. Default is `True`.
         share_x : bool
@@ -409,6 +407,14 @@ class FacetPlot(Plotter):
             DPI of the saved image. Default is `300`.
         return_figure : bool
             Return the figure object. Default is `False`.
+
+
+        .. note::
+            `compare_series` can only be used when the series is not removed by
+            `reduce_df()` in the object initialization.
+
+        .. note::
+            `facet_titles` and `legend` are overridden in this mode.
         """
 
         comp_series_flag: bool = False
