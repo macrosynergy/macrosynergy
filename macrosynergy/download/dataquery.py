@@ -77,18 +77,14 @@ def validate_response(
     response : requests.Response
         response object from requests.request().
 
-
     Raises
     ------
     InvalidResponseError
         if the response is not valid.
-
     AuthenticationError
         if the response is a 401 status code.
-
     KeyboardInterrupt
         if the user interrupts the download.
-
 
     Returns
     -------
@@ -146,7 +142,6 @@ def check_attributes_in_sync(response_dict: dict) -> bool:
     ----------
     response_dict : dict
         dictionary containing the response from the API.
-
 
     Returns
     -------
@@ -211,49 +206,35 @@ def request_wrapper(
     ----------
     url : str
         URL to request.
-
     headers : dict
         headers to pass to requests.request().
-
     params : dict
         params to pass to requests.request().
-
     method : str
         HTTP method to use. Must be one of "get" or "post". Defaults to "get".
-
     kwargs : dict
         kwargs to pass to requests.request().
-
     tracking_id : str
         default None, unique tracking ID of request.
-
     proxy : dict
         default None, dictionary of proxy settings for request.
-
     cert : Tuple[str, str]
         default None, tuple of string for filename of certificate and key.
-
 
     Raises
     ------
     InvalidResponseError
         if the response is not valid.
-
     AuthenticationError
         if the response is a 401 status code.
-
     DownloadError
         if the request fails after retrying.
-
     KeyboardInterrupt
         if the user interrupts the download.
-
     ValueError
         if the method is not one of "get" or "post".
-
     Exception
         other exceptions may be raised by requests.request().
-
 
     Returns
     -------
@@ -367,28 +348,21 @@ class OAuth(object):
     ----------
     client_id : str
         client ID for the OAuth application.
-
     client_secret : str
         client secret for the OAuth application.
-
     proxy : dict
         proxy to use for requests. Defaults to None.
-
     token_url : str
         URL for getting OAuth tokens.
-
     dq_resource_id : str
         resource ID for the JPMaQS Application.
-
 
     Raises
     ------
     ValueError
         if any of the parameters are semantically incorrect.
-
     TypeError
         if any of the parameters are of the wrong type.
-
     Exception
         other exceptions may be raised by underlying functions.
     """
@@ -518,25 +492,19 @@ class CertAuth(object):
     ----------
     username : str
         username for the DataQuery API.
-
     password : str
         password for the DataQuery API.
-
     crt : str
         path to the certificate file.
-
     key : str
         path to the key file.
-
 
     Raises
     ------
     AssertionError
         if any of the parameters are of the wrong type.
-
     FileNotFoundError
         if certificate or key file is missing from filesystem.
-
     Exception
         other exceptions may be raised by underlying functions.
     """
@@ -605,10 +573,8 @@ def validate_download_args(
     ------
     TypeError
         if any of the arguments are of the wrong type.
-
     ValueError
         if any of the arguments are semantically incorrect.
-
 
     Returns
     -------
@@ -698,70 +664,50 @@ class DataQueryInterface(object):
     ----------
     client_id : str
         client ID for the OAuth application.
-
     client_secret : str
         client secret for the OAuth application.  When using certificate authentication:
-
     crt : str
         path to the certificate file.
-
     key : str
         path to the key file.
-
     username : str
         username for the DataQuery API.
-
     password : str
         password for the DataQuery API.
-
     oauth : bool
         whether to use OAuth authentication. Defaults to True.
-
     debug : bool
         whether to print debug messages. Defaults to False.
-
     concurrent : bool
         whether to use concurrent requests. Defaults to True.
-
     batch_size : int
         default 20, number of expressions to send in a single request. Must be a number
         between 1 and 20 (both included).
-
     check_connection : bool
         whether to send a check_connection request. Defaults to True.
-
     base_url : str
         base URL for the DataQuery API. Defaults to OAUTH_BASE_URL if `oauth` is True,
         CERT_BASE_URL otherwise.
-
     token_url : str
         token URL for the DataQuery API. Defaults to OAUTH_TOKEN_URL.
-
     suppress_warnings : bool
         whether to suppress warnings. Defaults to True.
-
     custom_auth : Any
         custom authentication object. When specified oauth must be False and the object
         must have a get_auth method. Defaults to None.
-
 
     Raises
     ------
     TypeError
         if any of the parameters are of the wrong type.
-
     ValueError
         if any of the parameters are semantically incorrect.
-
     InvalidResponseError
         if the response from the server is not valid.
-
     DownloadError
         if the download fails to complete after a number of retries.
-
     HeartbeatError
         if the heartbeat (check connection) fails.
-
     Exception
         other exceptions may be raised by underlying functions.
     """
@@ -869,10 +815,8 @@ class DataQueryInterface(object):
         ----------
         expected_exprs : List[str]
             list of expressions that were requested.
-
         dicts_list : List[Dict]
             list of dicts to search for the expressions.
-
 
         Returns
         -------
@@ -897,12 +841,10 @@ class DataQueryInterface(object):
             whether to print a message if the heartbeat is successful. Useful for
             debugging. Defaults to False.
 
-
         Raises
         ------
         HeartbeatError
             if the heartbeat fails.
-
 
         Returns
         -------
@@ -952,25 +894,19 @@ class DataQueryInterface(object):
         ----------
         url : str
             URL to request.
-
         params : dict
             parameters to send with the request.
-
         proxy : dict
             proxy to use for the request.
-
         tracking_id : str
             tracking ID to use for the request.
-
 
         Raises
         ------
         InvalidResponseError
             if the response from the server is not valid.
-
         Exception
             other exceptions may be raised by underlying functions.
-
 
         Returns
         -------
@@ -1048,17 +984,14 @@ class DataQueryInterface(object):
         ----------
         group_id : str
             the group ID to fetch the catalogue for. Defaults to "JPMAQS".
-
         page_size : int
             the number of tickers to fetch in a single request. Defaults to 1000
             (maximum allowed by the API).
-
 
         Raises
         ------
         ValueError
             if the response from the server is not valid.
-
 
         Returns
         -------
@@ -1199,7 +1132,6 @@ class DataQueryInterface(object):
         download_outputs : List[Union[Dict, Any]
             list of list of dictionaries/ other objects.
 
-
         Returns
         -------
         List[Dict]
@@ -1305,56 +1237,40 @@ class DataQueryInterface(object):
         ----------
         expressions : List[str]
             list of expressions to download.
-
         start_date : str
             start date for the data in the ISO-8601 format (YYYY-MM-DD).
-
         end_date : str
             end date for the data in the ISO-8601 format (YYYY-MM-DD).
-
         show_progress : bool
             whether to show a progress bar for the download.
-
         endpoint : str
             endpoint to use for the download.
-
         calender : str
             calendar setting to use for the download.
-
         frequency : str
             frequency of data points to use for the download.
-
         conversion : str
             conversion setting to use for the download.
-
         nan_treatment : str
             NaN treatment setting to use for the download.
-
         reference_data : str
             reference data to pass to the API kwargs.
-
         retry_counter : int
             number of times the download has been retried.
-
         delay_param : float
             delay between requests to the API.
-
 
         Raises
         ------
         ValueError
             if any arguments are invalid or semantically incorrect (see
             validate_download_args()).
-
         DownloadError
             if the download fails.
-
         ConnectionError(HeartbeatError)
             if the heartbeat fails.
-
         Exception
             other exceptions may be raised by underlying functions.
-
 
         Returns
         -------
