@@ -41,7 +41,6 @@ class SignWeightedLinearRegression(SignWeightedRegressor):
         where the weighted average is based on inverse frequency of the sign of the
         dependent variable.
 
-
         By weighting the contribution of different training samples based on the
         sign of the label, the model is encouraged to learn equally from both positive and
         negative return samples, irrespective of class imbalance. If there are more
@@ -86,6 +85,19 @@ class SignWeightedLinearRegression(SignWeightedRegressor):
         self.shrinkage_type = shrinkage_type
 
     def set_params(self, **params):
+        """
+        Setter method to update the parameters of the `SignWeightedLinearRegression`.
+
+        Parameters
+        ----------
+        **params : dict
+            Dictionary of parameters to update.
+
+        Returns
+        -------
+        self
+            The `SignWeightedLinearRegression` instance with updated parameters.
+        """
         super().set_params(**params)
 
         relevant_params = {"fit_intercept", "positive", "alpha", "shrinkage_type"}
@@ -186,6 +198,19 @@ class TimeWeightedLinearRegression(TimeWeightedRegressor):
         self.shrinkage_type = shrinkage_type
 
     def set_params(self, **params):
+        """
+        Setter method to update the parameters of the `TimeWeightedLinearRegression`.
+
+        Parameters
+        ----------
+        **params : dict
+            Dictionary of parameters to update.
+
+        Returns
+        -------
+        self
+            The `TimeWeightedLinearRegression` instance with updated parameters.
+        """
         super().set_params(**params)
 
         relevant_params = {"fit_intercept", "positive", "alpha", "shrinkage_type"}

@@ -4,7 +4,6 @@ sequential learning.
 """
 
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -26,14 +25,63 @@ from macrosynergy.management.utils.df_utils import (
 class BetaEstimator(BasePanelLearner):
     """
     Class for sequential beta estimation by learning optimal regression coefficients.
+    Out-of-sample hedged returns are additionally calculated and stored.
 
     Parameters
     ----------
-    TODO
+    df : pd.DataFrame
+        Daily quantamental dataframe in JPMaQS format containing a panel of features, as
+        well as a panel of returns.
+    xcats : str or list
+        Name of a market return category within the panel specified in `df`.
+    benchmark_return : str
+        Name of the benchmark return ticker within the panel specified in `df`.
+    cids : list, optional
+        List of cross-sections for which hedged returns are to be calculated.
+        Default is None, which calculates hedged returns for all cross-sections in the
+        return panel.
+    start : str, optional
+        Start date for considered data in subsequent analysis in ISO 8601 format.
+        Default is None i.e. the earliest date in the dataframe.
+    end : str, optional
+        End date for considered data in subsequent analysis in ISO 8601 format.
+        Default is None i.e. the latest date in the dataframe.
 
     Notes
     -----
-    TODO
+    The `BetaEstimator` class is used to sequentially estimate macro betas based on a
+    panel of contract returns (provided in `xcats`) and a benchmark return ticker
+    (provided in `benchmark_return`). The initial conditions of the learning process
+    are specified by the dimensions of an initial training set. An optimal model is
+    selected out of a provided collection (with associated hyperparameters), a beta is
+    extracted for each cross-section (subject to availability) and out-of-sample hedged
+    returns are calculated for each cross-section with an estimated beta. The betas and
+    hedged returns are stored, and the training set is expanded to include the now-realized
+    returns. This process is repeated until the end of the dataset is reached.
+
+    In addition to storing betas and hedged returns, this class also stores useful model
+    selection information for analysis, such as the models selected at each point in time.
+
+    Model and hyperparameter selection is performed by cross-validation. Given a
+    collection of models and associated hyperparameters to choose from, an HPO is run
+    - currently only grid search and random search are supported - to determine the
+    optimal choice. This is done by providing a collection of `scikit-learn` compatible
+    scoring functions, as well as a collection of `scikit-learn` compatible
+    cross-validation splitters and scorers. At each point in time, the cross-validation
+    folds are the union of the folds produced by each splitter provided. Each scorer is
+    evaluated on each test fold and summarised across test folds by either a custom
+    function provided by the user or a common string i.e. 'mean'.
+
+    Consequently, each model and hyperparameter combination has an associated collection
+    of scores induced by different metrics, in units of those scorers. In order to form a
+    composite score for each hyperparameter, the scores must be normalized across
+    model/hyperparameter combinations. This makes scores across scorers comparable, so
+    that the average score across adjusted scores can be used as a meaningful estimate
+    of each model's generalization ability. Finally, a composite score for each model and
+    hyperparameter combination is calculated by averaging the adjusted scores across all
+    scorers.
+
+    The optimal model is the one with the largest composite score.
     """
 
     def __init__(
@@ -161,6 +209,7 @@ class BetaEstimator(BasePanelLearner):
         scorers,
         inner_splitters,
         search_type="grid",
+        normalize_fold_results=False,
         cv_summary="mean",
         min_cids=4,
         min_periods=12 * 3,
@@ -172,23 +221,77 @@ class BetaEstimator(BasePanelLearner):
         n_jobs_inner=1,
     ):
         """
-        Returns the selected features over time for one or more processes.
+        Determines optimal model betas and associated out-of-sample hedged returns.
 
         Parameters
         ----------
         beta_xcat : str
-            The name of the feature to be estimated.
-
-        Returns
-        -------
-        pd.DataFrame
-            Pandas dataframe of the selected features at each retraining date.
+            Category name for the panel of estimated betas.
+        hedged_return_xcat : str
+            Category name for the panel of out-of-sample hedged returns.
+        models : dict
+            Dictionary of models to choose from. The keys are model names and the values
+            are scikit-learn compatible models.
+        hyperparameters : dict
+            Dictionary of hyperparameters to choose from. The keys are model names and
+            the values are hyperparameter dictionaries for the corresponding model. The
+            keys must match with those provided in `models`.
+        scorers : dict
+            Dictionary of scoring functions to use in the hyperparameter optimization
+            process. The keys are scorer names and the values are scikit-learn compatible
+            scoring functions.
+        inner_splitters : dict
+            Dictionary of inner splitters to use in the hyperparameter optimization
+            process. The keys are splitter names and the values are scikit-learn compatible
+            cross-validator objects.
+        search_type : str
+            Type of hyperparameter optimization to perform. Default is "grid". Options are
+            "grid" and "prior".
+        normalize_fold_results : bool
+            Whether to normalize the scores across folds before combining them. Default is
+            False.
+        cv_summary : str or callable
+            Summary function to use to combine scores across cross-validation folds.
+            Default is "mean". Options are "mean", "median" or a callable function.
+        min_cids : int
+            Minimum number of cross-sections required for the initial
+            training set. Default is 4.
+        min_periods : int
+            Minimum number of periods required for the initial training set, in units of
+            the frequency `freq` specified in the constructor. Default is 36.
+        est_freq : str
+            Frequency at which models are refreshed. This corresponds with forward
+            frequency of out-of-sample hedged returns and the frequency at which betas
+            are estimated.
+        max_periods : int
+            Maximum length of each training set in units of the frequency `freq` specified
+            in the constructor. Default is None, in which case the sequential optimization
+            uses expanding training sets, as opposed to rolling windows.
+        split_functions : dict, optional
+            Dict of callables for determining the number of cross-validation
+            splits to add to the initial number as a function of the number of iterations
+            passed in the sequential learning process. Default is None. The keys must
+            correspond to the keys in `inner_splitters` and should be set to None for any
+            splitters that do not require splitter adjustment.
+        n_iter : int, optional
+            Number of iterations to run in random hyperparameter search. Default is None.
+        n_jobs_outer : int, optional
+            Number of jobs to run in parallel for the outer sequential loop. Default is -1.
+            It is advised for n_jobs_inner * n_jobs_outer (replacing -1 with the number of
+            available cores) to be less than or equal to the number of available cores on
+            the machine.
+        n_jobs_inner : int, optional
+            Number of jobs to run in parallel for the inner loop. Default is 1.
+            It is advised for n_jobs_inner * n_jobs_outer (replacing -1 with the number of
+            available cores) to be less than or equal to the number of available cores on
+            the machine.
         """
         # Checks
-        # TODO
+        # All others are checked in the run method
+        if not isinstance(hedged_return_xcat, str):
+            raise TypeError("hedged_return_xcat must be a string.")
 
         self.hedged_return_xcat = hedged_return_xcat
-        # Create pandas dataframes to store betas and hedged returns
 
         # Set up outer splitter
         outer_splitter = ExpandingFrequencyPanelSplit(
@@ -207,6 +310,7 @@ class BetaEstimator(BasePanelLearner):
             hyperparameters=hyperparameters,
             scorers=scorers,
             search_type=search_type,
+            normalize_fold_results=normalize_fold_results,
             cv_summary=cv_summary,
             split_functions=split_functions,
             n_iter=n_iter,
@@ -290,6 +394,42 @@ class BetaEstimator(BasePanelLearner):
         timestamp,
         adjusted_test_index,
     ):
+        """
+        Stores characteristics of the optimal model at each retraining date.
+
+        Parameters
+        ----------
+        pipeline_name : str
+            Name of the signal optimization process.
+        optimal_model : BaseRegressionSystem or VotingRegressor
+            Optimal model selected at each retraining date.
+        optimal_model_name : str
+            Name of the optimal model.
+        optimal_model_score : float
+            Cross-validation score for the optimal model.
+        optimal_model_params : dict
+            Chosen hyperparameters for the optimal model.
+        inner_splitters_adj : dict
+            Dictionary of adjusted inner splitters.
+        X_train : pd.DataFrame
+            Training feature matrix.
+        y_train : pd.Series
+            Training response variable.
+        X_test : pd.DataFrame
+            Test feature matrix.
+        y_test : pd.Series
+            Test response variable.
+        timestamp : pd.Timestamp
+            Timestamp of the retraining date.
+        adjusted_test_index : pd.MultiIndex
+            Adjusted test index to account for lagged features.
+
+        Returns
+        -------
+        dict
+            Dictionary containing the betas and hedged returns determined at the
+            given retraining date.
+        """
         if isinstance(optimal_model, VotingRegressor):
             estimators = optimal_model.estimators_
             coefs_list = [est.coefs_ for est in estimators]
@@ -315,7 +455,6 @@ class BetaEstimator(BasePanelLearner):
             for cid, beta in betas.items()
         ]
 
-        # TODO: handle case where no optimal model is found
         # Now calculate the induced hedged returns
 
         betas_series = pd.Series(betas)
@@ -329,14 +468,14 @@ class BetaEstimator(BasePanelLearner):
 
     def evaluate_hedged_returns(
         self,
-        hedged_return_xcat: Optional[Union[str, List[str]]] = None,
-        cids: Optional[Union[str, List[str]]] = None,
-        correlation_types: Union[str, List[str]] = "pearson",
-        title: Optional[str] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]] = None,
-        freqs: Optional[Union[str, List[str]]] = "M",
+        hedged_return_xcat=None,
+        cids=None,
+        correlation_types="pearson",
+        title=None,
+        start=None,
+        end=None,
+        blacklist=None,
+        freqs="M",
     ):
         """
         Method to determine and display a table of average absolute correlations between
@@ -350,30 +489,31 @@ class BetaEstimator(BasePanelLearner):
 
         Parameters
         ----------
-        hedged_return_xcat:
-            String or list of strings denoting the hedged returns to be
-            evaluated. Default is None, which evaluates all hedged returns within the class instance.
-        cids:
-            String or list of strings denoting the cross-sections to evaluate.
+        hedged_return_xcat : str or list, optional
+            Hedged returns to be evaluated. Default is None, which evaluates all hedged
+            returns within the class instance.
+        cids : str or list, optional
+            Cross-sections for which evaluation of hedged returns takes place.
             Default is None, which evaluates all cross-sections within the class instance.
-        correlation_types:
-            String or list of strings denoting the types of correlations
-            to calculate. Options are "pearson", "spearman" and "kendall". If None, all three
+        correlation_types : str or list, optional
+            Types of correlations to calculate.
+            Options are "pearson", "spearman" and "kendall". If None, all three
             are calculated. Default is "pearson".
-        title:
+        title : str, optional
             Title for the correlation table. If None, the default
-            title is "Average absolute correlations between each return and the chosen benchmark". Default is None.
-        start:
+            title is "Average absolute correlations between each return and the chosen
+            benchmark". Default is None.
+        start : str, optional
             String in ISO format. Default is None.
-        end:
+        end : str, optional
             String in ISO format. Default is None.
-        blacklist:
-            Dictionary of tuples of start and end
-            dates to exclude from the evaluation. Default is None.
-        freqs: Letters denoting all frequencies
-            at which the series may be sampled. This must be a selection of "D", "W", "M", "Q"
-            and "A". Default is "M". Each return series will always be summed over the sample
-            period.
+        blacklist : dict, optional
+            Dictionary of tuples of start and end dates to exclude from the evaluation.
+            Default is None.
+        freqs: str or list, optional
+            Letters denoting all frequencies at which the correlations may be calculated.
+            This must be a selection of "D", "W", "M", "Q" and "A". Default is "M".
+            Each return series will always be summed over the sample period.
 
         Returns
         -------
@@ -485,14 +625,34 @@ class BetaEstimator(BasePanelLearner):
 
     def _checks_evaluate_hedged_returns(
         self,
-        correlation_types: Union[str, List[str]],
-        hedged_return_xcat: Optional[Union[str, List[str]]],
-        cids: Optional[Union[str, List[str]]],
-        start: Optional[str],
-        end: Optional[str],
-        blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]],
-        freqs: Optional[Union[str, List[str]]],
+        correlation_types,
+        hedged_return_xcat,
+        cids,
+        start,
+        end,
+        blacklist,
+        freqs,
     ):
+        """
+        Input checks for the `evaluate_hedged_returns()` method.
+
+        Parameters
+        ----------
+        correlation_types : str or list
+            Types of correlations to calculate.
+        hedged_return_xcat : str or list, optional
+            Hedged returns to be evaluated.
+        cids : str or list, optional
+            Cross-sections for which evaluation of hedged returns takes place.
+        start : str, optional
+            Start date for evaluation.
+        end : str, optional
+            End date for evaluation.
+        blacklist : dict, optional
+            Dictionary of tuples of start and end dates to exclude from the evaluation.
+        freqs: str or list, optional
+            Letters denoting all frequencies at which the correlations may be calculated.
+        """
         if isinstance(correlation_types, str):
             correlation_types = [correlation_types]
         elif not isinstance(correlation_types, list):
@@ -589,23 +749,25 @@ class BetaEstimator(BasePanelLearner):
 
     def get_hedged_returns(
         self,
-        hedged_return_xcat: Optional[Union[str, List]] = None,
+        hedged_return_xcat = None,
     ):
         """
-        Returns a dataframe of out-of-sample hedged returns derived from beta estimation processes
-        held within the class instance.
+        Returns a dataframe of out-of-sample hedged returns derived from beta estimation
+        processes held within the class instance.
 
         Parameters
         ----------
-        hedged_return_xcat:
+        hedged_return_xcat : str or list, optional
             Category name or list of category names
             for the panel of derived hedged returns. If None, information from all
-            beta estimation processes held within the class instance is returned. Default is None.
+            beta estimation processes held within the class instance is returned.
+            Default is None.
 
         Returns
         -------
         pd.DataFrame
-            A dataframe of out-of-sample hedged returns derived from beta estimation processes.
+            A dataframe of out-of-sample hedged returns derived from beta estimation
+            processes.
         """
         # Checks
         hedged_return_xcat = self._checks_get_hedged_returns(
@@ -625,8 +787,23 @@ class BetaEstimator(BasePanelLearner):
 
     def _checks_get_hedged_returns(
         self,
-        hedged_return_xcat: Optional[str],
+        hedged_return_xcat,
     ):
+        """
+        Input checks for the `get_hedged_returns()` method.
+
+        Parameters
+        ----------
+        hedged_return_xcat : str or list
+            Category name or list of category names for the panel of derived hedged
+            returns.
+
+        Returns
+        -------
+        str or list
+            Category name or list of category names for the panel of derived hedged
+            returns.
+        """
         if hedged_return_xcat is not None:
             if isinstance(hedged_return_xcat, str):
                 hedged_return_xcat = [hedged_return_xcat]
@@ -646,7 +823,7 @@ class BetaEstimator(BasePanelLearner):
 
     def get_betas(
         self,
-        beta_xcat: Optional[Union[str, List]] = None,
+        beta_xcat = None,
     ):
         """
         Returns a dataframe of estimated betas derived from beta estimation processes
@@ -654,10 +831,10 @@ class BetaEstimator(BasePanelLearner):
 
         Parameters
         ----------
-        beta_xcat:
-            Category name or list of category names
-            for the panel of estimated contract betas. If None, information from all
-            beta estimation processes held within the class instance is returned. Default is None.
+        beta_xcat : str or list
+            Category name or list of category names for the panel of estimated contract
+            betas. If None, information from all beta estimation processes held within
+            the class instance is returned. Default is None.
 
         Returns
         -------
@@ -678,8 +855,23 @@ class BetaEstimator(BasePanelLearner):
 
     def _checks_get_betas(
         self,
-        beta_xcat: Optional[Union[str, List]],
+        beta_xcat,
     ):
+        """
+        Input checks for the `get_betas()` method.
+
+        Parameters
+        ----------
+        beta_xcat : str or list
+            Category name or list of category names for the panel of estimated contract
+            betas.
+
+        Returns
+        -------
+        str or list
+            Category name or list of category names for the panel of estimated contract
+            betas.
+        """
         if beta_xcat is not None:
             if isinstance(beta_xcat, str):
                 beta_xcat = [beta_xcat]
@@ -697,16 +889,31 @@ class BetaEstimator(BasePanelLearner):
 
     def _get_mean_abs_corrs(
         self,
-        xcat: str,
-        cids: str,
-        df: pd.DataFrame,
-        correlation: pd.DataFrame,
+        xcat,
+        cids,
+        df,
+        correlation,
     ):
         """
-        Private helper method to calculate the mean absolute correlation between a column
-        'xcat' in a dataframe 'df' and the benchmark return (the last column) across all
-        cross-sections in 'cids'. The correlation is calculated using the method specified
-        in 'correlation'.
+        Calculate mean absolute correlation between a column 'xcat' in a dataframe 'df'
+        and the benchmark return (the last column) across all cross-sections in 'cids'.
+        The correlation is calculated using the method specified in 'correlation'.
+
+        Parameters
+        ----------
+        xcat : str
+            Category name for the column in the dataframe.
+        cids : str
+            Cross-sections for which the correlation is calculated.
+        df : pd.DataFrame
+            Dataframe containing the relevant columns.
+        correlation : str
+            Type of correlation to calculate.
+
+        Returns
+        -------
+        float
+            Mean absolute correlation between the column 'xcat' and the benchmark return.
         """
         # Get relevant columns
         df_subset = df[[xcat, self.benchmark_xcat]].dropna()
@@ -725,6 +932,16 @@ class BetaEstimator(BasePanelLearner):
         return mean_abs_corr
 
     def _check_duplicate_results(self, hedged_return_xcat, beta_xcat):
+        """
+        Check for duplicate results in the class instance and remove them.
+
+        Parameters
+        ----------
+        hedged_return_xcat : str
+            Category name for the panel of out-of-sample hedged returns.
+        beta_xcat : str
+            Category name for the panel of estimated betas.
+        """
         conditions = [
             ("hedged_returns", "xcat", hedged_return_xcat),
             ("betas", "xcat", beta_xcat),

@@ -4,7 +4,7 @@ Sequential learning over a panel.
 
 import numbers
 import warnings
-from abc import ABC, abstractmethod
+from abc import ABC
 from functools import partial
 
 import matplotlib.pyplot as plt
@@ -77,6 +77,33 @@ class BasePanelLearner(ABC):
         generate_labels : callable, optional
             Function to transform the dependent variable, usually into
             classification labels. Default is None.
+
+        Notes
+        -----
+        `BasePanelLearner` is an abstract class that provides the basic structure to
+        train statistical machine learning models sequentially over a panel. At each
+        model retraining date, an optimal model is chosen out a collection of candidate
+        models through a hyperparameter optimization process. Following the model
+        selection stage, the model is trained on date preceding the retraining date,
+        maintaining the point-in-time principle of JPMaQS. Analytics from the selected
+        model are stored for interpretability of the process.
+
+        The hyperparameter optimization process revolves around cross-validation [1]_.
+        Cross-validation estimates out-of-sample performance metrics. Each candidate
+        model is cross-validated over a collection of possible hyperparameters and the
+        model with the best score is chosen. When all possible models are directly
+        specified and cross-validated, we call this process a 'grid search'. When models
+        are sampled from a given collection, we call this process a 'random search'.
+        These are the two methods currently supported by `BasePanelLearner`. In a future
+        release, we will add support for Bayesian hyperparameter searches [2]_.
+
+        References
+        ----------
+        .. [1] Brownlee, J. (2023). A Gentle Introduction to k-fold Cross-Validation.
+            https://machinelearningmastery.com/k-fold-cross-validation/
+
+        .. [2] Frazier, P.I., 2018. A tutorial on Bayesian optimization.
+            https://arxiv.org/abs/1807.02811
         """
         # Checks
         self._check_init(
@@ -211,6 +238,11 @@ class BasePanelLearner(ABC):
             Number of jobs to run in parallel for the outer loop. Default is -1.
         n_jobs_inner : int, optional
             Number of jobs to run in parallel for the inner loop. Default is 1.
+
+        Returns
+        -------
+        list
+            List of dictionaries containing the results of the learning process.
         """
         # Checks
         self._check_run(
@@ -327,8 +359,8 @@ class BasePanelLearner(ABC):
 
         Returns
         -------
-        return : tuple
-            Tuple of quantamental data, model choice data and other data.
+        dict
+            Dictionary comprising model selection data and predictive analytics.
         """
         # Train-test split
         X_train, X_test = self.X.iloc[train_idx, :], self.X.iloc[test_idx, :]
@@ -447,8 +479,8 @@ class BasePanelLearner(ABC):
 
         Returns
         -------
-        return : tuple
-            Tuple of optimal model name, optimal model, optimal model score and optimal
+        tuple
+            Optimal model name, optimal model, optimal model score and optimal
             model hyperparameters.
         """
         optim_name = None
@@ -542,18 +574,8 @@ class BasePanelLearner(ABC):
 
         Returns
         -------
-        return : int or float
+        int or float
             Either the index of the best estimator or the maximal score itself.
-
-        Notes
-        -----
-        For each hyperparameter choice, the given scorers are evaluated on each test cv
-        fold. If `normalize_fold_results` is True, the scores for each fold are standardized
-        across hyperparameter choices. This is done to make the scores comparable across
-        different test periods. Following this, the scores for each hyperparameter choice
-        are summarized using `cv_summary` and standardized, in order for fair comparison
-        across different scorers. The final score is the average of the standardized scores
-        for each scorer. The hyperparameter with the largest composite score is selected.
         """
         cv_results = pd.DataFrame(cv_results)
         metric_columns = [
@@ -587,16 +609,6 @@ class BasePanelLearner(ABC):
                 cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].mean(
                     axis=1
                 ) / cv_results[scorer_columns].std(axis=1)
-            # TODO sort out mad - this should create an error for now
-            # sort out NaNs for mad as well
-            elif cv_summary == "median-mad":
-                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].median(
-                    axis=1
-                ) - cv_results[scorer_columns].mad(axis=1)
-            elif cv_summary == "median/mad":
-                cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].median(
-                    axis=1
-                ) / cv_results[scorer_columns].mad(axis=1)
             else:
                 # TODO: handle NAs?
                 cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].apply(
@@ -617,26 +629,11 @@ class BasePanelLearner(ABC):
 
         # Return index of best estimator
         # TODO: handle case where multiple hyperparameter choices have the same score
+        # We currently return the first one
         if return_index:
             return cv_results["final_score"].idxmax()
         else:
             return cv_results["final_score"].max()
-
-    # @abstractmethod
-    # def store_quantamental_data(
-    #     self,
-    #     pipeline_name,
-    #     model,
-    #     X_train,
-    #     y_train,
-    #     X_test,
-    #     y_test,
-    #     adjusted_test_index,
-    # ):
-    #     """
-    #     Abstract method for storing quantamental data.
-    #     """
-    #     pass
 
     def _get_split_results(
         self,
@@ -654,7 +651,40 @@ class BasePanelLearner(ABC):
         adjusted_test_index,
     ):
         """
-        Store model selection information for training set (X_train, y_train)
+        Store model selection information and predictive analytics for training set
+        (X_train, y_train).
+
+        Parameters
+        ----------
+        pipeline_name : str
+            Name of the sequential optimization pipeline.
+        optimal_model : RegressorMixin or ClassifierMixin or Pipeline
+            Optimal model selected for the training set.
+        optimal_model_name : str
+            Name of the optimal model.
+        optimal_model_score : float
+            Score of the optimal model.
+        optimal_model_params : dict
+            Hyperparameters of the optimal model.
+        inner_splitters_adj : dict
+            Inner splitters for the learning process.
+        X_train : pd.DataFrame
+            Input feature matrix.
+        y_train : pd.Series
+            Target variable.
+        X_test : pd.DataFrame
+            Input feature matrix.
+        y_test : pd.Series
+            Target variable.
+        timestamp : pd.Timestamp
+            Model retraining date.
+        adjusted_test_index : pd.MultiIndex
+            Adjusted test index to account for lagged features.
+
+        Returns
+        -------
+        dict
+            Dictionary containing model selection data and predictive analytics.
         """
         split_result = dict()
         model_result = self._store_model_choice_data(
@@ -706,7 +736,37 @@ class BasePanelLearner(ABC):
         timestamp,
     ):
         """
-        Store model selection information for training set (X_train, y_train)
+        Store model selection information for training set (X_train, y_train).
+
+        Parameters
+        ----------
+        pipeline_name : str
+            Name of the sequential optimization pipeline.
+        optimal_model : RegressorMixin or ClassifierMixin or Pipeline
+            Optimal model selected for the training set.
+        optimal_model_name : str
+            Name of the optimal model.
+        optimal_model_score : float
+            Score of the optimal model.
+        optimal_model_params : dict
+            Hyperparameters of the optimal model.
+        inner_splitters_adj : dict
+            Inner splitters for the learning process.
+        X_train : pd.DataFrame
+            Input feature matrix.
+        y_train : pd.Series
+            Target variable.
+        X_test : pd.DataFrame
+            Input feature matrix.
+        y_test : pd.Series
+            Target variable.
+        timestamp : pd.Timestamp
+            Model retraining date.
+
+        Returns
+        -------
+        dict
+            Dictionary containing model selection data.
         """
         if optimal_model is None:
             warnings.warn(
@@ -748,7 +808,39 @@ class BasePanelLearner(ABC):
         adjusted_test_index,
     ):
         """
-        Method for storing quantamental data.
+        Store predictive analytics for training set (X_train, y_train).
+
+        Parameters
+        ----------
+        pipeline_name : str
+            Name of the sequential optimization pipeline.
+        optimal_model : RegressorMixin or ClassifierMixin or Pipeline
+            Optimal model selected for the training set.
+        optimal_model_name : str
+            Name of the optimal model.
+        optimal_model_score : float
+            Score of the optimal model.
+        optimal_model_params : dict
+            Hyperparameters of the optimal model.
+        inner_splitters_adj : dict
+            Inner splitters for the learning process.
+        X_train : pd.DataFrame
+            Input feature matrix.
+        y_train : pd.Series
+            Target variable.
+        X_test : pd.DataFrame
+            Input feature matrix.
+        y_test : pd.Series
+            Target variable.
+        timestamp : pd.Timestamp
+            Model retraining date.
+        adjusted_test_index : pd.MultiIndex
+            Adjusted test index to account for lagged features.
+
+        Returns
+        -------
+        dict
+            Dictionary containing predictive analytics.
         """
         return dict()
 
@@ -764,7 +856,7 @@ class BasePanelLearner(ABC):
 
         Returns
         -------
-        return : pd.DataFrame
+        pd.DataFrame
             Pandas dataframe of the optimal models and hyperparameters selected at each
             retraining date.
         """
@@ -1307,6 +1399,21 @@ class BasePanelLearner(ABC):
         cap=5,
         figsize=(12, 8),
     ):
+        """
+        Checks for the models_heatmap method.
+
+        Parameters
+        ----------
+        name : str
+            Name of the sequential optimization pipeline.
+        title : str, optional
+            Title of the heatmap. Default has the form "Model Selection Heatmap for {name}".
+        cap : int, optional
+            Maximum number of models to display. Default is 5, with limit of 10.
+            The chosen models are the 'cap' most frequently occurring in the process.
+        figsize : tuple, optional
+            Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        """
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
         if name not in self.chosen_models.name.unique():

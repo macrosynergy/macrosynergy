@@ -5,9 +5,8 @@ Classes for incremental expanding panel cross-validators.
 import numpy as np
 import pandas as pd
 
-from typing import List
-
 from macrosynergy.learning.splitters.base_splitters import WalkForwardPanelSplit
+
 
 class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
     """
@@ -58,12 +57,12 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
 
     def __init__(
         self,
-        train_intervals = 21,
-        test_size = 21,
-        min_cids = 4,
-        min_periods = 500,
-        start_date = None,
-        max_periods = None,
+        train_intervals=21,
+        test_size=21,
+        min_cids=4,
+        min_periods=500,
+        start_date=None,
+        max_periods=None,
     ):
         # Checks
         super().__init__(
@@ -117,7 +116,7 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
         splits = self._determine_unique_training_times(Xy, real_dates)
 
         # Determine the training and test indices for each split
-        train_splits: List[np.ndarray] = [
+        train_splits: list = [
             splits[0] if not self.max_periods else splits[0][-self.max_periods :]
         ]
         for i in range(1, self.n_splits):
@@ -128,9 +127,9 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
                 train_splits[i] = train_splits[i][-self.max_periods :]
 
         for split in train_splits:
-            train_indices: List[int] = np.where(real_dates.isin(split))[0]
+            train_indices: list = np.where(real_dates.isin(split))[0]
             test_start: int = self.unique_dates.get_loc(split.max()) + 1
-            test_indices: List[int] = np.where(
+            test_indices: list = np.where(
                 real_dates.isin(
                     self.unique_dates[test_start : test_start + self.test_size]
                 )
@@ -156,7 +155,7 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
         for ensuing components of the self.split() method.
         """
         self.unique_dates: pd.DatetimeIndex = real_dates.unique().sort_values()
-        
+
         # First determine the dates for the first training set
         if self.start_date:
             date_last_train = self.start_date
@@ -166,24 +165,19 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
                 init_mask[init_mask == True].reset_index().real_date.min()
             )
             date_last_train: pd.Timestamp = self.unique_dates[
-                self.unique_dates.get_loc(date_first_min_cids)
-                + self.min_periods
-                - 1
+                self.unique_dates.get_loc(date_first_min_cids) + self.min_periods - 1
             ]
 
         # Determine all remaining training splits
-        splits = [
-            self.unique_dates[self.unique_dates <= date_last_train]
-        ]
+        splits = [self.unique_dates[self.unique_dates <= date_last_train]]
         i = self.unique_dates.get_loc(date_last_train)
 
         # Loop until no test sets can be created
-        while (i < len(self.unique_dates) - (self.test_size + 1)):
+        while i < len(self.unique_dates) - (self.test_size + 1):
             next_loc = i + self.train_intervals
             splits.append(self.unique_dates[i + 1 : next_loc + 1])
             i = next_loc
 
-        
         self.n_splits = len(splits)
 
         return splits
@@ -318,14 +312,14 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
 
     def __init__(
         self,
-        expansion_freq = "D",
-        test_freq = "D",
-        min_cids = 4,
-        min_periods = 500,
-        start_date = None,
-        max_periods = None,
+        expansion_freq="D",
+        test_freq="D",
+        min_cids=4,
+        min_periods=500,
+        start_date=None,
+        max_periods=None,
     ):
-        # Checks 
+        # Checks
         super().__init__(
             min_cids=min_cids,
             min_periods=min_periods,
@@ -385,7 +379,7 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
         real_dates = Xy.index.get_level_values(1)
         splits = self._determine_unique_training_times(Xy, real_dates)
 
-        train_splits: List[np.ndarray] = [
+        train_splits: list = [
             splits[0] if not self.max_periods else splits[0][-self.max_periods :]
         ]
         for i in range(1, self.n_splits):
@@ -449,9 +443,7 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
         This method is called by self.split(). It also returns other variables needed
         for ensuing components of the self.split() method.
         """
-        self.unique_dates: pd.DatetimeIndex = (
-            real_dates.unique().sort_values()
-        )
+        self.unique_dates: pd.DatetimeIndex = real_dates.unique().sort_values()
         # First determine the dates for the first training set
         if self.start_date:
             date_last_train = self.start_date
@@ -461,9 +453,7 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
                 init_mask[init_mask == True].reset_index().real_date.min()
             )
             date_last_train: pd.Timestamp = self.unique_dates[
-                self.unique_dates.get_loc(date_first_min_cids)
-                + self.min_periods
-                - 1
+                self.unique_dates.get_loc(date_first_min_cids) + self.min_periods - 1
             ]
 
         # Determine all remaining training splits
@@ -495,11 +485,7 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
         # that constitute each training split are together.
         splits.insert(
             0,
-            real_dates[
-                real_dates <= date_last_train
-            ]
-            .unique()
-            .sort_values(),
+            real_dates[real_dates <= date_last_train].unique().sort_values(),
         )
 
         self.n_splits = len(splits)

@@ -23,7 +23,6 @@ def create_panel_metric(
 
     Parameters
     ----------
-
     y_true : pd.Series of shape (n_samples,)
         True regression labels.
     y_pred : array-like of shape (n_samples,)
@@ -307,8 +306,8 @@ def sharpe_ratio(
     type="panel",
 ):
     """
-    Sharpe ratio of a strategy where the trader goes long when the predictions are
-    positive and short when the predictions are negative.
+    Sharpe ratio of a strategy where the trader goes long by a single unit when the
+    predictions are positive and short by a single unit when the predictions are negative.
 
     Parameters
     ----------
@@ -435,7 +434,7 @@ def sortino_ratio(
 ):
     """
     Sortino ratio of a strategy where the trader goes long when the predictions are
-    positive and short when the predictions are negative.
+    positive by a single unit and short by a single unit when the predictions are negative.
 
     Parameters
     ----------
@@ -678,10 +677,6 @@ def _check_metric_params(
     type : str
         The panel dimension over which to compute the metric. Options are "panel",
         "cross_section" and "time_periods".
-
-    Returns
-    -------
-    None
     """
     # y_true
     if not isinstance(y_true, pd.Series):
@@ -706,3 +701,77 @@ def _check_metric_params(
         raise ValueError(
             "Invalid type. Options are 'panel', 'cross_section' and 'time_periods'"
         )
+
+
+if __name__ == "__main__":
+    import macrosynergy.management as msm
+    from macrosynergy.management.simulate import make_qdf
+    from sklearn.linear_model import LinearRegression
+
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["XR", "BMXR"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2012-01-01", "2020-12-31", 0, 1]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["XR"] = ["2012-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["BMXR"] = ["2012-01-01", "2020-12-31", 1, 2, 0.95, 1]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    Xy = msm.categories_df(
+        df=dfd, xcats=xcats, cids=cids, freq="M", lag=1, xcat_aggs=["last", "sum"]
+    ).dropna()
+    X = Xy.iloc[:, :-1]
+    y = Xy.iloc[:, -1]
+
+    lr = LinearRegression()
+    lr.fit(X, y)
+
+    # Accuracies
+    print(
+        "\nAccuracy over panel: "
+        f"{regression_accuracy(y, lr.predict(X), type='panel')}"
+    )
+    print(
+        "Cross-sectional accuracy: "
+        f"{regression_accuracy(y, lr.predict(X), type='cross_section')}"
+    )
+    print(
+        "Periodic accuracy: "
+        f"{regression_accuracy(y, lr.predict(X), type='time_periods')}"
+    )
+
+    # Un-annualized Sharpe ratios
+    print(
+        "\nUn-annualized Sharpe over panel: "
+        f"{sharpe_ratio(y, lr.predict(X), type='panel')}"
+    )
+    print(
+        "Cross-sectional un-annualized Sharpe: "
+        f"{sharpe_ratio(y, lr.predict(X), type='cross_section')}"
+    )
+    print(
+        "Periodic un-annualized Sharpe: "
+        f"{sharpe_ratio(y, lr.predict(X), type='time_periods')}"
+    )
+
+    # Kendall correlation
+    print(
+        "\nKendall correlation over panel: "
+        f"{correlation_coefficient(y, lr.predict(X), correlation_type='kendall', type='panel')}"
+    )
+    print(
+        "Cross-sectional Kendall correlation: "
+        f"{correlation_coefficient(y, lr.predict(X), correlation_type='kendall', type='cross_section')}"
+    )
+    print(
+        "Periodic Kendall correlation: "
+        f"{correlation_coefficient(y, lr.predict(X), correlation_type='kendall', type='time_periods')}"
+    )
