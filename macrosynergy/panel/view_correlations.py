@@ -91,13 +91,15 @@ def correl_matrix(
     xcat_secondary_labels : Optional[Union[List[str], Dict[str, str]]]
         optional list or dictionary of labels for xcats_secondary.
     **kwargs : Dict
-        Arbitrary keyword arguments that are passed to seaborn.heatmap.  N.B:. The
-        function displays the heatmap of a correlation matrix across categories or cross-
-        sections (depending on which parameter has received multiple elements).
+        Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
 
     .. note::
         Lags can include a 0 if the original should also be correlated.
+
+    .. note::
+        The function displays the heatmap of a correlation matrix across categories or cross-
+        sections (depending on which parameter has received multiple elements).
     """
 
     msv.view_correlation(
