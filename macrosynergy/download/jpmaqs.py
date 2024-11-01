@@ -1,5 +1,5 @@
 """
-JPMaQS Download Interface 
+JPMaQS Download Interface
 """
 
 import datetime
@@ -48,23 +48,34 @@ DEFAULT_CLIENT_SECRET_ENV_VAR: str = "DQ_CLIENT_SECRET"
 
 
 def deconstruct_expression(
-    expression: Union[str, List[str]]
+    expression: Union[str, List[str]],
 ) -> Union[List[str], List[List[str]]]:
     """
-    Deconstruct an expression into a list of cid, xcat, and metric.
-    Achieves the inverse of construct_expressions(). For non-JPMaQS expressions,
-    the returned list will be [expression, expression, 'value']. The metric is set to
-    'value' to ensure the reported metric is consistent with the standard JPMaQS metrics
+    Deconstruct an expression into a list of cid, xcat, and metric. Achieves the inverse
+    of construct_expressions(). For non-JPMaQS expressions, the returned list will be
+    [expression, expression, 'value']. The metric is set to 'value' to ensure the
+    reported metric is consistent with the standard JPMaQS metrics
     (JPMaQSDownload.valid_metrics).
 
-    :param <str> expression: expression to deconstruct. If a list is provided,
-        each element will be deconstructed and returned as a list of lists.
+    Parameters
+    ----------
+    expression : str
+        expression to deconstruct. If a list is provided, each element will be
+        deconstructed and returned as a list of lists.
 
-    :return <list[str]>: list of cid, xcat, and metric.
+    Raises
+    ------
+    TypeError
+        if `expression` is not a string or a list of strings.
+    ValueError
+        if `expression` is an empty list.
 
-    :raises <TypeError>: if `expression` is not a string or a list of strings.
-    :raises <ValueError>: if `expression` is an empty list.
+    Returns
+    -------
+    list[str]
+        list of cid, xcat, and metric.
     """
+
     if not isinstance(expression, (str, list)):
         raise TypeError("`expression` must be a string or a list of strings.")
 
@@ -98,14 +109,24 @@ def construct_expressions(
     xcats: Optional[List[str]] = None,
     metrics: Optional[List[str]] = None,
 ) -> List[str]:
-    """Construct expressions from the provided arguments.
+    """
+    Construct expressions from the provided arguments.
 
-    :param <list[str]> tickers: list of tickers.
-    :param <list[str]> cids: list of cids.
-    :param <list[str]> xcats: list of xcats.
-    :param <list[str]> metrics: list of metrics.
+    Parameters
+    ----------
+    tickers : list[str]
+        list of tickers.
+    cids : list[str]
+        list of cids.
+    xcats : list[str]
+        list of xcats.
+    metrics : list[str]
+        list of metrics.
 
-    :return <list[str]>: list of expressions.
+    Returns
+    -------
+    list[str]
+        list of expressions.
     """
 
     if tickers is None:
@@ -117,7 +138,6 @@ def construct_expressions(
 
 
 def get_expression_from_qdf(df: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[str]:
-
     if isinstance(df, list):
         return list(itertools.chain.from_iterable(map(get_expression_from_qdf, df)))
 
@@ -131,7 +151,7 @@ def get_expression_from_qdf(df: Union[pd.DataFrame, List[pd.DataFrame]]) -> List
 
 
 def get_expression_from_wide_df(
-    df: Union[pd.DataFrame, List[pd.DataFrame]]
+    df: Union[pd.DataFrame, List[pd.DataFrame]],
 ) -> List[str]:
     if isinstance(df, list):
         return list(itertools.chain.from_iterable(map(get_expression_from_wide_df, df)))
@@ -140,11 +160,19 @@ def get_expression_from_wide_df(
 
 def timeseries_to_qdf(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
     """
-    Converts a dictionary of time series to a QuantamentalDataFrame.
+    Converts a dictionary containing a time-series to a QuantamentalDataFrame.
 
-    :param <Dict[str, Any]> timeseries: A dictionary of time series.
-    :return <QuantamentalDataFrame>: The converted DataFrame.
+    Parameters
+    ----------
+    timeseries : Dict[str, Any]
+        A dictionary containing a time-series.
+
+    Returns
+    -------
+    QuantamentalDataFrame
+        The converted DataFrame.
     """
+
     if not isinstance(timeseries, dict):
         raise TypeError("Argument `timeseries` must be a dictionary.")
 
@@ -174,12 +202,21 @@ def timeseries_to_column(
     """
     Converts a dictionary of time series to a DataFrame with a single column.
 
-    :param <Dict[str, Any]> timeseries: A dictionary of time series.
-    :param <str> errors: The error handling method to use. If 'raise', then invalid
-        items in the list will raise an error. If 'ignore', then invalid items will be
-        ignored. Default is 'ignore'.
-    :return <pd.DataFrame>: The converted DataFrame.
+    Parameters
+    ----------
+    timeseries : Dict[str, Any]
+        A dictionary of time series.
+    errors : str
+        The error handling method to use. If 'raise', then invalid items in the list
+        will raise an error. If 'ignore', then invalid items will be ignored. Default is
+        'ignore'.
+
+    Returns
+    -------
+    pd.DataFrame
+        The converted DataFrame.
     """
+
     if not isinstance(timeseries, dict):
         raise TypeError("Argument `timeseries` must be a dictionary.")
 
@@ -211,12 +248,21 @@ def concat_column_dfs(
     """
     Concatenates a list of DataFrames into a single DataFrame.
 
-    :param <List[pd.DataFrame]> df_list: A list of DataFrames.
-    :param <str> errors: The error handling method to use. If 'raise', then invalid
-        items in the list will raise an error. If 'ignore', then invalid items will be
-        ignored. Default is 'ignore'.
-    :return <pd.DataFrame>: The concatenated DataFrame.
+    Parameters
+    ----------
+    df_list : List[pd.DataFrame]
+        A list of DataFrames.
+    errors : str
+        The error handling method to use. If 'raise', then invalid items in the list
+        will raise an error. If 'ignore', then invalid items will be ignored. Default is
+        'ignore'.
+
+    Returns
+    -------
+    pd.DataFrame
+        The concatenated DataFrame.
     """
+
     if not isinstance(df_list, list):
         raise TypeError("Argument `df_list` must be a list.")
 
@@ -258,7 +304,6 @@ def _ticker_filename(ticker: str, save_path: str) -> str:
 
 
 def _save_qdf(data: List[dict], save_path: str) -> None:
-
     for ticker in sorted(set(map(_get_ticker, data))):
         ticker_filename = _ticker_filename(ticker, save_path)
         os.makedirs(os.path.dirname(ticker_filename), exist_ok=True)
@@ -314,18 +359,30 @@ def validate_downloaded_df(
     """
     Validate the downloaded data in the provided dataframe.
 
-    :param <pd.DataFrame> data_df: dataframe containing the downloaded data.
-    :param <list[str]> expected_expressions: list of expressions that were expected
-        to be downloaded.
-    :param <list[str]> found_expressions: list of expressions that were actually
-        downloaded.
-    :param <str> start_date: start date of the downloaded data.
-    :param <str> end_date: end date of the downloaded data.
-    :param <bool> verbose: whether to print the validation results.
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        dataframe containing the downloaded data.
+    expected_expressions : list[str]
+        list of expressions that were expected to be downloaded.
+    found_expressions : list[str]
+        list of expressions that were actually downloaded.
+    start_date : str
+        start date of the downloaded data.
+    end_date : str
+        end date of the downloaded data.
+    verbose : bool
+        whether to print the validation results.
 
-    :return <bool>: True if the downloaded data is valid, False otherwise.
+    Raises
+    ------
+    TypeError
+        if `data_df` is not a dataframe.
 
-    :raises <TypeError>: if `data_df` is not a dataframe.
+    Returns
+    -------
+    bool
+        True if the downloaded data is valid, False otherwise.
     """
 
     if not isinstance(data_df, pd.DataFrame):
@@ -447,11 +504,21 @@ def get_expressions_from_file(
     """
     Loads the expressions found in a downloaded timeseries file (either JSON or CSV).
 
-    :param <str> file_path: path to the file.
-    :param <bool> as_dataframe: whether to load the file as a dataframe.
-    :param <str> dataframe_format: the format of the dataframe. Must be one of 'qdf' or 'wide'.
-    :return <List[str]>: list of expressions found in the file.
+    Parameters
+    ----------
+    file_path : str
+        path to the file.
+    as_dataframe : bool
+        whether to load the file as a dataframe.
+    dataframe_format : str
+        the format of the dataframe. Must be one of 'qdf' or 'wide'.
+
+    Returns
+    -------
+    List[str]
+        list of expressions found in the file.
     """
+
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File {file_path} does not exist.")
 
@@ -477,14 +544,25 @@ def validate_downloaded_data(
     """
     Validate the downloaded data in the provided path.
 
-    :param <str> path: path to the downloaded data.
-    :param <list[str]> expected_expressions: list of expressions that were expected
-        to be downloaded.
-    :param <bool> as_dataframe: whether to load the files as dataframes.
-    :param <str> dataframe_format: the format of the dataframe. Must be one of 'qdf' or 'wide'.
-    :param <bool> show_progress: whether to show a progress bar.
-    :return <list[str]>: list of expressions that are missing from the downloaded data.
+    Parameters
+    ----------
+    path : str
+        path to the downloaded data.
+    expected_expressions : list[str]
+        list of expressions that were expected to be downloaded.
+    as_dataframe : bool
+        whether to load the files as dataframes.
+    dataframe_format : str
+        the format of the dataframe. Must be one of 'qdf' or 'wide'.
+    show_progress : bool
+        whether to show a progress bar.
+
+    Returns
+    -------
+    list[str]
+        list of expressions that are missing from the downloaded data.
     """
+
     if not os.path.isdir(path):
         raise ValueError(f"Path {path} does not exist.")
 
@@ -523,33 +601,50 @@ def validate_downloaded_data(
 
 class JPMaQSDownload(DataQueryInterface):
     """
-    JPMaQSDownload Object. This object is used to download JPMaQS data via the DataQuery API.
-    It can be extended to include the use of proxies, and even request generic DataQuery expressions.
+    JPMaQSDownload Object. This object is used to download JPMaQS data via the DataQuery
+    API. It can be extended to include the use of proxies, and even request generic
+    DataQuery expressions.
 
-    :param <bool> oauth: True if using oauth, False if using username/password with crt/key.
-    :param <Optional[str]> client_id: oauth client_id, required if oauth=True.
-    :param <Optional[str]> client_secret: oauth client_secret, required if oauth=True.
-    :param <Optional[str]> crt: path to crt file.
-    :param <Optional[str]> key: path to key file.
-    :param <Optional[str]> username: username for certificate based authentication.
-    :param <Optional[str]> password: paired with username for certificate
-    :param <bool> debug: True if debug mode, False if not.
-    :param <bool> suppress_warning: True if suppressing warnings, False if not.
-    :param <bool> check_connection: True if the interface should check the connection to
-        the server before sending requests, False if not. False by default.
-    :param <Optional[dict]> proxy: proxy to use for requests, None if not using proxy (default).
-    :param <bool> print_debug_data: True if debug data should be printed, False if not
-        (default).
-    :param <dict> dq_kwargs: additional arguments to pass to the DataQuery API object such
-        `calender` and `frequency` for the DataQuery API. For more fine-grained usage,
-        initialize the DataQueryInterface object explicitly.
-    :param <dict> kwargs: any other keyword arguments.
+    Parameters
+    ----------
+    oauth : bool
+        True if using oauth, False if using username/password with crt/key.
+    client_id : Optional[str]
+        oauth client_id, required if oauth=True.
+    client_secret : Optional[str]
+        oauth client_secret, required if oauth=True.
+    crt : Optional[str]
+        path to crt file.
+    key : Optional[str]
+        path to key file.
+    username : Optional[str]
+        username for certificate based authentication.
+    password : Optional[str]
+        paired with username for certificate
+    debug : bool
+        True if debug mode, False if not.
+    suppress_warning : bool
+        True if suppressing warnings, False if not.
+    check_connection : bool
+        True if the interface should check the connection to the server before sending
+        requests, False if not. False by default.
+    proxy : Optional[dict]
+        proxy to use for requests, None if not using proxy (default).
+    print_debug_data : bool
+        True if debug data should be printed, False if not (default).
+    dq_kwargs : dict
+        additional arguments to pass to the DataQuery API object such `calender` and
+        `frequency` for the DataQuery API. For more fine-grained usage, initialize the
+        DataQueryInterface object explicitly.
+    kwargs : dict
+        any other keyword arguments.
 
-    :return <JPMaQSDownload>: JPMaQSDownload object
-
-    :raises <TypeError>: if provided arguments are not of the correct type.
-    :raises <ValueError>: if provided arguments are invalid or semantically incorrect.
-
+    Raises
+    ------
+    TypeError
+        if provided arguments are not of the correct type.
+    ValueError
+        if provided arguments are invalid or semantically incorrect.
     """
 
     def __init__(
@@ -688,13 +783,20 @@ class JPMaQSDownload(DataQueryInterface):
         dataframe_format: str,
         report_time_taken: bool,
     ) -> bool:
-        """Validate the arguments passed to the download function.
+        """
+        Validate the arguments passed to the download function.
 
-        :return <bool>: True if valid.
+        Raises
+        ------
+        TypeError
+            If any of the arguments are not of the correct type.
+        ValueError
+            If any of the arguments are semantically incorrect.
 
-        :raises <TypeError>: If any of the arguments are not of the correct type.
-        :raises <ValueError>: If any of the arguments are semantically incorrect.
-
+        Returns
+        -------
+        bool
+            True if valid.
         """
 
         for var, name in [
@@ -774,14 +876,19 @@ class JPMaQSDownload(DataQueryInterface):
         self, expressions: List[str], verbose: bool = True
     ) -> List[str]:
         """
-        Method to filter a list of expressions against the JPMaQS catalogue.
-        This avoids requesting data for expressions that are not in the catalogue,
-        and provides the user wuth the complete list of expressions that are in the
-        catalogue.
+        Method to filter a list of expressions against the JPMaQS catalogue. This avoids
+        requesting data for expressions that are not in the catalogue, and provides the
+        user wuth the complete list of expressions that are in the catalogue.
 
-        :param <List[str]> tickers: list of tickers to filter.
+        Parameters
+        ----------
+        tickers : List[str]
+            list of tickers to filter.
 
-        :return <List[str]>: list of tickers that are in the JPMaQS catalogue.
+        Returns
+        -------
+        List[str]
+            list of tickers that are in the JPMaQS catalogue.
         """
 
         catalogue_tickers: List[str] = self.get_catalogue(verbose=verbose)
@@ -932,6 +1039,14 @@ class JPMaQSDownload(DataQueryInterface):
         page_size: int = 1000,
         verbose: bool = True,
     ) -> List[str]:
+        """
+        Get the JPMaQS catalogue.
+
+        Returns
+        -------
+        List[str]
+            list of tickers in the JPMaQS catalogue.
+        """
         return super().get_catalogue(group_id, page_size, verbose)
 
     def download_all_to_disk(
@@ -951,29 +1066,41 @@ class JPMaQSDownload(DataQueryInterface):
         """
         Downloads all JPMaQS data to disk.
 
-        :param <str> path: path to the directory where the data will be saved.
-        :param <Optional[List[str]> expressions: Default is None, meaning all expressions
-            in the JPMaQS catalogue will be downloaded. If provided, only the expressions
-            in the list will be downloaded.
-        :param <bool> as_dataframe: Default is True, meaning the data will be saved as a
-            DataFrame (either in the Quantamental Data Format ('qdf') or wide format ('wide')).
-            If False, the data will be saved as JSON files, with one expression per file.
-        :param <str> dataframe_format: Default is 'qdf'. If `as_dataframe` is True, this
-            parameter specifies the format of the DataFrame. Must be one of 'qdf' or 'wide'.
-        :param <bool> show_progress: Default is True, meaning the progress of the download
-            will be displayed. If False, the progress will not be displayed.
-        :param <float> delay_param: Default is 0.2 seconds (fastest allowed by DataQuery API).
-            The delay parameter to use when making requests to the DataQuery API. Ideally, this
-            should not be changed.
-        :param <int> batch_size: Default is None, meaning the batch size will be set to the
-            default size (20). If provided, this parameter specifies the number of expressions
-            to download in each batch.
-        :param <int> retry: Default is 3, meaning the download will be retried 3 times for
-            any expressions that fail to download. If set to 0, no retries will be attempted.
-        :param <bool> overwrite: Default is True, meaning the data will be overwritten if it
-            already exists. If False, the data will not be overwritten.
-        :param <dict> kwargs: any other keyword arguments.
+        Parameters
+        ----------
+        path : str
+            path to the directory where the data will be saved.
+        expressions : Optional[List[str]
+            Default is None, meaning all expressions in the JPMaQS catalogue will be
+            downloaded. If provided, only the expressions in the list will be downloaded.
+        as_dataframe : bool
+            Default is True, meaning the data will be saved as a DataFrame (either in
+            the Quantamental Data Format ('qdf') or wide format ('wide')). If False, the
+            data will be saved as JSON files, with one expression per file.
+        dataframe_format : str
+            Default is 'qdf'. If `as_dataframe` is True, this parameter specifies the
+            format of the DataFrame. Must be one of 'qdf' or 'wide'.
+        show_progress : bool
+            Default is True, meaning the progress of the download will be displayed. If
+            False, the progress will not be displayed.
+        delay_param : float
+            Default is 0.2 seconds (fastest allowed by DataQuery API). The delay
+            parameter to use when making requests to the DataQuery API. Ideally, this should
+            not be changed.
+        batch_size : int
+            Default is None, meaning the batch size will be set to the default size
+            (20). If provided, this parameter specifies the number of expressions to
+            download in each batch.
+        retry : int
+            Default is 3, meaning the download will be retried 3 times for any
+            expressions that fail to download. If set to 0, no retries will be attempted.
+        overwrite : bool
+            Default is True, meaning the data will be overwritten if it already exists.
+            If False, the data will not be overwritten.
+        kwargs : dict
+            any other keyword arguments.
         """
+
         save_path: Optional[str] = None
         if path == "":
             print(
@@ -1103,52 +1230,67 @@ class JPMaQSDownload(DataQueryInterface):
         *args,
         **kwargs,
     ) -> Union[pd.DataFrame, List[Dict]]:
-        """Driver function to download data from JPMaQS via the DataQuery API.
-        Timeseries data can be requested using `tickers` with `metrics`, or
-        passing formed DataQuery expressions.
-        `cids` and `xcats` (along with `metrics`) are used to construct
-        expressions, which are ultimately passed to the DataQuery Interface.
+        """
+        Driver function to download data from JPMaQS via the DataQuery API. Timeseries
+        data can be requested using `tickers` with `metrics`, or passing formed
+        DataQuery expressions. `cids` and `xcats` (along with `metrics`) are used to
+        construct expressions, which are ultimately passed to the DataQuery Interface.
 
-        :param <list[str]> tickers: list of tickers.
-        :param <list[str]> cids: list of cids.
-        :param <list[str]> xcats: list of xcats.
-        :param <list[str]> metrics: list of metrics, one of "value" (default),
-            "grading", "eop_lag", "mop_lag". "all" is also accepted.
-        :param <str> start_date: start date of the data to download, in the
-            ISO format - YYYY-MM-DD.
-        :param <str> end_date: end date of the data to download in the ISO
-            format - YYYY-MM-DD.
-        :param <list[str]> expressions: list of DataQuery expressions.
-        :param <bool> get_catalogue: If True, the JPMaQS catalogue is
-            downloaded and used to filter the list of tickers. Default is
-            False.
-        :param <bool> show_progress: True if progress bar should be shown,
-            False if not (default).
-        :param <bool> suppress_warning: True if suppressing warnings. Default
-            is True.
-        :param <bool> debug: Override the debug behaviour of the JPMaQSDownload
-            class. If True, debug mode is enabled.
-        :param <bool> print_debug_data: True if debug data should be printed,
-            False if not (default). If debug=True, this is set to True.
-        :param <bool> as_dataframe: Return a dataframe if True (default),
-            a list of dictionaries if False.
-        :param <str> dataframe_format: Format of the dataframe to return, one of "qdf"
-            or "wide". QDF is the Quantamental Dataframe format, and wide is the wide
-            format with each expression as a column, and a single date column.
-        :param <bool> report_time_taken: If True, the time taken to download
-            and apply data transformations is reported.
-        :param <bool> categorical_dataframe: If True, the dataframe returned will use the
-            pandas Categorical data type for the `cid` and `xcat` columns. Default is
-            False.
-        :param <dict> kwargs: any other keyword arguments.
+        Parameters
+        ----------
+        tickers : list[str]
+            list of tickers.
+        cids : list[str]
+            list of cids.
+        xcats : list[str]
+            list of xcats.
+        metrics : list[str]
+            list of metrics, one of "value" (default), "grading", "eop_lag", "mop_lag".
+            "all" is also accepted.
+        start_date : str
+            start date of the data to download, in the ISO format - YYYY-MM-DD.
+        end_date : str
+            end date of the data to download in the ISO format - YYYY-MM-DD.
+        expressions : list[str]
+            list of DataQuery expressions.
+        get_catalogue : bool
+            If True, the JPMaQS catalogue is downloaded and used to filter the list of
+            tickers. Default is False.
+        show_progress : bool
+            True if progress bar should be shown, False if not (default).
+        suppress_warning : bool
+            True if suppressing warnings. Default is True.
+        debug : bool
+            Override the debug behaviour of the JPMaQSDownload class. If True, debug
+            mode is enabled.
+        print_debug_data : bool
+            True if debug data should be printed, False if not (default). If debug=True,
+            this is set to True.
+        as_dataframe : bool
+            Return a dataframe if True (default), a list of dictionaries if False.
+        dataframe_format : str
+            Format of the dataframe to return, one of "qdf" or "wide". QDF is the
+            Quantamental Dataframe format, and wide is the wide format with each expression
+            as a column, and a single date column.
+        report_time_taken : bool
+            If True, the time taken to download and apply data transformations is
+            reported.
+        categorical_dataframe : bool
+            If True, the dataframe returned will use the pandas Categorical data type
+            for the `cid` and `xcat` columns. Default is False.
+        kwargs : dict
+            any other keyword arguments.
 
-        :return <pd.DataFrame|list[Dict]>: dataframe of data if
-            `as_dataframe` is True, list of dictionaries if False.
-
-        :raises <ValueError>: if provided arguments are invalid or
-            semantically incorrect (see
+        Raises
+        ------
+        ValueError
+            if provided arguments are invalid or semantically incorrect (see
             macrosynergy.download.jpmaqs.JPMaQSDownload.validate_download_args()).
 
+        Returns
+        -------
+        pd.DataFrame|list[Dict]
+            dataframe of data if `as_dataframe` is True, list of dictionaries if False.
         """
 
         # override the default warning behaviour and debug behaviour
@@ -1285,16 +1427,28 @@ def custom_download(
     tickers, download_func, metrics=["value"], start_date=None, end_date=None
 ):
     """
-    Custom download function to download data for a list of tickers using a custom download function.
+    Custom download function to download data for a list of tickers using a custom
+    download function.
 
-    :param <list[str]> tickers: list of tickers to download data for.
-    :param <callable> download_func: custom download function.
-    :param <list[str]> metrics: list of metrics to download.
-    :param <str> start_date: start date of the data to download.
-    :param <str> end_date: end date of the data to download.
+    Parameters
+    ----------
+    tickers : list[str]
+        list of tickers to download data for.
+    download_func : callable
+        custom download function.
+    metrics : list[str]
+        list of metrics to download.
+    start_date : str
+        start date of the data to download.
+    end_date : str
+        end date of the data to download.
 
-    :return <pd.DataFrame>: dataframe of downloaded data.
+    Returns
+    -------
+    pd.DataFrame
+        dataframe of downloaded data.
     """
+
     dfs = []
     for metric in metrics:
         expressions = []
