@@ -1,6 +1,6 @@
 """
-A subclass inheriting from `macrosynergy.visuals.plotter.Plotter`,
-designed to plot time series data as a heatmap.
+A subclass inheriting from `macrosynergy.visuals.plotter.Plotter`, designed to plot time
+series data as a heatmap.
 """
 
 from numbers import Number
@@ -19,22 +19,27 @@ from macrosynergy.visuals.plotter import Plotter
 
 class Heatmap(Plotter):
     """
-    Class for plotting time series data as a heatmap.
-    Inherits from `macrosynergy.visuals.plotter.Plotter`.
+    Class for plotting time series data as a heatmap. Inherits from
+    `macrosynergy.visuals.plotter.Plotter`.
 
-    :param <pd.DataFrame> df: A DataFrame with the following columns:
-        'cid', 'xcat', 'real_date', and at least one metric from -
-        'value', 'grading', 'eop_lag', or 'mop_lag'.
-    :param <List[str]> cids: A list of cids to select from the DataFrame.
-        If None, all cids are selected.
-    :param <List[str]> xcats: A list of xcats to select from the DataFrame.
-        If None, all xcats are selected.
-    :param <List[str]> metrics: A list of metrics to select from the DataFrame.
-        If None, all metrics are selected.
-    :param <str> start: ISO-8601 formatted date. Select data from
-        this date onwards. If None, all dates are selected.
-    :param <str> end: ISO-8601 formatted date. Select data up to
-        and including this date. If None, all dates are selected.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        A DataFrame with the following columns: 'cid', 'xcat', 'real_date', and at least
+        one metric from - 'value', 'grading', 'eop_lag', or 'mop_lag'.
+    cids : List[str]
+        A list of cids to select from the DataFrame. If None, all cids are selected.
+    xcats : List[str]
+        A list of xcats to select from the DataFrame. If None, all xcats are selected.
+    metrics : List[str]
+        A list of metrics to select from the DataFrame. If None, all metrics are
+        selected.
+    start : str
+        ISO-8601 formatted date. Select data from this date onwards. If None, all dates
+        are selected.
+    end : str
+        ISO-8601 formatted date. Select data up to and including this date. If None, all
+        dates are selected.
     """
 
     def __init__(
@@ -91,45 +96,64 @@ class Heatmap(Plotter):
         **kwargs,
     ) -> Optional[plt.Figure]:
         """
-        Plots a DataFrame as a heatmap with the columns along the x-axis and
-        rows along the y-axis.
+        Plots a DataFrame as a heatmap with the columns along the x-axis and rows along
+        the y-axis.
 
-        :param <Tuple> figsize: tuple specifying the size of the figure. Default is
-            (12, 8).
-        :param <str> x_axis_label: label for x-axis.
-        :param <str> y_axis_label: label for y-axis.
-        :param <int> axis_fontsize: the font size for the axis labels.
-        :param <str> title: the figure's title.
-        :param <int> title_fontsize: the font size for the title.
-        :param <float> title_xadjust: sets the x position of the title text.
-        :param <float> title_yadjust: sets the y position of the title text.
-        :param <float> vmin: optional minimum value for heatmap scale.
-        :param <float> vmax: optional maximum value for heatmap scale.
-        :param <bool> show: if True, the image is displayed.
-        :param <str> save_to_file: the path at which to save the heatmap as an image.
-            If not specified, the plot will not be saved.
-        :param <int> dpi: the resolution in dots per inch used if saving the figure.
-        :param <bool> return_figure: if True, the function will return the figure.
-        :param <plt.Axes> on_axis: optional `plt.Axes` object to be used instead of
-            creating a new one.
-        :param <int> max_xticks: the maximum number of ticks to be displayed
-            along the x axis. Default is 50.
-        :param <mpl.colors.Colormap> cmap: string or matplotlib Colormap object
-            specifying the colormap of the plot.
-        :param <int> rotate_xticks: number of degrees to rotate the tick labels on
-            the x-axis. Default is zero.
-        :param <int> rotate_yticks: number of degrees to rotate the tick labels on
-            the y-axis. Default is zero.
-        :param <bool> show_tick_lines: if True, lines are shown for ticks.
-            Default is True.
-        :param <bool> show_colorbar: if True, the colorbar is shown. Default is True.
-        :param <bool> show_annotations: if True, annotations display the value of
-            each cell. Default is False.
-        :param <bool> show_boundaries: if True, cells are divided by a grid.
-            Default is False.
-        :param <int> annotation_fontsize: sets the font size of the annotations.
-        :param <int> tick_fontsize: sets the font size of tick labels.
+        Parameters
+        ----------
+        figsize : Tuple
+            tuple specifying the size of the figure. Default is (12, 8).
+        x_axis_label : str
+            label for x-axis.
+        y_axis_label : str
+            label for y-axis.
+        axis_fontsize : int
+            the font size for the axis labels.
+        title : str
+            the figure's title.
+        title_fontsize : int
+            the font size for the title.
+        title_xadjust : float
+            sets the x position of the title text.
+        title_yadjust : float
+            sets the y position of the title text.
+        vmin : float
+            optional minimum value for heatmap scale.
+        vmax : float
+            optional maximum value for heatmap scale.
+        show : bool
+            if True, the image is displayed.
+        save_to_file : str
+            the path at which to save the heatmap as an image. If not specified, the
+            plot will not be saved.
+        dpi : int
+            the resolution in dots per inch used if saving the figure.
+        return_figure : bool
+            if True, the function will return the figure.
+        on_axis : plt.Axes
+            optional `plt.Axes` object to be used instead of creating a new one.
+        max_xticks : int
+            the maximum number of ticks to be displayed along the x axis. Default is 50.
+        cmap : mpl.colors.Colormap
+            string or matplotlib Colormap object specifying the colormap of the plot.
+        rotate_xticks : int
+            number of degrees to rotate the tick labels on the x-axis. Default is zero.
+        rotate_yticks : int
+            number of degrees to rotate the tick labels on the y-axis. Default is zero.
+        show_tick_lines : bool
+            if True, lines are shown for ticks. Default is True.
+        show_colorbar : bool
+            if True, the colorbar is shown. Default is True.
+        show_annotations : bool
+            if True, annotations display the value of each cell. Default is False.
+        show_boundaries : bool
+            if True, cells are divided by a grid. Default is False.
+        annotation_fontsize : int
+            sets the font size of the annotations.
+        tick_fontsize : int
+            sets the font size of tick labels.
         """
+
         if on_axis:
             fig: plt.Figure = on_axis.get_figure()
             ax: plt.Axes = on_axis
