@@ -221,7 +221,9 @@ class BetaEstimator(BasePanelLearner):
         if beta_xcat in self.betas["xcat"].unique():
             self.betas = self.betas[self.betas.xcat != beta_xcat]
         if beta_xcat in self.chosen_models.name.unique():
-            self.chosen_models = self.chosen_models[self.chosen_models.name != beta_xcat]
+            self.chosen_models = self.chosen_models[
+                self.chosen_models.name != beta_xcat
+            ]
 
         # Collect results from the worker
         beta_data = []
@@ -721,6 +723,15 @@ class BetaEstimator(BasePanelLearner):
         )
 
         return mean_abs_corr
+
+    def _check_duplicate_results(self, hedged_return_xcat, beta_xcat):
+        conditions = [
+            ("hedged_returns", "xcat", hedged_return_xcat),
+            ("betas", "xcat", beta_xcat),
+            ("chosen_models", "name", beta_xcat),
+        ]
+
+        self._remove_results(conditions)
 
 
 if __name__ == "__main__":

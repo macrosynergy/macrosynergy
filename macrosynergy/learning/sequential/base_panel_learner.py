@@ -1337,3 +1337,9 @@ class BasePanelLearner(ABC):
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
+
+    def _remove_results(self, conditions):
+        for attr, column, value in conditions:
+            df = getattr(self, attr)
+            if value in df[column].unique():
+                setattr(self, attr, df[df[column] != value])
