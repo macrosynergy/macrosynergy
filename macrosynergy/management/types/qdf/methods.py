@@ -268,6 +268,7 @@ def update_df(
     Append a standard DataFrame to a standard base DataFrame with ticker replacement on
     the intersection.
     """
+
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("`df` must be a QuantamentalDataFrame.")
     if not isinstance(df_add, QuantamentalDataFrameBase):
@@ -465,7 +466,6 @@ def create_empty_categorical_qdf(
     end_date: Optional[str] = None,
     categorical: bool = True,
 ) -> QuantamentalDataFrameBase:
-
     if not all(isinstance(m, str) for m in metrics):
         raise TypeError("`metrics` must be a list of strings.")
 
@@ -539,9 +539,10 @@ def drop_nan_series(
     df: QuantamentalDataFrameBase, column: str = "value", raise_warning: bool = False
 ) -> QuantamentalDataFrameBase:
     """
-    Drops any series that are entirely NaNs.
-    Raises a user warning if any series are dropped.
+    Drops any series that are entirely NaNs. Raises a user warning if any series are
+    dropped.
     """
+
     if not isinstance(df, QuantamentalDataFrameBase):
         raise TypeError("Argument `df` must be a Quantamental DataFrame.")
 
@@ -612,7 +613,6 @@ def qdf_from_timseries(
 def concat_qdfs(
     qdf_list: List[QuantamentalDataFrameBase],
 ) -> QuantamentalDataFrameBase:
-
     if not isinstance(qdf_list, list):
         raise TypeError("`qdfs_list` must be a list of QuantamentalDataFrames.")
 
