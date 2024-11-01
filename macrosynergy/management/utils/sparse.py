@@ -24,8 +24,14 @@ def _get_diff_data(
     fvi: pd.Timestamp,
 ) -> pd.DataFrame:
     """
-    Get the diff data for a given ticker from wide/pivoted DataFrames (`ticker_df`) of
-    metrics `value`, `eop_lag` and `grading`.
+    Generate a DataFrame containing versioned differences in values with end-of-period
+    adjustments.
+
+    This function processes input time series data and constructs a DataFrame that tracks 
+    changes in values, their versions, and grading adjustments based on an end-of-period 
+    lag. The function is intended to help analyze how values evolve over time, accounting 
+    for end-of-period (EOP) adjustments and releases, with each observation uniquely 
+    versioned to capture changes.
 
     Parameters
     ----------
@@ -90,6 +96,36 @@ def _load_isc_from_df(
     grading_column: str = "grading",
     real_date_column: str = "real_date",
 ) -> pd.DataFrame:
+    """
+    Load and prepare versioned data from a DataFrame for a given ticker, including
+    end-of-period and grading adjustments.
+
+    This function extracts specified columns from the input DataFrame and processes
+    them to generate versioned differences in the values. It creates a structured 
+    DataFrame suitable for tracking value changes over time with associated end-of-period 
+    and grading information. Data validation is included to ensure column presence and 
+    correct grading ranges.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame containing data in wide format with required columns.
+    ticker : str
+        The identifier or ticker for the data, used to identify and validate the source.
+    value_column : str, optional
+        Column name for the primary values in the data, by default "value".
+    eop_column : str, optional
+        Column name for end-of-period data, by default "eop".
+    grading_column : str, optional
+        Column name for grading data, by default "grading".
+    real_date_column : str, optional
+        Column name for the date associated with each observation, by default "real_date".
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame with the versioned data for the specified ticker.
+    """
     if not isinstance(df, pd.DataFrame):
         raise ValueError("`df` must be a DataFrame")
     if not isinstance(ticker, str):

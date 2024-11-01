@@ -47,7 +47,7 @@ def is_categorical_qdf(df: pd.DataFrame) -> bool:
 
 
 def standardise_dataframe(
-    df: pd.DataFrame, verbose: bool = False
+    df: pd.DataFrame
 ) -> QuantamentalDataFrame:
     """
     Applies the standard JPMaQS Quantamental DataFrame format to a DataFrame.
@@ -56,8 +56,6 @@ def standardise_dataframe(
     ----------
     df : pd.DataFrame
         The DataFrame to be standardized.
-    verbose : bool
-        Whether to print warnings if the DataFrame is not in the correct format.
 
     Raises
     ------
@@ -142,7 +140,7 @@ def drop_nan_series(
 ) -> QuantamentalDataFrame:
     """
     Drops any series that are entirely NaNs. Raises a user warning if any series are
-    dropped.
+    dropped and the raise warning flag is set to true.
 
     Parameters
     ----------
@@ -377,6 +375,9 @@ def apply_slip(
         List of target categories.
     metrics : List[str]
         List of metrics to which the slip is applied.
+    raise_error : bool
+        If True, raises an error if the slip cannot be applied to all xcats in the target 
+        DataFrame. If False, raises a warning instead.
 
     Raises
     ------
@@ -450,7 +451,7 @@ def downsample_df_on_real_date(
     agg: str = "mean",
 ):
     """
-    Downsample JPMaQS DataFrame.
+    Downsamples JPMaQS DataFrame.
 
     Parameters
     ----------
@@ -530,14 +531,17 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
         with NaN values.
     xcat_replace : bool
         all series belonging to the categories in the added DataFrame will be replaced,
-        rather than just the added tickers. N.B.: tickers are combinations of cross-sections
-        and categories.
+        rather than just the added tickers. 
 
     Returns
     -------
     pd.DataFrame
         standardised DataFrame with the latest values of the modified or newly defined
         tickers added.
+
+
+    ..note::
+        Tickers are combinations of cross-sections and categories.
     """
 
     # index_cols = ["cid", "xcat", "real_date"]
@@ -1262,8 +1266,10 @@ def merge_categories(
     df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: List[str] = None
 ):
     """
-    Merges categories of different preferences into a single one, with the most
-    preferred being used first and others substituted in order.
+    Merges categories into a new category, given a list of categories to be merged. The
+    merging is done in a preferred order, i.e. the first category in the list will be
+    the preferred value for each real_date and if the first category does not have a
+    value for a given real_date, the next category in the list will be used, etc...
 
     Parameters
     ----------

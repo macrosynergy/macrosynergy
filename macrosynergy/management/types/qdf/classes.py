@@ -77,6 +77,9 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
     def _inplaceoperation(
         self, method: Callable[..., Any], inplace: bool = False, *args, **kwargs
     ):
+        """
+        Helper method to perform inplace operations.
+        """
         result = method(*args, **kwargs)
         if inplace:
             self.__init__(result)

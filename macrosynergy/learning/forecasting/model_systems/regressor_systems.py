@@ -10,8 +10,6 @@ from sklearn.linear_model import LinearRegression, Ridge
 
 from macrosynergy.learning.forecasting import LADRegressor
 
-from macrosynergy.management.validation import _validate_Xy_learning
-
 
 class LinearRegressionSystem(BaseRegressionSystem):
     """
