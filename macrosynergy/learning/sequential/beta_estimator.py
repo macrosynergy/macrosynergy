@@ -4,7 +4,6 @@ sequential learning.
 """
 
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -626,13 +625,13 @@ class BetaEstimator(BasePanelLearner):
 
     def _checks_evaluate_hedged_returns(
         self,
-        correlation_types: Union[str, List[str]],
-        hedged_return_xcat: Optional[Union[str, List[str]]],
-        cids: Optional[Union[str, List[str]]],
-        start: Optional[str],
-        end: Optional[str],
-        blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]],
-        freqs: Optional[Union[str, List[str]]],
+        correlation_types,
+        hedged_return_xcat,
+        cids,
+        start,
+        end,
+        blacklist,
+        freqs,
     ):
         """
         Input checks for the `evaluate_hedged_returns()` method.
