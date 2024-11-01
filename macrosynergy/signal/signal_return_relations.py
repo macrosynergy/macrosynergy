@@ -295,7 +295,10 @@ class SignalReturnRelations:
         Parameters
         ----------
         accuracy_df : pd.DataFrame
-            two dimensional DataFrame with accuracy & balanced accuracy columns.  N.B.:
+            two dimensional DataFrame with accuracy & balanced accuracy columns.
+
+
+        .. note::
             The returned range will always be below 0.5.
         """
 
@@ -720,9 +723,12 @@ class SignalReturnRelations:
         ----------
         df : pd.Dataframe
             standardized DataFrame with the following necessary columns: 'cid', 'xcat',
-            'real_date' and 'value'.  NB.: Remove the return category from establishing the
-            intersection to preserve the maximum amount of signal data available (required
-            because of the applied lag).
+            'real_date' and 'value'.
+
+
+        .. note::
+            Remove the return category from establishing the intersection to preserve the
+            maximum amount of signal data available (required because of the applied lag).
         """
 
         df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values="value")
