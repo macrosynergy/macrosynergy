@@ -11,11 +11,15 @@ def view_panel_dates(
     """
     Visualize panel dates with color codes.
 
-    :param <pd.DataFrame> df: DataFrame cross sections rows and category columns.
-    :param <Tuple[float]> size: tuple of floats with width/length of displayed heatmap.
-    :param <bool> use_last_businessday: boolean indicating whether or not to use the
-        last business day before today as the end date. Default is True.
-
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame cross sections rows and category columns.
+    size : Tuple[float]
+        tuple of floats with width/length of displayed heatmap.
+    use_last_businessday : bool
+        boolean indicating whether or not to use the last business day before today as
+        the end date. Default is True.
     """
 
     # DataFrame of official timestamps.
