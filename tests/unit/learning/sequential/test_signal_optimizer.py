@@ -10,21 +10,19 @@ import pandas as pd
 import scipy.stats as stats
 from parameterized import parameterized
 from sklearn.decomposition import PCA
-from sklearn.linear_model import Lasso, LinearRegression, Ridge, LogisticRegression
-from sklearn.metrics import make_scorer, r2_score, accuracy_score, balanced_accuracy_score
+from sklearn.linear_model import (Lasso, LinearRegression, LogisticRegression,
+                                  Ridge)
+from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
+                             make_scorer, r2_score)
 from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from macrosynergy.learning import (
-    ExpandingIncrementPanelSplit,
-    ExpandingKFoldPanelSplit,
-    LassoSelector,
-    RandomEffects,
-    RollingKFoldPanelSplit,
-    SignalOptimizer,
-    regression_balanced_accuracy,
-)
+from macrosynergy.learning import (ExpandingIncrementPanelSplit,
+                                   ExpandingKFoldPanelSplit, LassoSelector,
+                                   RandomEffects, RollingKFoldPanelSplit,
+                                   SignalOptimizer,
+                                   regression_balanced_accuracy)
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils.df_utils import categories_df
 

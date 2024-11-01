@@ -229,9 +229,6 @@ class BasePanelLearner(ABC):
             n_jobs_inner=n_jobs_inner,
         )
 
-        if name in self.chosen_models.name.unique():
-            self.chosen_models = self.chosen_models[~(self.chosen_models.name == name)]
-
         # Determine all outer splits and run the learning process in parallel
         train_test_splits = list(outer_splitter.split(self.X, self.y))
 

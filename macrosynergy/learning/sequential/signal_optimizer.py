@@ -283,19 +283,6 @@ class SignalOptimizer(BasePanelLearner):
             )
         self.store_correlations = store_correlations
 
-        if name in self.preds.xcat.unique():
-            self.preds = self.preds[self.preds.xcat != name]
-        if name in self.ftr_coefficients.name.unique():
-            self.ftr_coefficients = self.ftr_coefficients[
-                self.ftr_coefficients.name != name
-            ]
-        if name in self.intercepts.name.unique():
-            self.intercepts = self.intercepts[self.intercepts.name != name]
-        if name in self.selected_ftrs.name.unique():
-            self.selected_ftrs = self.selected_ftrs[self.selected_ftrs.name != name]
-        if name in self.ftr_corr.name.unique():
-            self.ftr_corr = self.ftr_corr[self.ftr_corr.name != name]
-
         # Set up outer splitter
         outer_splitter = ExpandingIncrementPanelSplit(
             train_intervals=test_size,
@@ -320,6 +307,21 @@ class SignalOptimizer(BasePanelLearner):
             n_jobs_outer=n_jobs_outer,
             n_jobs_inner=n_jobs_inner,
         )
+
+        if name in self.preds.xcat.unique():
+            self.preds = self.preds[self.preds.xcat != name]
+        if name in self.ftr_coefficients.name.unique():
+            self.ftr_coefficients = self.ftr_coefficients[
+                self.ftr_coefficients.name != name
+            ]
+        if name in self.intercepts.name.unique():
+            self.intercepts = self.intercepts[self.intercepts.name != name]
+        if name in self.selected_ftrs.name.unique():
+            self.selected_ftrs = self.selected_ftrs[self.selected_ftrs.name != name]
+        if name in self.ftr_corr.name.unique():
+            self.ftr_corr = self.ftr_corr[self.ftr_corr.name != name]
+        if name in self.chosen_models.name.unique():
+            self.chosen_models = self.chosen_models[self.chosen_models.name != name]
 
         # Collect results from the worker
         # quantamental_data, model_data, other_data
