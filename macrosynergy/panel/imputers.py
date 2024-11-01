@@ -11,22 +11,33 @@ def impute_panel(
     threshold: float = 0.5,
 ) -> pd.DataFrame:
     """
-    Imputes missing values for each category in a long-format panel dataset by a
-    cross-sectional mean, conditional on the number of available cross-sections at each
-    concerned date exceeding a fraction `threshold` of the total number of cross-sections.
+    Imputes missing values for each category in a long-format panel dataset by a cross-
+    sectional mean, conditional on the number of available cross-sections at each
+    concerned date exceeding a fraction `threshold` of the total number of cross-
+    sections.
 
-    :param <pd.DataFrame> df: the long-format panel dataset
-    :param <list> cids: the list of cross sections to be considered in the imputation
-    :param <list> xcats: the list of categories to be imputed
-    :param <float> threshold: the fraction of available cross-sections at each date
+    Parameters
+    ----------
+    df : pd.DataFrame
+        the long-format panel dataset
+    cids : list
+        the list of cross sections to be considered in the imputation
+    xcats : list
+        the list of categories to be imputed
+    threshold : float
+        the fraction of available cross-sections at each date
 
-    :return <pd.DataFrame>: the imputed long-format panel data, with the relevant xcats and cids
+    Returns
+    -------
+    pd.DataFrame
+        the imputed long-format panel data, with the relevant xcats and cids
+
 
     .. note::
-
-      This class is still **experimental**: the predictions
-      and the API might change without any deprecation cycle.
+        This class is still **experimental**: the predictions and the API might change
+        without any deprecation cycle.
     """
+
     # Checks
     if not isinstance(df, pd.DataFrame):
         raise TypeError("The input `df` must be a pandas DataFrame.")

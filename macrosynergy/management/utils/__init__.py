@@ -40,6 +40,7 @@ from .df_utils import (
     get_sops,
     merge_categories,
     concat_categorical,
+    _insert_as_categorical,
 )
 
 from .sparse import (
@@ -113,4 +114,5 @@ __all__ = [
     "ewm_sum",
     "calculate_cumulative_weights",
     "concat_categorical",
+    "_insert_as_categorical",
 ]

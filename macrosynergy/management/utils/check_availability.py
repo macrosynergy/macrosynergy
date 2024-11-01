@@ -38,7 +38,8 @@ def check_availability(
     cids : List[str]
         cross sections to be checked on. Default is all in the DataFrame.
     start : str
-        string representing earliest considered date. Default is None.
+        string representing earliest considered date. Default is None, which reverts to 
+        earliest date in the dataframe.
     start_size : Tuple[float]
         tuple of floats with width / length of the start years heatmap. Default is None
         (format adjusted to data).
@@ -129,7 +130,7 @@ def missing_in_df(
         print(msg, missing_cids)
 
 
-def check_startyears(df: pd.DataFrame):
+def check_startyears(df: pd.DataFrame) -> pd.DataFrame:
     """
     DataFrame with starting years across all extended categories and cross-sections
 
@@ -138,6 +139,11 @@ def check_startyears(df: pd.DataFrame):
     df : pd.DataFrame
         standardized DataFrame with the following necessary columns: 'cid', 'xcat',
         'real_date'.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame consisting of starting years for all series.
     """
 
     df: pd.DataFrame = df.copy()
@@ -159,6 +165,11 @@ def check_enddates(df: pd.DataFrame) -> pd.DataFrame:
     df : pd.DataFrame
         standardized DataFrame with the following necessary columns: 'cid', 'xcat',
         'real_date'.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame consisting of end dates for all series.
     """
 
     df: pd.DataFrame = df.copy()
@@ -169,7 +180,7 @@ def check_enddates(df: pd.DataFrame) -> pd.DataFrame:
     return df_ends.unstack().loc[:, "real_date"]
 
 
-def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp):
+def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp) -> pd.DataFrame:
     """
     Number of business days between two respective business dates.
 

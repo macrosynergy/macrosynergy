@@ -10,11 +10,17 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import VotingRegressor
 
+from macrosynergy.learning.forecasting.model_systems.base_regression_system import (
+    BaseRegressionSystem,
+)
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.learning import ExpandingFrequencyPanelSplit
 from macrosynergy.learning.sequential import BasePanelLearner
 from macrosynergy.management import categories_df, reduce_df, update_df
-from macrosynergy.management.utils.df_utils import concat_categorical
+from macrosynergy.management.utils.df_utils import (
+    concat_categorical,
+    _insert_as_categorical,
+)
 
 
 class BetaEstimator(BasePanelLearner):
@@ -127,20 +133,20 @@ class BetaEstimator(BasePanelLearner):
         )
 
         # Create initial dataframes to store estimated betas and OOS hedged returns
-        self.betas = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"]).astype(
+        self.betas = pd.DataFrame(columns=["real_date", "cid", "xcat", "value"]).astype(
             {
+                "real_date": "datetime64[s]",
                 "cid": "category",
-                "real_date": "datetime64[ns]",
                 "xcat": "category",
                 "value": "float32",
             }
         )
         self.hedged_returns = pd.DataFrame(
-            columns=["cid", "real_date", "xcat", "value"]
+            columns=["real_date", "cid", "xcat", "value"]
         ).astype(
             {
+                "real_date": "datetime64[s]",
                 "cid": "category",
-                "real_date": "datetime64[ns]",
                 "xcat": "category",
                 "value": "float32",
             }
@@ -208,6 +214,17 @@ class BetaEstimator(BasePanelLearner):
             n_jobs_inner=n_jobs_inner,
         )
 
+        if hedged_return_xcat in self.hedged_returns["xcat"].unique():
+            self.hedged_returns = self.hedged_returns[
+                self.hedged_returns.xcat != hedged_return_xcat
+            ]
+        if beta_xcat in self.betas["xcat"].unique():
+            self.betas = self.betas[self.betas.xcat != beta_xcat]
+        if beta_xcat in self.chosen_models.name.unique():
+            self.chosen_models = self.chosen_models[
+                self.chosen_models.name != beta_xcat
+            ]
+
         # Collect results from the worker
         beta_data = []
         hedged_return_data = []
@@ -222,24 +239,25 @@ class BetaEstimator(BasePanelLearner):
             index=self.forecast_idxs, columns=[beta_xcat], data=np.nan, dtype="float32"
         )
         # Create quantamental dataframes of betas and hedged returns
-        for cid, real_date, xcat, value in beta_data:
-            stored_betas.loc[(cid, real_date), xcat] = value
+        for real_date, cid, value in beta_data:
+            stored_betas.loc[(cid, real_date), beta_xcat] = value
 
         stored_betas = stored_betas.groupby(level=0, observed=True).ffill().dropna()
-
+        stored_betas.columns = stored_betas.columns.astype("category")
         stored_betas_long = pd.melt(
             frame=stored_betas.reset_index(),
-            id_vars=["cid", "real_date"],
+            id_vars=["real_date", "cid"],
             var_name="xcat",
             value_name="value",
         )
 
         hedged_returns = (
-            pd.DataFrame(
-                hedged_return_data, columns=["cid", "real_date", "xcat", "value"]
-            )
-            .sort_values(["real_date", "cid", "xcat"])
+            pd.DataFrame(hedged_return_data, columns=["real_date", "cid", "value"])
+            .sort_values(["cid", "real_date"])
             .dropna()
+        ).astype({"cid": "category"})
+        hedged_returns = _insert_as_categorical(
+            hedged_returns, "xcat", hedged_return_xcat, 2
         )
 
         self.betas = concat_categorical(self.betas, stored_betas_long)
@@ -250,9 +268,11 @@ class BetaEstimator(BasePanelLearner):
 
         # Store model selection data
         model_df_long = pd.DataFrame(
-            columns=self.chosen_models.columns,
+            columns=[col for col in self.chosen_models.columns if col != "name"],
             data=model_choice_data,
-        )
+        ).astype({"model_type": "category"})
+        model_df_long = _insert_as_categorical(model_df_long, "name", beta_xcat, 1)
+
         self.chosen_models = concat_categorical(self.chosen_models, model_df_long)
 
     def store_split_data(
@@ -279,16 +299,17 @@ class BetaEstimator(BasePanelLearner):
                 for key, value in coefs.items():
                     sum_dict[key][0] += value
                     sum_dict[key][1] += 1
-
             betas = {key: sum / count for key, (sum, count) in sum_dict.items()}
-        else:
+        elif isinstance(optimal_model, BaseRegressionSystem):
             betas = optimal_model.coefs_
+        else:
+            X_train.index.get_level_values(0).unique()
+            betas = {cid: np.nan for cid in X_train.index.get_level_values(0).unique()}
 
         betas_list = [
             [
-                cid.split("v")[0],
                 X_train.index.get_level_values(1).max(),
-                pipeline_name,
+                cid.split("v")[0],
                 beta,
             ]
             for cid, beta in betas.items()
@@ -301,9 +322,7 @@ class BetaEstimator(BasePanelLearner):
         XB = X_test.mul(betas_series, level=0, axis=0)
         hedged_returns = y_test.values.reshape(-1, 1) - XB.values.reshape(-1, 1)
         hedged_returns_data = [
-            [idx[0].split("v")[0], idx[1]]
-            + [self.hedged_return_xcat]
-            + [hedged_returns[i].item()]
+            [idx[1], idx[0].split("v")[0]] + [hedged_returns[i].item()]
             for i, (idx, _) in enumerate(y_test.items())
         ]
         return {"betas": betas_list, "hedged_returns": hedged_returns_data}
@@ -435,7 +454,9 @@ class BetaEstimator(BasePanelLearner):
         # For each xcat and frequency, calculate the mean absolute correlations
         # between the benchmark return and the (hedged and unhedged) market returns
         df_rows = []
-        xcats_non_benchmark = [xcat for xcat in self.xcats if xcat != self.benchmark_xcat]
+        xcats_non_benchmark = [
+            xcat for xcat in self.xcats if xcat != self.benchmark_xcat
+        ]
         for xcat in hedged_return_xcat + xcats_non_benchmark:
             for freq, Xy_long in zip(freqs, Xy_long_freq):
                 calculated_correlations = []
@@ -673,7 +694,7 @@ class BetaEstimator(BasePanelLearner):
                     "beta_xcat must be a valid beta category within the class instance."
                 )
         return beta_xcat
-    
+
     def _get_mean_abs_corrs(
         self,
         xcat: str,
@@ -697,9 +718,20 @@ class BetaEstimator(BasePanelLearner):
             return abs(group[xcat].corr(group[self.benchmark_xcat], method=correlation))
 
         # Calculate the mean absolute correlation over all cross sections
-        mean_abs_corr = df_subset.groupby("cid", observed=True).apply(calculate_correlation).mean()
+        mean_abs_corr = (
+            df_subset.groupby("cid", observed=True).apply(calculate_correlation).mean()
+        )
 
         return mean_abs_corr
+
+    def _check_duplicate_results(self, hedged_return_xcat, beta_xcat):
+        conditions = [
+            ("hedged_returns", "xcat", hedged_return_xcat),
+            ("betas", "xcat", beta_xcat),
+            ("chosen_models", "name", beta_xcat),
+        ]
+
+        self._remove_results(conditions)
 
 
 if __name__ == "__main__":

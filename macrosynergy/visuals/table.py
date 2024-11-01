@@ -21,17 +21,30 @@ def view_table(
     """
     Displays a DataFrame representing a table as a heatmap.
 
-    :param <pd.Dataframe> table: table to be displayed.
-    :param <str> title: string of chart title; defaults depend on type of range plot.
-    :param <int> title_fontsize: font size of chart header. Default is 16.
-    :param <Tuple[float]> figsize: Tuple (w, h) of width and height of plot.
-    :param <float> min_color: minimum value of colorbar.
-    :param <float> max_color: maximum value of colorbar.
-    :param <str> xlabel: string of x-axis label.
-    :param <str> ylabel: string of y-axis label.
-    :param <List[str]> xticklabels: list of strings to label x-axis ticks.
-    :param <List[str]> yticklabels: list of strings to label y-axis ticks.
-    :param <bool> annot: whether to annotate heatmap with values.
+    Parameters
+    ----------
+    table : pd.Dataframe
+        table to be displayed.
+    title : str
+        string of chart title; defaults depend on type of range plot.
+    title_fontsize : int
+        font size of chart header. Default is 16.
+    figsize : Tuple[float]
+        Tuple (w, h) of width and height of plot.
+    min_color : float
+        minimum value of colorbar.
+    max_color : float
+        maximum value of colorbar.
+    xlabel : str
+        string of x-axis label.
+    ylabel : str
+        string of y-axis label.
+    xticklabels : List[str]
+        list of strings to label x-axis ticks.
+    yticklabels : List[str]
+        list of strings to label y-axis ticks.
+    annot : bool
+        whether to annotate heatmap with values.
     """
 
     if not isinstance(df, pd.DataFrame):

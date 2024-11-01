@@ -10,8 +10,6 @@ from sklearn.linear_model import LinearRegression, Ridge
 
 from macrosynergy.learning.forecasting import LADRegressor
 
-from macrosynergy.management.validation import _validate_Xy_learning
-
 
 class LinearRegressionSystem(BaseRegressionSystem):
     """
@@ -760,13 +758,18 @@ if __name__ == "__main__":
 
     # Demonstration of CorrelationVolatilitySystem usage
 
-    X2 = pd.DataFrame(dfd["BENCH_XR"])
-    y2 = dfd["XR"]
-    cv = CorrelationVolatilitySystem().fit(X2, y2)
-    print(cv.coefs_)
+    # X2 = pd.DataFrame(dfd["BENCH_XR"])
+    # y2 = dfd["XR"]
+    # cv = CorrelationVolatilitySystem().fit(X2, y2)
+    # print(cv.coefs_)
 
-    # Demonstration of LinearRegressionSystem usage
+    # # # Demonstration of LinearRegressionSystem usage
+    # X1 = dfd.drop(columns=["XR", "BENCH_XR"])
+    # y1 = dfd["XR"]
+    # lr = LinearRegressionSystem(roll=5).fit(X1, y1)
+    # print(lr.coefs_)
+    
     X1 = dfd.drop(columns=["XR", "BENCH_XR"])
     y1 = dfd["XR"]
-    lr = LinearRegressionSystem().fit(X1, y1)
+    lr = LADRegressionSystem().fit(X1, y1)
     print(lr.coefs_)
