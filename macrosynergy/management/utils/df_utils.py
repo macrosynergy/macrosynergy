@@ -738,7 +738,7 @@ def reduce_df(
     df = df[df["cid"].isin(cids)]
 
     if out_all:
-        return df.drop_duplicates(), xcats, sorted(cids)
+        return df.drop_duplicates(), xcats, cids
     else:
         return df.drop_duplicates()
 
@@ -1456,8 +1456,8 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     dfw = categories_df(
-        df=dfd,
-        xcats=xcats[:2] + ["test"],
+        df=QuantamentalDataFrame(dfd),
+        xcats=xcats,
         cids=cids,
         freq="M",
         # lag=1,
@@ -1465,3 +1465,4 @@ if __name__ == "__main__":
         # years=5,
         # start="2000-01-01",
     )
+    print("HI")
