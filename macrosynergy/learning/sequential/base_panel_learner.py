@@ -453,8 +453,8 @@ class BasePanelLearner(ABC):
         """
         optim_name = None
         optim_model = None
-        optim_score = -np.inf
-        optim_params = None
+        optim_score = np.float32("-inf")
+        optim_params = {}
 
         cv_splits = []
 
@@ -713,9 +713,9 @@ class BasePanelLearner(ABC):
                 f"No model was selected at time {timestamp}",
                 RuntimeWarning,
             )
-            optimal_model_name = ("None",)
-            optimal_model_score = (-np.inf,)
-            optimal_model_params = ({},)
+            optimal_model_name = None
+            optimal_model_score = np.float32("-inf")
+            optimal_model_params = {}
 
         data = [timestamp, optimal_model_name, optimal_model_score, optimal_model_params]
 
