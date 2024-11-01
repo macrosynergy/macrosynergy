@@ -48,14 +48,22 @@ def deprecate(
     Decorator for deprecating a function.
 
     Parameters
-    :param <callable> new_func: The function that replaces the old one.
-    :param <str> deprecate_version: The version in which the old function is deprecated.
-    :param <str> remove_after: The version in which the old function is removed.
-    :param <str> message: The message to display when the old function is called.
-        This message must contain the following format strings:
-        "{old_method}", "{deprecate_version}", and "{new_method}".
-        If None, the default message is used.
-    :return <callable>: The decorated function.
+    ----------
+    new_func : callable
+        The function that replaces the old one.
+    deprecate_version : str
+        The version in which the old function is deprecated.
+    remove_after : str
+        The version in which the old function is removed.
+    message : str
+        The message to display when the old function is called. This message must
+        contain the following format strings: "{old_method}", "{deprecate_version}", and
+        "{new_method}". If None, the default message is used.
+
+    Returns
+    -------
+    callable
+        The decorated function.
     """
 
     def decorator(
@@ -132,11 +140,20 @@ def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
     """
     Implementation of `insinstance()` for type-hints imported from the `typing` module,
     and for subscripted types (e.g. `List[int]`, `Tuple[str, int]`, etc.).
+
     Parameters
-    :param <Any> value: The value to check.
-    :param <Type[Any]> type_hint: The type hint to check against.
-    :return <bool>: True if the value is of the type hint, False otherwise.
+    ----------
+    value : Any
+        The value to check.
+    type_hint : Type[Any]
+        The type hint to check against.
+
+    Returns
+    -------
+    bool
+        True if the value is of the type hint, False otherwise.
     """
+
     origin = get_origin(type_hint)
     args = get_args(type_hint)
 
@@ -189,12 +206,20 @@ def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
 
 def get_expected_type(arg_type_hint: Type[Any]) -> List[str]:
     """
-    Based on the type hint, return a list of strings that represent
-    the type hint - including any nested type hints.
+    Based on the type hint, return a list of strings that represent the type hint -
+    including any nested type hints.
+
     Parameters
-    :param <Type[Any]> arg_type_hint: The type hint to get the expected types for.
-    :return <List[str]>: A list of strings that represent the type hint.
+    ----------
+    arg_type_hint : Type[Any]
+        The type hint to get the expected types for.
+
+    Returns
+    -------
+    List[str]
+        A list of strings that represent the type hint.
     """
+
     origin = get_origin(arg_type_hint)
     args = get_args(arg_type_hint)
 
@@ -227,9 +252,16 @@ def get_expected_type(arg_type_hint: Type[Any]) -> List[str]:
 def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
     """
     Decorator for validating the arguments and return value of a function.
+
     Parameters
-    :param <Callable[..., Any]> func: The function to validate.
-    :return <Callable[..., Any]>: The decorated function.
+    ----------
+    func : Callable[..., Any]
+        The function to validate.
+
+    Returns
+    -------
+    Callable[..., Any]
+        The decorated function.
     """
 
     def format_expected_type(expected_types: List[Any]) -> str:
@@ -305,9 +337,16 @@ def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
 def argcopy(func: Callable) -> Callable:
     """
     Decorator for applying a "pass-by-value" method to the arguments of a function.
+
     Parameters
-    :param <Callable> func: The function to copy arguments for.
-    :return <Callable>: The decorated function.
+    ----------
+    func : Callable
+        The function to copy arguments for.
+
+    Returns
+    -------
+    Callable
+        The decorated function.
     """
 
     @wraps(func)

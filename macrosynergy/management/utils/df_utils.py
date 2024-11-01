@@ -27,10 +27,19 @@ def is_categorical_qdf(df: pd.DataFrame) -> bool:
     """
     Check if a column in a DataFrame is categorical.
 
-    :param <pd.DataFrame> df: The DataFrame to be checked.
-    :param <str> column: The column to be checked.
-    :return <bool>: True if the column is categorical, False otherwise.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to be checked.
+    column : str
+        The column to be checked.
+
+    Returns
+    -------
+    bool
+        True if the column is categorical, False otherwise.
     """
+
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
 
@@ -43,13 +52,26 @@ def standardise_dataframe(
     """
     Applies the standard JPMaQS Quantamental DataFrame format to a DataFrame.
 
-    :param <pd.DataFrame> df: The DataFrame to be standardized.
-    :param <bool> verbose: Whether to print warnings if the DataFrame is not in the
-        correct format.
-    :return <pd.DataFrame>: The standardized DataFrame.
-    :raises <TypeError>: If the input is not a pandas DataFrame.
-    :raises <ValueError>: If the input DataFrame is not in the correct format.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to be standardized.
+    verbose : bool
+        Whether to print warnings if the DataFrame is not in the correct format.
+
+    Raises
+    ------
+    TypeError
+        If the input is not a pandas DataFrame.
+    ValueError
+        If the input DataFrame is not in the correct format.
+
+    Returns
+    -------
+    pd.DataFrame
+        The standardized DataFrame.
     """
+
     idx_cols: List[str] = QuantamentalDataFrame.IndexCols
     metric_columns: List[str] = ms_constants.JPMAQS_METRICS
 
@@ -119,17 +141,31 @@ def drop_nan_series(
     df: pd.DataFrame, column: str = "value", raise_warning: bool = False
 ) -> QuantamentalDataFrame:
     """
-    Drops any series that are entirely NaNs.
-    Raises a user warning if any series are dropped.
+    Drops any series that are entirely NaNs. Raises a user warning if any series are
+    dropped.
 
-    :param <pd.DataFrame> df: The dataframe to be cleaned.
-    :param <str> column: The column to be used as the value column, defaults to
-        "value".
-    :param <bool> raise_warning: Whether to raise a warning if any series are dropped.
-    :return <pd.DataFrame | QuantamentalDataFrame>: The cleaned DataFrame.
-    :raises <TypeError>: If the input is not a pandas DataFrame.
-    :raises <ValueError>: If the input DataFrame is not in the correct format.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The dataframe to be cleaned.
+    column : str
+        The column to be used as the value column, defaults to "value".
+    raise_warning : bool
+        Whether to raise a warning if any series are dropped.
+
+    Raises
+    ------
+    TypeError
+        If the input is not a pandas DataFrame.
+    ValueError
+        If the input DataFrame is not in the correct format.
+
+    Returns
+    -------
+    pd.DataFrame | QuantamentalDataFrame
+        The cleaned DataFrame.
     """
+
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a Quantamental DataFrame.")
 
@@ -164,16 +200,25 @@ def drop_nan_series(
 
 def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFrame:
     """
-    Converts a standardized JPMaQS DataFrame to a wide format DataFrame
-    with each column representing a ticker.
+    Converts a standardized JPMaQS DataFrame to a wide format DataFrame with each column
+    representing a ticker.
 
-    :param <pd.DataFrame> df: A standardised quantamental dataframe.
-    :param <str> value_column: The column to be used as the value column, defaults to
-        "value". If the specified column is not present in the DataFrame, a column named
-        "value" will be used. If there is no column named "value", the first
-        column in the DataFrame will be used instead.
-    :return <pd.DataFrame>: The converted DataFrame.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        A standardised quantamental dataframe.
+    value_column : str
+        The column to be used as the value column, defaults to "value". If the specified
+        column is not present in the DataFrame, a column named "value" will be used. If
+        there is no column named "value", the first column in the DataFrame will be used
+        instead.
+
+    Returns
+    -------
+    pd.DataFrame
+        The converted DataFrame.
     """
+
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
 
@@ -203,12 +248,20 @@ def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFr
 
 def ticker_df_to_qdf(df: pd.DataFrame, metric: str = "value") -> QuantamentalDataFrame:
     """
-    Converts a wide format DataFrame (with each column representing a ticker)
-    to a standardized JPMaQS DataFrame.
+    Converts a wide format DataFrame (with each column representing a ticker) to a
+    standardized JPMaQS DataFrame.
 
-    :param <pd.DataFrame> df: A wide format DataFrame.
-    :return <pd.DataFrame>: The converted DataFrame.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        A wide format DataFrame.
+
+    Returns
+    -------
+    pd.DataFrame
+        The converted DataFrame.
     """
+
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Argument `df` must be a pandas DataFrame.")
     if not isinstance(metric, str):
@@ -233,12 +286,21 @@ def concat_single_metric_qdfs(
     """
     Combines a list of Quantamental DataFrames into a single DataFrame.
 
-    :param <List[QuantamentalDataFrame]> df_list: A list of Quantamental DataFrames.
-    :param <str> errors: The error handling method to use. If 'raise', then invalid
-        items in the list will raise an error. If 'ignore', then invalid items will be
-        ignored. Default is 'ignore'.
-    :return <QuantamentalDataFrame>: The combined DataFrame.
+    Parameters
+    ----------
+    df_list : List[QuantamentalDataFrame]
+        A list of Quantamental DataFrames.
+    errors : str
+        The error handling method to use. If 'raise', then invalid items in the list
+        will raise an error. If 'ignore', then invalid items will be ignored. Default is
+        'ignore'.
+
+    Returns
+    -------
+    QuantamentalDataFrame
+        The combined DataFrame.
     """
+
     if not isinstance(df_list, list):
         raise TypeError("Argument `df_list` must be a list.")
 
@@ -300,18 +362,35 @@ def apply_slip(
     raise_error: bool = True,
 ) -> QuantamentalDataFrame:
     """
-    Applies a slip, i.e. a negative lag, to the DataFrame
-    for the given cross-sections and categories, on the given metrics.
+    Applies a slip, i.e. a negative lag, to the DataFrame for the given cross-sections
+    and categories, on the given metrics.
 
-    :param <QuantamentalDataFrame> target_df: DataFrame to which the slip is applied.
-    :param <int> slip: Slip to be applied.
-    :param <List[str]> cids: List of cross-sections.
-    :param <List[str]> xcats: List of target categories.
-    :param <List[str]> metrics: List of metrics to which the slip is applied.
-    :return <QuantamentalDataFrame> target_df: DataFrame with the slip applied.
-    :raises <TypeError>: If the provided parameters are not of the expected type.
-    :raises <ValueError>: If the provided parameters are semantically incorrect.
+    Parameters
+    ----------
+    target_df : QuantamentalDataFrame
+        DataFrame to which the slip is applied.
+    slip : int
+        Slip to be applied.
+    cids : List[str]
+        List of cross-sections.
+    xcats : List[str]
+        List of target categories.
+    metrics : List[str]
+        List of metrics to which the slip is applied.
+
+    Raises
+    ------
+    TypeError
+        If the provided parameters are not of the expected type.
+    ValueError
+        If the provided parameters are semantically incorrect.
+
+    Returns
+    -------
+    QuantamentalDataFrame
+        DataFrame with the slip applied.
     """
+
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
 
@@ -373,17 +452,25 @@ def downsample_df_on_real_date(
     """
     Downsample JPMaQS DataFrame.
 
-    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
-        'cid', 'xcat', 'real_date' and at least one column with values of interest.
-    :param <List> groupby_columns: a list of columns used to group the DataFrame.
-    :param <str> freq: frequency option. Per default the correlations are calculated
-        based on the native frequency of the datetimes in 'real_date', which is business
-        daily. Downsampling options include weekly ('W'), monthly ('M'), or quarterly
-        ('Q') mean.
-    :param <str> agg: aggregation method. Must be one of "mean" (default), "median",
-        "min", "max", "first" or "last".
+    Parameters
+    ----------
+    df : pd.Dataframe
+        standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
+        'real_date' and at least one column with values of interest.
+    groupby_columns : List
+        a list of columns used to group the DataFrame.
+    freq : str
+        frequency option. Per default the correlations are calculated based on the
+        native frequency of the datetimes in 'real_date', which is business daily.
+        Downsampling options include weekly ('W'), monthly ('M'), or quarterly ('Q') mean.
+    agg : str
+        aggregation method. Must be one of "mean" (default), "median", "min", "max",
+        "first" or "last".
 
-    :return <pd.DataFrame>: the downsampled DataFrame.
+    Returns
+    -------
+    pd.DataFrame
+        the downsampled DataFrame.
     """
 
     if not set(groupby_columns).issubset(df.columns):
@@ -431,18 +518,26 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     Append a standard DataFrame to a standard base DataFrame with ticker replacement on
     the intersection.
 
-    :param <pd.DataFrame> df: standardised base JPMaQS DataFrame with the following
-        necessary columns: 'cid', 'xcat', 'real_date' and 'value'.
-    :param <pd.DataFrame> df_add: another standardised JPMaQS DataFrame, with the latest
-        values, to be added with the necessary columns: 'cid', 'xcat', 'real_date', and
-        'value'. Columns that are present in the base DataFrame but not in the appended
-        DataFrame will be populated with NaN values.
-    :param <bool> xcat_replace: all series belonging to the categories in the added
-        DataFrame will be replaced, rather than just the added tickers.
-        N.B.: tickers are combinations of cross-sections and categories.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        standardised base JPMaQS DataFrame with the following necessary columns: 'cid',
+        'xcat', 'real_date' and 'value'.
+    df_add : pd.DataFrame
+        another standardised JPMaQS DataFrame, with the latest values, to be added with
+        the necessary columns: 'cid', 'xcat', 'real_date', and 'value'. Columns that are
+        present in the base DataFrame but not in the appended DataFrame will be populated
+        with NaN values.
+    xcat_replace : bool
+        all series belonging to the categories in the added DataFrame will be replaced,
+        rather than just the added tickers. N.B.: tickers are combinations of cross-sections
+        and categories.
 
-    :return <pd.DataFrame>: standardised DataFrame with the latest values of the modified
-        or newly defined tickers added.
+    Returns
+    -------
+    pd.DataFrame
+        standardised DataFrame with the latest values of the modified or newly defined
+        tickers added.
     """
 
     # index_cols = ["cid", "xcat", "real_date"]
@@ -485,10 +580,14 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     """
     Method used to update aggregate DataFrame on a ticker level.
 
-    :param <pd.DataFrame> df: aggregate DataFrame used to store all tickers.
-    :param <pd.DataFrame> df_add: DataFrame with the latest values.
-
+    Parameters
+    ----------
+    df : pd.DataFrame
+        aggregate DataFrame used to store all tickers.
+    df_add : pd.DataFrame
+        DataFrame with the latest values.
     """
+
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("The base DataFrame must be a Quantamental Dataframe.")
     if not isinstance(df_add, QuantamentalDataFrame):
@@ -511,9 +610,12 @@ def update_categories(df: pd.DataFrame, df_add):
     """
     Method used to update the DataFrame on the category level.
 
-    :param <pd.DataFrame> df: base DataFrame.
-    :param <pd.DataFrame> df_add: appended DataFrame.
-
+    Parameters
+    ----------
+    df : pd.DataFrame
+        base DataFrame.
+    df_add : pd.DataFrame
+        appended DataFrame.
     """
 
     incumbent_categories = list(df["xcat"].unique())
@@ -548,25 +650,34 @@ def reduce_df(
     """
     Filter DataFrame by xcats and cids and notify about missing xcats and cids.
 
-    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
-        'cid', 'xcat', 'real_date' and 'value'.
-    :param <Union[str, List[str]]> xcats: extended categories to be filtered on. Default is
-        all in the DataFrame.
-    :param <List[str]> cids: cross sections to be checked on. Default is all in the
-        dataframe.
-    :param <str> start: string representing the earliest date. Default is None.
-    :param <str> end: string representing the latest date. Default is None.
-    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
-        the data frame. If one cross-section has several blacklist periods append numbers
-        to the cross-section code.
-    :param <bool> out_all: if True the function returns reduced dataframe and selected/
-        available xcats and cids.
-        Default is False, i.e. only the DataFrame is returned
-    :param <bool> intersect: if True only retains cids that are available for all xcats.
-        Default is False.
+    Parameters
+    ----------
+    df : pd.Dataframe
+        standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
+        'real_date' and 'value'.
+    xcats : Union[str, List[str]]
+        extended categories to be filtered on. Default is all in the DataFrame.
+    cids : List[str]
+        cross sections to be checked on. Default is all in the dataframe.
+    start : str
+        string representing the earliest date. Default is None.
+    end : str
+        string representing the latest date. Default is None.
+    blacklist : dict
+        cross-sections with date ranges that should be excluded from the data frame. If
+        one cross-section has several blacklist periods append numbers to the cross-section
+        code.
+    out_all : bool
+        if True the function returns reduced dataframe and selected/ available xcats and
+        cids. Default is False, i.e. only the DataFrame is returned
+    intersect : bool
+        if True only retains cids that are available for all xcats. Default is False.
 
-    :return <pd.Dataframe>: reduced DataFrame that also removes duplicates or
-        (for out_all True) DataFrame and available and selected xcats and cids.
+    Returns
+    -------
+    pd.Dataframe
+        reduced DataFrame that also removes duplicates or (for out_all True) DataFrame
+        and available and selected xcats and cids.
     """
 
     if not isinstance(df, QuantamentalDataFrame):
@@ -627,7 +738,7 @@ def reduce_df(
     df = df[df["cid"].isin(cids)]
 
     if out_all:
-        return df.drop_duplicates(), xcats, sorted(cids)
+        return df.drop_duplicates(), xcats, cids
     else:
         return df.drop_duplicates()
 
@@ -642,17 +753,27 @@ def reduce_df_by_ticker(
     """
     Filter dataframe by xcats and cids and notify about missing xcats and cids
 
-    :param <pd.Dataframe> df: standardized dataframe with the following columns:
-        'cid', 'xcat', 'real_date'.
-    :param <List[str]> ticks: tickers (cross sections + base categories)
-    :param <str> start: string in ISO 8601 representing earliest date. Default is None.
-    :param <str> end: string ISO 8601 representing the latest date. Default is None.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from
-        the dataframe. If one cross section has several blacklist periods append numbers
-        to the cross section code.
+    Parameters
+    ----------
+    df : pd.Dataframe
+        standardized dataframe with the following columns: 'cid', 'xcat', 'real_date'.
+    ticks : List[str]
+        tickers (cross sections + base categories)
+    start : str
+        string in ISO 8601 representing earliest date. Default is None.
+    end : str
+        string ISO 8601 representing the latest date. Default is None.
+    blacklist : dict
+        cross sections with date ranges that should be excluded from the dataframe. If
+        one cross section has several blacklist periods append numbers to the cross section
+        code.
 
-    :return <pd.Dataframe>: reduced dataframe that also removes duplicates
+    Returns
+    -------
+    pd.Dataframe
+        reduced dataframe that also removes duplicates
     """
+
     if type(df) is QuantamentalDataFrame:
         return df.reduce_df_by_ticker(
             tickers=ticks,
@@ -700,11 +821,12 @@ def categories_df_aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
     Helper method to down-sample each category in the DataFrame by aggregating over the
     intermediary dates according to a prescribed method.
 
-    :param <List[str]> dfx: standardised DataFrame defined exclusively on a single
-        category.
-    :param <List[str]> xcat_agg: associated aggregation method for the respective
-        category.
-
+    Parameters
+    ----------
+    dfx : List[str]
+        standardised DataFrame defined exclusively on a single category.
+    xcat_agg : List[str]
+        associated aggregation method for the respective category.
     """
 
     dfx = dfx.groupby(["xcat", "cid", "custom_date"], observed=True)
@@ -727,14 +849,20 @@ def _categories_df_explanatory_df(
     """
     Produces the explanatory column(s) for the custom DataFrame.
 
-    :param <pd.DataFrame> dfw: group-by DataFrame which has been down-sampled. The
-        respective aggregation method will be applied.
-    :param <List[str]> explanatory_xcats: list of explanatory category(s).
-    :param <str> agg_meth: aggregation method used for all explanatory variables.
-    :param <dict> sum_condition: required boolean to negate erroneous zeros if the
-        aggregate method used, for the explanatory variable, is sum.
-    :param <int> lag: lag of explanatory category(s). Applied uniformly to each
-        category.
+    Parameters
+    ----------
+    dfw : pd.DataFrame
+        group-by DataFrame which has been down-sampled. The respective aggregation
+        method will be applied.
+    explanatory_xcats : List[str]
+        list of explanatory category(s).
+    agg_meth : str
+        aggregation method used for all explanatory variables.
+    sum_condition : dict
+        required boolean to negate erroneous zeros if the aggregate method used, for the
+        explanatory variable, is sum.
+    lag : int
+        lag of explanatory category(s). Applied uniformly to each category.
     """
 
     dfw_explanatory = pd.DataFrame()
@@ -775,45 +903,54 @@ def categories_df(
     In principle, create custom two-categories DataFrame with appropriate frequency and,
     if applicable, lags.
 
-    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the following necessary
-        columns: 'cid', 'xcat', 'real_date' and at least one column with values of
-        interest.
-    :param <List[str]> xcats: extended categories involved in the custom DataFrame. The
-        last category in the list represents the dependent variable, and the (n - 1)
-        preceding categories will be the explanatory variables(s).
-    :param <List[str]> cids: cross-sections to be included. Default is all in the
-        DataFrame.
-    :param <str> val: name of column that contains the values of interest. Default is
-        'value'.
-    :param <str> start: earliest date in ISO 8601 format. Default is None,
-        i.e. earliest date in DataFrame is used.
-    :param <str> end: latest date in ISO 8601 format. Default is None,
-        i.e. latest date in DataFrame is used.
-    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
-        the DataFrame. If one cross section has several blacklist periods append numbers
-        to the cross section code.
-    :param <int> years: number of years over which data are aggregated. Supersedes the
-        "freq" parameter and does not allow lags, Default is None, i.e. no multi-year
-        aggregation.
-    :param <str> freq: letter denoting frequency at which the series are to be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'. Will always be the
-        last business day of the respective frequency.
-    :param <int> lag: lag (delay of arrival) of explanatory category(s) in periods
-        as set by freq. Default is 0.
-    :param <int> fwin: forward moving average window of first category. Default is 1,
-        i.e no average.
+    Parameters
+    ----------
+    df : pd.Dataframe
+        standardized JPMaQS DataFrame with the following necessary columns: 'cid',
+        'xcat', 'real_date' and at least one column with values of interest.
+    xcats : List[str]
+        extended categories involved in the custom DataFrame. The last category in the
+        list represents the dependent variable, and the (n - 1) preceding categories will be
+        the explanatory variables(s).
+    cids : List[str]
+        cross-sections to be included. Default is all in the DataFrame.
+    val : str
+        name of column that contains the values of interest. Default is 'value'.
+    start : str
+        earliest date in ISO 8601 format. Default is None, i.e. earliest date in
+        DataFrame is used.
+    end : str
+        latest date in ISO 8601 format. Default is None, i.e. latest date in DataFrame
+        is used.
+    blacklist : dict
+        cross-sections with date ranges that should be excluded from the DataFrame. If
+        one cross section has several blacklist periods append numbers to the cross section
+        code.
+    years : int
+        number of years over which data are aggregated. Supersedes the "freq" parameter
+        and does not allow lags, Default is None, i.e. no multi-year aggregation.
+    freq : str
+        letter denoting frequency at which the series are to be sampled. This must be
+        one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'. Will always be the last business day
+        of the respective frequency.
+    lag : int
+        lag (delay of arrival) of explanatory category(s) in periods as set by freq.
+        Default is 0.
+    fwin : int
+        forward moving average window of first category. Default is 1, i.e no average.
         Note: This parameter is used mainly for target returns as dependent variable.
-    :param <List[str]> xcat_aggs: exactly two aggregation methods. Default is 'mean' for
-        both. The same aggregation method, the first method in the parameter, will be
-        used for all explanatory variables.
+    xcat_aggs : List[str]
+        exactly two aggregation methods. Default is 'mean' for both. The same
+        aggregation method, the first method in the parameter, will be used for all
+        explanatory variables.
 
-    :return <pd.DataFrame>: custom DataFrame with category columns. All rows that contain
-        NaNs will be excluded.
-
-    N.B.:
-    The number of explanatory categories that can be included is not restricted and will
-    be appended column-wise to the returned DataFrame. The order of the DataFrame's
-    columns will reflect the order of the categories list.
+    Returns
+    -------
+    pd.DataFrame
+        custom DataFrame with category columns. All rows that contain NaNs will be
+        excluded.  N.B.: The number of explanatory categories that can be included is not
+        restricted and will be appended column-wise to the returned DataFrame. The order of
+        the DataFrame's columns will reflect the order of the categories list.
     """
 
     freq = _map_to_business_day_frequency(freq)
@@ -1097,16 +1234,20 @@ def get_eops(
     freq: str = "M",
 ) -> pd.Series:
     """
-    Returns a series of end-of-period dates for a given frequency.
-    Dates can be passed as a series, index, a generic iterable or as a start and end date.
+    Returns a series of end-of-period dates for a given frequency. Dates can be passed
+    as a series, index, a generic iterable or as a start and end date.
 
-    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
-    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
-        be used to generate the end-of-period dates. Can be passed as a series, index, a
-        generic iterable or as a start and end date.
-    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
-        not passed.
+    Parameters
+    ----------
+    freq : str
+        The frequency string. Must be one of "D", "W", "M", "Q", "A".
+    dates : pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]
+        The dates to be used to generate the end-of-period dates. Can be passed as a
+        series, index, a generic iterable or as a start and end date.
+    start_date : str | pd.Timestamp
+        The start date. Must be passed if dates is not passed.
     """
+
     direction = "end"
     return _get_edge_dates(
         dates=dates,
@@ -1121,18 +1262,27 @@ def merge_categories(
     df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: List[str] = None
 ):
     """
-    Merges categories of different preferences into a single one, with the most preferred
-    being used first and others substituted in order.
+    Merges categories of different preferences into a single one, with the most
+    preferred being used first and others substituted in order.
 
-    :param <pd.DataFrame> df: standardized JPMaQS DataFrame with the necessary columns
-        'cid', 'xcat', 'real_date' and at least one column with values of interest.
-    :param <List[str]> xcats: extended categories to be merged.
-    :param <List[str]> cids: cross sections to be included. Default is all in the
-        DataFrame.
-    :param <str> new_xcat: name of the new category to be created. Default is None.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        standardized JPMaQS DataFrame with the necessary columns 'cid', 'xcat',
+        'real_date' and at least one column with values of interest.
+    xcats : List[str]
+        extended categories to be merged.
+    cids : List[str]
+        cross sections to be included. Default is all in the DataFrame.
+    new_xcat : str
+        name of the new category to be created. Default is None.
 
-    :return <pd.DataFrame>: DataFrame with the merged category.
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with the merged category.
     """
+
     if not isinstance(df, pd.DataFrame):
         raise TypeError("The DataFrame must be a pandas DataFrame.")
     if not isinstance(xcats, list):
@@ -1158,7 +1308,6 @@ def merge_categories(
     real_dates = [pd.Timestamp(date) for date in unique_dates]
 
     def _get_values_for_xcat(real_dates, xcat_index, cid):
-
         values = df[
             (df["real_date"].isin(real_dates))
             & (df["xcat"] == xcats[xcat_index])
@@ -1199,16 +1348,20 @@ def get_sops(
     freq: str = "M",
 ) -> pd.Series:
     """
-    Returns a series of start-of-period dates for a given frequency.
-    Dates can be passed as a series, index, a generic iterable or as a start and end date.
+    Returns a series of start-of-period dates for a given frequency. Dates can be passed
+    as a series, index, a generic iterable or as a start and end date.
 
-    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
-    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
-        be used to generate the start-of-period dates. Can be passed as a series, index, a
-        generic iterable or as a start and end date.
-    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
-        not passed.
+    Parameters
+    ----------
+    freq : str
+        The frequency string. Must be one of "D", "W", "M", "Q", "A".
+    dates : pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]
+        The dates to be used to generate the start-of-period dates. Can be passed as a
+        series, index, a generic iterable or as a start and end date.
+    start_date : str | pd.Timestamp
+        The start date. Must be passed if dates is not passed.
     """
+
     direction = "start"
     return _get_edge_dates(
         dates=dates,
@@ -1221,17 +1374,23 @@ def get_sops(
 
 def concat_categorical(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     """
-    Concatenate two DataFrames with categorical columns.
+    Concatenate two DataFrames with categorical columns.  The dtypes of the of the
+    second DataFrame will be cast to the dtypes of the first. The columns of the
+    DataFrames must be identical.
 
-    The dtypes of the of the second DataFrame will be cast to the dtypes of the first.
-    The columns of the DataFrames must be identical.
+    Parameters
+    ----------
+    df1 : pd.DataFrame
+        The first DataFrame.
+    df2 : pd.DataFrame
+        The second DataFrame.
 
-    :param <pd.DataFrame> df1: The first DataFrame.
-    :param <pd.DataFrame> df2: The second DataFrame.
-
-    :return <pd.DataFrame>: The concatenated DataFrame with the same columns as the
-        input.
+    Returns
+    -------
+    pd.DataFrame
+        The concatenated DataFrame with the same columns as the input.
     """
+
     if not isinstance(df1, pd.DataFrame) or not isinstance(df2, pd.DataFrame):
         raise TypeError("Both DataFrames must be pandas DataFrames.")
 
@@ -1312,8 +1471,8 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     dfw = categories_df(
-        df=dfd,
-        xcats=xcats[:2] + ["test"],
+        df=QuantamentalDataFrame(dfd),
+        xcats=xcats,
         cids=cids,
         freq="M",
         # lag=1,
@@ -1321,3 +1480,4 @@ if __name__ == "__main__":
         # years=5,
         # start="2000-01-01",
     )
+    print("HI")

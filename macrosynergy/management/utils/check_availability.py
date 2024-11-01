@@ -1,7 +1,7 @@
 """
-Module for checking the availability of data availabity from a 
-Quantamental DataFrame. Includes functions for checking start years
-and end dates of a DataFrame, as well as visualizing the results.
+Module for checking the availability of data availabity from a Quantamental DataFrame.
+Includes functions for checking start years and end dates of a DataFrame, as well as
+visualizing the results.
 """
 
 import numpy as np
@@ -28,26 +28,34 @@ def check_availability(
     """
     Wrapper for visualizing start and end dates of a filtered DataFrame.
 
-    :param <pd.DataFrame> df: standardized DataFrame with the following necessary
-        columns: 'cid', 'xcat', 'real_date'.
-    :param <List[str]> xcats: extended categories to be checked on.
-        Default is all in the DataFrame.
-    :param <List[str]> cids: cross sections to be checked on.
-        Default is all in the DataFrame.
-    :param <str> start: string representing earliest considered date. Default is None.
-    :param <Tuple[float]> start_size: tuple of floats with width / length of
-        the start years heatmap. Default is None (format adjusted to data).
-    :param <Tuple[float]> end_size: tuple of floats with width/length of
-        the end dates heatmap. Default is None (format adjusted to data).
-    :param <bool> start_years: boolean indicating whether or not to display a chart
-        of starting years for each cross-section and indicator.
-        Default is True (display start years).
-    :param <bool> missing_recent: boolean indicating whether or not to display a chart
-        of missing date numbers for each cross-section and indicator.
-        Default is True (display missing days).
-    :param <bool> use_last_businessday: boolean indicating whether or not to use the
-        last business day before today as the end date. Default is True.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        standardized DataFrame with the following necessary columns: 'cid', 'xcat',
+        'real_date'.
+    xcats : List[str]
+        extended categories to be checked on. Default is all in the DataFrame.
+    cids : List[str]
+        cross sections to be checked on. Default is all in the DataFrame.
+    start : str
+        string representing earliest considered date. Default is None.
+    start_size : Tuple[float]
+        tuple of floats with width / length of the start years heatmap. Default is None
+        (format adjusted to data).
+    end_size : Tuple[float]
+        tuple of floats with width/length of the end dates heatmap. Default is None
+        (format adjusted to data).
+    start_years : bool
+        boolean indicating whether or not to display a chart of starting years for each
+        cross-section and indicator. Default is True (display start years).
+    missing_recent : bool
+        boolean indicating whether or not to display a chart of missing date numbers for
+        each cross-section and indicator. Default is True (display missing days).
+    use_last_businessday : bool
+        boolean indicating whether or not to use the last business day before today as
+        the end date. Default is True.
     """
+
     if not isinstance(start_years, bool):
         raise TypeError(f"<bool> object expected and not {type(start_years)}.")
     if not isinstance(missing_recent, bool):
@@ -78,14 +86,17 @@ def missing_in_df(
     """
     Print missing cross-sections and categories
 
-    :param <QuantamentalDataFrame> df: standardized DataFrame with the following necessary
-        columns: 'cid', 'xcat', 'real_date'.
-    :param <List[str]> xcats: extended categories to be checked on. Default is all
-        in the DataFrame.
-    :param <List[str]> cids: cross sections to be checked on. Default is all in
-        the DataFrame.
-
+    Parameters
+    ----------
+    df : QuantamentalDataFrame
+        standardized DataFrame with the following necessary columns: 'cid', 'xcat',
+        'real_date'.
+    xcats : List[str]
+        extended categories to be checked on. Default is all in the DataFrame.
+    cids : List[str]
+        cross sections to be checked on. Default is all in the DataFrame.
     """
+
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("`df` must be a QuantamentalDataFrame/pd.DataFrame")
 
@@ -122,10 +133,13 @@ def check_startyears(df: pd.DataFrame):
     """
     DataFrame with starting years across all extended categories and cross-sections
 
-    :param <pd.DataFrame> df: standardized DataFrame with the following necessary
-        columns: 'cid', 'xcat', 'real_date'.
-
+    Parameters
+    ----------
+    df : pd.DataFrame
+        standardized DataFrame with the following necessary columns: 'cid', 'xcat',
+        'real_date'.
     """
+
     df: pd.DataFrame = df.copy()
     df = df.dropna(how="any")
     df_starts = (
@@ -140,9 +154,13 @@ def check_enddates(df: pd.DataFrame) -> pd.DataFrame:
     """
     DataFrame with end dates across all extended categories and cross sections.
 
-    :param <pd.DataFrame> df: standardized DataFrame with the following necessary
-        columns: 'cid', 'xcat', 'real_date'.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        standardized DataFrame with the following necessary columns: 'cid', 'xcat',
+        'real_date'.
     """
+
     df: pd.DataFrame = df.copy()
     df = df.dropna(how="any")
     df_ends = df[["cid", "xcat", "real_date"]].groupby(["cid", "xcat"]).max()
@@ -155,16 +173,22 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp):
     """
     Number of business days between two respective business dates.
 
-    :param <pd.DataFrame> df: DataFrame cross-sections rows and category columns. Each
-        cell in the DataFrame will correspond to the start date of the respective series.
-    :param <pd.Timestamp> maxdate: maximum release date found in the received DataFrame.
-        In principle, all series should have values up until the respective business
-        date. The difference will represent possible missing values.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame cross-sections rows and category columns. Each cell in the DataFrame
+        will correspond to the start date of the respective series.
+    maxdate : pd.Timestamp
+        maximum release date found in the received DataFrame. In principle, all series
+        should have values up until the respective business date. The difference will
+        represent possible missing values.
 
-    :return <pd.DataFrame>: DataFrame consisting of business day differences for all
-        series.
-
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame consisting of business day differences for all series.
     """
+
     year_df = (maxdate.year - df.apply(lambda x: x.dt.isocalendar().year)) * 52
     week_df = maxdate.week - df.apply(lambda x: x.dt.isocalendar().week)
     # Account for difference over a year.
@@ -183,12 +207,17 @@ def visual_paneldates(
     """
     Visualize panel dates with color codes.
 
-    :param <pd.DataFrame> df: DataFrame cross sections rows and category columns.
-    :param <Tuple[float]> size: tuple of floats with width/length of displayed heatmap.
-    :param <bool> use_last_businessday: boolean indicating whether or not to use the
-        last business day before today as the end date. Default is True.
-
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame cross sections rows and category columns.
+    size : Tuple[float]
+        tuple of floats with width/length of displayed heatmap.
+    use_last_businessday : bool
+        boolean indicating whether or not to use the last business day before today as
+        the end date. Default is True.
     """
+
     msv.view_panel_dates(df=df, size=size, use_last_businessday=use_last_businessday)
 
 

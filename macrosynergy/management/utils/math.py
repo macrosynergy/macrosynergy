@@ -16,17 +16,23 @@ def expanding_mean_with_nan(
     dfw: pd.DataFrame, absolute: bool = False
 ) -> List[np.float64]:
     """
-    Computes a rolling median of a vector of floats and returns the results. NaNs will be
-    consumed.
+    Computes a rolling median of a vector of floats and returns the results. NaNs will
+    be consumed.
 
-    :param <QuantamentalDataFrame> dfw: "wide" dataframe with time index and
-        cross-sections as columns.
-    :param <bool> absolute: if True, the rolling mean will be computed on the magnitude
-        of each value. Default is False.
+    Parameters
+    ----------
+    dfw : QuantamentalDataFrame
+        "wide" dataframe with time index and cross-sections as columns.
+    absolute : bool
+        if True, the rolling mean will be computed on the magnitude of each value.
+        Default is False.
 
-    :return <List[float]> ret: a list containing the median values. The number of computed
-        median values held inside the list will correspond to the number of timestamps
-        the series is defined over.
+    Returns
+    -------
+    List[float]
+        a list containing the median values. The number of computed median values held
+        inside the list will correspond to the number of timestamps the series is defined
+        over.
     """
 
     if not isinstance(dfw, pd.DataFrame):
@@ -72,30 +78,41 @@ def expanding_mean_with_nan(
 def ewm_sum(df: pd.DataFrame, halflife: Number):
     """
     Compute the exponentially weighted moving sum of a DataFrame.
-    
-    :param <pd.DataFrame> df: DataFrame in the wide format for which to calculate weights.
-    :param <Number> halflife: The halflife of the exponential decay.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame in the wide format for which to calculate weights.
+    halflife : Number
+        The halflife of the exponential decay.
     """
+
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Method expects to receive a pd.DataFrame.")
     if not isinstance(halflife, Number):
         raise TypeError("The parameter `halflife` must be of type `<Number>`.")
-    
+
     weights = calculate_cumulative_weights(df, halflife)
     return df.ewm(halflife=halflife).mean().mul(weights, axis=0)
-    
+
+
 def calculate_cumulative_weights(df: pd.DataFrame, halflife: Number):
     """
-    Calculate the cumulative moving exponential weights for a DataFrame. 
-        
-    :param <pd.DataFrame> df: DataFrame in the wide format for which to calculate weights.
-    :param <Number> halflife: The halflife of the exponential decay.
+    Calculate the cumulative moving exponential weights for a DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame in the wide format for which to calculate weights.
+    halflife : Number
+        The halflife of the exponential decay.
     """
+
     n = len(df)
-    raw_weights = [(1/2) ** (i / halflife) for i in range(n)]
+    raw_weights = [(1 / 2) ** (i / halflife) for i in range(n)]
 
     cumulative_weights = np.cumsum(raw_weights)
-    
+
     return pd.Series(cumulative_weights, index=df.index)
 
 
