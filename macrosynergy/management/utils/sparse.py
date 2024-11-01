@@ -946,7 +946,10 @@ class InformationStateChanges(object):
     min_period : pd.Timestamp
         The minimum period to include in the InformationStateChanges object.
     max_period : pd.Timestamp
-        The maximum period to include in the InformationStateChanges object.  .. note::
+        The maximum period to include in the InformationStateChanges object.
+
+
+    .. note::
         Instantiate using the `from_qdf` or `from_isc_df` class methods.  This class is
         subscriptable, i.e. `isc["ticker"]` will return the DataFrame for the given ticker.
     """
