@@ -126,14 +126,14 @@ def panel_cv_scores(
             lambda y_true, y_pred: np.sum(y_true > 0) / len(y_true)
         )
 
-    results: Dict[str, Dict[str, float]] = {
+    results: dict = {
         estimator_name: {} for estimator_name in estimators
     }
 
     for estimator_name, estimator in estimators.items():
         if verbose:
             print(f"Calculating walk-forward validation metrics for {estimator_name}.")
-        cv_results: Dict[str, np.ndarray] = cross_validate(
+        cv_results: dict = cross_validate(
             estimator,
             X,
             y,
