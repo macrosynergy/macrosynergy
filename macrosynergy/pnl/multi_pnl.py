@@ -16,7 +16,6 @@ from macrosynergy.management.types import QuantamentalDataFrame
 
 
 class MultiPnL:
-
     def __init__(self):
         self.pnls_df = QuantamentalDataFrame(
             pd.DataFrame(columns=["real_date", "xcat", "value", "cid"])
@@ -29,9 +28,14 @@ class MultiPnL:
         """
         Add a NaivePnL object.
 
-        :param <NaivePnL> pnl: NaivePnL object.
-        :param <List[str]> pnl_xcats: List of PnLs to add from the NaivePnL object.
+        Parameters
+        ----------
+        pnl : NaivePnL
+            NaivePnL object.
+        pnl_xcats : List[str]
+            List of PnLs to add from the NaivePnL object.
         """
+
         self._validate_pnl(pnl, pnl_xcats)
 
         pnl_df = pnl.pnl_df(pnl_xcats)
@@ -56,12 +60,18 @@ class MultiPnL:
         """
         Combine PnLs with optional weighting.
 
-        :param <List[str]> pnl_xcats: List of PnLs to combine. Must be in the format
-            'xcat/return' and added using `add_pnl()`.
-        :param <str> composite_pnl_xcat: xcat for the combined PnL.
-        :param <Optional[Dict[str, float]]> weights: Weights for each PnL, by default None.
-            Must be in the format {'xcat': weight} or {'xcat/return': weight}.
+        Parameters
+        ----------
+        pnl_xcats : List[str]
+            List of PnLs to combine. Must be in the format 'xcat/return' and added using
+            `add_pnl()`.
+        composite_pnl_xcat : str
+            xcat for the combined PnL.
+        weights : Optional[Dict[str, float]]
+            Weights for each PnL, by default None. Must be in the format {'xcat':
+            weight} or {'xcat/return': weight}.
         """
+
         self._check_pnls_added(min_pnls=2)
         for i, pnl_xcat in enumerate(pnl_xcats):
             pnl_xcats[i] = self._infer_return_by_xcat(pnl_xcat)
@@ -133,10 +143,15 @@ class MultiPnL:
         """
         Creates a plot of PnLs
 
-        :param <List[str]> pnl_xcats: List of PnLs to plot. If None, all PnLs are plotted.
-            Must be in the format 'xcat', or 'xcat/return_xcat'.
-        :param <str> title: Title of the plot.
+        Parameters
+        ----------
+        pnl_xcats : List[str]
+            List of PnLs to plot. If None, all PnLs are plotted. Must be in the format
+            'xcat', or 'xcat/return_xcat'.
+        title : str
+            Title of the plot.
         """
+
         self._check_pnls_added()
 
         if pnl_xcats is None:
@@ -148,7 +163,6 @@ class MultiPnL:
             pnl_df = self.pnls_df[self.pnls_df["xcat"].isin(pnl_xcats)].copy()
 
         if xcat_labels is not None:
-
             xcat_labels = self._check_xcat_labels(pnl_xcats, xcat_labels)
             pnl_df["xcat"] = pnl_df["xcat"].map(xcat_labels)
 
@@ -166,9 +180,13 @@ class MultiPnL:
         """
         Evaluate individual and composite PnLs.
 
-        :param <List[str]> pnl_xcats: List of PnLs to evaluate. If None, all PnLs are evaluated.
-            Must be in the format 'xcat', or 'xcat/return_xcat'.
+        Parameters
+        ----------
+        pnl_xcats : List[str]
+            List of PnLs to evaluate. If None, all PnLs are evaluated. Must be in the
+            format 'xcat', or 'xcat/return_xcat'.
         """
+
         self._check_pnls_added()
         if pnl_xcats is None:
             pnl_xcats = self.pnl_xcats()
@@ -241,9 +259,13 @@ class MultiPnL:
         """
         Returns a DataFrame with PnLs.
 
-        :param <List[str]> pnl_xcats: List of PnLs to return. If None, all PnLs are returned.
-            Must be in the format 'xcat', or 'xcat/return_xcat'.
+        Parameters
+        ----------
+        pnl_xcats : List[str]
+            List of PnLs to return. If None, all PnLs are returned. Must be in the
+            format 'xcat', or 'xcat/return_xcat'.
         """
+
         if self.pnls_df is None:
             raise ValueError("The PnLs have been added. Use add_pnl() first.")
 
@@ -302,10 +324,10 @@ class MultiPnL:
 
     def _infer_return_by_xcat(self, pnl_xcat):
         """
-        Infer the return category from the xcat if not provided.
-
-        Throws an error is there are multiple return categories for the xcat.
+        Infer the return category from the xcat if not provided.  Throws an error is
+        there are multiple return categories for the xcat.
         """
+
         if pnl_xcat in self.composite_pnl_xcats:
             return pnl_xcat
 
@@ -342,7 +364,6 @@ class MultiPnL:
 
 
 if __name__ == "__main__":
-
     np.random.seed(0)
 
     cids = ["AUD", "CAD", "GBP", "NZD", "USD", "EUR"]
