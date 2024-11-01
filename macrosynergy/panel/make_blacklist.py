@@ -1,6 +1,6 @@
 """
-Module with functions for processing "blacklist" data for cross-sections in a quantamental
-DataFrame.
+Module with functions for processing "blacklist" data for cross-sections in a
+quantamental DataFrame.
 """
 
 import numpy as np
@@ -13,13 +13,22 @@ from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def startend(dti, start, length):
-    """Return start and end dates of a sequence as tuple
+    """
+    Return start and end dates of a sequence as tuple
 
-    :param <DateTimeIndex> dti: datetime series of working days
-    :param <int> start: index of start
-    :param <int> length: number of sequential days
+    Parameters
+    ----------
+    dti : DateTimeIndex
+        datetime series of working days
+    start : int
+        index of start
+    length : int
+        number of sequential days
 
-    :return <Tuple[pd.Timestamp, pd.Timestamp]>: tuple of start and end date
+    Returns
+    -------
+    Tuple[pd.Timestamp, pd.Timestamp]
+        tuple of start and end date
     """
 
     tup = (dti[start], dti[start + (length - 1)])
@@ -38,23 +47,33 @@ def make_blacklist(
     Converts binary category of standardized dataframe into a standardized dictionary
     that can serve as a blacklist for cross-sections in further analyses
 
-    :param <QuantamentalDataFrame> df: standardized DataFrame with following columns:
-        'cid', 'xcat', 'real_date' and 'value'.
-    :param <str> xcat: category with binary values, where 1 means blacklisting and 0
-        means not blacklisting.
-    :param List<str> cids: list of cross-sections that are considered in the formation
-        of the blacklist. Per default, all available cross sections are considered.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date
-        for which the respective category is available is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date
-        for which the respective category is available is used.
-    :param <bool> nan_black: if True NaNs are blacklisted (coverted to ones). Defaults is
-        False, i.e. NaNs are converted to zeroes.
+    Parameters
+    ----------
+    df : QuantamentalDataFrame
+        standardized DataFrame with following columns: 'cid', 'xcat', 'real_date' and
+        'value'.
+    xcat : str
+        category with binary values, where 1 means blacklisting and 0 means not
+        blacklisting.
+    cids : str
+        list of cross-sections that are considered in the formation of the blacklist.
+        Per default, all available cross sections are considered.
+    start : str
+        earliest date in ISO format. Default is None and earliest date for which the
+        respective category is available is used.
+    end : str
+        latest date in ISO format. Default is None and latest date for which the
+        respective category is available is used.
+    nan_black : bool
+        if True NaNs are blacklisted (coverted to ones). Defaults is False, i.e. NaNs
+        are converted to zeroes.
 
-    :return <dict>: standardized dictionary with cross-sections as keys and tuples of
-        start and end dates of the blacklist periods in ISO formats as values.
-        If one cross section has multiple blacklist periods, numbers are added to the
-        keys (i.e. TRY_1, TRY_2, etc.)
+    Returns
+    -------
+    dict
+        standardized dictionary with cross-sections as keys and tuples of start and end
+        dates of the blacklist periods in ISO formats as values. If one cross section has
+        multiple blacklist periods, numbers are added to the keys (i.e. TRY_1, TRY_2, etc.)
     """
 
     if not isinstance(df, QuantamentalDataFrame):

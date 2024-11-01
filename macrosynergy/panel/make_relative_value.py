@@ -1,6 +1,6 @@
 """
-Implementation of `make_relative_value()` function as a module. The function is used
-to calculate values for indicators relative to a basket of cross-sections.
+Implementation of `make_relative_value()` function as a module. The function is used to
+calculate values for indicators relative to a basket of cross-sections.
 """
 
 import pandas as pd
@@ -23,13 +23,19 @@ def _prepare_basket(
     Categories can be defined over different cross-sections. Will determine the
     respective basket given the available cross-sections for the respective category.
 
-    :param <pd.DataFrame> df: long JPMaQS DataFrame of single category.
-    :param <str> xcat: respective category for the relative value calculation.
-    :param <pd.DataFrame> basket: cross-sections to be used for the relative value
-        benchmark if available.
-    :param <List[str]> cids_avl: cross-sections available for the category.
-    :param <bool> complete_cross: if True, the basket is only calculated if all cross-
-        sections, held in the basket, are available for that respective category.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        long JPMaQS DataFrame of single category.
+    xcat : str
+        respective category for the relative value calculation.
+    basket : pd.DataFrame
+        cross-sections to be used for the relative value benchmark if available.
+    cids_avl : List[str]
+        cross-sections available for the category.
+    complete_cross : bool
+        if True, the basket is only calculated if all cross- sections, held in the
+        basket, are available for that respective category.
     """
 
     cids_used: List[str] = sorted(set(basket) & set(cids_avl))
@@ -76,42 +82,54 @@ def make_relative_value(
     """
     Returns panel of relative values versus an average of cross-sections.
 
-    :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
-        columns: 'cid', 'xcat', 'real_date' and 'value'.
-    :param <List[str]> xcats: all extended categories for which relative values are to
-        be calculated.
-    :param <List[str]> cids: cross-sections for which relative values are calculated.
-        Default is all cross-section available for the respective category.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date
-        for which the respective category is available is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date for
-        which the respective category is available is used.
-    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
-        the output.
-    :param <List[str]> basket: cross-sections to be used for the relative value
-        benchmark. The default is every cross-section in the chosen list that is
-        available in the DataFrame over the respective time-period.
-        However, the basket can be reduced to a valid subset of the available
-        cross-sections.
-    :param <bool> complete_cross: boolean parameter that outlines whether each category
-        is required to have the full set of cross-sections held by the basket parameter
-        for a relative value calculation to occur. If set to True, the category will be
-        excluded from the output if cross-sections are missing.
-        Default is False. If False, the mean, for the relative value, will use the subset
-        that is available for that category. For instance, if basket = ['AUD', 'CAD',
-        'GBP', 'NZD'] but available cids = ['GBP', 'NZD'], the basket will be implicitly
-        updated to basket = ['GBP', 'NZD'] for that respective category.
-    :param <str> rel_meth: method for calculating relative value. Default is 'subtract'.
-        Alternative is 'divide'.
-    :param <List[str]> rel_xcats: extended category name of the relative values. Will
-        displace the original category names: xcat + postfix. The order should reflect
-        the order of the passed categories.
-    :param <str> postfix: acronym to be appended to 'xcat' string to give the name for
-        relative value category. Only applies if rel_xcats is None. Default is 'R'
+    Parameters
+    ----------
+    df : pd.DataFrame
+        standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
+        'real_date' and 'value'.
+    xcats : List[str]
+        all extended categories for which relative values are to be calculated.
+    cids : List[str]
+        cross-sections for which relative values are calculated. Default is all cross-
+        section available for the respective category.
+    start : str
+        earliest date in ISO format. Default is None and earliest date for which the
+        respective category is available is used.
+    end : str
+        latest date in ISO format. Default is None and latest date for which the
+        respective category is available is used.
+    blacklist : dict
+        cross-sections with date ranges that should be excluded from the output.
+    basket : List[str]
+        cross-sections to be used for the relative value benchmark. The default is every
+        cross-section in the chosen list that is available in the DataFrame over the
+        respective time-period. However, the basket can be reduced to a valid subset of the
+        available cross-sections.
+    complete_cross : bool
+        boolean parameter that outlines whether each category is required to have the
+        full set of cross-sections held by the basket parameter for a relative value
+        calculation to occur. If set to True, the category will be excluded from the output
+        if cross-sections are missing. Default is False. If False, the mean, for the
+        relative value, will use the subset that is available for that category. For
+        instance, if basket = ['AUD', 'CAD', 'GBP', 'NZD'] but available cids = ['GBP',
+        'NZD'], the basket will be implicitly updated to basket = ['GBP', 'NZD'] for that
+        respective category.
+    rel_meth : str
+        method for calculating relative value. Default is 'subtract'. Alternative is
+        'divide'.
+    rel_xcats : List[str]
+        extended category name of the relative values. Will displace the original
+        category names: xcat + postfix. The order should reflect the order of the passed
+        categories.
+    postfix : str
+        acronym to be appended to 'xcat' string to give the name for relative value
+        category. Only applies if rel_xcats is None. Default is 'R'
 
-    :return <pd.DataFrame>: standardized DataFrame with the relative values, featuring
-        the categories: 'cid', 'xcat', 'real_date' and 'value'.
-
+    Returns
+    -------
+    pd.DataFrame
+        standardized DataFrame with the relative values, featuring the categories:
+        'cid', 'xcat', 'real_date' and 'value'.
     """
 
     col_names = ["cid", "xcat", "real_date", "value"]

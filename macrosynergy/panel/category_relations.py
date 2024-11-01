@@ -21,55 +21,66 @@ class CategoryRelations(object):
     """
     Class for analyzing and visualizing the relations of multiple panel categories.
 
-    :param <pd.DataFrame> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcat', 'real_date' and at least one column with values of interest.
-    :param <List[str]> xcats: exactly two extended categories to be analyzed.
-        If there is a hypothesized explanatory-dependent relation, the first category
-        is the explanatory variable and the second category the explained variable.
-    :param <List[str]> cids: cross-sections for which the category relations is being
-        analyzed. Default is all in the DataFrame.
-    :param <str> start: earliest date in ISO format. Default is None in which case the
-        earliest date in the DataFrame will be used.
-    :param <str> end: latest date in ISO format. Default is None in which case the
-        latest date in the DataFrame will be used.
-    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
-        the analysis.
-    :param <int> years: number of years over which data are aggregated. Supersedes the
-        'freq' parameter and does not allow lags, Default is None, meaning no multi-year
-        aggregation.
-        Note: for single year labelled plots, better use freq='A' for cleaner labels.
-    :param <str> val: name of column that contains the values of interest. Default is
-        'value'.
-    :param <str> freq: letter denoting frequency at which the series are to be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
-    :param <int> lag: lag (delay of arrival) of first (explanatory) category in periods
-        as set by freq. Default is 0.
-        Importantly, for analyses with explanatory and dependent categories, the first
-        category takes the role of the explanatory and a positive lag means that the
-        explanatory values will be deferred into the future, i.e. relate to future values
-        of the explained variable.
-    :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
-        both.
-    :param <str> xcat1_chg: time series changes are applied to the first category.
-        Default is None. Options are 'diff' (first difference) and 'pch'
-        (percentage change). The changes are calculated over the number of
-        periods determined by `n_periods`.
-    :param <int> n_periods: number of periods over which changes of the first category
-        have been calculated. Default is 1.
-    :param <int> fwin: forward moving average window of second category. Default is 1,
-        i.e no average.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
+        and at least one column with values of interest.
+    xcats : List[str]
+        exactly two extended categories to be analyzed. If there is a hypothesized
+        explanatory-dependent relation, the first category is the explanatory variable and
+        the second category the explained variable.
+    cids : List[str]
+        cross-sections for which the category relations is being analyzed. Default is
+        all in the DataFrame.
+    start : str
+        earliest date in ISO format. Default is None in which case the earliest date in
+        the DataFrame will be used.
+    end : str
+        latest date in ISO format. Default is None in which case the latest date in the
+        DataFrame will be used.
+    blacklist : dict
+        cross-sections with date ranges that should be excluded from the analysis.
+    years : int
+        number of years over which data are aggregated. Supersedes the 'freq' parameter
+        and does not allow lags, Default is None, meaning no multi-year aggregation. Note:
+        for single year labelled plots, better use freq='A' for cleaner labels.
+    val : str
+        name of column that contains the values of interest. Default is 'value'.
+    freq : str
+        letter denoting frequency at which the series are to be sampled. This must be
+        one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
+    lag : int
+        lag (delay of arrival) of first (explanatory) category in periods as set by
+        freq. Default is 0. Importantly, for analyses with explanatory and dependent
+        categories, the first category takes the role of the explanatory and a positive lag
+        means that the explanatory values will be deferred into the future, i.e. relate to
+        future values of the explained variable.
+    xcat_aggs : List[str]
+        Exactly two aggregation methods. Default is 'mean' for both.
+    xcat1_chg : str
+        time series changes are applied to the first category. Default is None. Options
+        are 'diff' (first difference) and 'pch' (percentage change). The changes are
+        calculated over the number of periods determined by `n_periods`.
+    n_periods : int
+        number of periods over which changes of the first category have been calculated.
+        Default is 1.
+    fwin : int
+        forward moving average window of second category. Default is 1, i.e no average.
         Importantly, for analysis with explanatory and dependent categories, the second
-        takes the role of the dependent and a forward window means that the dependent
-        values average forward into the future.
-    :param <List[float]> xcat_trims: two-element list with maximum absolute values
-        for the two respective categories. Observations with higher values will be
-        trimmed, i.e. removed from the analysis (not winsorized!). Default is None
-        for both. Trimming is applied after all other transformations.
-    :param <int> slip: implied slippage of feature availability for relationship with
-        the target category. This mimics the relationship between trading signals and
-        returns, which is often characterized by a delay due to the setup of positions.
-        Technically, this is a negative lag (early arrival) of the target category
-        in working days prior to any frequency conversion. Default is 0.
+        takes the role of the dependent and a forward window means that the dependent values
+        average forward into the future.
+    xcat_trims : List[float]
+        two-element list with maximum absolute values for the two respective categories.
+        Observations with higher values will be trimmed, i.e. removed from the analysis (not
+        winsorized!). Default is None for both. Trimming is applied after all other
+        transformations.
+    slip : int
+        implied slippage of feature availability for relationship with the target
+        category. This mimics the relationship between trading signals and returns, which is
+        often characterized by a delay due to the setup of positions. Technically, this is a
+        negative lag (early arrival) of the target category in working days prior to any
+        frequency conversion. Default is 0.
     """
 
     def __init__(
@@ -220,16 +231,22 @@ class CategoryRelations(object):
 
     @classmethod
     def intersection_cids(cls, df, xcats, cids):
-        """Returns common cross-sections across both categories and specified
-        parameter.
+        """
+        Returns common cross-sections across both categories and specified parameter.
 
-        :param <pd.DataFrame> df: standardised DataFrame.
-        :param <List[str]> xcats: exactly two extended categories to be checked on.
-        :param <List[str]> cids: cross-sections for which the category relation is being
-        analyzed.
+        Parameters
+        ----------
+        df : pd.DataFrame
+            standardised DataFrame.
+        xcats : List[str]
+            exactly two extended categories to be checked on.
+        cids : List[str]
+            cross-sections for which the category relation is being analyzed.
 
-        :return <List[str]>: usable: List of the common cross-sections across the two
-            categories.
+        Returns
+        -------
+        List[str]
+            usable: List of the common cross-sections across the two categories.
         """
 
         set_1 = set(df[df["xcat"] == xcats[0]]["cid"])
@@ -270,21 +287,30 @@ class CategoryRelations(object):
         shared_cids: List[str],
         expln_var: str,
     ):
-        """Calculates first differences and percent changes.
+        """
+        Calculates first differences and percent changes.
 
-        :param <pd.DataFrame> df: multi-index DataFrame hosting the two categories: first
-            column represents the explanatory variable; second column hosts the dependent
-            variable. The DataFrame's index is the real-date and cross-section.
-        :param <str> change: type of change to be applied
-        :param <int> n_periods: number of base periods in df over which the change is
-            applied.
-        :param <List[str]> shared_cids: shared cross-sections across the two categories
-            and the received list.
-        :param <str> expln_var: only the explanatory variable's data series will be
-            changed from the raw value series to a difference or percentage change value.
+        Parameters
+        ----------
+        df : pd.DataFrame
+            multi-index DataFrame hosting the two categories: first column represents
+            the explanatory variable; second column hosts the dependent variable. The
+            DataFrame's index is the real-date and cross-section.
+        change : str
+            type of change to be applied
+        n_periods : int
+            number of base periods in df over which the change is applied.
+        shared_cids : List[str]
+            shared cross-sections across the two categories and the received list.
+        expln_var : str
+            only the explanatory variable's data series will be changed from the raw
+            value series to a difference or percentage change value.
 
-        :return <pd.Dataframe>: df: returns the same multi-index DataFrame but with an
-            adjusted series inline with the 'change' parameter.
+        Returns
+        -------
+        pd.Dataframe
+            df: returns the same multi-index DataFrame but with an adjusted series
+            inline with the 'change' parameter.
         """
 
         df_lists = []
@@ -309,18 +335,23 @@ class CategoryRelations(object):
         """
         Trim outliers from the dataset.
 
-        :param <pd.DataFrame> df: multi-index DataFrame hosting the two categories. The
-            transformations, to each series, have already been applied.
-        :param <List[str]> xcats: explanatory and dependent variable.
-        :param <List[float]> xcat_trims:
+        Parameters
+        ----------
+        df : pd.DataFrame
+            multi-index DataFrame hosting the two categories. The transformations, to
+            each series, have already been applied.
+        xcats : List[str]
+            explanatory and dependent variable.
+        xcat_trims : List[float]
 
-        :return <pd.DataFrame> df: returns the same multi-index DataFrame.
 
-        N.B.:
-        Outliers are classified as any datapoint whose absolute value exceeds the
-        predefined value specified in the field self.xcat_trims. The values will be set
-        to NaN, and subsequently excluded from any regression modelling or correlation
-        coefficients.
+        Returns
+        -------
+        pd.DataFrame
+            returns the same multi-index DataFrame.  N.B.: Outliers are classified as
+            any datapoint whose absolute value exceeds the predefined value specified in the
+            field self.xcat_trims. The values will be set to NaN, and subsequently excluded
+            from any regression modelling or correlation coefficients.
         """
 
         xcat_dict = dict(zip(xcats, xcat_trims))
@@ -337,15 +368,20 @@ class CategoryRelations(object):
         """
         Compute the correlation coefficient and probability statistics.
 
-        :param <List[pd.DataFrame] or pd.DataFrame> df_probability: pandas DataFrame
-            containing the dependent and explanatory variables.
-        :param <str> prob_est: type of estimator for probability of significant relation.
+        Parameters
+        ----------
+        df_probability : List[pd.DataFrame] or pd.DataFrame
+            pandas DataFrame containing the dependent and explanatory variables.
+        prob_est : str
+            type of estimator for probability of significant relation.
 
-        :return <List[tuple(float, float)]>:
-
-        N.B.: The method is able to handle multiple DataFrames, and will return the
-        corresponding number of statistics held inside a List.
+        Returns
+        -------
+        List[tuple(float, float)]
+            N.B.: The method is able to handle multiple DataFrames, and will return the
+            corresponding number of statistics held inside a List.
         """
+
         if isinstance(df_probability, pd.DataFrame):
             df_probability = [df_probability]
 
@@ -363,9 +399,7 @@ class CategoryRelations(object):
                     y,
                     X,
                     groups,
-                ).fit(
-                    reml=False
-                )  # random effects est
+                ).fit(reml=False)  # random effects est
                 pval = float(re.summary().tables[1].iloc[1, 3])
             row = [np.round(coeff, 3), np.round(1 - pval, 3)]
             cpl.append(row)
@@ -382,22 +416,28 @@ class CategoryRelations(object):
         """
         Add the computed correlation coefficient and probability to a Matplotlib table.
 
-        :param <List[pd.DataFrame] or pd.DataFrame> df_probability: pandas DataFrame
-            containing the dependent and explanatory variables. Able to handle multiple
-            DataFrames representing different time-periods of the original series.
-        :param <str> prob_est: type of estimator for probability of significant relation.
-        :param <str> time_period: indicator used to clarify which time-period the
-            statistics are computed for. For example, before 2010 and after 2010: the two
-            periods experience very different macroeconomic conditions. The default is
-            an empty string.
-        :param <str> coef_box_loc: location on the graph of the aforementioned box. The
-            default is in the upper left corner.
-        :param <bool> prob_bool: boolean parameter which determines whether the
-            probability value is included in the table. The default is True.
-        :param <plt.Axes> ax: Matplotlib Axes object. If None (default), new
-            axes will be created.
-
+        Parameters
+        ----------
+        df_probability : List[pd.DataFrame] or pd.DataFrame
+            pandas DataFrame containing the dependent and explanatory variables. Able to
+            handle multiple DataFrames representing different time-periods of the original
+            series.
+        prob_est : str
+            type of estimator for probability of significant relation.
+        time_period : str
+            indicator used to clarify which time-period the statistics are computed for.
+            For example, before 2010 and after 2010: the two periods experience very
+            different macroeconomic conditions. The default is an empty string.
+        coef_box_loc : str
+            location on the graph of the aforementioned box. The default is in the upper
+            left corner.
+        prob_bool : bool
+            boolean parameter which determines whether the probability value is included
+            in the table. The default is True.
+        ax : plt.Axes
+            Matplotlib Axes object. If None (default), new axes will be created.
         """
+
         time_period_error = f"<str> expected - received {type(time_period)}."
         assert isinstance(time_period, str), time_period_error
 
@@ -475,51 +515,63 @@ class CategoryRelations(object):
         """
         Display scatter-plot and regression line.
 
-        :param <str> title: title of plot. If None (default) an informative title is
-            applied.
-        :param <bool> labels: assign a cross-section/period label to each dot.
-            Default is False.
-        :param <Tuple[float]> size: width and height of the figure
-        :param <str> xlab: x-axis label. Default is no label.
-        :param <str> ylab: y-axis label. Default is no label.
-        :param <bool> fit_reg: if True (default) adds a regression line.
-        :param <int> reg_ci: size of the confidence interval for the regression estimate.
-            Default is 95. Can be None.
-        :param <int> reg_order: order of the regression equation. Default is 1 (linear).
-        :param <bool> reg_robust: if this will de-weight outliers, which is
-            computationally expensive. Default is False.
-        :param <str> coef_box: two-purpose parameter. Firstly, if the parameter equals
-            None, the correlation coefficient and probability statistics will not be
-            included in the graphic. Secondly, if the statistics are to be included,
-            pass in the desired location on the graph which, in addition, will act as a
-            pseudo-boolean parameter. The options are standard, i.e. 'upper left',
-            'lower right' and so forth. Default is None, i.e the statistics are not
-            displayed.
-        :param <str> prob_est: type of estimator for probability of significant relation.
-            The default is "pool", which means that all observation pairs of a panel
-            are pooled and the probability is based on that pool.
-            The alternative is "map", denoting Macrosynergy panel test. This is based
-            on a panel regression with period-specific random effects and greatly
-            mitigates the issue of pseudo-replication if panel features and targets
-            are correlated across time.
-            See also https://research.macrosynergy.com/testing-macro-trading-factors/
-        :param <Union[str, int]> separator: allows categorizing the scatter analysis by
-            cross-section or integer. In the former case the argument is set to
-            "cids" and in the latter case the argument is set to a year [2010, for
-            instance] which will subsequently split the time-period into the sample
-            before (not including) that year and from (including) that year.
-        :param <float> title_adj: parameter that sets top of figure to accommodate title.
-            Default is 1.
-        :param <bool> single_chart: boolean parameter determining whether the x- and y-
-            labels are only written on a single graph of the Facet Grid (useful if there
-            are numerous charts, and the labels are excessively long). The default is
-            False, and the names of the axis will be displayed on each grid if not
-            conflicting with the label for each variable.
-        :param <int> ncol: number of columns in the facet grid. Default is None, in which
-            case the number of columns is determined by the number of cross-sections.
-        :param <plt.Axes> ax: Matplotlib Axes object. If None (default), new figure and
-            axes objects will be created. If an Axes object is passed, the plot will be
-            drawn on the Axes, and plt.show() will not be called.
+        Parameters
+        ----------
+        title : str
+            title of plot. If None (default) an informative title is applied.
+        labels : bool
+            assign a cross-section/period label to each dot. Default is False.
+        size : Tuple[float]
+            width and height of the figure
+        xlab : str
+            x-axis label. Default is no label.
+        ylab : str
+            y-axis label. Default is no label.
+        fit_reg : bool
+            if True (default) adds a regression line.
+        reg_ci : int
+            size of the confidence interval for the regression estimate. Default is 95.
+            Can be None.
+        reg_order : int
+            order of the regression equation. Default is 1 (linear).
+        reg_robust : bool
+            if this will de-weight outliers, which is computationally expensive. Default
+            is False.
+        coef_box : str
+            two-purpose parameter. Firstly, if the parameter equals None, the
+            correlation coefficient and probability statistics will not be included in the
+            graphic. Secondly, if the statistics are to be included, pass in the desired
+            location on the graph which, in addition, will act as a pseudo-boolean
+            parameter. The options are standard, i.e. 'upper left', 'lower right' and so
+            forth. Default is None, i.e the statistics are not displayed.
+        prob_est : str
+            type of estimator for probability of significant relation. The default is
+            "pool", which means that all observation pairs of a panel are pooled and the
+            probability is based on that pool. The alternative is "map", denoting
+            Macrosynergy panel test. This is based on a panel regression with period-
+            specific random effects and greatly mitigates the issue of pseudo-replication if
+            panel features and targets are correlated across time. See also
+            https://research.macrosynergy.com/testing-macro-trading-factors/
+        separator : Union[str, int]
+            allows categorizing the scatter analysis by cross-section or integer. In the
+            former case the argument is set to "cids" and in the latter case the argument is
+            set to a year [2010, for instance] which will subsequently split the time-period
+            into the sample before (not including) that year and from (including) that year.
+        title_adj : float
+            parameter that sets top of figure to accommodate title. Default is 1.
+        single_chart : bool
+            boolean parameter determining whether the x- and y- labels are only written
+            on a single graph of the Facet Grid (useful if there are numerous charts, and
+            the labels are excessively long). The default is False, and the names of the
+            axis will be displayed on each grid if not conflicting with the label for each
+            variable.
+        ncol : int
+            number of columns in the facet grid. Default is None, in which case the
+            number of columns is determined by the number of cross-sections.
+        ax : plt.Axes
+            Matplotlib Axes object. If None (default), new figure and axes objects will
+            be created. If an Axes object is passed, the plot will be drawn on the Axes, and
+            plt.show() will not be called.
         """
 
         coef_box_loc_error = (
@@ -718,7 +770,6 @@ class CategoryRelations(object):
                         fg.axes[-remainder].set_ylabel(ylab)
 
         elif separator == "cids" and single_scatter:
-
             assert isinstance(single_chart, bool)
 
             if (
@@ -858,10 +909,14 @@ class CategoryRelations(object):
     def ols_table(self, type="pool"):
         """
         Print statsmodels regression summaries.
-        :param <str> type: type of linear regression summary to print. Default is 'pool'.
-            Alternative is 're' for period-specific random effects.
 
+        Parameters
+        ----------
+        type : str
+            type of linear regression summary to print. Default is 'pool'. Alternative
+            is 're' for period-specific random effects.
         """
+
         assert type in ["pool", "re"], "Type must be either 'pool' or 're'."
 
         x, y = self.df.dropna().iloc[:, 0], self.df.dropna().iloc[:, 1]
