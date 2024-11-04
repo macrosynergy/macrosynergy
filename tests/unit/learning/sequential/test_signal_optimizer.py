@@ -1662,9 +1662,8 @@ class TestAll(unittest.TestCase):
             ):
                 so._check_run(**invalid_case)
 
-    # @parameterized.expand([["grid", None], ["prior", 1]])
-    def test_valid_worker(self):
-        # , search_type, n_iter
+    @parameterized.expand([["grid", None], ["prior", 1]])
+    def test_valid_worker(self, search_type, n_iter):
         search_type = "grid"
         n_iter = None
         store_correlations = False
@@ -1698,9 +1697,9 @@ class TestAll(unittest.TestCase):
                     n_jobs_inner=1,
                     inner_splitters=self.single_inner_splitter,
                     normalize_fold_results=False,
-                    # n_iter=None,
                     n_splits_add=None,
                     cv_summary="median",
+                    base_splits=None,
                 )
 
             except Exception as e:
@@ -1792,9 +1791,9 @@ class TestAll(unittest.TestCase):
                     n_jobs_inner=1,
                     inner_splitters=self.single_inner_splitter,
                     normalize_fold_results=False,
-                    # n_iter=None,
                     n_splits_add=None,
                     cv_summary="median",
+                    base_splits=None,
                 )
 
             except Exception as e:
