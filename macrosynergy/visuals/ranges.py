@@ -186,12 +186,6 @@ def view_ranges(
     handles, labels = ax.get_legend_handles_labels()
 
     if xcat_labels is not None:
-        error_message = (
-            "The number of custom labels must match the defined number of "
-            "categories in pnl_cats."
-        )
-        if len(xcat_labels) != len(xcats):
-            raise ValueError(error_message)
         labels = xcat_labels
 
     if (len(xcats) == 1) and (xcat_labels is None):
