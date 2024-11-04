@@ -820,7 +820,6 @@ class Basket(object):
         ----------
         df : pd.DataFrame
 
-
         Returns
         -------
         pd.DataFrame
@@ -854,7 +853,7 @@ class Basket(object):
 
         Returns
         -------
-        pd.Dataframe
+        QuantamentalDataFrame
             standardized DataFrame with the basket return and (possibly) carry data in
             standard form, i.e. columns 'cid', 'xcat', 'real_date' and 'value'.
         """
@@ -895,7 +894,7 @@ class Basket(object):
 
         Returns
         -------
-        pd.Dataframe
+        QuantamentalDataFrame
             standardized DataFrame with basket weights.
         """
 
