@@ -213,13 +213,6 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         Apply a blacklist to the QuantamentalDataFrame.
         """
-        # func = apply_blacklist
-        # return self._inplaceoperation(
-        #     method=func,
-        #     inplace=inplace,
-        #     df=self,
-        #     blacklist=blacklist,
-        # )
         result = apply_blacklist(df=self, blacklist=blacklist)
         return QuantamentalDataFrame(
             result,
