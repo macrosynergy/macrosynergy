@@ -62,7 +62,7 @@ def dataframe_generator(
     edate = pd.to_datetime(
         min(df_cids.loc[cid, "latest"], df_xcats.loc[xcat, "latest"])
     )
-    all_days = pd.date_range(sdate, edate)
+    all_days = pd.bdate_range(sdate, edate)
     work_days = all_days[all_days.weekday < 5]
 
     df_add = pd.DataFrame(columns=qdf_cols)
@@ -105,7 +105,7 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     if any(df_xcats["back_coef"] != 0):
         sdate = min(min(df_cids.loc[:, "earliest"]), min(df_xcats.loc[:, "earliest"]))
         edate = max(max(df_cids.loc[:, "latest"]), max(df_xcats.loc[:, "latest"]))
-        all_days = pd.date_range(sdate, edate)
+        all_days = pd.bdate_range(sdate, edate)
         work_days = all_days[all_days.weekday < 5]
         ser = simulate_ar(len(work_days), mean=0, sd_mult=1, ar_coef=back_ar)
         df_back = pd.DataFrame(index=work_days, columns=["value"])
@@ -345,6 +345,8 @@ def make_test_df(
 
     :param <List[str]> cids: A list of strings for cids.
     :param <List[str]> xcats: A list of strings for xcats.
+    :param <List[str]> tickers: A list of strings for tickers. If provided, `cids` and
+        `xcats` will be ignored.
     :param <List[str]> metrics: A list of strings for metrics.
     :param <str> start: An ISO-formatted date string.
     :param <str> end: An ISO-formatted date string.
@@ -374,6 +376,10 @@ def make_test_df(
     if tickers is None or len(tickers) == 0:
         if cids is None:
             raise ValueError("Please provide a list of tickers or `cids` & `xcats`.")
+
+    if tickers is not None:
+        cids = None
+        xcats = None
 
     for varx, namex in zip(
         [cids, xcats, metrics, tickers], ["cids", "xcats", "metrics", "tickers"]
