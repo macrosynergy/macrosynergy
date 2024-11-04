@@ -145,7 +145,9 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         out_all: bool = False,
         intersect: bool = False,
         inplace: bool = False,
-    ) -> Union["QuantamentalDataFrame", Tuple["QuantamentalDataFrame", List[str], List[str]]]:
+    ) -> Union[
+        "QuantamentalDataFrame", Tuple["QuantamentalDataFrame", List[str], List[str]]
+    ]:
         """
         Filter DataFrame by `cids`, `xcats`, and `start` & `end` dates.
         """
@@ -316,6 +318,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         cls,
         timeseries: pd.Series,
         ticker: str,
+        metric: str = "value",
     ) -> "QuantamentalDataFrame":
         """
         Convert a timeseries DataFrame to a QuantamentalDataFrame.
@@ -324,6 +327,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             qdf_from_timeseries(
                 timeseries=timeseries,
                 ticker=ticker,
+                metric=metric,
             )
         )
 
@@ -344,11 +348,15 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         XCAT columns are not named as such.
         """
 
-        # does the real_date column exist?
         if real_date_column not in df.columns:
             raise ValueError(f"No `{real_date_column}` column found in the DataFrame.")
+        else:
+            df = df.rename(columns={real_date_column: "real_date"})
+            real_date_column = "real_date"
+
         if value_column not in df.columns:
             raise ValueError(f"No `{value_column}` column found in the DataFrame.")
+
         if len(df) == 0:
             raise ValueError("Input DataFrame is empty.")
 
