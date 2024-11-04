@@ -498,7 +498,7 @@ def create_empty_categorical_qdf(
         )
 
     if date_range is None:
-        date_range = pd.date_range(start=start_date, end=end_date, freq="B")
+        date_range = pd.bdate_range(start=start_date, end=end_date)
 
     if bool(cid) ^ bool(xcat):
         raise ValueError("`cid` and `xcat` must be specified together.")
