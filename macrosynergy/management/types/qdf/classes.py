@@ -2,7 +2,7 @@
 Module hosting custom types and meta-classes for use across the package.
 """
 
-from typing import Optional, Any, Mapping, Union, Callable, Sequence, List
+from typing import Optional, Any, Mapping, Union, Callable, Sequence, List, Tuple
 import pandas as pd
 
 from .methods import (
@@ -145,7 +145,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         out_all: bool = False,
         intersect: bool = False,
         inplace: bool = False,
-    ) -> "QuantamentalDataFrame":
+    ) -> Union["QuantamentalDataFrame", Tuple["QuantamentalDataFrame", List[str], List[str]]]:
         """
         Filter DataFrame by `cids`, `xcats`, and `start` & `end` dates.
         """
