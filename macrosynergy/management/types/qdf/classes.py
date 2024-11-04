@@ -4,7 +4,7 @@ Module hosting custom types and meta-classes for use across the package.
 
 from typing import Optional, Any, Mapping, Union, Callable, Sequence, List, Tuple
 import pandas as pd
-
+from macrosynergy.compat import PD_2_0_OR_LATER
 from .methods import (
     get_col_sort_order,
     change_column_format,
@@ -60,7 +60,11 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             if df.columns.tolist() != get_col_sort_order(df):
                 df = df[get_col_sort_order(df)]
 
-        super().__init__(df)
+        if PD_2_0_OR_LATER:
+            super().__init__(df)
+        else:
+            super().__init__(df.copy())
+
         _check_cat = check_is_categorical(self)
         if _initialized_as_categorical is None:
             self.InitializedAsCategorical = _check_cat
