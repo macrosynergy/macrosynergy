@@ -1,12 +1,8 @@
-import numbers
-import datetime
 import numpy as np
 import pandas as pd
 
 from collections import Counter, defaultdict
 from abc import ABC
-
-from typing import Union, Optional
 
 
 class BasePanelBootstrap(ABC):
@@ -33,6 +29,27 @@ class BasePanelBootstrap(ABC):
             The number of features to consider in each bootstrap dataset.
             This can be used to increase the variation between bootstrap datasets.
             Default is None and currently not implemented.
+
+        Notes
+        -----
+        The non-parametric bootstrap is a method to generate datasets that follow the same
+        distribution as the original dataset, as best as possible given the observed data.
+        Mathematically, a bootstrap dataset is equivalent to sampling from the empirical
+        distribution of the original dataset. A bootstrap dataset is constructed by
+        sampling the observed data with replacement.
+
+        Bootstrapping can be used to estimate the distribution of a statistic, for
+        instance the sampling distribution of a model parameter. As an example, a
+        regression model can be fit to each bootstrap dataset to estimate the distribution
+        of the model parameters. The standard deviation of these distributions,
+        consequently, can be used to estimate the sampling variation of the model
+        parameters.
+
+        Bootstrapping can also be used to create "bagged" models. Bagging is a method
+        aimed at reducing the variance of a machine learning model. It involves training
+        multiple models on different bootstrap datasets and averaging the predictions
+        of these models. Often, additional variation is also introduced to each bootstrap
+        dataset - for instance by randomly sampling a subset of features for each dataset.
         """
         # Checks
         self._check_boot_params(

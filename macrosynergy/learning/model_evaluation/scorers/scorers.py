@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 
-from sklearn.base import RegressorMixin
 from sklearn.ensemble import VotingRegressor
 
 from macrosynergy.learning.forecasting.model_systems import BaseRegressionSystem
@@ -85,7 +84,6 @@ def neg_mean_abs_corr(
         raise ValueError("X_test must have only one column.")
     if not isinstance(X_test.index, pd.MultiIndex):
         raise ValueError("X_test must be multi-indexed.")
-    # TODO: replace below with categorical dtype for cross sections
     if not X_test.index.get_level_values(0).dtype == "object":
         raise TypeError("The outer index of X_test must be strings.")
     if not X_test.index.get_level_values(1).dtype == "datetime64[ns]":
@@ -172,3 +170,39 @@ def neg_mean_abs_corr(
         return np.nan
     else:
         return -running_sum / xs_count
+
+
+if __name__ == "__main__":
+    import macrosynergy.management as msm
+    from macrosynergy.management.simulate import make_qdf
+    from macrosynergy.learning import RidgeRegressionSystem
+
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["XR", "BMXR"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2012-01-01", "2020-12-31", 0, 1]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["XR"] = ["2012-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["BMXR"] = ["2012-01-01", "2020-12-31", 1, 2, 0.95, 1]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    Xy = msm.categories_df(
+        df=dfd, xcats=xcats, cids=cids, freq="M", lag=1, xcat_aggs=["last", "sum"]
+    ).dropna()
+    X = Xy.iloc[:, :-1]
+    y = Xy.iloc[:, -1]
+
+    ridge = RidgeRegressionSystem()
+    ridge.fit(X, y)
+    print(
+        "\nNegative mean absolute correlation: "
+        f"{neg_mean_abs_corr(ridge, X, y, correlation_type='pearson')}"
+    )

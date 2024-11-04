@@ -2,20 +2,21 @@ import numpy as np
 import pandas as pd
 
 from macrosynergy.learning.forecasting.linear_model.lad_regressors import LADRegressor
-from macrosynergy.learning.forecasting.weighted_regressors import SignWeightedRegressor, TimeWeightedRegressor
-from sklearn.base import BaseEstimator, RegressorMixin
+from macrosynergy.learning.forecasting.weighted_regressors import (
+    SignWeightedRegressor,
+    TimeWeightedRegressor,
+)
 
-import numbers
 
 class SignWeightedLADRegressor(SignWeightedRegressor):
     def __init__(
         self,
         fit_intercept: bool = True,
-        positive = False,
-        alpha = 0,
-        shrinkage_type = "l1",
-        tol = None,
-        maxiter = None,
+        positive=False,
+        alpha=0,
+        shrinkage_type="l1",
+        tol=None,
+        maxiter=None,
     ):
         """
         LAD regressor with sign-weighted loss.
@@ -49,7 +50,6 @@ class SignWeightedLADRegressor(SignWeightedRegressor):
         where the weighted average is based on inverse frequency of the sign of the
         dependent variable.
 
-
         By weighting the contribution of different training samples based on the
         sign of the label, the model is encouraged to learn equally from both positive and
         negative return samples, irrespective of class imbalance. If there are more
@@ -58,7 +58,7 @@ class SignWeightedLADRegressor(SignWeightedRegressor):
         The opposite is true if there are more negative targets than positive targets.
         """
         super().__init__(
-            model = LADRegressor(
+            model=LADRegressor(
                 fit_intercept=fit_intercept,
                 positive=positive,
                 alpha=alpha,
@@ -75,31 +75,44 @@ class SignWeightedLADRegressor(SignWeightedRegressor):
         self.maxiter = maxiter
 
     def set_params(self, **params):
+        """
+        Setter method to update the parameters of the `SignWeightedLADRegressor`.
+
+        Parameters
+        ----------
+        **params : dict
+            Dictionary of parameters to update.
+
+        Returns
+        -------
+        self
+            The `SignWeightedLADRegressor` instance with updated parameters.
+        """
         super().set_params(**params)
-        
+
         relevant_params = {"fit_intercept", "positive", "alpha", "shrinkage_type"}
-        
+
         if relevant_params.intersection(params):
             self.model = LADRegressor(
                 fit_intercept=self.fit_intercept,
                 positive=self.positive,
                 alpha=self.alpha,
-                shrinkage_type=self.shrinkage_type
+                shrinkage_type=self.shrinkage_type,
             )
-        
+
         return self
 
 
 class TimeWeightedLADRegressor(TimeWeightedRegressor):
     def __init__(
         self,
-        fit_intercept = True,
-        positive = False,
-        half_life = 21 * 12,
-        alpha = 0,
-        shrinkage_type = "l1",
-        tol = None,
-        maxiter = None,
+        fit_intercept=True,
+        positive=False,
+        half_life=21 * 12,
+        alpha=0,
+        shrinkage_type="l1",
+        tol=None,
+        maxiter=None,
     ):
         """
         LAD regressor with time-weighted loss.
@@ -136,7 +149,6 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
         where the weighted average is based on an exponential decay specified by the
         half-life parameter, where more recent samples are given higher weight.
 
-
         By weighting the contribution of different training samples based on the
         timestamp, the model is encouraged to prioritise more recent samples in the
         model training process. The half-life denotes the number of time periods in units
@@ -144,7 +156,7 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
         (one) to decay by half.
         """
         super().__init__(
-            model = LADRegressor(
+            model=LADRegressor(
                 fit_intercept=fit_intercept,
                 positive=positive,
                 alpha=alpha,
@@ -152,7 +164,7 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
                 tol=tol,
                 maxiter=maxiter,
             ),
-            half_life = half_life
+            half_life=half_life,
         )
         self.fit_intercept = fit_intercept
         self.positive = positive
@@ -163,20 +175,34 @@ class TimeWeightedLADRegressor(TimeWeightedRegressor):
         self.maxiter = maxiter
 
     def set_params(self, **params):
+        """
+        Setter method to update the parameters of the `TimeWeightedLADRegressor`.
+
+        Parameters
+        ----------
+        **params : dict
+            Dictionary of parameters to update.
+
+        Returns
+        -------
+        self
+            The `TimeWeightedLADRegressor` instance with updated parameters.
+        """
         super().set_params(**params)
-        
+
         relevant_params = {"fit_intercept", "positive", "alpha", "shrinkage_type"}
-        
+
         if relevant_params.intersection(params):
             self.model = LADRegressor(
                 fit_intercept=self.fit_intercept,
                 positive=self.positive,
                 alpha=self.alpha,
-                shrinkage_type=self.shrinkage_type
+                shrinkage_type=self.shrinkage_type,
             )
-        
+
         return self
-    
+
+
 if __name__ == "__main__":
     import macrosynergy.management as msm
     from macrosynergy.management.simulate import make_qdf
@@ -244,7 +270,7 @@ if __name__ == "__main__":
 
     # Fit TWLAD - regularization
     model = TimeWeightedLADRegressor(
-        fit_intercept=True, positive=False, half_life = 36, alpha=1, shrinkage_type="l1"
+        fit_intercept=True, positive=False, half_life=36, alpha=1, shrinkage_type="l1"
     )
     model.fit(X_train, y_train)
     print(f"Intercept: {model.intercept_}, Coefficients: {model.coef_}")

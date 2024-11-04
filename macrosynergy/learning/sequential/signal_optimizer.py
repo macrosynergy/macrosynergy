@@ -1,10 +1,9 @@
 """
 Class to determine and store sequentially-optimized panel forecasts based on statistical
-learning. 
+machine learning. 
 """
 
 import numbers
-from typing import List, Optional, Tuple, Union
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -269,8 +268,9 @@ class SignalOptimizer(BasePanelLearner):
             It is advised for n_jobs_inner * n_jobs_outer (replacing -1 with the number of
             available cores) to be less than or equal to the number of available cores on
             the machine.
-        :param <bool> store_correlations: Whether to store the correlations between input
-            pipeline features and input predictor features. Default is False.
+        store_correlations : bool
+            Whether to store the correlations between input pipeline features and input
+            predictor features. Default is False.
         """
         if not isinstance(store_correlations, bool):
             raise TypeError("The store_correlations argument must be a boolean.")
@@ -469,9 +469,9 @@ class SignalOptimizer(BasePanelLearner):
         Returns
         -------
         dict
-            Dictionary containing the optimal model, model choice data, feature
-            coefficients, intercepts, selected features and correlations between
-            inputs to pipelines and those entered into a final model.
+            Dictionary containing the feature coefficients, intercepts, selected features
+            and correlations between inputs to pipelines and those entered into a final
+            model.
         """
         if optimal_model is not None:
             if hasattr(optimal_model, "create_signal"):
@@ -549,6 +549,27 @@ class SignalOptimizer(BasePanelLearner):
         return split_result
 
     def _get_ftr_corr_data(self, pipeline_name, optimal_model, X_train, timestamp):
+        """
+        Returns a list of correlations between the input features to a pipeline and the
+        features inputted into the final model, at each retraining date.
+
+        Parameters
+        ----------
+        pipeline_name : str
+            Name of the signal optimization process.
+        optimal_model : RegressorMixin, ClassifierMixin or Pipeline
+            Optimal model selected at each retraining date.
+        X_train : pd.DataFrame
+            Input feature matrix.
+        timestamp : pd.Timestamp
+            Timestamp of the retraining date.
+
+        Returns
+        -------
+        list
+            List of correlations between the input features to a pipeline and the
+            features inputted into the final model, at each retraining date.
+        """
         if self.store_correlations and optimal_model is not None:
             # Transform the training data to the final feature space
             transformers = Pipeline(steps=optimal_model.steps[:-1])
@@ -592,6 +613,7 @@ class SignalOptimizer(BasePanelLearner):
             ]
         else:
             ftr_corr_data = []
+
         return ftr_corr_data
 
     def get_optimized_signals(self, name=None):
@@ -748,16 +770,22 @@ class SignalOptimizer(BasePanelLearner):
 
     def get_feature_correlations(
         self,
-        name: Optional[Union[str, List]] = None,
+        name=None,
     ):
         """
         Returns dataframe of feature correlations for one or more processes
-        :param <Optional[Union[str, List]]> name: Label of signal optimization process.
-            Default is all stored in the class instance.
 
-        :return <pd.DataFrame>: Pandas dataframe of the correlations between the
-            features passed into a model pipeline and the post-processed features inputted
-            into the final model.
+        Parameters
+        ----------
+        name: str or list, optional
+            Label(s) of signal optimization process(es). Default is all stored in the
+            class instance.
+
+        Returns
+        -------
+        pd.DataFrame
+            Pandas dataframe of the correlations between the features passed into a model
+            pipeline and the post-processed features inputted into the final model.
         """
         if name is None:
             return self.ftr_corr
@@ -922,30 +950,51 @@ class SignalOptimizer(BasePanelLearner):
         self,
         name: str,
         feature_name: str,
-        title: Optional[str] = None,
-        cap: Optional[int] = None,
-        ftrs_renamed: Optional[dict] = None,
-        figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
+        title: str = None,
+        cap: int = None,
+        ftrs_renamed: dict = None,
+        figsize: tuple = (12, 8),
     ):
         """
         Method to visualise correlations between features entering a model, and those that
         entered a preprocessing pipeline.
-        :param <str> name: Name of the prediction model.
-        :param <str> feature_name: Name of the feature passed into the final predictor.
-        :param <Optional[str]> title: Title of the heatmap. Default is None. This creates
-            a figure title of the form "Correlation Heatmap for feature {feature_name}
-            and pipeline {name}".
-        :param <int> cap: Maximum number of correlations to display. Default is None.
-            The chosen features are the 'cap' most highly correlated.
-        :param <Optional[dict]> ftrs_renamed: Dictionary to rename the feature names for
-            visualisation in the plot axis. Default is None, which uses the original
-            feature names.
-        :param <Optional[Tuple[Union[int, float], Union[int, float]]> figsize: Tuple of
-            floats or ints denoting the figure size. Default is (12, 8).
-        Note:
+
+        Parameters
+        ----------
+        name : str
+            Name of the signal optimization process.
+        feature_name : str
+            Name of the feature passed into the final predictor.
+        title : str, optional
+            Title of the heatmap. Default is None. This creates a figure title of the form
+            "Correlation Heatmap for feature {feature_name} and pipeline {name}".
+        cap : int, optional
+            Maximum number of correlations to display. Default is None. The chosen features
+            are the 'cap' most highly correlated.
+        ftrs_renamed : dict, optional
+            Dictionary to rename the feature names for visualisation in the plot axis.
+            Default is None, which uses the original feature names.
+        figsize : tuple of floats or ints, optional
+            Tuple of floats or ints denoting the figure size. Default is (12, 8).
+
+        Notes
+        -----
         This method displays the correlation between a feature that is about to be entered
         into a final predictor and the `cap` most correlated features entered into the
-        original pipeline.
+        original pipeline. This information is contained within a heatmap.
+
+        In a given pipeline, the features that enter it can be transformed in any way.
+        Sometimes the transformation is non-trivial, resulting in a feature space that is
+        not easily interpretable. This method allows the user to see how the original
+        features are correlated with the features that enter the final model, providing
+        insight into the transformation process.
+
+        As an example, dimensionality reduction techniques such as PCA and LDA rotate the
+        feature space, resulting in factors that can be hard to interpret. A neural network
+        aims to learn a non-linear transformation of the feature space, which can also be
+        hard to interpret. This method allows the user to see how the original features are
+        correlated with the transformed features, providing insight into the transformation
+        that took place.
         """
         # Checks
         self._checks_correlations_heatmap(
@@ -1001,11 +1050,32 @@ class SignalOptimizer(BasePanelLearner):
         self,
         name: str,
         feature_name: str,
-        title: Optional[str],
-        cap: Optional[int],
-        ftrs_renamed: Optional[dict],
-        figsize: Tuple[Union[int, float], Union[int, float]],
+        title: str,
+        cap: int,
+        ftrs_renamed: dict,
+        figsize: tuple,
     ):
+        """
+        Checks for the correlations_heatmap method.
+
+        Parameters
+        ----------
+        name : str
+            Name of the signal optimization process.
+        feature_name : str
+            Name of the feature passed into the final predictor.
+        title : str
+            Title of the heatmap. Default is None. This creates a figure title of the form
+            "Correlation Heatmap for feature {feature_name} and pipeline {name}".
+        cap : int
+            Maximum number of correlations to display. Default is None. The chosen features
+            are the 'cap' most highly correlated.
+        ftrs_renamed : dict
+            Dictionary to rename the feature names for visualisation in the plot axis.
+            Default is None, which uses the original feature names.
+        figsize : tuple of floats or ints
+            Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        """
         # name
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
@@ -1522,16 +1592,14 @@ class SignalOptimizer(BasePanelLearner):
 
 
 if __name__ == "__main__":
-    from sklearn.linear_model import LinearRegression
-    from sklearn.metrics import make_scorer, r2_score
-
-    import macrosynergy.management as msm
+    from sklearn.linear_model import Ridge, Lasso
+    from sklearn.metrics import make_scorer, r2_score, mean_absolute_error
     from macrosynergy.learning import (
         ExpandingKFoldPanelSplit,
-        RollingKFoldPanelSplit,
-        regression_balanced_accuracy,
         SignWeightedLinearRegression,
+        TimeWeightedLinearRegression,
     )
+    import scipy.stats as stats
     from macrosynergy.management.simulate import make_qdf
     from macrosynergy.learning.model_evaluation.scorers.scorers import neg_mean_abs_corr
     from macrosynergy.management.types import QuantamentalDataFrame
@@ -1567,8 +1635,6 @@ if __name__ == "__main__":
         ),
     }
 
-    # Signal optimizer with single metric and inner splitter
-    # dfd = QuantamentalDataFrame(dfd)
     so = SignalOptimizer(
         df=dfd,
         xcats=["CRY", "GROWTH", "INFL", "XR"],
@@ -1579,71 +1645,44 @@ if __name__ == "__main__":
     so.calculate_predictions(
         name="LR",
         models={
-            "LR": LinearRegression(),
-            "SWLS": SignWeightedLinearRegression(),
+            "Ridge": Ridge(),
+            "Lasso": Lasso(),
+            "TWLS": TimeWeightedLinearRegression(),
         },
         hyperparameters={
-            "LR": {"fit_intercept": [True, False]},
-            "SWLS": {"fit_intercept": [True, False]},
+            "Ridge": {
+                "fit_intercept": [True, False],
+                "alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000],
+            },
+            "Lasso": {
+                "fit_intercept": [True, False],
+                "alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000],
+            },
+            "TWLS": {
+                "half_life": [24, 36, 60, 120, 240],
+                "fit_intercept": [True, False],
+            },
         },
         scorers={
             "r2": make_scorer(r2_score),
+            "mae": make_scorer(mean_absolute_error, greater_is_better=False),
         },
         inner_splitters={
             "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
-            "SecondSplit": ExpandingKFoldPanelSplit(n_splits=5),
+            "SecondSplit": ExpandingKFoldPanelSplit(n_splits=10),
         },
-        search_type="grid",
-        cv_summary="mean",
-        n_jobs_outer=1,
+        search_type="prior",
+        n_iter=6,
+        cv_summary="mean-std",
+        n_jobs_outer=-1,
         n_jobs_inner=1,
+        normalize_fold_results=True,
+        split_functions={
+            "ExpandingKFold": lambda n: n // 12,
+            "SecondSplit": None,
+        },
     )
-    sig = so.get_optimized_signals("LR")
-    pass
-    # so.nsplits_timeplot(name="LR", splitter="ExpandingKFold")
 
-    # # Now run a pipeline with changes from the default
-
-    # so = SignalOptimizer(
-    #     df=dfd,
-    #     xcats=["CRY", "GROWTH", "INFL", "XR"],
-    #     cids=cids,
-    #     blacklist=black,
-    # )
-
-    # so.calculate_predictions(
-    #     name="LR",
-    #     models={
-    #         "LR": LinearRegression(),
-    #         "SWLS": SignWeightedLinearRegression(),
-    #     },
-    #     hyperparameters={
-    #         "LR": {"fit_intercept": [True, False]},
-    #         "SWLS": {"fit_intercept": [True, False]},
-    #     },
-    #     scorers={
-    #         "r2": make_scorer(r2_score),
-    #         "bac": make_scorer(regression_balanced_accuracy),
-    #     },
-    #     inner_splitters={
-    #         "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=2),
-    #         "RollingKFold": RollingKFoldPanelSplit(n_splits=2),
-    #     },
-    #     search_type="grid",
-    #     normalize_fold_results=True,
-    #     cv_summary="mean-std",
-    #     test_size=3,
-    #     max_periods=24,
-    #     split_functions={
-    #         "ExpandingKFold": None,
-    #         "RollingKFold": lambda n: n // 12,
-    #     },
-    #     n_jobs_outer=1,
-    #     n_jobs_inner=1,
-    # )
-
-    # so.models_heatmap(name="LR")
-    # so.feature_selection_heatmap(name="LR")
-    # so.coefs_timeplot(name="LR")
-    # so.intercepts_timeplot(name="LR")
-    # so.coefs_stackedbarplot(name="LR")
+    so.models_heatmap("LR")
+    so.coefs_stackedbarplot("LR")
+    so.nsplits_timeplot("LR")

@@ -56,6 +56,31 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
             the default standard error expressions for an OLS linear regression model
             are used. If `analytic_method = "White"`, the heteroskedasticity-robust
             White estimator is used to estimate the standard errors.
+
+        Notes
+        -----
+        OLS linear regression models are fit by finding optimal parameters that
+        minimize the total squared residuals. In the frequentist statistics framework,
+        "true" population-wide values exist for these parameters, which can only be
+        estimated from sampled data. Consequently, our parameter estimates can be
+        considered to be realizations from a random variable, and hence subject to
+        sampling variation. Broadly speaking, the greater the amount of independent data
+        sampled, the smaller the variation in parameter estimates. In other words,
+        parameter estimates are more unreliable when less data is seen during training.
+        By estimating the standard deviation of their sampling distributions - a.k.a.
+        their "standard errors" - we can adjust our model coefficients to account for
+        lack of statistical precision.
+
+        In our `ModifiedLinearRegression`, each estimated parameter is divided by the
+        estimated standard error (plus an offset). This means that greater
+        volatility in a parameter estimate due to lack of data is accounted for by
+        reducing the magnitude of this estimate, whilst greater certainty in the precision
+        of the estimate is reflected by inflating a regression coefficient.
+
+        This procedure works for linear models because they're interpretable, with the
+        coefficient adjustment having the interpretation of increasing the relevance of
+        factors whose coefficients we are more confident in, and decreasing relevance for
+        factors whose coefficients we are less confident in.
         """
         # Checks
         if not isinstance(fit_intercept, bool):
@@ -180,6 +205,11 @@ class ModifiedLinearRegression(BaseModifiedRegressor):
         ----------
         **params : dict
             Dictionary of parameters to update.
+
+        Returns
+        -------
+        self
+            The ModifiedLinearRegression instance with updated parameters.
         """
         super().set_params(**params)
         if "fit_intercept" in params or "positive" in params:
@@ -235,6 +265,31 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
             the default standard error expressions for an OLS linear regression model
             are used. If `analytic_method = "White"`, the heteroskedasticity-robust
             White estimator is used to estimate the standard errors.
+
+        Notes
+        -----
+        SWLS linear regression models are fit by finding optimal parameters that
+        minimize the total sign-weighted squared residuals. In the frequentist statistics
+        framework, "true" population-wide values exist for these parameters, which can
+        only be estimated from sampled data. Consequently, our parameter estimates can be
+        considered to be realizations from a random variable, and hence subject to
+        sampling variation. Broadly speaking, the greater the amount of independent data
+        sampled, the smaller the variation in parameter estimates. In other words,
+        parameter estimates are more unreliable when less data is seen during training.
+        By estimating the standard deviation of their sampling distributions - a.k.a.
+        their "standard errors" - we can adjust our model coefficients to account for
+        lack of statistical precision.
+
+        In our `ModifiedSignWeightedLinearRegression`, each estimated parameter is divided
+        by the estimated standard error (plus an offset). This means that greater
+        volatility in a parameter estimate due to lack of data is accounted for by
+        reducing the magnitude of this estimate, whilst greater certainty in the precision
+        of the estimate is reflected by inflating a regression coefficient.
+
+        This procedure works for linear models because they're interpretable, with the
+        coefficient adjustment having the interpretation of increasing the relevance of
+        factors whose coefficients we are more confident in, and decreasing relevance for
+        factors whose coefficients we are less confident in.
         """
         self.fit_intercept = fit_intercept
         self.positive = positive
@@ -376,6 +431,11 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
         ----------
         **params : dict
             Dictionary of parameters to update.
+
+        Returns
+        -------
+        self
+            The ModifiedSignWeightedLinearRegression instance with updated parameters.
         """
         super().set_params(**params)
         if "fit_intercept" in params or "positive" in params:
@@ -385,7 +445,6 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
             )
 
         return self
-
 
 class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
     def __init__(
@@ -435,6 +494,31 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
             the default standard error expressions for an OLS linear regression model
             are used. If `analytic_method = "White"`, the heteroskedasticity-robust
             White estimator is used to estimate the standard errors.
+
+        Notes
+        -----
+        TWLS linear regression models are fit by finding optimal parameters that
+        minimize the total time-weighted squared residuals. In the frequentist statistics
+        framework, "true" population-wide values exist for these parameters, which can
+        only be estimated from sampled data. Consequently, our parameter estimates can be
+        considered to be realizations from a random variable, and hence subject to
+        sampling variation. Broadly speaking, the greater the amount of independent data
+        sampled, the smaller the variation in parameter estimates. In other words,
+        parameter estimates are more unreliable when less data is seen during training.
+        By estimating the standard deviation of their sampling distributions - a.k.a.
+        their "standard errors" - we can adjust our model coefficients to account for
+        lack of statistical precision.
+
+        In our `ModifiedTimeWeightedLinearRegression`, each estimated parameter is divided
+        by the estimated standard error (plus an offset). This means that greater
+        volatility in a parameter estimate due to lack of data is accounted for by
+        reducing the magnitude of this estimate, whilst greater certainty in the precision
+        of the estimate is reflected by inflating a regression coefficient.
+
+        This procedure works for linear models because they're interpretable, with the
+        coefficient adjustment having the interpretation of increasing the relevance of
+        factors whose coefficients we are more confident in, and decreasing relevance for
+        factors whose coefficients we are less confident in.
         """
         self.fit_intercept = fit_intercept
         self.positive = positive
@@ -579,6 +663,11 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
         ----------
         **params : dict
             Dictionary of parameters to update.
+
+        Returns
+        -------
+        self
+            The ModifiedTimeWeightedLinearRegression instance with updated parameters.
         """
         super().set_params(**params)
         if "fit_intercept" in params or "positive" in params or "half_life" in params:
@@ -669,7 +758,7 @@ if __name__ == "__main__":
                 "fit_intercept": [True, False],
                 "positive": [True, False],
             },
-            cv=5,
+            cv=3,
             n_jobs=-1,
         )
         cv.fit(X, y)

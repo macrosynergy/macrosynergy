@@ -6,18 +6,19 @@ import numbers
 
 from sklearn.base import BaseEstimator, TransformerMixin
 
+
 class ZnScoreAverager(BaseEstimator, TransformerMixin):
     def __init__(
         self,
-        neutral = "zero",
-        use_signs = False,
+        neutral="zero",
+        use_signs=False,
     ):
         """
         Point-in-time factor normalization before feature averaging for a conceptual
         parity signal.
 
         :deprecated: This class is deprecated and will be replaced in a future release
-            by a transformer that applies PiT z-scoring to each feature, without 
+            by a transformer that applies PiT z-scoring to each feature, without
             any averaging.
 
         Parameters
@@ -34,10 +35,10 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
 
         Notes
         -----
-        When clear priors on underlying market drivers are available, a useful signal 
+        When clear priors on underlying market drivers are available, a useful signal
         can be constructed by averaging PiT :math:`z_{n}`-scores of each feature/factor.
-        This is often a competitive signal. 
-        
+        This is often a competitive signal.
+
         A :math:`z_{n}`-score involves standardising a feature PiT by subtracting a
         `neutral` value and dividing by a measure of historic dispersion.
         In this class, the neutral value can be set to zero or the mean. An option for the
@@ -46,7 +47,7 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         mean neutral value. The dispersion measure is calculated using all training
         information and test information until (and including) that test time, reflecting
         the information available to a portfolio manager at that time.
-        
+
         We include that test time since features are assumed to lag behind returns, with
         the timestamp in the index representing the date of the returns.
         """
@@ -55,9 +56,9 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
             "ZnScoreAverager is deprecated and will be replaced in a future "
             "release by a transformer that applies PiT z-scoring to each feature, "
             "without any averaging, as per the current implementation.",
-             DeprecationWarning
+            DeprecationWarning,
         )
-        
+
         if not isinstance(neutral, str):
             raise TypeError("'neutral' must be a string.")
 
@@ -72,11 +73,7 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         self.n_features_in_ = None
         self.feature_names_in_ = None
 
-    def fit(
-        self,
-        X,
-        y = None
-    ):
+    def fit(self, X, y=None):
         """
         Extract relevant standardisation/normalisation statistics.
 
@@ -103,7 +100,7 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
             raise ValueError(
                 "All columns in the input feature matrix for a panel selector ",
-                "must be numeric."
+                "must be numeric.",
             )
         if X.isnull().values.any():
             raise ValueError(
@@ -131,10 +128,7 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
 
         return self
 
-    def transform(
-        self,
-        X
-    ):
+    def transform(self, X):
         """
         Create an OOS conceptual parity signal by averaging PiT z-scores of features.
 
@@ -162,7 +156,7 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
             raise ValueError(
                 "All columns in the input feature matrix for `ZnScoreAverager` ",
-                "must be numeric."
+                "must be numeric.",
             )
         if X.isnull().values.any():
             raise ValueError(
@@ -269,9 +263,10 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         """
 
         return X.groupby(level="real_date").count().expanding().sum().to_numpy()
-    
+
+
 class PanelPCA(BaseEstimator, TransformerMixin):
-    def __init__(self, n_components = None, kaiser_criterion=False, adjust_signs = False):
+    def __init__(self, n_components=None, kaiser_criterion=False, adjust_signs=False):
         """
         PCA transformer for panel data.
 
@@ -299,30 +294,34 @@ class PanelPCA(BaseEstimator, TransformerMixin):
         can be attributed to "signal" whilst the remaining components are "noise".
 
         Most modern implementations use the singular value decomposition (SVD) to perform
-        PCA. We estimate a covariance matrix because it follows that an alternative 
+        PCA. We estimate a covariance matrix because it follows that an alternative
         covariance estimator can be used for PCA, which may affect results. However, this
         behaviour will be introduced in a future release.
         """
         if n_components is not None:
-            if not isinstance(n_components, numbers.Number) or isinstance(n_components, bool):
+            if not isinstance(n_components, numbers.Number) or isinstance(
+                n_components, bool
+            ):
                 raise TypeError("n_components must be a number or None.")
             if n_components <= 0:
                 raise ValueError("n_components must be greater than 0.")
             if isinstance(n_components, float) and n_components > 1:
-                raise ValueError("If n_components is a float, it must be between 0 and 1.")
-            
+                raise ValueError(
+                    "If n_components is a float, it must be between 0 and 1."
+                )
+
         if not isinstance(kaiser_criterion, bool):
             raise TypeError("kaiser_criterion must be a boolean.")
-        
+
         if not isinstance(adjust_signs, bool):
             raise TypeError("adjust_signs must be a boolean.")
-        
+
         self.n_components = n_components
         self.kaiser_criterion = kaiser_criterion
         self.adjust_signs = adjust_signs
         self.n_features_in_ = None
         self.feature_names_in_ = None
-        
+
     def fit(self, X, y=None):
         """
         Fit method to determine an eigenbasis for the PCA.
@@ -358,20 +357,20 @@ class PanelPCA(BaseEstimator, TransformerMixin):
 
         if self.kaiser_criterion:
             # Get eigenvalues greater or equal to one
-            mask = (self.adjusted_evals >= 1)
+            mask = self.adjusted_evals >= 1
             self.adjusted_evals = self.adjusted_evals[mask]
-            self.adjusted_evecs = self.adjusted_evecs[:,mask]
+            self.adjusted_evecs = self.adjusted_evecs[:, mask]
         elif isinstance(self.n_components, int):
             # Keep first n_components components
-            self.adjusted_evals = self.adjusted_evals[:self.n_components]
-            self.adjusted_evecs = self.adjusted_evecs[:,:self.n_components]
+            self.adjusted_evals = self.adjusted_evals[: self.n_components]
+            self.adjusted_evecs = self.adjusted_evecs[:, : self.n_components]
         elif isinstance(self.n_components, float):
-            # Keep components that explain a certain percentage of difference. 
+            # Keep components that explain a certain percentage of difference.
             variance_explained = self.adjusted_evals / np.sum(self.adjusted_evals)
             cumulative_variance_explained = np.cumsum(variance_explained)
-            mask = (cumulative_variance_explained <= self.n_components)
+            mask = cumulative_variance_explained <= self.n_components
             self.adjusted_evals = self.adjusted_evals[mask]
-            self.adjusted_evecs = self.adjusted_evecs[:,mask]
+            self.adjusted_evecs = self.adjusted_evecs[:, mask]
 
         # Adjust signs of eigenvectors so that projected data is positively correlated with y
         if self.adjust_signs:
@@ -380,15 +379,15 @@ class PanelPCA(BaseEstimator, TransformerMixin):
                 y = y.values
             elif isinstance(y, pd.DataFrame):
                 y = y.values.reshape(-1)
-            
+
             # Calculate correlation between projected data and y
             # If correlation is negative, flip the sign of the eigenvector
             for i in range(self.adjusted_evecs.shape[1]):
-                if np.corrcoef(X.values @ self.adjusted_evecs[:,i], y)[0,1] < 0:
-                    self.adjusted_evecs[:,i] *= -1
+                if np.corrcoef(X.values @ self.adjusted_evecs[:, i], y)[0, 1] < 0:
+                    self.adjusted_evecs[:, i] *= -1
 
         return self
-            
+
     def transform(self, X):
         """
         Project input features onto the principal components.
@@ -408,11 +407,11 @@ class PanelPCA(BaseEstimator, TransformerMixin):
 
         # Project data onto the principal components
         return pd.DataFrame(
-            index = X.index,
-            columns = [f"PCA {i+1}" for i in range(self.adjusted_evecs.shape[1])],
-            data = X.values @ self.adjusted_evecs
+            index=X.index,
+            columns=[f"PCA {i+1}" for i in range(self.adjusted_evecs.shape[1])],
+            data=X.values @ self.adjusted_evecs,
         )
-    
+
     def _check_fit_params(self, X, y):
         """
         Checks the input data for the fit method.
@@ -434,7 +433,7 @@ class PanelPCA(BaseEstimator, TransformerMixin):
         if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
             raise ValueError(
                 "All columns in the input feature matrix for PanelPCA",
-                " must be numeric."
+                " must be numeric.",
             )
         if X.isnull().values.any():
             raise ValueError(
@@ -447,7 +446,7 @@ class PanelPCA(BaseEstimator, TransformerMixin):
             raise TypeError("The outer index of X must be strings.")
         if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
-        
+
         # Checks on y only necessary if adjust_signs is True
         if self.adjust_signs:
             if y is None:
@@ -460,20 +459,26 @@ class PanelPCA(BaseEstimator, TransformerMixin):
                 )
             else:
                 if not isinstance(y, (pd.Series, pd.DataFrame, np.ndarray)):
-                    raise TypeError("y must be a pandas Series, DataFrame, or numpy array.")
+                    raise TypeError(
+                        "y must be a pandas Series, DataFrame, or numpy array."
+                    )
                 if not y.shape[0] == X.shape[0]:
                     raise ValueError("y must have the same number of rows as X.")
                 if not isinstance(y, np.ndarray):
                     if not np.issubdtype(y.values.dtype, np.number):
                         raise ValueError("The target vector must be numeric.")
                     if y.isnull().values.any():
-                        raise ValueError("The target vector must not contain any missing values.")
+                        raise ValueError(
+                            "The target vector must not contain any missing values."
+                        )
                 else:
                     if not np.issubdtype(y.dtype, np.number):
                         raise ValueError("The target vector must be numeric.")
                     if np.isnan(y).any():
-                        raise ValueError("The target vector must not contain any missing values.")
-                    
+                        raise ValueError(
+                            "The target vector must not contain any missing values."
+                        )
+
     def _check_transform_params(self, X):
         """
         Input checks for the transform method.
@@ -492,7 +497,7 @@ class PanelPCA(BaseEstimator, TransformerMixin):
         if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
             raise ValueError(
                 "All columns in the input feature matrix for PanelPCA",
-                " must be numeric."
+                " must be numeric.",
             )
         if X.isnull().values.any():
             raise ValueError(
@@ -503,7 +508,7 @@ class PanelPCA(BaseEstimator, TransformerMixin):
             raise TypeError("The outer index of X must be strings.")
         if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
-        
+
         if X.shape[1] != self.n_features_in_:
             raise ValueError(
                 "The input feature matrix must have the same number of columns as the "
@@ -514,7 +519,8 @@ class PanelPCA(BaseEstimator, TransformerMixin):
                 "The input feature matrix must have the same columns as the training "
                 "feature matrix."
             )
-    
+
+
 if __name__ == "__main__":
     import numpy as np
     import pandas as pd
@@ -523,6 +529,7 @@ if __name__ == "__main__":
         categories_df,
         make_qdf,
     )
+
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
@@ -559,7 +566,9 @@ if __name__ == "__main__":
     train = categories_df(
         df=dfd, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
     ).dropna()
-    train = train[train.index.get_level_values(1) >= pd.Timestamp(year=2005,month=8,day=1)]
+    train = train[
+        train.index.get_level_values(1) >= pd.Timestamp(year=2005, month=8, day=1)
+    ]
 
     X_train = train.drop(columns=["XR"])
     y_train = train["XR"]

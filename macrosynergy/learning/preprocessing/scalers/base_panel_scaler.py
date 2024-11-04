@@ -1,7 +1,5 @@
-import datetime
 from abc import ABC, abstractmethod
 
-import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 
@@ -17,6 +15,12 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
     type : str, default="panel"
         The panel dimension over which the scaling is applied. Options are
         "panel" and "cross_section".
+
+    Notes
+    -----
+    Learning algorithms can benefit from scaling each feature to a similar range. This
+    ensures they consider each feature equally in the model training process. It can
+    also encourage faster convergence of an optimization algorithm.
     """
 
     def __init__(self, type="panel"):
@@ -41,6 +45,11 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
             The feature matrix.
         y : pd.Series or pd.DataFrame, default=None
             The target vector.
+
+        Returns
+        -------
+        self
+            The fitted scaler.
         """
         # Checks
         self._check_fit_params(X, y)
@@ -114,7 +123,9 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
             scaled_columns.append(X_transformed)
 
         # Concatenate the transformed columns
-        X_transformed = pd.DataFrame(pd.concat(scaled_columns, axis=1).values, index=X.index, columns=X.columns)
+        X_transformed = pd.DataFrame(
+            pd.concat(scaled_columns, axis=1).values, index=X.index, columns=X.columns
+        )
 
         return X_transformed
 
@@ -153,7 +164,7 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
         if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
             raise ValueError(
                 "All columns in the input feature matrix for PanelStandardScaler",
-                " must be numeric."
+                " must be numeric.",
             )
         if X.isnull().values.any():
             raise ValueError(
@@ -185,7 +196,7 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
         if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
             raise ValueError(
                 "All columns in the input feature matrix for PanelStandardScaler",
-                " must be numeric."
+                " must be numeric.",
             )
         if X.isnull().values.any():
             raise ValueError(
@@ -196,7 +207,7 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
             raise TypeError("The outer index of X must be strings.")
         if not X.index.get_level_values(1).dtype == "datetime64[ns]":
             raise TypeError("The inner index of X must be datetime.date.")
-        
+
         if X.shape[1] != self.n_features_in_:
             raise ValueError(
                 "The input feature matrix must have the same number of columns as the "
