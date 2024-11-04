@@ -131,6 +131,8 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         """
         Drop the ticker column from the QuantamentalDataFrame.
         """
+        if "ticker" not in self.columns:
+            raise ValueError("No `ticker` column found in the DataFrame.")
         return self.drop(columns=["ticker"])
 
     def reduce_df(
