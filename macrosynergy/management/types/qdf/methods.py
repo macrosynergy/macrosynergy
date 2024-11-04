@@ -2,7 +2,7 @@
 Module hosting custom types and meta-classes for use with Quantamental DataFrames.
 """
 
-from typing import List, Optional, Any, Iterable, Mapping, Union, Dict, Set
+from typing import List, Optional, Any, Iterable, Mapping, Union, Dict, Set, Tuple
 import pandas as pd
 import numpy as np
 import warnings
@@ -184,8 +184,9 @@ def reduce_df(
     blacklist: dict = None,
     out_all: bool = False,
     intersect: bool = False,
-) -> QuantamentalDataFrameBase:
-    # Filter DataFrame by xcats and cids and notify about missing xcats and cids.
+) -> Union[
+    QuantamentalDataFrameBase, Tuple[QuantamentalDataFrameBase, List[str], List[str]]
+]:
     """
     Filter DataFrame by `cids`, `xcats`, and `start` & `end` dates.
     """
