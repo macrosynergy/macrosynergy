@@ -264,6 +264,8 @@ class BasePanelLearner(ABC):
         # Determine all outer splits and run the learning process in parallel
         train_test_splits = list(outer_splitter.split(self.X, self.y))
 
+        base_splits = self._get_base_splits(inner_splitters)
+
         # Return list of results
         optim_results = tqdm(
             Parallel(n_jobs=n_jobs_outer, **JOBLIB_RETURN_AS)(
@@ -279,25 +281,11 @@ class BasePanelLearner(ABC):
                     search_type=search_type,
                     normalize_fold_results=normalize_fold_results,
                     n_iter=n_iter,
-                    n_splits_add=(
-                        {
-                            splitter_name: (
-                                int(
-                                    np.ceil(
-                                        split_function(
-                                            iteration * outer_splitter.test_size
-                                        )
-                                    )
-                                )
-                                if split_function is not None
-                                else 0
-                            )
-                            for splitter_name, split_function in split_functions.items()
-                        }
-                        if split_functions is not None
-                        else None
+                    n_splits_add=self._get_n_splits_add(
+                        iteration, outer_splitter, split_functions
                     ),
                     n_jobs_inner=n_jobs_inner,
+                    base_splits=base_splits,
                 )
                 for iteration, (train_idx, test_idx) in enumerate(train_test_splits)
             ),
@@ -321,6 +309,7 @@ class BasePanelLearner(ABC):
         n_iter,
         n_splits_add,
         n_jobs_inner,
+        base_splits,
     ):
         """
         Worker function for parallel processing of the learning process.
@@ -356,6 +345,8 @@ class BasePanelLearner(ABC):
             Default is None.
         n_jobs_inner : int
             Number of jobs to run in parallel for the inner loop. Default is 1.
+        base_splits : dict
+            Dictionary of initial number of splits for each inner splitter.
 
         Returns
         -------
@@ -396,9 +387,9 @@ class BasePanelLearner(ABC):
             inner_splitters_adj = inner_splitters.copy()
             for splitter_name, _ in inner_splitters_adj.items():
                 if hasattr(inner_splitters_adj[splitter_name], "n_splits"):
-                    inner_splitters_adj[splitter_name].n_splits += n_splits_add[
-                        splitter_name
-                    ]
+                    inner_splitters_adj[splitter_name].n_splits = (
+                        base_splits[splitter_name] + n_splits_add[splitter_name]
+                    )
 
         else:
             inner_splitters_adj = inner_splitters
@@ -1445,7 +1436,37 @@ class BasePanelLearner(ABC):
                     "The elements of the figsize tuple must be floats or ints."
                 )
 
+    def _get_base_splits(self, inner_splitters):
+        """Get the initial number of splits for each splitter."""
+        base_splits = {}
+        for splitter_name, splitter in inner_splitters.items():
+            if hasattr(splitter, "n_splits"):
+                base_splits[splitter_name] = splitter.n_splits
+        return base_splits
+
+    def _get_n_splits_add(self, iteration, outer_splitters, split_functions) -> dict:
+        """Call split functions to determine the number of splits to add to each splitter."""
+        if split_functions is not None:
+            return {
+                splitter_name: (
+                    int(np.ceil(split_function(iteration * outer_splitters.test_size)))
+                    if split_function is not None
+                    else 0
+                )
+                for splitter_name, split_function in split_functions.items()
+            }
+        else:
+            return None
+
     def _remove_results(self, conditions):
+        """
+        Remove rows from results DataFrames based on conditions.
+        
+        Parameters
+        ----------
+        conditions : list of tuples
+            List of tuples containing the attribute name, column name and value to filter on.
+        """
         for attr, column, value in conditions:
             df = getattr(self, attr)
             if value in df[column].unique():
