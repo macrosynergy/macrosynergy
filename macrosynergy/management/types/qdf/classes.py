@@ -59,7 +59,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         if PD_2_0_OR_LATER:
             super().__init__(df)
         else:
-            super().__init__(df.copy())
+            super().__init__(df.copy()) # pragma: no cover
 
         _check_cat = check_is_categorical(self)
         if _initialized_as_categorical is None:
