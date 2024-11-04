@@ -113,5 +113,32 @@ class TestDeprecateDecorator(unittest.TestCase):
         self.assertEqual(old_func.__doc__, self.mock_new_func.__doc__)
         self.assertEqual(old_func.__signature__, signature(self.mock_new_func))
 
+class TestIsMatchingSubscriptedType(unittest.TestCase):
+    def test_list_of_ints(self):
+        self.assertTrue(is_matching_subscripted_type([1, 2, 3], List[int]))
+        self.assertFalse(is_matching_subscripted_type([1, "2", 3], List[int]))
+        self.assertFalse(is_matching_subscripted_type("not a list", List[int]))
+
+    def test_tuple_of_mixed_types(self):
+        self.assertTrue(is_matching_subscripted_type(("a", 1), Tuple[str, int]))
+        self.assertFalse(is_matching_subscripted_type(("a", "b"), Tuple[str, int]))
+        self.assertFalse(is_matching_subscripted_type(("a", 1, 2), Tuple[str, int]))
+
+    def test_dict_of_str_to_int(self):
+        self.assertTrue(is_matching_subscripted_type({"a": 1, "b": 2}, Dict[str, int]))
+        self.assertFalse(is_matching_subscripted_type({"a": "b"}, Dict[str, int]))
+        self.assertFalse(is_matching_subscripted_type([("a", 1)], Dict[str, int]))
+
+    def test_union_type(self):
+        self.assertTrue(is_matching_subscripted_type(5, Union[int, str]))
+        self.assertTrue(is_matching_subscripted_type("hello", Union[int, str]))
+        self.assertFalse(is_matching_subscripted_type(5.0, Union[int, str]))
+
+    def test_optional_type(self):
+        self.assertTrue(is_matching_subscripted_type(None, Optional[int]))
+        self.assertTrue(is_matching_subscripted_type(10, Optional[int]))
+        self.assertFalse(is_matching_subscripted_type("string", Optional[int]))
+
+
 if __name__ == "__main__":
     unittest.main()

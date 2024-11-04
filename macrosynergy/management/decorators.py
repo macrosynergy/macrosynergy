@@ -189,14 +189,19 @@ def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
         if not isinstance(value, dict):
             return False
         key_type, value_type = args
-        return all(
-            [
-                (get_origin(key_type) and is_matching_subscripted_type(k, key_type))
-                or isinstance(k, key_type)
-                or (isinstance(k, key_type) and isinstance(v, value_type))
-                for k, v in value.items()
-            ]
-        )
+        result = True
+        for k, v in value.items():
+            if get_origin(key_type) is not None:
+                if not is_matching_subscripted_type(k, key_type):
+                    result = False
+
+            if result:
+                result = isinstance(k, key_type) and isinstance(v, value_type)
+
+            if not result:
+                break
+
+        return result
 
     # unions and optionals
     if origin is Union:
