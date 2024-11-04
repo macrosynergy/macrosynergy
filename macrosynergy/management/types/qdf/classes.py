@@ -79,18 +79,6 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         else:
             self.to_string_type()
 
-    # def _inplaceoperation(
-    #     self, method: Callable[..., Any], inplace: bool = False, *args, **kwargs
-    # ):
-    #     """
-    #     Helper method to perform inplace operations.
-    #     """
-    #     result = method(*args, **kwargs)
-    #     if inplace:
-    #         self.__init__(result)
-    #         return self
-    #     return QuantamentalDataFrame(result)
-
     def is_categorical(self) -> bool:
         """
         Returns True if the QuantamentalDataFrame is categorical.
