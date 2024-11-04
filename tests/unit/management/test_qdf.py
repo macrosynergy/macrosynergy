@@ -1631,6 +1631,14 @@ class TestQDFClassInit(unittest.TestCase):
 
         self.assertTrue(qdf.is_categorical())
         self.assertTrue(qdf.InitializedAsCategorical)
+        
+    def test_qdf_init_real_date_strs(self):
+        # test that it still works when the real_date is a column of strings
+        test_df = self.test_df.copy()
+        test_df["real_date"] = test_df["real_date"].astype(str)
+        
+        qdf = QuantamentalDataFrame(test_df)
+        self.assertTrue(qdf["real_date"].dtype == "datetime64[ns]")
 
 
 class TestQDFInitializationMethods(unittest.TestCase):
