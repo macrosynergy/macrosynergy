@@ -309,7 +309,27 @@ def update_tickers(
     elif df.empty:
         return df_add
 
+    if all(
+        _df[icol].dtype.name == "category"
+        for _df in [df, df_add]
+        for icol in ["cid", "xcat"]
+    ):
+        union_cids = pd.api.types.union_categoricals(
+            [df["cid"].unique(), df_add["cid"].unique()]
+        )
+        union_xcats = pd.api.types.union_categoricals(
+            [df["xcat"].unique(), df_add["xcat"].unique()]
+        )
+        df["cid"] = pd.Categorical(df["cid"], categories=union_cids.categories)
+        df["xcat"] = pd.Categorical(df["xcat"], categories=union_xcats.categories)
+
+        df_add["cid"] = pd.Categorical(df_add["cid"], categories=union_cids.categories)
+        df_add["xcat"] = pd.Categorical(
+            df_add["xcat"], categories=union_xcats.categories
+        )
+
     df = pd.concat([df, df_add], axis=0, ignore_index=True)
+
     df = df.drop_duplicates(
         subset=QuantamentalDataFrameBase.IndexCols,
         keep="last",
@@ -334,6 +354,25 @@ def update_categories(
 
     append_condition = set(incumbent_categories) | set(new_categories)
     intersect = list(set(incumbent_categories).intersection(set(new_categories)))
+
+    if all(
+        _df[icol].dtype.name == "category"
+        for _df in [df, df_add]
+        for icol in ["cid", "xcat"]
+    ):
+        union_cids = pd.api.types.union_categoricals(
+            [df["cid"].unique(), df_add["cid"].unique()]
+        )
+        union_xcats = pd.api.types.union_categoricals(
+            [df["xcat"].unique(), df_add["xcat"].unique()]
+        )
+        df["cid"] = pd.Categorical(df["cid"], categories=union_cids.categories)
+        df["xcat"] = pd.Categorical(df["xcat"], categories=union_xcats.categories)
+
+        df_add["cid"] = pd.Categorical(df_add["cid"], categories=union_cids.categories)
+        df_add["xcat"] = pd.Categorical(
+            df_add["xcat"], categories=union_xcats.categories
+        )
 
     if len(append_condition) == len(incumbent_categories + new_categories):
         df = pd.concat([df, df_add], axis=0, ignore_index=True)
@@ -637,7 +676,7 @@ def concat_qdfs(
     qdf_list: List[QuantamentalDataFrameBase],
 ) -> QuantamentalDataFrameBase:
     """
-    Concatenate a list of QuantamentalDataFrames into a single QuantamentalDataFrame. 
+    Concatenate a list of QuantamentalDataFrames into a single QuantamentalDataFrame.
     Converts the index columns to categorical format, if not already categorical.
     """
     if not isinstance(qdf_list, list):
