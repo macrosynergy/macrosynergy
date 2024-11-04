@@ -6,7 +6,12 @@ from typing import List
 import warnings
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.constants import JPMAQS_METRICS
-from macrosynergy.management.utils import get_cid, get_xcat
+from macrosynergy.management.utils import (
+    get_cid,
+    get_xcat,
+    qdf_to_ticker_df,
+    ticker_df_to_qdf,
+)
 from macrosynergy.management.types.qdf.methods import (
     get_col_sort_order,
     change_column_format,
@@ -1525,10 +1530,56 @@ class TestQDFClass(unittest.TestCase):
             QuantamentalDataFrame.IndexColsSortOrder
         ).reset_index(drop=True)
 
-        qdf[['cid', 'xcat']] = qdf[['cid', 'xcat']].astype('object')
-        qdf_copy[['cid', 'xcat']] = qdf_copy[['cid', 'xcat']].astype('object')
+        qdf[["cid", "xcat"]] = qdf[["cid", "xcat"]].astype("object")
+        qdf_copy[["cid", "xcat"]] = qdf_copy[["cid", "xcat"]].astype("object")
 
         self.assertTrue(qdf.equals(qdf_copy))
+
+    def test_rename_xcats(self):
+        test_df = self.test_df.copy()
+
+        qdf = QuantamentalDataFrame(test_df)
+
+        xcat_map = {xc: xc[::-1] for xc in qdf["xcat"].unique()}
+
+        new_df = qdf.rename_xcats(xcat_map=xcat_map)
+
+        expc_df = rename_xcats(qdf, xcat_map=xcat_map)
+
+        self.assertTrue(new_df.eq(expc_df).all().all())
+
+    def test_qdf_to_wide(self):
+        test_df = self.test_df.copy()
+
+        qdf = QuantamentalDataFrame(test_df)
+
+        wide_df = qdf.to_wide()
+
+        expc_df = qdf_to_ticker_df(test_df)
+
+        # check the columns are the same
+        self.assertTrue(wide_df.columns.equals(expc_df.columns))
+
+        for col in wide_df.columns:
+            self.assertTrue(wide_df[col].equals(expc_df[col]))
+
+        # test with categorical df
+        test_df = self.test_df.copy()
+        expc_df = qdf_to_ticker_df(test_df)
+
+        _qdf = QuantamentalDataFrame(test_df, _initialized_as_categorical=True)
+        qdf = QuantamentalDataFrame(_qdf)
+
+        wide_df = qdf.to_wide()
+
+        # assert that the wide sdf
+        isinstance(wide_df.columns, pd.CategoricalIndex)
+
+        # check that the set of columns is the same
+        self.assertTrue(set(wide_df.columns) == set(expc_df.columns))
+
+        for col in wide_df.columns:
+            self.assertTrue(wide_df[col].equals(expc_df[col]))
 
 
 if __name__ == "__main__":
