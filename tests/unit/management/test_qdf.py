@@ -1517,7 +1517,18 @@ class TestQDFClass(unittest.TestCase):
         for rt in rand_tickers:
             qdf = qdf.add_nan_series(ticker=rt)
 
-        qdf = qdf.drop_nan_series()
+        with warnings.catch_warnings(record=True) as wcatch:
+            qdf = qdf.drop_nan_series()
+            wlist = [w for w in wcatch if issubclass(w.category, UserWarning)]
+            self.assertEqual(len(wlist), len(rand_tickers))
+
+            ticker_dict = {t: False for t in rand_tickers}
+            for w in wlist:
+                for _t in rand_tickers:
+                    if _t in str(w.message):
+                        ticker_dict[_t] = True
+
+            self.assertTrue(all(ticker_dict.values()))
 
         tickers = qdf.list_tickers()
         self.assertTrue(set(tickers).isdisjoint(set(rand_tickers)))
@@ -1580,6 +1591,123 @@ class TestQDFClass(unittest.TestCase):
 
         for col in wide_df.columns:
             self.assertTrue(wide_df[col].equals(expc_df[col]))
+
+
+class TestQDFInitializationMethods(unittest.TestCase):
+    def test_qdf_from_timeseries(self):
+        ts = pd.Series(
+            np.random.randn(100), index=pd.bdate_range("2020-01-01", periods=100)
+        )
+
+        # test with cid and xcat
+        cid, xcat = "A", "X"
+        ticker = f"{cid}_{xcat}"
+        qdf = qdf_from_timeseries(ts, ticker=ticker)
+
+        self.assertTrue(isinstance(qdf, QuantamentalDataFrame))
+
+        self.assertTrue(qdf["cid"].unique().tolist() == ["A"])
+        self.assertTrue(qdf["xcat"].unique().tolist() == ["X"])
+
+        self.assertTrue(qdf["real_date"].eq(ts.index).all())
+
+        # test same output
+
+        qdf_a = qdf_from_timeseries(ts, ticker=ticker, metric="value")
+        qdf_b = QuantamentalDataFrame.from_timeseries(ts, ticker=ticker, metric="value")
+
+        self.assertTrue(qdf_a.equals(qdf_b))
+
+    def test_from_long_df(self):
+
+        df = pd.DataFrame(
+            {
+                "real_date": pd.bdate_range("2020-01-01", periods=100),
+                "value": np.random.randn(100),
+            }
+        )
+
+        qdf = QuantamentalDataFrame.from_long_df(df, cid="A", xcat="X")
+
+        self.assertTrue(isinstance(qdf, QuantamentalDataFrame))
+        self.assertTrue(qdf["cid"].unique().tolist() == ["A"])
+        self.assertTrue(qdf["xcat"].unique().tolist() == ["X"])
+
+        self.assertTrue(qdf["real_date"].eq(df["real_date"]).all())
+
+        # test ticker args work the same way
+        new_qdf = QuantamentalDataFrame.from_long_df(df, ticker="A_X")
+        self.assertTrue(new_qdf.equals(qdf))
+
+        # test works when cid col is missing
+        test_df = make_test_df()
+        no_cid = test_df.drop(columns=["cid"])
+        qdf = QuantamentalDataFrame.from_long_df(no_cid, cid="A")
+
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame.from_long_df(no_cid)
+
+        # test works when xcat col is missing
+        no_xcat = test_df.drop(columns=["xcat"])
+        qdf = QuantamentalDataFrame.from_long_df(no_xcat, xcat="X")
+
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame.from_long_df(no_xcat)
+
+        # test works when real_date is named differently
+        diff_real_date = test_df.rename(columns={"real_date": "date"})
+
+        qdf = QuantamentalDataFrame.from_long_df(
+            diff_real_date, cid="A", xcat="X", real_date_column="date"
+        )
+
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame.from_long_df(diff_real_date, cid="A", xcat="X")
+
+        # test works when value is named differently
+        diff_value = test_df.rename(columns={"value": "val"})
+        qdf = QuantamentalDataFrame.from_long_df(
+            diff_value, cid="A", xcat="X", value_column="val"
+        )
+
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame.from_long_df(diff_value, cid="A", xcat="X")
+
+        # test a error states
+        test_df = make_test_df()
+        test_df = test_df.iloc[0:0]
+
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame.from_long_df(test_df, cid="A", xcat="X")
+
+        # test with ticker & cid+xcat
+        test_df = make_test_df()
+
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame.from_long_df(test_df, cid="A", xcat="X", ticker="A_X")
+
+    def test_from_qdf_list(self):
+        tickers = helper_random_tickers(50)
+        df_list = [make_test_df(tickers=tickers[i : i + 10]) for i in range(0, 50, 10)]
+
+        qdf = QuantamentalDataFrame.from_qdf_list(df_list)
+        expc_df = concat_qdfs(df_list)
+
+        self.assertTrue(isinstance(qdf, QuantamentalDataFrame))
+        self.assertTrue(qdf.equals(expc_df))
+
+        # test non categorical return
+        qdf = QuantamentalDataFrame.from_qdf_list(df_list, categorical=False)
+        expc_df = QuantamentalDataFrame(expc_df, categorical=False)
+
+        self.assertTrue(qdf.equals(expc_df))
+
+        # test errors
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame.from_qdf_list([])
+
+        with self.assertRaises(TypeError):
+            QuantamentalDataFrame.from_qdf_list([1])
 
 
 if __name__ == "__main__":
