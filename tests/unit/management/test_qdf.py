@@ -5,6 +5,7 @@ import random
 from typing import List
 import warnings
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.compat import PD_2_0_OR_LATER
 from macrosynergy.management.constants import JPMAQS_METRICS
 from macrosynergy.management.utils import (
     get_cid,
@@ -1415,8 +1416,13 @@ class TestQDFClass(unittest.TestCase):
 
         expc_df = reduce_df(qdf, cids=red_cids, xcats=red_xcats)
 
-        self.assertTrue(new_df.eq(expc_df).all().all())
-
+        if PD_2_0_OR_LATER:
+            self.assertTrue(new_df.eq(expc_df).all().all())
+        else:
+            self.assertTrue(
+                pd.DataFrame(new_df).eq(pd.DataFrame(expc_df)).all().all(),
+                msg="Test failing on pandas < 2.0",
+            )
         # test reduce_df out_all
 
         qdf = QuantamentalDataFrame(test_df)
@@ -1431,7 +1437,13 @@ class TestQDFClass(unittest.TestCase):
             qdf, cids=red_cids, xcats=red_xcats, out_all=True
         )
 
-        self.assertTrue(new_df.eq(expc_df).all().all())
+        if PD_2_0_OR_LATER:
+            self.assertTrue(new_df.eq(expc_df).all().all())
+        else:
+            self.assertTrue(
+                pd.DataFrame(new_df).eq(pd.DataFrame(expc_df)).all().all(),
+                msg="Test failing on pandas < 2.0",
+            )
 
         self.assertEqual(out_cids, expc_out_cids)
         self.assertEqual(out_xcats, expc_out_xcats)
@@ -1445,7 +1457,13 @@ class TestQDFClass(unittest.TestCase):
 
         expc_df = reduce_df_by_ticker(df=qdf, tickers=sel_tickers)
 
-        self.assertTrue(new_df.eq(expc_df).all().all())
+        if PD_2_0_OR_LATER:
+            self.assertTrue(new_df.eq(expc_df).all().all())
+        else:
+            self.assertTrue(
+                pd.DataFrame(new_df).eq(pd.DataFrame(expc_df)).all().all(),
+                msg="Test failing on pandas < 2.0",
+            )
 
     def test_apply_blacklist(self):
         blacklist = {
@@ -1459,7 +1477,13 @@ class TestQDFClass(unittest.TestCase):
 
         expc_df = apply_blacklist(df=qdf, blacklist=blacklist)
 
-        self.assertTrue(new_df.eq(expc_df).all().all())
+        if PD_2_0_OR_LATER:
+            self.assertTrue(new_df.eq(expc_df).all().all())
+        else:
+            self.assertTrue(
+                pd.DataFrame(new_df).eq(pd.DataFrame(expc_df)).all().all(),
+                msg="Test failing on pandas < 2.0",
+            )
 
         # test with reduce_df
 
@@ -1469,7 +1493,13 @@ class TestQDFClass(unittest.TestCase):
 
         expc_df = reduce_df(qdf, blacklist=blacklist)
 
-        self.assertTrue(new_df.eq(expc_df).all().all())
+        if PD_2_0_OR_LATER:
+            self.assertTrue(new_df.eq(expc_df).all().all())
+        else:
+            self.assertTrue(
+                pd.DataFrame(new_df).eq(pd.DataFrame(expc_df)).all().all(),
+                msg="Test failing on pandas < 2.0",
+            )
 
     def test_update_df(self):
         tickers = helper_random_tickers(20)
@@ -1483,7 +1513,13 @@ class TestQDFClass(unittest.TestCase):
 
         expected_df = update_df(qdfa, qdfb)
 
-        self.assertTrue(new_df.eq(expected_df).all().all())
+        if PD_2_0_OR_LATER:
+            self.assertTrue(new_df.eq(expected_df).all().all())
+        else:
+            self.assertTrue(
+                pd.DataFrame(new_df).eq(pd.DataFrame(expected_df)).all().all(),
+                msg="Test failing on pandas < 2.0",
+            )
 
     def test_add_nan_series(self):
         test_df = self.test_df.copy()
@@ -1557,7 +1593,13 @@ class TestQDFClass(unittest.TestCase):
 
         expc_df = rename_xcats(qdf, xcat_map=xcat_map)
 
-        self.assertTrue(new_df.eq(expc_df).all().all())
+        if PD_2_0_OR_LATER:
+            self.assertTrue(new_df.eq(expc_df).all().all())
+        else:
+            self.assertTrue(
+                pd.DataFrame(new_df).eq(pd.DataFrame(expc_df)).all().all(),
+                msg="Test failing on pandas < 2.0",
+            )
 
     def test_qdf_to_wide(self):
         test_df = self.test_df.copy()
@@ -1631,12 +1673,12 @@ class TestQDFClassInit(unittest.TestCase):
 
         self.assertTrue(qdf.is_categorical())
         self.assertTrue(qdf.InitializedAsCategorical)
-        
+
     def test_qdf_init_real_date_strs(self):
         # test that it still works when the real_date is a column of strings
         test_df = self.test_df.copy()
         test_df["real_date"] = test_df["real_date"].astype(str)
-        
+
         qdf = QuantamentalDataFrame(test_df)
         self.assertTrue(qdf["real_date"].dtype == "datetime64[ns]")
 
