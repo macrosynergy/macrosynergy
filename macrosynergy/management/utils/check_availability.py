@@ -175,7 +175,7 @@ def check_enddates(df: pd.DataFrame) -> pd.DataFrame:
     df: pd.DataFrame = df.copy()
     df = df.dropna(how="any")
     df_ends = (
-        df[["cid", "xcat", "real_date"]].groupby(["cid", "xcat"], observed=False).max()
+        df[["cid", "xcat", "real_date"]].groupby(["cid", "xcat"], observed=True).max()
     )
     df_ends["real_date"] = df_ends["real_date"].dt.strftime("%Y-%m-%d")
 
