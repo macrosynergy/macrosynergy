@@ -31,7 +31,7 @@ from macrosynergy.management.types.qdf.methods import (
     _add_index_str_column,
     add_nan_series,
     drop_nan_series,
-    qdf_from_timseries,
+    qdf_from_timeseries,
     create_empty_categorical_qdf,
     concat_qdfs,
 )
@@ -236,15 +236,15 @@ class TestMethods(unittest.TestCase):
         )
 
         # test with cid and xcat
-        qdf = qdf_from_timseries(ts, cid="A", xcat="X")
+        qdf = qdf_from_timeseries(ts, cid="A", xcat="X")
         self.assertTrue(check_is_categorical(qdf))
 
         # test with ticker
-        qdf = qdf_from_timseries(ts, ticker="A_X")
+        qdf = qdf_from_timeseries(ts, ticker="A_X")
         self.assertTrue(check_is_categorical(qdf))
 
         # test with ticker
-        qdf = qdf_from_timseries(ts, ticker="A_X")
+        qdf = qdf_from_timeseries(ts, ticker="A_X")
         self.assertTrue(check_is_categorical(qdf))
 
         # test with non datetime index
@@ -252,25 +252,25 @@ class TestMethods(unittest.TestCase):
         with self.assertRaises(ValueError):
             ts_copy = ts.copy()
             ts_copy.index = ts_copy.index.astype(str)
-            qdf_from_timseries(ts_copy, ticker="A_X")
+            qdf_from_timeseries(ts_copy, ticker="A_X")
 
         # test with non pd.Series
         with self.assertRaises(TypeError):
-            qdf_from_timseries(ts.values, ticker="A_X")
+            qdf_from_timeseries(ts.values, ticker="A_X")
 
         # test with non string metric
         with self.assertRaises(TypeError):
-            qdf_from_timseries(ts, ticker="A_X", metric=1)
+            qdf_from_timeseries(ts, ticker="A_X", metric=1)
 
         # test with no cid or xcat
         with self.assertRaises(ValueError):
-            qdf_from_timseries(ts, ticker="A_X", cid="A", xcat="X")
+            qdf_from_timeseries(ts, ticker="A_X", cid="A", xcat="X")
 
         with self.assertRaises(ValueError):
-            qdf_from_timseries(ts, ticker="A_X", cid="A")
+            qdf_from_timeseries(ts, ticker="A_X", cid="A")
 
         with self.assertRaises(ValueError):
-            qdf_from_timseries(ts, xcat="X")
+            qdf_from_timeseries(ts, xcat="X")
 
     def test_add_ticker_column(self):
         test_df: pd.DataFrame = make_test_df()

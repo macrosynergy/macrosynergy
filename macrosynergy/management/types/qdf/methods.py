@@ -595,7 +595,7 @@ def drop_nan_series(
     return df.reset_index(drop=True)
 
 
-def qdf_from_timseries(
+def qdf_from_timeseries(
     timeseries: pd.Series,
     cid: Optional[str] = None,
     xcat: Optional[str] = None,

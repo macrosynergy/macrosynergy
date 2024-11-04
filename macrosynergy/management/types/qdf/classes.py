@@ -18,7 +18,7 @@ from .methods import (
     add_nan_series,
     drop_nan_series,
     rename_xcats,
-    qdf_from_timseries,
+    qdf_from_timeseries,
     create_empty_categorical_qdf,
     concat_qdfs,
 )
@@ -321,7 +321,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         Convert a timeseries DataFrame to a QuantamentalDataFrame.
         """
         return QuantamentalDataFrame(
-            qdf_from_timseries(
+            qdf_from_timeseries(
                 timeseries=timeseries,
                 ticker=ticker,
             )
