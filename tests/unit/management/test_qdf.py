@@ -29,7 +29,6 @@ from macrosynergy.management.types.qdf.methods import (
     qdf_to_wide_df,
     add_ticker_column,
     rename_xcats,
-    _add_index_str_column,
     add_nan_series,
     drop_nan_series,
     qdf_from_timeseries,
@@ -1872,8 +1871,8 @@ class TestQDFInitializationMethods(unittest.TestCase):
             cid=test_cid,
             xcat=test_xcat,
             metrics=test_metrics,
-            start_date=test_start_date,
-            end_date=test_end_date,
+            start=test_start_date,
+            end=test_end_date,
         )
 
         self.assertTrue(qdf.equals(expc_df))
@@ -1901,8 +1900,8 @@ class TestQDFInitializationMethods(unittest.TestCase):
             cid=test_cid,
             xcat=test_xcat,
             metrics=test_metrics,
-            start_date=test_start_date,
-            end_date=test_end_date,
+            start=test_start_date,
+            end=test_end_date,
         )
 
         expc_df = qdf_to_string_index(expc_df)

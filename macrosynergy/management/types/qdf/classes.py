@@ -452,7 +452,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             ticker=ticker,
             metrics=metrics,
             date_range=date_range,
-            start_date=start_date,
-            end_date=end_date,
+            start=start_date,
+            end=end_date,
         )
         return QuantamentalDataFrame(qdf, categorical=categorical)

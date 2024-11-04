@@ -421,7 +421,7 @@ def add_ticker_column(
     return df
 
 
-def _add_index_str_column(
+def _add_categorical_column(
     df: pd.DataFrame,
     column_name: str,
     fill_value: str,
@@ -521,8 +521,8 @@ def create_empty_categorical_qdf(
     ticker: Optional[str] = None,
     metrics: List[str] = ["value"],
     date_range: Optional[pd.DatetimeIndex] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
     categorical: bool = True,
 ) -> QuantamentalDataFrameBase:
     """
@@ -531,13 +531,13 @@ def create_empty_categorical_qdf(
     if not all(isinstance(m, str) for m in metrics):
         raise TypeError("`metrics` must be a list of strings.")
 
-    if (date_range is None) and (start_date is None or end_date is None):
+    if (date_range is None) and (start is None or end is None):
         raise ValueError(
             "Either `date_range` or `start_date` & `end_date` must be specified."
         )
 
     if date_range is None:
-        date_range = pd.bdate_range(start=start_date, end=end_date)
+        date_range = pd.bdate_range(start=start, end=end)
 
     if bool(cid) ^ bool(xcat):
         raise ValueError("`cid` and `xcat` must be specified together.")
@@ -549,8 +549,8 @@ def create_empty_categorical_qdf(
         cid, xcat = ticker.split("_", 1)
 
     qdf = pd.DataFrame(columns=["real_date"], data=date_range)
-    qdf = _add_index_str_column(qdf, "cid", cid)
-    qdf = _add_index_str_column(qdf, "xcat", xcat)
+    qdf = _add_categorical_column(qdf, "cid", cid)
+    qdf = _add_categorical_column(qdf, "xcat", xcat)
 
     for metric in metrics:
         qdf[metric] = np.nan
@@ -665,8 +665,8 @@ def qdf_from_timeseries(
 
     df = timeseries.reset_index().rename(columns={"index": "real_date", 0: metric})
     # assign as categorical string
-    df = _add_index_str_column(df, "cid", cid)
-    df = _add_index_str_column(df, "xcat", xcat)
+    df = _add_categorical_column(df, "cid", cid)
+    df = _add_categorical_column(df, "xcat", xcat)
 
     df = df[[*QuantamentalDataFrameBase.IndexCols, metric]]
     return QuantamentalDataFrameBase(df)
