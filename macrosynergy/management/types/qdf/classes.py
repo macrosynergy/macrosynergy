@@ -415,6 +415,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         cls,
         df: pd.DataFrame,
         value_column: str = "value",
+        categorical: bool = True,
     ) -> "QuantamentalDataFrame":
         """
         Convert a wide DataFrame to a QuantamentalDataFrame.
@@ -438,8 +439,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         qdfs_list: List[QuantamentalDataFrame] = []
 
         for tkr in tickers:
-            ticker = tkr
-            cid, xcat = ticker.split("_", 1)
+            cid, xcat = tkr.split("_", 1)
             qdf = df[[tkr]].reset_index().rename(columns={tkr: value_column})
             df = df.drop(columns=[tkr])
             qdf = QuantamentalDataFrame.from_long_df(
@@ -447,8 +447,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             )
             qdfs_list.append(qdf)
 
-        qdfs_list = QuantamentalDataFrame.from_qdf_list(qdfs_list)
-        return qdfs_list
+        return QuantamentalDataFrame.from_qdf_list(qdfs_list, categorical=categorical)
 
     @classmethod
     def create_empty_df(
