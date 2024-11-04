@@ -38,7 +38,7 @@ def check_availability(
     cids : List[str]
         cross sections to be checked on. Default is all in the DataFrame.
     start : str
-        string representing earliest considered date. Default is None, which reverts to 
+        string representing earliest considered date. Default is None, which reverts to
         earliest date in the dataframe.
     start_size : Tuple[float]
         tuple of floats with width / length of the start years heatmap. Default is None
@@ -174,7 +174,9 @@ def check_enddates(df: pd.DataFrame) -> pd.DataFrame:
 
     df: pd.DataFrame = df.copy()
     df = df.dropna(how="any")
-    df_ends = df[["cid", "xcat", "real_date"]].groupby(["cid", "xcat"]).max()
+    df_ends = (
+        df[["cid", "xcat", "real_date"]].groupby(["cid", "xcat"], observed=False).max()
+    )
     df_ends["real_date"] = df_ends["real_date"].dt.strftime("%Y-%m-%d")
 
     return df_ends.unstack().loc[:, "real_date"]
