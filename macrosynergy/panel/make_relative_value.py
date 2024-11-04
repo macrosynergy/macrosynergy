@@ -12,60 +12,6 @@ from macrosynergy.management.types import QuantamentalDataFrame
 import warnings
 
 
-def _prepare_basket(
-    df: pd.DataFrame,
-    xcat: str,
-    basket: List[str],
-    cids_avl: List[str],
-    complete_cross: bool,
-):
-    """
-    Categories can be defined over different cross-sections. Will determine the
-    respective basket given the available cross-sections for the respective category.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        long JPMaQS DataFrame of single category.
-    xcat : str
-        respective category for the relative value calculation.
-    basket : pd.DataFrame
-        cross-sections to be used for the relative value benchmark if available.
-    cids_avl : List[str]
-        cross-sections available for the category.
-    complete_cross : bool
-        if True, the basket is only calculated if all cross- sections, held in the
-        basket, are available for that respective category.
-    """
-
-    cids_used: List[str] = sorted(set(basket) & set(cids_avl))
-    cids_miss: List[str] = list(set(basket) - set(cids_used))
-
-    # if any missing cids, warn
-    if cids_miss:
-        if complete_cross:
-            cids_used = []
-            err_str: str = (
-                f"The category, {xcat}, is missing {cids_miss} which are included "
-                f"in the basket {basket}. Therefore, the category will be excluded "
-                "from the returned DataFrame."
-            )
-            print(err_str)
-            warnings.warn(err_str, UserWarning)
-        else:
-            err_str: str = (
-                f"The category, {xcat}, is missing {cids_miss} from the requested "
-                f"basket. The new basket will be {cids_used}."
-            )
-            print(err_str)
-            warnings.warn(err_str, UserWarning)
-
-    # Reduce the DataFrame to the specified basket given the available cross-sections.
-    dfb = df[df["cid"].isin(cids_used)]
-
-    return dfb, cids_used
-
-
 def make_relative_value(
     df: pd.DataFrame,
     xcats: List[str],
@@ -80,7 +26,7 @@ def make_relative_value(
     postfix: str = "R",
 ):
     """
-    Returns panel of relative values versus an average of cross-sections.
+    Returns a panel with values relative to a cross-sectional average at each `real_date`.
 
     Parameters
     ----------
@@ -102,7 +48,7 @@ def make_relative_value(
         cross-sections with date ranges that should be excluded from the output.
     basket : List[str]
         cross-sections to be used for the relative value benchmark. The default is every
-        cross-section in the chosen list that is available in the DataFrame over the
+        cross-section in the cids argument that is available in the DataFrame over the
         respective time-period. However, the basket can be reduced to a valid subset of the
         available cross-sections.
     complete_cross : bool
@@ -180,12 +126,11 @@ def make_relative_value(
 
     if basket is not None:
         # Basket must be a subset of the available cross-sections.
-        miss: Set = set(basket) - set(df["cid"])
-        error_basket = (
-            f"The basket elements {miss} are not specified or " f"are not available."
-        )
-        if not len(miss) == 0:
-            raise ValueError(error_basket)
+        set_diff = set(basket).difference(set(dfx["cid"].unique()))
+        if not (len(set_diff) == 0):
+            raise ValueError(
+                f"The basket elements {set_diff} are not available in the DataFrame."
+            )
     else:
         # Default basket is all available cross-sections.
         basket = cids
@@ -273,6 +218,58 @@ def make_relative_value(
     )
 
 
+def _prepare_basket(
+    df: pd.DataFrame,
+    xcat: str,
+    basket: List[str],
+    cids_avl: List[str],
+    complete_cross: bool,
+):
+    """
+    Categories can be defined over different cross-sections. Will determine the
+    respective basket given the available cross-sections for the respective category.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        long JPMaQS DataFrame of single category.
+    xcat : str
+        respective category for the relative value calculation.
+    basket : pd.DataFrame
+        cross-sections to be used for the relative value benchmark if available.
+    cids_avl : List[str]
+        cross-sections available for the category.
+    complete_cross : bool
+        if True, the basket is only calculated if all cross- sections, held in the
+        basket, are available for that respective category.
+    """
+
+    cids_used: List[str] = sorted(set(basket) & set(cids_avl))
+    cids_miss: List[str] = list(set(basket) - set(cids_used))
+
+    # if any missing cids, warn
+    if cids_miss:
+        if complete_cross:
+            cids_used = []
+            err_str: str = (
+                f"The category, {xcat}, is missing {cids_miss} which are included "
+                f"in the basket {basket}. Therefore, the category will be excluded "
+                "from the returned DataFrame."
+            )
+            warnings.warn(err_str, UserWarning)
+        else:
+            err_str: str = (
+                f"The category, {xcat}, is missing {cids_miss} from the requested "
+                f"basket. The new basket will be {cids_used}."
+            )
+            warnings.warn(err_str, UserWarning)
+
+    # Reduce the DataFrame to the specified basket given the available cross-sections.
+    dfb = df[df["cid"].isin(cids_used)]
+
+    return dfb, cids_used
+
+
 if __name__ == "__main__":
     # Simulate DataFrame.
 
@@ -303,15 +300,26 @@ if __name__ == "__main__":
     # Applications
     dfd_1 = make_relative_value(
         dfd,
-        xcats=["GROWTH", "INFL"],
+        xcats=["GROWTH"],
         cids=None,
         blacklist=None,
         rel_meth="subtract",
         rel_xcats=None,
         postfix="RV",
+        basket=["AUD", "CAD"],
     )
 
     rel_xcats = ["GROWTH_sRV", "INFL_sRV"]
+    dfd_2 = make_relative_value(
+        dfd,
+        xcats=["GROWTH", "INFL"],
+        cids=None,
+        blacklist=None,
+        rel_meth="subtract",
+        rel_xcats=rel_xcats,
+        postfix="RV",
+    )
+
     dfd_1_black = make_relative_value(
         dfd,
         xcats=["GROWTH", "INFL"],

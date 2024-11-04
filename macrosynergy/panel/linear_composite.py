@@ -20,6 +20,183 @@ PD_FUTURE_STACK = (
 )
 
 
+def linear_composite(
+    df: pd.DataFrame,
+    xcats: Union[str, List[str]],
+    cids: Optional[List[str]] = None,
+    weights: Optional[Union[List[float], str]] = None,
+    normalize_weights: bool = True,
+    signs: Optional[List[float]] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    blacklist: Dict[str, List[str]] = None,
+    complete_xcats: bool = False,
+    complete_cids: bool = False,
+    new_xcat="NEW",
+    new_cid="GLB",
+):
+    """
+    Weighted linear combinations of cross sections or categories
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
+        'real_date' and 'value'.
+    xcats : Union[str, List[str]
+        One or more categories to be combined. If a single category is given the linear
+        combination is calculated across sections. This results in a single series to which
+        a new cross-sectional identifier is assigned. If more than one category string is
+        given the output will be a new category, i.e. a panel that is a linear combination
+        of the categories specified.
+    cids : List[str]
+        cross-sections for which the linear combinations are calculated. Default is all
+        cross-section available.
+    weights : Union[List[float], str]
+        This specifies how categories or cross sections are combined. There are three
+        principal options. The first (default) is None, in which case equal weights are
+        given to all categories or cross sections that are available. The second case is a
+        set of fixed coefficients, in which case these very coefficients are applied to all
+        available categories of cross sections. Per default the coefficients are normalized
+        so that they add up to one for each period. This can be changed with the argument
+        `normalize_weights`. The third case is the assignment of a weighting category. This
+        only applies to combinations of cross sections. In this care the weighting category
+        is multiplied for each period with the corresponding value of main category of the
+        same cross section. Per default the weight category values are normalized so that
+        they add up to one for each period. This can be changed with the argument
+        `normalize_weights`.
+    normalize_weights : bool
+        If True (default) the weights are normalized to sum to 1. If False the weights
+        are used as specified.
+    signs : List[float]
+        An array of consisting of +1s or -1s, of the same length as the number of
+        categories in `xcats` to indicate whether the respective category should be added or
+        subtracted from the linear combination. Not relevant when aggregating over cross-
+        sections, i.e. when a single category is given in `xcats`. Default is None and all
+        signs are set to +1.
+    start : str
+        earliest date in ISO format. Default is None and earliest date for which the
+        respective category is available is used.
+    end : str
+        latest date in ISO format. Default is None and latest date for which the
+        respective category is available is used.
+    complete_xcats : bool
+        If True (default) combinations are only calculated for observation dates on
+        which all xcats are available. If False a combination of the available categories is
+        used. Not relevant when aggregating over cross-sections, i.e. when a single category
+        is given in `xcats`.
+    complete_cids : bool
+        If True (default) combinations are only calculated for observation dates on
+        which all cids are available. If False a combination of the available cross-sections
+        is used. Not relevant when aggregating over categories, i.e. when multiple
+        categories are given in `xcats`.
+    new_xcat : str
+        Name of new composite xcat when aggregating over xcats for a given cid. Default
+        is "NEW".
+    new_cid : str
+        Name of new composite cid when aggregating over cids for a given xcat. Default
+        is "GLB".
+
+    Returns
+    -------
+    pd.DataFrame
+        standardized DataFrame with the relative values, featuring the categories:
+        'cid', 'xcat', 'real_date' and 'value'.
+    """
+
+    (
+        df,
+        xcats,
+        cids,
+        weights,
+        normalize_weights,
+        signs,
+        start,
+        end,
+        blacklist,
+        complete_xcats,
+        complete_cids,
+        new_xcat,
+        new_cid,
+        _xcat_agg,
+        mode,
+    ) = _check_args(
+        df=df,
+        xcats=xcats,
+        cids=cids,
+        weights=weights,
+        normalize_weights=normalize_weights,
+        signs=signs,
+        start=start,
+        end=end,
+        blacklist=blacklist,
+        complete_xcats=complete_xcats,
+        complete_cids=complete_cids,
+        new_xcat=new_xcat,
+        new_cid=new_cid,
+    )
+
+    # update local variables
+    df = QuantamentalDataFrame(df)
+    result_as_categorical = df.InitializedAsCategorical
+    _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
+
+    df: pd.DataFrame
+    remaining_xcats: List[str]
+    remaining_cids: List[str]
+    # NOTE: the "remaining_*" variables will not be in the same order as the input
+    # cids/xcats.
+    # Do not used these for index based lookups/operations.
+    df, remaining_xcats, remaining_cids = reduce_df(
+        df=df,
+        xcats=_xcats,
+        cids=cids,
+        start=start,
+        end=end,
+        blacklist=blacklist,
+        intersect=False,
+        out_all=True,
+    )
+
+    if len(remaining_cids) < len(cids) and not _xcat_agg:
+        missing_cids_xcats_str = _missing_cids_xcats_str(df=df, cids=cids, xcats=xcats)
+        raise ValueError(
+            "Not all `cids` have complete `xcat` data required for the calculation.\n"
+            f"{missing_cids_xcats_str}"
+        )
+
+    if _xcat_agg:
+        df = _populate_missing_xcat_series(df)
+
+        result_df: QuantamentalDataFrame = linear_composite_xcat_agg(
+            df=df,
+            xcats=xcats,
+            weights=weights,
+            signs=signs,
+            normalize_weights=normalize_weights,
+            complete_xcats=complete_xcats,
+            new_xcat=new_xcat,
+        )
+
+    else:  # mode == "cid_agg" -- single xcat
+        df, cids, _xcat, weights, signs = _check_df_for_missing_cid_data(
+            df=df, cids=cids, weights=weights, signs=signs
+        )
+
+        result_df: QuantamentalDataFrame = linear_composite_cid_agg(
+            df=df,
+            xcat=_xcat,
+            cids=cids,
+            weights=weights,
+            signs=signs,
+            normalize_weights=normalize_weights,
+            complete_cids=complete_cids,
+            new_cid=new_cid,
+        )
+
+    return QuantamentalDataFrame(result_df, categorical=result_as_categorical)
+
+
 def _missing_cids_xcats_str(
     df: QuantamentalDataFrame,
     cids: List[str],
@@ -552,183 +729,6 @@ def _check_args(
         _xcat_agg,
         mode,
     )
-
-
-def linear_composite(
-    df: pd.DataFrame,
-    xcats: Union[str, List[str]],
-    cids: Optional[List[str]] = None,
-    weights: Optional[Union[List[float], str]] = None,
-    normalize_weights: bool = True,
-    signs: Optional[List[float]] = None,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    blacklist: Dict[str, List[str]] = None,
-    complete_xcats: bool = False,
-    complete_cids: bool = False,
-    new_xcat="NEW",
-    new_cid="GLB",
-):
-    """
-    Weighted linear combinations of cross sections or categories
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
-        'real_date' and 'value'.
-    xcats : Union[str, List[str]
-        One or more categories to be combined. If a single category is given the linear
-        combination is calculated across sections. This results in a single series to which
-        a new cross-sectional identifier is assigned. If more than one category string is
-        given the output will be a new category, i.e. a panel that is a linear combination
-        of the categories specified.
-    cids : List[str]
-        cross-sections for which the linear combinations are calculated. Default is all
-        cross-section available.
-    weights : Union[List[float], str]
-        This specifies how categories or cross sections are combined. There are three
-        principal options. The first (default) is None, in which case equal weights are
-        given to all categories or cross sections that are available. The second case is a
-        set of fixed coefficients, in which case these very coefficients are applied to all
-        available categories of cross sections. Per default the coefficients are normalized
-        so that they add up to one for each period. This can be changed with the argument
-        `normalize_weights`. The third case is the assignment of a weighting category. This
-        only applies to combinations of cross sections. In this care the weighting category
-        is multiplied for each period with the corresponding value of main category of the
-        same cross section. Per default the weight category values are normalized so that
-        they add up to one for each period. This can be changed with the argument
-        `normalize_weights`.
-    normalize_weights : bool
-        If True (default) the weights are normalized to sum to 1. If False the weights
-        are used as specified.
-    signs : List[float]
-        An array of consisting of +1s or -1s, of the same length as the number of
-        categories in `xcats` to indicate whether the respective category should be added or
-        subtracted from the linear combination. Not relevant when aggregating over cross-
-        sections, i.e. when a single category is given in `xcats`. Default is None and all
-        signs are set to +1.
-    start : str
-        earliest date in ISO format. Default is None and earliest date for which the
-        respective category is available is used.
-    end : str
-        latest date in ISO format. Default is None and latest date for which the
-        respective category is available is used.
-    complete_xcats : bool
-        If True (default) combinations are only calculated for observation dates on
-        which all xcats are available. If False a combination of the available categories is
-        used. Not relevant when aggregating over cross-sections, i.e. when a single category
-        is given in `xcats`.
-    complete_cids : bool
-        If True (default) combinations are only calculated for observation dates on
-        which all cids are available. If False a combination of the available cross-sections
-        is used. Not relevant when aggregating over categories, i.e. when multiple
-        categories are given in `xcats`.
-    new_xcat : str
-        Name of new composite xcat when aggregating over xcats for a given cid. Default
-        is "NEW".
-    new_cid : str
-        Name of new composite cid when aggregating over cids for a given xcat. Default
-        is "GLB".
-
-    Returns
-    -------
-    pd.DataFrame
-        standardized DataFrame with the relative values, featuring the categories:
-        'cid', 'xcat', 'real_date' and 'value'.
-    """
-
-    (
-        df,
-        xcats,
-        cids,
-        weights,
-        normalize_weights,
-        signs,
-        start,
-        end,
-        blacklist,
-        complete_xcats,
-        complete_cids,
-        new_xcat,
-        new_cid,
-        _xcat_agg,
-        mode,
-    ) = _check_args(
-        df=df,
-        xcats=xcats,
-        cids=cids,
-        weights=weights,
-        normalize_weights=normalize_weights,
-        signs=signs,
-        start=start,
-        end=end,
-        blacklist=blacklist,
-        complete_xcats=complete_xcats,
-        complete_cids=complete_cids,
-        new_xcat=new_xcat,
-        new_cid=new_cid,
-    )
-
-    # update local variables
-    df = QuantamentalDataFrame(df)
-    result_as_categorical = df.InitializedAsCategorical
-    _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
-
-    df: pd.DataFrame
-    remaining_xcats: List[str]
-    remaining_cids: List[str]
-    # NOTE: the "remaining_*" variables will not be in the same order as the input
-    # cids/xcats.
-    # Do not used these for index based lookups/operations.
-    df, remaining_xcats, remaining_cids = reduce_df(
-        df=df,
-        xcats=_xcats,
-        cids=cids,
-        start=start,
-        end=end,
-        blacklist=blacklist,
-        intersect=False,
-        out_all=True,
-    )
-
-    if len(remaining_cids) < len(cids) and not _xcat_agg:
-        missing_cids_xcats_str = _missing_cids_xcats_str(df=df, cids=cids, xcats=xcats)
-        raise ValueError(
-            "Not all `cids` have complete `xcat` data required for the calculation.\n"
-            f"{missing_cids_xcats_str}"
-        )
-
-    if _xcat_agg:
-        df = _populate_missing_xcat_series(df)
-
-        result_df: QuantamentalDataFrame = linear_composite_xcat_agg(
-            df=df,
-            xcats=xcats,
-            weights=weights,
-            signs=signs,
-            normalize_weights=normalize_weights,
-            complete_xcats=complete_xcats,
-            new_xcat=new_xcat,
-        )
-
-    else:  # mode == "cid_agg" -- single xcat
-        df, cids, _xcat, weights, signs = _check_df_for_missing_cid_data(
-            df=df, cids=cids, weights=weights, signs=signs
-        )
-
-        result_df: QuantamentalDataFrame = linear_composite_cid_agg(
-            df=df,
-            xcat=_xcat,
-            cids=cids,
-            weights=weights,
-            signs=signs,
-            normalize_weights=normalize_weights,
-            complete_cids=complete_cids,
-            new_cid=new_cid,
-        )
-
-    return QuantamentalDataFrame(result_df, categorical=result_as_categorical)
 
 
 if __name__ == "__main__":

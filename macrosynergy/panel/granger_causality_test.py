@@ -25,6 +25,143 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def granger_causality_test(
+    df: pd.DataFrame,
+    tickers: Optional[List[str]] = None,
+    cids: Optional[Union[str, List[str]]] = None,
+    xcats: Optional[Union[str, List[str]]] = None,
+    max_lag: Union[int, List[int]] = 4,
+    add_constant: bool = False,
+    freq: str = "M",
+    agg: str = "mean",
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    metric: str = "value",
+) -> Dict[Any, Any]:
+    """
+    Run Granger Causality Test on a standardized quantamental dataframe. Since the
+    Graner Causality Test is a pairwise test, only two tickers can be specified. Specify
+    either `tickers` or `cids` & `xcats`. When specifying `cids` & `xcats`, the user may
+    input one `cid` and two `xcats`; or two `cids` and one `xcat` to yield two tickers.
+    The function forms the list of tickers from the `cids` and `xcats` such that the
+    order of the formed tickers is preserved. The order of the tickers is important as
+    the first ticker is the one that is tested to Granger cause the second ticker. The
+    function tests whether the first ticker Granger causes the second ticker.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        A standardized quantamental dataframe.
+    tickers : List[str]
+        A list of tickers to run the test on. A maximum of two tickers can be specified.
+    cids : Union[str, List[str]]
+        One or two cids to run the test on. If two cids are specified, then only one
+        xcat can be specified. If one cid is specified, then two xcats can be specified.
+    xcats : Union[str, List[str]]
+        One or two xcats to run the test on. If two xcats are specified, then only one
+        cid can be specified. If one xcat is specified, then two cids can be specified.
+    max_lag : Union[int, List[int]]
+        If `max_lag` is an integer, then the function computes the test for all lags up
+        to `max_lag`. If `max_lag` is a list of integers, then the function computes the
+        test only for lags specified in the list.
+    add_constant : bool
+        Whether to add a constant to the regression.
+    freq : str
+        The frequency to downsample the data to. Must be one of "D", "W", "M", "Q", "A".
+        Default is "M".
+    agg : str
+        The aggregation method to use when downsampling the data. Must be one of "mean"
+        (default), "median", "min", "max", "first" or "last".
+    start : str
+        The start date of the data. Must be a valid ISO date. If not specified, the
+        earliest date in `df` is used.
+    end : str
+        The end date of the data. Must be a valid ISO date. If not specified, the latest
+        date in `df` is used.
+    metric : str
+        The metric to run the test on. Must be a column in `df`. Default is "value".
+
+    Raises
+    ------
+    TypeError
+        If any of the inputs are of the wrong type.
+    ValueError
+        If any of the input values are invalid.
+
+    Returns
+    -------
+    Dict[Any, Any]
+        A dictionary containing the results of the Granger Causality Test. The keys are
+        the lags and the values are the results of the test.
+    """
+
+    ## Check inputs
+
+    _type_checks(
+        df=df,
+        tickers=tickers,
+        cids=cids,
+        xcats=xcats,
+        max_lag=max_lag,
+        add_constant=add_constant,
+        start=start,
+        end=end,
+        freq=freq,
+        agg=agg,
+        metric=metric,
+    )
+    ## value checks for `freq` and `agg` are implicitly checked in downstream functions
+
+    ## Copy df to prevent side effects
+    df: QuantamentalDataFrame = QuantamentalDataFrame(df)
+
+    ## Construct tickers from the `cids` and `xcats` if `tickers` is not specified
+    tickers: List[str] = _get_tickers(tickers=tickers, cids=cids, xcats=xcats)
+
+    ## Reduce df
+    df: QuantamentalDataFrame = reduce_df_by_ticker(
+        df=df, ticks=tickers, start=start, end=end
+    )
+
+    # Downsample df
+    freq = freq.upper()
+    agg = agg.lower()
+    df = downsample_df_on_real_date(
+        df=df, groupby_columns=["cid", "xcat"], freq=freq, agg=agg
+    )
+
+    # Pivot df
+    df_wide: pd.DataFrame = QuantamentalDataFrame(df).to_wide(value_column=metric)
+
+    # there must only be two columns in df_wide
+    assert len(df_wide.columns) == 2, "df_wide must have only two columns"
+
+    logger.info(
+        "Running Granger Causality Test: Testing whether %s Granger causes %s",
+        df_wide.columns[0],
+        df_wide.columns[1],
+    )
+    # NOTE: Since no NANs are allowed in the input data, we must drop them here
+    # This may yield unexpected/unreliable results for tickers with large periods of
+    # missing data
+
+    # drop any rows with NANs
+    df_wide = df_wide.dropna(how="any", axis=0)
+    if df_wide.empty:
+        raise ValueError(
+            "The input data contains only NANs. "
+            "Please check the input data for missing values or "
+            "consider using a different downsampling frequency/date range."
+        )
+
+    gct: Dict[Any, Any] = _granger_causality_backend(
+        data=df_wide,
+        max_lag=max_lag,
+    )
+
+    return gct
+
+
 def _statsmodels_compatibility_wrapper(
     x: Any = None, maxlag: Any = None, addconst: Any = None, verbose: Any = None
 ) -> Any:
@@ -205,143 +342,6 @@ def _type_checks(
         raise TypeError("`add_constant` must be a boolean")
 
     return True
-
-
-def granger_causality_test(
-    df: pd.DataFrame,
-    tickers: Optional[List[str]] = None,
-    cids: Optional[Union[str, List[str]]] = None,
-    xcats: Optional[Union[str, List[str]]] = None,
-    max_lag: Union[int, List[int]] = 4,
-    add_constant: bool = False,
-    freq: str = "M",
-    agg: str = "mean",
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    metric: str = "value",
-) -> Dict[Any, Any]:
-    """
-    Run Granger Causality Test on a standardized quantamental dataframe. Since the
-    Graner Causality Test is a pairwise test, only two tickers can be specified. Specify
-    either `tickers` or `cids` & `xcats`. When specifying `cids` & `xcats`, the user may
-    input one `cid` and two `xcats`; or two `cids` and one `xcat` to yield two tickers.
-    The function forms the list of tickers from the `cids` and `xcats` such that the
-    order of the formed tickers is preserved. The order of the tickers is important as
-    the first ticker is the one that is tested to Granger cause the second ticker. The
-    function tests whether the first ticker Granger causes the second ticker.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        A standardized quantamental dataframe.
-    tickers : List[str]
-        A list of tickers to run the test on. A maximum of two tickers can be specified.
-    cids : Union[str, List[str]]
-        One or two cids to run the test on. If two cids are specified, then only one
-        xcat can be specified. If one cid is specified, then two xcats can be specified.
-    xcats : Union[str, List[str]]
-        One or two xcats to run the test on. If two xcats are specified, then only one
-        cid can be specified. If one xcat is specified, then two cids can be specified.
-    max_lag : Union[int, List[int]]
-        If `max_lag` is an integer, then the function computes the test for all lags up
-        to `max_lag`. If `max_lag` is a list of integers, then the function computes the
-        test only for lags specified in the list.
-    add_constant : bool
-        Whether to add a constant to the regression.
-    freq : str
-        The frequency to downsample the data to. Must be one of "D", "W", "M", "Q", "A".
-        Default is "M".
-    agg : str
-        The aggregation method to use when downsampling the data. Must be one of "mean"
-        (default), "median", "min", "max", "first" or "last".
-    start : str
-        The start date of the data. Must be a valid ISO date. If not specified, the
-        earliest date in `df` is used.
-    end : str
-        The end date of the data. Must be a valid ISO date. If not specified, the latest
-        date in `df` is used.
-    metric : str
-        The metric to run the test on. Must be a column in `df`. Default is "value".
-
-    Raises
-    ------
-    TypeError
-        If any of the inputs are of the wrong type.
-    ValueError
-        If any of the input values are invalid.
-
-    Returns
-    -------
-    Dict[Any, Any]
-        A dictionary containing the results of the Granger Causality Test. The keys are
-        the lags and the values are the results of the test.
-    """
-
-    ## Check inputs
-
-    _type_checks(
-        df=df,
-        tickers=tickers,
-        cids=cids,
-        xcats=xcats,
-        max_lag=max_lag,
-        add_constant=add_constant,
-        start=start,
-        end=end,
-        freq=freq,
-        agg=agg,
-        metric=metric,
-    )
-    ## value checks for `freq` and `agg` are implicitly checked in downstream functions
-
-    ## Copy df to prevent side effects
-    df: QuantamentalDataFrame = QuantamentalDataFrame(df)
-
-    ## Construct tickers from the `cids` and `xcats` if `tickers` is not specified
-    tickers: List[str] = _get_tickers(tickers=tickers, cids=cids, xcats=xcats)
-
-    ## Reduce df
-    df: QuantamentalDataFrame = reduce_df_by_ticker(
-        df=df, ticks=tickers, start=start, end=end
-    )
-
-    # Downsample df
-    freq = freq.upper()
-    agg = agg.lower()
-    df = downsample_df_on_real_date(
-        df=df, groupby_columns=["cid", "xcat"], freq=freq, agg=agg
-    )
-
-    # Pivot df
-    df_wide: pd.DataFrame = QuantamentalDataFrame(df).to_wide(value_column=metric)
-
-    # there must only be two columns in df_wide
-    assert len(df_wide.columns) == 2, "df_wide must have only two columns"
-
-    logger.info(
-        "Running Granger Causality Test: Testing whether %s Granger causes %s",
-        df_wide.columns[0],
-        df_wide.columns[1],
-    )
-    # NOTE: Since no NANs are allowed in the input data, we must drop them here
-    # This may yield unexpected/unreliable results for tickers with large periods of
-    # missing data
-
-    # drop any rows with NANs
-    df_wide = df_wide.dropna(how="any", axis=0)
-    if df_wide.empty:
-        raise ValueError(
-            "The input data contains only NANs. "
-            "Please check the input data for missing values or "
-            "consider using a different downsampling frequency/date range."
-        )
-
-    gct: Dict[Any, Any] = _granger_causality_backend(
-        data=df_wide,
-        max_lag=max_lag,
-    )
-
-    return gct
 
 
 if __name__ == "__main__":

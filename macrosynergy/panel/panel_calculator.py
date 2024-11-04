@@ -15,106 +15,6 @@ import re
 import random
 
 
-def time_series_check(formula: str, index: int):
-    """
-    Determine if the panel has any time-series methods applied. If a time-series
-    conversion is applied, the function will return the terminal index of the respective
-    category. Further, a boolean parameter is also returned to confirm the presence of a
-    time-series operation.
-
-    Parameters
-    ----------
-    formula : str
-
-    index : int
-        starting index to iterate over.
-
-    Returns
-    -------
-    Tuple[int, bool]
-    """
-
-    check = lambda a, b, c: (
-        (a.isupper() or a.isnumeric()) and b == "." and c.islower()
-    )
-
-    f = formula
-    length = len(f)
-    clause = False
-    for i in range(index, (length - 2)):
-        if check(f[i], f[i + 1], f[i + 2]):
-            clause = True
-            break
-
-    return i, clause
-
-
-def xcat_isolator(expression: str, start_index: str, index: int):
-    """
-    Split the category from the time-series operation. The function will return the
-    respective category.
-
-    Parameters
-    ----------
-    expression : str
-
-    start_index : str
-        starting index to search over.
-    index : int
-        defines the end of the search space over the expression.
-
-    Returns
-    -------
-    str
-        xcat.
-    """
-
-    op_copy = expression[start_index : index + 1]
-
-    start = next(i for i, elem in enumerate(op_copy) if elem.isupper())
-
-    xcat = op_copy[start : index + 1]
-
-    return xcat, start_index + start + len(xcat)
-
-
-def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
-    """
-    Collect all categories used in the panel calculation.
-
-    Parameters
-    ----------
-    ops : dict
-        dictionary of panel calculation formulas.
-
-    Returns
-    -------
-    Tuple[List[str], List[str]]
-        all_xcats_used, singles_used.
-    """
-
-    xcats_used: List[str] = []
-    singles_used: List[str] = []
-    for op in ops.values():
-        index, clause = time_series_check(formula=op, index=0)
-        start_index = 0
-        if clause:
-            while clause:
-                xcat, end_ = xcat_isolator(op, start_index, index)
-                xcats_used.append(xcat)
-                index, clause = time_series_check(op, index=end_)
-                start_index = end_
-        else:
-            op_list = op.split(" ")
-            xcats_used += [x for x in op_list if re.match("^[A-Z]", x)]
-            singles_used += [s for s in op_list if re.match("^i", s)]
-
-    single_xcats = [x[5:] for x in singles_used]
-    single_cids = [x[1:4] for x in single_xcats]
-    all_xcats_used = xcats_used + single_xcats
-    return all_xcats_used, singles_used, single_cids
-
-
 def panel_calculator(
     df: pd.DataFrame,
     calcs: List[str] = None,
@@ -262,6 +162,106 @@ def panel_calculator(
 
     df_out = QuantamentalDataFrame(df_out, categorical=_as_categorical)
     return df_out
+
+
+def time_series_check(formula: str, index: int):
+    """
+    Determine if the panel has any time-series methods applied. If a time-series
+    conversion is applied, the function will return the terminal index of the respective
+    category. Further, a boolean parameter is also returned to confirm the presence of a
+    time-series operation.
+
+    Parameters
+    ----------
+    formula : str
+
+    index : int
+        starting index to iterate over.
+
+    Returns
+    -------
+    Tuple[int, bool]
+    """
+
+    check = lambda a, b, c: (
+        (a.isupper() or a.isnumeric()) and b == "." and c.islower()
+    )
+
+    f = formula
+    length = len(f)
+    clause = False
+    for i in range(index, (length - 2)):
+        if check(f[i], f[i + 1], f[i + 2]):
+            clause = True
+            break
+
+    return i, clause
+
+
+def xcat_isolator(expression: str, start_index: str, index: int):
+    """
+    Split the category from the time-series operation. The function will return the
+    respective category.
+
+    Parameters
+    ----------
+    expression : str
+
+    start_index : str
+        starting index to search over.
+    index : int
+        defines the end of the search space over the expression.
+
+    Returns
+    -------
+    str
+        xcat.
+    """
+
+    op_copy = expression[start_index : index + 1]
+
+    start = next(i for i, elem in enumerate(op_copy) if elem.isupper())
+
+    xcat = op_copy[start : index + 1]
+
+    return xcat, start_index + start + len(xcat)
+
+
+def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
+    """
+    Collect all categories used in the panel calculation.
+
+    Parameters
+    ----------
+    ops : dict
+        dictionary of panel calculation formulas.
+
+    Returns
+    -------
+    Tuple[List[str], List[str]]
+        all_xcats_used, singles_used.
+    """
+
+    xcats_used: List[str] = []
+    singles_used: List[str] = []
+    for op in ops.values():
+        index, clause = time_series_check(formula=op, index=0)
+        start_index = 0
+        if clause:
+            while clause:
+                xcat, end_ = xcat_isolator(op, start_index, index)
+                xcats_used.append(xcat)
+                index, clause = time_series_check(op, index=end_)
+                start_index = end_
+        else:
+            op_list = op.split(" ")
+            xcats_used += [x for x in op_list if re.match("^[A-Z]", x)]
+            singles_used += [s for s in op_list if re.match("^i", s)]
+
+    single_xcats = [x[5:] for x in singles_used]
+    single_cids = [x[1:4] for x in single_xcats]
+    all_xcats_used = xcats_used + single_xcats
+    return all_xcats_used, singles_used, single_cids
 
 
 def _check_calcs(formulas: List[str]):

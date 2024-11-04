@@ -15,61 +15,6 @@ from macrosynergy.management.types import QuantamentalDataFrame
 import warnings
 
 
-def _prepare_category_basket(
-    df: pd.DataFrame,
-    cid: str,
-    basket: List[str],
-    xcats_avl: List[str],
-    complete_set: bool,
-):
-    """
-    Relative cid-specific indicators can be defined over different sets of categories.
-    We will determine the respective basket given the available categories for the
-    respective cross-section.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        long JPMaQS DataFrame of single category.
-    cid : str
-        target cross-section for the relative value calculation.
-    basket : pd.DataFrame
-        set of categories to be used for the relative value benchmark if available.
-    xcats_avl : List[str]
-        actual set of categories available for the target cross-section.
-    complete_set : bool
-        if True, the basket is only calculated if all categories, held in the basket,
-        are available for that respective category.
-    """
-
-    xcats_used: List[str] = sorted(set(basket) & set(xcats_avl))
-    xcats_miss: List[str] = list(set(basket) - set(xcats_used))
-
-    # if any missing cids, warn
-    if xcats_miss:
-        if complete_set:
-            xcats_used = []
-            err_str: str = (
-                f"The cross-section, {cid}, is missing {xcats_miss} which are included "
-                f"in the basket {basket}. Therefore, the cross-section will be excluded "
-                "from the returned DataFrame."
-            )
-            print(err_str)
-            warnings.warn(err_str, UserWarning)
-        else:
-            err_str: str = (
-                f"The cross-section, {cid}, is missing {xcats_miss} from the requested "
-                f"basket. The new basket will be {xcats_used}."
-            )
-            print(err_str)
-            warnings.warn(err_str, UserWarning)
-
-    # Reduce the DataFrame to the specified basket given the available cross-sections.
-    dfb = df.loc[df["xcat"].isin(xcats_used)]
-
-    return dfb, xcats_used
-
-
 def make_relative_category(
     df: pd.DataFrame,
     xcats: List[str] = None,
@@ -253,6 +198,61 @@ def make_relative_category(
         pd.concat(df_list).reset_index(drop=True),
         categorical=df.InitializedAsCategorical,
     )
+
+
+def _prepare_category_basket(
+    df: pd.DataFrame,
+    cid: str,
+    basket: List[str],
+    xcats_avl: List[str],
+    complete_set: bool,
+):
+    """
+    Relative cid-specific indicators can be defined over different sets of categories.
+    We will determine the respective basket given the available categories for the
+    respective cross-section.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        long JPMaQS DataFrame of single category.
+    cid : str
+        target cross-section for the relative value calculation.
+    basket : pd.DataFrame
+        set of categories to be used for the relative value benchmark if available.
+    xcats_avl : List[str]
+        actual set of categories available for the target cross-section.
+    complete_set : bool
+        if True, the basket is only calculated if all categories, held in the basket,
+        are available for that respective category.
+    """
+
+    xcats_used: List[str] = sorted(set(basket) & set(xcats_avl))
+    xcats_miss: List[str] = list(set(basket) - set(xcats_used))
+
+    # if any missing cids, warn
+    if xcats_miss:
+        if complete_set:
+            xcats_used = []
+            err_str: str = (
+                f"The cross-section, {cid}, is missing {xcats_miss} which are included "
+                f"in the basket {basket}. Therefore, the cross-section will be excluded "
+                "from the returned DataFrame."
+            )
+            print(err_str)
+            warnings.warn(err_str, UserWarning)
+        else:
+            err_str: str = (
+                f"The cross-section, {cid}, is missing {xcats_miss} from the requested "
+                f"basket. The new basket will be {xcats_used}."
+            )
+            print(err_str)
+            warnings.warn(err_str, UserWarning)
+
+    # Reduce the DataFrame to the specified basket given the available cross-sections.
+    dfb = df.loc[df["xcat"].isin(xcats_used)]
+
+    return dfb, xcats_used
 
 
 if __name__ == "__main__":

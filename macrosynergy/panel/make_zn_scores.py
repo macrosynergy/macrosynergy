@@ -16,97 +16,6 @@ from macrosynergy.management.types import QuantamentalDataFrame
 from numbers import Number
 
 
-def expanding_stat(
-    df: pd.DataFrame,
-    dates_iter: pd.DatetimeIndex,
-    stat: Union[str, Number] = "mean",
-    sequential: bool = True,
-    min_obs: int = 261,
-    iis: bool = True,
-) -> pd.DataFrame:
-    """
-    Compute statistic based on an expanding sample.
-
-    Parameters
-    ----------
-    df : pd.Dataframe
-        Daily-frequency time series DataFrame.
-    dates_iter : pd.DatetimeIndex
-        controls the frequency of the neutral & mean absolute deviation calculations.
-    stat : str, Number
-        statistical method to be applied. This is typically 'mean', or 'median'.
-    sequential : bool
-        if True (default) the statistic is estimated sequentially. If this set to false
-        a single value is calculated per time series, based on the full sample.
-    min_obs : int
-        minimum required observations for calculation of the statistic in days.
-    iis : bool
-        if set to True, the values of the initial interval determined by min_obs will be
-        estimated in-sample, based on the full initial sample.
-
-    Returns
-    -------
-    pd.DataFrame
-        Time series dataframe of the chosen statistic across all columns
-    """
-
-    df_out = pd.DataFrame(np.nan, index=df.index, columns=["value"])
-    # An adjustment for individual series' first realised value is not required given the
-    # returned DataFrame will be subtracted from the original DataFrame. The original
-    # DataFrame will implicitly host this information through NaN values such that when
-    # the arithmetic operation is made, any falsified values will be displaced by NaN
-    # values.
-
-    first_observation = df.dropna(axis=0, how="all").index[0]
-    # Adjust for individual cross-sections' series commencing at different dates.
-    first_estimation = df.dropna(axis=0, how="all").index[min_obs]
-
-    obs_index = np.where(df.index == first_observation)[0][0]
-    est_index = np.where(df.index == first_estimation)[0][0]
-
-    if stat == "zero":
-        df_out["value"] = 0
-
-    elif isinstance(stat, Number):
-        df_out["value"] = stat
-
-    elif not sequential:
-        # The entire series is treated as in-sample. Will automatically handle NaN
-        # values.
-        statval = df.stack().apply(stat)
-        df_out["value"] = statval
-
-    else:
-        dates = dates_iter[dates_iter >= first_estimation]
-        if stat == "mean":
-            expanding_count = _get_expanding_count(
-                df.loc[first_observation:], min_periods=min_obs + 1
-            )
-            df_mean = (
-                df.loc[first_observation:]
-                .sum(1)
-                .expanding(min_periods=min_obs + 1)
-                .sum()
-                / expanding_count
-            )
-            df_mean = df_mean.dropna().loc[dates]
-            df_mean.name = "value"
-            df_out.update(df_mean)
-        else:
-            for date in dates:
-                df_out.loc[date, "value"] = (
-                    df.loc[first_observation:date].stack().apply(stat)
-                )
-
-        df_out = df_out.ffill()
-
-        if iis and (est_index - obs_index) > 0:
-            df_out = df_out.bfill(limit=int(est_index - obs_index))
-
-    df_out.columns.name = "cid"
-    return df_out
-
-
 def make_zn_scores(
     df: pd.DataFrame,
     xcat: str,
@@ -333,6 +242,97 @@ def make_zn_scores(
         categorical=df.InitializedAsCategorical,
     )
 
+    return df_out
+
+
+def expanding_stat(
+    df: pd.DataFrame,
+    dates_iter: pd.DatetimeIndex,
+    stat: Union[str, Number] = "mean",
+    sequential: bool = True,
+    min_obs: int = 261,
+    iis: bool = True,
+) -> pd.DataFrame:
+    """
+    Compute statistic based on an expanding sample.
+
+    Parameters
+    ----------
+    df : pd.Dataframe
+        Daily-frequency time series DataFrame.
+    dates_iter : pd.DatetimeIndex
+        controls the frequency of the neutral & mean absolute deviation calculations.
+    stat : str, Number
+        statistical method to be applied. This is typically 'mean', or 'median'.
+    sequential : bool
+        if True (default) the statistic is estimated sequentially. If this set to false
+        a single value is calculated per time series, based on the full sample.
+    min_obs : int
+        minimum required observations for calculation of the statistic in days.
+    iis : bool
+        if set to True, the values of the initial interval determined by min_obs will be
+        estimated in-sample, based on the full initial sample.
+
+    Returns
+    -------
+    pd.DataFrame
+        Time series dataframe of the chosen statistic across all columns
+    """
+
+    df_out = pd.DataFrame(np.nan, index=df.index, columns=["value"])
+    # An adjustment for individual series' first realised value is not required given the
+    # returned DataFrame will be subtracted from the original DataFrame. The original
+    # DataFrame will implicitly host this information through NaN values such that when
+    # the arithmetic operation is made, any falsified values will be displaced by NaN
+    # values.
+
+    first_observation = df.dropna(axis=0, how="all").index[0]
+    # Adjust for individual cross-sections' series commencing at different dates.
+    first_estimation = df.dropna(axis=0, how="all").index[min_obs]
+
+    obs_index = np.where(df.index == first_observation)[0][0]
+    est_index = np.where(df.index == first_estimation)[0][0]
+
+    if stat == "zero":
+        df_out["value"] = 0
+
+    elif isinstance(stat, Number):
+        df_out["value"] = stat
+
+    elif not sequential:
+        # The entire series is treated as in-sample. Will automatically handle NaN
+        # values.
+        statval = df.stack().apply(stat)
+        df_out["value"] = statval
+
+    else:
+        dates = dates_iter[dates_iter >= first_estimation]
+        if stat == "mean":
+            expanding_count = _get_expanding_count(
+                df.loc[first_observation:], min_periods=min_obs + 1
+            )
+            df_mean = (
+                df.loc[first_observation:]
+                .sum(1)
+                .expanding(min_periods=min_obs + 1)
+                .sum()
+                / expanding_count
+            )
+            df_mean = df_mean.dropna().loc[dates]
+            df_mean.name = "value"
+            df_out.update(df_mean)
+        else:
+            for date in dates:
+                df_out.loc[date, "value"] = (
+                    df.loc[first_observation:date].stack().apply(stat)
+                )
+
+        df_out = df_out.ffill()
+
+        if iis and (est_index - obs_index) > 0:
+            df_out = df_out.bfill(limit=int(est_index - obs_index))
+
+    df_out.columns.name = "cid"
     return df_out
 
 
