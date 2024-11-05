@@ -1,5 +1,5 @@
 """
-"Naive" PnLs with limited signal options and disregarding transaction costs.
+"Naive" profit-and-loss (PnL) calculations with basic signal options, disregarding transaction costs.
 """
 
 from dataclasses import dataclass
@@ -33,7 +33,7 @@ class NaivePnL:
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.Dataframe
         standardized DataFrame with the following necessary columns: 'cid', 'xcat',
         'real_date' and 'value'.
     ret : str
@@ -106,192 +106,6 @@ class NaivePnL:
 
         self.pnl_params = {}
 
-    def add_bm(self, df: pd.DataFrame, bms: List[str], tickers: List[str]):
-        """
-        Returns a dictionary with benchmark return series.
-
-        Parameters
-        ----------
-        df : pd.DataFrame
-            aggregate DataFrame passed into the Class.
-        bms : List[str]
-            benchmark return tickers.
-        tickers : List[str]
-            the available tickers held in the reduced DataFrame. The reduced DataFrame
-            consists exclusively of the signal & return categories.
-        """
-
-        bm_dict = {}
-
-        for bm in bms:
-            # Accounts for appending "_NEG" to the ticker.
-            bm_s = bm.split("_", maxsplit=1)
-            cid = bm_s[0]
-            xcat = bm_s[1]
-            dfa = df[(df["cid"] == cid) & (df["xcat"] == xcat)]
-
-            if dfa.shape[0] == 0:
-                print(f"{bm} has no observations in the DataFrame.")
-            else:
-                df_single_bm = dfa.pivot(
-                    index="real_date", columns="xcat", values="value"
-                )
-                df_single_bm.columns = [bm]
-                bm_dict[bm] = df_single_bm
-                if bm not in tickers:
-                    self.df = update_df(self.df, dfa)
-
-        return bm_dict
-
-    @staticmethod
-    def _make_signal(
-        dfx: pd.DataFrame,
-        sig: str,
-        sig_op: str = "zn_score_pan",
-        min_obs: int = 252,
-        iis: bool = True,
-        sequential: bool = True,
-        neutral: str = "zero",
-        thresh: float = None,
-    ):
-        """
-        Helper function used to produce the raw signal that forms the basis for
-        positioning.
-
-        Parameters
-        ----------
-        dfx : pd.DataFrame
-            DataFrame defined over the return & signal category.
-        sig : str
-            name of the raw signal.
-        sig_op : str
-            signal transformation.
-        min_obs : int
-            the minimum number of observations required to calculate zn_scores. Default
-            is 252.
-        iis : bool
-            if True (default) zn-scores are also calculated for the initial sample
-            period defined by min_obs, on an in-sample basis, to avoid losing history.
-        sequential : bool
-            if True (default) score parameters are estimated sequentially with
-            concurrently available information only.
-        neutral : str
-            method to determine neutral level.
-        thresh : float
-            threshold value beyond which scores are winsorized,
-        """
-
-        if sig_op == "binary":
-            dfw = dfx.pivot(index=["cid", "real_date"], columns="xcat", values="value")
-            dfw["psig"] = np.sign(dfw[sig])
-        elif sig_op == "raw":
-            dfw = dfx.pivot(index=["cid", "real_date"], columns="xcat", values="value")
-            dfw["psig"] = dfw[sig]
-        else:
-            panw = 1 if sig_op == "zn_score_pan" else 0
-            # The re-estimation frequency for the neutral level and standard deviation
-            # will be the same as the re-balancing frequency. For instance, if the
-            # neutral level is computed weekly, a material change in the signal will only
-            # manifest along a similar timeline. Therefore, re-estimation and
-            # re-balancing frequencies match.
-            df_ms = make_zn_scores(
-                dfx,
-                xcat=sig,
-                neutral=neutral,
-                pan_weight=panw,
-                sequential=sequential,
-                min_obs=min_obs,
-                iis=iis,
-                thresh=thresh,
-            )
-
-            df_ms = df_ms.drop("xcat", axis=1)
-            df_ms = QuantamentalDataFrame.from_long_df(df_ms, xcat="psig")
-
-            dfx_concat = pd.concat([dfx, df_ms])
-            dfw = dfx_concat.pivot(
-                index=["cid", "real_date"], columns="xcat", values="value"
-            )
-
-        # Reconstruct the DataFrame to recognise the signal's start date for each
-        # individual cross-section
-        dfw_list = []
-        for c, cid_df in dfw.groupby(level=0, observed=True):
-            first_date = cid_df.loc[:, "psig"].first_valid_index()
-            cid_df = cid_df.loc[first_date:, :]
-            dfw_list.append(cid_df)
-        return pd.concat(dfw_list)
-
-    @staticmethod
-    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0):
-        """
-        The signals are calculated daily and for each individual cross-section defined
-        in the panel. However, re-balancing a position can occur more infrequently than
-        daily. Therefore, produce the re-balancing values according to the more
-        infrequent timeline (weekly or monthly).
-
-        Parameters
-        ----------
-        dfw : pd.Dataframe
-            DataFrame with each category represented by a column and the daily signal is
-            also included with the column name 'psig'.
-        rebal_freq : str
-            re-balancing frequency for positions according to signal must be one of
-            'daily' (default), 'weekly' or 'monthly'.
-        rebal_slip : str
-            re-balancing slippage in days.
-
-        Returns
-        -------
-        pd.Series
-            will return a pd.Series containing the associated signals according to the
-            re-balancing frequency.
-        """
-
-        # The re-balancing days are the first of the respective time-periods because of
-        # the shift forward by one day applied earlier in the code. Therefore, only
-        # concerned with the minimum date of each re-balance period.
-        dfw["year"] = dfw["real_date"].dt.year
-        if rebal_freq == "monthly":
-            dfw["month"] = dfw["real_date"].dt.month
-            rebal_dates = dfw.groupby(
-                ["cid", "year", "month"],
-                observed=True,
-            )["real_date"].min()
-        elif rebal_freq == "weekly":
-            dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
-            rebal_dates = dfw.groupby(["cid", "year", "week"])["real_date"].min()
-
-        # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
-        r_dates_df = rebal_dates.reset_index(level=0)
-        r_dates_df.reset_index(drop=True, inplace=True)
-        dfw = dfw[["real_date", "psig", "cid"]]
-
-        # Isolate the required signals on the re-balancing dates. Only concerned with the
-        # respective signal on the re-balancing date. However, the produced DataFrame
-        # will only be defined over the re-balancing dates. Therefore, merge the
-        # aforementioned DataFrame with the original DataFrame such that all business
-        # days are included. The intermediary dates, dates between re-balancing dates,
-        # will initially be populated by NA values. To ensure the signal is used for the
-        # duration between re-balancing dates, forward fill the computed signal over the
-        # associated dates.
-
-        # The signal is computed for each individual cross-section. Therefore, merge on
-        # the real_date and the cross-section.
-        rebal_merge = r_dates_df.merge(dfw, how="left", on=["real_date", "cid"])
-        # Re-establish the daily date series index where the intermediary dates, between
-        # the re-balancing dates, will be populated using a forward fill.
-        rebal_merge = dfw[["real_date", "cid"]].merge(
-            rebal_merge, how="left", on=["real_date", "cid"]
-        )
-        rebal_merge["psig"] = rebal_merge["psig"].ffill().shift(rebal_slip)
-        rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
-
-        rebal_merge = rebal_merge.set_index("real_date")
-        sig_series = rebal_merge.drop(["cid"], axis=1)
-
-        return sig_series
-
     def make_pnl(
         self,
         sig: str,
@@ -319,12 +133,8 @@ class NaivePnL:
             be recorded at the end of the day prior to position taking.
         sig_op : str
             signal transformation options; must be one of 'zn_score_pan', 'zn_score_cs',
-            'binary', or 'raw'. The default is 'zn_score_pan'. 'zn_score_pan': transforms
-            raw signals into z-scores around zero value based on the whole panel. The
-            neutral level & standard deviation will use the cross-section of panels.
-            'zn_score_cs': transforms signals to z-scores around zero based on cross-section
-            alone. 'binary': transforms signals into uniform long/shorts (1/-1) across all
-            sections.
+            'binary', or 'raw'. The default is 'zn_score_pan'. See notes below for
+            further details.
         sig_add : float
             add a constant to the signal after initial transformation. This allows to
             give PnLs a long or short bias relative to the signal score. Default is 0.
@@ -372,10 +182,23 @@ class NaivePnL:
             Default is no threshold.
 
 
-        .. note::
-            zn-score here means standardized score with zero being the
-            natural neutral level and standardization through division by mean absolute
-            value.
+        Notes
+        -----
+        When sig_op = 'zn_score_pan', raw signals are transformed into zn-scores
+        around a neutral value where pooled panel statistics are calculated.
+
+        When sig_op = 'zn_score_cs', raw signals are transformed into zn-scores
+        around a neutral value where statistics are calculated by cross section alone.
+
+        When sig_op = 'binary', transforms signals into uniform long/shorts (1/-1) across
+        all cross sections.
+
+        When sig_op = 'raw', no transformation is applied to the signal.
+
+        See Also
+        --------
+        macrosynergy.panel.make_zn_scores : compute zn-scores for a panel. 
+        
         """
 
         for varx, name, typex in (
@@ -541,7 +364,7 @@ class NaivePnL:
         leverage: float = 1.0,
     ):
         """
-        The long-only returns will be computed which act as a basis for comparison
+        Computes long-only returns which may act as a basis for comparison
         against the signal-adjusted returns. Will take a long-only position in the
         category passed to the parameter 'self.ret'.
 
@@ -592,6 +415,192 @@ class NaivePnL:
 
         self.df = self.df.reset_index(drop=True)
 
+    def add_bm(self, df: pd.DataFrame, bms: List[str], tickers: List[str]):
+        """
+        Returns a dictionary with benchmark return series.
+
+        Parameters
+        ----------
+        df : ~pandas.DataFrame
+            aggregate DataFrame passed into the Class.
+        bms : List[str]
+            benchmark return tickers.
+        tickers : List[str]
+            the available tickers held in the reduced DataFrame. The reduced DataFrame
+            consists exclusively of the signal & return categories.
+        """
+
+        bm_dict = {}
+
+        for bm in bms:
+            # Accounts for appending "_NEG" to the ticker.
+            bm_s = bm.split("_", maxsplit=1)
+            cid = bm_s[0]
+            xcat = bm_s[1]
+            dfa = df[(df["cid"] == cid) & (df["xcat"] == xcat)]
+
+            if dfa.shape[0] == 0:
+                print(f"{bm} has no observations in the DataFrame.")
+            else:
+                df_single_bm = dfa.pivot(
+                    index="real_date", columns="xcat", values="value"
+                )
+                df_single_bm.columns = [bm]
+                bm_dict[bm] = df_single_bm
+                if bm not in tickers:
+                    self.df = update_df(self.df, dfa)
+
+        return bm_dict
+
+    @staticmethod
+    def _make_signal(
+        dfx: pd.DataFrame,
+        sig: str,
+        sig_op: str = "zn_score_pan",
+        min_obs: int = 252,
+        iis: bool = True,
+        sequential: bool = True,
+        neutral: str = "zero",
+        thresh: float = None,
+    ):
+        """
+        Helper function used to produce the raw signal that forms the basis for
+        positioning.
+
+        Parameters
+        ----------
+        dfx : ~pandas.DataFrame
+            DataFrame defined over the return & signal category.
+        sig : str
+            name of the raw signal.
+        sig_op : str
+            signal transformation.
+        min_obs : int
+            the minimum number of observations required to calculate zn_scores. Default
+            is 252.
+        iis : bool
+            if True (default) zn-scores are also calculated for the initial sample
+            period defined by min_obs, on an in-sample basis, to avoid losing history.
+        sequential : bool
+            if True (default) score parameters are estimated sequentially with
+            concurrently available information only.
+        neutral : str
+            method to determine neutral level.
+        thresh : float
+            threshold value beyond which scores are winsorized,
+        """
+
+        if sig_op == "binary":
+            dfw = dfx.pivot(index=["cid", "real_date"], columns="xcat", values="value")
+            dfw["psig"] = np.sign(dfw[sig])
+        elif sig_op == "raw":
+            dfw = dfx.pivot(index=["cid", "real_date"], columns="xcat", values="value")
+            dfw["psig"] = dfw[sig]
+        else:
+            panw = 1 if sig_op == "zn_score_pan" else 0
+            # The re-estimation frequency for the neutral level and standard deviation
+            # will be the same as the re-balancing frequency. For instance, if the
+            # neutral level is computed weekly, a material change in the signal will only
+            # manifest along a similar timeline. Therefore, re-estimation and
+            # re-balancing frequencies match.
+            df_ms = make_zn_scores(
+                dfx,
+                xcat=sig,
+                neutral=neutral,
+                pan_weight=panw,
+                sequential=sequential,
+                min_obs=min_obs,
+                iis=iis,
+                thresh=thresh,
+            )
+
+            df_ms = df_ms.drop("xcat", axis=1)
+            df_ms = QuantamentalDataFrame.from_long_df(df_ms, xcat="psig")
+
+            dfx_concat = pd.concat([dfx, df_ms])
+            dfw = dfx_concat.pivot(
+                index=["cid", "real_date"], columns="xcat", values="value"
+            )
+
+        # Reconstruct the DataFrame to recognise the signal's start date for each
+        # individual cross-section
+        dfw_list = []
+        for c, cid_df in dfw.groupby(level=0, observed=True):
+            first_date = cid_df.loc[:, "psig"].first_valid_index()
+            cid_df = cid_df.loc[first_date:, :]
+            dfw_list.append(cid_df)
+        return pd.concat(dfw_list)
+
+    @staticmethod
+    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0):
+        """
+        The signals are calculated daily and for each individual cross-section defined
+        in the panel. However, re-balancing a position can occur more infrequently than
+        daily. Therefore, produce the re-balancing values according to the more
+        infrequent timeline (weekly or monthly).
+
+        Parameters
+        ----------
+        dfw : ~pandas.Dataframe
+            DataFrame with each category represented by a column and the daily signal is
+            also included with the column name 'psig'.
+        rebal_freq : str
+            re-balancing frequency for positions according to signal must be one of
+            'daily' (default), 'weekly' or 'monthly'.
+        rebal_slip : str
+            re-balancing slippage in days.
+
+        Returns
+        -------
+        ~pandas.Series
+            will return a pd.Series containing the associated signals according to the
+            re-balancing frequency.
+        """
+
+        # The re-balancing days are the first of the respective time-periods because of
+        # the shift forward by one day applied earlier in the code. Therefore, only
+        # concerned with the minimum date of each re-balance period.
+        dfw["year"] = dfw["real_date"].dt.year
+        if rebal_freq == "monthly":
+            dfw["month"] = dfw["real_date"].dt.month
+            rebal_dates = dfw.groupby(
+                ["cid", "year", "month"],
+                observed=True,
+            )["real_date"].min()
+        elif rebal_freq == "weekly":
+            dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
+            rebal_dates = dfw.groupby(["cid", "year", "week"])["real_date"].min()
+
+        # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
+        r_dates_df = rebal_dates.reset_index(level=0)
+        r_dates_df.reset_index(drop=True, inplace=True)
+        dfw = dfw[["real_date", "psig", "cid"]]
+
+        # Isolate the required signals on the re-balancing dates. Only concerned with the
+        # respective signal on the re-balancing date. However, the produced DataFrame
+        # will only be defined over the re-balancing dates. Therefore, merge the
+        # aforementioned DataFrame with the original DataFrame such that all business
+        # days are included. The intermediary dates, dates between re-balancing dates,
+        # will initially be populated by NA values. To ensure the signal is used for the
+        # duration between re-balancing dates, forward fill the computed signal over the
+        # associated dates.
+
+        # The signal is computed for each individual cross-section. Therefore, merge on
+        # the real_date and the cross-section.
+        rebal_merge = r_dates_df.merge(dfw, how="left", on=["real_date", "cid"])
+        # Re-establish the daily date series index where the intermediary dates, between
+        # the re-balancing dates, will be populated using a forward fill.
+        rebal_merge = dfw[["real_date", "cid"]].merge(
+            rebal_merge, how="left", on=["real_date", "cid"]
+        )
+        rebal_merge["psig"] = rebal_merge["psig"].ffill().shift(rebal_slip)
+        rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
+
+        rebal_merge = rebal_merge.set_index("real_date")
+        sig_series = rebal_merge.drop(["cid"], axis=1)
+
+        return sig_series
+
     @staticmethod
     def long_only_pnl(
         dfw: pd.DataFrame,
@@ -606,7 +615,7 @@ class NaivePnL:
 
         Parameters
         ----------
-        dfw : pd.DataFrame
+        dfw : ~pandas.DataFrame
 
         vol_scale : bool
             ex-post scaling of PnL to annualized volatility given. This is for
@@ -619,7 +628,7 @@ class NaivePnL:
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             standardised dataframe containing exclusively the return category, and the
             long-only panel return.
         """
@@ -1099,7 +1108,7 @@ class NaivePnL:
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             standardized DataFrame with key PnL performance statistics.
         """
 
@@ -1237,7 +1246,7 @@ class NaivePnL:
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             custom DataFrame with PnLs
         """
 
@@ -1285,7 +1294,7 @@ def create_results_dataframe(
     ----------
     title : str
         title of the DataFrame.
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         DataFrame with the data.
     ret : str
         name of the return signal.
@@ -1326,7 +1335,7 @@ def create_results_dataframe(
 
     Returns
     -------
-    pd.DataFrame
+    ~pandas.DataFrame
         DataFrame with the performance metrics.
     """
 

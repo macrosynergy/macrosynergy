@@ -1,5 +1,7 @@
 """
-Multi PnLs combine multiple "Naive" PnLs with limited signal options and disregarding transaction costs.
+The `MultiPnL` class allows for visualizing and analyzing PnLs across multiple return categories. 
+It also provides functionality to calculate a weighted aggregate PnL based on user-defined weights
+for each PnL.
 """
 
 from typing import Dict, List, Optional, Union
@@ -16,6 +18,10 @@ from macrosynergy.management.types import QuantamentalDataFrame
 
 
 class MultiPnL:
+    """
+    Manages multiple `NaivePnL` instances, enabling combined PnL analysis and visualization.
+    """
+
     def __init__(self):
         self.pnls_df = QuantamentalDataFrame(
             pd.DataFrame(columns=["real_date", "xcat", "value", "cid"])
@@ -26,7 +32,8 @@ class MultiPnL:
 
     def add_pnl(self, pnl: NaivePnL, pnl_xcats: List[str]):
         """
-        Add a NaivePnL object.
+        Add PnL(s) from a NaivePnL object. PnL categories will be ingested into
+        the MultiPnL object as 'pnl_xcat/return'.
 
         Parameters
         ----------
@@ -56,7 +63,7 @@ class MultiPnL:
         pnl_xcats: List[str],
         composite_pnl_xcat: str,
         weights: Optional[Dict[str, float]] = None,
-    ) -> pd.DataFrame:
+    ):
         """
         Combine PnLs with optional weighting.
 
@@ -141,7 +148,8 @@ class MultiPnL:
         xcat_labels: Union[List[str], dict] = None,
     ):
         """
-        Creates a plot of PnLs
+        Creates a plot of PnLs from added NaivePnL objects and/or
+        combined PnLs created with `combine_pnls()`.
 
         Parameters
         ----------
@@ -156,7 +164,7 @@ class MultiPnL:
 
         if pnl_xcats is None:
             pnl_df = self.pnls_df
-            pnl_xcats = self.pnl_xcats()
+            pnl_xcats = self.pnl_xcats
         else:
             for i, pnl_xcat in enumerate(pnl_xcats):
                 pnl_xcats[i] = self._infer_return_by_xcat(pnl_xcat)
@@ -178,18 +186,39 @@ class MultiPnL:
 
     def evaluate_pnls(self, pnl_xcats: List[str] = None) -> pd.DataFrame:
         """
-        Evaluate individual and composite PnLs.
+        Returns a DataFrame containing the following evaluation metrics for specified PnLs:
+
+        Return %
+        St. Dev. %
+        Sharpe Ratio
+        Sortino Ratio
+        Max 21-Day Draw %
+        Max 6-Month Draw %
+        Peak to Trough Draw %
+        Top 5% Monthly PnL Share
+        Traded Months
+        Correlation with benchmarks (if available)
+
+        .. note::
+            The evaluation metrics are calculated in a manner similar to NaivePnL's `evaluate_pnls()`.
+
+            Benchmark correlation is not currently supported for combined PnLs.
 
         Parameters
         ----------
         pnl_xcats : List[str]
             List of PnLs to evaluate. If None, all PnLs are evaluated. Must be in the
             format 'xcat', or 'xcat/return_xcat'.
+            
+        Returns
+        -------
+        ~pandas.DataFrame
+            DataFrame containing evaluation metrics for the specified PnLs.
         """
 
         self._check_pnls_added()
         if pnl_xcats is None:
-            pnl_xcats = self.pnl_xcats()
+            pnl_xcats = self.pnl_xcats
         else:
             for i, pnl_xcat in enumerate(pnl_xcats):
                 pnl_xcats[i] = self._infer_return_by_xcat(pnl_xcat)
@@ -208,7 +237,6 @@ class MultiPnL:
     def _evaluate_composite_pnl(self, pnl_xcat: str) -> pd.DataFrame:
         """
         Evaluate the combined PnLs in a manner similar to NaivePnL's `evaluate_pnls()`.
-
         """
         stats = [
             "Return %",
@@ -257,13 +285,18 @@ class MultiPnL:
 
     def get_pnls(self, pnl_xcats: List[str] = None) -> pd.DataFrame:
         """
-        Returns a DataFrame with PnLs.
+        Returns a DataFrame containing specified PnLs.
 
         Parameters
         ----------
         pnl_xcats : List[str]
             List of PnLs to return. If None, all PnLs are returned. Must be in the
             format 'xcat', or 'xcat/return_xcat'.
+            
+        Returns
+        -------
+        ~pandas.DataFrame
+            DataFrame containing the specified PnLs.
         """
 
         if self.pnls_df is None:
@@ -301,15 +334,17 @@ class MultiPnL:
             raise ValueError("All elements in the list must be strings.")
         return True
 
+    @property
     def pnl_xcats(self):
         """
-        Return all PnL categories.
+        Returns all PnL categories.
         """
         return self.pnls_df["xcat"].unique().tolist()
 
+    @property
     def return_xcats(self):
         """
-        Return all return categories associated with PnLs.
+        Returns all return categories associated with PnLs.
         """
         return list(set(self.xcat_to_ret.values()))
 
@@ -317,7 +352,7 @@ class MultiPnL:
         """
         Check if at least `min_pnls` PnLs have been added.
         """
-        if len(self.pnl_xcats()) < min_pnls:
+        if len(self.pnl_xcats) < min_pnls:
             raise ValueError(
                 f"At least {min_pnls} PnL must be added with add_pnl() first."
             )
@@ -342,7 +377,7 @@ class MultiPnL:
             else:
                 return f"{pnl_xcat}/{list(self.xcat_to_ret[pnl_xcat])[0]}"
         else:
-            if pnl_xcat not in self.pnl_xcats():
+            if pnl_xcat not in self.pnl_xcats:
                 raise ValueError(f"{pnl_xcat} has not been added with add_pnl() yet.")
             else:
                 return pnl_xcat
