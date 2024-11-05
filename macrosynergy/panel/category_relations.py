@@ -23,7 +23,7 @@ class CategoryRelations(object):
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
         and at least one column with values of interest.
     xcats : List[str]
@@ -236,7 +236,7 @@ class CategoryRelations(object):
 
         Parameters
         ----------
-        df : pd.DataFrame
+        df : ~pandas.DataFrame
             standardised DataFrame.
         xcats : List[str]
             exactly two extended categories to be checked on.
@@ -274,6 +274,9 @@ class CategoryRelations(object):
         xcats: List[str],
         metrics: List[str],
     ) -> pd.DataFrame:
+        """ 
+        Calls the utility function apply_slip_util defined in df_utils. 
+        """
         return apply_slip_util(
             df=df, slip=slip, cids=cids, xcats=xcats, metrics=metrics, raise_error=False
         )
@@ -288,16 +291,18 @@ class CategoryRelations(object):
         expln_var: str,
     ):
         """
-        Calculates first differences and percent changes.
+        Apply time-series changes to the explanatory variable. Calculates first 
+        differences or percentage changes of the time series.
 
         Parameters
         ----------
-        df : pd.DataFrame
-            multi-index DataFrame hosting the two categories: first column represents
+        df : ~pandas.DataFrame
+            multi-indexed DataFrame hosting the two categories: first column represents
             the explanatory variable; second column hosts the dependent variable. The
             DataFrame's index is the real-date and cross-section.
         change : str
-            type of change to be applied
+            type of change to be applied. Can be 'diff' for first-differencing or 'pch' 
+            for percentage change.
         n_periods : int
             number of base periods in df over which the change is applied.
         shared_cids : List[str]
@@ -308,10 +313,13 @@ class CategoryRelations(object):
 
         Returns
         -------
-        pd.Dataframe
-            df: returns the same multi-index DataFrame but with an adjusted series
+        ~pandas.DataFrame
+            df: returns the same multi-indexed DataFrame but with an adjusted series
             inline with the 'change' parameter.
         """
+
+        if change not in ["diff", "pch"]:
+            raise ValueError("change must be 'diff' or 'pch'.")
 
         df_lists = []
         for c in shared_cids:
@@ -319,7 +327,7 @@ class CategoryRelations(object):
 
             if change == "diff":
                 temp_df[expln_var] = temp_df[expln_var].diff(periods=n_periods)
-            else:
+            elif change == "pch":
                 temp_df[expln_var] = temp_df[expln_var].pct_change(periods=n_periods)
 
             temp_df["cid"] = c
@@ -337,18 +345,21 @@ class CategoryRelations(object):
 
         Parameters
         ----------
-        df : pd.DataFrame
-            multi-index DataFrame hosting the two categories. The transformations, to
+        df : ~pandas.DataFrame
+            multi-indexed DataFrame hosting the two categories. The transformations, to
             each series, have already been applied.
         xcats : List[str]
             explanatory and dependent variable.
         xcat_trims : List[float]
+            two-element list with maximum absolute values for the two respective
+            categories. Observations with higher values will be trimmed, i.e. removed from
+            the analysis (not winsorized!).
 
 
         Returns
         -------
-        pd.DataFrame
-            returns the same multi-index DataFrame.
+        ~pandas.DataFrame
+            returns the same multi-indexed DataFrame.
 
 
         .. note::
