@@ -23,7 +23,7 @@ def view_table(
 
     Parameters
     ----------
-    table : pd.Dataframe
+    table : ~pandas.DataFrame
         table to be displayed.
     title : str, optional
         string of chart title; defaults depend on type of range plot.

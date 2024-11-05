@@ -422,7 +422,7 @@ def lag_series(
 
     Parameters
     ----------
-    df_w : pd.DataFrame
+    df_w : ~pandas.DataFrame
         multi-index DataFrame where the columns are the categories, and the two indices
         are the cross-sections and real-dates.
     lags : dict
@@ -485,7 +485,7 @@ def _cluster_correlations(
 
     Parameters
     ----------
-    corr : pd.Dataframe
+    corr : ~pandas.DataFrame
         dataframe representing a correlation matrix.
     is_symmetric : bool
         if True, rows and columns are rearranged identically. If False, only rows are
