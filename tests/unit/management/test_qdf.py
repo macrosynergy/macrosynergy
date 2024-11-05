@@ -2,12 +2,16 @@ import unittest
 import numpy as np
 import pandas as pd
 import random
-import string
 from typing import List
 import warnings
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.compat import PD_2_0_OR_LATER
 from macrosynergy.management.constants import JPMAQS_METRICS
-from macrosynergy.management.utils import get_cid, get_xcat
+from macrosynergy.management.utils import (
+    get_cid,
+    get_xcat,
+    qdf_to_ticker_df,
+)
 from macrosynergy.management.types.qdf.methods import (
     get_col_sort_order,
     change_column_format,
@@ -19,15 +23,13 @@ from macrosynergy.management.types.qdf.methods import (
     reduce_df,
     reduce_df_by_ticker,
     update_df,
-    update_tickers,
     update_categories,
     qdf_to_wide_df,
     add_ticker_column,
     rename_xcats,
-    _add_index_str_column,
     add_nan_series,
     drop_nan_series,
-    qdf_from_timseries,
+    qdf_from_timeseries,
     create_empty_categorical_qdf,
     concat_qdfs,
 )
@@ -62,57 +64,6 @@ def helper_split_df_by_metrics(
 
 def helper_split_df_by_ticker(df: QuantamentalDataFrame) -> List[QuantamentalDataFrame]:
     return [sdf for (c, x), sdf in df.groupby(["cid", "xcat"], observed=True)]
-
-
-class TestQDFBasic(unittest.TestCase):
-    def test_quantamental_dataframe_type(self):
-        test_df: pd.DataFrame = make_test_df()
-        self.assertTrue(isinstance(test_df, QuantamentalDataFrame))
-        # rename xcat to xkat
-        df: pd.DataFrame = test_df.copy()
-        df.columns = df.columns.str.replace("xcat", "xkat")
-        self.assertFalse(isinstance(df, QuantamentalDataFrame))
-
-        # rename cid to xid
-        df: pd.DataFrame = test_df.copy()
-        df.columns = df.columns.str.replace("cid", "xid")
-        self.assertFalse(isinstance(df, QuantamentalDataFrame))
-
-        # change one date to a string
-        df: pd.DataFrame = test_df.copy()
-        self.assertTrue(isinstance(df, QuantamentalDataFrame))
-
-        # change one date to a string -- remember the caveats for pd arrays
-        df: pd.DataFrame = test_df.copy()
-        nseries: List[pd.Timestamp] = df["real_date"].tolist()
-        nseries[0] = "2020-01-01"
-        df["real_date"] = pd.Series(nseries, dtype=object).copy()
-        self.assertFalse(isinstance(df, QuantamentalDataFrame))
-
-        # Check if subclassing works as expected
-        df: pd.DataFrame = test_df.copy()
-
-        dfx: QuantamentalDataFrame = QuantamentalDataFrame(df)
-
-        self.assertTrue(isinstance(dfx, QuantamentalDataFrame))
-        self.assertTrue(isinstance(dfx, pd.DataFrame))
-
-        df_Q = (
-            QuantamentalDataFrame(df)
-            .sort_values(["cid", "xcat", "real_date"])
-            .reset_index(drop=True)
-        )
-        df_S = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
-        self.assertTrue((df_S == df_Q).all().all())
-
-        # test with categorical=False
-        df_Q = (
-            QuantamentalDataFrame(df, categorical=False)
-            .sort_values(["cid", "xcat", "real_date"])
-            .reset_index(drop=True)
-        )
-        df_S = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
-        self.assertTrue(df_Q.equals(df_S))
 
 
 class TestMethods(unittest.TestCase):
@@ -234,8 +185,8 @@ class TestMethods(unittest.TestCase):
         alt_args = dict(
             ticker="A_X",
             metrics=["a", "b"],
-            start_date="2000-01-01",
-            end_date="2020-01-01",
+            start="2000-01-01",
+            end="2020-01-01",
         )
 
         df2 = create_empty_categorical_qdf(**alt_args)
@@ -283,15 +234,15 @@ class TestMethods(unittest.TestCase):
         )
 
         # test with cid and xcat
-        qdf = qdf_from_timseries(ts, cid="A", xcat="X")
+        qdf = qdf_from_timeseries(ts, cid="A", xcat="X")
         self.assertTrue(check_is_categorical(qdf))
 
         # test with ticker
-        qdf = qdf_from_timseries(ts, ticker="A_X")
+        qdf = qdf_from_timeseries(ts, ticker="A_X")
         self.assertTrue(check_is_categorical(qdf))
 
         # test with ticker
-        qdf = qdf_from_timseries(ts, ticker="A_X")
+        qdf = qdf_from_timeseries(ts, ticker="A_X")
         self.assertTrue(check_is_categorical(qdf))
 
         # test with non datetime index
@@ -299,25 +250,25 @@ class TestMethods(unittest.TestCase):
         with self.assertRaises(ValueError):
             ts_copy = ts.copy()
             ts_copy.index = ts_copy.index.astype(str)
-            qdf_from_timseries(ts_copy, ticker="A_X")
+            qdf_from_timeseries(ts_copy, ticker="A_X")
 
         # test with non pd.Series
         with self.assertRaises(TypeError):
-            qdf_from_timseries(ts.values, ticker="A_X")
+            qdf_from_timeseries(ts.values, ticker="A_X")
 
         # test with non string metric
         with self.assertRaises(TypeError):
-            qdf_from_timseries(ts, ticker="A_X", metric=1)
+            qdf_from_timeseries(ts, ticker="A_X", metric=1)
 
         # test with no cid or xcat
         with self.assertRaises(ValueError):
-            qdf_from_timseries(ts, ticker="A_X", cid="A", xcat="X")
+            qdf_from_timeseries(ts, ticker="A_X", cid="A", xcat="X")
 
         with self.assertRaises(ValueError):
-            qdf_from_timseries(ts, ticker="A_X", cid="A")
+            qdf_from_timeseries(ts, ticker="A_X", cid="A")
 
         with self.assertRaises(ValueError):
-            qdf_from_timseries(ts, xcat="X")
+            qdf_from_timeseries(ts, xcat="X")
 
     def test_add_ticker_column(self):
         test_df: pd.DataFrame = make_test_df()
@@ -549,7 +500,7 @@ class TestReduceDF(unittest.TestCase):
 
         qdf = QuantamentalDataFrame(test_df)
         orig_cids = set(qdf["cid"].unique())
-        orig_xcats = set(qdf["xcat"].unique())
+        # orig_xcats = set(qdf["xcat"].unique())
 
         reduce_cids = random.sample(list(orig_cids), random.randint(2, 5))
         rel_tickers = sorted(set([t for t in tickers if get_cid(t) in reduce_cids]))
@@ -574,12 +525,10 @@ class TestReduceDF(unittest.TestCase):
 
     def test_reduce_df_across_xcat(self):
         tickers = helper_random_tickers(20)
-        start = "2010-01-01"
-        end = "2010-12-31"
         test_df: pd.DataFrame = make_test_df(tickers=tickers)
 
         qdf = QuantamentalDataFrame(test_df)
-        orig_cids = set(qdf["cid"].unique())
+        # orig_cids = set(qdf["cid"].unique())
         orig_xcats = set(qdf["xcat"].unique())
 
         reduce_xcats = random.sample(list(orig_xcats), random.randint(2, 5))
@@ -616,8 +565,6 @@ class TestReduceDF(unittest.TestCase):
         test_df: pd.DataFrame = make_test_df(tickers=tickers, metrics=JPMAQS_METRICS)
 
         qdf = QuantamentalDataFrame(test_df)
-        orig_cids = set(qdf["cid"].unique())
-        orig_xcats = set(qdf["xcat"].unique())
 
         reduce_xcats = ["FX", "IR", "EQ", "CDS"]
 
@@ -759,6 +706,33 @@ class TestReduceDF(unittest.TestCase):
         expected_df = apply_blacklist(qdf, blacklist)
 
         self.assertTrue(new_df.equals(expected_df))
+
+    def test_reduce_df_out_all(self):
+        # tickers = helper_random_tickers(20)
+        test_cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
+        test_xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
+        test_df: pd.DataFrame = make_test_df(cids=test_cids, xcats=test_xcats)
+
+        qdf = QuantamentalDataFrame(test_df)
+        orig_cids = set(qdf["cid"].unique())
+        orig_xcats = set(qdf["xcat"].unique())
+
+        sel_cids = random.sample(list(orig_cids), 2)
+        sel_xcats = random.sample(list(orig_xcats), 2)
+
+        new_df, out_xcats, out_cids = reduce_df(
+            qdf, cids=sel_cids, xcats=sel_xcats, out_all=True
+        )
+
+        found_cids = new_df["cid"].unique()
+        found_xcats = new_df["xcat"].unique()
+
+        # should be the same as the original
+        self.assertTrue(set(found_cids) == set(sel_cids))
+        self.assertTrue(set(found_xcats) == set(sel_xcats))
+
+        self.assertTrue(set(out_cids) == set(sel_cids))
+        self.assertTrue(set(out_xcats) == set(sel_xcats))
 
 
 class TestUpdateDF(unittest.TestCase):
@@ -981,17 +955,13 @@ class TestConcatQDFs(unittest.TestCase):
                 by=QuantamentalDataFrame.IndexCols + [sdf.columns[-1]]
             )
 
-        orig_len = len(split_dfs)
         for idf, _ in enumerate(split_dfs):
             cid = split_dfs[idf]["cid"].unique().tolist()[0]
             xcat = split_dfs[idf]["xcat"].unique().tolist()[0]
             _metric = split_dfs[idf].columns[-1]
             for t, m in drop_pairs:
                 if t == f"{cid}_{xcat}" and m == _metric:
-                    # split_dfs.pop()
                     split_dfs.pop(idf)
-
-                    # dfo[(dfo["cid"] == cid) & (dfo["xcat"] == xcat)][m] = np.nan
                     dfo.loc[(dfo["cid"] == cid) & (dfo["xcat"] == xcat), m] = np.nan
 
         output_df = concat_qdfs(split_dfs)
@@ -1253,6 +1223,688 @@ class TestRenameXCATs(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             rename_xcats(qdf, fmt_string="new_{xcat}_name_")
+
+
+class TestQDFClass(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tickers = helper_random_tickers(50)
+        self.test_df: pd.DataFrame = make_test_df(
+            tickers=self.tickers, metrics=JPMAQS_METRICS
+        )
+
+    def test_quantamental_dataframe_type(self):
+        test_df: pd.DataFrame = make_test_df()
+        self.assertTrue(isinstance(test_df, QuantamentalDataFrame))
+        # rename xcat to xkat
+        df: pd.DataFrame = test_df.copy()
+        df.columns = df.columns.str.replace("xcat", "xkat")
+        self.assertFalse(isinstance(df, QuantamentalDataFrame))
+
+        # rename cid to xid
+        df: pd.DataFrame = test_df.copy()
+        df.columns = df.columns.str.replace("cid", "xid")
+        self.assertFalse(isinstance(df, QuantamentalDataFrame))
+
+        # change one date to a string
+        df: pd.DataFrame = test_df.copy()
+        self.assertTrue(isinstance(df, QuantamentalDataFrame))
+
+        # change one date to a string -- remember the caveats for pd arrays
+        df: pd.DataFrame = test_df.copy()
+        nseries: List[pd.Timestamp] = df["real_date"].tolist()
+        nseries[0] = "2020-01-01"
+        df["real_date"] = pd.Series(nseries, dtype=object).copy()
+        self.assertFalse(isinstance(df, QuantamentalDataFrame))
+
+        # Check if subclassing works as expected
+        df: pd.DataFrame = test_df.copy()
+
+        dfx: QuantamentalDataFrame = QuantamentalDataFrame(df)
+
+        self.assertTrue(isinstance(dfx, QuantamentalDataFrame))
+        self.assertTrue(isinstance(dfx, pd.DataFrame))
+
+        df_Q = (
+            QuantamentalDataFrame(df)
+            .sort_values(["cid", "xcat", "real_date"])
+            .reset_index(drop=True)
+        )
+        df_S = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
+        self.assertTrue((df_S == df_Q).all().all())
+
+        # test with categorical=False
+        df_Q = (
+            QuantamentalDataFrame(df, categorical=False)
+            .sort_values(["cid", "xcat", "real_date"])
+            .reset_index(drop=True)
+        )
+        df_S = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
+        self.assertTrue(df_Q.equals(df_S))
+
+    def test_qdf_minimal(self):
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df.copy())
+        in_dtypes = test_df.dtypes.to_dict()
+
+        qdf_copy = qdf.copy()
+        qdf_copy[["cid", "xcat"]] = qdf_copy[["cid", "xcat"]].astype("object")
+
+        self.assertTrue(qdf_copy.equals(test_df))
+
+        self.assertTrue(qdf.dtypes.to_dict()["cid"].name == "category")
+        self.assertTrue(qdf.dtypes.to_dict()["xcat"].name == "category")
+
+        for col in qdf.columns:
+            if col not in ["cid", "xcat"]:
+                self.assertTrue(qdf[col].dtype == in_dtypes[col])
+
+    def test_qdf_str_cols(self):
+        tickers = helper_random_tickers(10)
+        test_df: pd.DataFrame = make_test_df(tickers=tickers, metrics=JPMAQS_METRICS)
+
+        qdf = QuantamentalDataFrame(test_df, categorical=False)
+
+        self.assertTrue(qdf.equals(test_df))
+        self.assertTrue(qdf.dtypes.to_dict()["cid"].name == "object")
+        self.assertTrue(qdf.dtypes.to_dict()["xcat"].name == "object")
+
+    def test_qdf_is_categorical(self):
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df)
+        self.assertTrue(qdf.is_categorical())
+        self.assertEqual(check_is_categorical(qdf), qdf.is_categorical())
+
+        qdf = QuantamentalDataFrame(test_df, categorical=False)
+        self.assertFalse(qdf.is_categorical())
+        self.assertEqual(check_is_categorical(qdf), qdf.is_categorical())
+
+    def test_qdf_to_categorical(self):
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df, categorical=False)
+        self.assertFalse(qdf.is_categorical())
+        qdf = qdf.to_categorical()
+        self.assertTrue(qdf.is_categorical())
+
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df)
+        self.assertTrue(qdf.is_categorical())
+        qdf = qdf.to_categorical()
+        self.assertTrue(qdf.is_categorical())
+
+    def test_qdf_to_string_type(self):
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df, categorical=False)
+        self.assertFalse(qdf.is_categorical())
+        qdf = qdf.to_string_type()
+        self.assertFalse(qdf.is_categorical())
+
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df)
+        self.assertTrue(qdf.is_categorical())
+        qdf = qdf.to_string_type()
+        self.assertFalse(qdf.is_categorical())
+
+    def test_qdf_to_original_dtypes(self):
+        test_df = self.test_df.copy()
+
+        qdf = QuantamentalDataFrame(test_df)
+        self.assertTrue(qdf.is_categorical())
+        qdf = qdf.to_original_dtypes()
+        self.assertFalse(qdf.is_categorical())
+        self.assertTrue(qdf.equals(test_df))
+
+        # now try with an already categorical df
+        new_test_df = qdf_to_categorical(self.test_df.copy())
+        qdf = QuantamentalDataFrame(new_test_df)
+        qdf = qdf.to_original_dtypes()
+        self.assertTrue(qdf.is_categorical())
+
+    def test_qdf_list_tickers(self):
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df)
+        self.assertEqual(set(qdf.list_tickers()), set(self.tickers))
+
+        self.assertTrue(pd.DataFrame(qdf).eq(self.test_df).all().all())
+
+    def test_add_ticker_column(self):
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df)
+        orig_cols = qdf.columns
+
+        qdf = qdf.add_ticker_column()
+
+        self.assertTrue("ticker" in qdf.columns)
+
+        self.assertTrue(qdf[orig_cols].eq(test_df).all().all())
+
+        expc_column = qdf["cid"].astype(str) + "_" + qdf["xcat"].astype(str)
+        self.assertTrue((qdf["ticker"] == expc_column).all())
+
+    def test_drop_ticker_column(self):
+        test_df = self.test_df.copy()
+        qdf = QuantamentalDataFrame(test_df)
+        orig_cols = qdf.columns
+
+        qdf = qdf.add_ticker_column()
+        assert "ticker" in qdf.columns, "Test logic failed"
+
+        qdf = qdf.drop_ticker_column()
+        self.assertTrue("ticker" not in qdf.columns)
+        self.assertTrue(qdf[orig_cols].eq(test_df).all().all())
+
+        new_qdf = QuantamentalDataFrame(test_df)
+
+        with self.assertRaises(ValueError):
+            new_qdf.drop_ticker_column()
+
+    def test_reduce_df(self):
+        test_cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
+        test_xcats = ["FX", "IR", "EQ", "CDS", "PPP"]
+
+        test_df: pd.DataFrame = make_test_df(
+            cids=test_cids, xcats=test_xcats, metrics=JPMAQS_METRICS
+        )
+
+        qdf = QuantamentalDataFrame(test_df)
+        red_cids = random.sample(test_cids, 3)
+        red_xcats = random.sample(test_xcats, 3)
+
+        new_df = qdf.reduce_df(cids=red_cids, xcats=red_xcats)
+
+        expc_df = reduce_df(qdf, cids=red_cids, xcats=red_xcats)
+
+        if PD_2_0_OR_LATER:
+            self.assertTrue(new_df.eq(expc_df).all().all())
+        else:
+            self.assertTrue(
+                pd.DataFrame(new_df).eq(pd.DataFrame(expc_df)).all().all(),
+                msg="Test failing on pandas < 2.0",
+            )
+        # test reduce_df out_all
+
+        qdf = QuantamentalDataFrame(test_df)
+        red_cids = random.sample(test_cids, 3)
+        red_xcats = random.sample(test_xcats, 3)
+
+        new_df, out_xcats, out_cids = qdf.reduce_df(
+            cids=red_cids, xcats=red_xcats, out_all=True
+        )
+
+        expc_df, expc_out_xcats, expc_out_cids = reduce_df(
+            qdf, cids=red_cids, xcats=red_xcats, out_all=True
+        )
+
+        if PD_2_0_OR_LATER:
+            self.assertTrue(new_df.eq(expc_df).all().all())
+        else:
+            self.assertTrue(
+                pd.DataFrame(new_df).eq(pd.DataFrame(expc_df)).all().all(),
+                msg="Test failing on pandas < 2.0",
+            )
+
+        self.assertEqual(out_cids, expc_out_cids)
+        self.assertEqual(out_xcats, expc_out_xcats)
+
+    def test_reduce_df_by_ticker(self):
+
+        qdf = QuantamentalDataFrame(self.test_df)
+        sel_tickers = random.sample(self.tickers, 10)
+
+        new_df = qdf.reduce_df_by_ticker(tickers=sel_tickers)
+
+        expc_df = reduce_df_by_ticker(df=qdf, tickers=sel_tickers)
+
+        if PD_2_0_OR_LATER:
+            self.assertTrue(new_df.eq(expc_df).all().all())
+        else:
+            self.assertTrue(
+                pd.DataFrame(new_df).eq(pd.DataFrame(expc_df)).all().all(),
+                msg="Test failing on pandas < 2.0",
+            )
+
+    def test_apply_blacklist(self):
+        blacklist = {
+            "GBP": [pd.Timestamp("2010-06-06"), pd.Timestamp("2010-07-23")],
+            "AUD": [pd.Timestamp("2000-01-01"), pd.Timestamp("2025-01-01")],
+        }
+
+        qdf = QuantamentalDataFrame(self.test_df)
+
+        new_df = qdf.apply_blacklist(blacklist=blacklist)
+
+        expc_df = apply_blacklist(df=qdf, blacklist=blacklist)
+
+        if PD_2_0_OR_LATER:
+            self.assertTrue(new_df.eq(expc_df).all().all())
+        else:
+            self.assertTrue(
+                pd.DataFrame(new_df).eq(pd.DataFrame(expc_df)).all().all(),
+                msg="Test failing on pandas < 2.0",
+            )
+
+        # test with reduce_df
+
+        qdf = QuantamentalDataFrame(self.test_df)
+
+        new_df = qdf.reduce_df(blacklist=blacklist)
+
+        expc_df = reduce_df(qdf, blacklist=blacklist)
+
+        if PD_2_0_OR_LATER:
+            self.assertTrue(new_df.eq(expc_df).all().all())
+        else:
+            self.assertTrue(
+                pd.DataFrame(new_df).eq(pd.DataFrame(expc_df)).all().all(),
+                msg="Test failing on pandas < 2.0",
+            )
+
+    def test_update_df(self):
+        tickers = helper_random_tickers(20)
+        dfa = make_test_df(tickers=tickers[:10])
+        dfb = make_test_df(tickers=tickers[10:])
+
+        qdfa = QuantamentalDataFrame(dfa)
+        qdfb = QuantamentalDataFrame(dfb)
+
+        new_df = qdfa.update_df(qdfb)
+
+        expected_df = update_df(qdfa, qdfb)
+
+        if PD_2_0_OR_LATER:
+            self.assertTrue(new_df.eq(expected_df).all().all())
+        else:
+            self.assertTrue(
+                pd.DataFrame(new_df).eq(pd.DataFrame(expected_df)).all().all(),
+                msg="Test failing on pandas < 2.0",
+            )
+
+    def test_add_nan_series(self):
+        test_df = self.test_df.copy()
+
+        qdf = QuantamentalDataFrame(test_df)
+        curr_min_date, curr_max_date = qdf["real_date"].min(), qdf["real_date"].max()
+
+        new_cid, new_xcat = "NCID", "NXCAT"
+        new_ticker = f"{new_cid}_{new_xcat}"
+
+        qdf = qdf.add_nan_series(ticker=new_ticker)
+
+        test_added = qdf.loc[(qdf["cid"] == new_cid) & (qdf["xcat"] == new_xcat)]
+
+        # test that the min and max dates are the same
+        self.assertEqual(test_added["real_date"].min(), curr_min_date)
+        self.assertEqual(test_added["real_date"].max(), curr_max_date)
+
+        # test that all the metrics are nan
+        self.assertTrue(test_added[JPMAQS_METRICS].isna().all().all())
+
+    def test_drop_nan_series(self):
+        test_df = self.test_df.copy()
+
+        qdf = QuantamentalDataFrame(test_df)
+        qdf_copy = qdf.copy()
+        rand_xcats = ["RAND1", "RAND2", "RAND3"]
+        rand_cids = ["RAND4", "RAND5", "RAND6"]
+        rand_tickers = [f"{rc}_{rx}" for rc in rand_cids for rx in rand_xcats]
+
+        for rt in rand_tickers:
+            qdf = qdf.add_nan_series(ticker=rt)
+
+        with warnings.catch_warnings(record=True) as wcatch:
+            qdf = qdf.drop_nan_series()
+            wlist = [w for w in wcatch if issubclass(w.category, UserWarning)]
+            self.assertEqual(len(wlist), len(rand_tickers))
+
+            ticker_dict = {t: False for t in rand_tickers}
+            for w in wlist:
+                for _t in rand_tickers:
+                    if _t in str(w.message):
+                        ticker_dict[_t] = True
+
+            self.assertTrue(all(ticker_dict.values()))
+
+        tickers = qdf.list_tickers()
+        self.assertTrue(set(tickers).isdisjoint(set(rand_tickers)))
+
+        # sort both dfs by the index cols
+        qdf = qdf.sort_values(QuantamentalDataFrame.IndexColsSortOrder).reset_index(
+            drop=True
+        )
+        qdf_copy = qdf_copy.sort_values(
+            QuantamentalDataFrame.IndexColsSortOrder
+        ).reset_index(drop=True)
+
+        qdf[["cid", "xcat"]] = qdf[["cid", "xcat"]].astype("object")
+        qdf_copy[["cid", "xcat"]] = qdf_copy[["cid", "xcat"]].astype("object")
+
+        self.assertTrue(qdf.equals(qdf_copy))
+
+    def test_rename_xcats(self):
+        test_df = self.test_df.copy()
+
+        qdf = QuantamentalDataFrame(test_df)
+
+        xcat_map = {xc: xc[::-1] for xc in qdf["xcat"].unique()}
+
+        new_df = qdf.rename_xcats(xcat_map=xcat_map)
+
+        expc_df = rename_xcats(qdf, xcat_map=xcat_map)
+
+        if PD_2_0_OR_LATER:
+            self.assertTrue(new_df.eq(expc_df).all().all())
+        else:
+            self.assertTrue(
+                pd.DataFrame(new_df).eq(pd.DataFrame(expc_df)).all().all(),
+                msg="Test failing on pandas < 2.0",
+            )
+
+    def test_qdf_to_wide(self):
+        test_df = self.test_df.copy()
+
+        qdf = QuantamentalDataFrame(test_df)
+
+        wide_df = qdf.to_wide()
+
+        expc_df = qdf_to_ticker_df(test_df)
+
+        # check the columns are the same
+        self.assertTrue(wide_df.columns.equals(expc_df.columns))
+
+        for col in wide_df.columns:
+            self.assertTrue(wide_df[col].equals(expc_df[col]))
+
+        # test with categorical df
+        test_df = self.test_df.copy()
+        expc_df = qdf_to_ticker_df(test_df)
+
+        _qdf = QuantamentalDataFrame(test_df, _initialized_as_categorical=True)
+        qdf = QuantamentalDataFrame(_qdf)
+
+        wide_df = qdf.to_wide()
+
+        # assert that the wide sdf
+        isinstance(wide_df.columns, pd.CategoricalIndex)
+
+        # check that the set of columns is the same
+        self.assertTrue(set(wide_df.columns) == set(expc_df.columns))
+
+        for col in wide_df.columns:
+            self.assertTrue(wide_df[col].equals(expc_df[col]))
+
+
+class TestQDFClassInit(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tickers = helper_random_tickers(10)
+        self.test_df: pd.DataFrame = make_test_df(tickers=self.tickers)
+
+    def test_qdf_errors(self):
+        with self.assertRaises(TypeError):
+            QuantamentalDataFrame(1)
+
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame(pd.DataFrame())
+
+    def test_qdf_init_as_categorical_flag(self):
+        cat_df = pd.DataFrame(QuantamentalDataFrame(self.test_df.copy()))
+        qdf = QuantamentalDataFrame(cat_df, _initialized_as_categorical=True)
+
+        new_qdf = QuantamentalDataFrame(qdf)
+        self.assertTrue(new_qdf.InitializedAsCategorical)
+
+        with self.assertRaises(TypeError):
+            QuantamentalDataFrame(self.test_df, _initialized_as_categorical="banana")
+
+        qdf = QuantamentalDataFrame(self.test_df)
+        self.assertFalse(qdf.InitializedAsCategorical)
+
+    def test_qdf_col_sort_order(self):
+        test_df = self.test_df.copy()
+        test_df = test_df[test_df.columns.tolist()[::-1]]
+
+        qdf = QuantamentalDataFrame(test_df)
+        self.assertTrue(qdf.columns.tolist() == get_col_sort_order(test_df))
+
+    def test_qdf_is_cat_check(self):
+        cat_df = pd.DataFrame(QuantamentalDataFrame(self.test_df.copy()))
+        qdf = QuantamentalDataFrame(cat_df)
+
+        self.assertTrue(qdf.is_categorical())
+        self.assertTrue(qdf.InitializedAsCategorical)
+
+    def test_qdf_init_real_date_strs(self):
+        # test that it still works when the real_date is a column of strings
+        test_df = self.test_df.copy()
+        test_df["real_date"] = test_df["real_date"].astype(str)
+
+        qdf = QuantamentalDataFrame(test_df)
+        self.assertTrue(qdf["real_date"].dtype == "datetime64[ns]")
+
+
+class TestQDFInitializationMethods(unittest.TestCase):
+
+    def test_qdf_from_timeseries(self):
+        ts = pd.Series(
+            np.random.randn(100), index=pd.bdate_range("2020-01-01", periods=100)
+        )
+
+        # test with cid and xcat
+        cid, xcat = "A", "X"
+        ticker = f"{cid}_{xcat}"
+        qdf = qdf_from_timeseries(ts, ticker=ticker)
+
+        self.assertTrue(isinstance(qdf, QuantamentalDataFrame))
+
+        self.assertTrue(qdf["cid"].unique().tolist() == ["A"])
+        self.assertTrue(qdf["xcat"].unique().tolist() == ["X"])
+
+        self.assertTrue(qdf["real_date"].eq(ts.index).all())
+
+        # test same output
+
+        qdf_a = qdf_from_timeseries(ts, ticker=ticker, metric="value")
+        qdf_b = QuantamentalDataFrame.from_timeseries(ts, ticker=ticker, metric="value")
+
+        self.assertTrue(qdf_a.equals(qdf_b))
+
+    def test_from_long_df(self):
+
+        df = pd.DataFrame(
+            {
+                "real_date": pd.bdate_range("2020-01-01", periods=100),
+                "value": np.random.randn(100),
+            }
+        )
+
+        qdf = QuantamentalDataFrame.from_long_df(df, cid="A", xcat="X")
+
+        self.assertTrue(isinstance(qdf, QuantamentalDataFrame))
+        self.assertTrue(qdf["cid"].unique().tolist() == ["A"])
+        self.assertTrue(qdf["xcat"].unique().tolist() == ["X"])
+
+        self.assertTrue(qdf["real_date"].eq(df["real_date"]).all())
+
+        # test ticker args work the same way
+        new_qdf = QuantamentalDataFrame.from_long_df(df, ticker="A_X")
+        self.assertTrue(new_qdf.equals(qdf))
+
+        # test works when cid col is missing
+        test_df = make_test_df()
+        no_cid = test_df.drop(columns=["cid"])
+        qdf = QuantamentalDataFrame.from_long_df(no_cid, cid="A")
+
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame.from_long_df(no_cid)
+
+        # test works when xcat col is missing
+        no_xcat = test_df.drop(columns=["xcat"])
+        qdf = QuantamentalDataFrame.from_long_df(no_xcat, xcat="X")
+
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame.from_long_df(no_xcat)
+
+        # test works when real_date is named differently
+        diff_real_date = test_df.rename(columns={"real_date": "date"})
+
+        qdf = QuantamentalDataFrame.from_long_df(
+            diff_real_date, cid="A", xcat="X", real_date_column="date"
+        )
+
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame.from_long_df(diff_real_date, cid="A", xcat="X")
+
+        # test works when value is named differently
+        diff_value = test_df.rename(columns={"value": "val"})
+        qdf = QuantamentalDataFrame.from_long_df(
+            diff_value, cid="A", xcat="X", value_column="val"
+        )
+
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame.from_long_df(diff_value, cid="A", xcat="X")
+
+        # test a error states
+        test_df = make_test_df()
+        test_df = test_df.iloc[0:0]
+
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame.from_long_df(test_df, cid="A", xcat="X")
+
+        # test with ticker & cid+xcat
+        test_df = make_test_df()
+
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame.from_long_df(test_df, cid="A", xcat="X", ticker="A_X")
+
+    def test_from_qdf_list(self):
+        tickers = helper_random_tickers(50)
+        df_list = [make_test_df(tickers=tickers[i : i + 10]) for i in range(0, 50, 10)]
+
+        qdf = QuantamentalDataFrame.from_qdf_list(df_list)
+        expc_df = concat_qdfs(df_list)
+
+        self.assertTrue(isinstance(qdf, QuantamentalDataFrame))
+        self.assertTrue(qdf.equals(expc_df))
+
+        # test non categorical return
+        qdf = QuantamentalDataFrame.from_qdf_list(df_list, categorical=False)
+        expc_df = QuantamentalDataFrame(expc_df, categorical=False)
+
+        self.assertTrue(qdf.equals(expc_df))
+
+        # test errors
+        with self.assertRaises(ValueError):
+            QuantamentalDataFrame.from_qdf_list([])
+
+        with self.assertRaises(TypeError):
+            QuantamentalDataFrame.from_qdf_list([1])
+
+    def test_qdf_from_wide_df(self):
+        tickers = helper_random_tickers(50)
+        df = make_test_df(tickers=tickers)
+
+        wdf = qdf_to_ticker_df(df)
+        qdf: QuantamentalDataFrame = QuantamentalDataFrame.from_wide(wdf)
+
+        self.assertTrue(isinstance(qdf, QuantamentalDataFrame))
+
+        qdf["cid"] = qdf["cid"].astype("object")
+        qdf["xcat"] = qdf["xcat"].astype("object")
+
+        # sort the dfs by the index cols
+        qdf = qdf.sort_values(QuantamentalDataFrame.IndexColsSortOrder).reset_index(
+            drop=True
+        )
+        df = df.sort_values(QuantamentalDataFrame.IndexColsSortOrder).reset_index(
+            drop=True
+        )
+
+        self.assertTrue(qdf.equals(df))
+
+        # test with non-categorical
+        qdf = QuantamentalDataFrame.from_wide(wdf, categorical=False)
+
+        qdf = qdf.sort_values(QuantamentalDataFrame.IndexColsSortOrder).reset_index(
+            drop=True
+        )
+
+        df = df.sort_values(QuantamentalDataFrame.IndexColsSortOrder).reset_index(
+            drop=True
+        )
+
+        self.assertTrue(qdf.equals(df))
+
+        # test errors
+        with self.assertRaises(TypeError):
+            QuantamentalDataFrame.from_wide(1)
+
+        with self.assertRaises(TypeError):
+            df = qdf_to_ticker_df(make_test_df())
+            QuantamentalDataFrame.from_wide(df, value_column=1)
+
+        with self.assertRaises(ValueError):
+            df = qdf_to_ticker_df(make_test_df())
+            df.index = df.index.astype(str)
+            QuantamentalDataFrame.from_wide(df)
+
+        with self.assertRaises(ValueError):
+            df = qdf_to_ticker_df(make_test_df())
+            df.columns = df.columns.astype(str)
+            df.columns = [c.replace("_", "/") for c in df.columns]
+            QuantamentalDataFrame.from_wide(df)
+
+    def test_qdf_create_empty_df(self):
+
+        test_cid, test_xcat = "A", "X"
+        test_ticker = f"{test_cid}_{test_xcat}"
+        test_metrics = JPMAQS_METRICS[:-1]
+        test_start_date, test_end_date = "2020-01-01", "2020-01-10"
+        qdf = QuantamentalDataFrame.create_empty_df(
+            cid=test_cid,
+            xcat=test_xcat,
+            metrics=test_metrics,
+            start=test_start_date,
+            end=test_end_date,
+        )
+
+        expc_df = create_empty_categorical_qdf(
+            cid=test_cid,
+            xcat=test_xcat,
+            metrics=test_metrics,
+            start=test_start_date,
+            end=test_end_date,
+        )
+
+        self.assertTrue(qdf.equals(expc_df))
+
+        # test with ticker and date range args
+        dt_range = pd.bdate_range(test_start_date, test_end_date)
+        qdf = QuantamentalDataFrame.create_empty_df(
+            ticker=test_ticker,
+            metrics=test_metrics,
+            date_range=dt_range,
+        )
+        self.assertTrue(qdf.equals(expc_df))
+
+        # test with categorical = False
+        qdf = QuantamentalDataFrame.create_empty_df(
+            cid=test_cid,
+            xcat=test_xcat,
+            metrics=test_metrics,
+            start=test_start_date,
+            end=test_end_date,
+            categorical=False,
+        )
+
+        expc_df = create_empty_categorical_qdf(
+            cid=test_cid,
+            xcat=test_xcat,
+            metrics=test_metrics,
+            start=test_start_date,
+            end=test_end_date,
+        )
+
+        expc_df = qdf_to_string_index(expc_df)
+
+        self.assertTrue(qdf.equals(expc_df))
 
 
 if __name__ == "__main__":
