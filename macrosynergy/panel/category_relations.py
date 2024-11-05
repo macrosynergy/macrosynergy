@@ -314,7 +314,7 @@ class CategoryRelations(object):
         Returns
         -------
         ~pandas.DataFrame
-            df: returns the same multi-indexed DataFrame but with an adjusted series
+            returns the same multi-indexed DataFrame but with an adjusted series
             inline with the 'change' parameter.
         """
 
