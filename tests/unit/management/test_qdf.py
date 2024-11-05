@@ -11,7 +11,6 @@ from macrosynergy.management.utils import (
     get_cid,
     get_xcat,
     qdf_to_ticker_df,
-    ticker_df_to_qdf,
 )
 from macrosynergy.management.types.qdf.methods import (
     get_col_sort_order,
@@ -24,7 +23,6 @@ from macrosynergy.management.types.qdf.methods import (
     reduce_df,
     reduce_df_by_ticker,
     update_df,
-    update_tickers,
     update_categories,
     qdf_to_wide_df,
     add_ticker_column,
