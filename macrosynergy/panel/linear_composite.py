@@ -81,13 +81,13 @@ def linear_composite(
         latest date in ISO format. Default is None and latest date for which the
         respective category is available is used.
     complete_xcats : bool
-        If True (default) combinations are only calculated for observation dates on
-        which all xcats are available. If False a combination of the available categories is
+        If True combinations are only calculated for observation dates on
+        which all xcats are available. If False (default) a combination of the available categories is
         used. Not relevant when aggregating over cross-sections, i.e. when a single category
         is given in `xcats`.
     complete_cids : bool
-        If True (default) combinations are only calculated for observation dates on
-        which all cids are available. If False a combination of the available cross-sections
+        If True combinations are only calculated for observation dates on
+        which all cids are available. If False (default) a combination of the available cross-sections
         is used. Not relevant when aggregating over categories, i.e. when multiple
         categories are given in `xcats`.
     new_xcat : str
@@ -158,7 +158,7 @@ def linear_composite(
         out_all=True,
     )
 
-    if len(remaining_cids) < len(cids) and not _xcat_agg:
+    if len(remaining_cids) < len(cids) and not _xcat_agg and complete_cids or len(remaining_cids) <= 0:
         missing_cids_xcats_str = _missing_cids_xcats_str(df=df, cids=cids, xcats=xcats)
         raise ValueError(
             "Not all `cids` have complete `xcat` data required for the calculation.\n"
@@ -296,7 +296,7 @@ def linear_composite_cid_agg(
     weights: Union[str, List[float]],
     signs: List[float],
     normalize_weights: bool = True,
-    complete_cids: bool = True,
+    complete_cids: bool = False,
     new_cid="GLB",
 ):
     """Linear composite of various cids for a given xcat across all periods."""
@@ -372,7 +372,7 @@ def linear_composite_xcat_agg(
     weights: List[float],
     signs: List[float],
     normalize_weights: bool = True,
-    complete_xcats: bool = True,
+    complete_xcats: bool = False,
     new_xcat="NEW",
 ):
     """Linear composite of various xcats across all cids and periods"""
@@ -479,6 +479,10 @@ def _check_df_for_missing_cid_data(
                 f" Available categories are {found_xcats}."
             )
 
+    for i, cid in enumerate(cids):
+        if cid not in found_cids:
+            signs.pop(i)
+
     ctr = 0
     for cidx in found_cids.copy():  # copy to allow modification of `cids`
         missing_xcats = list(
@@ -506,66 +510,6 @@ def _check_df_for_missing_cid_data(
 
     rcids = [c for c in cids if c in found_cids]  # to preserve order
     return QuantamentalDataFrame(df), rcids, _xcat, weights, signs
-
-
-def _check_weights_and_signs(
-    df: QuantamentalDataFrame,
-    cids: List[str],
-    xcats: List[str],
-    weights: Union[str, List[float]],
-    signs: List[float],
-    xcat_agg: bool,
-) -> Tuple[QuantamentalDataFrame, List[str], List[float]]:
-    found_cids: List[str] = df["cid"].unique().tolist()
-    found_xcats: List[str] = df["xcat"].unique().tolist()
-    found_cids = [c for c in cids if c in found_cids]  # to preserve order
-    found_xcats = [x for x in xcats if x in found_xcats]  # to preserve order
-
-    # if len of found_cids!=len of cids
-    err_msg = (
-        "Some `{vtype}` are missing in `df`. `{wtype}` could not be re-assigned.\n"
-        "Available {vtype}: {found_vtypes}\n"
-        "Requested {vtype}: {vtypes}"
-    )
-
-    ws_arr = [weights, signs]
-    ws_names = ["weights", "signs"]
-
-    found_var = found_xcats if xcat_agg else found_cids
-    specified_var = xcats if xcat_agg else cids
-    vtype = "xcats" if xcat_agg else "cids"
-
-    if len(found_var) != len(specified_var):
-        missing_var = list(set(specified_var) - set(found_var))
-
-        for i, ws in enumerate(ws_arr):
-            if isinstance(ws, str):
-                continue
-            if np.allclose(np.array(ws) / ws[0], 1):  # if the weights are all the same
-                ws_arr[i] = [1] * len(found_var)
-                warnings.warn(
-                    f"The provided data is missing some {vtype}. Reassigning all {ws_names[i]} to the 1s (equal)"
-                    f" Missing {vtype}: {missing_var}"
-                )
-            else:
-                raise ValueError(
-                    err_msg.format(
-                        vtype=vtype,
-                        wtype=ws_names[i],
-                        found_vtypes=found_var,
-                        vtypes=specified_var,
-                    )
-                )
-
-        # remove the cid or xcat from the list of cids or xcats
-        if xcat_agg:
-            xcats = found_xcats
-        else:
-            cids = found_cids
-
-    weights, signs = ws_arr
-
-    return cids, xcats, weights, signs
 
 
 def _check_args(
@@ -778,8 +722,11 @@ if __name__ == "__main__":
     df = QuantamentalDataFrame(df)
     lc_xcat = linear_composite(
         df=df,
-        cids=["AUD", "CAD"],
-        xcats=["XR", "CRY", "INFL"],
-        weights=[1, 2, 1],
-        signs=[1, -1, 1],
+        cids=["AUD", "CAD", "GBP"],
+        xcats=["XR"],
+        weights="INFL",
+        new_cid="GLB",
+        signs=[-1, 1, 1],
+        complete_cids=True,
     )
+    print("HELLO")
