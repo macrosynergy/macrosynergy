@@ -1,6 +1,6 @@
 """
 Implementation of `make_relative_value()` function as a module. The function is used to
-calculate values for indicators relative to a basket of cross-sections.
+calculate values for indicators relative to a basket of cross sections.
 """
 
 import pandas as pd
@@ -26,7 +26,8 @@ def make_relative_value(
     postfix: str = "R",
 ):
     """
-    Returns a panel with values relative to a cross-sectional average at each `real_date`.
+    For each category specified in the panel, relative values are calculated
+    by either subtracting or dividing by the cross-sectional mean at each `real_date`.
 
     Parameters
     ----------
@@ -36,7 +37,7 @@ def make_relative_value(
     xcats : List[str]
         all extended categories for which relative values are to be calculated.
     cids : List[str]
-        cross-sections for which relative values are calculated. Default is all cross-
+        cross sections for which relative values are calculated. Default is all cross 
         section available for the respective category.
     start : str
         earliest date in ISO format. Default is None and earliest date for which the
@@ -45,17 +46,17 @@ def make_relative_value(
         latest date in ISO format. Default is None and latest date for which the
         respective category is available is used.
     blacklist : dict
-        cross-sections with date ranges that should be excluded from the output.
+        cross sections with date ranges that should be excluded from the output.
     basket : List[str]
-        cross-sections to be used for the relative value benchmark. The default is every
-        cross-section in the cids argument that is available in the DataFrame over the
+        cross sections to be used for the relative value benchmark. The default is every
+        cross section in the cids argument that is available in the DataFrame over the
         respective time-period. However, the basket can be reduced to a valid subset of the
-        available cross-sections.
+        available cross sections.
     complete_cross : bool
-        boolean parameter that outlines whether each category is required to have the
-        full set of cross-sections held by the basket parameter for a relative value
+        boolean parameter that determines whether each category is required to have the
+        full set of cross sections held by the basket parameter for a relative value
         calculation to occur. If set to True, the category will be excluded from the output
-        if cross-sections are missing. Default is False. If False, the mean, for the
+        if cross sections are missing. Default is False. If False, the mean, for the
         relative value, will use the subset that is available for that category. For
         instance, if basket = ['AUD', 'CAD', 'GBP', 'NZD'] but available cids = ['GBP',
         'NZD'], the basket will be implicitly updated to basket = ['GBP', 'NZD'] for that
@@ -109,7 +110,7 @@ def make_relative_value(
         rel_xcats_dict = dict(zip(xcats, rel_xcats))
 
     df = QuantamentalDataFrame(df)
-    # Intersect parameter set to False. Therefore, cross-sections across the categories
+    # Intersect parameter set to False. Therefore, cross sections across the categories
     # can vary.
     all_cids: List[str] = []
     for cvar in [cids, basket]:
@@ -121,32 +122,32 @@ def make_relative_value(
     dfx = reduce_df(df, xcats, all_cids, start, end, blacklist, out_all=False)
 
     if cids is None:
-        # All cross-sections available - union across categories.
+        # All cross sections available - union across categories.
         cids = list(dfx["cid"].unique())
 
     if basket is not None:
-        # Basket must be a subset of the available cross-sections.
+        # Basket must be a subset of the available cross sections.
         set_diff = set(basket).difference(set(dfx["cid"].unique()))
         if not (len(set_diff) == 0):
             raise ValueError(
                 f"The basket elements {set_diff} are not available in the DataFrame."
             )
     else:
-        # Default basket is all available cross-sections.
+        # Default basket is all available cross sections.
         basket = cids
 
     available_xcats = dfx["xcat"].unique()
 
     if len(cids) == len(basket) == 1:
         run_error = (
-            "Computing the relative value on a single cross-section using a "
-            "basket consisting exclusively of the aforementioned cross-section "
+            "Computing the relative value on a single cross section using a "
+            "basket consisting exclusively of the aforementioned cross section "
             "is an incorrect usage of the function."
         )
         raise RuntimeError(run_error)
 
     df_list: List[pd.DataFrame] = []
-    # Categories can be defined over a different set of cross-sections.
+    # Categories can be defined over a different set of cross sections.
     for i, xcat in enumerate(available_xcats):
         df_xcat = dfx[dfx["xcat"] == xcat]
         available_cids = df_xcat["cid"].unique()
@@ -162,15 +163,15 @@ def make_relative_value(
         )
 
         if len(basket) > 1:
-            # Mean of (available) cross-sections at each point in time. If all
-            # cross-sections defined in the "basket" data structure are not available for
+            # Mean of (available) cross sections at each point in time. If all
+            # cross sections defined in the "basket" data structure are not available for
             # a specific date, compute the mean over the available subset.
             bm = dfb.groupby(by="real_date").mean(numeric_only=True)
         elif len(basket) == 1:
-            # Relative value is mapped against a single cross-section.
+            # Relative value is mapped against a single cross section.
             bm = dfb.set_index("real_date")[["value"]]
         else:
-            # Category is not defined over all cross-sections in the basket and
+            # Category is not defined over all cross sections in the basket and
             # 'complete_cross' equals True.
             continue
 
@@ -178,9 +179,9 @@ def make_relative_value(
             index="real_date", columns="cid", values="value"
         )
 
-        # Computing the relative value is only justified if the number of cross-sections,
+        # Computing the relative value is only justified if the number of cross sections,
         # for the respective date, exceeds one. Therefore, if any rows have only a single
-        # cross-section, remove the dates from the DataFrame.
+        # cross section, remove the dates from the DataFrame.
         dfw = dfw[dfw.count(axis=1) > 1]
         # The time-index will be delimited by the respective category.
         if isinstance(dfw.columns, pd.CategoricalIndex):
@@ -226,8 +227,8 @@ def _prepare_basket(
     complete_cross: bool,
 ):
     """
-    Categories can be defined over different cross-sections. Will determine the
-    respective basket given the available cross-sections for the respective category.
+    Categories can be defined over different cross sections. Will determine the
+    basket given the available cross sections for the respective category.
 
     Parameters
     ----------
@@ -236,11 +237,11 @@ def _prepare_basket(
     xcat : str
         respective category for the relative value calculation.
     basket : pd.DataFrame
-        cross-sections to be used for the relative value benchmark if available.
+        cross sections to be used for the relative value benchmark if available.
     cids_avl : List[str]
-        cross-sections available for the category.
+        cross sections available for the category.
     complete_cross : bool
-        if True, the basket is only calculated if all cross- sections, held in the
+        if True, the basket is only calculated if all cross sections, held in the
         basket, are available for that respective category.
     """
 
@@ -264,7 +265,7 @@ def _prepare_basket(
             )
             warnings.warn(err_str, UserWarning)
 
-    # Reduce the DataFrame to the specified basket given the available cross-sections.
+    # Reduce the DataFrame to the specified basket given the available cross sections.
     dfb = df[df["cid"].isin(cids_used)]
 
     return dfb, cids_used
