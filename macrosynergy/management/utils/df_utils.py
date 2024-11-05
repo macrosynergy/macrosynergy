@@ -498,7 +498,7 @@ def downsample_df_on_real_date(
         .groupby(groupby_columns, observed=True)[non_groupby_columns]
         .resample(freq)
     )
-    if PD_OLD_RESAMPLE:
+    if PD_OLD_RESAMPLE: # pragma: no cover
         # resample only if the column is numeric
         res = res.agg(
             {
