@@ -1,5 +1,5 @@
 """
-The `MultiPnL` class allows for visualizing and analyzing PnLs across multiple return categories. 
+The `MultiPnL` class allows for the visualization and analysis of PnLs across multiple return categories.
 It also provides functionality to calculate a weighted aggregate PnL based on user-defined weights
 for each PnL.
 """
@@ -209,7 +209,7 @@ class MultiPnL:
         pnl_xcats : List[str]
             List of PnLs to evaluate. If None, all PnLs are evaluated. Must be in the
             format 'xcat', or 'xcat/return_xcat'.
-            
+
         Returns
         -------
         ~pandas.DataFrame
@@ -292,7 +292,7 @@ class MultiPnL:
         pnl_xcats : List[str]
             List of PnLs to return. If None, all PnLs are returned. Must be in the
             format 'xcat', or 'xcat/return_xcat'.
-            
+
         Returns
         -------
         ~pandas.DataFrame
@@ -337,14 +337,24 @@ class MultiPnL:
     @property
     def pnl_xcats(self):
         """
-        Returns all PnL categories.
+        List of all unique PnL categories stored in the MultiPnL object.
+
+        Returns
+        -------
+        List[str]
+            A list of unique category names from the "xcat" column in `pnls_df`.
         """
         return self.pnls_df["xcat"].unique().tolist()
 
     @property
     def return_xcats(self):
         """
-        Returns all return categories associated with PnLs.
+        List of all unique return categories associated with PnLs.
+
+        Returns
+        -------
+        List[str]
+            A list of unique return category names derived from the `xcat_to_ret` mapping.
         """
         return list(set(self.xcat_to_ret.values()))
 
