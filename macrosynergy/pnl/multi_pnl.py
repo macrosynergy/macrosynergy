@@ -63,7 +63,7 @@ class MultiPnL:
         pnl_xcats: List[str],
         composite_pnl_xcat: str,
         weights: Optional[Dict[str, float]] = None,
-    ) -> pd.DataFrame:
+    ):
         """
         Combine PnLs with optional weighting.
 
@@ -209,6 +209,11 @@ class MultiPnL:
         pnl_xcats : List[str]
             List of PnLs to evaluate. If None, all PnLs are evaluated. Must be in the
             format 'xcat', or 'xcat/return_xcat'.
+            
+        Returns
+        -------
+        ~pandas.DataFrame
+            DataFrame containing evaluation metrics for the specified PnLs.
         """
 
         self._check_pnls_added()
@@ -287,6 +292,11 @@ class MultiPnL:
         pnl_xcats : List[str]
             List of PnLs to return. If None, all PnLs are returned. Must be in the
             format 'xcat', or 'xcat/return_xcat'.
+            
+        Returns
+        -------
+        ~pandas.DataFrame
+            DataFrame containing the specified PnLs.
         """
 
         if self.pnls_df is None:

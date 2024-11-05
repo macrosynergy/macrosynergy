@@ -33,7 +33,7 @@ class NaivePnL:
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.Dataframe
         standardized DataFrame with the following necessary columns: 'cid', 'xcat',
         'real_date' and 'value'.
     ret : str
@@ -421,7 +421,7 @@ class NaivePnL:
 
         Parameters
         ----------
-        df : pd.DataFrame
+        df : ~pandas.DataFrame
             aggregate DataFrame passed into the Class.
         bms : List[str]
             benchmark return tickers.
@@ -469,7 +469,7 @@ class NaivePnL:
 
         Parameters
         ----------
-        dfx : pd.DataFrame
+        dfx : ~pandas.DataFrame
             DataFrame defined over the return & signal category.
         sig : str
             name of the raw signal.
@@ -541,7 +541,7 @@ class NaivePnL:
 
         Parameters
         ----------
-        dfw : pd.Dataframe
+        dfw : ~pandas.Dataframe
             DataFrame with each category represented by a column and the daily signal is
             also included with the column name 'psig'.
         rebal_freq : str
@@ -552,7 +552,7 @@ class NaivePnL:
 
         Returns
         -------
-        pd.Series
+        ~pandas.Series
             will return a pd.Series containing the associated signals according to the
             re-balancing frequency.
         """
@@ -615,7 +615,7 @@ class NaivePnL:
 
         Parameters
         ----------
-        dfw : pd.DataFrame
+        dfw : ~pandas.DataFrame
 
         vol_scale : bool
             ex-post scaling of PnL to annualized volatility given. This is for
@@ -628,7 +628,7 @@ class NaivePnL:
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             standardised dataframe containing exclusively the return category, and the
             long-only panel return.
         """
@@ -1108,7 +1108,7 @@ class NaivePnL:
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             standardized DataFrame with key PnL performance statistics.
         """
 
@@ -1246,7 +1246,7 @@ class NaivePnL:
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             custom DataFrame with PnLs
         """
 
@@ -1294,7 +1294,7 @@ def create_results_dataframe(
     ----------
     title : str
         title of the DataFrame.
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         DataFrame with the data.
     ret : str
         name of the return signal.
@@ -1335,7 +1335,7 @@ def create_results_dataframe(
 
     Returns
     -------
-    pd.DataFrame
+    ~pandas.DataFrame
         DataFrame with the performance metrics.
     """
 
