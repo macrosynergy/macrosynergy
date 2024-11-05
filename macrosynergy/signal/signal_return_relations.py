@@ -1479,7 +1479,7 @@ class SignalReturnRelations:
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             DataFrame with the specified statistic for each row and column.
         """
 
