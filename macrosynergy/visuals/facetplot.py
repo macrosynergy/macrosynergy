@@ -236,6 +236,14 @@ class FacetPlot(Plotter):
 
         Parameters
         ----------
+        cids : List[str]
+            A list of `cids` to select from the DataFrame. If None, the `cids` are selected
+            from the object initialization, or all if were specified.
+        xcats : List[str]
+            A list of `xcats` to select from the DataFrame. If None, all `xcats` are selected
+            from the object initialization, or all if were specified.
+        metric : str
+            the metric to plot. Default is the first metric in the DataFrame.
         ncols : int
             number of columns in the grid. Default is 3.
         attempt_square : bool
@@ -250,10 +258,8 @@ class FacetPlot(Plotter):
             "row" contains plots for the same `cid`, and each "column" would contain plots
             for the same `xcat`. Therefore, this mode does not respect the `ncols` or
             `attempt_square` arguments.
-        cids_mean : bool
-            Used with `cid_grid` with a single `xcat`. If `True`, the mean of all `cids`
-            for that `xcat` will be plotted on all charts. If `False`, only the specified
-            `cids` will be plotted. Default is `False`.
+        grid_dim : Tuple[int, int]
+            A tuple of integers specifying the number of rows and columns in the grid.
         compare_series : str
             Used with `cid_grid` with a single `xcat`. If specified, the series
             specified will be plotted in each facet, as a red dashed line. This is useful
