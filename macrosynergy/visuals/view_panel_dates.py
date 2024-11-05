@@ -3,19 +3,22 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Tuple
 from macrosynergy.management import business_day_dif
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def view_panel_dates(
-    df: pd.DataFrame, size: Tuple[float] = None, use_last_businessday: bool = True
+    df: pd.DataFrame,
+    size: Tuple[float, float] = None,
+    use_last_businessday: bool = True,
 ):
     """
     Visualize panel dates with color codes.
 
     Parameters
     ----------
-    df : pd.DataFrame
-        DataFrame cross sections rows and category columns.
-    size : Tuple[float]
+    df : ~pandas.DataFrame
+        A standardized Quantamental DataFrame with dates as index and series as columns.
+    size : Tuple[float, float]
         tuple of floats with width/length of displayed heatmap.
     use_last_businessday : bool
         boolean indicating whether or not to use the last business day before today as

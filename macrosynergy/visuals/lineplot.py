@@ -19,7 +19,7 @@ class LinePlot(Plotter):
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         A DataFrame with the following columns: 'cid', 'xcat', 'real_date', and at least
         one metric from - 'value', 'grading', 'eop_lag', or 'mop_lag'.
     cids : List[str]
@@ -106,6 +106,75 @@ class LinePlot(Plotter):
         *args,
         **kwargs,
     ):
+        """
+        Create the line plot.
+
+        Parameters
+        ----------
+        metric : str
+            The metric to plot. Default is 'value'.
+        compare_series : Optional[str]
+            A ticker (cid_xcat) to compare the metric against. Default is None.
+        figsize : Tuple[Number, Number]
+            The size of the figure. Default is (12, 8).
+        aspect : Number
+            The aspect ratio of the figure. Default is 1.618.
+        height : Number
+            The height of the figure. Default is 0.8.
+        grid : bool
+            Whether to show a grid on the plot. Default is True.
+        x_axis_label : Optional[str]
+            The label for the x-axis. Default is None.
+        y_axis_label : Optional[str]
+            The label for the y-axis. Default is None.
+        axis_fontsize : int
+            The fontsize for the axis labels. Default is 12.
+        ax_hline : Optional[Union[Number, List[Number]]]
+            A horizontal line to add to the plot. The numeric value(s) of the x-axis where
+            the line should be drawn. Default is None.
+        ax_vline : Optional[Union[str, List[str]]]
+            A vertical line to add to the plot. The date(s) where the line should be drawn.
+            Default is None.
+        title : Optional[str]
+            The title of the plot. Default is None.
+        title_fontsize : int
+            The fontsize of the title. Default is 16.
+        title_xadjust : Number
+            The x-adjustment of the title. Default is 0.5.
+        title_yadjust : Number
+            The y-adjustment of the title. Default is 1.05.
+        legend : bool
+            Whether to show a legend on the plot. Default is True.
+        legend_labels : Optional[List[str]]
+            The labels for the legend. Default is None.
+        legend_title : Optional[str]
+            The title of the legend. Default is None.
+        legend_loc : Optional[str]
+            The location of the legend. Default is 'best'.
+        legend_fontsize : int
+            The fontsize of the legend. Default is 14.
+        legend_ncol : int
+            The number of columns in the legend. Default is 1.
+        legend_bbox_to_anchor : Optional[Tuple[Number, Number]]
+            The bbox_to_anchor of the legend. Default is None.
+        legend_frame : bool
+            Whether to show a frame around the legend. Default is True.
+        show : bool
+            Whether to show the plot. Default is True.
+        save_to_file : Optional[str]
+            The path to save the plot to. Default is None.
+        dpi : int
+            The DPI of the saved plot. Default is 300.
+        return_figure : bool
+            Whether to return the figure. Default is False.
+        on_axis : Optional[plt.Axes]
+            An axis to plot on. Default is None.
+        *args
+            Additional arguments.
+        **kwargs
+            Additional keyword arguments.
+        """
+
         if on_axis:
             fig: plt.Figure = on_axis.get_figure()
             ax: plt.Axes = on_axis

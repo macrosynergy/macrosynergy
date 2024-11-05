@@ -1,8 +1,13 @@
 """
 Function for visualising the `eop_lag`, `mop_lag` or `grading` metrics for a given set
-of cross sections and extended categories. ```python import macrosynergy.visuals as msv
-... msv.view_metrics( df, xcats="IR", cids=["USD", "EUR", "GBP"], metric='eop_lag' ) ...
-```
+of cross sections and extended categories. 
+
+.. code-block:: python
+
+    import macrosynergy.visuals as msv
+    ...
+    msv.view_metrics(df, xcats="IR", cids=["USD", "EUR", "GBP"], metric='eop_lag')
+
 """
 
 from typing import List, Optional, Tuple
@@ -31,9 +36,8 @@ def view_metrics(
 
     Parameters
     ----------
-    df : pd.Dataframe
-        standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
-        and 'grading', 'eop_lag' or 'mop_lag'.
+    df : ~pandas.DataFrame
+        standardized Qauntamental dataframe.
     xcat : str
         extended category whose lags are to be visualized.
     cids : List[str]
