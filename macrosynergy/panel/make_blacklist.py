@@ -12,29 +12,6 @@ from macrosynergy.management.simulate import make_qdf_black, make_qdf
 from macrosynergy.management.types import QuantamentalDataFrame
 
 
-def startend(dti, start, length):
-    """
-    Return start and end dates of a sequence as tuple
-
-    Parameters
-    ----------
-    dti : DateTimeIndex
-        datetime series of working days
-    start : int
-        index of start
-    length : int
-        number of sequential days
-
-    Returns
-    -------
-    Tuple[pd.Timestamp, pd.Timestamp]
-        tuple of start and end date
-    """
-
-    tup = (dti[start], dti[start + (length - 1)])
-    return tup
-
-
 def make_blacklist(
     df: QuantamentalDataFrame,
     xcat: str,
@@ -117,6 +94,29 @@ def make_blacklist(
                 count += 1
             si += length
     return dates_dict
+
+
+def startend(dti, start, length):
+    """
+    Return start and end dates of a sequence as tuple
+
+    Parameters
+    ----------
+    dti : DateTimeIndex
+        datetime series of working days
+    start : int
+        index of start
+    length : int
+        number of sequential days
+
+    Returns
+    -------
+    Tuple[pd.Timestamp, pd.Timestamp]
+        tuple of start and end date
+    """
+
+    tup = (dti[start], dti[start + (length - 1)])
+    return tup
 
 
 if __name__ == "__main__":
