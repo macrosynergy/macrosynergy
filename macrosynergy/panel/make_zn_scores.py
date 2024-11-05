@@ -92,8 +92,8 @@ def make_zn_scores(
 
 
     .. note::
-        The argument is a dictionary with cross-sections as keys and tuples of start
-        and end dates of the blacklist periods in ISO formats as values. If one cross
+        The blacklist argument is a dictionary with cross-sections as keys and tuples of
+        start and end dates of the blacklist periods in ISO formats as values. If one cross
         section has multiple blacklist periods, numbers are added to the keys (i.e. TRY_1,
         TRY_2, etc.)
     """

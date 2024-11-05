@@ -35,7 +35,7 @@ def view_ranges(
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.DataFrame
         standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
         and at least one column with values of interest.
     xcats : List[str]
