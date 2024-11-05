@@ -25,8 +25,13 @@ class PlotterMetaClass(type):
     Metaclass for the Plotter class. The purpose of this metaclass is to wrap all
     methods of the Plotter class with the `argvalidation` and `argcopy` decorators, so
     that all methods of the Plotter class are automatically validated and copied. Meant
-    to be used as a metaclass, i.e. use as follows: ```python ... class
-    MyCustomClass(metaclass=PlotterMetaClass): def __init__(self, ...): ... ```
+    to be used as a metaclass, i.e. use as follows:
+
+    .. code-block:: python
+
+        class MyCustomClass(metaclass=PlotterMetaClass):
+            def __init__(self, ...):
+                ...
     """
 
     def __init__(cls, name, bases, dct: Dict[str, Any]):
@@ -47,7 +52,7 @@ class Plotter(metaclass=PlotterMetaClass):
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         A DataFrame with the following columns: 'cid', 'xcat', 'real_date', and at least
         one metric from - 'value', 'grading', 'eop_lag', or 'mop_lag'.
     cids : List[str]
