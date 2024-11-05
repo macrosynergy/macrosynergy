@@ -30,12 +30,12 @@ import numpy as np
 from packaging import version
 
 try:
-    from macrosynergy import __version__ as _version
+    from macrosynergy import __version__ as MSY_VERSION
 except ImportError:
     try:
-        from setup import VERSION as _version
+        from setup import VERSION as MSY_VERSION
     except ImportError:
-        _version = "0.0.0"
+        MSY_VERSION = "0.0.0"
 
 
 def deprecate(
@@ -43,6 +43,7 @@ def deprecate(
     deprecate_version: str,
     remove_after: str = None,
     message: str = None,
+    macrosynergy_package_version: str = MSY_VERSION,
 ):
     """
     Decorator for deprecating a function.
@@ -59,6 +60,9 @@ def deprecate(
         The message to display when the old function is called. This message must
         contain the following format strings: "{old_method}", "{deprecate_version}", and
         "{new_method}". If None, the default message is used.
+    macrosynergy_package_version : str
+        The version of the macrosynergy package. This is used to determine if the
+        deprecation warning should be shown.
 
     Returns
     -------
@@ -72,6 +76,7 @@ def deprecate(
         deprecate_version=deprecate_version,
         remove_after=remove_after,
         message=message,
+        macrosynergy_package_version=macrosynergy_package_version,
     ):
         # if the message is none, use the default message
         if message is None:
@@ -96,13 +101,13 @@ def deprecate(
         if remove_after is not None:
             try:
                 version.parse(remove_after)
-            except:
+            except version.InvalidVersion as e:
                 raise ValueError(
                     f"The version in which the function is deprecated ({remove_after}) "
                     f"must be a valid version string."
-                )
+                ) from e
 
-            if version.parse(deprecate_version) < version.parse(remove_after):
+            if version.parse(deprecate_version) > version.parse(remove_after):
                 raise ValueError(
                     f"The version in which the old function will be removed "
                     f"({remove_after}) "
@@ -110,12 +115,14 @@ def deprecate(
                     f"({deprecate_version})."
                 )
         else:
-            remove_after = _version
+            remove_after = MSY_VERSION
 
         @wraps(old_func)
         # This will ensure the old function retains its name and other properties.
         def wrapper(*args, **kwargs):
-            if version.parse(deprecate_version) < version.parse(_version):
+            if version.parse(deprecate_version) < version.parse(
+                macrosynergy_package_version
+            ):
                 warnings.warn(
                     message.format(
                         old_method=old_func.__name__,
