@@ -306,7 +306,7 @@ def _replace_zeros(df: pd.DataFrame):
         cleaned dataframe.
     """
 
-    if not PYTHON_3_8_OR_LATER:
+    if not PYTHON_3_8_OR_LATER: # pragma: no cover
         for col in df.columns:
             df[col] = df[col].replace(pd.NA, np.nan)
             df[col] = df[col].astype("float64")

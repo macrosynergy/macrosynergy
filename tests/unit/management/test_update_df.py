@@ -448,5 +448,13 @@ class TestAll(unittest.TestCase):
         self.assertTrue(test_df.equals(result_df))
 
 
+    def test_update_tickers_errors(self):
+        with self.assertRaises(TypeError):
+            update_tickers(df=1, df_add=self.dfd)
+
+        with self.assertRaises(TypeError):
+            update_tickers(df=self.dfd, df_add=1)
+
+
 if __name__ == "__main__":
     unittest.main()
