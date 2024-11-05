@@ -129,7 +129,7 @@ def historic_vol(
         weights: Optional[np.ndarray] = None,
     ):
         """
-        Helper function to calculate the historic volatility for a single row in the 
+        Helper function to calculate the historic volatility for a single row in the
         DataFrame.
         """
         target_dates = pd.bdate_range(end=row["real_date"], periods=lback_periods)
@@ -253,9 +253,12 @@ def expo_weights(lback_periods: int = 21, half_life: int = 11):
     Returns
     -------
     ~numpy.ndarray
-        An Array of weights determined by the length of the lookback period.  Note: 50%
-        of the weight allocation will be applied to the number of days delimited by the
-        half_life.
+        An Array of weights determined by the length of the lookback period.
+
+    Notes
+    -----
+    50% of the weight allocation will be applied to the number of days delimited by the
+    half_life.
     """
 
     decf = 2 ** (-1 / half_life)
