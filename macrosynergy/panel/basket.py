@@ -239,9 +239,13 @@ class Basket(object):
         Returns
         -------
         ~pandas.DataFrame
-            dataframe of weights.  Note: The method determines the  number of non-NA
-            cross-sections per timestamp, and subsequently distributes the weights evenly
-            across non-NA cross-sections.
+            dataframe of weights.
+
+
+        Notes
+        -----
+        The method determines the number of non-NA cross-sections per timestamp, and
+        subsequently distributes the weights evenly across non-NA cross-sections.
         """
 
         act_cross = ~df_ret.isnull()
