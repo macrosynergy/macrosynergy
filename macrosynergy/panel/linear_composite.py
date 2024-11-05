@@ -120,7 +120,7 @@ def linear_composite_cid_agg(
     weights: Union[str, List[float]],
     signs: List[float],
     normalize_weights: bool = True,
-    complete_cids: bool = True,
+    complete_cids: bool = False,
     new_cid="GLB",
 ):
     """Linear composite of various cids for a given xcat across all periods."""
@@ -192,7 +192,7 @@ def linear_composite_xcat_agg(
     weights: List[float],
     signs: List[float],
     normalize_weights: bool = True,
-    complete_xcats: bool = True,
+    complete_xcats: bool = False,
     new_xcat="NEW",
 ):
     """Linear composite of various xcats across all cids and periods"""
@@ -275,6 +275,10 @@ def _check_df_for_missing_cid_data(
                 f"Weight category {weights} not found in `df`."
                 f" Available categories are {found_xcats}."
             )
+
+    for i, cid in enumerate(cids):
+        if cid not in found_cids:
+            signs.pop(i)
 
     ctr = 0
     for cidx in found_cids.copy():  # copy to allow modification of `cids`
@@ -589,7 +593,7 @@ def linear_composite(
         out_all=True,
     )
 
-    if len(remaining_cids) < len(cids) and not _xcat_agg:
+    if len(remaining_cids) < len(cids) and not _xcat_agg and complete_cids or len(remaining_cids) == 0:
         missing_cids_xcats_str = _missing_cids_xcats_str(df=df, cids=cids, xcats=xcats)
         raise ValueError(
             "Not all `cids` have complete `xcat` data required for the calculation.\n"
