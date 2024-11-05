@@ -99,6 +99,6 @@ def impute_panel(
     )
 
     return QuantamentalDataFrame(
-        incomplete_df[:, complete_df.columns],
+        incomplete_df[complete_df.columns],
         categorical=_as_categorical,
     )
