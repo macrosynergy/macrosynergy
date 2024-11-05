@@ -1,8 +1,14 @@
 """
-Function for visualising a facet grid of time line charts of one or more categories
-```python import macrosynergy.visuals as msv ... msv.view.timelines( df, xcats=["FXXR",
-"EQXR", "IR"], cids=["USD", "EUR", "GBP"] ) ...
-msv.FacetPlot(df).lineplot(cid_grid=True) ```
+Function for visualising a facet grid of time line charts of one or more categories.
+
+.. code-block:: python
+
+    import macrosynergy.visuals as msv
+    ...
+    msv.view.timelines(df, xcats=["FXXR","EQXR", "IR"], cids=["USD", "EUR", "GBP"] )
+    ...
+    msv.FacetPlot(df).lineplot(cid_grid=True)
+
 """
 
 from typing import List, Optional, Tuple
@@ -49,7 +55,7 @@ def timelines(
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.DataFrame
         standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
         and at least one column with values of interest.
     xcats : List[str]

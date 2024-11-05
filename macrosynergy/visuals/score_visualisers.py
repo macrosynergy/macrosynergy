@@ -23,17 +23,18 @@ class ScoreVisualisers:
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         A standardized JPMaQS with the following columns: 'cid', 'xcat', 'real_date',
         and at least one metric from - 'value', 'grading', 'eop_lag', or 'mop_lag'.
-    cids : List[str]
+    cids : List[str], optional
         A list of cross-section identifiers to select from the DataFrame. If None, all
-        cross-sections in the frame are selected.
-    xcats : List[str]
+        cross-sections in the frame are selected. Default is None.
+    xcats : List[str], optional
         A list of category tickers to select from the DataFrame. If None, all categories
-        are selected.
-    xcat_labels : Dict[str, str]
-        A dictionary mapping category tickers (keys) to their labels (values).
+        are selected. Default is None.
+    xcat_labels : Dict[str, str], optional
+        A dictionary mapping category tickers (keys) to their labels (values). Default is
+        None.
     xcat_comp : str
         The name of the composite category. Default is 'Composite'.
     weights : List[float]
