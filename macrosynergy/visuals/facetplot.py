@@ -695,14 +695,14 @@ class FacetPlot(Plotter):
 
         Parameters
         ----------
-        X : np.ndarray
+        X : ~numpy.ndarray
             Array of dates.
-        Y : np.ndarray
+        Y : ~numpy.ndarray
             Array of values.
 
         Returns
         -------
-        Tuple[np.ndarray, np.ndarray]
+        Tuple[~numpy.ndarray, ~numpy.ndarray]
             Tuple of arrays with gaps filled.
         """
 
