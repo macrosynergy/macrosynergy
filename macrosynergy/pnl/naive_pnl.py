@@ -1,5 +1,5 @@
 """
-"Naive" PnLs with limited signal options and disregarding transaction costs.
+"Naive" profit-and-loss (PnL) calculations with basic signal options, disregarding transaction costs.
 """
 
 from dataclasses import dataclass
@@ -105,6 +105,315 @@ class NaivePnL:
             self._bm_dict = bm_dict
 
         self.pnl_params = {}
+
+    def make_pnl(
+        self,
+        sig: str,
+        sig_op: str = "zn_score_pan",
+        sig_add: float = 0,
+        sig_neg: bool = False,
+        pnl_name: Optional[str] = None,
+        rebal_freq: str = "daily",
+        rebal_slip: int = 0,
+        vol_scale: Optional[float] = None,
+        leverage: float = 1.0,
+        min_obs: int = 261,
+        iis: bool = True,
+        sequential: bool = True,
+        neutral: str = "zero",
+        thresh: float = None,
+    ):
+        """
+        Calculate daily PnL and add to class instance.
+
+        Parameters
+        ----------
+        sig : str
+            name of raw signal that is basis for positioning. The signal is assumed to
+            be recorded at the end of the day prior to position taking.
+        sig_op : str
+            signal transformation options; must be one of 'zn_score_pan', 'zn_score_cs',
+            'binary', or 'raw'. The default is 'zn_score_pan'. See notes below for
+            further details.
+        sig_add : float
+            add a constant to the signal after initial transformation. This allows to
+            give PnLs a long or short bias relative to the signal score. Default is 0.
+        sig_neg : str
+            if True the PnL is based on the negative value of the transformed signal.
+            Default is False.
+        pnl_name : str
+            name of the PnL to be generated and stored. Default is None, i.e. a default
+            name is given. The default name will be: 'PNL_<signal name>[_<NEG>]', with the
+            last part added if sig_neg has been set to True. Previously calculated PnLs of
+            the same name will be overwritten. This means that if a set of PnLs are to be
+            compared, each PnL requires a distinct name.
+        rebal_freq : str
+            re-balancing frequency for positions according to signal must be one of
+            'daily' (default), 'weekly' or 'monthly'. The re-balancing is only concerned
+            with the signal value on the re-balancing date which is delimited by the
+            frequency chosen. Additionally, the re-balancing frequency will be applied to
+            make_zn_scores() if used as the method to produce the raw signals.
+        rebal_slip : str
+            re-balancing slippage in days. Default is 1 which means that it takes one
+            day to re-balance the position and that the new positions produce PnL from the
+            second day after the signal has been recorded.
+        vol_scale : bool
+            ex-post scaling of PnL to annualized volatility given. This is for
+            comparative visualization and not out-of-sample. Default is none.
+        leverage : float
+            leverage applied to the raw signal when a `vol_scale` is not defined.
+            Default is 1.0, i.e., position size is 1 or 100% of implied risk capital.
+        min_obs : int
+            the minimum number of observations required to calculate zn_scores. Default
+            is 252.
+        iis : bool
+            if True (default) zn-scores are also calculated for the initial sample
+            period defined by min_obs, on an in-sample basis, to avoid losing history.
+        sequential : bool
+            if True (default) score parameters (neutral level and standard deviations)
+            are estimated sequentially with concurrently available information only.
+        neutral : str
+            method to determine neutral level. Default is 'zero'. Alternatives are
+            'mean' and "median".
+        thresh : float
+            threshold value beyond which scores are winsorized, i.e. contained at that
+            threshold. Therefore, the threshold is the maximum absolute score value that the
+            function is allowed to produce. The minimum threshold is one standard deviation.
+            Default is no threshold.
+
+
+        Notes
+        -----
+        When sig_op = 'zn_score_pan', raw signals are transformed into zn-scores
+        around a neutral value where pooled panel statistics are calculated.
+
+        When sig_op = 'zn_score_cs', raw signals are transformed into zn-scores
+        around a neutral value where statistics are calculated by cross section alone.
+
+        When sig_op = 'binary', transforms signals into uniform long/shorts (1/-1) across
+        all cross sections.
+
+        When sig_op = 'raw', no transformation is applied to the signal.
+
+        See Also
+        --------
+        macrosynergy.panel.make_zn_scores : compute zn-scores for a panel. 
+        
+        """
+
+        for varx, name, typex in (
+            (sig, "sig", str),
+            (sig_op, "sig_op", str),
+            (
+                sig_add,
+                "sig_add",
+                (Number),
+            ),  # testing for number instead of (float, int)
+            (sig_neg, "sig_neg", bool),
+            (pnl_name, "pnl_name", (str, type(None))),
+            (rebal_freq, "rebal_freq", str),
+            (rebal_slip, "rebal_slip", int),
+            (vol_scale, "vol_scale", (Number, type(None))),
+            (leverage, "leverage", (Number)),
+            (min_obs, "min_obs", int),
+            (iis, "iis", bool),
+            (sequential, "sequential", bool),
+            (neutral, "neutral", str),
+            (thresh, "thresh", (Number, type(None))),
+        ):
+            if not isinstance(varx, typex):
+                raise TypeError(f"{name} must be a {typex}.")
+
+        error_sig = (
+            f"Signal category missing from the options defined on the class: "
+            f"{self.sigs}. "
+        )
+        if sig not in self.sigs:
+            raise ValueError(error_sig)
+
+        sig_options = ["zn_score_pan", "zn_score_cs", "binary", "raw"]
+        error_sig_method = (
+            f"The signal transformation method, {sig_op}, is not one of "
+            f"the options specified: {sig_options}."
+        )
+        if sig_op not in sig_options:
+            raise ValueError(error_sig_method)
+
+        freq_params = ["daily", "weekly", "monthly"]
+        freq_error = f"Re-balancing frequency must be one of: {freq_params}."
+        if rebal_freq not in freq_params:
+            raise ValueError(freq_error)
+
+        if thresh is not None and thresh < 1:
+            raise ValueError("thresh must be greater than or equal to one.")
+
+        err_lev = "`leverage` must be a numerical value greater than 0."
+        if leverage <= 0:
+            raise ValueError(err_lev)
+        err_vol = "`vol_scale` must be a numerical value greater than 0."
+        if vol_scale is not None and (vol_scale <= 0):
+            raise ValueError(err_vol)
+
+        # B. Extract DataFrame of exclusively return and signal categories in time series
+        # format.
+        dfx = self.df[self.df["xcat"].isin([self.ret, sig])]
+
+        dfw = self._make_signal(
+            dfx=dfx,
+            sig=sig,
+            sig_op=sig_op,
+            min_obs=min_obs,
+            iis=iis,
+            sequential=sequential,
+            neutral=neutral,
+            thresh=thresh,
+        )
+
+        if sig_neg:
+            dfw["psig"] *= -1
+            neg = "_NEG"
+        else:
+            neg = ""
+
+        dfw["psig"] += sig_add
+
+        self._winsorize(df=dfw["psig"], thresh=thresh)
+
+        # Multi-index DataFrame with a natural minimum lag applied.
+        dfw["psig"] = dfw["psig"].groupby(level=0, observed=True).shift(1)
+        dfw.reset_index(inplace=True)
+        dfw = dfw.rename_axis(None, axis=1)
+
+        dfw = dfw.sort_values(["cid", "real_date"])
+
+        if rebal_freq != "daily":
+            sig_series = self.rebalancing(
+                dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
+            )
+            dfw["sig"] = np.squeeze(sig_series.to_numpy())
+        else:
+            dfw = dfw.rename({"psig": "sig"}, axis=1)
+
+        # The signals are generated across the panel.
+        dfw["value"] = dfw[self.ret] * dfw["sig"]
+
+        df_pnl = dfw.loc[:, ["cid", "real_date", "value"]]
+
+        # Compute the return across the panel. The returns are still computed daily
+        # regardless of the re-balancing frequency potentially occurring weekly or
+        # monthly.
+        df_pnl_all = df_pnl.groupby(["real_date"]).sum(numeric_only=True)
+        df_pnl_all = df_pnl_all[df_pnl_all["value"].cumsum() != 0]
+        # Returns are computed for each cross-section and across the panel.
+        if df_pnl["cid"].dtype.name == "category":
+            df_pnl_all["cid"] = pd.Categorical.from_codes(
+                codes=[0] * len(df_pnl_all), categories=["ALL"]
+            )
+        else:
+            df_pnl_all["cid"] = "ALL"
+
+        df_pnl_all = df_pnl_all.reset_index()[df_pnl.columns]
+        # Will be inclusive of each individual cross-section's signal-adjusted return and
+        # the aggregated panel return.
+
+        pnn = ("PNL_" + sig + neg) if pnl_name is None else pnl_name
+
+        df_pnl = QuantamentalDataFrame.from_long_df(df_pnl, xcat=pnn)
+        df_pnl_all = QuantamentalDataFrame.from_long_df(df_pnl_all, xcat=pnn)
+        df_pnl = QuantamentalDataFrame.from_qdf_list([df_pnl, df_pnl_all])
+
+        if vol_scale is not None:
+            leverage = vol_scale * (df_pnl_all["value"].std() * np.sqrt(261)) ** (-1)
+
+        assert isinstance(leverage, (float, int)), err_lev  # sanity check
+        df_pnl["value"] = df_pnl["value"] * leverage
+
+        # Populating the signal dictionary is required for the display methods:
+        self.signal_df[pnn] = dfw.loc[:, ["cid", "real_date", "sig"]]
+
+        if pnn in self.pnl_names:
+            self.df = self.df[~(self.df["xcat"] == pnn)]
+        else:
+            self.pnl_names = self.pnl_names + [pnn]
+
+        # agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
+        agg_df = QuantamentalDataFrame.from_qdf_list([self.df, df_pnl[self.df.columns]])
+        self.df = agg_df.reset_index(drop=True)
+
+        self.df = QuantamentalDataFrame(
+            self.df, _initialized_as_categorical=self._as_categorical
+        )
+
+        self.pnl_params[pnn] = PnLParams(
+            pnl_name=pnn,
+            signal=sig,
+            sig_op=sig_op,
+            sig_add=sig_add,
+            sig_neg=sig_neg,
+            rebal_freq=rebal_freq,
+            rebal_slip=rebal_slip,
+            vol_scale=vol_scale,
+            neutral=neutral,
+            thresh=thresh,
+        )
+
+    def make_long_pnl(
+        self,
+        vol_scale: Optional[float] = None,
+        label: Optional[str] = None,
+        leverage: float = 1.0,
+    ):
+        """
+        Computes long-only returns which may act as a basis for comparison
+        against the signal-adjusted returns. Will take a long-only position in the
+        category passed to the parameter 'self.ret'.
+
+        Parameters
+        ----------
+        vol_scale : bool
+            ex-post scaling of PnL to annualized volatility given. This is for
+            comparative visualization and not out-of-sample, and is applied to the long-only
+            position. Default is None.
+        label : str
+            associated label that will be mapped to the long-only DataFrame. The label
+            will be used in the plotting graphic for plot_pnls(). If a label is not defined,
+            the default will be the name of the return category.
+        leverage : float
+            leverage applied to the raw signal when a `vol_scale` is not defined.
+            Default is 1.0, i.e., position size is 1 or 100% of implied risk capital.
+        """
+
+        if vol_scale is not None:
+            vol_err = (
+                "The parameter `vol_scale` must be a numerical value greater than 0."
+            )
+            if not isinstance(vol_scale, (float, int)):
+                raise TypeError(vol_err)
+            elif vol_scale <= 0:
+                raise ValueError(vol_err)
+
+        else:
+            err_lev = "`leverage` must be a numerical value greater than 0."
+            if not isinstance(leverage, (float, int)):
+                raise TypeError(err_lev)
+            elif leverage <= 0:
+                raise ValueError(err_lev)
+
+        if label is None:
+            label = self.ret
+
+        dfx = self.df[self.df["xcat"].isin([self.ret])]
+
+        df_long = self.long_only_pnl(
+            dfw=dfx, vol_scale=vol_scale, label=label, leverage=leverage
+        )
+
+        self.df = QuantamentalDataFrame.from_qdf_list([self.df, df_long])
+
+        if label not in self.pnl_names:
+            self.pnl_names = self.pnl_names + [label]
+
+        self.df = self.df.reset_index(drop=True)
 
     def add_bm(self, df: pd.DataFrame, bms: List[str], tickers: List[str]):
         """
@@ -291,306 +600,6 @@ class NaivePnL:
         sig_series = rebal_merge.drop(["cid"], axis=1)
 
         return sig_series
-
-    def make_pnl(
-        self,
-        sig: str,
-        sig_op: str = "zn_score_pan",
-        sig_add: float = 0,
-        sig_neg: bool = False,
-        pnl_name: Optional[str] = None,
-        rebal_freq: str = "daily",
-        rebal_slip: int = 0,
-        vol_scale: Optional[float] = None,
-        leverage: float = 1.0,
-        min_obs: int = 261,
-        iis: bool = True,
-        sequential: bool = True,
-        neutral: str = "zero",
-        thresh: float = None,
-    ):
-        """
-        Calculate daily PnL and add to class instance.
-
-        Parameters
-        ----------
-        sig : str
-            name of raw signal that is basis for positioning. The signal is assumed to
-            be recorded at the end of the day prior to position taking.
-        sig_op : str
-            signal transformation options; must be one of 'zn_score_pan', 'zn_score_cs',
-            'binary', or 'raw'. The default is 'zn_score_pan'. 'zn_score_pan': transforms
-            raw signals into z-scores around zero value based on the whole panel. The
-            neutral level & standard deviation will use the cross-section of panels.
-            'zn_score_cs': transforms signals to z-scores around zero based on cross-section
-            alone. 'binary': transforms signals into uniform long/shorts (1/-1) across all
-            sections.
-        sig_add : float
-            add a constant to the signal after initial transformation. This allows to
-            give PnLs a long or short bias relative to the signal score. Default is 0.
-        sig_neg : str
-            if True the PnL is based on the negative value of the transformed signal.
-            Default is False.
-        pnl_name : str
-            name of the PnL to be generated and stored. Default is None, i.e. a default
-            name is given. The default name will be: 'PNL_<signal name>[_<NEG>]', with the
-            last part added if sig_neg has been set to True. Previously calculated PnLs of
-            the same name will be overwritten. This means that if a set of PnLs are to be
-            compared, each PnL requires a distinct name.
-        rebal_freq : str
-            re-balancing frequency for positions according to signal must be one of
-            'daily' (default), 'weekly' or 'monthly'. The re-balancing is only concerned
-            with the signal value on the re-balancing date which is delimited by the
-            frequency chosen. Additionally, the re-balancing frequency will be applied to
-            make_zn_scores() if used as the method to produce the raw signals.
-        rebal_slip : str
-            re-balancing slippage in days. Default is 1 which means that it takes one
-            day to re-balance the position and that the new positions produce PnL from the
-            second day after the signal has been recorded.
-        vol_scale : bool
-            ex-post scaling of PnL to annualized volatility given. This is for
-            comparative visualization and not out-of-sample. Default is none.
-        leverage : float
-            leverage applied to the raw signal when a `vol_scale` is not defined.
-            Default is 1.0, i.e., position size is 1 or 100% of implied risk capital.
-        min_obs : int
-            the minimum number of observations required to calculate zn_scores. Default
-            is 252.
-        iis : bool
-            if True (default) zn-scores are also calculated for the initial sample
-            period defined by min_obs, on an in-sample basis, to avoid losing history.
-        sequential : bool
-            if True (default) score parameters (neutral level and standard deviations)
-            are estimated sequentially with concurrently available information only.
-        neutral : str
-            method to determine neutral level. Default is 'zero'. Alternatives are
-            'mean' and "median".
-        thresh : float
-            threshold value beyond which scores are winsorized, i.e. contained at that
-            threshold. Therefore, the threshold is the maximum absolute score value that the
-            function is allowed to produce. The minimum threshold is one standard deviation.
-            Default is no threshold.
-
-
-        .. note::
-            zn-score here means standardized score with zero being the
-            natural neutral level and standardization through division by mean absolute
-            value.
-        """
-
-        for varx, name, typex in (
-            (sig, "sig", str),
-            (sig_op, "sig_op", str),
-            (
-                sig_add,
-                "sig_add",
-                (Number),
-            ),  # testing for number instead of (float, int)
-            (sig_neg, "sig_neg", bool),
-            (pnl_name, "pnl_name", (str, type(None))),
-            (rebal_freq, "rebal_freq", str),
-            (rebal_slip, "rebal_slip", int),
-            (vol_scale, "vol_scale", (Number, type(None))),
-            (leverage, "leverage", (Number)),
-            (min_obs, "min_obs", int),
-            (iis, "iis", bool),
-            (sequential, "sequential", bool),
-            (neutral, "neutral", str),
-            (thresh, "thresh", (Number, type(None))),
-        ):
-            if not isinstance(varx, typex):
-                raise TypeError(f"{name} must be a {typex}.")
-
-        error_sig = (
-            f"Signal category missing from the options defined on the class: "
-            f"{self.sigs}. "
-        )
-        if sig not in self.sigs:
-            raise ValueError(error_sig)
-
-        sig_options = ["zn_score_pan", "zn_score_cs", "binary", "raw"]
-        error_sig_method = (
-            f"The signal transformation method, {sig_op}, is not one of "
-            f"the options specified: {sig_options}."
-        )
-        if sig_op not in sig_options:
-            raise ValueError(error_sig_method)
-
-        freq_params = ["daily", "weekly", "monthly"]
-        freq_error = f"Re-balancing frequency must be one of: {freq_params}."
-        if rebal_freq not in freq_params:
-            raise ValueError(freq_error)
-
-        if thresh is not None and thresh < 1:
-            raise ValueError("thresh must be greater than or equal to one.")
-
-        err_lev = "`leverage` must be a numerical value greater than 0."
-        if leverage <= 0:
-            raise ValueError(err_lev)
-        err_vol = "`vol_scale` must be a numerical value greater than 0."
-        if vol_scale is not None and (vol_scale <= 0):
-            raise ValueError(err_vol)
-
-        # B. Extract DataFrame of exclusively return and signal categories in time series
-        # format.
-        dfx = self.df[self.df["xcat"].isin([self.ret, sig])]
-
-        dfw = self._make_signal(
-            dfx=dfx,
-            sig=sig,
-            sig_op=sig_op,
-            min_obs=min_obs,
-            iis=iis,
-            sequential=sequential,
-            neutral=neutral,
-            thresh=thresh,
-        )
-
-        if sig_neg:
-            dfw["psig"] *= -1
-            neg = "_NEG"
-        else:
-            neg = ""
-
-        dfw["psig"] += sig_add
-
-        self._winsorize(df=dfw["psig"], thresh=thresh)
-
-        # Multi-index DataFrame with a natural minimum lag applied.
-        dfw["psig"] = dfw["psig"].groupby(level=0, observed=True).shift(1)
-        dfw.reset_index(inplace=True)
-        dfw = dfw.rename_axis(None, axis=1)
-
-        dfw = dfw.sort_values(["cid", "real_date"])
-
-        if rebal_freq != "daily":
-            sig_series = self.rebalancing(
-                dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
-            )
-            dfw["sig"] = np.squeeze(sig_series.to_numpy())
-        else:
-            dfw = dfw.rename({"psig": "sig"}, axis=1)
-
-        # The signals are generated across the panel.
-        dfw["value"] = dfw[self.ret] * dfw["sig"]
-
-        df_pnl = dfw.loc[:, ["cid", "real_date", "value"]]
-
-        # Compute the return across the panel. The returns are still computed daily
-        # regardless of the re-balancing frequency potentially occurring weekly or
-        # monthly.
-        df_pnl_all = df_pnl.groupby(["real_date"]).sum(numeric_only=True)
-        df_pnl_all = df_pnl_all[df_pnl_all["value"].cumsum() != 0]
-        # Returns are computed for each cross-section and across the panel.
-        if df_pnl["cid"].dtype.name == "category":
-            df_pnl_all["cid"] = pd.Categorical.from_codes(
-                codes=[0] * len(df_pnl_all), categories=["ALL"]
-            )
-        else:
-            df_pnl_all["cid"] = "ALL"
-
-        df_pnl_all = df_pnl_all.reset_index()[df_pnl.columns]
-        # Will be inclusive of each individual cross-section's signal-adjusted return and
-        # the aggregated panel return.
-
-        pnn = ("PNL_" + sig + neg) if pnl_name is None else pnl_name
-
-        df_pnl = QuantamentalDataFrame.from_long_df(df_pnl, xcat=pnn)
-        df_pnl_all = QuantamentalDataFrame.from_long_df(df_pnl_all, xcat=pnn)
-        df_pnl = QuantamentalDataFrame.from_qdf_list([df_pnl, df_pnl_all])
-
-        if vol_scale is not None:
-            leverage = vol_scale * (df_pnl_all["value"].std() * np.sqrt(261)) ** (-1)
-
-        assert isinstance(leverage, (float, int)), err_lev  # sanity check
-        df_pnl["value"] = df_pnl["value"] * leverage
-
-        # Populating the signal dictionary is required for the display methods:
-        self.signal_df[pnn] = dfw.loc[:, ["cid", "real_date", "sig"]]
-
-        if pnn in self.pnl_names:
-            self.df = self.df[~(self.df["xcat"] == pnn)]
-        else:
-            self.pnl_names = self.pnl_names + [pnn]
-
-        # agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
-        agg_df = QuantamentalDataFrame.from_qdf_list([self.df, df_pnl[self.df.columns]])
-        self.df = agg_df.reset_index(drop=True)
-
-        self.df = QuantamentalDataFrame(
-            self.df, _initialized_as_categorical=self._as_categorical
-        )
-
-        self.pnl_params[pnn] = PnLParams(
-            pnl_name=pnn,
-            signal=sig,
-            sig_op=sig_op,
-            sig_add=sig_add,
-            sig_neg=sig_neg,
-            rebal_freq=rebal_freq,
-            rebal_slip=rebal_slip,
-            vol_scale=vol_scale,
-            neutral=neutral,
-            thresh=thresh,
-        )
-
-    def make_long_pnl(
-        self,
-        vol_scale: Optional[float] = None,
-        label: Optional[str] = None,
-        leverage: float = 1.0,
-    ):
-        """
-        The long-only returns will be computed which act as a basis for comparison
-        against the signal-adjusted returns. Will take a long-only position in the
-        category passed to the parameter 'self.ret'.
-
-        Parameters
-        ----------
-        vol_scale : bool
-            ex-post scaling of PnL to annualized volatility given. This is for
-            comparative visualization and not out-of-sample, and is applied to the long-only
-            position. Default is None.
-        label : str
-            associated label that will be mapped to the long-only DataFrame. The label
-            will be used in the plotting graphic for plot_pnls(). If a label is not defined,
-            the default will be the name of the return category.
-        leverage : float
-            leverage applied to the raw signal when a `vol_scale` is not defined.
-            Default is 1.0, i.e., position size is 1 or 100% of implied risk capital.
-        """
-
-        if vol_scale is not None:
-            vol_err = (
-                "The parameter `vol_scale` must be a numerical value greater than 0."
-            )
-            if not isinstance(vol_scale, (float, int)):
-                raise TypeError(vol_err)
-            elif vol_scale <= 0:
-                raise ValueError(vol_err)
-
-        else:
-            err_lev = "`leverage` must be a numerical value greater than 0."
-            if not isinstance(leverage, (float, int)):
-                raise TypeError(err_lev)
-            elif leverage <= 0:
-                raise ValueError(err_lev)
-
-        if label is None:
-            label = self.ret
-
-        dfx = self.df[self.df["xcat"].isin([self.ret])]
-
-        df_long = self.long_only_pnl(
-            dfw=dfx, vol_scale=vol_scale, label=label, leverage=leverage
-        )
-
-        self.df = QuantamentalDataFrame.from_qdf_list([self.df, df_long])
-
-        if label not in self.pnl_names:
-            self.pnl_names = self.pnl_names + [label]
-
-        self.df = self.df.reset_index(drop=True)
 
     @staticmethod
     def long_only_pnl(
