@@ -26,7 +26,7 @@ class Basket(object):
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.Dataframe
         standardized DataFrame containing the columns: 'cid', 'xcat', 'real_date' and
         'value'.
     contracts : List[str]
@@ -100,7 +100,7 @@ class Basket(object):
 
         Parameters
         ----------
-        df : pd.DataFrame
+        df : ~pandas.DataFrame
             original, standardised DataFrame.
         pfx : List[str]
             category postfixes involved in the basket calculation.
@@ -140,12 +140,12 @@ class Basket(object):
         ----------
         tick_list : List[str]
             list of the respective tickers.
-        df : pd.DataFrame
+        df : ~pandas.DataFrame
             standardised dataframe.
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             wide dataframe.
         """
 
@@ -184,7 +184,7 @@ class Basket(object):
 
         Parameters
         ----------
-        weight : pd.DataFrame
+        weight : ~pandas.DataFrame
             weight dataframe.
         """
 
@@ -199,14 +199,14 @@ class Basket(object):
 
         Parameters
         ----------
-        weights : pd.DataFrame
+        weights : ~pandas.DataFrame
             Corresponding weight matrix. Multidimensional.
         max_weight : float
             Upper-bound on the weight allowed for each cross-section.
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             Will return the modified weight DataFrame.
 
 
@@ -233,12 +233,12 @@ class Basket(object):
 
         Parameters
         ----------
-        df_ret : pd.DataFrame
+        df_ret : ~pandas.DataFrame
             wide time-indexed data frame of returns.
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             dataframe of weights.  Note: The method determines the  number of non-NA
             cross-sections per timestamp, and subsequently distributes the weights evenly
             across non-NA cross-sections.
@@ -266,14 +266,14 @@ class Basket(object):
 
         Parameters
         ----------
-        df_ret : pd.DataFrame
+        df_ret : ~pandas.DataFrame
             Return series matrix. Multidimensional.
         weights : List[float]
             List of floats determining weight allocation.
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             panel of weights
         """
 
@@ -307,7 +307,7 @@ class Basket(object):
 
         Parameters
         ----------
-        dfw_ret : pd.DataFrame
+        dfw_ret : ~pandas.DataFrame
             panel dataframe of returns.
         lback_meth : str
             Lookback method for "invsd" weighting method. Default is "xma".
@@ -320,7 +320,7 @@ class Basket(object):
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             Dataframe of weights.
 
 
@@ -359,16 +359,16 @@ class Basket(object):
 
         Parameters
         ----------
-        dfw_ret : pd.DataFrame
+        dfw_ret : ~pandas.DataFrame
             Standard wide dataframe of returns across time and contracts.
-        dfw_wgt : pd.DataFrame
+        dfw_wgt : ~pandas.DataFrame
             Standard wide dataframe of weight category values across time and contracts.
         weight_meth : str
 
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             Dataframe of weights.
         """
 
@@ -504,14 +504,14 @@ class Basket(object):
 
         Parameters
         ----------
-        df_cat : pd.DataFrame
+        df_cat : ~pandas.DataFrame
             return or carry dataframe.
-        dfw_wgs : pd.DataFrame
+        dfw_wgs : ~pandas.DataFrame
             weight dataframe.
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             modified weight dataframe (column names will map to the other dataframe
             received).
         """
@@ -535,12 +535,12 @@ class Basket(object):
 
         Parameters
         ----------
-        dfw_wgs : pd.DataFrame
+        dfw_wgs : ~pandas.DataFrame
             weight dataframe.
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             weight dataframe with updated columns names.
         """
 
@@ -818,11 +818,11 @@ class Basket(object):
 
         Parameters
         ----------
-        df : pd.DataFrame
+        df : ~pandas.DataFrame
 
         Returns
         -------
-        pd.DataFrame
+        ~pandas.DataFrame
             standardised dataframe.
         """
 

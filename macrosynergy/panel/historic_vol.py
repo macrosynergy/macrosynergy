@@ -27,12 +27,13 @@ def historic_vol(
     nan_tolerance: float = 0.25,
 ):
     """
-    Estimate historic annualized standard deviations of asset returns. User Function.
-    Controls the functionality.
+    Estimate historic annualized standard deviations of asset returns. The function can
+    calculate the volatility using either a moving average or an exponential moving
+    average method.
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         standardized DataFrame with the following necessary columns: 'cid', 'xcat',
         'real_date' and 'value'. Will contain all of the data across all macroeconomic
         fields.
@@ -75,7 +76,7 @@ def historic_vol(
 
     Returns
     -------
-    pd.DataFrame
+    ~pandas.DataFrame
         standardized DataFrame with the estimated annualized standard deviations of the
         chosen xcat. If the input 'value' is in % (as is the standard in JPMaQS) then the
         output will also be in %. 'cid', 'xcat', 'real_date' and 'value'.
@@ -127,6 +128,10 @@ def historic_vol(
         remove_zeros: bool,
         weights: Optional[np.ndarray] = None,
     ):
+        """
+        Helper function to calculate the historic volatility for a single row in the 
+        DataFrame.
+        """
         target_dates = pd.bdate_range(end=row["real_date"], periods=lback_periods)
         target_df: pd.DataFrame = dfw.loc[dfw.index.isin(target_dates)]
 
@@ -247,7 +252,7 @@ def expo_weights(lback_periods: int = 21, half_life: int = 11):
 
     Returns
     -------
-    np.ndarray
+    ~numpy.ndarray
         An Array of weights determined by the length of the lookback period.  Note: 50%
         of the weight allocation will be applied to the number of days delimited by the
         half_life.
@@ -269,9 +274,9 @@ def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
 
     Parameters
     ----------
-    x : np.ndarray
+    x : ~numpy.ndarray
         array of returns
-    w : np.ndarray
+    w : ~numpy.ndarray
         array of exponential weights (same length as x); will be normalized to 1.
     remove_zeros : bool
         removes zeroes as invalid entries and shortens the effective window.
@@ -299,7 +304,7 @@ def flat_std(x: np.ndarray, remove_zeros: bool = True):
 
     Parameters
     ----------
-    x : np.ndarray
+    x : ~numpy.ndarray
         array of returns
     remove_zeros : bool
         removes zeroes as invalid entries and shortens the effective window.

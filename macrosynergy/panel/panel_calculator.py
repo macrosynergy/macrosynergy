@@ -25,11 +25,12 @@ def panel_calculator(
     external_func: dict = None,
 ) -> pd.DataFrame:
     """
-    Calculates new data panels through operations on existing panels.
+    Calculates new data panels through a given input formula which is performed on 
+    existing panels.
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.Dataframe
         standardized dataframe with following necessary columns: 'cid', 'xcat',
         'real_date' and 'value'.
     calcs : List[str]
@@ -48,23 +49,33 @@ def panel_calculator(
         code.
     external_func : dict
         dictionary of external functions to be used in the panel calculation. The key is
-        the name of the function and the value is the function.
+        the name of the function and the value is the function object itself. e.g.
+        {"my_func": my_func}.
 
     Returns
     -------
-    pd.Dataframe
+    ~pandas.Dataframe
         standardized dataframe with all new categories in standard format, i.e the
-        columns 'cid', 'xcat', 'real_date' and 'value'.  Notes: Panel calculation strings
-        can use numpy functions and unary/binary operators on category panels. The category
-        is indicated by capital letters, underscores and numbers. Panel category names that
-        are not at the beginning or end of the string must always have a space before and
-        after the name. Calculated category and panel operations must be separated by '='.
+        columns 'cid', 'xcat', 'real_date' and 'value'.  
+
+
+    ..note::
+        Panel calculation strings can use numpy functions and unary/binary operators on 
+        category panels. The category is indicated by capital letters, underscores and 
+        numbers. Panel category names that are not at the beginning or end of the string 
+        must always have a space before and after the name. Calculated category and 
+        panel operations must be separated by '='. 
+        
         Examples: "NEWCAT = ( OLDCAT1 + 0.5) * OLDCAT2" "NEWCAT = np.log( OLDCAT1 ) -
-        np.abs( OLDCAT2 ) ** 1/2" Panel calculation can also involve individual indicator
+        np.abs( OLDCAT2 ) ** 1/2" 
+
+        Panel calculation can also involve individual indicator
         series (to be applied to all series in the panel by using th 'i' as prefix), such
-        as: "NEWCAT = OLDCAT1 - np.sqrt( iUSD_OLDCAT2 )" If more than one new category is
-        calculated, the resulting panels can be used sequentially in the calculations, such
-        as: ["NEWCAT1 = 1 + OLDCAT1 / 100", "NEWCAT2 = OLDCAT2 * NEWCAT1"]
+        as: "NEWCAT = OLDCAT1 - np.sqrt( iUSD_OLDCAT2 )" 
+        
+        If more than one new category is calculated, the resulting panels can be used 
+        sequentially in the calculations, such as: 
+        ["NEWCAT1 = 1 + OLDCAT1 / 100", "NEWCAT2 = OLDCAT2 * NEWCAT1"]
     """
 
     # A. Asserts
@@ -297,12 +308,12 @@ def _replace_zeros(df: pd.DataFrame):
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         dataframe to be cleaned.
 
     Returns
     -------
-    pd.DataFrame
+    ~pandas.DataFrame
         cleaned dataframe.
     """
 

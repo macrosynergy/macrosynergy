@@ -36,7 +36,7 @@ def correl_matrix(
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.Dataframe
         standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
         'real_date' and at least one column with values of interest.
     xcats : List[str]

@@ -18,7 +18,7 @@ def impute_panel(
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         the long-format panel dataset
     cids : list
         the list of cross sections to be considered in the imputation
@@ -29,7 +29,7 @@ def impute_panel(
 
     Returns
     -------
-    pd.DataFrame
+    ~pandas.DataFrame
         the imputed long-format panel data, with the relevant xcats and cids
 
 

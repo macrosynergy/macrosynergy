@@ -37,7 +37,7 @@ def make_zn_scores(
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.Dataframe
         standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
         'real_date' and 'value'.
     xcat : str
@@ -86,7 +86,7 @@ def make_zn_scores(
 
     Returns
     -------
-    pd.Dataframe
+    ~pandas.Dataframe
         standardized DataFrame with the zn-scores of the chosen xcat: 'cid', 'xcat',
         'real_date' and 'value'.
 
@@ -254,13 +254,13 @@ def expanding_stat(
     iis: bool = True,
 ) -> pd.DataFrame:
     """
-    Compute statistic based on an expanding sample.
+    Compute specified statistic based on an expanding sample.
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.Dataframe
         Daily-frequency time series DataFrame.
-    dates_iter : pd.DatetimeIndex
+    dates_iter : ~pandas.DatetimeIndex
         controls the frequency of the neutral & mean absolute deviation calculations.
     stat : str, Number
         statistical method to be applied. This is typically 'mean', or 'median'.
@@ -275,7 +275,7 @@ def expanding_stat(
 
     Returns
     -------
-    pd.DataFrame
+    ~pandas.DataFrame
         Time series dataframe of the chosen statistic across all columns
     """
 
@@ -342,7 +342,7 @@ def _get_expanding_count(X: pd.DataFrame, min_periods: int = 1):
 
     Parameters
     ----------
-    X : pd.DataFrame
+    X : ~pandas.DataFrame
         Pandas dataframe of input features.
     min_periods : int
         Minimum number of observations in window required to have a value (otherwise
@@ -350,7 +350,7 @@ def _get_expanding_count(X: pd.DataFrame, min_periods: int = 1):
 
     Returns
     -------
-    np.ndarray
+    ~numpy.ndarray
         Numpy array of expanding counts.
     """
 

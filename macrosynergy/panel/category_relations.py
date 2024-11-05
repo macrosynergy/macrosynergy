@@ -385,7 +385,7 @@ class CategoryRelations(object):
 
         Parameters
         ----------
-        df_probability : List[pd.DataFrame] or pd.DataFrame
+        df_probability : List[~pandas.DataFrame] or ~pandas.DataFrame
             pandas DataFrame containing the dependent and explanatory variables.
         prob_est : str
             type of estimator for probability of significant relation.
@@ -432,7 +432,7 @@ class CategoryRelations(object):
 
         Parameters
         ----------
-        df_probability : List[pd.DataFrame] or pd.DataFrame
+        df_probability : List[~pandas.DataFrame] or ~pandas.DataFrame
             pandas DataFrame containing the dependent and explanatory variables. Able to
             handle multiple DataFrames representing different time-periods of the original
             series.

@@ -30,14 +30,14 @@ def date_alignment(
 
     Parameters
     ----------
-    unhedged_return : pd.DataFrame
+    unhedged_return : ~pandas.DataFrame
         the return series of the asset that is being hedged.
-    benchmark_return : pd.Series
+    benchmark_return : ~pandas.Series
         the return series of the asset being used to hedge against the main asset.
 
     Returns
     -------
-    pd.Timestamp, pd.Timestamp
+    ~pandas.Timestamp, ~pandas.Timestamp
         the shared start and end date across the two series.
     """
 
@@ -75,11 +75,11 @@ def hedge_calculator(
 
     Parameters
     ----------
-    unhedged_return : pd.Series
+    unhedged_return : ~pandas.Series
         the return series of the asset that is being hedged.
-    benchmark_return : pd.Series
+    benchmark_return : ~pandas.Series
         the return series of the asset being used to hedge against the main asset.
-    rdates : List[pd.Timestamp]
+    rdates : List[~pandas.Timestamp]
         the dates controlling the frequency of re-estimation.
     cross_section : str
         cross-section responsible for the "benchmark_return" series.
@@ -95,7 +95,7 @@ def hedge_calculator(
 
     Returns
     -------
-    pd.DataFrame
+    ~pandas.DataFrame
         returns a dataframe of the hedge ratios for the respective cross-section.
     """
 
@@ -182,16 +182,16 @@ def adjusted_returns(
 
     Parameters
     ----------
-    benchmark_return : pd.Series
+    benchmark_return : ~pandas.Series
         the return series of the asset being used to hedge against the main asset.
-    df_hedge : pd.DataFrame
+    df_hedge : ~pandas.DataFrame
         standardised dataframe with the hedge ratios.
-    dfw : pd.DataFrame
+    dfw : ~pandas.DataFrame
         pivoted dataframe of the relevant returns.
 
     Returns
     -------
-    pd.DataFrame
+    ~pandas.DataFrame
         standardised dataframe of adjusted returns.
     """
 
@@ -260,6 +260,7 @@ def return_beta(
     oos : bool
         if True (default) hedge ratios are calculated out-of-sample, i.e. for the period
         following the estimation period at the given re-estimation frequency.
+        Currently not implemented. So will always be out of sample.
     refreq : str
         re-estimation frequency. This is period after which hedge ratios are re-
         estimated. The re-estimation is conducted at the end of the period and used as hedge
@@ -420,7 +421,7 @@ def beta_display(df_hedge: pd.DataFrame, subplots: bool = False, hr_name: str = 
 
     Parameters
     ----------
-    df_hedge : pd.DataFrame
+    df_hedge : ~pandas.DataFrame
         DataFrame with hedge ratios.
     subplots : bool
         matplotlib parameter to determine if each hedging series is displayed on

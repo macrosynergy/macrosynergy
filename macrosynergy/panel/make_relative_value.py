@@ -31,7 +31,7 @@ def make_relative_value(
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
         'real_date' and 'value'.
     xcats : List[str]
@@ -74,7 +74,7 @@ def make_relative_value(
 
     Returns
     -------
-    pd.DataFrame
+    ~pandas.DataFrame
         standardized DataFrame with the relative values, featuring the categories:
         'cid', 'xcat', 'real_date' and 'value'.
     """
@@ -232,7 +232,7 @@ def _prepare_basket(
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         long JPMaQS DataFrame of single category.
     xcat : str
         respective category for the relative value calculation.
@@ -243,6 +243,13 @@ def _prepare_basket(
     complete_cross : bool
         if True, the basket is only calculated if all cross sections, held in the
         basket, are available for that respective category.
+
+    Returns
+    -------
+    ~pandas.DataFrame
+        DataFrame with the cross sections available for the respective category.
+    List[str]
+        List of cross sections available for the respective category.
     """
 
     cids_used: List[str] = sorted(set(basket) & set(cids_avl))

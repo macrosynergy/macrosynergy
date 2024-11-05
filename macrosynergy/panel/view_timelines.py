@@ -39,11 +39,11 @@ def view_timelines(
     legend_fontsize: int = 12,
 ):
     """
-    Displays a facet grid of time line charts of one or more categories.
+    Displays a grid with subplots of time line charts of one or more categories.
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.Dataframe
         standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
         and at least one column with values of interest.
     xcats : List[str]
