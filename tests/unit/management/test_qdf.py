@@ -187,8 +187,8 @@ class TestMethods(unittest.TestCase):
         alt_args = dict(
             ticker="A_X",
             metrics=["a", "b"],
-            start_date="2000-01-01",
-            end_date="2020-01-01",
+            start="2000-01-01",
+            end="2020-01-01",
         )
 
         df2 = create_empty_categorical_qdf(**alt_args)
@@ -1863,8 +1863,8 @@ class TestQDFInitializationMethods(unittest.TestCase):
             cid=test_cid,
             xcat=test_xcat,
             metrics=test_metrics,
-            start_date=test_start_date,
-            end_date=test_end_date,
+            start=test_start_date,
+            end=test_end_date,
         )
 
         expc_df = create_empty_categorical_qdf(
@@ -1891,8 +1891,8 @@ class TestQDFInitializationMethods(unittest.TestCase):
             cid=test_cid,
             xcat=test_xcat,
             metrics=test_metrics,
-            start_date=test_start_date,
-            end_date=test_end_date,
+            start=test_start_date,
+            end=test_end_date,
             categorical=False,
         )
 
