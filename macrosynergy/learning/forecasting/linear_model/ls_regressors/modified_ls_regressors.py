@@ -313,7 +313,7 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
         y,
         analytic_method=None,
     ):
-        """
+        r"""
         Adjust the coefficients of the SWLS linear regression model
         by an analytical standard error formula.
 
@@ -335,20 +335,18 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
         coef : np.ndarray
             Adjusted coefficients.
 
-        Parameters
+        Notes
         ----------
         The analytical parameter estimates for WLS are:
 
         .. math::
 
-        \hat{\Beta}^{\text{WLS}} = (X^{\intercal}WX)^{-1}X^{\intercal}y
+            \hat{\beta}^{\text{WLS}} = (X^{\intercal}WX)^{-1}X^{\intercal}y
 
         where:
-            - :math: `X` is the input feature matrix, possibly with a column of
-                ones representing the choice of an intercept.
-            - :math: `W` is the positive-definite, symmetric weight matrix, a
-                diagonal matrix with sample weights along the main diagonal.
-            - :math: `y` is the dependent variable vector.
+            - `X` is the input feature matrix, possibly with a column of ones representing the choice of an intercept.
+            - `W` is the positive-definite, symmetric weight matrix, a diagonal matrix with sample weights along the main diagonal.
+            - `y` is the dependent variable vector.
 
         Since `W` is a positive-definite, symmetric matrix, it has a square root
         equal to the diagonal matrix with square roots of the sample weights along
@@ -356,10 +354,20 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
 
         .. math::
 
-        \hat{\Beta}^{\text{WLS}} = ((W^{\frac{1}{2}}X}^{\intercal}(W^{\frac{1}{2}}X))^{-1}(W^{\frac{1}{2}}X)^{\intercal}(W^{\frac{1}{2}}y)
+            \hat{\beta}^{\text{WLS}} = ((({W^{1/2}X})^{\intercal}(W^{1/2}X))^{-1}(W^{1/2}X)^{\intercal}(W^{1/2}y))
 
-        This is precisely the OLS estimator for a rescaled matrix :math: `\sim{X} = W^{\frac{1}{2}}X`
-        and a rescaled dependent variable :math: `\sim{y} = W^{\frac{1}{2}}y`.
+        This is precisely the OLS estimator for a rescaled matrix
+
+        .. math::
+
+            \tilde {X} = W^{1/2}X
+
+        and a rescaled dependent variable
+
+        .. math::
+
+            \tilde {y} = W^{1/2}y
+
         Hence, the usual standard error estimate and White's estimator can be applied
         based on a rescaling of the design matrix and associated target vector.
         """
@@ -445,6 +453,7 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
             )
 
         return self
+
 
 class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
     def __init__(
@@ -545,7 +554,7 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
         y,
         analytic_method,
     ):
-        """
+        r"""
         Adjust the coefficients of the TWLS linear regression model
         by an analytical standard error formula.
 
@@ -567,20 +576,18 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
         coef : np.ndarray
             Adjusted coefficients.
 
-        Parameters
+        Notes
         ----------
         The analytical parameter estimates for WLS are:
 
         .. math::
 
-        \hat{\Beta}^{\text{WLS}} = (X^{\intercal}WX)^{-1}X^{\intercal}y
+            \hat{\beta}^{\text{WLS}} = (X^{\intercal}WX)^{-1}X^{\intercal}y
 
         where:
-            - :math: `X` is the input feature matrix, possibly with a column of
-                ones representing the choice of an intercept.
-            - :math: `W` is the positive-definite, symmetric weight matrix, a
-                diagonal matrix with sample weights along the main diagonal.
-            - :math: `y` is the dependent variable vector.
+            - `X` is the input feature matrix, possibly with a column of ones representing the choice of an intercept.
+            - `W` is the positive-definite, symmetric weight matrix, a diagonal matrix with sample weights along the main diagonal.
+            - `y` is the dependent variable vector.
 
         Since `W` is a positive-definite, symmetric matrix, it has a square root
         equal to the diagonal matrix with square roots of the sample weights along
@@ -588,10 +595,20 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
 
         .. math::
 
-        \hat{\Beta}^{\text{WLS}} = ((W^{\frac{1}{2}}X}^{\intercal}(W^{\frac{1}{2}}X))^{-1}(W^{\frac{1}{2}}X)^{\intercal}(W^{\frac{1}{2}}y)
+            \hat{\beta}^{\text{WLS}} = (({W^{1/2}X})^{\intercal}(W^{1/2}X))^{-1}(W^{1/2}X)^{\intercal}(W^{1/2}y))
 
-        This is precisely the OLS estimator for a rescaled matrix :math: `\sim{X} = W^{\frac{1}{2}}X`
-        and a rescaled dependent variable :math: `\sim{y} = W^{\frac{1}{2}}y`.
+        This is precisely the OLS estimator for a rescaled matrix
+
+        .. math::
+        
+            \tilde {X} = W^{1/2}X
+
+        and a rescaled dependent variable
+
+        .. math::
+        
+            \tilde {y} = W^{1/2}y
+
         Hence, the usual standard error estimate and White's estimator can be applied
         based on a rescaling of the design matrix and associated target vector.
         """
