@@ -40,15 +40,15 @@ def linear_composite(
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
         'real_date' and 'value'.
     xcats : Union[str, List[str]
         One or more categories to be combined. If a single category is given the linear
-        combination is calculated across sections. This results in a single series to which
-        a new cross-sectional identifier is assigned. If more than one category string is
-        given the output will be a new category, i.e. a panel that is a linear combination
-        of the categories specified.
+        combination is calculated across cross-sections. This results in a single series 
+        to which a new cross-sectional identifier is assigned. If more than one category 
+        string is given the output will be a new category, i.e. a panel that is a linear 
+        combination of the categories specified.
     cids : List[str]
         cross-sections for which the linear combinations are calculated. Default is all
         cross-section available.
@@ -99,8 +99,8 @@ def linear_composite(
 
     Returns
     -------
-    pd.DataFrame
-        standardized DataFrame with the relative values, featuring the categories:
+    ~pandas.DataFrame
+        standardized DataFrame with the composite values, with the columns:
         'cid', 'xcat', 'real_date' and 'value'.
     """
 
@@ -506,67 +506,6 @@ def _check_df_for_missing_cid_data(
 
     rcids = [c for c in cids if c in found_cids]  # to preserve order
     return QuantamentalDataFrame(df), rcids, _xcat, weights, signs
-
-
-def _check_weights_and_signs(
-    df: QuantamentalDataFrame,
-    cids: List[str],
-    xcats: List[str],
-    weights: Union[str, List[float]],
-    signs: List[float],
-    xcat_agg: bool,
-) -> Tuple[QuantamentalDataFrame, List[str], List[float]]:
-    found_cids: List[str] = df["cid"].unique().tolist()
-    found_xcats: List[str] = df["xcat"].unique().tolist()
-    found_cids = [c for c in cids if c in found_cids]  # to preserve order
-    found_xcats = [x for x in xcats if x in found_xcats]  # to preserve order
-
-    # if len of found_cids!=len of cids
-    err_msg = (
-        "Some `{vtype}` are missing in `df`. `{wtype}` could not be re-assigned.\n"
-        "Available {vtype}: {found_vtypes}\n"
-        "Requested {vtype}: {vtypes}"
-    )
-
-    ws_arr = [weights, signs]
-    ws_names = ["weights", "signs"]
-
-    found_var = found_xcats if xcat_agg else found_cids
-    specified_var = xcats if xcat_agg else cids
-    vtype = "xcats" if xcat_agg else "cids"
-
-    if len(found_var) != len(specified_var):
-        missing_var = list(set(specified_var) - set(found_var))
-
-        for i, ws in enumerate(ws_arr):
-            if isinstance(ws, str):
-                continue
-            if np.allclose(np.array(ws) / ws[0], 1):  # if the weights are all the same
-                ws_arr[i] = [1] * len(found_var)
-                warnings.warn(
-                    f"The provided data is missing some {vtype}. Reassigning all {ws_names[i]} to the 1s (equal)"
-                    f" Missing {vtype}: {missing_var}"
-                )
-            else:
-                raise ValueError(
-                    err_msg.format(
-                        vtype=vtype,
-                        wtype=ws_names[i],
-                        found_vtypes=found_var,
-                        vtypes=specified_var,
-                    )
-                )
-
-        # remove the cid or xcat from the list of cids or xcats
-        if xcat_agg:
-            xcats = found_xcats
-        else:
-            cids = found_cids
-
-    weights, signs = ws_arr
-
-    return cids, xcats, weights, signs
-
 
 def _check_args(
     df: QuantamentalDataFrame,

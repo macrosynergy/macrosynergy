@@ -165,6 +165,10 @@ def granger_causality_test(
 def _statsmodels_compatibility_wrapper(
     x: Any = None, maxlag: Any = None, addconst: Any = None, verbose: Any = None
 ) -> Any:
+    """
+    Wrapper function to handle compatibility issues with different versions of 
+    statsmodels.
+    """
     if version.parse(statsmodels.__version__) < version.parse("0.15.0"):
         with warnings.catch_warnings():
             warnings.simplefilter(action="ignore", category=FutureWarning)
