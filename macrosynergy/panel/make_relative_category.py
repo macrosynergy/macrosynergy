@@ -75,7 +75,7 @@ def make_relative_category(
     Returns
     -------
     ~pandas.DataFrame
-        standardized DataFrame with the relative values, featuring the categories:
+        standardized DataFrame with the relative values, with the columns:
         'cid', 'xcat', 'real_date' and 'value'.
     """
 
