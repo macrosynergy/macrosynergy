@@ -31,7 +31,7 @@ class SignalReturnRelations:
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.DataFrame
         standardized DataFrame with the following necessary columns: 'cid', 'xcat',
         'real_date' and 'value.
     rets : str, List[str]
@@ -294,7 +294,7 @@ class SignalReturnRelations:
 
         Parameters
         ----------
-        accuracy_df : pd.DataFrame
+        accuracy_df : ~pandas.DataFrame
             two dimensional DataFrame with accuracy & balanced accuracy columns.
 
 
@@ -575,7 +575,7 @@ class SignalReturnRelations:
 
         Parameters
         ----------
-        df : pd.DataFrame
+        df : ~pandas.DataFrame
             standardised DataFrame.
         cs : str
             individual segment, cross-section or year.
@@ -607,7 +607,7 @@ class SignalReturnRelations:
 
         Parameters
         ----------
-        df : pd.DataFrame
+        df : ~pandas.DataFrame
             standardised DataFrame.
         slip : int
             slip value to apply to df.
@@ -721,7 +721,7 @@ class SignalReturnRelations:
 
         Parameters
         ----------
-        df : pd.Dataframe
+        df : ~pandas.DataFrame
             standardized DataFrame with the following necessary columns: 'cid', 'xcat',
             'real_date' and 'value'.
 
@@ -786,9 +786,9 @@ class SignalReturnRelations:
 
         Parameters
         ----------
-        df_segment : pd.DataFrame
+        df_segment : ~pandas.DataFrame
             segmented DataFrame.
-        df_out : pd.DataFrame
+        df_out : ~pandas.DataFrame
             metric DataFrame where the index will be all segments for the respective
             segmentation type.
         segment : str

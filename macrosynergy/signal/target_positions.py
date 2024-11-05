@@ -22,7 +22,7 @@ def weight_dataframes(df: pd.DataFrame, basket_names: Union[str, List[str]] = No
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.DataFrame
         standardized DataFrame.
     basket_names : str or List[str]
         string or list of basket names.
@@ -81,7 +81,7 @@ def modify_signals(
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.DataFrame
         standardized DataFrame containing the following columns: 'cid', 'xcat',
         'real_date' and 'value'.
     cids : List[str]
@@ -154,7 +154,7 @@ def cs_unit_returns(
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.DataFrame
         standardized DataFrame containing the following columns: 'cid', 'xcat',
         'real_date' and 'value'.
     contract_returns : List[str]
@@ -209,10 +209,10 @@ def basket_handler(
 
     Parameters
     ----------
-    df_mods_w : pd.DataFrame
+    df_mods_w : ~pandas.DataFrame
         target position dataframe. Will be multiplied by the weight dataframe to
         establish the positions for the basket of constituents.
-    df_c_wgts : pd.DataFrame
+    df_c_wgts : ~pandas.DataFrame
         weight dataframe used to adjust the positions of the basket of contracts.
     contracts : dict
         the constituents that make up each basket.
@@ -264,9 +264,9 @@ def date_alignment(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
 
     Parameters
     ----------
-    panel_df : pd.DataFrame
+    panel_df : ~pandas.DataFrame
 
-    basket_df : pd.DataFrame
+    basket_df : ~pandas.DataFrame
 
 
     Returns
@@ -306,9 +306,9 @@ def consolidation_help(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
 
     Parameters
     ----------
-    panel_df : pd.DataFrame
+    panel_df : ~pandas.DataFrame
 
-    basket_df : pd.DataFrame
+    basket_df : ~pandas.DataFrame
 
 
     Returns
@@ -400,7 +400,7 @@ def target_positions(
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.DataFrame
         standardized DataFrame containing at least the following columns: 'cid', 'xcat',
         'real_date' and 'value'.
     cids : List[str]
