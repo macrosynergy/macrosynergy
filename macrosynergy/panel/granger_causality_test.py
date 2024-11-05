@@ -40,7 +40,7 @@ def granger_causality_test(
 ) -> Dict[Any, Any]:
     """
     Run Granger Causality Test on a standardized quantamental dataframe. Since the
-    Graner Causality Test is a pairwise test, only two tickers can be specified. Specify
+    Granger Causality Test is a pairwise test, only two tickers can be specified. Specify
     either `tickers` or `cids` & `xcats`. When specifying `cids` & `xcats`, the user may
     input one `cid` and two `xcats`; or two `cids` and one `xcat` to yield two tickers.
     The function forms the list of tickers from the `cids` and `xcats` such that the
