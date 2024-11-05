@@ -27,7 +27,7 @@ def view_grades(
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.DataFrame
         standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
         and 'grading'.
     xcats : List[str]

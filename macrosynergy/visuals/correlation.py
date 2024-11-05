@@ -47,7 +47,7 @@ def view_correlation(
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.DataFrame
         standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
         'real_date' and at least one column with values of interest.
     xcats : List[str]
@@ -342,7 +342,7 @@ def _transform_df_for_cross_sectional_corr(
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.DataFrame
         standardized JPMaQS DataFrame.
     val : str
         name of column that contains the values of interest. Default is 'value'.
@@ -371,7 +371,7 @@ def _transform_df_for_cross_category_corr(
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.DataFrame
         standardized JPMaQS DataFrame.
     xcats : List[str]
         extended categories to be correlated.

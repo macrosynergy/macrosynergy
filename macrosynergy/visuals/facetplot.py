@@ -64,7 +64,7 @@ class FacetPlot(Plotter):
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         A DataFrame with the following columns: 'cid', 'xcat', 'real_date', and at least
         one metric from - 'value', 'grading', 'eop_lag', or 'mop_lag'.
     cids : List[str]

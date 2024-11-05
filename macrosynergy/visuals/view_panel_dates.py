@@ -16,7 +16,7 @@ def view_panel_dates(
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         A standardized Quantamental DataFrame with dates as index and series as columns.
     size : Tuple[float, float]
         tuple of floats with width/length of displayed heatmap.
