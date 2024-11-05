@@ -360,13 +360,13 @@ class ModifiedSignWeightedLinearRegression(BaseModifiedRegressor):
 
         .. math::
 
-            \sim{X} = W^{1/2}X
+            \tilde {X} = W^{1/2}X
 
         and a rescaled dependent variable
 
         .. math::
 
-            \sim{y} = W^{1/2}y
+            \tilde {y} = W^{1/2}y
 
         Hence, the usual standard error estimate and White's estimator can be applied
         based on a rescaling of the design matrix and associated target vector.
@@ -601,13 +601,13 @@ class ModifiedTimeWeightedLinearRegression(BaseModifiedRegressor):
 
         .. math::
         
-            \sim{X} = W^{1/2}X
+            \tilde {X} = W^{1/2}X
 
         and a rescaled dependent variable
 
         .. math::
         
-            \sim{y} = W^{1/2}y
+            \tilde {y} = W^{1/2}y
 
         Hence, the usual standard error estimate and White's estimator can be applied
         based on a rescaling of the design matrix and associated target vector.
