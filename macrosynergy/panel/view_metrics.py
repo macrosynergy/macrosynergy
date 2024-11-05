@@ -30,7 +30,7 @@ def view_metrics(
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.Dataframe
         standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
         and 'grading', 'eop_lag' or 'mop_lag'.
     xcat : str

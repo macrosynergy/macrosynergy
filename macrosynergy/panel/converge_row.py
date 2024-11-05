@@ -11,7 +11,7 @@ class ConvergeRow(object):
 
     Parameters
     ----------
-    row : np.ndarray
+    row : ~numpy.ndarray
         Array of weights.
     max_weight : float
         Maximum weight.
@@ -40,6 +40,21 @@ class ConvergeRow(object):
 
     @classmethod
     def application(cls, row: np.ndarray, max_weight: float):
+        """
+        Initiates the class and applies the redistribution of weights.
+
+        Parameters
+        ----------
+        row : ~numpy.ndarray
+            Array of weights.
+        max_weight : float
+            Maximum weight.
+
+        Returns
+        -------
+        ~numpy.ndarray
+            Array of weights.
+        """
         cr = ConvergeRow(row=row, max_weight=max_weight)
 
         if cr.flag:  # if enough non-nan values in row

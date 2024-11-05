@@ -22,11 +22,11 @@ def heatmap_grades(
     size: Tuple[float] = None,
 ):
     """
-    Displays a heatmap of grading
+    Displays a heatmap of the grading for a given set of cross sections and extended
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.Dataframe
         standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
         and 'grading'.
     xcats : List[str]

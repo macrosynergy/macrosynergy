@@ -34,7 +34,7 @@ def make_relative_category(
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
         'real_date' and 'value'.
     xcats : List[str]
@@ -74,8 +74,8 @@ def make_relative_category(
 
     Returns
     -------
-    pd.DataFrame
-        standardized DataFrame with the relative values, featuring the categories:
+    ~pandas.DataFrame
+        standardized DataFrame with the relative values, with the columns:
         'cid', 'xcat', 'real_date' and 'value'.
     """
 
@@ -210,17 +210,24 @@ def _prepare_category_basket(
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         long JPMaQS DataFrame of single category.
     cid : str
         target cross section for the relative value calculation.
-    basket : pd.DataFrame
+    basket : ~pandas.DataFrame
         set of categories to be used for the relative value benchmark if available.
     xcats_avl : List[str]
         categories available for the target cross section.
     complete_set : bool
         if True, the basket is only calculated if all categories, held in the basket,
         are available for that respective category.
+
+    Returns
+    -------
+    ~pandas.DataFrame
+        DataFrame with the categories available for the target cross section.
+    List[str]
+        List of categories available for the target cross section.
     """
 
     xcats_used: List[str] = sorted(set(basket) & set(xcats_avl))

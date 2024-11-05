@@ -31,7 +31,7 @@ class SignalReturnRelations:
 
     Parameters
     ----------
-    df : pd.Dataframe
+    df : ~pandas.DataFrame
         standardized DataFrame with the following necessary columns: 'cid', 'xcat',
         'real_date' and 'value.
     rets : str, List[str]
@@ -294,7 +294,7 @@ class SignalReturnRelations:
 
         Parameters
         ----------
-        accuracy_df : pd.DataFrame
+        accuracy_df : ~pandas.DataFrame
             two dimensional DataFrame with accuracy & balanced accuracy columns.
 
 
@@ -319,7 +319,7 @@ class SignalReturnRelations:
         type: str = "cross_section",
         title: str = None,
         title_fontsize: int = 16,
-        size: Tuple[float] = None,
+        size: Tuple[float, float] = None,
         legend_pos: str = "best",
     ):
         """
@@ -329,25 +329,25 @@ class SignalReturnRelations:
 
         Parameters
         ----------
-        ret : str
+        ret : str, optional
             return category. Default is None, in which case the first return category will
             be used.
-        sigs : str, List[str]
+        sigs : str, or List[str], optional
             signal category. Default is None, in which case all signals will be used.
-        freq : str
+        freq : str, optional
             frequency to be used in analysis. Default is None, in which case the first
             frequency will be used.
-        agg_sig : str
+        agg_sig : str, optional
             aggregation method to be used in analysis. Default is None, in which case the
             first aggregation method will be used.
-        type : str
+        type : str, optional
             type of segment over which bars are drawn. Either "cross_section" (default),
             "years" or "signals".
-        title : str
+        title : str, optional
             chart header - default will be applied if none is chosen.
         title_fontsize : int
             font size of chart header. Default is 16.
-        size : Tuple[float]
+        size : Tuple[float], optional
             2-tuple of width and height of plot - default will be applied if none is
             chosen.
         legend_pos : str
@@ -451,7 +451,7 @@ class SignalReturnRelations:
         type: str = "cross_section",
         title: str = None,
         title_fontsize: int = 16,
-        size: Tuple[float] = None,
+        size: Tuple[float, float] = None,
         legend_pos: str = "best",
     ):
         """
@@ -459,20 +459,19 @@ class SignalReturnRelations:
 
         Parameters
         ----------
-        ret : str
+        ret : str, optional
             return category. Default is the first return category.
-        sig : str
+        sig : str, List[str], optional
             signal category. Default is the first signal category.
-        type : str
+        type : str, optional
             type of segment over which bars are drawn. Either "cross_section" (default),
             "years" or "signals".
-        title : str
-            chart header. Default will be applied if none is chosen.
+        title : str, optional
+            chart header. Default is None, in which case the default title will be applied.
         title_fontsize : int
             font size of chart header. Default is 16.
-        size : Tuple[float]
-            2-tuple of width and height of plot. Default will be applied if none is
-            chosen.
+        size : Tuple[float, float], optional
+            2-tuple of width and height of plot. If None, the default size will be applied.
         legend_pos : str
             position of legend box. Default is 'best'. See matplotlib.pyplot.legend.
         """
@@ -575,7 +574,7 @@ class SignalReturnRelations:
 
         Parameters
         ----------
-        df : pd.DataFrame
+        df : ~pandas.DataFrame
             standardised DataFrame.
         cs : str
             individual segment, cross-section or year.
@@ -603,11 +602,11 @@ class SignalReturnRelations:
     ) -> pd.DataFrame:
         """
         Function used to call the apply slip method that is defined in
-        management/utils.py
+        `macrosynergy.management.df_utils`.
 
         Parameters
         ----------
-        df : pd.DataFrame
+        df : ~pandas.DataFrame
             standardised DataFrame.
         slip : int
             slip value to apply to df.
@@ -627,7 +626,7 @@ class SignalReturnRelations:
     def is_list_of_strings(variable: Any) -> bool:
         """
         Function used to test whether a variable is a list of strings, to avoid the
-        compiler saying a string is a list of characters
+        compiler saying a string is a list of characters.
 
         Parameters
         ----------
@@ -660,14 +659,6 @@ class SignalReturnRelations:
             frequency to be used in analysis.
         agg_sig : str
             aggregation method to be used in analysis.
-        sig : str
-            signal to be analysed.
-        sst : bool
-            Boolean that specifies whether this function is to be used for a single
-            statistic table.
-        df_result : Optional[pd.DataFrame]
-            DataFrame to be used for single statistic table. `None` by default, and when
-            using with `sst` set to `False`.
         """
 
         self.df = self.original_df.copy()
@@ -721,10 +712,13 @@ class SignalReturnRelations:
 
         Parameters
         ----------
-        df : pd.Dataframe
+        df : ~pandas.DataFrame
             standardized DataFrame with the following necessary columns: 'cid', 'xcat',
             'real_date' and 'value'.
-
+        signal : str
+            signal category.
+        ret : str
+            return category.
 
         .. note::
             Remove the return category from establishing the intersection to preserve the
@@ -786,9 +780,9 @@ class SignalReturnRelations:
 
         Parameters
         ----------
-        df_segment : pd.DataFrame
+        df_segment : ~pandas.DataFrame
             segmented DataFrame.
-        df_out : pd.DataFrame
+        df_out : ~pandas.DataFrame
             metric DataFrame where the index will be all segments for the respective
             segmentation type.
         segment : str
@@ -796,6 +790,8 @@ class SignalReturnRelations:
             Will form the index of the returned DataFrame.
         signal : str
             signal category.
+        ret : str
+            return category.
         """
 
         # Account for NaN values between the single respective signal and return. Only
@@ -851,7 +847,23 @@ class SignalReturnRelations:
 
         return df_out
 
-    def map_pval(self, ret_vals, sig_vals):
+    def map_pval(self, ret_vals, sig_vals) -> float:
+        """
+        Calculates the p-value using statsmodels MixedLM.
+
+        Parameters
+        ----------
+        ret_vals : ~pandas.Series
+            return values.
+        sig_vals : ~pandas.Series
+            signal values.
+
+        Returns
+        -------
+        float
+            p-value of the MixedLM model.
+        """
+
         if (
             not "cid" in ret_vals.index.names
             or ret_vals.index.get_level_values("cid").nunique() <= 1
@@ -879,7 +891,13 @@ class SignalReturnRelations:
         pval_string = re.summary().tables[1].iloc[1, 3]
         return float(pval_string)
 
-    def __output_table__(self, cs_type: str = "cids", ret=None, sig=None, srt=False):
+    def __output_table__(
+        self,
+        cs_type: str = "cids",
+        ret: str = None,
+        sig: str = None,
+        srt: bool = False,
+    ):
         """
         Creates a DataFrame with information on the signal-return relation across cross-
         sections or years and, additionally, the panel.
@@ -888,6 +906,12 @@ class SignalReturnRelations:
         ----------
         cs_type : str
             the segmentation type.
+        ret : str
+            return category. Default is the first return category.
+        sig : str
+            signal category. Default is the first signal category.
+        srt : bool
+            if True, the DataFrame will be sorted by the cross-sections. Default is False.
         """
 
         if ret is None:
@@ -961,7 +985,7 @@ class SignalReturnRelations:
 
     def calculate_single_stat(
         self, stat: str, ret: str = None, sig: str = None, type: str = None
-    ):
+    ) -> float:
         """
         Calculates a single statistic for a given signal-return relation.
 
@@ -973,9 +997,14 @@ class SignalReturnRelations:
             return category. Default is the first return category.
         sig : str
             signal category. Default is the first signal category.
-        cstype : str
+        type : str
             type of segment over which bars are drawn. Either "panel" (default), "years"
             or "signals".
+
+        Returns
+        -------
+        float
+            statistic value.
         """
 
         r = [ret]
@@ -1076,6 +1105,23 @@ class SignalReturnRelations:
                 return np.mean(np.array(list_of_results) < 0.5)
 
     def summary_table(self, cross_section: bool = False, years: bool = False):
+        """
+        Generates a summary table for the signal-return relations.
+
+        Parameters
+        ----------
+        cross_section : bool
+            if True, the summary table will be generated for cross-sections.
+        years : bool
+            if True, the summary table will be generated for years. Must be False if
+            cross_section is True.
+
+        Returns
+        -------
+        ~pandas.DataFrame
+            summary table.
+        """
+
         warnings.warn(
             "summary_table() has been deprecated will be removed in a subsequent "
             "version, please now use single_relation_table(table_type='summary').",
@@ -1129,7 +1175,7 @@ class SignalReturnRelations:
         freq: str = None,
         agg_sigs: str = None,
         table_type: str = None,
-    ):
+    ) -> pd.DataFrame:
         """
         Computes all the statistics for one specific signal-return relation:
 
@@ -1149,6 +1195,11 @@ class SignalReturnRelations:
             aggregation method applied to the signal values in down-sampling.
         table_type : str
             type of table to be returned. Either "summary", "years", "cross_section".
+
+        Returns
+        -------
+        ~pandas.DataFrame
+            table with the statistics for the single signal-return relation.
         """
 
         self.df = self.original_df
@@ -1367,7 +1418,7 @@ class SignalReturnRelations:
         return_name_dict: Optional[Dict[str, str]] = None,
         min_color: Optional[float] = None,
         max_color: Optional[float] = None,
-        figsize: Tuple[float] = (14, 8),
+        figsize: Tuple[float, float] = (14, 8),
         annotate: bool = True,
         round: int = 5,
     ):
@@ -1397,33 +1448,39 @@ class SignalReturnRelations:
             resulting in index strings () or if only one frequency is available.
         show_heatmap : bool
             if True, the table is visualized as a heatmap. Default is False.
-        title : str
-            plot title; if none given default title is shown.
+        title : str, optional
+            plot title. Default is None in which case the default title is used.
         title_fontsize : int
             font size of title. Default is 16.
         row_names : List[str]
-            specifies the labels of rows in the heatmap. If None, the indices of the
-            generated DataFrame are used.
+            specifies the labels of rows in the heatmap. Default is None, the indices of
+            the generated DataFrame are used.
         column_names : List[str]
-            specifies the labels of columns in the heatmap. If None, the columns of the
-            generated DataFrame are used.
-        min_color : float
+            specifies the labels of columns in the heatmap. Default is None, the columns
+            of the generated DataFrame are used.
+        signal_name_dict : dict, optional
+            dictionary mapping the signal names to the desired names in the heatmap.
+            Default is None, in which case the signal names are used.
+        return_name_dict : dict, optional
+            dictionary mapping the return names to the desired names in the heatmap.
+            Default is None, in which case the return names are used.
+        min_color : float, optional
             minimum value of the color scale. Default is None, in which case the minimum
             value of the table is used.
-        max_color : float
+        max_color : float, optional
             maximum value of the color scale. Default is None, in which case the maximum
             value of the table is used.
-        figsize : Tuple[float]
-            Tuple (w, h) of width and height of graph.
+        figsize : Tuple[float, float]
+            Tuple (w, h) of width and height of graph. Default is (14, 8).
         annotate : bool
-            if True, the values are annotated in the heatmap.
+            Default is True, where the values shown in the heatmap are annotated.
         round : int
             number of decimals to round the values to on the heatmap's annotations.
 
         Returns
         -------
-        pd.DataFrame
-            DataFrame with the specified statistic for each row and column
+        ~pandas.DataFrame
+            DataFrame with the specified statistic for each row and column.
         """
 
         self.df = self.original_df.copy()

@@ -8,7 +8,7 @@ def view_table(
     df: pd.DataFrame,
     title: Optional[str] = None,
     title_fontsize: Optional[int] = 16,
-    figsize: Optional[Tuple[float]] = (14, 4),
+    figsize: Optional[Tuple[float, float]] = (14, 4),
     min_color: float = -1,
     max_color: float = 1,
     xlabel: Optional[str] = None,
@@ -23,28 +23,30 @@ def view_table(
 
     Parameters
     ----------
-    table : pd.Dataframe
+    table : ~pandas.DataFrame
         table to be displayed.
-    title : str
+    title : str, optional
         string of chart title; defaults depend on type of range plot.
-    title_fontsize : int
+    title_fontsize : int, optional
         font size of chart header. Default is 16.
-    figsize : Tuple[float]
+    figsize : Tuple[float, float], optional
         Tuple (w, h) of width and height of plot.
     min_color : float
-        minimum value of colorbar.
+        minimum value of colorbar. Default is -1.
     max_color : float
-        maximum value of colorbar.
-    xlabel : str
-        string of x-axis label.
-    ylabel : str
-        string of y-axis label.
-    xticklabels : List[str]
-        list of strings to label x-axis ticks.
-    yticklabels : List[str]
-        list of strings to label y-axis ticks.
+        maximum value of colorbar. Default is 1.
+    xlabel : str, optional
+        string of x-axis label. Default is None.
+    ylabel : str, optional
+        string of y-axis label. Default is None.
+    xticklabels : List[str], optional
+        list of strings to label x-axis ticks. Default is None.
+    yticklabels : List[str], optional
+        list of strings to label y-axis ticks. Default is None.
     annot : bool
         whether to annotate heatmap with values.
+    fmt : str
+        string format for annotations. Default is '.2f'.
     """
 
     if not isinstance(df, pd.DataFrame):

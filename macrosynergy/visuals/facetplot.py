@@ -64,7 +64,7 @@ class FacetPlot(Plotter):
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : ~pandas.DataFrame
         A DataFrame with the following columns: 'cid', 'xcat', 'real_date', and at least
         one metric from - 'value', 'grading', 'eop_lag', or 'mop_lag'.
     cids : List[str]
@@ -174,71 +174,6 @@ class FacetPlot(Plotter):
 
         raise ValueError("Unable to infer grid dimensions.")
 
-    # def scatterplot(
-    #     self,
-    #     # plot arguments
-    #     cids: Optional[List[str]] = None,
-    #     xcats: Optional[List[str]] = None,
-    #     metric: Optional[str] = None,
-    #     # fig arguments
-    #     figsize: Tuple[Number, Number] = (16.0, 9.0),
-    #     ncols: int = 3,
-    #     attempt_square: bool = False,
-    #     # xcats_mean: bool = False,
-    #     # title arguments
-    #     title: Optional[str] = None,
-    #     title_fontsize: int = 20,
-    #     title_xadjust: Optional[Number] = None,
-    #     title_yadjust: Optional[Number] = None,
-    #     # subplot axis arguments
-    #     ax_grid: bool = True,
-    #     ax_hline: bool = False,
-    #     ax_hline_val: Number = 0.0,
-    #     ax_vline: bool = False,
-    #     ax_vline_val: Number = 0.0,
-    #     x_axis_label: Optional[str] = None,
-    #     y_axis_label: Optional[str] = None,
-    #     axis_fontsize: int = 12,
-    #     # subplot arguments
-    #     facet_size: Optional[Tuple[Number, Number]] = None,
-    #     facet_titles: Optional[List[str]] = None,
-    #     facet_title_fontsize: int = 12,
-    #     facet_title_xadjust: Number = 0.5,
-    #     facet_title_yadjust: Number = 1.0,
-    #     facet_xlabel: Optional[str] = None,
-    #     facet_ylabel: Optional[str] = None,
-    #     facet_label_fontsize: int = 12,
-    #     # legend arguments
-    #     legend: bool = True,
-    #     legend_labels: Optional[List[str]] = None,
-    #     legend_loc: str = "upper center",
-    #     legend_ncol: int = 1,
-    #     legend_bbox_to_anchor: Optional[Tuple[Number, Number]] = None,  # (1.0, 0.5),
-    #     legend_frame: bool = True,
-    #     # return args
-    #     show: bool = True,
-    #     save_to_file: Optional[str] = None,
-    #     dpi: int = 300,
-    #     return_figure: bool = False,
-    #     plot_func_args: Dict[str, Any] = {},
-    #     *args,
-    #     **kwargs,
-    # ):
-    #     """
-    #     **NOT IMPLEMENTED YET**
-
-    #     Showing a FacetPlot composed of scatter plots from the data available in the
-    #     `FacetPlot` object after initialization.
-    #     """
-    #     raise NotImplementedError("Scatterplot not implemented yet.")
-    #     if metric is None:
-    #         metric: str = self.metrics[0]
-
-    #     _cids: List[str] = self.cids if cids is None else cids
-    #     _xcats: List[str] = self.xcats if xcats is None else xcats
-
-    #     ...
-
     def lineplot(
         self,
         # plot arguments
@@ -301,6 +236,14 @@ class FacetPlot(Plotter):
 
         Parameters
         ----------
+        cids : List[str]
+            A list of `cids` to select from the DataFrame. If None, the `cids` are selected
+            from the object initialization, or all if were specified.
+        xcats : List[str]
+            A list of `xcats` to select from the DataFrame. If None, all `xcats` are selected
+            from the object initialization, or all if were specified.
+        metric : str
+            the metric to plot. Default is the first metric in the DataFrame.
         ncols : int
             number of columns in the grid. Default is 3.
         attempt_square : bool
@@ -315,10 +258,8 @@ class FacetPlot(Plotter):
             "row" contains plots for the same `cid`, and each "column" would contain plots
             for the same `xcat`. Therefore, this mode does not respect the `ncols` or
             `attempt_square` arguments.
-        cids_mean : bool
-            Used with `cid_grid` with a single `xcat`. If `True`, the mean of all `cids`
-            for that `xcat` will be plotted on all charts. If `False`, only the specified
-            `cids` will be plotted. Default is `False`.
+        grid_dim : Tuple[int, int]
+            A tuple of integers specifying the number of rows and columns in the grid.
         compare_series : str
             Used with `cid_grid` with a single `xcat`. If specified, the series
             specified will be plotted in each facet, as a red dashed line. This is useful
@@ -754,14 +695,14 @@ class FacetPlot(Plotter):
 
         Parameters
         ----------
-        X : np.ndarray
+        X : ~numpy.ndarray
             Array of dates.
-        Y : np.ndarray
+        Y : ~numpy.ndarray
             Array of values.
 
         Returns
         -------
-        Tuple[np.ndarray, np.ndarray]
+        Tuple[~numpy.ndarray, ~numpy.ndarray]
             Tuple of arrays with gaps filled.
         """
 
