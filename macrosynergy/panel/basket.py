@@ -429,8 +429,12 @@ class Basket(object):
             maximum weight of a single contract. Default is 1, i.e zero restrictions.
             The purpose of the restriction is to limit concentration within the basket.
         remove_zeros : bool
-            removes the zeros. Default is set to True.  return: <pd.DataFrame>: wide
-            dataframe of contract weights across time.
+            removes the zeros. Default is set to True.
+
+        Returns
+        -------
+        pd.DataFrame
+            wide dataframe of contract weights across time.
         """
 
         assert 0.0 < max_weight <= 1.0
@@ -571,13 +575,24 @@ class Basket(object):
         weight_meth : str
             method used for weighting constituent returns and carry. The parameter can
             receive either a single weight method or multiple weighting methods. The options
-            are as follows: [1] "equal": all constituents with non-NA returns have the same
-            weight. This is the default. [2] "fixed": weights are proportionate to a single
+            are as follows:
+
+            - [1] "equal": all constituents with non-NA returns have the same
+            weight. This is the default.
+
+            - [2] "fixed": weights are proportionate to a single
             list of values provided which are passed to argument `weights` (each value
-            corresponds to a single contract). [3] "invsd": weights based on inverse to
-            standard deviations of recent returns. [4] "values": weights proportionate to a
-            panel of values of exogenous weight category. [5] "inv_values": weights are
+            corresponds to a single contract).
+
+            - [3] "invsd": weights based on inverse to
+            standard deviations of recent returns.
+
+            - [4] "values": weights proportionate to a
+            panel of values of exogenous weight category.
+
+            - [5] "inv_values": weights are
             inversely proportionate to of values of exogenous weight category.
+
         weights : List[float]
             single list of weights corresponding to the base tickers in `contracts`
             argument. This is only relevant for the fixed weight method.
@@ -805,7 +820,6 @@ class Basket(object):
         ----------
         df : pd.DataFrame
 
-
         Returns
         -------
         pd.DataFrame
@@ -839,7 +853,7 @@ class Basket(object):
 
         Returns
         -------
-        pd.Dataframe
+        QuantamentalDataFrame
             standardized DataFrame with the basket return and (possibly) carry data in
             standard form, i.e. columns 'cid', 'xcat', 'real_date' and 'value'.
         """
@@ -880,7 +894,7 @@ class Basket(object):
 
         Returns
         -------
-        pd.Dataframe
+        QuantamentalDataFrame
             standardized DataFrame with basket weights.
         """
 

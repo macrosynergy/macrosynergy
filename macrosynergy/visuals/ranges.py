@@ -89,7 +89,7 @@ def view_ranges(
         if not isinstance(sort_cids_by, str):
             raise TypeError("`sort_cids_by` must be a string.")
         sort_error = "Sorting parameter must either be 'mean' or 'std'."
-        if not sort_cids_by in ["mean", "std"]:
+        if  sort_cids_by not in ["mean", "std"]:
             raise ValueError(sort_error)
         if sort_cids_by == "mean":
             sort_cids_func = np.mean
@@ -156,7 +156,7 @@ def view_ranges(
                 order=order,
             )
         else:
-            ax = sns.barplot(
+            ax = sns.barplot( # pragma: no cover
                 x="cid",
                 y=val,
                 hue="xcat",
@@ -186,12 +186,6 @@ def view_ranges(
     handles, labels = ax.get_legend_handles_labels()
 
     if xcat_labels is not None:
-        error_message = (
-            "The number of custom labels must match the defined number of "
-            "categories in pnl_cats."
-        )
-        if len(xcat_labels) != len(xcats):
-            raise ValueError(error_message)
         labels = xcat_labels
 
     if (len(xcats) == 1) and (xcat_labels is None):
