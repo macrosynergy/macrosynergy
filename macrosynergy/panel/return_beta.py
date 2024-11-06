@@ -1,6 +1,6 @@
 """
 Functions for calculating the hedge ratios of a panel of returns with respect to a
-single return. 
+single return.
 """
 
 import warnings
@@ -24,17 +24,23 @@ def date_alignment(
     unhedged_return: pd.Series, benchmark_return: pd.Series
 ) -> Tuple[pd.Timestamp, pd.Timestamp]:
     """
-    Method used to align the two Series over the same timestamps: the sample data for the
-    endogenous & exogenous variables must match throughout the re-estimation calculation.
+    Method used to align the two Series over the same timestamps: the sample data for
+    the endogenous & exogenous variables must match throughout the re-estimation
+    calculation.
 
-    :param <pd.DataFrame> unhedged_return: the return series of the asset that is being
-        hedged.
-    :param <pd.Series> benchmark_return: the return series of the asset being used to
-        hedge against the main asset.
+    Parameters
+    ----------
+    unhedged_return : ~pandas.DataFrame
+        the return series of the asset that is being hedged.
+    benchmark_return : ~pandas.Series
+        the return series of the asset being used to hedge against the main asset.
 
-    :return <pd.Timestamp, pd.Timestamp>: the shared start and end date across the two
-        series.
+    Returns
+    -------
+    ~pandas.Timestamp, ~pandas.Timestamp
+        the shared start and end date across the two series.
     """
+
     ma_dates = unhedged_return.index
     ha_dates = benchmark_return.index
 
@@ -67,23 +73,30 @@ def hedge_calculator(
     of timestamps where the numeracy of dates added to the sample is instructed by the
     "refreq" parameter.
 
-    :param <pd.Series> unhedged_return: the return series of the asset that is being
-        hedged.
-    :param <pd.Series> benchmark_return: the return series of the asset being used to
-        hedge against the main asset.
-    :param <List[pd.Timestamp]> rdates: the dates controlling the frequency of
-        re-estimation.
-    :param <str> cross_section: cross-section responsible for the "benchmark_return"
-        series.
-    :param <str> meth: method to estimate hedge ratio. At present the only method is
-        OLS regression ('ols').
-    :param <int> min_obs: a hedge ratio will only be computed if the number of days has
-        surpassed the integer held by the parameter.
-    :param <int> max_obs: the maximum number of latest observations allowed in order to
-        estimate a hedge ratio. The default value is 1000.
+    Parameters
+    ----------
+    unhedged_return : ~pandas.Series
+        the return series of the asset that is being hedged.
+    benchmark_return : ~pandas.Series
+        the return series of the asset being used to hedge against the main asset.
+    rdates : List[~pandas.Timestamp]
+        the dates controlling the frequency of re-estimation.
+    cross_section : str
+        cross-section responsible for the "benchmark_return" series.
+    meth : str
+        method to estimate hedge ratio. At present the only method is OLS regression
+        ('ols').
+    min_obs : int
+        a hedge ratio will only be computed if the number of days has surpassed the
+        integer held by the parameter.
+    max_obs : int
+        the maximum number of latest observations allowed in order to estimate a hedge
+        ratio. The default value is 1000.
 
-    :return <pd.DataFrame>: returns a dataframe of the hedge ratios for the respective
-        cross-section.
+    Returns
+    -------
+    ~pandas.DataFrame
+        returns a dataframe of the hedge ratios for the respective cross-section.
     """
 
     benchmark_return = benchmark_return.astype(dtype=np.float32)
@@ -154,8 +167,6 @@ def hedge_calculator(
 
     df_hr = df_hr.set_index("real_date", drop=True).shift(1).reset_index(level=0)
 
-    df_hr["cid"] = cross_section
-
     return df_hr
 
 
@@ -166,15 +177,22 @@ def adjusted_returns(
     Method used to compute the hedge ratio returns on the hedging asset which will
     subsequently be subtracted from the returns of the position contracts to calculate
     the adjusted returns (adjusted for the hedged position) across all cross-sections in
-    the panel. For instance, if using US Equity to hedge Australia FX:
-    AUD_FXXR_NSA_H = AUD_FXXR_NSA - HR_AUD * USD_EQXR_NSA.
+    the panel. For instance, if using US Equity to hedge Australia FX: AUD_FXXR_NSA_H =
+    AUD_FXXR_NSA - HR_AUD * USD_EQXR_NSA.
 
-    :param <pd.Series> benchmark_return: the return series of the asset being used to
-        hedge against the main asset.
-    :param <pd.DataFrame> df_hedge: standardised dataframe with the hedge ratios.
-    :param <pd.DataFrame> dfw: pivoted dataframe of the relevant returns.
+    Parameters
+    ----------
+    benchmark_return : ~pandas.Series
+        the return series of the asset being used to hedge against the main asset.
+    df_hedge : ~pandas.DataFrame
+        standardised dataframe with the hedge ratios.
+    dfw : ~pandas.DataFrame
+        pivoted dataframe of the relevant returns.
 
-    :return <pd.DataFrame>: standardised dataframe of adjusted returns.
+    Returns
+    -------
+    ~pandas.DataFrame
+        standardised dataframe of adjusted returns.
     """
 
     hedge_pivot = df_hedge.pivot(index="real_date", columns="cid", values="value")
@@ -190,7 +208,8 @@ def adjusted_returns(
 
     hedged_returns = hedge_pivot.multiply(br_df)
     adj_rets = dfw - hedged_returns
-
+    if isinstance(df_hedge["cid"].dtype, pd.CategoricalDtype):
+        adj_rets.columns = pd.Categorical(adj_rets.columns)
     df_stack = adj_rets.stack().reset_index(name="value")
     df_stack.columns = ["real_date", "cid", "value"]
 
@@ -217,61 +236,77 @@ def return_beta(
     """
     Estimate sensitivities (betas) of return category with respect to single return.
 
-    :param <QuantamentalDataFrame> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcat', 'real_date' and 'value.
-    :param <str> xcat:  return category based on the type of positions that are
-        to be hedged.
-        N.B.: Each cross-section of this category uses the same hedge asset/basket.
-    :param <List[str]> cids: cross-sections of the returns for which hedge ratios are
-        to be calculated. Default is all that are available in the dataframe.
-    :param <str> benchmark_return: ticker of return of the hedge asset or basket.
-        This is a single series, e.g. U.S. equity index returns ("USD_EQXR_NSA").
-    :param <str> start: earliest date in ISO format. Default is None: earliest date in
-        df is used.
-    :param <str> end: latest date in ISO format. Default is None: latest date in df is
-        used.
-    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
-        the sample of data used for estimating hedge ratios. The estimated ratios
-        during blacklist periods will be set equal to the last valid estimate.
-    :param <bool> oos: if True (default) hedge ratios are calculated out-of-sample,
-        i.e. for the period following the estimation period at the given
-        re-estimation frequency.
-    :param <str> refreq: re-estimation frequency. This is period after which hedge ratios
-        are re-estimated. The re-estimation is conducted at the end of the period and
-        used as hedge ratio for all days of the following period. Re-estimation can have
-        weekly, monthly, and quarterly frequency with the notations 'W', 'M', and 'Q'
-        respectively. The default frequency is monthly.
-    :param <int> min_obs: the minimum number of observations required in order to
-        estimate a hedge ratio. The default value is 24 days.
-        The permissible minimum is 10.
-    :param <int> max_obs: the maximum number of latest observations allowed in order to
-        estimate a hedge ratio. The default value is 1000.
-    :param <str> meth: method used to estimate hedge ratio. At present the only method is
-        OLS regression ('ols').
-    :param <bool> hedged_returns: If True the function appends the hedged returns to the
-        dataframe of hedge ratios. Default is False.
-    :param <str> ratio_name: hedge ratio label that will be appended to the category
-        name. The default is "_HR". For instance, 'xcat' + "_HR".
-    :param <str> hr_name: label used to distinguish the hedged returns in the DataFrame.
-        The label is appended to the category being hedged. The default is "H".
+    Parameters
+    ----------
+    df : QuantamentalDataFrame
+        standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
+        and 'value.
+    xcat : str
+        return category based on the type of positions that are to be hedged.
+    cids : List[str]
+        cross-sections of the returns for which hedge ratios are to be calculated.
+        Default is all that are available in the dataframe.
+    benchmark_return : str
+        ticker of return of the hedge asset or basket. This is a single series, e.g.
+        U.S. equity index returns ("USD_EQXR_NSA").
+    start : str
+        earliest date in ISO format. Default is None: earliest date in df is used.
+    end : str
+        latest date in ISO format. Default is None: latest date in df is used.
+    blacklist : dict
+        cross-sections with date ranges that should be excluded from the sample of data
+        used for estimating hedge ratios. The estimated ratios during blacklist periods will
+        be set equal to the last valid estimate.
+    oos : bool
+        if True (default) hedge ratios are calculated out-of-sample, i.e. for the period
+        following the estimation period at the given re-estimation frequency.
+        Currently not implemented. So will always be out of sample.
+    refreq : str
+        re-estimation frequency. This is period after which hedge ratios are re-
+        estimated. The re-estimation is conducted at the end of the period and used as hedge
+        ratio for all days of the following period. Re-estimation can have weekly, monthly,
+        and quarterly frequency with the notations 'W', 'M', and 'Q' respectively. The
+        default frequency is monthly.
+    min_obs : int
+        the minimum number of observations required in order to estimate a hedge ratio.
+        The default value is 24 days. The permissible minimum is 10.
+    max_obs : int
+        the maximum number of latest observations allowed in order to estimate a hedge
+        ratio. The default value is 1000.
+    meth : str
+        method used to estimate hedge ratio. At present the only method is OLS
+        regression ('ols').
+    hedged_returns : bool
+        If True the function appends the hedged returns to the dataframe of hedge
+        ratios. Default is False.
+    ratio_name : str
+        hedge ratio label that will be appended to the category name. The default is
+        "_HR". For instance, 'xcat' + "_HR".
+    hr_name : str
+        label used to distinguish the hedged returns in the DataFrame. The label is
+        appended to the category being hedged. The default is "H".
 
-    :return <QuantamentalDataFrame>: DataFrame with hedge ratio estimates that update at the
-        chosen re-estimation frequency.
-        Additionally, the dataframe can include the hedged returns if the parameter
-        `benchmark_return` has been set to True.
+    Returns
+    -------
+    QuantamentalDataFrame
+        DataFrame with hedge ratio estimates that update at the chosen re-estimation
+        frequency. Additionally, the dataframe can include the hedged returns if the
+        parameter `benchmark_return` has been set to True.
 
-    N.B.: A return beta is the estimated sensitivity of the main return with respect to
-    the asset used for hedging. The ratio is recorded for the period after the estimation
-    sample up until the next re-estimation date.
 
+    .. note::
+        Each cross-section of this category uses the same hedge asset/basket.
+
+    .. note::
+        A return beta is the estimated sensitivity of the main return with respect to the
+        asset used for hedging. The ratio is recorded for the period after the estimation
+        sample up until the next re-estimation date.
     """
 
     # Value checks
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError(f"Expected DataFrame but received <{type(df)}>.")
-    df: QuantamentalDataFrame = standardise_dataframe(df)
+    df: QuantamentalDataFrame = QuantamentalDataFrame(df)
 
-    all_tix = np.unique(df["cid"] + "_" + df["xcat"])
+    all_tix = df.list_tickers()
     bm_error = f"Benchmark return ticker {benchmark_return} is not in the DataFrame."
     if not benchmark_return in all_tix:
         raise ValueError(bm_error)
@@ -339,6 +374,8 @@ def return_beta(
     dfh_w.columns = ["hedge"]
 
     # --- Merge time series and calculate re-balancing dates.
+    if isinstance(dfp_w.columns.dtype, pd.CategoricalDtype):
+        dfp_w.columns = dfp_w.columns.astype("object")
 
     dfw = pd.merge(dfp_w, dfh_w, how="inner", on="real_date")
     br = dfw["hedge"]
@@ -362,17 +399,17 @@ def return_beta(
             min_obs=min_obs,
             max_obs=max_obs,
         )
+        df_hr = QuantamentalDataFrame.from_long_df(df_hr, cid=c, xcat=xcat + ratio_name)
         aggregate.append(df_hr)
 
-    df_hedge = pd.concat(aggregate, ignore_index=True)
-
-    df_hedge["xcat"] = xcat + ratio_name
+    df_hedge = QuantamentalDataFrame.from_qdf_list(aggregate)
 
     if hedged_returns:
         df_hreturn = adjusted_returns(df_hedge=df_hedge, dfw=dfw, benchmark_return=br)
-        df_hreturn = df_hreturn.sort_values(["cid", "real_date"])
-        df_hreturn["xcat"] = xcat + "_" + hr_name
-        df_hedge = pd.concat([df_hedge, df_hreturn], ignore_index=True)
+        df_hreturn = QuantamentalDataFrame.from_long_df(
+            df=df_hreturn, xcat=xcat + "_" + hr_name
+        )
+        df_hedge = df_hedge.update_df(df_hreturn)
 
     return standardise_dataframe(df_hedge)
 
@@ -382,12 +419,16 @@ def beta_display(df_hedge: pd.DataFrame, subplots: bool = False, hr_name: str = 
     Method used to visualise the hedging ratios across the panel: assumes a single
     category is used to hedge the primary asset.
 
-    :param <pd.DataFrame> df_hedge: DataFrame with hedge ratios.
-    :param <bool> subplots: matplotlib parameter to determine if each hedging series is
-        displayed on separate subplots.
-    :param <str> hr_name: label used to distinguish the hedged returns in the DataFrame.
-        Comparable to return_beta() method, the default is "H".
-
+    Parameters
+    ----------
+    df_hedge : ~pandas.DataFrame
+        DataFrame with hedge ratios.
+    subplots : bool
+        matplotlib parameter to determine if each hedging series is displayed on
+        separate subplots.
+    hr_name : str
+        label used to distinguish the hedged returns in the DataFrame. Comparable to
+        return_beta() method, the default is "H".
     """
 
     condition = lambda c: c.split("_")[-1] != hr_name

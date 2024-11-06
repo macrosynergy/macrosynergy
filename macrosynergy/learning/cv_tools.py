@@ -1,63 +1,64 @@
 """
 A set of tools for cross-validation of panel data.
-
-**NOTE: This module is under development, and is not yet ready for production use.**
 """
 
 import numpy as np
 import pandas as pd
 import datetime
-from typing import Union, Optional, Dict
 
-from macrosynergy.learning.panel_time_series_split import (
-    BasePanelSplit,
-    ExpandingKFoldPanelSplit,
-)
+from macrosynergy.learning import ExpandingKFoldPanelSplit
+from macrosynergy.learning.splitters.base_splitters import BasePanelSplit
+
 from sklearn.model_selection import cross_validate
 from sklearn.metrics import make_scorer
 
 
 def panel_cv_scores(
-    X: pd.DataFrame,
-    y: Union[pd.DataFrame, pd.Series],
-    splitter: BasePanelSplit,
-    estimators: dict,
-    scoring: dict,
-    show_longbias: Optional[bool] = True,
-    show_std: Optional[bool] = False,
-    verbose: Optional[int] = 1,
-    n_jobs: Optional[int] = -1,
+    X,
+    y,
+    splitter,
+    estimators,
+    scoring,
+    show_longbias = True,
+    show_std = False,
+    verbose = 1,
+    n_jobs = -1,
 ):
     """
-    Returns a dataframe of cross-validation scores.
+    Returns a dataframe of cross-validation scores for a collection of models, with
+    respect to a cross-validation splitter and a set of scorers.
 
-    :param <pd.DataFrame> X: Dataframe of features multi-indexed by (cross-section, date).
-        The dataframe must be in wide format: each feature is a column.  The dates must
-        be in datetime format.
-    :param <pd.DataFrame> y: Dataframe of the target variable, multi-indexed by
-        (cross-section, date). The dates must be in datetime format.
-    :param <BasePanelSplit> splitter: splitter object of a class inheriting
-        from BasePanelSplit.
-    :param <dict> estimators: dictionary of estimators, where the keys are the estimator
-        names and the values are the sklearn estimator objects.
-    :param <dict> scoring: dictionary of scoring metrics, where the keys are the metric
-        names and the values are callables.
-    :param <bool> show_longbias: boolean specifying whether or not to display the
-        proportion of positive returns. Default is True.
-    :param <bool> show_std: boolean specifying whether or not to show the standard
-        deviation of the cross-validation scores. Default is False.
-    :param <int> verbose: integer specifying verbosity of the cross-validation process.
-        Default is 1.
-    :param <int> n_jobs: integer specifying the number of jobs to run in parallel.
-        Default is -1, which uses all cores.
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Input feature matrix.
+    y : pd.DataFrame or pd.Series
+        Target variable.
+    splitter : BasePanelSplit
+        Panel cross-validation splitter.
+    estimators : dict
+        Dictionary of models.
+    scoring : dict
+        Dictionary of scorers.
+    show_longbias : bool, optional, default=True
+        Whether to show the proportion of times a model predicts a positive return.
+    show_std : bool, optional, default=False
+        Whether to show the standard deviation of the cross-validation scores over folds.
+    verbose : int, optional, default=1
+        Verbosity level.
+    n_jobs : int, optional, default=-1
+        Number of jobs to run in parallel.
 
-    :return <pd.DataFrame> metrics_df: dataframe comprising means & standard deviations of
-        cross-validation metrics for each sklearn estimator, over the walk-forward
-        history.
+    Returns
+    -------
+    pd.DataFrame
+        Dataframe of cross-validation scores.
 
-    N.B.: The performance metrics dataframe returned is multi-indexed with the outer index
-    representing a metric and the inner index representing the mean & standard deviation
-    of the metric over the walk-forward validation splits. The columns are the estimators.
+    Notes
+    -----
+    This function returns a dataframe that is multi-indexed with the outer index
+    representing a metric and the inner index representing the mean & (optionally) a
+    standard deviation over validation splits. The columns are the estimators.
     """
 
     # check input types
@@ -85,7 +86,7 @@ def panel_cv_scores(
         raise ValueError("scoring must not be an empty dictionary.")
     if np.any([not isinstance(metric_name, str) for metric_name in scoring.keys()]):
         raise TypeError("scorer names must all be strings.")
-    
+
     if not isinstance(show_longbias, bool):
         raise TypeError("show_longbias must be a boolean.")
     if not isinstance(show_std, bool):
@@ -125,14 +126,14 @@ def panel_cv_scores(
             lambda y_true, y_pred: np.sum(y_true > 0) / len(y_true)
         )
 
-    results: Dict[str, Dict[str, float]] = {
+    results: dict = {
         estimator_name: {} for estimator_name in estimators
     }
 
     for estimator_name, estimator in estimators.items():
         if verbose:
             print(f"Calculating walk-forward validation metrics for {estimator_name}.")
-        cv_results: Dict[str, np.ndarray] = cross_validate(
+        cv_results: dict = cross_validate(
             estimator,
             X,
             y,
@@ -168,7 +169,7 @@ if __name__ == "__main__":
 
     from sklearn.linear_model import LinearRegression, Lasso
     from sklearn.metrics import (
-        mean_squared_error,
+        root_mean_squared_error,
         mean_absolute_error,
         mean_absolute_percentage_error,
     )
@@ -204,13 +205,11 @@ if __name__ == "__main__":
 
     # 1) Demonstration of panel_cv_scores
     splitex = ExpandingKFoldPanelSplit(n_splits=100)
-    models = {"OLS": LinearRegression(), "Lasso": Lasso()}
+    models = {"OLS": LinearRegression(), "Lasso": Lasso(alpha=0.05)}
     metrics = {
-        "rmse": make_scorer(
-            lambda y_true, y_pred: np.sqrt(mean_squared_error(y_true, y_pred))
-        ),
-        "mae": make_scorer(mean_absolute_error),
-        "mape": make_scorer(mean_absolute_percentage_error),
+        "neg_rmse": make_scorer(root_mean_squared_error, greater_is_better=False),
+        "neg_mae": make_scorer(mean_absolute_error, greater_is_better=False),
+        "neg_mape": make_scorer(mean_absolute_percentage_error, greater_is_better=False),
         "acc": make_scorer(msl.regression_accuracy),
         "bac": make_scorer(msl.regression_balanced_accuracy),
         "map": make_scorer(msl.panel_significance_probability),

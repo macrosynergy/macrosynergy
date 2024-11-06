@@ -330,6 +330,11 @@ class TestFunctions(unittest.TestCase):
             dfu: pd.DataFrame = drop_nan_series(df=df_test, raise_warning=False)
             self.assertEqual(len(w), 9)
 
+        # test with non existant column name
+        df_test: pd.DataFrame = df_orig.copy()
+        with self.assertRaises(ValueError):
+            drop_nan_series(df=df_test.rename(columns={"value": "val"}))
+
         warnings.resetwarnings()
 
     def test_qdf_to_ticker_df(self):
@@ -375,6 +380,25 @@ class TestFunctions(unittest.TestCase):
         df: pd.DataFrame = test_df.copy()
         rdf: pd.DataFrame = qdf_to_ticker_df(df=df)
         self.assertTrue(df.equals(test_df))
+
+        #  test case 4 - bad args
+        self.assertRaises(TypeError, qdf_to_ticker_df, df=test_df, value_column=1)
+
+        with warnings.catch_warnings(record=True) as w:
+            qdf_to_ticker_df(df=test_df, value_column="banana")
+            self.assertEqual(len(w), 1)
+            # check that 'Value column specified in `value_column`' is in the warning
+            self.assertTrue(
+                "Value column specified in `value_column`" in str(w[0].message)
+            )
+
+        # test case 5 - with categorical qdf
+        qdf = QuantamentalDataFrame(test_df.copy())
+        rdf = qdf_to_ticker_df(qdf)
+
+        expc_df = qdf_to_ticker_df(test_df)
+
+        self.assertTrue(rdf.equals(expc_df))
 
     def test_ticker_df_to_qdf(self):
         cids: List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
@@ -576,6 +600,11 @@ class TestFunctions(unittest.TestCase):
             df=df, groupby_columns=["cid", "xcat"], freq=freq, agg=agg_method
         )
         assert downsampled_df.shape[0] == 12
+
+        with self.assertRaises(ValueError):
+            downsample_df_on_real_date(
+                df=df, groupby_columns=["xid", "xcat"], freq=freq, agg=agg_method
+            )
 
     def test_downsample_df_on_real_date_multiple_xcats(self):
         test_cids: List[str] = ["USD", "EUR", "GBP"]
@@ -1222,6 +1251,21 @@ class TestFunctions(unittest.TestCase):
                 ]["value"].reset_index(drop=True)
             )
         )
+
+        with self.assertRaises(TypeError):
+            merge_categories(
+                df=1, xcats=["XR", "CRY"], cids=["AUD"], new_xcat="NEW_CAT"
+            )
+
+        with self.assertRaises(TypeError):
+            merge_categories(
+                df=test_df, xcats=['XR', 1], cids=["AUD"], new_xcat="NEW_CAT"
+            )
+
+        with self.assertRaises(TypeError):
+            merge_categories(
+                df=test_df, xcats=['XR', 'CRY'], cids=["AUD", 1], new_xcat="NEW_CAT"
+            )
 
 
 class TestTimer(unittest.TestCase):
