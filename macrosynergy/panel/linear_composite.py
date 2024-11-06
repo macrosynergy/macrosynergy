@@ -356,7 +356,18 @@ def _check_args(
 
     # check xcats in df
     if not set(xcats).issubset(set(df["xcat"].unique().tolist())):
-        raise ValueError("Not all `xcats` are available in `df`.")
+        if complete_xcats:
+            raise ValueError("Not all `xcats` are available in `df`.")
+        else:
+            missing_xcats = list(set(xcats) - set(df["xcat"].unique().tolist()))
+            warnings.warn(
+                f"Not all `xcats` are available in `df`: {missing_xcats} "
+                "The calculation will be performed with the available xcats."
+            )
+            signs = [signs[i] for i, xc in enumerate(xcats) if xc not in missing_xcats]
+            if isinstance(weights, list):
+                weights = [weights[i] for i, xc in enumerate(xcats) if xc not in missing_xcats]
+            xcats = [xc for xc in xcats if xc not in missing_xcats]
 
     # check cids
     if cids is None:
@@ -370,7 +381,19 @@ def _check_args(
 
     # check cids in df
     if not set(cids).issubset(set(df["cid"].unique().tolist())):
-        raise ValueError("Not all `cids` are available in `df`.")
+        if complete_cids:
+            raise ValueError("Not all `cids` are available in `df`.")
+        else:
+            missing_cids = list(set(cids) - set(df["cid"].unique().tolist()))
+            warnings.warn(
+                f"Not all `cids` are available in `df`: {missing_cids} "
+                "The calculation will be performed with the available cids."
+            )
+            if signs is not None:
+                signs = [signs[i] for i, cid in enumerate(cids) if cid not in missing_cids]
+            if isinstance(weights, list):
+                weights = [weights[i] for i, cid in enumerate(cids) if cid not in missing_cids]
+            cids = [cid for cid in cids if cid not in missing_cids]
 
     _xcat_agg: bool = len(xcats) > 1 or new_xcat != "NEW"
     mode: str = "xcat_agg" if _xcat_agg else "cid_agg"
@@ -589,7 +612,7 @@ def linear_composite(
         out_all=True,
     )
 
-    if len(remaining_cids) < len(cids) and not _xcat_agg:
+    if len(remaining_cids) < len(cids) and not _xcat_agg and complete_cids or len(remaining_cids) == 0:
         missing_cids_xcats_str = _missing_cids_xcats_str(df=df, cids=cids, xcats=xcats)
         raise ValueError(
             "Not all `cids` have complete `xcat` data required for the calculation.\n"
@@ -667,14 +690,20 @@ if __name__ == "__main__":
 
     # there are now missing values for AUD-CRY and GBP-INFL on 2000-01-17
 
-    lc_cid = linear_composite(
-        df=df, xcats="XR", weights="INFL", normalize_weights=False
-    )
+    # lc_cid = linear_composite(
+    #     df=df, xcats="XR", weights="INFL", normalize_weights=False
+    # )
+
+    df = df[(df["xcat"] != "INFL")]
 
     lc_xcat = linear_composite(
         df=df,
-        cids=["AUD", "CAD"],
+        cids=["AUD", "CAD", "GBP"],
         xcats=["XR", "CRY", "INFL"],
         weights=[1, 2, 1],
         signs=[1, -1, 1],
+        complete_xcats=True,
     )
+    # Check that the output is as expected
+    #lc_xcat[["value", "real_date"]] 
+    print("CHECK DATA")
