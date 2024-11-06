@@ -27,7 +27,23 @@ warnings.simplefilter("always")
 
 class SignalReturnRelations:
     """
-    Class for analysing and visualizing signal and a return series.
+    Class for analysing and visualizing signals and return series. The class is designed
+    to provide a comprehensive analysis of the relationship between signals and returns
+    across different frequencies and aggregation methods. The class can be used
+    to calculate and visualize the following metrics:
+
+    - Accuracy
+    - Balanced accuracy
+    - Positive signal ratio
+    - Positive return ratio
+    - Positive precision
+    - Negative precision
+    - Pearson correlation
+    - Pearson correlation p-value
+    - Kendall correlation
+    - Kendall correlation p-value
+    - AUC
+    - Macrosynergy Panel test
 
     Parameters
     ----------
@@ -41,19 +57,19 @@ class SignalReturnRelations:
         statistics can be calculated.
     sig_neg : bool, List[bool]
         if set to True puts the signal in negative terms for all analysis. If more than
-        one signal is tested, `sig_neg` must be a same-order list of the same length as the
-        signals, containing a True for each signal that needs to be put in negative terms.
+        one signal is tested, `sig_neg` must be an ordered list of the same length as the
+        signals, containing a True for each signal that needs to be negative.
         Default is False.
     cosp : bool
         If True the comparative statistics are calculated only for the "communal sample
-        periods", i.e. periods and cross-sections that have values for all compared signals.
-        Default is False.
+        periods", i.e. periods and cross-sections that have values for all compared 
+        signals. Default is False.
     start : str
         earliest date in ISO format. Default is None in which case the earliest date
         available will be used.
     end : str
         latest date in ISO format. Default is None in which case the latest date in the
-        df will be used.
+        dataframe will be used.
     blacklist : dict
         cross-sections with date ranges that should be excluded from the data frame. If
         one cross-section has several blacklist periods append numbers to the cross-section
@@ -270,7 +286,7 @@ class SignalReturnRelations:
 
     def __rival_sigs__(self, ret, sigs=None):
         """
-        Produces the panel-level table for the additional signals.
+        Helper function used to produce the panel-level table for the additional signals.
         """
 
         if sigs is None:
@@ -290,7 +306,7 @@ class SignalReturnRelations:
     @staticmethod
     def __yaxis_lim__(accuracy_df: pd.DataFrame):
         """
-        Determines the range the y-axis is defined over.
+        Helper function to determine the range the y-axis is defined over.
 
         Parameters
         ----------
@@ -324,8 +340,7 @@ class SignalReturnRelations:
     ):
         """
         Plot bar chart for the overall and balanced accuracy metrics. For types:
-        cross_section and years. If sigs is not specified, then the first signal in the
-        list of signals will be used.
+        cross_section and years.
 
         Parameters
         ----------
@@ -455,7 +470,8 @@ class SignalReturnRelations:
         legend_pos: str = "best",
     ):
         """
-        Plot correlation coefficients and significance.
+        Plot correlation coefficients and significance. For types: cross_section and 
+        years.
 
         Parameters
         ----------
