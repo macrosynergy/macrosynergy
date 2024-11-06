@@ -19,7 +19,6 @@ PD_FUTURE_STACK = (
     else dict(dropna=False)
 )
 
-
 def linear_composite(
     df: pd.DataFrame,
     xcats: Union[str, List[str]],
@@ -137,11 +136,11 @@ def linear_composite(
     )
 
     # update local variables
-    df = QuantamentalDataFrame(df)
-    result_as_categorical = df.InitializedAsCategorical
+
     _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
 
-    df: pd.DataFrame
+    df = QuantamentalDataFrame(df)
+    result_as_categorical = df.InitializedAsCategorical
     remaining_xcats: List[str]
     remaining_cids: List[str]
     # NOTE: the "remaining_*" variables will not be in the same order as the input
@@ -158,7 +157,7 @@ def linear_composite(
         out_all=True,
     )
 
-    if len(remaining_cids) < len(cids) and not _xcat_agg:
+    if len(remaining_cids) < len(cids) and not _xcat_agg and complete_cids or len(remaining_cids) == 0:
         missing_cids_xcats_str = _missing_cids_xcats_str(df=df, cids=cids, xcats=xcats)
         raise ValueError(
             "Not all `cids` have complete `xcat` data required for the calculation.\n"
@@ -168,7 +167,7 @@ def linear_composite(
     if _xcat_agg:
         df = _populate_missing_xcat_series(df)
 
-        result_df: QuantamentalDataFrame = linear_composite_xcat_agg(
+        result_df: QuantamentalDataFrame =  linear_composite_xcat_agg(
             df=df,
             xcats=xcats,
             weights=weights,
@@ -183,7 +182,7 @@ def linear_composite(
             df=df, cids=cids, weights=weights, signs=signs
         )
 
-        result_df: QuantamentalDataFrame = linear_composite_cid_agg(
+        result_df: QuantamentalDataFrame =  linear_composite_cid_agg(
             df=df,
             xcat=_xcat,
             cids=cids,
@@ -193,9 +192,8 @@ def linear_composite(
             complete_cids=complete_cids,
             new_cid=new_cid,
         )
-
+    
     return QuantamentalDataFrame(result_df, categorical=result_as_categorical)
-
 
 def _missing_cids_xcats_str(
     df: QuantamentalDataFrame,
@@ -560,7 +558,18 @@ def _check_args(
 
     # check xcats in df
     if not set(xcats).issubset(set(df["xcat"].unique().tolist())):
-        raise ValueError("Not all `xcats` are available in `df`.")
+        if complete_xcats:
+            raise ValueError("Not all `xcats` are available in `df`.")
+        else:
+            missing_xcats = list(set(xcats) - set(df["xcat"].unique().tolist()))
+            warnings.warn(
+                f"Not all `xcats` are available in `df`: {missing_xcats} "
+                "The calculation will be performed with the available xcats."
+            )
+            signs = [signs[i] for i, xc in enumerate(xcats) if xc not in missing_xcats]
+            if isinstance(weights, list):
+                weights = [weights[i] for i, xc in enumerate(xcats) if xc not in missing_xcats]
+            xcats = [xc for xc in xcats if xc not in missing_xcats]
 
     # check cids
     if cids is None:
@@ -574,7 +583,19 @@ def _check_args(
 
     # check cids in df
     if not set(cids).issubset(set(df["cid"].unique().tolist())):
-        raise ValueError("Not all `cids` are available in `df`.")
+        if complete_cids:
+            raise ValueError("Not all `cids` are available in `df`.")
+        else:
+            missing_cids = list(set(cids) - set(df["cid"].unique().tolist()))
+            warnings.warn(
+                f"Not all `cids` are available in `df`: {missing_cids} "
+                "The calculation will be performed with the available cids."
+            )
+            if signs is not None:
+                signs = [signs[i] for i, cid in enumerate(cids) if cid not in missing_cids]
+            if isinstance(weights, list):
+                weights = [weights[i] for i, cid in enumerate(cids) if cid not in missing_cids]
+            cids = [cid for cid in cids if cid not in missing_cids]
 
     _xcat_agg: bool = len(xcats) > 1 or new_xcat != "NEW"
     mode: str = "xcat_agg" if _xcat_agg else "cid_agg"
@@ -718,8 +739,9 @@ if __name__ == "__main__":
     df = QuantamentalDataFrame(df)
     lc_xcat = linear_composite(
         df=df,
-        cids=["AUD", "CAD"],
+        cids=["AUD", "CAD", "GBP"],
         xcats=["XR", "CRY", "INFL"],
         weights=[1, 2, 1],
         signs=[1, -1, 1],
+        complete_xcats=True,
     )
