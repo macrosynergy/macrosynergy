@@ -49,7 +49,7 @@ def make_relative_value(
         cross sections with date ranges that should be excluded from the output.
     basket : List[str]
         cross sections to be used for the relative value benchmark. The default is every
-        cross section in the cids argument that is available in the DataFrame over the
+        cross section in the `cids` argument that is available in the DataFrame over the
         respective time-period. However, the basket can be reduced to a valid subset of the
         available cross sections.
     complete_cross : bool
@@ -58,8 +58,8 @@ def make_relative_value(
         calculation to occur. If set to True, the category will be excluded from the output
         if cross sections are missing. Default is False. If False, the mean, for the
         relative value, will use the subset that is available for that category. For
-        instance, if basket = ['AUD', 'CAD', 'GBP', 'NZD'] but available cids = ['GBP',
-        'NZD'], the basket will be implicitly updated to basket = ['GBP', 'NZD'] for that
+        instance, if `basket = ['AUD', 'CAD', 'GBP', 'NZD']` but available `cids = ['GBP',
+        'NZD']`, the basket will be implicitly updated to basket = ['GBP', 'NZD'] for that
         respective category.
     rel_meth : str
         method for calculating relative value. Default is 'subtract'. Alternative is
@@ -69,7 +69,7 @@ def make_relative_value(
         category names: xcat + postfix. The order should reflect the order of the passed
         categories.
     postfix : str
-        acronym to be appended to 'xcat' string to give the name for relative value
+        acronym to be appended to `xcat` string to give the name for relative value
         category. Only applies if rel_xcats is None. Default is 'R'
 
     Returns

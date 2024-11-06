@@ -30,7 +30,7 @@ def impute_panel(
     Returns
     -------
     ~pandas.DataFrame
-        the imputed long-format panel data, with the relevant xcats and cids
+        the imputed long-format panel data with columns
 
 
     .. note::

@@ -6,6 +6,7 @@ Unlike `make_relative_value()`, which computes values relative to a cross-sectio
 for a given category, `make_relative_category()` returns values relative to an average
 across categories.
 """
+
 import pandas as pd
 from typing import List, Set
 
@@ -39,7 +40,7 @@ def make_relative_category(
         'real_date' and 'value'.
     xcats : List[str]
         all extended categories for which relative values are to be calculated. The user
-        must provide the set of xcats to be used in the calculation.
+        must provide the set of categories to be used in the calculation.
     cids : List[str]
         cross sections for which relative values are calculated.
     start : str
@@ -56,11 +57,11 @@ def make_relative_category(
         However, the basket parameter can specify a subset of the available
         categories.
     complete_set : bool
-        boolean parameter that determines whether each cid is required to have the full
-        set of xcats in the basket for a relative value calculation to occur.
-        If set to True, the cid will be excluded from the output if some desired categories
-        are missing. Default is False. If False, the mean, for the relative value, will use
-        the subset of categories available for that cross section.
+        boolean parameter that determines whether each cross-section is required to have
+        the full set of extended categories in the basket for a relative value calculation
+        to occur. If set to True, the cross-section will be excluded from the output if
+        some desired categories are missing. Default is False. If False, the mean, for the
+        relative value, will use the subset of categories available for that cross-section.
     rel_meth : str
         method for calculating relative value. Default is 'subtract'. Alternative is
         'divide'.

@@ -40,18 +40,18 @@ def correl_matrix(
         standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
         'real_date' and at least one column with values of interest.
     xcats : List[str]
-        extended categories to be correlated. Default is all in the DataFrame. If xcats
+        extended categories to be correlated. Default is all in the DataFrame. If `xcats`
         contains only one category the correlation coefficients across cross sections are
-        displayed. If xcats contains more than one category, the correlation coefficients
-        across categories are displayed. Additionally, the order of the xcats received will
+        displayed. If `xcats` contains more than one category, the correlation coefficients
+        across categories are displayed. Additionally, the order of the `xcats` received will
         be mirrored in the correlation matrix.
     cids : List[str]
         cross sections to be correlated. Default is all in the DataFrame.
     xcats_secondary : List[str]
-        an optional second set of extended categories. If xcats_secondary is provided,
-        correlations will be calculated between the categories in xcats and xcats_secondary.
+        an optional second set of extended categories. If `xcats_secondary` is provided,
+        correlations will be calculated between the categories in `xcats` and `xcats_secondary`.
     cids_secondary : List[str]
-        an optional second list of cross sections. If cids_secondary is provided
+        an optional second list of cross sections. If `cids_secondary` is provided
         correlations will be calculated and visualized between these two sets.
     start : str
         earliest date in ISO format. Default is None and earliest date in df is used.
@@ -70,11 +70,11 @@ def correl_matrix(
         optional dictionary of lags applied to respective categories. The key will be
         the category and the value is the lag or lags. If a category has multiple lags
         applied, pass in a list of lag values. The lag factor will be appended to the
-        category name in the correlation matrix. If xcats_secondary is not none, this
-        parameter will specify lags for the categories in xcats.
+        category name in the correlation matrix. If `xcats_secondary` is not none, this
+        parameter will specify lags for the categories in `xcats`.
     lags_secondary : dict
         optional dictionary of lags applied to the second set of categories if
-        xcats_secondary is provided.
+        `xcats_secondary` is provided.
     title : str
         chart heading. If none is given, a default title is used.
     size : Tuple[float]
@@ -86,10 +86,11 @@ def correl_matrix(
     show : bool
         if True the figure will be displayed. Default is True.
     xcat_labels : Optional[Union[List[str], Dict[str, str]]
-        optional list or dictionary of labels for xcats. A list should be in the same
-        order as xcats, a dictionary should map from each xcat to its label.
+        optional list or dictionary of labels for the categories specified in `xcats`.
+        A list should be in the same order as `xcats`, a dictionary should map from each
+        category to its label (e.g. {'XR': 'Exchange Rate', 'CRY': 'Cryptocurrency'}).
     xcat_secondary_labels : Optional[Union[List[str], Dict[str, str]]]
-        optional list or dictionary of labels for xcats_secondary.
+        optional list or dictionary of labels for `xcats_secondary`.
     **kwargs : Dict
         Arbitrary keyword arguments that are passed to seaborn.heatmap.
 

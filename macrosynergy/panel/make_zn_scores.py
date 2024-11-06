@@ -87,7 +87,7 @@ def make_zn_scores(
     Returns
     -------
     ~pandas.Dataframe
-        standardized DataFrame with the zn-scores of the chosen xcat: 'cid', 'xcat',
+        standardized DataFrame with the zn-scores of the chosen category: 'cid', 'xcat',
         'real_date' and 'value'.
 
 

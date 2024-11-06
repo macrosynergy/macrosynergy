@@ -209,7 +209,7 @@ def time_series_check(formula: str, index: int):
     return i, clause
 
 
-def xcat_isolator(expression: str, start_index: str, index: int):
+def xcat_isolator(expression: str, start_index: str, index: int) -> Tuple[str, int]:
     """
     Split the category from the time-series operation. The function will return the
     respective category.
@@ -225,8 +225,8 @@ def xcat_isolator(expression: str, start_index: str, index: int):
 
     Returns
     -------
-    str
-        xcat.
+    Tuple[str, int]
+        xcat string, and the string index where the xcat ends.
     """
 
     op_copy = expression[start_index : index + 1]
