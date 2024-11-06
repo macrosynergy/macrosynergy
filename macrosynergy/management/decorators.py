@@ -24,18 +24,18 @@ if PYTHON_3_8_OR_LATER:
 else:
     from typing_extensions import get_args, get_origin
 from inspect import signature
-from macrosynergy.management.types import NoneType
+
 import pandas as pd
 import numpy as np
 from packaging import version
 
 try:
-    from macrosynergy import __version__ as _version
+    from macrosynergy import __version__ as MSY_VERSION
 except ImportError:
     try:
-        from setup import VERSION as _version
+        from setup import VERSION as MSY_VERSION
     except ImportError:
-        _version = "0.0.0"
+        MSY_VERSION = "0.0.0"
 
 
 def deprecate(
@@ -43,19 +43,31 @@ def deprecate(
     deprecate_version: str,
     remove_after: str = None,
     message: str = None,
+    macrosynergy_package_version: str = MSY_VERSION,
 ):
     """
     Decorator for deprecating a function.
 
     Parameters
-    :param <callable> new_func: The function that replaces the old one.
-    :param <str> deprecate_version: The version in which the old function is deprecated.
-    :param <str> remove_after: The version in which the old function is removed.
-    :param <str> message: The message to display when the old function is called.
-        This message must contain the following format strings:
-        "{old_method}", "{deprecate_version}", and "{new_method}".
-        If None, the default message is used.
-    :return <callable>: The decorated function.
+    ----------
+    new_func : callable
+        The function that replaces the old one.
+    deprecate_version : str
+        The version in which the old function is deprecated.
+    remove_after : str
+        The version in which the old function is removed.
+    message : str
+        The message to display when the old function is called. This message must
+        contain the following format strings: "{old_method}", "{deprecate_version}", and
+        "{new_method}". If None, the default message is used.
+    macrosynergy_package_version : str
+        The version of the macrosynergy package. This is used to determine if the
+        deprecation warning should be shown.
+
+    Returns
+    -------
+    callable
+        The decorated function.
     """
 
     def decorator(
@@ -64,6 +76,7 @@ def deprecate(
         deprecate_version=deprecate_version,
         remove_after=remove_after,
         message=message,
+        macrosynergy_package_version=macrosynergy_package_version,
     ):
         # if the message is none, use the default message
         if message is None:
@@ -88,13 +101,13 @@ def deprecate(
         if remove_after is not None:
             try:
                 version.parse(remove_after)
-            except:
+            except version.InvalidVersion as e:
                 raise ValueError(
                     f"The version in which the function is deprecated ({remove_after}) "
                     f"must be a valid version string."
-                )
+                ) from e
 
-            if version.parse(deprecate_version) < version.parse(remove_after):
+            if version.parse(deprecate_version) > version.parse(remove_after):
                 raise ValueError(
                     f"The version in which the old function will be removed "
                     f"({remove_after}) "
@@ -102,12 +115,14 @@ def deprecate(
                     f"({deprecate_version})."
                 )
         else:
-            remove_after = _version
+            remove_after = MSY_VERSION
 
         @wraps(old_func)
         # This will ensure the old function retains its name and other properties.
         def wrapper(*args, **kwargs):
-            if version.parse(deprecate_version) < version.parse(_version):
+            if version.parse(deprecate_version) < version.parse(
+                macrosynergy_package_version
+            ):
                 warnings.warn(
                     message.format(
                         old_method=old_func.__name__,
@@ -132,11 +147,20 @@ def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
     """
     Implementation of `insinstance()` for type-hints imported from the `typing` module,
     and for subscripted types (e.g. `List[int]`, `Tuple[str, int]`, etc.).
+
     Parameters
-    :param <Any> value: The value to check.
-    :param <Type[Any]> type_hint: The type hint to check against.
-    :return <bool>: True if the value is of the type hint, False otherwise.
+    ----------
+    value : Any
+        The value to check.
+    type_hint : Type[Any]
+        The type hint to check against.
+
+    Returns
+    -------
+    bool
+        True if the value is of the type hint, False otherwise.
     """
+
     origin = get_origin(type_hint)
     args = get_args(type_hint)
 
@@ -189,12 +213,20 @@ def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
 
 def get_expected_type(arg_type_hint: Type[Any]) -> List[str]:
     """
-    Based on the type hint, return a list of strings that represent
-    the type hint - including any nested type hints.
+    Based on the type hint, return a list of strings that represent the type hint -
+    including any nested type hints.
+
     Parameters
-    :param <Type[Any]> arg_type_hint: The type hint to get the expected types for.
-    :return <List[str]>: A list of strings that represent the type hint.
+    ----------
+    arg_type_hint : Type[Any]
+        The type hint to get the expected types for.
+
+    Returns
+    -------
+    List[str]
+        A list of strings that represent the type hint.
     """
+
     origin = get_origin(arg_type_hint)
     args = get_args(arg_type_hint)
 
@@ -227,9 +259,16 @@ def get_expected_type(arg_type_hint: Type[Any]) -> List[str]:
 def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
     """
     Decorator for validating the arguments and return value of a function.
+
     Parameters
-    :param <Callable[..., Any]> func: The function to validate.
-    :return <Callable[..., Any]>: The decorated function.
+    ----------
+    func : Callable[..., Any]
+        The function to validate.
+
+    Returns
+    -------
+    Callable[..., Any]
+        The decorated function.
     """
 
     def format_expected_type(expected_types: List[Any]) -> str:
@@ -239,7 +278,7 @@ def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
         for i, et in enumerate(expected_types):
             if str(et).startswith("typing."):
                 expected_types[i] = str(et).replace("typing.", "")
-            if et is NoneType:
+            if et is type(None):
                 expected_types[i] = "None"
 
         ret_string = (
@@ -305,9 +344,16 @@ def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
 def argcopy(func: Callable) -> Callable:
     """
     Decorator for applying a "pass-by-value" method to the arguments of a function.
+
     Parameters
-    :param <Callable> func: The function to copy arguments for.
-    :return <Callable>: The decorated function.
+    ----------
+    func : Callable
+        The function to copy arguments for.
+
+    Returns
+    -------
+    Callable
+        The decorated function.
     """
 
     @wraps(func)

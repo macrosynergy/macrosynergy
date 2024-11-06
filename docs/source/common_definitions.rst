@@ -29,8 +29,7 @@ real_date  cid xcat     value grading eop_lag mop_lag
 2023-01-02 CAD EQXR_NSA -0.2  2       0       10
 ========== === ======== ===== ======= ======= =======
 
-To get a better understanding of the QDF, please see Ralph's Research
-posts:
+To get a better understanding of the QDF, please see our Research:
 
 `How to build a quantamental system for investment
 management <https://research.macrosynergy.com/how-to-build-a-quantamental-system/>`__

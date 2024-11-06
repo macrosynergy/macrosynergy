@@ -1,6 +1,6 @@
 * @macrosynergy/package-maintainers
 
-/macrosynergy/pnl/* @lsimonsen @macrosynergy/package-maintainers
+/macrosynergy/pnl/* @macrosynergy/package-maintainers
 /macrosynergy/signal/* @macrosynergy/package-maintainers
 /macrosynergy/panel/* @macrosynergy/package-maintainers
 
