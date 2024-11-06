@@ -170,6 +170,11 @@ class MultiPnL:
                 pnl_xcats[i] = self._infer_return_by_xcat(pnl_xcat)
             pnl_df = self.pnls_df[self.pnls_df["xcat"].isin(pnl_xcats)].copy()
 
+        if pnl_df["cid"].dtype.name == "category":
+            pnl_df.loc[:, "cid"] = pnl_df["cid"].cat.remove_unused_categories()
+        if pnl_df["xcat"].dtype.name == "category":
+            pnl_df.loc[:, "xcat"] = pnl_df["xcat"].cat.remove_unused_categories()
+
         if xcat_labels is not None:
             xcat_labels = self._check_xcat_labels(pnl_xcats, xcat_labels)
             pnl_df["xcat"] = pnl_df["xcat"].map(xcat_labels)
