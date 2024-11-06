@@ -5,75 +5,10 @@ Function for calculating historic volatility of quantamental data.
 import numpy as np
 import pandas as pd
 from typing import List, Optional, Dict, Any
+import warnings
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df, standardise_dataframe, get_eops
-
-
-def expo_weights(lback_periods: int = 21, half_life: int = 11):
-    """
-    Calculates exponential series weights for finite horizon, normalized to 1.
-
-    :param <int>  lback_periods: Number of lookback periods over which volatility is
-        calculated. Default is 21.
-    :param <int> half_life: Refers to the half-time for "xma" and full lookback period
-        for "ma". Default is 11.
-
-    :return <np.ndarray>: An Array of weights determined by the length of the lookback
-        period.
-
-    Note: 50% of the weight allocation will be applied to the number of days delimited by
-        the half_life.
-    """
-    decf = 2 ** (-1 / half_life)
-    weights = (1 - decf) * np.array(
-        [decf ** (lback_periods - ii - 1) for ii in range(lback_periods)]
-    )
-    weights = weights / sum(weights)
-
-    return weights
-
-
-def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
-    """
-    Estimate standard deviation of returns based on exponentially weighted absolute
-    values.
-
-    :param <np.ndarray> x: array of returns
-    :param <np.ndarray> w: array of exponential weights (same length as x); will be
-        normalized to 1.
-    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
-        effective window.
-
-    :return <float>: exponentially weighted mean absolute value (as proxy of return
-        standard deviation).
-
-    """
-    assert len(x) == len(w), "weights and window must have same length"
-    if remove_zeros:
-        x = x[x != 0]
-        w = w[0 : len(x)] / sum(w[0 : len(x)])
-    w = w / sum(w)  # weights are normalized
-    mabs = np.sum(np.multiply(w, np.abs(x)))
-    return mabs
-
-
-def flat_std(x: np.ndarray, remove_zeros: bool = True):
-    """
-    Estimate standard deviation of returns based on exponentially weighted absolute
-    values.
-
-    :param <np.ndarray> x: array of returns
-    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
-        effective window.
-
-    :return <float>: flat weighted mean absolute value (as proxy of return standard
-        deviation).
-
-    """
-    if remove_zeros:
-        x = x[x != 0]
-    mabs = np.mean(np.abs(x))
-    return mabs
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def historic_vol(
@@ -92,52 +27,62 @@ def historic_vol(
     nan_tolerance: float = 0.25,
 ):
     """
-    Estimate historic annualized standard deviations of asset returns. User Function.
-    Controls the functionality.
+    Estimate historic annualized standard deviations of asset returns. The function can
+    calculate the volatility using either a moving average or an exponential moving
+    average method.
 
-    :param <pd.DataFrame> df: standardized DataFrame with the following necessary columns:
-        'cid', 'xcat', 'real_date' and 'value'. Will contain all of the data across all
-        macroeconomic fields.
-    :param <str> xcat:  extended category denoting the return series for which volatility
-        should be calculated.
-        Note: in JPMaQS returns are represented in %, i.e. 5 means 5%.
-    :param <List[str]> cids: cross sections for which volatility is calculated;
-        default is all available for the category.
-    :param <int>  lback_periods: Number of lookback periods over which volatility is
-        calculated. Default is 21.
-    :param <str> lback_meth: Lookback method to calculate the volatility, Default is
-        "ma". Alternative is "xma", Exponential Moving Average. Expects to receive either
-        the aforementioned strings.
-    :param <int> half_life: Refers to the half-time for "xma". Default is 11.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date in
-        df is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date in df is
-        used.
-    :param <str> est_freq: Frequency of (re-)estimation of volatility. Options are 'D'
-        for end of each day (default), 'W' for end of each work week, 'M' for end of each
-        month, and 'Q' for end of each week.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from
-        the data frame. If one cross section has several blacklist periods append numbers
-        to the cross section code.
-    :param <int> half_life: Refers to the half-time for "xma" and full lookback period
-        for "ma".
-    :param <bool> remove_zeros: if True (default) any returns that are exact zeros will
-        not be included in the lookback window and prior non-zero values are added to the
-        window instead.
-    :param <str> postfix: string appended to category name for output; default is "ASD".
-    :param <float> nan_tolerance: maximum ratio of NaNs to non-NaNs in a lookback window,
-        if exceeded the resulting volatility is set to NaN. Default is 0.25.
+    Parameters
+    ----------
+    df : ~pandas.DataFrame
+        standardized DataFrame with the following necessary columns: 'cid', 'xcat',
+        'real_date' and 'value'. Will contain all of the data across all macroeconomic
+        fields.
+    xcat : str
+        extended category denoting the return series for which volatility should be
+        calculated. Note: in JPMaQS returns are represented in %, i.e. 5 means 5%.
+    cids : List[str]
+        cross sections for which volatility is calculated; default is all available for
+        the category.
+    lback_periods : int
+        Number of lookback periods over which volatility is calculated. Default is 21.
+    lback_meth : str
+        Lookback method to calculate the volatility, Default is "ma". Alternative is
+        "xma", Exponential Moving Average. Expects to receive either the aforementioned
+        strings.
+    half_life : int
+        Refers to the half-time for "xma". Default is 11.
+    start : str
+        earliest date in ISO format. Default is None and earliest date in df is used.
+    end : str
+        latest date in ISO format. Default is None and latest date in df is used.
+    est_freq : str
+        Frequency of (re-)estimation of volatility. Options are 'D' for end of each day
+        (default), 'W' for end of each work week, 'M' for end of each month, and 'Q' for end
+        of each week.
+    blacklist : dict
+        cross sections with date ranges that should be excluded from the data frame. If
+        one cross section has several blacklist periods append numbers to the cross section
+        code.
+    half_life : int
+        Refers to the half-time for "xma" and full lookback period for "ma".
+    remove_zeros : bool
+        if True (default) any returns that are exact zeros will not be included in the
+        lookback window and prior non-zero values are added to the window instead.
+    postfix : str
+        string appended to category name for output; default is "ASD".
+    nan_tolerance : float
+        maximum ratio of NaNs to non-NaNs in a lookback window, if exceeded the
+        resulting volatility is set to NaN. Default is 0.25.
 
-    :return <pd.DataFrame>: standardized DataFrame with the estimated annualized standard
-        deviations of the chosen xcat.
-        If the input 'value' is in % (as is the standard in JPMaQS) then the output
-        will also be in %.
-        'cid', 'xcat', 'real_date' and 'value'.
+    Returns
+    -------
+    ~pandas.DataFrame
+        standardized DataFrame with the estimated annualized standard deviations of the
+        chosen category. If the input 'value' is in % (as is the standard in 
+        JPMaQS) then the output will also be in %. 'cid', 'xcat', 'real_date' and 'value'.
     """
 
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-    df = df[["cid", "xcat", "real_date", "value"]]
-    in_df = df.copy()
+    df: QuantamentalDataFrame = QuantamentalDataFrame(df)
     est_freq = est_freq.lower()
     assert lback_meth in ["xma", "ma"], (
         "Lookback method must be either 'xma' "
@@ -183,6 +128,10 @@ def historic_vol(
         remove_zeros: bool,
         weights: Optional[np.ndarray] = None,
     ):
+        """
+        Helper function to calculate the historic volatility for a single row in the
+        DataFrame.
+        """
         target_dates = pd.bdate_range(end=row["real_date"], periods=lback_periods)
         target_df: pd.DataFrame = dfw.loc[dfw.index.isin(target_dates)]
 
@@ -255,25 +204,124 @@ def historic_vol(
         dfwa = dfwa.astype(float).reindex(dfw.index).ffill(limit=fills[est_freq])
 
     df_out = dfwa.unstack().reset_index().rename({0: "value"}, axis=1)
-    df_out["xcat"] = xcat + postfix
 
-    # iteratively ensure that each cid has the same date entries as the input df
-    out_dfs: List[pd.DataFrame] = []
+    # Create an initial mask for all rows to keep
+    keep_mask = pd.Series(False, index=df_out.index)
+
+    # Iterate over each cid and mark valid rows
     for cid in cids:
+        # Get the date range for the current 'cid' in the original df
+        loc_bools = df["cid"] == cid
+        if df[loc_bools].empty:
+            warnings.warn(f"No data for {cid}_{xcat}. Skipping.")
+            continue
+        min_date = df.loc[loc_bools, "real_date"].min()
+        max_date = df.loc[loc_bools, "real_date"].max()
+
+        # Generate valid date range for the current 'cid'
+        valid_dates = pd.bdate_range(start=min_date, end=max_date)
+
+        # Update the keep_mask for rows corresponding to current 'cid' with valid dates
         sel_bools = df_out["cid"] == cid
-        in_df_start = in_df["cid"] == cid
-        sel_dts = df_out["real_date"].isin(
-            (
-                pd.bdate_range(
-                    start=in_df.loc[in_df_start, "real_date"].min(),
-                    end=in_df.loc[in_df_start, "real_date"].max(),
-                )
-            )
-        )
+        sel_dts = df_out["real_date"].isin(valid_dates)
 
-        out_dfs.append(df_out.loc[sel_bools & sel_dts])
+        keep_mask |= sel_bools & sel_dts
 
-    return standardise_dataframe(pd.concat(out_dfs))
+    # Apply the mask to df_out
+    df_out = df_out[keep_mask].reset_index(drop=True)
+
+    df_out = QuantamentalDataFrame.from_long_df(
+        df=df_out,
+        xcat=xcat + postfix,
+        categorical=df.InitializedAsCategorical,
+    )
+    return standardise_dataframe(df_out)
+
+
+def expo_weights(lback_periods: int = 21, half_life: int = 11):
+    """
+    Calculates exponential series weights for finite horizon, normalized to 1.
+
+    Parameters
+    ----------
+    lback_periods : int
+        Number of lookback periods over which volatility is calculated. Default is 21.
+    half_life : int
+        Refers to the half-time for "xma" and full lookback period for "ma". Default is
+        11.
+
+    Returns
+    -------
+    ~numpy.ndarray
+        An Array of weights determined by the length of the lookback period.
+
+    Notes
+    -----
+    50% of the weight allocation will be applied to the number of days delimited by the
+    half_life.
+    """
+
+    decf = 2 ** (-1 / half_life)
+    weights = (1 - decf) * np.array(
+        [decf ** (lback_periods - ii - 1) for ii in range(lback_periods)]
+    )
+    weights = weights / sum(weights)
+
+    return weights
+
+
+def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
+    """
+    Estimate standard deviation of returns based on exponentially weighted absolute
+    values.
+
+    Parameters
+    ----------
+    x : ~numpy.ndarray
+        array of returns
+    w : ~numpy.ndarray
+        array of exponential weights (same length as x); will be normalized to 1.
+    remove_zeros : bool
+        removes zeroes as invalid entries and shortens the effective window.
+
+    Returns
+    -------
+    float
+        exponentially weighted mean absolute value (as proxy of return standard
+        deviation).
+    """
+
+    assert len(x) == len(w), "weights and window must have same length"
+    if remove_zeros:
+        x = x[x != 0]
+        w = w[0 : len(x)] / sum(w[0 : len(x)])
+    w = w / sum(w)  # weights are normalized
+    mabs = np.sum(np.multiply(w, np.abs(x)))
+    return mabs
+
+
+def flat_std(x: np.ndarray, remove_zeros: bool = True):
+    """
+    Estimate standard deviation of returns based on exponentially weighted absolute
+    values.
+
+    Parameters
+    ----------
+    x : ~numpy.ndarray
+        array of returns
+    remove_zeros : bool
+        removes zeroes as invalid entries and shortens the effective window.
+
+    Returns
+    -------
+    float
+        flat weighted mean absolute value (as proxy of return standard deviation).
+    """
+
+    if remove_zeros:
+        x = x[x != 0]
+    mabs = np.mean(np.abs(x))
+    return mabs
 
 
 if __name__ == "__main__":

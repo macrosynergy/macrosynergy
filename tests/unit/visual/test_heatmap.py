@@ -86,10 +86,13 @@ class TestAll(unittest.TestCase):
     def test_plot_heatmap_no_error(self):
         heatmap = Heatmap(**self.constructor_args)
         heatmap.df = heatmap.df.pivot_table(
-            index="cid", columns="real_date", values=self.metric
+            index="cid",
+            columns="real_date",
+            values=self.metric,
+            observed=True,
         )
         try:
-            heatmap._plot(heatmap.df, **self.plot_args)
+            heatmap.plot(heatmap.df, **self.plot_args)
         except Exception as e:
             self.fail(f"Heatmap.plot raised {e} unexpectedly")
 
@@ -104,7 +107,7 @@ class TestAll(unittest.TestCase):
         self.plot_args["return_figure"] = True
 
         try:
-            fig = heatmap._plot(heatmap.df, **self.plot_args)
+            fig = heatmap.plot(heatmap.df, **self.plot_args)
         except Exception as e:
             self.fail(f"Heatmap.plot raised {e} unexpectedly")
 

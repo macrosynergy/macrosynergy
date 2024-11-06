@@ -12,10 +12,11 @@ Submodules
 .. toctree::
    :maxdepth: 2
    
-   macrosynergy.learning.beta_estimator
+   macrosynergy.learning.sequential
    macrosynergy.learning.cv_tools
-   macrosynergy.learning.metrics
-   macrosynergy.learning.panel_time_series_split
+   macrosynergy.learning.forecasting
+   macrosynergy.learning.model_evaluation
+   macrosynergy.learning.splitters
+   macrosynergy.learning.preprocessing
+   macrosynergy.learning.random_effects
    macrosynergy.learning.predictors
-   macrosynergy.learning.signal_optimizer
-   macrosynergy.learning.transformers
