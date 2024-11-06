@@ -39,14 +39,15 @@ def granger_causality_test(
     metric: str = "value",
 ) -> Dict[Any, Any]:
     """
-    Run Granger Causality Test on a standardized quantamental dataframe. Since the
-    Granger Causality Test is a pairwise test, only two tickers can be specified.
-    The user may specify two tickers directly using the `tickers` parameter, or specify
-    one or two cross-sections and one or two extended categories using the `cids` and
-    `xcats` parameters. The function forms the list of tickers from the `cids` and `xcats`
-    such that the order of the formed tickers is preserved. The order of the tickers is
-    important as the first ticker is the one that is tested to Granger cause the second
-    ticker. The function tests whether the first ticker Granger causes the second ticker.
+    Run Granger Causality Test on a standardized quantamental dataframe. Since the Granger
+    Causality Test is a pairwise test, only two tickers are permitted. Tickers may be
+    specified directly using the `tickers` parameter, or formed by providing one
+    cross-section (`cid`) and two extended categories (`xcats`), or two cross-sections
+    (`cids`) and one extended category (`xcat`). Tickers are constructed from the
+    specified `cids` and `xcats` in the provided order. The order of the tickers is
+    preserved, with the first ticker being tested to determine whether it Granger-causes
+    the second. The test evaluates whether the time series of the first ticker
+    Granger-causes the time series of the second ticker.
 
     Parameters
     ----------
@@ -56,7 +57,7 @@ def granger_causality_test(
         A list of tickers to run the test on. A maximum of two tickers can be specified.
     cids : Union[str, List[str]]
         One or two cross-sections to run the test on. If two cross-sections are specified,
-        then only one extended category can be specified. If one cross-section is 
+        then only one extended category can be specified. If one cross-section is
         specified, then two categories must be specified.
     xcats : Union[str, List[str]]
         One or two extended categories to run the test on. If two categories are specified,
@@ -208,7 +209,7 @@ def _get_tickers(
 ) -> List[str]:
     """
     Simply returns the tickers if they are specified. If they are not specified, then
-    the function forms the list of tickers from the `cids` and `xcats` parameters such 
+    the function forms the list of tickers from the `cids` and `xcats` parameters such
     that the order of the formed tickers is preserved.
 
     Parameters
