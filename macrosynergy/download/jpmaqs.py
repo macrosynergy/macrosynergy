@@ -1226,7 +1226,7 @@ class JPMaQSDownload(DataQueryInterface):
         as_dataframe: bool = True,
         dataframe_format: str = "qdf",
         report_time_taken: bool = False,
-        categorical_dataframe: bool = False,
+        categorical_dataframe: bool = True,
         *args,
         **kwargs,
     ) -> Union[pd.DataFrame, List[Dict]]:
