@@ -131,7 +131,7 @@ def linear_composite_cid_agg(
         weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(
             level=1
         )
-        weights_df = weights_df.mul(signs, axis=1)
+        weights_df = weights_df[cids].mul(signs, axis=1)
 
     else:
         weights_series: pd.Series = pd.Series(
@@ -253,14 +253,19 @@ def _populate_missing_xcat_series(
 
 def _check_df_for_missing_cid_data(
     df: QuantamentalDataFrame,
+    cids: List[str],
     weights: Union[str, List[float]],
     signs: List[float],
-) -> QuantamentalDataFrame:
+) -> Tuple[
+    QuantamentalDataFrame, List[str], str, Union[str, List[float], None], List[float]
+]:
     """
     Check the DataFrame for missing `cid` data and drop them if necessary and return the
     DataFrame with the missing `cid` data dropped.
     """
+
     found_cids: List[str] = df["cid"].unique().tolist()
+    found_cids = [cid for cid in cids if cid in found_cids]
     found_xcats: List[str] = df["xcat"].unique().tolist()
     found_xcats_set: Set[str] = set(found_xcats)
     wrn_msg: str = (
@@ -275,6 +280,15 @@ def _check_df_for_missing_cid_data(
                 f"Weight category {weights} not found in `df`."
                 f" Available categories are {found_xcats}."
             )
+
+    if set(cids) - set(found_cids) != set():
+        for cid in set(cids) - set(found_cids):
+            # Cids has already been removed since it uses
+            warnings.warn(f"cid {cid} not found in `df`. It will be ignored.")
+            signs.pop(cids.index(cid))
+            if isinstance(weights, list):
+                weights.pop(cids.index(cid))
+
 
     ctr = 0
     for cidx in found_cids.copy():  # copy to allow modification of `cids`
@@ -301,7 +315,8 @@ def _check_df_for_missing_cid_data(
         0
     ]
 
-    return df, found_cids, _xcat
+    rcids = [c for c in cids if c in found_cids]  # to preserve order
+    return df, rcids, _xcat, weights, signs
 
 
 def _check_args(
@@ -633,8 +648,8 @@ def linear_composite(
         )
 
     else:  # mode == "cid_agg" -- single xcat
-        df, cids, _xcat = _check_df_for_missing_cid_data(
-            df=df, weights=weights, signs=signs
+        df, cids, _xcat, weights, signs = _check_df_for_missing_cid_data(
+            df=df, cids=cids, weights=weights, signs=signs
         )
 
         return linear_composite_cid_agg(
@@ -694,16 +709,12 @@ if __name__ == "__main__":
     #     df=df, xcats="XR", weights="INFL", normalize_weights=False
     # )
 
-    df = df[(df["xcat"] != "INFL")]
+    df = df[(df["cid"] != "AUD")]
 
     lc_xcat = linear_composite(
         df=df,
-        cids=["AUD", "CAD", "GBP"],
-        xcats=["XR", "CRY", "INFL"],
+        cids=["GBP", "AUD", "CAD"],
+        xcats=["XR"],
         weights=[1, 2, 1],
         signs=[1, -1, 1],
-        complete_xcats=True,
     )
-    # Check that the output is as expected
-    #lc_xcat[["value", "real_date"]] 
-    print("CHECK DATA")
