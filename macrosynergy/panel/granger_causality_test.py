@@ -40,13 +40,13 @@ def granger_causality_test(
 ) -> Dict[Any, Any]:
     """
     Run Granger Causality Test on a standardized quantamental dataframe. Since the
-    Granger Causality Test is a pairwise test, only two tickers can be specified. Specify
-    either `tickers` or `cids` & `xcats`. When specifying `cids` & `xcats`, the user may
-    input one `cid` and two `xcats`; or two `cids` and one `xcat` to yield two tickers.
-    The function forms the list of tickers from the `cids` and `xcats` such that the
-    order of the formed tickers is preserved. The order of the tickers is important as
-    the first ticker is the one that is tested to Granger cause the second ticker. The
-    function tests whether the first ticker Granger causes the second ticker.
+    Granger Causality Test is a pairwise test, only two tickers can be specified.
+    The user may specify two tickers directly using the `tickers` parameter, or specify
+    one or two cross-sections and one or two extended categories using the `cids` and
+    `xcats` parameters. The function forms the list of tickers from the `cids` and `xcats`
+    such that the order of the formed tickers is preserved. The order of the tickers is
+    important as the first ticker is the one that is tested to Granger cause the second
+    ticker. The function tests whether the first ticker Granger causes the second ticker.
 
     Parameters
     ----------
@@ -55,11 +55,13 @@ def granger_causality_test(
     tickers : List[str]
         A list of tickers to run the test on. A maximum of two tickers can be specified.
     cids : Union[str, List[str]]
-        One or two cids to run the test on. If two cids are specified, then only one
-        xcat can be specified. If one cid is specified, then two xcats can be specified.
+        One or two cross-sections to run the test on. If two cross-sections are specified,
+        then only one extended category can be specified. If one cross-section is 
+        specified, then two categories must be specified.
     xcats : Union[str, List[str]]
-        One or two xcats to run the test on. If two xcats are specified, then only one
-        cid can be specified. If one xcat is specified, then two cids can be specified.
+        One or two extended categories to run the test on. If two categories are specified,
+        then only one cross-sections can be specified. If one category is specified, then
+        two cross-sections must be specified.
     max_lag : Union[int, List[int]]
         If `max_lag` is an integer, then the function computes the test for all lags up
         to `max_lag`. If `max_lag` is a list of integers, then the function computes the
@@ -166,7 +168,7 @@ def _statsmodels_compatibility_wrapper(
     x: Any = None, maxlag: Any = None, addconst: Any = None, verbose: Any = None
 ) -> Any:
     """
-    Wrapper function to handle compatibility issues with different versions of 
+    Wrapper function to handle compatibility issues with different versions of
     statsmodels.
     """
     if version.parse(statsmodels.__version__) < version.parse("0.15.0"):
@@ -206,17 +208,17 @@ def _get_tickers(
 ) -> List[str]:
     """
     Simply returns the tickers if they are specified. If they are not specified, then
-    the function forms the list of tickers from the `cids` and `xcats` such that the
-    order of the formed tickers is preserved.
+    the function forms the list of tickers from the `cids` and `xcats` parameters such 
+    that the order of the formed tickers is preserved.
 
     Parameters
     ----------
     tickers : List[str]
         A list of tickers.
     cids : Union[str, List[str]]
-        One or two cids.
+        One or two cross-sections.
     xcats : Union[str, List[str]]
-        One or two xcats.
+        One or two extended categories.
     """
 
     if tickers is not None:

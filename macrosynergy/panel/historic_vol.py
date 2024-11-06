@@ -78,8 +78,8 @@ def historic_vol(
     -------
     ~pandas.DataFrame
         standardized DataFrame with the estimated annualized standard deviations of the
-        chosen xcat. If the input 'value' is in % (as is the standard in JPMaQS) then the
-        output will also be in %. 'cid', 'xcat', 'real_date' and 'value'.
+        chosen category. If the input 'value' is in % (as is the standard in 
+        JPMaQS) then the output will also be in %. 'cid', 'xcat', 'real_date' and 'value'.
     """
 
     df: QuantamentalDataFrame = QuantamentalDataFrame(df)

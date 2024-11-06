@@ -45,9 +45,9 @@ def linear_composite(
         'real_date' and 'value'.
     xcats : Union[str, List[str]
         One or more categories to be combined. If a single category is given the linear
-        combination is calculated across cross-sections. This results in a single series 
-        to which a new cross-sectional identifier is assigned. If more than one category 
-        string is given the output will be a new category, i.e. a panel that is a linear 
+        combination is calculated across cross-sections. This results in a single series
+        to which a new cross-sectional identifier is assigned. If more than one category
+        string is given the output will be a new category, i.e. a panel that is a linear
         combination of the categories specified.
     cids : List[str]
         cross-sections for which the linear combinations are calculated. Default is all
@@ -82,20 +82,20 @@ def linear_composite(
         respective category is available is used.
     complete_xcats : bool
         If True (default) combinations are only calculated for observation dates on
-        which all xcats are available. If False a combination of the available categories is
-        used. Not relevant when aggregating over cross-sections, i.e. when a single category
-        is given in `xcats`.
+        which all categories are available. If False a combination of the available
+        categories is used. Not relevant when aggregating over cross-sections, i.e.
+        when a single category is given in `xcats`.
     complete_cids : bool
         If True (default) combinations are only calculated for observation dates on
-        which all cids are available. If False a combination of the available cross-sections
-        is used. Not relevant when aggregating over categories, i.e. when multiple
-        categories are given in `xcats`.
+        which all cross-sections are available. If False a combination of the available
+        cross-sections is used. Not relevant when aggregating over categories, i.e. when
+        multiple categories are given in `xcats`.
     new_xcat : str
-        Name of new composite xcat when aggregating over xcats for a given cid. Default
-        is "NEW".
+        Name of new composite category when aggregating over categories for a given
+        cross-section. Default is "NEW".
     new_cid : str
-        Name of new composite cid when aggregating over cids for a given xcat. Default
-        is "GLB".
+        Name of new composite cross-section when aggregating over cross-sections for a 
+        given category. Default is "GLB".
 
     Returns
     -------
@@ -299,7 +299,7 @@ def linear_composite_cid_agg(
     complete_cids: bool = True,
     new_cid="GLB",
 ):
-    """Linear composite of various cids for a given xcat across all periods."""
+    """Linear composite of various cids for a given category across all periods."""
     if isinstance(weights, str):
         weights_df: pd.DataFrame = df[(df["xcat"] == weights)]
         weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(
@@ -506,6 +506,7 @@ def _check_df_for_missing_cid_data(
 
     rcids = [c for c in cids if c in found_cids]  # to preserve order
     return QuantamentalDataFrame(df), rcids, _xcat, weights, signs
+
 
 def _check_args(
     df: QuantamentalDataFrame,

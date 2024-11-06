@@ -52,7 +52,8 @@ def view_timelines(
         cross sections to plot. Default is all in DataFrame. If this contains only one
         cross section a single line chart is created.
     intersect : bool
-        if True only retains cids that are available for all xcats. Default is False.
+        if True only retains cross-sections that are available for all categories.
+        Default is False.
     val : str
         name of column that contains the values of interest. Default is 'value'.
     cumsum : bool
@@ -71,7 +72,7 @@ def view_timelines(
         if True x-axis tick labels are added to all plots in grid. Default is False, i.e
         only the lowest row displays the labels.
     xcat_grid : bool
-        if True, shows a facet grid of line charts for each xcat for a single cross
+        if True, shows a facet grid of line charts for each category for a single cross
         section. Default is False, only one cross section is allowed with this option.
     xcat_labels : List[str]
         labels to be used for xcats. If not defined, the labels will be identical to
