@@ -8,7 +8,7 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![codecov](https://codecov.io/github/macrosynergy/macrosynergy/branch/develop/graph/badge.svg?token=BX4IKVD07R)](https://codecov.io/github/macrosynergy/macrosynergy)
 
-The Macrosynergy package supports financial market research and the development of trading strategies based on formats and conventions of the J.P. Morgan Macrosynergy  Quantamental System (JPMaQS). JPMaQS provides quantitative-fundamental (quantamental) and market data in simple daily formats in accordance with the information state of markets. The Macrosynergy package consists of five sub-packages:
+The Macrosynergy package supports financial market research and the development of trading strategies based on formats and conventions of the J.P. Morgan Macrosynergy Quantamental System (JPMaQS). JPMaQS provides quantitative-fundamental (quantamental) and market data in simple daily formats in accordance with the information state of markets. The Macrosynergy package consists of seven sub-packages:
 
 1. [download](./macrosynergy/download): interface for downloading data from JP Morgan DataQuery, with main module [jpmaqs.py](./macrosynergy/download/jpmaqs.py).
 2. [management](./macrosynergy/management): simulates, analyses and reshapes standard quantamental dataframes.
