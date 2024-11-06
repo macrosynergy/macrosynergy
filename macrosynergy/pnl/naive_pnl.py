@@ -184,21 +184,20 @@ class NaivePnL:
 
         Notes
         -----
-        When sig_op = 'zn_score_pan', raw signals are transformed into zn-scores
+        When `sig_op = "zn_score_pan"`, raw signals are transformed into zn-scores
         around a neutral value where pooled panel statistics are calculated.
 
-        When sig_op = 'zn_score_cs', raw signals are transformed into zn-scores
+        When `sig_op = "zn_score_cs"`, raw signals are transformed into zn-scores
         around a neutral value where statistics are calculated by cross section alone.
 
-        When sig_op = 'binary', transforms signals into uniform long/shorts (1/-1) across
+        When `sig_op = "binary"`, transforms signals into uniform long/shorts (1/-1) across
         all cross sections.
 
-        When sig_op = 'raw', no transformation is applied to the signal.
+        When `sig_op = "raw"`, no transformation is applied to the signal.
 
         See Also
         --------
-        macrosynergy.panel.make_zn_scores : compute zn-scores for a panel. 
-        
+        macrosynergy.panel.make_zn_scores : compute zn-scores for a panel.
         """
 
         for varx, name, typex in (
