@@ -107,7 +107,7 @@ class LinePlot(Plotter):
         **kwargs,
     ):
         """
-        Create the line plot.
+        Plot the time series data on a line plot.
 
         Parameters
         ----------

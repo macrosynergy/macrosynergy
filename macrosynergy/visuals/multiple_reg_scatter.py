@@ -1,3 +1,4 @@
+from typing import List, Tuple
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
@@ -8,30 +9,32 @@ import seaborn as sns
 
 
 def multiple_reg_scatter(
-    cat_rels,
-    ncol=0,
-    nrow=0,
-    figsize=(20, 15),
-    title="",
-    title_xadj=0.5,
-    title_yadj=0.99,
-    title_fontsize=20,
-    xlab="",
-    ylab="",
-    fit_reg=True,
-    reg_ci=95,
-    reg_order=1,
-    reg_robust=False,
-    coef_box=None,
-    coef_box_font_size=12,
-    prob_est="pool",
-    separator=None,
-    single_chart=False,
-    subplot_titles=None,
-    color_cids=False,
+    cat_rels: List[CategoryRelations],
+    ncol: int = 0,
+    nrow: int = 0,
+    figsize: Tuple[int, int] = (20, 15),
+    title: str = "",
+    title_xadj: float = 0.5,
+    title_yadj: float = 0.99,
+    title_fontsize: int = 20,
+    xlab: str = "",
+    ylab: str = "",
+    fit_reg: bool = True,
+    reg_ci: int = 95,
+    reg_order: int = 1,
+    reg_robust: bool = False,
+    coef_box: str = None,
+    coef_box_font_size: int = 12,
+    prob_est: str = "pool",
+    separator: int = None,
+    single_chart: bool = False,
+    subplot_titles: bool = None,
+    color_cids: bool = False,
 ):
     """
-    Visualize the results of a multiple regression analysis across categories.
+    Displays multiple regression scatter plots across categories. The categories are 
+    passed as a list of CategoryRelations objects, where the regression calculations 
+    take place.
 
     Parameters
     ----------
@@ -75,6 +78,9 @@ def multiple_reg_scatter(
         a grid of charts is created.
     subplot_titles : List[str]
         list of titles for each subplot. Default is None.
+    color_cids : bool
+        if True (default is False) each cross section is given a distinct color in the 
+        scatter plot.
     """
 
     sns.set_theme(style="whitegrid")
