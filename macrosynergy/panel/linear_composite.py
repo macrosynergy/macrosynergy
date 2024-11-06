@@ -303,7 +303,7 @@ def linear_composite_cid_agg(
         weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(
             level=1
         )
-        weights_df = weights_df.mul(signs, axis=1)
+        weights_df = weights_df[cids].mul(signs, axis=1)
 
     else:
         weights_series: pd.Series = pd.Series(
@@ -462,6 +462,7 @@ def _check_df_for_missing_cid_data(
     """
 
     found_cids: List[str] = df["cid"].unique().tolist()
+    found_cids = [cid for cid in cids if cid in found_cids]
     found_xcats: List[str] = df["xcat"].unique().tolist()
     found_xcats_set: Set[str] = set(found_xcats)
     wrn_msg: str = (
@@ -476,6 +477,15 @@ def _check_df_for_missing_cid_data(
                 f"Weight category {weights} not found in `df`."
                 f" Available categories are {found_xcats}."
             )
+
+    if set(cids) - set(found_cids) != set():
+        for cid in set(cids) - set(found_cids):
+            # Cids has already been removed since it uses
+            warnings.warn(f"cid {cid} not found in `df`. It will be ignored.")
+            signs.pop(cids.index(cid))
+            if isinstance(weights, list):
+                weights.pop(cids.index(cid))
+
 
     ctr = 0
     for cidx in found_cids.copy():  # copy to allow modification of `cids`
@@ -739,8 +749,8 @@ if __name__ == "__main__":
     df = QuantamentalDataFrame(df)
     lc_xcat = linear_composite(
         df=df,
-        cids=["AUD", "CAD", "GBP"],
-        xcats=["XR", "CRY", "INFL"],
+        cids=["GBP", "AUD", "CAD"],
+        xcats=["XR"],
         weights=[1, 2, 1],
         signs=[1, -1, 1],
         complete_xcats=True,

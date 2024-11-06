@@ -112,7 +112,7 @@ class TestAll(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             rdf: pd.DataFrame = linear_composite(
-                df=_test_df, xcats="XR", cids=self.cids
+                df=_test_df, xcats="XR", cids=self.cids, complete_cids=True
             )
 
         # check that passings signs as random values works
@@ -724,7 +724,7 @@ class TestAll(unittest.TestCase):
 
         df = make_test_df(cids=cids, xcats=xcats)
 
-        cids = ["AUD", "CAD", "GBP"]
+        cids = ["GBP", "CAD", "AUD"]
 
         # If complete_cids is True, then error should be thrown since not all cids are in 
         # the df
@@ -736,7 +736,7 @@ class TestAll(unittest.TestCase):
 
         aud_values = df[(df["xcat"] == "XR") & (df["cid"] == "AUD")]["value"].reset_index(drop=True).values
         cad_values = df[(df["xcat"] == "XR") & (df["cid"] == "CAD")]["value"].reset_index(drop=True).values
-        expected_values = (aud_values - 7 * cad_values) / 8
+        expected_values = (9 * aud_values - 7 * cad_values) / 16
 
         self.assertTrue(np.allclose(lc_values, expected_values))
 
@@ -760,7 +760,7 @@ class TestAll(unittest.TestCase):
         self.assertTrue(np.allclose(lc_values, expected_values))
 
     def test_complete_xcats(self):
-        cids = ["AUD", "CAD", "GBP"]
+        cids = ["GBP", "AUD", "CAD"]
         xcats = ["XR", "CRY"]
 
         df = make_test_df(cids=cids, xcats=xcats)
