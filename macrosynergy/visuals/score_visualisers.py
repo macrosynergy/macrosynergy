@@ -18,7 +18,7 @@ from macrosynergy.panel import linear_composite, make_zn_scores
 
 class ScoreVisualisers:
     """
-    Class to visualize the scores and linear composite of specified categories and
+    Class to visualize the z-scores and linear composite of specified categories and
     cross-sections.
 
     Parameters
@@ -208,6 +208,9 @@ class ScoreVisualisers:
         postfix,
         no_zn_scores,
     ):
+        """
+        Helper function to create the DataFrame with z-scores.
+        """
         if no_zn_scores:
             return reduce_df(df, xcats=xcats, cids=self.cids)
 
@@ -244,6 +247,9 @@ class ScoreVisualisers:
         horizontal_divider: bool = False,
         vertical_divider: bool = False,
     ):
+        """
+        Helper function to plot the heatmap.
+        """
         fig, ax = plt.subplots(figsize=figsize)
 
         cmap = cmap or "coolwarm_r"
@@ -428,7 +434,7 @@ class ScoreVisualisers:
         round_decimals: int = 2,
     ):
         """
-        View the evolution of the scores for the specified xcat and cids.
+        View the evolution of the scores for the specified category and cross-sections.
 
         Parameters
         ----------
@@ -566,7 +572,7 @@ class ScoreVisualisers:
         round_decimals: int = 2,
     ):
         """
-        View the evolution of the scores for the specified cid and xcats.
+        View the evolution of the scores for the specified cross-section and categories.
 
         Parameters
         ----------

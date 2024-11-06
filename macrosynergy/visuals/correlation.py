@@ -43,7 +43,7 @@ def view_correlation(
     **kwargs: Any,
 ):
     """
-    Visualize correlation across categories or cross-sections of panels.
+    Displays a correlation matrix across categories or cross-sections of panels.
 
     Parameters
     ----------
