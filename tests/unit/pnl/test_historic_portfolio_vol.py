@@ -513,7 +513,12 @@ class TestCalculatePortfolioVolatility(unittest.TestCase):
                     _calculate_portfolio_volatility(**self.good_args)
                     self.assertEqual(mock_est_var_cov.call_count, _call_count)
                     self.assertEqual(mock_downsample_returns.call_count, _call_count)
-                    self.assertEqual(mock_get_max_lookback.call_count, _call_count)
+
+                    # called len(est_freqs) times in _get_first_usable_date in _calculate_portfolio_volatility
+                    self.assertEqual(
+                        mock_get_max_lookback.call_count,
+                        _call_count + len(self.good_args["est_freqs"]),
+                    )
 
 
 class TestHistVolFunc(unittest.TestCase):

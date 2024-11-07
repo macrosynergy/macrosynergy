@@ -68,6 +68,9 @@ FFILL_LIMITS = {
     "BM": 24,
     "BQ": 64,
     "BA": 252,
+    "BME": 24,
+    "BQE": 64,
+    "BA": 252,
 }
 DAYS_PER_FREQ = FFILL_LIMITS.copy()
 

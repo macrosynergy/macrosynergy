@@ -269,7 +269,11 @@ def _get_first_usable_date(
     # for each frequency and lookback
     for lb, est_freq in zip(lback_periods, est_freqs):
         _max_lb = get_max_lookback(lb, nan_tolerance)
-        _max_lb = FFILL_LIMITS[est_freq] if _max_lb == 0 else _max_lb
+        _max_lb = (
+            FFILL_LIMITS[_map_to_business_day_frequency(est_freq)]
+            if _max_lb == 0
+            else _max_lb
+        )
         max_lb = _max_lb if _max_lb > max_lb else max_lb
 
     assert set(pivot_returns.columns.tolist()) == set(pivot_signals.columns.tolist())
