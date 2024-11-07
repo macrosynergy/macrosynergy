@@ -114,8 +114,9 @@ def _make_relative_value(
     **kwargs,
 ) -> pd.DataFrame:
     assert isinstance(df, QuantamentalDataFrame), "`df` must be a QuantamentalDataFrame"
-    df = df[df["xcat"] == sig].copy()
-    return make_relative_value(df=df, xcats=[sig], postfix="", *args, **kwargs)
+    return make_relative_value(
+        df=df[df["xcat"] == sig], xcats=[sig], postfix="", *args, **kwargs
+    )
 
 
 def _gen_contract_signals(
@@ -355,7 +356,8 @@ def contract_signals(
         raise TypeError("`df` must be a standardised quantamental dataframe")
 
     ## Standardise and copy the dataframe
-    df: pd.DataFrame = standardise_dataframe(df.copy())
+    df: pd.DataFrame = QuantamentalDataFrame(df)
+    _initialized_as_categorical: bool = df.InitializedAsCategorical
 
     ## Check the dates
     if start is None:
@@ -371,12 +373,12 @@ def contract_signals(
     df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
 
     ## Check that all cid_ctype are in the dataframe
-    expected_base_signals: List[str] = [f"{cx}_{sig}" for cx in cids]
-    found_base_signals: Set[str] = set(df["cid"] + "_" + df["xcat"])
-    if not set(expected_base_signals).issubset(found_base_signals):
+    expected_base_signals: Set[str] = set([f"{cx}_{sig}" for cx in cids])
+    found_base_signals: Set[str] = set(QuantamentalDataFrame(df).list_tickers())
+    if not (expected_base_signals).issubset(found_base_signals):
         raise ValueError(
             "Some `cids` are missing the `sig` in the provided dataframe."
-            f"\nMissing: {set(expected_base_signals) - found_base_signals}"
+            f"\nMissing: {expected_base_signals - found_base_signals}"
         )
 
     ## Check the scaling and hedging arguments
@@ -444,13 +446,15 @@ def contract_signals(
     )
 
     ## Wide to quantamental
-    df_out: pd.DataFrame = ticker_df_to_qdf(df=df_out)
+    df_out: pd.DataFrame = QuantamentalDataFrame.from_wide(df=df_out)
 
     # Append the strategy name to all the xcats
-    df_out["xcat"] = df_out["xcat"] + "_" + sname
+    df_out = df_out.rename_xcats(postfix=f"_{sname}")
 
     assert isinstance(df_out, QuantamentalDataFrame)
-    return df_out
+    return QuantamentalDataFrame(
+        df_out, _initialized_as_categorical=_initialized_as_categorical
+    ).to_original_dtypes()
 
 
 def multi_signal_contract_signals(
