@@ -1099,6 +1099,44 @@ class JPMaQSDownload(DataQueryInterface):
             If False, the data will not be overwritten.
         kwargs : dict
             any other keyword arguments.
+
+        Returns
+        -------
+        None
+            The data is saved to disk.
+
+
+        Examples
+        --------
+
+        Download all JPMaQS data to disk.
+
+        >>> with JPMaQSDownload(
+        ...     client_id=os.getenv("DQ_CLIENT_ID"),
+        ...     client_secret=os.getenv("DQ_CLIENT_SECRET"),
+        ... ) as jpmaqs:
+        ...     jpmaqs.download_all_to_disk(path="./jpmaqs-data")
+
+
+        Alternatively downloading only a custom list of expressions
+
+        >>> expressions = ['DB(JPMAQS,USD_EQXR_NSA,value)', 'DB(JPMAQS,GBP_EQXR_NSA,value)']
+        >>> with JPMaQSDownload(
+        ...     client_id=os.getenv("DQ_CLIENT_ID"),
+        ...     client_secret=os.getenv("DQ_CLIENT_SECRET"),
+        ... ) as jpmaqs:
+        ...     jpmaqs.download_all_to_disk(path="./jpmaqs-data", expressions=expressions)
+
+
+        Save each expression as a JSON
+
+        >>> with JPMaQSDownload(
+        ...     client_id=os.getenv("DQ_CLIENT_ID"),
+        ...     client_secret=os.getenv("DQ_CLIENT_SECRET"),
+        ... ) as jpmaqs:
+        ...     jpmaqs.download_all_to_disk(path="./jpmaqs-data", as_dataframe=False)
+
+
         """
 
         save_path: Optional[str] = None
