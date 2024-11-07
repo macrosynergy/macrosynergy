@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import QuantileRegressor
 
-from macrosynergy.compat import PYTHON_3_8_OR_LATER
+from macrosynergy import PYTHON_3_9_OR_LATER
 from macrosynergy.learning import (
     LADRegressor,
     SignWeightedLADRegressor,
@@ -184,7 +184,7 @@ class TestLADRegressor(unittest.TestCase):
         self.assertTrue(len(lad.coef_) == self.X.shape[1])
         self.assertTrue(isinstance(lad.intercept_, float))
         self.assertTrue(lad.intercept_ != 0)
-        if PYTHON_3_8_OR_LATER:
+        if PYTHON_3_9_OR_LATER:
             # Check the solution is close to QuantileRegressor from scikit-learn
             qr = QuantileRegressor(alpha=0, fit_intercept=True).fit(self.X, self.y)
             self.assertTrue(np.allclose(lad.coef_, qr.coef_, atol=0.01, rtol=0.01))
@@ -200,7 +200,7 @@ class TestLADRegressor(unittest.TestCase):
         self.assertTrue(len(lad.coef_) == self.X.shape[1])
         self.assertTrue(isinstance(lad.intercept_, float))
         self.assertTrue(lad.intercept_ != 0)
-        if PYTHON_3_8_OR_LATER:
+        if PYTHON_3_9_OR_LATER:
             # Check the solution is close to QuantileRegressor from scikit-learn
             qr = QuantileRegressor(alpha=0, fit_intercept=True).fit(
                 self.X.values, self.y.values
@@ -219,7 +219,7 @@ class TestLADRegressor(unittest.TestCase):
         self.assertTrue(isinstance(lad.coef_, np.ndarray))
         self.assertTrue(len(lad.coef_) == self.X.shape[1])
         self.assertTrue(lad.intercept_ == 0)
-        if PYTHON_3_8_OR_LATER:
+        if PYTHON_3_9_OR_LATER:
             qr = QuantileRegressor(alpha=0, fit_intercept=False).fit(self.X, self.y)
             self.assertTrue(np.allclose(lad.coef_, qr.coef_, atol=0.01, rtol=0.01))
             np.testing.assert_almost_equal(lad.intercept_, qr.intercept_, decimal=2)
@@ -261,7 +261,7 @@ class TestLADRegressor(unittest.TestCase):
         self.assertTrue(len(lad1.coef_) == self.X.shape[1])
         self.assertTrue(isinstance(lad1.intercept_, float))
         self.assertTrue(lad1.intercept_ != 0)
-        if PYTHON_3_8_OR_LATER:
+        if PYTHON_3_9_OR_LATER:
             qr = QuantileRegressor(alpha=2 * self.X.shape[0], fit_intercept=True).fit(
                 self.X, self.y
             )
@@ -500,7 +500,7 @@ class TestSignWeightedLADRegression(unittest.TestCase):
         self.assertTrue(len(lad.coef_) == self.X.shape[1])
         self.assertTrue(isinstance(lad.intercept_, float))
         self.assertTrue(lad.intercept_ != 0)
-        if PYTHON_3_8_OR_LATER:
+        if PYTHON_3_9_OR_LATER:
             # Check the solution is close to QuantileRegressor from scikit-learn
             qr = QuantileRegressor(alpha=0, fit_intercept=True).fit(
                 self.X, self.y, sample_weight=self.sign_weights
@@ -518,7 +518,7 @@ class TestSignWeightedLADRegression(unittest.TestCase):
         self.assertTrue(len(lad.coef_) == self.X.shape[1])
         self.assertTrue(isinstance(lad.intercept_, float))
         self.assertTrue(lad.intercept_ != 0)
-        if PYTHON_3_8_OR_LATER:
+        if PYTHON_3_9_OR_LATER:
             # Check the solution is close to QuantileRegressor from scikit-learn
             qr = QuantileRegressor(alpha=0, fit_intercept=True).fit(
                 self.X.values, self.y.values, sample_weight=self.sign_weights
@@ -537,7 +537,7 @@ class TestSignWeightedLADRegression(unittest.TestCase):
         self.assertTrue(isinstance(lad.coef_, np.ndarray))
         self.assertTrue(len(lad.coef_) == self.X.shape[1])
         self.assertTrue(lad.intercept_ == 0)
-        if PYTHON_3_8_OR_LATER:
+        if PYTHON_3_9_OR_LATER:
             qr = QuantileRegressor(alpha=0, fit_intercept=False).fit(
                 self.X, self.y, sample_weight=self.sign_weights
             )
@@ -558,7 +558,7 @@ class TestSignWeightedLADRegression(unittest.TestCase):
         self.assertTrue(len(lad1.coef_) == self.X.shape[1])
         self.assertTrue(isinstance(lad1.intercept_, float))
         self.assertTrue(lad1.intercept_ != 0)
-        if PYTHON_3_8_OR_LATER:
+        if PYTHON_3_9_OR_LATER:
             qr = QuantileRegressor(alpha=2 * self.X.shape[0], fit_intercept=True).fit(
                 self.X, self.y, sample_weight=self.sign_weights
             )
@@ -818,7 +818,7 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
         self.assertTrue(len(lad.coef_) == self.X.shape[1])
         self.assertTrue(isinstance(lad.intercept_, float))
         self.assertTrue(lad.intercept_ != 0)
-        if PYTHON_3_8_OR_LATER:
+        if PYTHON_3_9_OR_LATER:
             # Check the solution is close to QuantileRegressor from scikit-learn
             qr = QuantileRegressor(alpha=0, fit_intercept=True).fit(
                 self.X, self.y, self.time_weights
@@ -837,7 +837,7 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
         self.assertTrue(isinstance(lad.coef_, np.ndarray))
         self.assertTrue(len(lad.coef_) == self.X.shape[1])
         self.assertTrue(lad.intercept_ == 0)
-        if PYTHON_3_8_OR_LATER:
+        if PYTHON_3_9_OR_LATER:
             qr = QuantileRegressor(alpha=0, fit_intercept=False).fit(
                 self.X, self.y, sample_weight=self.time_weights
             )
@@ -858,7 +858,7 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
         self.assertTrue(len(lad1.coef_) == self.X.shape[1])
         self.assertTrue(isinstance(lad1.intercept_, float))
         self.assertTrue(lad1.intercept_ != 0)
-        if PYTHON_3_8_OR_LATER:
+        if PYTHON_3_9_OR_LATER:
             qr = QuantileRegressor(alpha=2 * self.X.shape[0], fit_intercept=True).fit(
                 self.X, self.y, sample_weight=self.time_weights
             )

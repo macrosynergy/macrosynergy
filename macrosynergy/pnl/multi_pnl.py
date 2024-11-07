@@ -193,16 +193,16 @@ class MultiPnL:
         """
         Returns a DataFrame containing the following evaluation metrics for specified PnLs:
 
-        Return %
-        St. Dev. %
-        Sharpe Ratio
-        Sortino Ratio
-        Max 21-Day Draw %
-        Max 6-Month Draw %
-        Peak to Trough Draw %
-        Top 5% Monthly PnL Share
-        Traded Months
-        Correlation with benchmarks (if available)
+        - Return %
+        - St. Dev. %
+        - Sharpe Ratio
+        - Sortino Ratio
+        - Max 21-Day Draw %
+        - Max 6-Month Draw %
+        - Peak to Trough Draw %
+        - Top 5% Monthly PnL Share
+        - Traded Months
+        - Correlation with benchmarks (if available)
 
         .. note::
             The evaluation metrics are calculated in a manner similar to NaivePnL's `evaluate_pnls()`.
