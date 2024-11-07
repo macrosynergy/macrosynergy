@@ -1,6 +1,5 @@
 """
-Module with functionality for generating mock 
-quantamental data for testing purposes.
+Module with functionality for generating mock quantamental data for testing purposes.
 """
 
 import numpy as np
@@ -23,13 +22,22 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
     """
     Create an auto-correlated data-series as numpy array.
 
-    :param <int> nobs: number of observations.
-    :param <float> mean: mean of values, default is zero.
-    :param <float> sd_mult: standard deviation multipliers of values, default is 1.
-        This affects non-zero means.
-    :param <float> ar_coef: autoregression coefficient (between 0 and 1): default is 0.75.
+    Parameters
+    ----------
+    nobs : int
+        number of observations.
+    mean : float
+        mean of values, default is zero.
+    sd_mult : float
+        standard deviation multipliers of values, default is 1. This affects non-zero
+        means.
+    ar_coef : float
+        autoregression coefficient (between 0 and 1): default is 0.75.
 
-    :return <np.ndarray>: autocorrelated data series.
+    Returns
+    -------
+    np.ndarray
+        autocorrelated data series.
     """
 
     # Define relative parameters for creating an AR process.
@@ -46,14 +54,24 @@ def dataframe_generator(
     """
     Adjacent method used to construct the quantamental DataFrame.
 
-    :param <pd.DataFrame> df_cids:
-    :param <pd.DataFrame> df_xcats:
-    :param <str> cid: individual cross-section.
-    :param <str> xcat: individual category.
+    Parameters
+    ----------
+    df_cids : pd.DataFrame
 
-    :return <Tuple[pd.DataFrame, pd.DatetimeIndex]>: Tuple containing
-        the quantamental DataFrame and a DatetimeIndex of the business days.
+    df_xcats : pd.DataFrame
+
+    cid : str
+        individual cross-section.
+    xcat : str
+        individual category.
+
+    Returns
+    -------
+    Tuple[pd.DataFrame, pd.DatetimeIndex]
+        Tuple containing the quantamental DataFrame and a DatetimeIndex of the business
+        days.
     """
+
     qdf_cols = ["cid", "xcat", "real_date", "value"]
 
     sdate = pd.to_datetime(
@@ -77,29 +95,32 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     """
     Make quantamental DataFrame with basic columns: 'cid', 'xcat', 'real_date', 'value'.
 
-    :param <pd.DataFrame> df_cids: DataFrame with parameters by cid. Row indices are
-        cross-sections. Columns are:
+    Parameters
+    ----------
+    df_cids : pd.DataFrame
+        DataFrame with parameters by cid. Row indices are cross-sections. Columns are:
         'earliest': string of earliest date (ISO) for which country values are available;
         'latest': string of latest date (ISO) for which country values are available;
-        'mean_add': float of country-specific addition to any category's mean;
-        'sd_mult': float of country-specific multiplier of an category's standard
-            deviation.
-    :param <pd.DataFrame> df_xcats: dataframe with parameters by xcat. Row indices are
-        cross-sections. Columns are:
-        'earliest': string of earliest date (ISO) for which category values are
-        available;
+        'mean_add': float of country-specific addition to any category's mean; 'sd_mult':
+        float of country-specific multiplier of an category's standard deviation.
+    df_xcats : pd.DataFrame
+        dataframe with parameters by xcat. Row indices are cross-sections. Columns are:
+        'earliest': string of earliest date (ISO) for which category values are available;
         'latest': string of latest date (ISO) for which category values are available;
-        'mean_add': float of category-specific addition;
-        'sd_mult': float of country-specific multiplier of an category's standard
-        deviation;
-        'ar_coef': float between 0 and 1 denoting set auto-correlation of the category;
-        'back_coef': float, coefficient with which communal (mean 0, SD 1) background
-        factor is added to category values.
-    :param <float> back_ar: float between 0 and 1 denoting set auto-correlation of the
-        background factor. Default is zero.
+        'mean_add': float of category-specific addition; 'sd_mult': float of country-
+        specific multiplier of an category's standard deviation; 'ar_coef': float between 0
+        and 1 denoting set auto-correlation of the category; 'back_coef': float, coefficient
+        with which communal (mean 0, SD 1) background factor is added to category values.
+    back_ar : float
+        float between 0 and 1 denoting set auto-correlation of the background factor.
+        Default is zero.
 
-    :return <pd.DataFrame>: basic quantamental DataFrame according to specifications.
+    Returns
+    -------
+    pd.DataFrame
+        basic quantamental DataFrame according to specifications.
     """
+
     df_list = []
 
     if any(df_xcats["back_coef"] != 0):
@@ -140,37 +161,40 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
 def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict):
     """
     Make quantamental DataFrame with basic columns: 'cid', 'xcat', 'real_date', 'value'.
-    In this DataFrame the column, 'value', will consist of Binary Values denoting whether
-    the cross-section is active for the corresponding dates.
+    In this DataFrame the column, 'value', will consist of Binary Values denoting
+    whether the cross-section is active for the corresponding dates.
 
-    :param <pd.DataFrame> df_cids: dataframe with parameters by cid. Row indices are
-        cross-sections. Columns are:
-    'earliest': string of earliest date (ISO) for which country values are available;
-    'latest': string of latest date (ISO) for which country values are available;
-    'mean_add': float of country-specific addition to any category's mean;
-    'sd_mult': float of country-specific multiplier of an category's standard deviation.
-    :param <pd.DataFrame> df_xcats: dataframe with parameters by xcat. Row indices are
-        cross-sections. Columns are:
-    'earliest': string of earliest date (ISO) for which category values are available;
-    'latest': string of latest date (ISO) for which category values are available;
-    'mean_add': float of category-specific addition;
-    'sd_mult': float of country-specific multiplier of an category's standard deviation;
-    'ar_coef': float between 0 and 1 denoting set autocorrelation of the category;
-    'back_coef': float, coefficient with which communal (mean 0, SD 1) background
-        factor is added to categoy values.
-    :param <dict> blackout: Dictionary defining the blackout periods for each cross-
-        section. The expected form of the dictionary is:
-        {'AUD': (Timestamp('2000-01-13 00:00:00'), Timestamp('2000-01-13 00:00:00')),
-        'USD_1': (Timestamp('2000-01-03 00:00:00'), Timestamp('2000-01-05 00:00:00')),
-        'USD_2': (Timestamp('2000-01-09 00:00:00'), Timestamp('2000-01-10 00:00:00')),
-        'USD_3': (Timestamp('2000-01-12 00:00:00'), Timestamp('2000-01-12 00:00:00'))}
-        The values of the dictionary are tuples consisting of the start & end-date of the
-        respective blackout period. Each cross-section could have potentially more than
-        one blackout period on a single category, and subsequently each key will be
-        indexed to indicate the number of periods.
+    Parameters
+    ----------
+    df_cids : pd.DataFrame
+        dataframe with parameters by cid. Row indices are cross-sections. Columns are:
+        'earliest': string of earliest date (ISO) for which country values are available;
+        'latest': string of latest date (ISO) for which country values are available;
+        'mean_add': float of country-specific addition to any category's mean; 'sd_mult':
+        float of country-specific multiplier of an category's standard deviation.
+    df_xcats : pd.DataFrame
+        dataframe with parameters by xcat. Row indices are cross-sections. Columns are:
+        'earliest': string of earliest date (ISO) for which category values are available;
+        'latest': string of latest date (ISO) for which category values are available;
+        'mean_add': float of category-specific addition; 'sd_mult': float of country-
+        specific multiplier of an category's standard deviation; 'ar_coef': float between 0
+        and 1 denoting set autocorrelation of the category; 'back_coef': float, coefficient
+        with which communal (mean 0, SD 1) background factor is added to categoy values.
+    blackout : dict
+        Dictionary defining the blackout periods for each cross- section. The expected
+        form of the dictionary is: {'AUD': (Timestamp('2000-01-13 00:00:00'),
+        Timestamp('2000-01-13 00:00:00')), 'USD_1': (Timestamp('2000-01-03 00:00:00'),
+        Timestamp('2000-01-05 00:00:00')), 'USD_2': (Timestamp('2000-01-09 00:00:00'),
+        Timestamp('2000-01-10 00:00:00')), 'USD_3': (Timestamp('2000-01-12 00:00:00'),
+        Timestamp('2000-01-12 00:00:00'))} The values of the dictionary are tuples
+        consisting of the start & end-date of the respective blackout period. Each cross-
+        section could have potentially more than one blackout period on a single category,
+        and subsequently each key will be indexed to indicate the number of periods.
 
-    :return <pd.DataFrame>: basic quantamental DataFrame according to specifications with
-        binary values.
+    Returns
+    -------
+    pd.DataFrame
+        basic quantamental DataFrame according to specifications with binary values.
     """
 
     df_list = []
@@ -236,19 +260,24 @@ def generate_lines(sig_len: int, style: str = "linear") -> Union[np.ndarray, Lis
     Returns a numpy array of a line with a given length.
 
     Parameters
-    :param <int> sig_len: The number of elements in the returned array.
-    :param <str> style: The style of the line. Default `'linear'`. Current choices are:
-        `linear`, `decreasing-linear`, `sharp-hill`, `four-bit-sine`, `sine`, `cosine`,
-        `sawtooth`. Adding `"inv"` or "inverted" to the style will return
-        the inverted version of that line. For example, `'inv-sawtooth'` or `'inverted
-        sawtooth'` will return the inverted sawtooth line. `'any'` will return a random
-        line. `'all'` will return a list of all the available styles.
+    ----------
+    sig_len : int
+        The number of elements in the returned array.
+    style : str
+        The style of the line. Default `'linear'`. Current choices are: `linear`,
+        `decreasing-linear`, `sharp-hill`, `four-bit-sine`, `sine`, `cosine`, `sawtooth`.
+        Adding `"inv"` or "inverted" to the style will return the inverted version of that
+        line. For example, `'inv-sawtooth'` or `'inverted sawtooth'` will return the
+        inverted sawtooth line. `'any'` will return a random line. `'all'` will return a
+        list of all the available styles.
 
-    :return <Union[np.ndarray, List[str]]>: A numpy array of the line. If `style` is
-        `'all'`, then a list (of strings) of all the available styles is returned.
-
-    NOTE: It is indeed request an `"inverted linear"` or `"inverted decreasing-linear"`
-    line. They're just there for completeness and readability.
+    Returns
+    -------
+    Union[np.ndarray, List[str]]
+        A numpy array of the line. If `style` is `'all'`, then a list (of strings) of
+        all the available styles is returned.  NOTE: It is indeed request an `"inverted
+        linear"` or `"inverted decreasing-linear"` line. They're just there for completeness
+        and readability.
     """
 
     def _sawtooth(sig_len: int) -> np.ndarray:
@@ -334,27 +363,33 @@ def make_test_df(
     style: str = "any",
 ) -> QuantamentalDataFrame:
     """
-    Generates a test dataframe with pre-defined values.
-    These values are meant to be used for testing purposes only.
-    The functions generates a standard quantamental dataframe with
-    where the value column is populated with pre-defined values.
-    These values are simple lines, or waves that are easy to identify
-    and differentiate in a plot.
+    Generates a test dataframe with pre-defined values. These values are meant to be
+    used for testing purposes only. The functions generates a standard quantamental
+    dataframe with where the value column is populated with pre-defined values. These
+    values are simple lines, or waves that are easy to identify and differentiate in a
+    plot.
 
     Parameters
-
-    :param <List[str]> cids: A list of strings for cids.
-    :param <List[str]> xcats: A list of strings for xcats.
-    :param <List[str]> tickers: A list of strings for tickers. If provided, `cids` and
-        `xcats` will be ignored.
-    :param <List[str]> metrics: A list of strings for metrics.
-    :param <str> start: An ISO-formatted date string.
-    :param <str> end: An ISO-formatted date string.
-    :param <str> style: A string that specifies the type of line to generate.
-        Current choices are: 'linear', 'decreasing-linear', 'sharp-hill',
-        'four-bit-sine', 'sine', 'cosine', 'sawtooth', 'any'. See
+    ----------
+    cids : List[str]
+        A list of strings for cids.
+    xcats : List[str]
+        A list of strings for xcats.
+    tickers : List[str]
+        A list of strings for tickers. If provided, `cids` and `xcats` will be ignored.
+    metrics : List[str]
+        A list of strings for metrics.
+    start : str
+        An ISO-formatted date string.
+    end : str
+        An ISO-formatted date string.
+    style : str
+        A string that specifies the type of line to generate. Current choices are:
+        'linear', 'decreasing-linear', 'sharp-hill', 'four-bit-sine', 'sine', 'cosine',
+        'sawtooth', 'any'. See
         `macrosynergy.management.simulate.simulate_quantamental_data.generate_lines()`.
     """
+
     ## Check the inputs
     if isinstance(cids, str):
         cids = [cids]

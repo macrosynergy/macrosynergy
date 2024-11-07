@@ -72,7 +72,8 @@ class TestAll(unittest.TestCase):
             {"end": 1},
             {"xcats": ["foo"]},
             {"cids": ["bar"]},
-            {"cids": [self.cids[0], "foo"]},
+            {"cids": [self.cids[0], "foo"], "complete_cids": True},
+            {"xcats": [self.xcats[0], "foo"], "complete_xcats": True},
             {"xcats": self.xcats[0], "weights": "foo"},
             {"weights": "foo"},
             {"weights": [1] * 100},
@@ -111,7 +112,7 @@ class TestAll(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             rdf: pd.DataFrame = linear_composite(
-                df=_test_df, xcats="XR", cids=self.cids
+                df=_test_df, xcats="XR", cids=self.cids, complete_cids=True
             )
 
         # check that passings signs as random values works
@@ -717,6 +718,69 @@ class TestAll(unittest.TestCase):
         expc_end = "XR:  ['AUD', 'CAD', 'GBP']"
         self.assertTrue(err_str.split("\n")[-1] == expc_end)
 
+    def test_complete_cids(self):
+        cids = ["AUD", "CAD"]
+        xcats = ["XR", "CRY", "INFL"]
+
+        df = make_test_df(cids=cids, xcats=xcats)
+
+        cids = ["GBP", "CAD", "AUD"]
+
+        # If complete_cids is True, then error should be thrown since not all cids are in 
+        # the df
+        with self.assertRaises(ValueError):
+            lc_df = linear_composite(df=df, cids=cids, xcats=xcats, complete_cids=True)
+
+        lc_df = linear_composite(df=df, cids=cids, xcats="XR", weights=[1, 7, 9], signs=[1, -1, 1], complete_cids=False)
+        lc_values = lc_df["value"].values
+
+        aud_values = df[(df["xcat"] == "XR") & (df["cid"] == "AUD")]["value"].reset_index(drop=True).values
+        cad_values = df[(df["xcat"] == "XR") & (df["cid"] == "CAD")]["value"].reset_index(drop=True).values
+        expected_values = (9 * aud_values - 7 * cad_values) / 16
+
+        self.assertTrue(np.allclose(lc_values, expected_values))
+
+        # Test when weight is a category
+
+        # Initially ensure that an error is thrown if a cid doesn't exist for the weight category
+        df_1 = df[~((df["xcat"] == "INFL") & (df["cid"] == "AUD"))].reset_index(drop=True)
+
+        with self.assertRaises(ValueError):
+            lc_df = linear_composite(df=df_1, cids=cids, xcats=xcats, weights="INFL")
+
+        lc_df = linear_composite(df=df, cids=cids, xcats="XR", weights="INFL", signs=[1, -1, 1], complete_cids=False)
+        lc_values = lc_df["value"].values
+
+        aud_values = df[(df["xcat"] == "XR") & (df["cid"] == "AUD")]["value"].reset_index(drop=True).values
+        cad_values = df[(df["xcat"] == "XR") & (df["cid"] == "CAD")]["value"].reset_index(drop=True).values
+        aud_infl_values = df[(df["xcat"] == "INFL") & (df["cid"] == "AUD")]["value"].reset_index(drop=True).values
+        cad_infl_values = df[(df["xcat"] == "INFL") & (df["cid"] == "CAD")]["value"].reset_index(drop=True).values
+        expected_values = (aud_values * aud_infl_values - cad_values * cad_infl_values) / (aud_infl_values + cad_infl_values)
+
+        self.assertTrue(np.allclose(lc_values, expected_values))
+
+    def test_complete_xcats(self):
+        cids = ["GBP", "AUD", "CAD"]
+        xcats = ["XR", "CRY"]
+
+        df = make_test_df(cids=cids, xcats=xcats)
+
+        xcats = ["XR", "CRY", "INFL"]
+
+        # If complete_xcats is True, then error should be thrown since not all xcats are 
+        # in the df
+
+        with self.assertRaises(ValueError):
+            lc_df = linear_composite(df=df, cids=cids, xcats=xcats, complete_xcats=True)
+
+        lc_df = linear_composite(df=df, cids=cids, xcats=xcats, weights=[4, 3, 9], signs=[1, -1, 1], complete_xcats=False)
+        lc_values = lc_df["value"].values
+
+        xr_values = df[(df["xcat"] == "XR")]["value"].reset_index(drop=True).values
+        cry_values = df[(df["xcat"] == "CRY")]["value"].reset_index(drop=True).values
+        expected_values = (4 * xr_values - 3 * cry_values) / 7
+
+        self.assertTrue(np.allclose(lc_values, expected_values))
 
 if __name__ == "__main__":
     unittest.main()
