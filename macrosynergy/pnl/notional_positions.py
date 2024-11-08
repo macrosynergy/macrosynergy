@@ -49,12 +49,12 @@ def _apply_slip(
     if slip == 0:
         return df
     else:
-        ticker_series: pd.Series = df["cid"] + "_" + df["xcat"]
-        cdf: pd.DataFrame = df[ticker_series.str.startswith(tuple(fids))].copy()
-        tickers: List[str] = list(set(cdf["cid"] + "_" + cdf["xcat"]))
+        cdf = QuantamentalDataFrame(df)
+        filter_tickers = [tk for tk in cdf.list_tickers() if tk.startswith(tuple(fids))]
+        cdf = cdf.reduce_df_by_ticker(tickers=filter_tickers)
         return apply_slip_util(
             df=cdf,
-            tickers=tickers,
+            tickers=filter_tickers,
             slip=slip,
             raise_error=False,
             metrics=["value"],
@@ -342,6 +342,10 @@ def notional_positions(
         if isinstance(varx, (str, list, dict)) and len(varx) == 0:
             raise ValueError(f"`{namex}` must not be an empty {str(typex)}.")
 
+    ## Convert df to QDF
+    df: QuantamentalDataFrame = QuantamentalDataFrame(df)
+    _initialized_as_categorical: bool = df.InitializedAsCategorical
+
     ## Volatility targeting and leverage cannot be applied at the same time
     if bool(leverage) and bool(vol_target):
         raise ValueError(
@@ -359,11 +363,14 @@ def notional_positions(
             raise ValueError(f"`{nx}` must be a valid ISO-8601 date string")
 
     ## Reduce the dataframe
-    df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
+    df: QuantamentalDataFrame = reduce_df(
+        df=df, start=start, end=end, blacklist=blacklist
+    )
 
     ## Check the contract identifiers and contract signals
 
-    df["ticker"] = df["cid"] + "_" + df["xcat"]
+    # df["ticker"] = df["cid"] + "_" + df["xcat"]
+    df = QuantamentalDataFrame(df).add_ticker_column()
 
     # There must be atleast one contract signal with the strategy name
     if not any(df["ticker"].str.endswith(f"_CSIG_{sname}")):
@@ -385,7 +392,8 @@ def notional_positions(
     )
 
     # TODO why pivot it out to a wide format?
-    df_wide = qdf_to_ticker_df(df)
+    # df_wide = qdf_to_ticker_df(df)
+    df_wide = QuantamentalDataFrame(df=df).to_wide()
     return_df = None
     if leverage:
         return_df: pd.DataFrame = _leverage_positions(
@@ -420,7 +428,10 @@ def notional_positions(
     return_pvol = return_pvol and (locals().get("pvol") is not None)
     return_vcv = return_vcv and (locals().get("vcv_df") is not None)
 
-    return_df = ticker_df_to_qdf(df=return_df).dropna()
+    # return_df = ticker_df_to_qdf(df=return_df).dropna()
+    return_df = QuantamentalDataFrame.from_wide(
+        df=return_df, categorical=_initialized_as_categorical
+    )
     if return_pvol and return_vcv:
         return (return_df, pvol, vcv_df)
     elif return_pvol:

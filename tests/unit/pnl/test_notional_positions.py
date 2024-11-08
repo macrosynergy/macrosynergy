@@ -96,7 +96,9 @@ class TestNotionalPositions(unittest.TestCase):
         fids = [f"{cid}_{fcat}" for cid in cids for fcat in fcats]
         removed_fid = fids.pop(np.random.randint(len(fids)))
         result = _apply_slip(df=tdf, slip=4, fids=fids)
-        out_tickers: List[str] = sorted(set(result["cid"] + "_" + result["xcat"]))
+        out_tickers: List[str] = sorted(
+            set(result["cid"].astype("object") + "_" + result["xcat"].astype("object"))
+        )
         self.assertTrue(removed_fid not in out_tickers)
         self.assertIsInstance(result, QuantamentalDataFrame)
 

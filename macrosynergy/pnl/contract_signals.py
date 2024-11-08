@@ -408,14 +408,12 @@ def contract_signals(
         df = update_df(df=df, df_add=rel_signals)
 
     ## Cast the dataframe to wide format
-    df_wide: pd.DataFrame = qdf_to_ticker_df(df)
+    df_wide: pd.DataFrame = QuantamentalDataFrame(df=df).to_wide()
 
     ## Check rebal_freq or downsample the dataframe
     # df_wide: pd.DataFrame = _check_estimation_frequency(
     #     df_wide=df_wide, rebal_freq=rebal_freq
     # )
-
-    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
 
     ## Generate primary contract signals
     df_contract_signals: pd.DataFrame = _gen_contract_signals(
@@ -501,6 +499,9 @@ def multi_signal_contract_signals(
         "sname": str,
     }
 
+    df = QuantamentalDataFrame(df)
+    _initialized_as_categorical: bool = df.InitializedAsCategorical
+
     type_error_msg: str = "{} must be <{}> not <{}>"
     value_error_msg: str = "{} must not be an empty {}"
     for k, v in common_args.items():
@@ -529,7 +530,6 @@ def multi_signal_contract_signals(
     # the awkward syntax **{**a, **b} is used to update left dict values with right dict values
     # to avoid conflicts in the keys of the two dictionaries
 
-    df = pd.DataFrame()
     for dict_args in contract_dicts.values():
         df = pd.concat(
             [
@@ -538,7 +538,9 @@ def multi_signal_contract_signals(
             ],
             axis=0,
         )
-    return standardise_dataframe(df)
+    return QuantamentalDataFrame(
+        df, _initialized_as_categorical=_initialized_as_categorical
+    ).to_original_dtypes()
 
 
 if __name__ == "__main__":
