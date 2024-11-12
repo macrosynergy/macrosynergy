@@ -16,21 +16,11 @@ import warnings
 
 import functools
 from typing import Dict, List, Optional
-from typing import (
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Tuple,
-    Any,
-    Union,
-)
+from typing import Callable, Tuple, Any, Union
 from numbers import Number
 
 import numpy as np
 import pandas as pd
-import seaborn as sns, matplotlib.pyplot as plt
 from macrosynergy.panel.historic_vol import expo_weights
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.management.constants import FFILL_LIMITS, ANNUALIZATION_FACTORS
@@ -41,9 +31,7 @@ from macrosynergy.management.utils import (
     reduce_df,
     standardise_dataframe,
     ticker_df_to_qdf,
-    _map_to_business_day_frequency,
 )
-from macrosynergy.panel.historic_vol import expo_weights
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
 
@@ -236,7 +224,7 @@ def _calc_vol_tuple(
     s.loc[idx_mask] = 0
     vcv_df.loc[idx_mask, :] = 0
     vcv_df.loc[:, idx_mask] = 0
-    assert not vcv_df.isna().any().any(), f"N/A values in variance-covariance matrix!\n"
+    assert not vcv_df.isna().any().any(), "N/A values in variance-covariance matrix!\n"
 
     pvol: float = np.sqrt(s.T.dot(vcv_df).dot(s))
     return date, pvol
