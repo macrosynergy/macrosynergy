@@ -2,20 +2,12 @@
 Module for calculating an approximate nominal PnL under consideration of transaction costs.
 """
 
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-from typing import List, Union, Tuple, Optional, Dict, Callable
+from typing import List, Union, Tuple, Optional, Dict
 from numbers import Number
 import warnings
-from macrosynergy.management.simulate import make_test_df
-from macrosynergy.download.transaction_costs import download_transaction_costs
 from macrosynergy.management.utils import (
     reduce_df,
-    get_cid,
-    get_xcat,
     ticker_df_to_qdf,
     standardise_dataframe,
     qdf_to_ticker_df,
@@ -206,7 +198,7 @@ def _pnl_excl_costs(
     # Actual PNL calculation
     pnl_df = (pivot_returns / 100) * pivot_pos.shift(1) * prices_df.shift(1)
     # Drop rows with no pnl
-    nan_count_rows = pnl_df.isna().all(axis=1).sum()
+    # nan_count_rows = pnl_df.isna().all(axis=1).sum()
     pnl_df = pnl_df.loc[pnl_df.abs().sum(axis=1) > 0]
     pnl_df.columns = [f"{col}_{spos}_{pnl_name}" for col in pnl_df.columns]
     return pnl_df
@@ -341,8 +333,10 @@ def _apply_trading_costs(
 
         out_df[pnl_col] = out_df[pnl_col].sub(tc_wide_df[tc_col], fill_value=0)
 
-    rename_pnl = lambda x: str(x).replace(f"_{spos}_{pnl_name}", f"_{spos}_{pnle_name}")
-    out_df = out_df.rename(columns=rename_pnl)
+    def __rename_pnl(x: str) -> str:
+        return str(x).replace(f"_{spos}_{pnl_name}", f"_{spos}_{pnle_name}")
+
+    out_df = out_df.rename(columns=lambda x: __rename_pnl(x))
 
     return out_df
 
@@ -595,10 +589,16 @@ def plot_pnl(
     """
     df_wide = qdf_to_ticker_df(df)
     df_wide = df_wide.loc[:, df_wide.columns.str.startswith(portfolio_name + "_")]
-    _ewcols = lambda x: df_wide.columns[df_wide.columns.str.endswith(x)].tolist()
-    pnl_cols = _ewcols(pnl_name)
-    pnle_cols = _ewcols(pnl_name + "e")
-    tc_cols = _ewcols(tc_name)
+
+    # _ewcols = lambda x: df_wide.columns[df_wide.columns.str.endswith(x)].tolist()
+    def _endswith_cols(x: str) -> List[str]:
+        return df_wide.columns[df_wide.columns.str.endswith(x)].tolist()
+
+    pnl_cols = _endswith_cols(pnl_name)
+    pnle_cols = _endswith_cols(pnl_name + "e")
+    tc_cols = _endswith_cols(tc_name)
+
+
     df_wide = df_wide[pnl_cols + pnle_cols + tc_cols]
     assert len(pnl_cols) == len(pnle_cols) == len(tc_cols) == 1
     if cumsum:
@@ -613,9 +613,10 @@ def plot_pnl(
 
 
 if __name__ == "__main__":
-    import macrosynergy.management as msm
     import macrosynergy.visuals as msv
-    import os, pickle
+    import os
+
+    import pickle
 
     cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
     cids_dmec = ["DEM", "ESP", "FRF", "ITL"]

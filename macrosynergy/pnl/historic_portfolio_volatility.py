@@ -29,8 +29,8 @@ from macrosynergy.management.utils import (
     get_sops,
     is_valid_iso_date,
     reduce_df,
-    standardise_dataframe,
-    ticker_df_to_qdf,
+    # standardise_dataframe,
+    # ticker_df_to_qdf,
 )
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
@@ -574,6 +574,24 @@ def _check_est_args(
     return est_freqs, est_weights, lback_periods, half_life
 
 
+def add_fid_column(df: QuantamentalDataFrame, rstring: str) -> QuantamentalDataFrame:
+    """Add financial identifier (fid) to DataFrame."""
+    df["fid"] = (
+        df["cid"].astype(str)
+        + "_"
+        + df["xcat"]
+        .str.split("_")
+        .map(
+            lambda x: (
+                x[0][: -len(rstring.split("_")[0])]
+                if x[0].endswith(rstring.split("_")[0])
+                else x[0]
+            )
+        )
+    )
+    return df
+
+
 def historic_portfolio_vol(
     df: pd.DataFrame,
     sname: str,
@@ -701,7 +719,7 @@ def historic_portfolio_vol(
     )
 
     ## Standardize and copy DF
-    df: pd.DataFrame = standardise_dataframe(df.copy())
+    df = QuantamentalDataFrame(df)
     rebal_freq = _map_to_business_day_frequency(rebal_freq)
     est_freqs: List[str] = [_map_to_business_day_frequency(freq) for freq in est_freqs]
 
@@ -718,26 +736,14 @@ def historic_portfolio_vol(
 
     ## Reduce the dataframe
     df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
-    df["ticker"] = df["cid"] + "_" + df["xcat"]
-    u_tickers: List[str] = list(df["ticker"].unique())
+    df = QuantamentalDataFrame(df).add_ticker_column()
+    u_tickers: List[str] = df.list_tickers()
 
     ## Check for missing data
     _check_missing_data(df=df, sname=sname, fids=fids, rstring=rstring)
 
     # Add financial identifier (fid) to DataFrame
-    df["fid"] = (
-        df["cid"]
-        + "_"
-        + df["xcat"]
-        .str.split("_")
-        .map(
-            lambda x: (
-                x[0][: -len(rstring.split("_")[0])]
-                if x[0].endswith(rstring.split("_")[0])
-                else x[0]
-            )
-        )
-    )
+    df = add_fid_column(df=df, rstring=rstring)
 
     ## Filter out data-frame and select contract signals (CSIG) and returns (XR)
     filt_csigs: List[str] = [tx for tx in u_tickers if tx.endswith(f"_CSIG_{sname}")]
@@ -771,7 +777,7 @@ def historic_portfolio_vol(
 
     assert len(result) == 1 + int(return_variance_covariance)
 
-    result[0] = ticker_df_to_qdf(df=result[0])
+    result[0] = QuantamentalDataFrame.from_wide(df=result[0])
     if return_variance_covariance:
         return result[0], result[1]
     return result[0]
