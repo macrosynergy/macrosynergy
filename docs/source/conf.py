@@ -61,12 +61,12 @@ html_theme_options = {
         {
             "rel": "icon",
             "sizes": "300x300",
-            "href": "https://macrosynergy.com/wp-content/uploads/2022/10/macrosynergy-logo-favicon-300x300.png",
+            "href": "https://macrosynergy.com/wp-content/uploads/2024/02/macrosynergy-logo-favicon-300x300.png",
         },
         {
             "rel": "apple-touch-icon",
             "sizes": "300x300",
-            "href": "https://macrosynergy.com/wp-content/uploads/2022/10/macrosynergy-logo-favicon-300x300.png",
+            "href": "https://macrosynergy.com/wp-content/uploads/2024/02/macrosynergy-logo-favicon-300x300.png",
         },
     ],
     "icon_links": [
