@@ -5,8 +5,6 @@ and other relevant parameters.
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 from numbers import Number
 from typing import List, Union, Tuple, Optional, Set
 
@@ -15,8 +13,6 @@ from macrosynergy.management.utils import (
     reduce_df,
     is_valid_iso_date,
     apply_slip as apply_slip_util,
-    reduce_df,
-    qdf_to_ticker_df,
     ticker_df_to_qdf,
 )
 
@@ -167,8 +163,6 @@ def _vol_target_positions(
     # get na values per column
     na_per_col = out_df.isna().sum()
     na_per_col = na_per_col[na_per_col > 0]
-    log_str = f"Columns with N/A values: {na_per_col.index.tolist()}"
-
     out_df = out_df.rename(
         columns={
             col: col.replace(sig_ident, f"_{sname}_{pname}")
