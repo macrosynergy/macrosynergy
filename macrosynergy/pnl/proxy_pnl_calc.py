@@ -481,6 +481,7 @@ def proxy_pnl_calc(
         )
 
     df = QuantamentalDataFrame(df)
+    _initialized_as_categorical: bool = df.InitializedAsCategorical
 
     if start is None:
         start = df["real_date"].min().strftime("%Y-%m-%d")
@@ -540,10 +541,14 @@ def proxy_pnl_calc(
 
     # # Convert to QDFs
     for key in df_outs.keys():
-        df_outs[key] = QuantamentalDataFrame.from_wide(df_outs[key])
+        df_outs[key] = QuantamentalDataFrame.from_wide(
+            df_outs[key], categorical=_initialized_as_categorical
+        )
 
     if concat_dfs:
-        return QuantamentalDataFrame.from_qdf_list(list(df_outs.values()))
+        return QuantamentalDataFrame.from_qdf_list(
+            list(df_outs.values()), categorical=_initialized_as_categorical
+        )
 
     if not (return_pnl_excl_costs or return_costs):
         return df_outs["pnl_incl_costs"]
