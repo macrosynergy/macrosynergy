@@ -6,7 +6,7 @@ and hedging them with a basket of contracts. Main function is `contract_signals`
 import pandas as pd
 import warnings
 from numbers import Number
-from typing import List, Union, Tuple, Optional, Set, Any
+from typing import List, Union, Tuple, Optional, Set, Any, Dict
 
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.panel import make_relative_value
@@ -452,8 +452,8 @@ def contract_signals(
 
 def multi_signal_contract_signals(
     df: QuantamentalDataFrame,
-    contract_dicts: dict[str, dict[str, Any]],
-    common_args: dict[str, Any],
+    contract_dicts: Dict[str, Dict[str, Any]],
+    common_args: Dict[str, Any],
 ):
     """
     Calculate contract signals for multiple signal specifications. Each signal
