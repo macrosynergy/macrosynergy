@@ -3,10 +3,8 @@ Module for calculating contract signals based on cross-section-specific signals,
 and hedging them with a basket of contracts. Main function is `contract_signals`.
 """
 
-import numpy as np
 import pandas as pd
 import warnings
-
 from numbers import Number
 from typing import List, Union, Tuple, Optional, Set, Any
 
@@ -14,9 +12,6 @@ from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.panel import make_relative_value
 from macrosynergy.management.utils import (
     is_valid_iso_date,
-    standardise_dataframe,
-    ticker_df_to_qdf,
-    qdf_to_ticker_df,
     update_df,
     reduce_df,
     estimate_release_frequency,
@@ -531,13 +526,11 @@ def multi_signal_contract_signals(
     # to avoid conflicts in the keys of the two dictionaries
 
     for dict_args in contract_dicts.values():
-        df = pd.concat(
-            [
-                df,
-                contract_signals(df=df, **{**common_args, **dict_args}),
-            ],
-            axis=0,
+        # TODO: use update_df?
+        df = QuantamentalDataFrame.from_qdf_list(
+            [df, contract_signals(df=df, **{**common_args, **dict_args})]
         )
+
     return QuantamentalDataFrame(
         df, _initialized_as_categorical=_initialized_as_categorical
     ).to_original_dtypes()
