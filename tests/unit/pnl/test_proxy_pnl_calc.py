@@ -5,6 +5,7 @@ import pandas as pd
 from typing import List, Dict, Tuple, Union, Any, Set
 from numbers import Number
 import warnings
+from macrosynergy.compat import PD_NEW_DATE_FREQ
 from macrosynergy.pnl.proxy_pnl_calc import (
     _apply_trading_costs,
     _calculate_trading_costs,
@@ -124,8 +125,9 @@ class TestHelperFunctions(unittest.TestCase):
                 _split_returns_positions_df(df_wide=test_df, rstring=rstring, spos=spos)
 
     def test_get_rebal_dates(self):
+        _freq = "BME" if PD_NEW_DATE_FREQ else "BM"
         rd_idx = pd.Series(
-            pd.bdate_range(start="2020-01-01", end="2020-12-31", freq="BME"),
+            pd.bdate_range(start="2020-01-01", end="2020-12-31", freq=_freq),
             name="real_date",
         )
         df_test = self.df_wide.copy()
