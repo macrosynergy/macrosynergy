@@ -480,6 +480,8 @@ def proxy_pnl_calc(
             "Functionality to support `roll_freqs` is not yet implemented."
         )
 
+    df = QuantamentalDataFrame(df)
+
     if start is None:
         start = df["real_date"].min().strftime("%Y-%m-%d")
     if end is None:
@@ -494,7 +496,7 @@ def proxy_pnl_calc(
     )
     _check_df(df=df, spos=spos, rstring=rstring)
 
-    df_wide = qdf_to_ticker_df(df)
+    df_wide = df.to_wide()
 
     pnle_name = pnl_name + "e"
 
@@ -538,10 +540,10 @@ def proxy_pnl_calc(
 
     # # Convert to QDFs
     for key in df_outs.keys():
-        df_outs[key] = ticker_df_to_qdf(df_outs[key])
+        df_outs[key] = QuantamentalDataFrame.from_wide(df_outs[key])
 
     if concat_dfs:
-        return standardise_dataframe(pd.concat(df_outs.values(), axis=0))
+        return QuantamentalDataFrame.from_qdf_list(list(df_outs.values()))
 
     if not (return_pnl_excl_costs or return_costs):
         return df_outs["pnl_incl_costs"]
@@ -587,7 +589,7 @@ def plot_pnl(
 
     :return: None
     """
-    df_wide = qdf_to_ticker_df(df)
+    df_wide = QuantamentalDataFrame(df).to_wide()
     df_wide = df_wide.loc[:, df_wide.columns.str.startswith(portfolio_name + "_")]
 
     # _ewcols = lambda x: df_wide.columns[df_wide.columns.str.endswith(x)].tolist()
@@ -597,7 +599,6 @@ def plot_pnl(
     pnl_cols = _endswith_cols(pnl_name)
     pnle_cols = _endswith_cols(pnl_name + "e")
     tc_cols = _endswith_cols(tc_name)
-
 
     df_wide = df_wide[pnl_cols + pnle_cols + tc_cols]
     assert len(pnl_cols) == len(pnle_cols) == len(tc_cols) == 1
