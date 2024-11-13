@@ -28,7 +28,7 @@ def get_fids(df: QuantamentalDataFrame) -> list:
         return x
 
     fid_endings = [f"{t}_{s}" for t in AVAIALBLE_COSTS for s in AVAILABLE_STATS]
-    tickers = list(set(df["cid"] + "_" + df["xcat"]))
+    tickers = QuantamentalDataFrame(df).list_tickers()
 
     return list(set(map(lambda x: repl(x, fid_endings), tickers)))
 
@@ -48,7 +48,7 @@ def check_df_for_txn_stats(
         for _fid in fids
         for txn_ticker in [tcost_n, rcost_n, size_n, tcost_l, rcost_l, size_l]
     ]
-    found_tickers = list(set(df["cid"] + "_" + df["xcat"]))
+    found_tickers = QuantamentalDataFrame(df).list_tickers()
     if not set(expected_tickers).issubset(set(found_tickers)):
         raise ValueError(
             "The dataframe is missing the following tickers: "
@@ -109,7 +109,7 @@ def _plot_costs_func(
     if fids is None:
         fids = tco.fids
     if not isinstance(fids, list) or not all(isinstance(fid, str) for fid in fids):
-        raise ValueError("fids must be a list of strings")
+        raise ValueError("`fids` must be a list of strings")
 
     costfunc = tco.bidoffer if cost_type == "BIDOFFER" else tco.rollcost
 
@@ -195,7 +195,7 @@ class SparseCosts(object):
     def __init__(self, df):
         if not isinstance(df, QuantamentalDataFrame):
             raise TypeError("df must be a QuantamentalDataFrame")
-        self.df = df
+        self.df: QuantamentalDataFrame = QuantamentalDataFrame(df)
         self.prepare_data()
 
     def prepare_data(self):
@@ -204,7 +204,7 @@ class SparseCosts(object):
         including setting up the wide DataFrame and fids.
         This method can be called again to refresh the data and cache.
         """
-        df_wide = qdf_to_ticker_df(self.df)
+        df_wide = QuantamentalDataFrame(self.df).to_wide()
         self._all_fids = get_fids(self.df)
         change_index = get_diff_index(df_wide)  # drop rows with no change
         self.change_index: pd.DatetimeIndex = change_index
@@ -259,6 +259,7 @@ class TransactionCosts(object):
         rcost_l: str = "ROLLCOST_90PCTL",
         size_l: str = "SIZE_90PCTL",
     ) -> None:
+        df = QuantamentalDataFrame(df)
         check_df_for_txn_stats(
             df=df,
             fids=fids,
@@ -303,7 +304,7 @@ class TransactionCosts(object):
 
     @classmethod
     def download(cls) -> "TransactionCosts":
-        df = download_transaction_costs()
+        df = download_transaction_costs(categorical=True)
         return cls(df=df, fids=get_fids(df), **cls.DEFAULT_ARGS)
 
     def get_costs(self, fid: str, real_date: str) -> pd.Series:
