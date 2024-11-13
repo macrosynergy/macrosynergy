@@ -18,6 +18,7 @@ def _request_wrapper(url: str, verbose: bool = True, **kwargs) -> str:
     Any additional keyword arguments are passed to `requests.get`. Purpose is to allow
     users to pass additional headers, proxy settings, cert verification, etc.
     """
+
     if verbose:
         print(f"Requesting data from {url}")
 
@@ -53,11 +54,17 @@ def download_transaction_costs(
     """
     Download trading costs data from the S3 bucket.
 
-    :param <str> csv_url: URL of the CSV file to download.
-    :param <bool> verbose: Print progress information.
-    :param <args> **kwargs: Additional keyword arguments to pass to `requests.get`. This can be
-        used to pass additional headers, proxy settings, cert verification, etc.
+    Parameters
+    ----------
+    csv_url : str
+        URL of the CSV file to download.
+    verbose : bool
+        Print progress information.
+    **kwargs : args
+        Additional keyword arguments to pass to `requests.get`. This can be used to pass
+        additional headers, proxy settings, cert verification, etc.
     """
+
     if verbose:
         print(f"Timestamp (UTC): {datetime.datetime.now(datetime.timezone.utc)}")
         print(f"Downloading trading costs data from {csv_url}")
