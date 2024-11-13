@@ -131,11 +131,11 @@ def view_ranges(
 
     if order_condition and sort_cids_func is not None:
         # Sort exclusively on the first category.
-        dfx = df[filt_1].groupby(["cid"])[val].apply(sort_cids_func)
+        dfx = df[filt_1].groupby(["cid"], observed=True)[val].apply(sort_cids_func)
         order = dfx.sort_values(ascending=False).index
     elif not order_condition and sort_cids_func is not None:
         # Sort across all categories on the available cross-sections.
-        dfx = df.groupby(["cid"])[val].apply(sort_cids_func)
+        dfx = df.groupby(["cid"], observed=True)[val].apply(sort_cids_func)
         order = dfx.sort_values(ascending=False).index
     else:
         order = None
