@@ -410,54 +410,69 @@ def proxy_pnl_calc(
     """
     Calculates an approximate nominal PnL under consideration of transaction costs
 
-    :param <QuantamentalDataFrame> df:  standardized JPMaQS DataFrame with the necessary
-        columns: 'cid', 'xcat', 'real_date' and 'value'.
-        This dataframe must contain the notional positions and related notional return
-        series (for PnL calculations).
-    :param <str> spos: the name of the strategy positions in the dataframe in
-        the format "<sname>_<pname>".
-        This must correspond to contract positions in the dataframe, which are categories
-        of the format "<cid>_<ctype>_<sname>_<pname>". The strategy name <sname> has
-        usually been set by the `contract_signals` function and the string for <pname> by
-        the `notional_positions` function.
-    :param <str> rstring: the string that identifies the returns series in the dataframe.
-    :param <TransactionCosts> transaction_costs_object: an initialized TransactionCosts
-        object (macrosynergy.pnl.transaction_costs.TransactionCosts) that contains the
-        transaction costs data.
-    :param <dict> roll_freqs: dictionary of roll frequencies for each contract type.
-        This must use the contract types as keys and frequency string ("w", "m", or "q")
-        as values. The default frequency for all contracts not in the dictionary is
-        "m" for monthly. Default is None: all contracts are rolled monthly.
-    :param <str> start: the start date of the data. Default is None, which means that
-        the start date is taken from the dataframe.
-    :param <str> end: the end date of the data. Default is None, which means that
-        the end date is taken from the dataframe.
-    :param <dict> blacklist: a dictionary of contract identifiers to exclude from
-        the calculation. Default is None, which means that no contracts are excluded.
-    :param <str> portfolio_name: the name of the portfolio. Default is "GLB".
-    :param <str> pnl_name: the name of the PnL (including costs), Default is "PNL".
-        The series for PnL excluding costs is named with "...<pnl_name>e". The name is
-        appended with the strategy positions name, as "<portfolio_name>_<spos>_<pnl_name>".
-    :param <str> tc_name: the name of the trading costs series. Default is "TCOST".
-    :param <str> bidoffer_name: a sub-component of the trading costs, representing the
-        bid-offer spread. Default is "BIDOFFER".
-    :param <str> rollcost_name: a sub-component of the trading costs, representing the
-        roll costs. Default is "ROLLCOST".
-    :param <bool> return_pnl_excl_costs: whether to return the PnL excluding costs.
-        Default is False.
-    :param <bool> return_costs: whether to return the trading costs. Default is False.
-    :param <bool> concat_dfs: whether to concatenate the output dataframes. Default is
-        False.
+    Parameters
+    ----------
+    df : QuantamentalDataFrame
+        standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
+        'real_date' and 'value'. This dataframe must contain the notional positions and
+        related notional return series (for PnL calculations).
+    spos : str
+        the name of the strategy positions in the dataframe in the format
+        "<sname>_<pname>". This must correspond to contract positions in the dataframe,
+        which are categories of the format "<cid>_<ctype>_<sname>_<pname>". The strategy
+        name <sname> has usually been set by the `contract_signals` function and the string
+        for <pname> by the `notional_positions` function.
+    rstring : str
+        the string that identifies the returns series in the dataframe.
+    transaction_costs_object : TransactionCosts
+        an initialized TransactionCosts object
+        (macrosynergy.pnl.transaction_costs.TransactionCosts) that contains the transaction
+        costs data.
+    roll_freqs : dict
+        dictionary of roll frequencies for each contract type. This must use the
+        contract types as keys and frequency string ("w", "m", or "q") as values. The
+        default frequency for all contracts not in the dictionary is "m" for monthly.
+        Default is None: all contracts are rolled monthly.
+    start : str
+        the start date of the data. Default is None, which means that the start date is
+        taken from the dataframe.
+    end : str
+        the end date of the data. Default is None, which means that the end date is
+        taken from the dataframe.
+    blacklist : dict
+        a dictionary of contract identifiers to exclude from the calculation. Default is
+        None, which means that no contracts are excluded.
+    portfolio_name : str
+        the name of the portfolio. Default is "GLB".
+    pnl_name : str
+        the name of the PnL (including costs), Default is "PNL". The series for PnL
+        excluding costs is named with "...<pnl_name>e". The name is appended with the
+        strategy positions name, as "<portfolio_name>_<spos>_<pnl_name>".
+    tc_name : str
+        the name of the trading costs series. Default is "TCOST".
+    bidoffer_name : str
+        a sub-component of the trading costs, representing the bid-offer spread. Default
+        is "BIDOFFER".
+    rollcost_name : str
+        a sub-component of the trading costs, representing the roll costs. Default is
+        "ROLLCOST".
+    return_pnl_excl_costs : bool
+        whether to return the PnL excluding costs. Default is False.
+    return_costs : bool
+        whether to return the trading costs. Default is False.
+    concat_dfs : bool
+        whether to concatenate the output dataframes. Default is False.
 
-    :return <Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]>: When
-        either of `return_pnl_excl_costs` or `return_costs` is True, the function returns
-        a tuple of the PnL excluding costs, the PnL including costs, and the trading
-        costs. Otherwise, it returns the PnL including costs. If `concat_dfs` is True,
-        the function concatenates any output dataframes and returns a single dataframe.
-
-    N.B.: Transaction costs as % of notional are considered to be a linear function of
-        size, with the slope determined by the normal and large positions, if all relevant
-        series are applied.
+    Returns
+    -------
+    Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]
+        When either of `return_pnl_excl_costs` or `return_costs` is True, the function
+        returns a tuple of the PnL excluding costs, the PnL including costs, and the trading
+        costs. Otherwise, it returns the PnL including costs. If `concat_dfs` is True, the
+        function concatenates any output dataframes and returns a single dataframe.  N.B.:
+        Transaction costs as % of notional are considered to be a linear function of size,
+        with the slope determined by the normal and large positions, if all relevant series
+        are applied.
     """
 
     for _varx, _namex, _typex in [
@@ -579,21 +594,35 @@ def plot_pnl(
     """
     Plot the PnLs and costs for the portfolio.
 
-    :param <pd.DataFrame> df: the dataframe containing the PnLs and costs.
-    :param <str> portfolio_name: the name of the portfolio. Default is "GLB".
-    :param <str> pnl_name: the name of the PnL (including costs). Default is "PNL".
-    :param <str> tc_name: the name of the trading costs series. Default is "TCOST".
-    :param <bool> cumsum: whether to plot the cumulative sum of the PnLs and costs.
-        Default is True.
-    :param <str> title: the title of the plot. Default is "Cumulative PnLs and Costs".
-    :param <str> ylabel: the label for the y-axis. Default is "PnL / USD Million".
-    :param <str> xlabel: the label for the x-axis. Default is "Real Date".
-    :param <Union[Number, List[Number]]> hline: the value(s) for the horizontal line(s).
-        Default is 0.0.
-    :param <dict> kwargs: additional keyword arguments for the plot.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        the dataframe containing the PnLs and costs.
+    portfolio_name : str
+        the name of the portfolio. Default is "GLB".
+    pnl_name : str
+        the name of the PnL (including costs). Default is "PNL".
+    tc_name : str
+        the name of the trading costs series. Default is "TCOST".
+    cumsum : bool
+        whether to plot the cumulative sum of the PnLs and costs. Default is True.
+    title : str
+        the title of the plot. Default is "Cumulative PnLs and Costs".
+    ylabel : str
+        the label for the y-axis. Default is "PnL / USD Million".
+    xlabel : str
+        the label for the x-axis. Default is "Real Date".
+    hline : Union[Number, List[Number]]
+        the value(s) for the horizontal line(s). Default is 0.0.
+    kwargs : dict
+        additional keyword arguments for the plot.
 
-    :return <None>: The function plots the PnLs and costs for the portfolio.
+    Returns
+    -------
+    None
+        The function plots the PnLs and costs for the portfolio.
     """
+
     df_wide = QuantamentalDataFrame(df).to_wide()
     df_wide = df_wide.loc[:, df_wide.columns.str.startswith(portfolio_name + "_")]
 
