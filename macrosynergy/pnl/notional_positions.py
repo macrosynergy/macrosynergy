@@ -1,6 +1,6 @@
 """
-Module for calculating notional positions based on contract signals, assets-under-management, 
-and other relevant parameters.
+Module for calculating notional positions based on contract signals, assets-under-
+management, and other relevant parameters.
 """
 
 import numpy as np
@@ -29,11 +29,18 @@ def _apply_slip(
     Applies a slip using the function `apply_slip()` to a dataframe with contract
     signals and returns.
 
-    :param <pd.DataFrame> df: Quantamental dataframe with contract signals and returns.
-    :param <int> slip: the number of days to wait before applying the signal.
-    :param <List[str]> fids: list of contract identifiers to apply the slip to.
-    :param <List[str]> metrics: list of metrics to apply the slip to.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Quantamental dataframe with contract signals and returns.
+    slip : int
+        the number of days to wait before applying the signal.
+    fids : List[str]
+        list of contract identifiers to apply the slip to.
+    metrics : List[str]
+        list of metrics to apply the slip to.
     """
+
     assert isinstance(df, QuantamentalDataFrame)
     assert isinstance(slip, int)
     assert (
@@ -63,13 +70,19 @@ def _check_df_for_contract_signals(
     fids: List[str],
 ) -> None:
     """
-    Checks if the dataframe contains contract signals for the specified strategy
-    and the specified contract identifiers.
+    Checks if the dataframe contains contract signals for the specified strategy and the
+    specified contract identifiers.
 
-    :param <pd.DataFrame> df: Wide dataframe with contract signals and returns.
-    :param <str> sname: the name of the strategy.
-    :param <List[str]> fids: list of contract identifiers to apply the slip to.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Wide dataframe with contract signals and returns.
+    sname : str
+        the name of the strategy.
+    fids : List[str]
+        list of contract identifiers to apply the slip to.
     """
+
     assert isinstance(sname, str)
     assert (
         isinstance(fids, list)
@@ -107,8 +120,8 @@ def _vol_target_positions(
     pname: str,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Uses historic portfolio volatility to calculate notional positions based on
-    contract signals, volatility targeting and other relevant parameters.
+    Uses historic portfolio volatility to calculate notional positions based on contract
+    signals, volatility targeting and other relevant parameters.
     """
 
     _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
@@ -240,75 +253,90 @@ def notional_positions(
     Tuple[QuantamentalDataFrame, QuantamentalDataFrame, pd.DataFrame],
 ]:
     """
-    Calculates contract positions based on contract signals, assets under management (AUM)
-    and other specifications.
+    Calculates contract positions based on contract signals, assets under management
+    (AUM) and other specifications.
 
-    :param <QuantamentalDataFrame> df:  standardized JPMaQS DataFrame with the necessary
-        columns: 'cid', 'xcat', 'real_date' and 'value'.
-        This dataframe must contain the contract-specific signals and possibly
-        related return series (for vol-targeting).
-    :param <str> sname: the name of the strategy. It must correspond to contract
-        signals in the dataframe, which have the format "<cid>_<ctype>_CSIG_<sname>", and
-        which are typically calculated by the function contract_signals().
-    :param <List[str]> fids: list of financial contract identifiers in the format
-        "<cid>_<ctype>". It must correspond to contract signals in the dataframe.
-    :param <float> aum: the assets under management in USD million (for consistency).
-        This is basis for all position sizes. Default is 100.
-    :param <float> dollar_per_signal: the amount of notional (e.g. USD) per
-        contract signal value. Default is 1. The default scale is arbitrary
-        and is merely a basis for tryouts.
-    :param <float> leverage: the ratio of the sum of notional positions to AUM.
-        This is the main basis for leveraged-based positioning. Since different
-        contracts have different expected volatility and correlations this method
-        does not control expected volatility. Default is None, i.e. the method is not
-        applied.
-    :param <float> vol_target: the target volatility of the portfolio in % of AUM
-        (For clarity, `vol_target=10` means 10%). This is the main parameter for
-        volatility-targeted positioning. That method estimates the annualized standard
-        deviation of the signal-based portfolio for a 1 USD per signal portfolio based on
-        past variances and covariances of the contract returns. The estimation is managed
-        by the function `historic_portfolio_vol()`. Default is None, i.e. the
-        volatility-targeting is not applied.
-    :param <str> rebal_freq: the rebalancing frequency. Default is 'm' for monthly.
-        Alternatives are 'w' for business weekly, 'd' for daily, and 'q' for quarterly.
-        Contract signals are taken from the end of the holding period and applied to
-        positions at the beginning of the next period, subject to slippage.
-    :param <int> slip: the number of days to wait before applying the signal. Default is 1.
-        This means that new positions are taken at the very end of the first trading day
-        of the holding period and are the basis of PnL calculation from the second
-        Trading day onward.
-    :param <int> lback_periods: the number of periods to use for the lookback period
-        of the volatility-targeting method. Default is 21. This passed through to
-        the function `historic_portfolio_vol()`.
-    :param <str> lback_meth: the method to use for the lookback period of the
-        volatility-targeting method. Default is 'ma' for moving average. Alternative is
-        "xma", for exponential moving average. Again this is passed through to
-        the function `historic_portfolio_vol()`.
-    :param <int> half_life: the half-life of the exponential moving average for
-        volatility-targeting if the exponential moving average "xma" method has been
-        chosen Default is 11. This is passed through to
-        the function `historic_portfolio_vol()`.
-    :param <str> rstring: a general string of the return category. This identifies
-        the contract returns that are required for the volatility-targeting method, based
-        on the category identifier format <cid>_<ctype><rstring>_<rstring> in accordance
-        with JPMaQS conventions. Default is 'XR'.
-    :param <str> start: the start date of the data. Default is None, which means that
-        the start date is taken from the dataframe.
-    :param <str> end: the end date of the data. Default is None, which means that
-        the end date is taken from the dataframe.
-    :param <dict> blacklist: a dictionary of contract identifiers to exclude from
-        the calculation. Default is None, which means that no contracts are excluded.
-    :param <str> pname: the name of the position. Default is 'POS'.
-    :param <bool> return_pvol: whether to return the historic portfolio volatility.
-        Default is False.
-    :param <bool> return_vcv: whether to return the variance-covariance matrix.
-        Default is False.
+    Parameters
+    ----------
+    df : QuantamentalDataFrame
+        standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
+        'real_date' and 'value'. This dataframe must contain the contract-specific signals
+        and possibly related return series (for vol-targeting).
+    sname : str
+        the name of the strategy. It must correspond to contract signals in the
+        dataframe, which have the format "<cid>_<ctype>_CSIG_<sname>", and which are
+        typically calculated by the function contract_signals().
+    fids : List[str]
+        list of financial contract identifiers in the format "<cid>_<ctype>". It must
+        correspond to contract signals in the dataframe.
+    aum : float
+        the assets under management in USD million (for consistency). This is basis for
+        all position sizes. Default is 100.
+    dollar_per_signal : float
+        the amount of notional (e.g. USD) per contract signal value. Default is 1. The
+        default scale is arbitrary and is merely a basis for tryouts.
+    leverage : float
+        the ratio of the sum of notional positions to AUM. This is the main basis for
+        leveraged-based positioning. Since different contracts have different expected
+        volatility and correlations this method does not control expected volatility.
+        Default is None, i.e. the method is not applied.
+    vol_target : float
+        the target volatility of the portfolio in % of AUM (For clarity, `vol_target=10`
+        means 10%). This is the main parameter for volatility-targeted positioning. That
+        method estimates the annualized standard deviation of the signal-based portfolio for
+        a 1 USD per signal portfolio based on past variances and covariances of the contract
+        returns. The estimation is managed by the function `historic_portfolio_vol()`.
+        Default is None, i.e. the volatility-targeting is not applied.
+    rebal_freq : str
+        the rebalancing frequency. Default is 'm' for monthly. Alternatives are 'w' for
+        business weekly, 'd' for daily, and 'q' for quarterly. Contract signals are taken
+        from the end of the holding period and applied to positions at the beginning of the
+        next period, subject to slippage.
+    slip : int
+        the number of days to wait before applying the signal. Default is 1. This means
+        that new positions are taken at the very end of the first trading day of the holding
+        period and are the basis of PnL calculation from the second Trading day onward.
+    lback_periods : int
+        the number of periods to use for the lookback period of the volatility-targeting
+        method. Default is 21. This passed through to the function
+        `historic_portfolio_vol()`.
+    lback_meth : str
+        the method to use for the lookback period of the volatility-targeting method.
+        Default is 'ma' for moving average. Alternative is "xma", for exponential moving
+        average. Again this is passed through to the function `historic_portfolio_vol()`.
+    half_life : int
+        the half-life of the exponential moving average for volatility-targeting if the
+        exponential moving average "xma" method has been chosen Default is 11. This is
+        passed through to the function `historic_portfolio_vol()`.
+    rstring : str
+        a general string of the return category. This identifies the contract returns
+        that are required for the volatility-targeting method, based on the category
+        identifier format <cid>_<ctype><rstring>_<rstring> in accordance with JPMaQS
+        conventions. Default is 'XR'.
+    start : str
+        the start date of the data. Default is None, which means that the start date is
+        taken from the dataframe.
+    end : str
+        the end date of the data. Default is None, which means that the end date is
+        taken from the dataframe.
+    blacklist : dict
+        a dictionary of contract identifiers to exclude from the calculation. Default is
+        None, which means that no contracts are excluded.
+    pname : str
+        the name of the position. Default is 'POS'.
+    return_pvol : bool
+        whether to return the historic portfolio volatility. Default is False.
+    return_vcv : bool
+        whether to return the variance-covariance matrix. Default is False.
 
-    :return <pd.DataFrame>: a standard Quantamental DataFrame with the positions for all
-        traded contracts and the specified strategy in USD million. The contract signals
-        have the following format "<cid>_<ctype>_<sname>_<pname>".
-
+    Returns
+    -------
+    pd.DataFrame
+        a standard Quantamental DataFrame with the positions for all traded contracts
+        and the specified strategy in USD million. The contract signals have the following
+        format "<cid>_<ctype>_<sname>_<pname>".
     """
+
     for varx, namex, typex in [
         (df, "df", QuantamentalDataFrame),
         (sname, "sname", str),
