@@ -1,6 +1,6 @@
 """
-Module for calculating contract signals based on cross-section-specific signals,
-and hedging them with a basket of contracts. Main function is `contract_signals`.
+Module for calculating contract signals based on cross-section-specific signals, and
+hedging them with a basket of contracts. Main function is `contract_signals`.
 """
 
 import pandas as pd
@@ -77,13 +77,24 @@ def _check_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.Da
     """
     Check the timeseries to see if the estimated frequency matches the actual frequency.
 
-    :param <pd.DataFrame> df_wide: dataframe in wide format with the contract signals.
-    :param <str> est_freq: the estimated frequency of the contract signals.
+    Parameters
+    ----------
+    df_wide : pd.DataFrame
+        dataframe in wide format with the contract signals.
+    est_freq : str
+        the estimated frequency of the contract signals.
 
-    :return <pd.DataFrame>: dataframe with the estimated frequency.
+    Raises
+    ------
+    ValueError
+        if the estimated frequency does not match the actual frequency.
 
-    :raises <ValueError>: if the estimated frequency does not match the actual frequency.
+    Returns
+    -------
+    pd.DataFrame
+        dataframe with the estimated frequency.
     """
+
     return
     estimated_freq: pd.Series = estimate_release_frequency(df_wide=df_wide)
 
@@ -125,26 +136,34 @@ def _gen_contract_signals(
     """
     Generate contract signals from cross-section-specific signals.
 
-    :param <pd.DataFrame> df: dataframe in quantamental format with the contract signals
-        and potentially categories required for translation into contract signals.
-    :param <List[str]> cids: list of cross-sections whose signals are to be translated
-        into contract signals.
-    :param <str> sig: the category ticker of the cross-section-specific signal that
-        is translated into contract signals.
-    :param <List[str]> ctypes: list of identifiers for the contract types that are
-        to be traded. They typically correspond to the contract type acronyms
-        that are used in JPMaQS for generic returns, carry and volatility, such as
-        "FX" for FX forwards or "EQ" for equity index futures.
-        N.B. Overall a contract is identified by the combination of its cross-section
-        and its contract type "<cid>_<ctype>".
-    :param <List[Union[Number, str]]> cscales: list of scaling factors for the
-        contract signals. These can be either a list of floats or a list of category
-        tickers that serve as basis of translation. The former are fixed across time,
-        the latter variable.
-    :param <List[int]> csigns: list of signs for the contract signals. These must be
-        either 1 for long position or -1 for short position.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        dataframe in quantamental format with the contract signals and potentially
+        categories required for translation into contract signals.
+    cids : List[str]
+        list of cross-sections whose signals are to be translated into contract signals.
+    sig : str
+        the category ticker of the cross-section-specific signal that is translated into
+        contract signals.
+    ctypes : List[str]
+        list of identifiers for the contract types that are to be traded. They typically
+        correspond to the contract type acronyms that are used in JPMaQS for generic
+        returns, carry and volatility, such as "FX" for FX forwards or "EQ" for equity index
+        futures. N.B. Overall a contract is identified by the combination of its cross-
+        section and its contract type "<cid>_<ctype>".
+    cscales : List[Union[Number, str]]
+        list of scaling factors for the contract signals. These can be either a list of
+        floats or a list of category tickers that serve as basis of translation. The former
+        are fixed across time, the latter variable.
+    csigns : List[int]
+        list of signs for the contract signals. These must be either 1 for long position
+        or -1 for short position.
 
-    :return <pd.DataFrame>: dataframe with scaling applied.
+    Returns
+    -------
+    pd.DataFrame
+        dataframe with scaling applied.
     """
 
     expected_contract_signals: List[str] = [f"{cx}_{sig}" for cx in cids]
@@ -277,53 +296,67 @@ def contract_signals(
     """
     Calculate contract-specific signals based on cross section-specific signals.
 
-    :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
-        columns: 'cid', 'xcat', 'real_date' and 'value'.
-        This dataframe must contain the cross-section-specific signals and possibly
-        [1] categories for changing scale factors of the main contracts,
-        [2] contracts of a hedging basket, and
-        [3] cross-section specific hedge ratios
-    :param <str> sig: the cross section-specific signal that serves as the basis of
+    Parameters
+    ----------
+    df : pd.DataFrame
+        standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
+        'real_date' and 'value'. This dataframe must contain the cross-section-specific
+        signals and possibly
+            [1] categories for changing scale factors of the main contracts,
+            [2] contracts of a hedging basket, and
+            [3] cross-section specific hedge ratios
+    sig : str
+        the cross section-specific signal that serves as the basis of contract signals.
+    cids : List[str]
+        list of cross-sections whose signal is to be used.
+    ctypes : List[str]
+        list of identifiers for the contract types that are to be traded. They typically
+        correspond to the contract type acronyms that are used in JPMaQS for generic
+        returns, carry and volatility, such as "FX" for FX forwards or "EQ" for equity index
+        futures. If n contracts are traded per cross sections `ctypes` must contain n
+        arguments. N.B. Overall a contract is identified by the combination of its cross-
+        section and its contract type "<cid>_<ctype>".
+    cscales : List[str|float]
+        list of scaling factors for the contract signals. These can be either a list of
+        floats or a list of category tickers that serve as basis of translation. The former
+        are fixed across time, the latter variable. The list `cscales` must be of the same
+        length as the list `ctypes`.
+    csigns : List[int]
+        list of signs that determine the direction of the contract signals. Contract
+        signal is sign x cross section signal. The signs must be either 1 or -1. The list
+        `csigns` must be of the same length as `ctypes` and `cscales`.
+    hbasket : List[str]
+        list of contract identifiers in the format "<cid>_<ctype>" that serve as
+        constituents of a hedging basket, if one is used. param <List[str|float]> hscales:
+        list of scaling factors (weights) for the basket. These can be either a list of
+        floats or a list of category tickers that serve as basis of translation. The former
+        are fixed across time, the latter variable.
+    hratios : str
+        category name for cross-section-specific hedge ratios. The values of this
+        category determine direction and size of the hedge basket per unit of the cross
+        section-specific signal.
+    relative_value : bool
+        If False (default), no relative value is calculated. If True boolean, relative
+        value is calculated for all cids in the strategy. # TODO split above
+        `relative_value` argument into two: `relative_value` and `relative_value_cids`?
+    start : str
+        earliest date in ISO format. Default is None and earliest date in df is used.
+    end : str
+        latest date in ISO format. Default is None and latest date in df is used.
+    blacklist : dict
+        cross-sections with date ranges that should be excluded from the calculation of
         contract signals.
-    :param <List[str]> cids: list of cross-sections whose signal is to be used.
-    :param <List[str]> ctypes: list of identifiers for the contract types that are
-        to be traded. They typically correspond to the contract type acronyms
-        that are used in JPMaQS for generic returns, carry and volatility, such as
-        "FX" for FX forwards or "EQ" for equity index futures.
-        If n contracts are traded per cross sections `ctypes` must contain n arguments.
-        N.B. Overall a contract is identified by the combination of its cross-section
-        and its contract type "<cid>_<ctype>".
-    :param <List[str|float]> cscales: list of scaling factors for the contract signals.
-        These can be either a list of floats or a list of category tickers that serve
-        as basis of translation. The former are fixed across time, the latter variable.
-        The list `cscales` must be of the same length as the list `ctypes`.
-    :param <List[int]> csigns: list of signs that determine the direction of the
-        contract signals. Contract signal is sign x cross section signal.
-        The signs must be either 1 or -1.
-        The list `csigns` must be of the same length as `ctypes` and `cscales`.
-    :param <List[str]> hbasket: list of contract identifiers in the format "<cid>_<ctype>"
-        that serve as constituents of a hedging basket, if one is used.
-    param <List[str|float]> hscales: list of scaling factors (weights) for the basket.
-        These can be either a list of floats or a list of category tickers that serve
-        as basis of translation. The former are fixed across time, the latter variable.
-    :param <str> hratios: category name for cross-section-specific hedge ratios.
-        The values of this category determine direction and size of the hedge basket
-        per unit of the cross section-specific signal.
-    :param <bool> relative_value: If False (default), no relative value is calculated. If
-        True boolean, relative value is calculated for all cids in the strategy.
-        # TODO split above `relative_value` argument into two: `relative_value` and `relative_value_cids`?
-    :param <str> start: earliest date in ISO format. Default is None and earliest date
-        in df is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date in df
-        is used.
-    :param <dict> blacklist: cross-sections with date ranges that should be excluded
-        from the calculation of contract signals.
-    :param <str> sname: name of the strategy. Default is "STRAT".
+    sname : str
+        name of the strategy. Default is "STRAT".
 
-    :return <pd.DataFrame>: with the contract signals for all traded contracts and the
-        specified strategy. It has the standard JPMaQS DataFrame. The contract signals
-        have the following format "<cid>_<ctype>_<sname>_CSIG".
+    Returns
+    -------
+    pd.DataFrame
+        with the contract signals for all traded contracts and the specified strategy.
+        It has the standard JPMaQS DataFrame. The contract signals have the following format
+        "<cid>_<ctype>_<sname>_CSIG".
     """
+
     ## basic type and value checks
     for varx, namex, typex in [
         (df, "df", pd.DataFrame),
@@ -460,23 +493,31 @@ def multi_signal_contract_signals(
     specification is a dictionary with arguments for a call to `contract_signals()`. The
     common arguments are passed to all calls. The dataframe is passed to all calls, and
     should not be included in the dictionaries, or common arguments. Please see the
-    documentation for `contract_signals()` for more information on the arguments.
-    Note: when two (or more) of the arguments produce a series with the same name, each
-    new series will overwrite the previous one.
+    documentation for `contract_signals()` for more information on the arguments. Note:
+    when two (or more) of the arguments produce a series with the same name, each new
+    series will overwrite the previous one.
 
-    :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
-        columns: 'cid', 'xcat', 'real_date' and 'value'.
-    :param <dict[str, dict[str, Any]]> contract_dicts: dictionary of dictionaries
-        with arguments for each call to `contract_signals()`. The keys are the names
-        of the signal specifications.
-    :param <dict[str, Any]> common_args: dictionary with common arguments for all calls
-        to `contract_signals()`. These are passed to all calls, and should not be included
-        in the dictionaries in `contract_dicts`.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
+        'real_date' and 'value'.
+    contract_dicts : dict[str, dict[str, Any]]
+        dictionary of dictionaries with arguments for each call to `contract_signals()`.
+        The keys are the names of the signal specifications.
+    common_args : dict[str, Any]
+        dictionary with common arguments for all calls to `contract_signals()`. These
+        are passed to all calls, and should not be included in the dictionaries in
+        `contract_dicts`.
 
-    :return <QuantamentalDataFrame>: dataframe with the contract signals for all traded
-        contracts and the specified strategies. It has the standard JPMaQS DataFrame.
-        The contract signals have the following format "<cid>_<ctype>_<sname>_CSIG".
+    Returns
+    -------
+    QuantamentalDataFrame
+        dataframe with the contract signals for all traded contracts and the specified
+        strategies. It has the standard JPMaQS DataFrame. The contract signals have the
+        following format "<cid>_<ctype>_<sname>_CSIG".
     """
+
     # Check that the types are correct
     types_dict: dict = {
         "sig": str,
