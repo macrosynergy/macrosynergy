@@ -238,7 +238,7 @@ class ProxyPnL(object):
 
         return self.proxy_pnl
 
-    def plot_strategy(self ):
+    def plot_strategy(self):
         csigs = self.cs_df.columns
         poss = self.npos_df.columns
 
