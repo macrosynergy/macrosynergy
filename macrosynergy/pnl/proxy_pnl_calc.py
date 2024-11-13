@@ -592,7 +592,7 @@ def plot_pnl(
         Default is 0.0.
     :param <dict> kwargs: additional keyword arguments for the plot.
 
-    :return: None
+    :return <None>: The function plots the PnLs and costs for the portfolio.
     """
     df_wide = QuantamentalDataFrame(df).to_wide()
     df_wide = df_wide.loc[:, df_wide.columns.str.startswith(portfolio_name + "_")]
