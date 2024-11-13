@@ -48,7 +48,7 @@ def _check_df(df: QuantamentalDataFrame, spos: str, rstring: str) -> None:
         raise TypeError("Input must be a pandas DataFrame.")
 
     returns_tickers, positions_tickers = _split_returns_positions_tickers(
-        tickers=list(set(df["cid"] + "_" + df["xcat"])),
+        tickers=QuantamentalDataFrame(df).list_tickers(),
         spos=spos,
         rstring=rstring,
     )
