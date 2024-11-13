@@ -1,14 +1,23 @@
-"""Estimation of Historic Portfolio Volatility.
+"""
+Estimation of Historic Portfolio Volatility.
 
-Module for calculating the historic portfolio volatility for a given strategy.
+Module for calculating the historic portfolio volatility for a given strategy.  
 
 TODO Proposed workflow:
-1. Create list of trigger dates for rebalance frequency.
-2. Create batches of frequencies for which to estimate volatility per trigger date (memory inefficient).
-3. Estimate variance-covariance matrix for each batch (per trigger date) and per frequency (annualised).
-4. Weight the variance-covariance matrices by the weights for each frequency into single matrix.
-5. Aggregate the variance-covariance matrix into a single portfolio volatility estimate.
 
+    1. Create list of trigger dates for rebalance frequency.
+
+    2. Create batches of frequencies for which to estimate volatility per trigger date 
+        (memory inefficient).
+
+    3. Estimate variance-covariance matrix for each batch (per trigger date) and per frequency
+        (annualised).
+
+    4. Weight the variance-covariance matrices by the weights for each frequency into single
+        matrix.
+
+    5. Aggregate the variance-covariance matrix into a single portfolio volatility
+        estimate.
 """
 
 import logging
@@ -98,11 +107,15 @@ def estimate_variance_covariance(
     lback_periods: int,
     half_life: int,
 ) -> pd.DataFrame:
-    """Estimation of the variance-covariance matrix needs to have the following configuration options
+    """
+    Estimation of the variance-covariance matrix needs to have the following
+    configuration options
 
-    1. Absolutely vs squared deviations,
-    2. Flat weights (equal) vs. exponential weights,
-    3. Frequency of estimation (daily, weekly, monthly, quarterly) and their weights.
+        1. Absolutely vs squared deviations,
+
+        2. Flat weights (equal) vs. exponential weights,
+
+        3. Frequency of estimation (daily, weekly, monthly, quarterly) and their weights.
     """
 
     cov_mat = np.zeros((len(piv_ret.columns), len(piv_ret.columns)))
@@ -151,10 +164,19 @@ def get_max_lookback(lb: int, nt: float) -> int:
     """
     Calculate the maximum lookback period for a given lookback period and nan tolerance.
 
-    :param <int> lb: the lookback period.
-    :param <float> nt: the nan tolerance.
-    :return <int>: the maximum lookback period.
+    Parameters
+    ----------
+    lb : int
+        the lookback period.
+    nt : float
+        the nan tolerance.
+
+    Returns
+    -------
+    int
+        the maximum lookback period.
     """
+
     return int(np.ceil(lb * (1 + nt))) if lb > 0 else 0
 
 
@@ -396,22 +418,31 @@ def _hist_vol(
     Calculates historic volatility for a given strategy. It assumes that the dataframe
     is composed solely of the relevant signals and returns for the strategy.
 
-    :param <pd.DataFrame> pivot_signals: the pivot table of the contract signals.
-    :param <pd.DataFrame> pivot_returns: the pivot table of the contract returns.
-    :param <str> rebal_freq: the frequency of the volatility estimation. Default is 'm'
-        for monthly. Alternatives are 'w' for business weekly, 'd' for daily, and 'q'
-        for quarterly. Estimations are conducted for the end of the period.
-    :param <int> lback_periods: the number of periods to use for the lookback period
-        of the volatility-targeting method. Default is 21.
-    :param <str> lback_meth: the method to use for the lookback period of the
-        volatility-targeting method. Default is 'ma' for moving average. Alternative is
-        "xma", for exponential moving average.
-    :param <int> half_life: Refers to the half-time for "xma" and full lookback period
-        for "ma". Default is 11.
-    :param <float> nan_tolerance: maximum ratio of NaNs to non-NaNs in a lookback window,
-        if exceeded the resulting volatility is set to NaN. Default is 0.25.
-    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
-        effective window.
+    Parameters
+    ----------
+    pivot_signals : pd.DataFrame
+        the pivot table of the contract signals.
+    pivot_returns : pd.DataFrame
+        the pivot table of the contract returns.
+    rebal_freq : str
+        the frequency of the volatility estimation. Default is 'm' for monthly.
+        Alternatives are 'w' for business weekly, 'd' for daily, and 'q' for quarterly.
+        Estimations are conducted for the end of the period.
+    lback_periods : int
+        the number of periods to use for the lookback period of the volatility-targeting
+        method. Default is 21.
+    lback_meth : str
+        the method to use for the lookback period of the volatility-targeting method.
+        Default is 'ma' for moving average. Alternative is "xma", for exponential moving
+        average.
+    half_life : int
+        Refers to the half-time for "xma" and full lookback period for "ma". Default is
+        11.
+    nan_tolerance : float
+        maximum ratio of NaNs to non-NaNs in a lookback window, if exceeded the
+        resulting volatility is set to NaN. Default is 0.25.
+    remove_zeros : bool
+        removes zeroes as invalid entries and shortens the effective window.
     """
 
     lback_meth = lback_meth.lower()
@@ -610,68 +641,87 @@ def historic_portfolio_vol(
     remove_zeros: bool = True,
     return_variance_covariance: bool = True,
 ) -> Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, pd.DataFrame]]:
-    """Historical portfolio volatility.
-
-    Estimates annualized standard deviations of a portfolio, based on historic
-    variances and co-variances.
-
-    :param <QuantamentalDataFrame> df: JPMaQS standard DataFrame containing contract-specific signals and return series.
-    :param <str> sname: the name of the strategy. It must correspond to contract
-        signals in the dataframe, which have the format "<cid>_<ctype>_CSIG_<sname>", and
-        which are typically calculated by the function contract_signals().
-    :param <List[str]> fids: list of financial contract identifiers in the format
-        "<cid>_<ctype>". It must correspond to contract signals in the dataframe.
-
-    :param <str> rstring: a general string of the return category. This identifies
-        the contract returns that are required for the volatility-targeting method, based
-        on the category identifier format <cid>_<ctype><rstring> in accordance with
-        JPMaQS conventions. Default is 'XR'.
-    :param <str> rebal_freq: the frequency of rebalancing and volatility estimation.
-        Default is 'M' for monthly. Alternatives are 'W' for business weekly, 'D' for
-        daily, and 'Q' for quarterly. Estimations are conducted for the end of the period.
-    :param <List[str]> est_freqs: the list of frequencies for which the volatility
-        is estimated. Volatility for a given period is the weighted sum of the volatilities
-        estimated for each frequency. Default is ["D", "W", "M"].
-    :param <List[float]> est_weights: the list of weights for each frequency in
-        `est_freqs`. Weights are normalized before applying. In cases where there may be
-        missing data or NaNs in the result, the remaining weights are normalized. Default
-        is None, which means that the weights are equal.
-    :param <str> lback_meth: the method to use for the lookback period of the
-        volatility-targeting method. Default is "ma" for moving average. Alternative is
-        "xma", for exponential moving average.
-    :param <List[int]> lback_periods: the number of periods to use for the lookback
-        period of the volatility-targeting method. Each element corresponds to the
-        the same index in `est_freqs`. Passing a single element will apply the same
-        value to all frequencies. Default is [-1], which means that the lookback period
-        is the full available data for all specified frequencies.
-    :param <List[int]> half_life: number of periods in the half-life of the exponential
-        moving average. Each element corresponds to the same index in `est_freqs`.
-    :param <str> start: the start date of the data. Default is None, which means that
-        the start date is taken from the dataframe.
-    :param <str> end: the end date of the data. Default is None, which means that
-        the end date is taken from the dataframe.
-    :param <dict> blacklist: a dictionary of contract identifiers to exclude from
-        the calculation. Default is None, which means that no contracts are excluded.
-    :param <float> nan_tolerance: maximum ratio of number of NaN values to the total
-        number of values in a lookback window. If exceeded the resulting volatility is set
-        to NaN, else prior non-zero values are added to the window instead. Default is 0.25.
-    :param <bool> remove_zeros: if True (default) any returns that are exact zeros will
-        not be included in the lookback window and prior non-zero values are added to the
-        window instead.
-
-    :return <pd.DataFrame>: JPMaQS dataframe of annualized standard deviation of
-        estimated strategy PnL, with category name <sname>_PNL_USD1S_ASD.
-        TODO: check if this is correct.
-        The values are in % annualized. Values between estimation points are forward
-        filled.
-
-    N.B.: If returns in the lookback window are not available the function will replace
-    them with the average of the available returns of the same contract type. If no
-    returns are available for a contract type the function will reduce the lookback window
-    up to a minimum of 11 days. If no returns are available for a contract type for
-    at least 11 days the function returns an NaN for that date and sends a warning of all
-    the dates for which this happened.
     """
+    Historical portfolio volatility.  Estimates annualized standard deviations of a
+    portfolio, based on historic variances and co-variances.
+
+    Parameters
+    ----------
+    df : QuantamentalDataFrame
+        JPMaQS standard DataFrame containing contract-specific signals and return
+        series.
+    sname : str
+        the name of the strategy. It must correspond to contract signals in the
+        dataframe, which have the format "<cid>_<ctype>_CSIG_<sname>", and which are
+        typically calculated by the function contract_signals().
+    fids : List[str]
+        list of financial contract identifiers in the format "<cid>_<ctype>". It must
+        correspond to contract signals in the dataframe.
+    rstring : str
+        a general string of the return category. This identifies the contract returns
+        that are required for the volatility-targeting method, based on the category
+        identifier format <cid>_<ctype><rstring> in accordance with JPMaQS conventions.
+        Default is 'XR'.
+    rebal_freq : str
+        the frequency of rebalancing and volatility estimation. Default is 'M' for
+        monthly. Alternatives are 'W' for business weekly, 'D' for daily, and 'Q' for
+        quarterly. Estimations are conducted for the end of the period.
+    est_freqs : List[str]
+        the list of frequencies for which the volatility is estimated. Volatility for a
+        given period is the weighted sum of the volatilities estimated for each frequency.
+        Default is ["D", "W", "M"].
+    est_weights : List[float]
+        the list of weights for each frequency in `est_freqs`. Weights are normalized
+        before applying. In cases where there may be missing data or NaNs in the result, the
+        remaining weights are normalized. Default is None, which means that the weights are
+        equal.
+    lback_meth : str
+        the method to use for the lookback period of the volatility-targeting method.
+        Default is "ma" for moving average. Alternative is "xma", for exponential moving
+        average.
+    lback_periods : List[int]
+        the number of periods to use for the lookback period of the volatility-targeting
+        method. Each element corresponds to the the same index in `est_freqs`. Passing a
+        single element will apply the same value to all frequencies. Default is [-1], which
+        means that the lookback period is the full available data for all specified
+        frequencies.
+    half_life : List[int]
+        number of periods in the half-life of the exponential moving average. Each
+        element corresponds to the same index in `est_freqs`.
+    start : str
+        the start date of the data. Default is None, which means that the start date is
+        taken from the dataframe.
+    end : str
+        the end date of the data. Default is None, which means that the end date is
+        taken from the dataframe.
+    blacklist : dict
+        a dictionary of contract identifiers to exclude from the calculation. Default is
+        None, which means that no contracts are excluded.
+    nan_tolerance : float
+        maximum ratio of number of NaN values to the total number of values in a
+        lookback window. If exceeded the resulting volatility is set to NaN, else prior non-
+        zero values are added to the window instead. Default is 0.25.
+    remove_zeros : bool
+        if True (default) any returns that are exact zeros will not be included in the
+        lookback window and prior non-zero values are added to the window instead.
+
+    Returns
+    -------
+    pd.DataFrame
+        JPMaQS dataframe of annualized standard deviation of estimated strategy PnL,
+        with category name <sname>_PNL_USD1S_ASD. TODO: check if this is correct. The values
+        are in % annualized. Values between estimation points are forward filled.
+
+    Notes
+    -----
+    If returns in the lookback window are not available the function will replace them with
+    the average of the available returns of the same contract type. If no returns are
+    available for a contract type the function will reduce the lookback window up to a
+    minimum of 11 days. If no returns are available for a contract type for at least 11
+    days the function returns an NaN for that date and sends a warning of all the dates
+    for which this happened.
+    """
+
     if isinstance(lback_periods, Number):
         lback_periods = [lback_periods]
     if isinstance(half_life, Number):
