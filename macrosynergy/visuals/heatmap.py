@@ -410,7 +410,7 @@ class Heatmap(Plotter):
             )
 
         if "real_date" not in [x_axis_column, y_axis_column]:
-            df = df.groupby(["xcat", "cid"]).mean().reset_index()
+            df = df.groupby(["xcat", "cid"], observed=True).mean().reset_index()
         else:
             df["real_date"] = df["real_date"].dt.strftime("%Y-%m-%d")
 
