@@ -55,7 +55,7 @@ def download_transaction_costs(
 
     :param <str> csv_url: URL of the CSV file to download.
     :param <bool> verbose: Print progress information.
-    :param **kwargs: Additional keyword arguments to pass to `requests.get`. This can be
+    :param <args> **kwargs: Additional keyword arguments to pass to `requests.get`. This can be
         used to pass additional headers, proxy settings, cert verification, etc.
     """
     if verbose:

@@ -304,9 +304,9 @@ def notional_positions(
     :param <bool> return_vcv: whether to return the variance-covariance matrix.
         Default is False.
 
-    :return: <pd.DataFrame> with the positions for all traded contracts and the
-        specified strategy in USD million. It has the standard JPMaQS DataFrame.
-        The contract signals have the following format "<cid>_<ctype>_<sname>_<pname>".
+    :return <pd.DataFrame>: a standard Quantamental DataFrame with the positions for all
+        traded contracts and the specified strategy in USD million. The contract signals
+        have the following format "<cid>_<ctype>_<sname>_<pname>".
 
     """
     for varx, namex, typex in [
