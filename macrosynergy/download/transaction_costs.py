@@ -47,6 +47,7 @@ AVAILABLE_CATS = [
 def download_transaction_costs(
     csv_url: str = CSV_URL,
     verbose: bool = False,
+    categorical: bool = False,
     **kwargs,
 ) -> QuantamentalDataFrame:
     """
@@ -70,10 +71,15 @@ def download_transaction_costs(
         raise ValueError("Failed to download trading costs data")
 
     if not isinstance(dfd, QuantamentalDataFrame):
-        ers = "Downloaded dataframe is not a QuantamentalDataFrame."
-        warnings.warn(ers, UserWarning)
         if verbose:
-            print(ers)
+            warnings.warn(
+                "Downloaded data could not be converted to QuantamentalDataFrame",
+                UserWarning,
+            )
+    else:
+        if verbose:
+            print("Downloaded data and transformed data successfully")
+        dfd = QuantamentalDataFrame(dfd, categorical=categorical)
 
     return dfd
 
