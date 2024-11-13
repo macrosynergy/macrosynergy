@@ -200,10 +200,10 @@ class SparseCosts(object):
 
     def prepare_data(self):
         """
-        Prepares data for use within the class,
-        including setting up the wide DataFrame and fids.
-        This method can be called again to refresh the data and cache.
+        Prepares data for use within the class, including setting up the wide DataFrame
+        and fids. This method can be called again to refresh the data and cache.
         """
+
         df_wide = QuantamentalDataFrame(self.df).to_wide()
         self._all_fids = get_fids(self.df)
         change_index = get_diff_index(df_wide)  # drop rows with no change
@@ -215,9 +215,14 @@ class SparseCosts(object):
         """
         Returns the costs for a given FID and date.
 
-        :param <str> fid: The FID (financial contract identifier) to get costs for.
-        :param <str> real_date: The date to get costs for.
+        Parameters
+        ----------
+        fid : str
+            The FID (financial contract identifier) to get costs for.
+        real_date : str
+            The date to get costs for.
         """
+
         assert fid in self._all_fids, f"Invalid FID: {fid} is not in the dataframe"
         cost_names = [col for col in self.df_wide.columns if col.startswith(fid)]
         if not cost_names:
