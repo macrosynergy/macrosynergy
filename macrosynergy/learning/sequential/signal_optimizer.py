@@ -137,7 +137,7 @@ class SignalOptimizer(BasePanelLearner):
                 "value": "float32",
             }
         )
-        self.ftr_coefficients = pd.DataFrame(
+        self.feature_importances = pd.DataFrame(
             columns=["real_date", "name"] + list(self.X.columns)
         ).astype(
             {
@@ -322,7 +322,7 @@ class SignalOptimizer(BasePanelLearner):
         for split_result in results:
             prediction_data.append(split_result["predictions"])
             model_choice_data.append(split_result["model_choice"])
-            ftr_coef_data.append(split_result["ftr_coefficients"])
+            ftr_coef_data.append(split_result["feature_importances"])
             intercept_data.append(split_result["intercepts"])
             ftr_selection_data.append(split_result["selected_ftrs"])
             ftr_corr_data.extend(split_result["ftr_corr"])
@@ -370,12 +370,12 @@ class SignalOptimizer(BasePanelLearner):
 
         # Store feature coefficients
         coef_df_long = pd.DataFrame(
-            columns=[col for col in self.ftr_coefficients.columns if col != "name"],
+            columns=[col for col in self.feature_importances.columns if col != "name"],
             data=ftr_coef_data,
         )
         coef_df_long = _insert_as_categorical(coef_df_long, "name", name, 1)
-        self.ftr_coefficients = concat_categorical(
-            self.ftr_coefficients,
+        self.feature_importances = concat_categorical(
+            self.feature_importances,
             coef_df_long,
         )
 
@@ -413,7 +413,7 @@ class SignalOptimizer(BasePanelLearner):
     def _check_duplicate_results(self, name):
         conditions = [
             ("preds", "xcat", name),
-            ("ftr_coefficients", "name", name),
+            ("feature_importances", "name", name),
             ("intercepts", "name", name),
             ("selected_ftrs", "name", name),
             ("ftr_corr", "name", name),
@@ -469,7 +469,7 @@ class SignalOptimizer(BasePanelLearner):
         Returns
         -------
         dict
-            Dictionary containing the feature coefficients, intercepts, selected features
+            Dictionary containing feature importance scores, intercepts, selected features
             and correlations between inputs to pipelines and those entered into a final
             model.
         """
@@ -496,14 +496,16 @@ class SignalOptimizer(BasePanelLearner):
 
         coefs = np.full(X_train.shape[1], np.nan)
 
-        if hasattr(final_estimator, "coef_"):
+        if hasattr(final_estimator, "feature_importances_"):
+            coef = final_estimator.feature_importances_
+        elif hasattr(final_estimator, "coef_"):
             coef = final_estimator.coef_
 
-            if coef.ndim == 1:
-                coefs = coef
-            elif coef.ndim == 2:
-                if coef.shape[0] == 1:
-                    coefs = coef.flatten()
+        if coef.ndim == 1:
+            coefs = coef
+        elif coef.ndim == 2:
+            if coef.shape[0] == 1:
+                coefs = coef.flatten()
 
         coef_ftr_map = {ftr: coef for ftr, coef in zip(feature_names, coefs)}
         coefs = [
@@ -539,7 +541,7 @@ class SignalOptimizer(BasePanelLearner):
 
         # Store data
         split_result = {
-            "ftr_coefficients": [timestamp] + coefs,
+            "feature_importances": [timestamp] + coefs,
             "intercepts": [timestamp, intercepts],
             "selected_ftrs": ftr_selection_data,
             "predictions": prediction_data,
@@ -692,9 +694,9 @@ class SignalOptimizer(BasePanelLearner):
                     )
             return self.selected_ftrs[self.selected_ftrs.name.isin(name)]
 
-    def get_feature_coefficients(self, name=None):
+    def get_feature_importances(self, name=None):
         """
-        Returns feature coefficients for a given pipeline.
+        Returns feature importances for a given pipeline.
 
         Parameters
         ----------
@@ -705,11 +707,16 @@ class SignalOptimizer(BasePanelLearner):
         Returns
         -------
         pd.DataFrame
-            Pandas dataframe of the feature coefficients, if available, learnt at each
+            Pandas dataframe of the feature importances, if available, learnt at each
             retraining date for a given pipeline.
+
+        Notes
+        -----
+        Availability of feature importances is subject to the selected model having a 
+        `feature_importances_` or `coef_` attribute.
         """
         if name is None:
-            return self.ftr_coefficients
+            return self.feature_importances
         else:
             if isinstance(name, str):
                 name = [name]
@@ -719,15 +726,15 @@ class SignalOptimizer(BasePanelLearner):
                 )
 
             for n in name:
-                if n not in self.ftr_coefficients.name.unique():
+                if n not in self.feature_importances.name.unique():
                     raise ValueError(
                         f"""The process name '{n}' is not in the list of already-run
                         pipelines. Please check the name carefully. If correct, please run 
                         calculate_predictions() first.
                         """
                     )
-            return self.ftr_coefficients[
-                self.ftr_coefficients.name.isin(name)
+            return self.feature_importances[
+                self.feature_importances.name.isin(name)
             ].sort_values(by="real_date")
 
     def get_intercepts(self, name=None):
@@ -1136,7 +1143,7 @@ class SignalOptimizer(BasePanelLearner):
                     "The elements of the figsize tuple must be floats or ints."
                 )
 
-    def coefs_timeplot(
+    def feature_importance_timeplot(
         self,
         name,
         ftrs=None,
@@ -1145,8 +1152,8 @@ class SignalOptimizer(BasePanelLearner):
         figsize=(10, 6),
     ):
         """
-        Visualise time series of feature coefficients for a given pipeline, when
-        available.
+        Visualise time series of feature importances for the final predictor in a
+        given pipeline, when available. 
 
         Parameters
         ----------
@@ -1156,7 +1163,7 @@ class SignalOptimizer(BasePanelLearner):
             List of feature names to plot. Default is None.
         title : str, optional
             Title of the plot. Default is None. This creates a figure title of the form
-            "Feature coefficients for pipeline: {name}".
+            "Feature importances for pipeline: {name}".
         ftrs_renamed : dict, optional
             Dictionary to rename the feature names for visualisation in the plot legend.
             Default is None, which uses the original feature names.
@@ -1165,27 +1172,36 @@ class SignalOptimizer(BasePanelLearner):
 
         Notes
         -----
-        This method displays the time series of feature coefficients for a given pipeline,
-        when available. This information is contained within a line plot. The default
-        behaviour is to plot the first 10 features in the order specified during training.
-        If more than 10 features were involved in the learning procedure, the default is
-        to plot the first 10 features. By specifying a `ftrs` list (which can be no longer
-        than 10 elements in length), this default behaviour can be overridden.
+        This method displays the time series of feature importances for a given pipeline,
+        when available. Availability depends on whether or not the final predictor in the
+        pipeline has either a `coefs_` or `feature_importances_` attribute. This
+        information is contained within a line plot. The default behaviour is to sort the
+        feature importance columns in ascending order of the number of NAs, accounting for
+        a possible feature selection module in the pipeline and plot the feature
+        importances for the first 10 features in the sorted order. If more than 10
+        features were involved in the learning procedure, the default is to plot the
+        feature importances for the first 10 sorted features. By specifying a `ftrs` list
+        (which can be no longer than 10 elements in length), this default behaviour can be
+        overridden.
+
+        By sorting by NAs, the plot displays the model feature importances for either the
+        first 10 features in the dataframe or, when a feature selection module was present,
+        the 10 most frequently selected features. 
         """
         # Checks
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
-        if name not in self.ftr_coefficients.name.unique():
+        if name not in self.feature_importances.name.unique():
             raise ValueError(
                 f"""The pipeline name {name} is not in the list of already-calculated 
                 pipelines. Please check the pipeline name carefully. If correct, please 
                 run calculate_predictions() first.
                 """
             )
-        ftrcoef_df = self.get_feature_coefficients(name)
+        ftrcoef_df = self.get_feature_importances(name)
         if ftrcoef_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
-                f"""There are no non-NA coefficients for the pipeline {name}.
+                f"""There are no non-NA feature importances for the pipeline {name}.
                 Cannot display a time series plot.
                 """
             )
@@ -1239,7 +1255,7 @@ class SignalOptimizer(BasePanelLearner):
         sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
-        ftrcoef_df = self.get_feature_coefficients(name)
+        ftrcoef_df = self.get_feature_importances(name)
         ftrcoef_df = ftrcoef_df.set_index("real_date")
         ftrcoef_df = ftrcoef_df.iloc[:, 1:]
 
@@ -1266,7 +1282,7 @@ class SignalOptimizer(BasePanelLearner):
         if title is not None:
             plt.title(title)
         else:
-            plt.title(f"Feature coefficients for pipeline: {name}")
+            plt.title(f"Feature importances for pipeline: {name}")
 
         plt.show()
 
@@ -1382,14 +1398,14 @@ class SignalOptimizer(BasePanelLearner):
         # Checks
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
-        if name not in self.ftr_coefficients.name.unique():
+        if name not in self.feature_importances.name.unique():
             raise ValueError(
                 f"""The pipeline name {name} is not in the list of already-calculated 
                 pipelines. Please check the pipeline name carefully. If correct, please 
                 run calculate_predictions() first.
                 """
             )
-        ftrcoef_df = self.get_feature_coefficients(name)
+        ftrcoef_df = self.get_feature_importances(name)
         if ftrcoef_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
                 f"""There are no non-NA coefficients for the pipeline {name}.
@@ -1454,7 +1470,7 @@ class SignalOptimizer(BasePanelLearner):
         sns.set_style("darkgrid")
 
         # Reshape dataframe for plotting
-        ftrcoef_df = self.get_feature_coefficients(name)
+        ftrcoef_df = self.get_feature_importances(name)
         years = ftrcoef_df["real_date"].dt.year
         years.name = "year"
         ftrcoef_df.drop(columns=["real_date", "name"], inplace=True)
@@ -1684,5 +1700,38 @@ if __name__ == "__main__":
     )
 
     so.models_heatmap("LR")
+    so.feature_importance_timeplot("LR")
     so.coefs_stackedbarplot("LR")
     so.nsplits_timeplot("LR")
+
+    # Test a random forest
+    from sklearn.ensemble import RandomForestRegressor
+
+    so.calculate_predictions(
+        name="RF",
+        models={
+            "RF": RandomForestRegressor(
+                n_estimators=100,
+                min_samples_leaf=5,
+                max_features="sqrt",
+                max_samples=0.1,
+            ),
+        },
+        hyperparameters={
+            "RF": {},
+        },
+        scorers={
+            "r2": make_scorer(r2_score),
+            "mae": make_scorer(mean_absolute_error, greater_is_better=False),
+        },
+        inner_splitters={
+            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=2),
+            "SecondSplit": ExpandingKFoldPanelSplit(n_splits=3),
+        },
+        search_type="grid",
+        cv_summary="mean-std",
+        n_jobs_outer=-1,
+        n_jobs_inner=1,
+    )
+
+    so.feature_importance_timeplot("RF")
