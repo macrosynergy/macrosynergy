@@ -235,7 +235,7 @@ class TestAll(unittest.TestCase):
             ),
         )
         pd.testing.assert_frame_equal(
-            so.ftr_coefficients,
+            so.feature_importances,
             pd.DataFrame(columns=["real_date", "name"] + list(so.X.columns)).astype(
                 {
                     **{col: "float32" for col in self.X.columns},
@@ -1710,7 +1710,7 @@ class TestAll(unittest.TestCase):
                 split_result.keys()
                 == {
                     "model_choice",
-                    "ftr_coefficients",
+                    "feature_importances",
                     "intercepts",
                     "selected_ftrs",
                     "predictions",
@@ -1731,7 +1731,7 @@ class TestAll(unittest.TestCase):
             self.assertIsInstance(prediction_data[0], pd.MultiIndex)
             self.assertIsInstance(prediction_data[1], np.ndarray)
 
-            ftr_data = split_result["ftr_coefficients"]
+            ftr_data = split_result["feature_importances"]
             self.assertIsInstance(ftr_data, list)
             self.assertTrue(len(ftr_data) == 1 + 3)  # 3 ftrs + 2 extra columns
             self.assertIsInstance(ftr_data[0], datetime.date)
@@ -1804,7 +1804,7 @@ class TestAll(unittest.TestCase):
                 split_result.keys()
                 == {
                     "model_choice",
-                    "ftr_coefficients",
+                    "feature_importances",
                     "intercepts",
                     "selected_ftrs",
                     "predictions",
@@ -1825,7 +1825,7 @@ class TestAll(unittest.TestCase):
             self.assertIsInstance(prediction_data[0], pd.MultiIndex)
             self.assertIsInstance(prediction_data[1], np.ndarray)
 
-            ftr_data = split_result["ftr_coefficients"]
+            ftr_data = split_result["feature_importances"]
             self.assertIsInstance(ftr_data, list)
             self.assertTrue(len(ftr_data) == 1 + 3)  # 3 ftrs + 2 extra columns
             self.assertIsInstance(ftr_data[0], datetime.date)
@@ -2059,50 +2059,50 @@ class TestAll(unittest.TestCase):
         self.assertTrue(selected_ftrs.name.unique()[0] == "test")
         self.assertTrue(selected_ftrs.isna().sum().sum() == 0)
 
-    def test_types_get_ftr_coefficients(self):
+    def test_types_get_feature_importances(self):
         so = self.so_with_calculated_preds
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
-            so.get_feature_coefficients(name="test2")
+            so.get_feature_importances(name="test2")
         with self.assertRaises(ValueError):
-            so.get_feature_coefficients(name=["test", "test2"])
+            so.get_feature_importances(name=["test", "test2"])
         # Test that the wrong dtype of a signal name raises an error
         with self.assertRaises(TypeError):
-            so.get_feature_coefficients(name=1)
+            so.get_feature_importances(name=1)
         with self.assertRaises(TypeError):
-            so.get_feature_coefficients(name={})
+            so.get_feature_importances(name={})
 
-    def test_valid_get_ftr_coefficients(self):
+    def test_valid_get_feature_importances(self):
         so = self.so_with_calculated_preds
-        # Test that running get_ftr_coefficients on pipeline "test" works
+        # Test that running get_feature_importances on pipeline "test" works
         try:
-            ftr_coefficients = so.get_feature_coefficients(name="test")
+            feature_importances = so.get_feature_importances(name="test")
         except Exception as e:
-            self.fail(f"get_ftr_coefficients raised an exception: {e}")
+            self.fail(f"get_feature_importances raised an exception: {e}")
         # Test that the output is as expected
-        self.assertIsInstance(ftr_coefficients, pd.DataFrame)
-        self.assertEqual(ftr_coefficients.shape[1], 5)
-        self.assertEqual(ftr_coefficients.columns[0], "real_date")
-        self.assertEqual(ftr_coefficients.columns[1], "name")
+        self.assertIsInstance(feature_importances, pd.DataFrame)
+        self.assertEqual(feature_importances.shape[1], 5)
+        self.assertEqual(feature_importances.columns[0], "real_date")
+        self.assertEqual(feature_importances.columns[1], "name")
         for i in range(2, 5):
-            self.assertEqual(ftr_coefficients.columns[i], self.X.columns[i - 2])
-        self.assertTrue(ftr_coefficients.name.unique()[0] == "test")
-        self.assertTrue(ftr_coefficients.isna().sum().sum() == 0)
+            self.assertEqual(feature_importances.columns[i], self.X.columns[i - 2])
+        self.assertTrue(feature_importances.name.unique()[0] == "test")
+        self.assertTrue(feature_importances.isna().sum().sum() == 0)
 
-        # Test that running get_ftr_coefficients without a name works
+        # Test that running get_feature_importances without a name works
         try:
-            ftr_coefficients = so.get_feature_coefficients()
+            feature_importances = so.get_feature_importances()
         except Exception as e:
             self.fail(f"get_selected_features raised an exception: {e}")
         # Test that the output is as expected
-        self.assertIsInstance(ftr_coefficients, pd.DataFrame)
-        self.assertEqual(ftr_coefficients.shape[1], 5)
-        self.assertEqual(ftr_coefficients.columns[0], "real_date")
-        self.assertEqual(ftr_coefficients.columns[1], "name")
+        self.assertIsInstance(feature_importances, pd.DataFrame)
+        self.assertEqual(feature_importances.shape[1], 5)
+        self.assertEqual(feature_importances.columns[0], "real_date")
+        self.assertEqual(feature_importances.columns[1], "name")
         for i in range(2, 5):
-            self.assertEqual(ftr_coefficients.columns[i], self.X.columns[i - 2])
-        self.assertTrue(ftr_coefficients.name.unique()[0] == "test")
-        self.assertTrue(ftr_coefficients.isna().sum().sum() == 0)
+            self.assertEqual(feature_importances.columns[i], self.X.columns[i - 2])
+        self.assertTrue(feature_importances.name.unique()[0] == "test")
+        self.assertTrue(feature_importances.isna().sum().sum() == 0)
 
     def test_types_get_intercepts(self):
         so = self.so_with_calculated_preds
@@ -2292,64 +2292,64 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"correlations_heatmap raised an exception: {e}")
 
-    def test_types_coefs_timeplot(self):
+    def test_types_feature_importance_timeplot(self):
         so = self.so_with_calculated_preds
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
-            so.coefs_timeplot(name="test2")
+            so.feature_importance_timeplot(name="test2")
         with self.assertRaises(TypeError):
-            so.coefs_timeplot(name=1)
+            so.feature_importance_timeplot(name=1)
         # title
         with self.assertRaises(TypeError):
-            so.coefs_timeplot(name="test", title=1)
+            so.feature_importance_timeplot(name="test", title=1)
         # figsize
         with self.assertRaises(TypeError):
-            so.coefs_timeplot(name="test", figsize="figsize")
+            so.feature_importance_timeplot(name="test", figsize="figsize")
         with self.assertRaises(ValueError):
-            so.coefs_timeplot(name="test", figsize=(0, 1, 2))
+            so.feature_importance_timeplot(name="test", figsize=(0, 1, 2))
         with self.assertRaises(TypeError):
-            so.coefs_timeplot(name="test", figsize=(10, "hello"))
+            so.feature_importance_timeplot(name="test", figsize=(10, "hello"))
         with self.assertRaises(TypeError):
-            so.coefs_timeplot(name="test", figsize=("hello", 6))
+            so.feature_importance_timeplot(name="test", figsize=("hello", 6))
         with self.assertRaises(TypeError):
-            so.coefs_timeplot(name="test", figsize=("hello", "hello"))
+            so.feature_importance_timeplot(name="test", figsize=("hello", "hello"))
         # ftrs_renamed
         with self.assertRaises(TypeError):
-            so.coefs_timeplot(name="test", ftrs_renamed=1)
+            so.feature_importance_timeplot(name="test", ftrs_renamed=1)
         with self.assertRaises(TypeError):
-            so.coefs_timeplot(name="test", ftrs_renamed={1: "ftr1"})
+            so.feature_importance_timeplot(name="test", ftrs_renamed={1: "ftr1"})
         with self.assertRaises(TypeError):
-            so.coefs_timeplot(name="test", ftrs_renamed={"ftr1": 1})
+            so.feature_importance_timeplot(name="test", ftrs_renamed={"ftr1": 1})
         with self.assertRaises(ValueError):
-            so.coefs_timeplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
+            so.feature_importance_timeplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
         # ftrs
         with self.assertRaises(TypeError):
-            so.coefs_timeplot(name="test", ftrs=1)
+            so.feature_importance_timeplot(name="test", ftrs=1)
         with self.assertRaises(ValueError):
-            so.coefs_timeplot(name="test", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+            so.feature_importance_timeplot(name="test", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
         with self.assertRaises(TypeError):
-            so.coefs_timeplot(name="test", ftrs=[1])
+            so.feature_importance_timeplot(name="test", ftrs=[1])
         with self.assertRaises(ValueError):
-            so.coefs_timeplot(name="test", ftrs=["invalid"])
+            so.feature_importance_timeplot(name="test", ftrs=["invalid"])
 
-    def test_valid_coefs_timeplot(self):
+    def test_valid_feature_importance_timeplot(self):
         so = self.so_with_calculated_preds
-        # Test that running coefs_timeplot on pipeline "test" works
+        # Test that running feature_importance_timeplot on pipeline "test" works
         try:
-            so.coefs_timeplot(name="test")
+            so.feature_importance_timeplot(name="test")
         except Exception as e:
-            self.fail(f"coefs_timeplot raised an exception: {e}")
+            self.fail(f"feature_importance_timeplot raised an exception: {e}")
         # Check that the legend is correct
         ax = plt.gca()
         legend = ax.get_legend()
         labels = [text.get_text() for text in legend.get_texts()]
         self.assertTrue(np.all(sorted(self.X.columns) == sorted(labels)))
-        # Now rerun coefs_timeplot but with a feature renaming dictionary
+        # Now rerun feature_importance_timeplot but with a feature renaming dictionary
         ftr_dict = {"CPI": "inflation"}
         try:
-            so.coefs_timeplot(name="test", ftrs_renamed=ftr_dict)
+            so.feature_importance_timeplot(name="test", ftrs_renamed=ftr_dict)
         except Exception as e:
-            self.fail(f"coefs_timeplot raised an exception: {e}")
+            self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
         legend = ax.get_legend()
         labels = [text.get_text() for text in legend.get_texts()]
@@ -2359,9 +2359,9 @@ class TestAll(unittest.TestCase):
         # Now rename two features
         ftr_dict = {"CPI": "inflation", "GROWTH": "growth"}
         try:
-            so.coefs_timeplot(name="test", ftrs_renamed=ftr_dict)
+            so.feature_importance_timeplot(name="test", ftrs_renamed=ftr_dict)
         except Exception as e:
-            self.fail(f"coefs_timeplot raised an exception: {e}")
+            self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
         legend = ax.get_legend()
         labels = [text.get_text() for text in legend.get_texts()]
@@ -2371,9 +2371,9 @@ class TestAll(unittest.TestCase):
         # Now rename all features
         ftr_dict = {ftr: f"ftr{i}" for i, ftr in enumerate(self.X.columns)}
         try:
-            so.coefs_timeplot(name="test", ftrs_renamed=ftr_dict)
+            so.feature_importance_timeplot(name="test", ftrs_renamed=ftr_dict)
         except Exception as e:
-            self.fail(f"coefs_timeplot raised an exception: {e}")
+            self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
         legend = ax.get_legend()
         labels = [text.get_text() for text in legend.get_texts()]
@@ -2382,12 +2382,12 @@ class TestAll(unittest.TestCase):
         )
         # Finally, test that the title works
         title = ax.get_title()
-        self.assertTrue(title == "Feature coefficients for pipeline: test")
+        self.assertTrue(title == "Feature importances for pipeline: test")
         # Try changing the title
         try:
-            so.coefs_timeplot(name="test", title="hello")
+            so.feature_importance_timeplot(name="test", title="hello")
         except Exception as e:
-            self.fail(f"coefs_timeplot raised an exception: {e}")
+            self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
         title = ax.get_title()
         self.assertTrue(title == "hello")
@@ -2500,7 +2500,7 @@ class TestAll(unittest.TestCase):
         legend = ax.get_legend()
         labels = sorted([text.get_text() for text in legend.get_texts()])
         # Check that the legend is correct
-        ftrcoef_df = so.get_feature_coefficients(name="test")
+        ftrcoef_df = so.get_feature_importances(name="test")
         ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
         ftrcoef_df = ftrcoef_df.drop(columns=["real_date", "name"])
         ftrcoef_df = ftrcoef_df.rename(columns=ftr_dict)
@@ -2532,10 +2532,10 @@ class TestAll(unittest.TestCase):
             so.intercepts_timeplot(name="test")
         # Test that an error is raised if calculate_predictions has not been run
         with self.assertRaises(ValueError):
-            so.coefs_timeplot(name="test")
+            so.feature_importance_timeplot(name="test")
         # Test that if no signals have been calculated, an error is raised
         with self.assertRaises(ValueError):
-            so.get_feature_coefficients(name="test")
+            so.get_feature_importances(name="test")
         # Test that if no signals have been calculated, an error is raised
         with self.assertRaises(ValueError):
             so.get_intercepts(name="test")
