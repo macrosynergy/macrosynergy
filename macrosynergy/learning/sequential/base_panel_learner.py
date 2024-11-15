@@ -998,9 +998,9 @@ class BasePanelLearner(ABC):
             raise ValueError("xcats must have at least two elements.")
         if not all(isinstance(xcat, str) for xcat in xcats):
             raise TypeError("All elements in xcats must be strings.")
-        for xcat in xcats:
-            if xcat not in df["xcat"].unique():
-                raise ValueError(f"{xcat} not in the dataframe.")
+        difference_xcats = set(xcats) - set(df["xcat"].unique())
+        if difference_xcats != set():
+                raise ValueError(f"{str(difference_xcats)} not in the dataframe.")
 
         # cids checks
         if cids is not None:
@@ -1008,9 +1008,9 @@ class BasePanelLearner(ABC):
                 raise TypeError("cids must be a list.")
             if not all(isinstance(cid, str) for cid in cids):
                 raise TypeError("All elements in cids must be strings.")
-            for cid in cids:
-                if cid not in df["cid"].unique():
-                    raise ValueError(f"{cid} not in the dataframe.")
+            difference_cids = set(cids) - set(df["cid"].unique())
+            if difference_cids != set():
+                raise ValueError(f"{str(difference_cids)} not in the dataframe.")
 
         # start checks
         if start is not None:
