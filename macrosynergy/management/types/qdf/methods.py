@@ -382,7 +382,7 @@ def reduce_df(
         cids = [cids] if isinstance(cids, str) else cids
         cids = [cid for cid in cids if cid in cids_in_df]
 
-    df = df[df["cid"].isin(cids)]
+    df = df[df["cid"].isin(cids)].reset_index(drop=True)
 
     df = _sync_df_categories(df)
 
@@ -448,7 +448,7 @@ def reduce_df_by_ticker(
     if tickers is None:
         tickers = sorted(ticker_series.unique())
 
-    df = df[ticker_series.isin(tickers)]
+    df = df[ticker_series.isin(tickers)].reset_index(drop=True)
 
     df = _sync_df_categories(df)
 
@@ -1057,7 +1057,7 @@ def _convert_to_single_metric_qdfs(
     qdf: QuantamentalDataFrameBase,
 ) -> QuantamentalDataFrameBase:
     """
-    Internal function for concat_qdfs. Splits a QuantamentalDataFrame with multiple 
+    Internal function for concat_qdfs. Splits a QuantamentalDataFrame with multiple
     metrics to multiple QuantamentalDataFrames with a single metric.
 
     Parameters

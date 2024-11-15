@@ -27,10 +27,10 @@ def _get_diff_data(
     Generate a DataFrame containing versioned differences in values with end-of-period
     adjustments.
 
-    This function processes input time series data and constructs a DataFrame that tracks 
-    changes in values, their versions, and grading adjustments based on an end-of-period 
-    lag. The function is intended to help analyze how values evolve over time, accounting 
-    for end-of-period (EOP) adjustments and releases, with each observation uniquely 
+    This function processes input time series data and constructs a DataFrame that tracks
+    changes in values, their versions, and grading adjustments based on an end-of-period
+    lag. The function is intended to help analyze how values evolve over time, accounting
+    for end-of-period (EOP) adjustments and releases, with each observation uniquely
     versioned to capture changes.
 
     Parameters
@@ -101,9 +101,9 @@ def _load_isc_from_df(
     end-of-period and grading adjustments.
 
     This function extracts specified columns from the input DataFrame and processes
-    them to generate versioned differences in the values. It creates a structured 
-    DataFrame suitable for tracking value changes over time with associated end-of-period 
-    and grading information. Data validation is included to ensure column presence and 
+    them to generate versioned differences in the values. It creates a structured
+    DataFrame suitable for tracking value changes over time with associated end-of-period
+    and grading information. Data validation is included to ensure column presence and
     correct grading ranges.
 
     Parameters
@@ -273,6 +273,7 @@ def create_delta_data(
     if "grading" not in df.columns:
         df["grading"] = np.nan
 
+    df = QuantamentalDataFrame(df)
     values_df = qdf_to_ticker_df(df, value_column="value")
     eop_df = qdf_to_ticker_df(df, value_column="eop_lag")
     grading_df = qdf_to_ticker_df(df, value_column="grading")
@@ -749,28 +750,26 @@ def sparse_to_dense(
         )
         if wdf.empty or wdf.isna().all().all():
             dfs = [
-                pd.DataFrame(index=dtrange)
-                .assign(
-                    cid=get_cid(tickerx),
-                    xcat=get_xcat(tickerx),
-                    obs=np.nan,
+                QuantamentalDataFrame.create_empty_df(
+                    ticker=tickerx,
+                    date_range=dtrange,
+                    metrics=[metric_name],
                 )
-                .rename(columns={"obs": metric_name})
-                .reset_index()
                 for tickerx in wdf.columns
             ]
-            m_qdf = pd.concat(dfs, axis=0).reset_index(drop=True)
+            m_qdf = QuantamentalDataFrame.from_qdf_list(dfs)
         else:
             m_qdf = ticker_df_to_qdf(wdf, metric=metric_name)
 
         sm_qdfs.append(m_qdf)
 
-    qdf: QuantamentalDataFrame = concat_single_metric_qdfs(sm_qdfs)
+    qdf: QuantamentalDataFrame = QuantamentalDataFrame.from_qdf_list(sm_qdfs)
     if "eop" in metrics:
         qdf["eop_lag"] = (qdf["real_date"] - qdf["eop"]).dt.days
+        qdf = QuantamentalDataFrame(qdf)
 
     if postfix:
-        qdf["xcat"] += postfix
+        qdf.rename_xcats(postfix=postfix)
 
     return qdf
 
@@ -999,6 +998,7 @@ class InformationStateChanges(object):
         self.density_stats_df: pd.DataFrame = None
         self._min_period: pd.Timestamp = min_period
         self._max_period: pd.Timestamp = max_period
+        self._qdf_as_categorical: bool = False
 
     def __getitem__(self, item) -> pd.DataFrame:
         return self.isc_dict[item]
@@ -1114,6 +1114,9 @@ class InformationStateChanges(object):
             max_period=df["real_date"].max(),
         )
 
+        df = QuantamentalDataFrame(df)
+        isc._qdf_as_categorical = df.InitializedAsCategorical
+
         isc_dict, density_stats_df = create_delta_data(df, return_density_stats=True)
 
         isc.isc_dict = isc_dict
@@ -1212,7 +1215,7 @@ class InformationStateChanges(object):
             A DataFrame with the information state changes.
         """
 
-        return sparse_to_dense(
+        result = sparse_to_dense(
             isc=self.isc_dict,
             value_column=value_column,
             min_period=self._min_period,
@@ -1220,6 +1223,11 @@ class InformationStateChanges(object):
             postfix=postfix,
             metrics=metrics,
         )
+
+        return QuantamentalDataFrame(
+            result,
+            _initialized_as_categorical=self._qdf_as_categorical,
+        ).to_original_dtypes()
 
     def to_dict(
         self, ticker: str
