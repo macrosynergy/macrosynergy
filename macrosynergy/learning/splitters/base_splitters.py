@@ -236,7 +236,6 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                 ax[cs_idx].set_yticks([0])
                 ax[cs_idx].set_yticklabels([cross_sections[cs_idx]])
                 ax[cs_idx].tick_params(axis="x", rotation=90)
-                ax[cs_idx].set_title(f"{split_titles[0]}")
             else:
                 ax[cs_idx, idx].broken_barh(
                     xranges, (-0.4, 0.8), facecolors=color, label=label
