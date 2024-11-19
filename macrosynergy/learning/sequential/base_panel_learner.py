@@ -225,8 +225,8 @@ class BasePanelLearner(ABC):
             False.
         cv_summary : str or callable
             Summary function for determining cross-validation scores given scores for
-            each validation fold. Default is "mean". Can also be "median" or a function
-            that takes a list of scores and returns a single value.
+            each validation fold. Default is "mean". Can also be "median", "special" or a
+            function that takes a list of scores and returns a single value.
         n_iter : int
             Number of iterations for random or bayesian hyperparameter optimization.
         split_functions : dict, optional
@@ -501,6 +501,7 @@ class BasePanelLearner(ABC):
                         normalize_fold_results=normalize_fold_results,
                     ),
                     cv=cv_splits,
+                    return_train_score = (True if cv_summary == "special" else False) 
                 )
             elif search_type == "prior":
                 search_object = RandomizedSearchCV(
@@ -516,6 +517,7 @@ class BasePanelLearner(ABC):
                         normalize_fold_results=normalize_fold_results,
                     ),
                     cv=cv_splits,
+                    return_train_score = (True if cv_summary == "special" else False) 
                 )
 
             try:
@@ -572,7 +574,7 @@ class BasePanelLearner(ABC):
         metric_columns = [
             col
             for col in cv_results.columns
-            if col.startswith("split") and "test" in col
+            if col.startswith("split") and ("test" in col or "train" in col)
         ]
         if normalize_fold_results:
             cv_results[metric_columns] = StandardScaler().fit_transform(
@@ -600,6 +602,28 @@ class BasePanelLearner(ABC):
                 cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].mean(
                     axis=1
                 ) / cv_results[scorer_columns].std(axis=1)
+            elif cv_summary == "special":
+                # Separate training and columns
+                train_columns = [col for col in scorer_columns if "train" in col]
+                test_columns = [col for col in scorer_columns if "test" in col]
+
+                # obtain mean and std of test metrics
+                mean_test = cv_results[test_columns].mean(axis=1)
+                std_test = cv_results[test_columns].std(axis=1)
+
+                # Determine generalization gap.
+                # We define this to be the average absolute deviation of the test metrics
+                # from their corresponding training metrics.
+                generalization_gap = np.nanmean(
+                    np.abs(
+                        cv_results[train_columns].values - cv_results[test_columns].values
+                    ),
+                    axis=1
+                )
+
+                # Store mean test metric - std test metric - generalization gap
+                cv_results[f"{scorer}_summary"] = mean_test - std_test - generalization_gap
+            
             else:
                 # TODO: handle NAs?
                 cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].apply(
@@ -1244,9 +1268,11 @@ class BasePanelLearner(ABC):
                 "median",
                 "mean-std",
                 "mean/std",
+                "special",
             ]:
                 raise ValueError(
-                    "cv_summary must be one of 'mean', 'median', 'mean-std' or 'mean/std'"
+                    "cv_summary must be one of 'mean', 'median', 'mean-std', 'special' or ",
+                    "'mean/std'"
                 )
         else:
             try:

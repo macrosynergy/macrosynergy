@@ -237,7 +237,8 @@ class SignalOptimizer(BasePanelLearner):
             False.
         cv_summary : str or callable, optional
             Summary function to use to combine scores across cross-validation folds.
-            Default is "mean". Options are "mean", "median" or a callable function.
+            Default is "mean". Options are "mean", "median", "special"
+            or a callable function.
         min_cids : int, optional
             Minimum number of cross-sections required for the initial
             training set. Default is 4.
@@ -1689,7 +1690,7 @@ if __name__ == "__main__":
         },
         search_type="prior",
         n_iter=6,
-        cv_summary="mean-std",
+        cv_summary="special",
         n_jobs_outer=-1,
         n_jobs_inner=1,
         normalize_fold_results=True,
