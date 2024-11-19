@@ -274,6 +274,11 @@ if __name__ == "__main__":
     X = dfd.drop(columns=["XR"])
     y = dfd["XR"]
 
+    """ Single validation set example """
+    splitter = RecencyKFoldPanelSplit(n_splits=1, n_periods=21*12)
+    splitter.visualise_splits(X, y)
+
+    """ Cross-validation examples """
     # ExpandingKFoldPanelSplit
     splitter = ExpandingKFoldPanelSplit(n_splits=5)
     splitter.visualise_splits(X, y)
