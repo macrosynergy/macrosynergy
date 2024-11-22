@@ -440,7 +440,13 @@ class TestRecencyKFold(unittest.TestCase):
         try:
             splitter.visualise_splits(X=self.X, y=self.y)
         except Exception as e:
-            self.fail(f"Unexpected exception: {e}")       
+            self.fail(f"Unexpected exception: {e}")      
+
+        splitter = RecencyKFoldPanelSplit(n_splits=1, n_periods = 3)
+        try:
+            splitter.visualise_splits(X=self.X, y=self.y)
+        except Exception as e:
+            self.fail(f"Unexpected exception: {e}")
 
 def make_simple_df(
     start1="2020-01-01",

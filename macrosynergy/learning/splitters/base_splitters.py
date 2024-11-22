@@ -228,7 +228,14 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                 ax[idx].set_yticklabels([cross_sections[0]])
                 ax[idx].tick_params(axis="x", rotation=90)
                 ax[idx].set_title(f"{split_titles[idx]}")
-
+            elif len(split_idxs) == 1:
+                ax[cs_idx].broken_barh(
+                    xranges, (-0.4, 0.8), facecolors=color, label=label
+                )
+                ax[cs_idx].set_xlim(real_dates.min(), real_dates.max() + difference)
+                ax[cs_idx].set_yticks([0])
+                ax[cs_idx].set_yticklabels([cross_sections[cs_idx]])
+                ax[cs_idx].tick_params(axis="x", rotation=90)
             else:
                 ax[cs_idx, idx].broken_barh(
                     xranges, (-0.4, 0.8), facecolors=color, label=label
