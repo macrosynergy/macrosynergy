@@ -222,11 +222,11 @@ class SparseCosts(object):
         real_date : str
             The date to get costs for.
         """
-
-        assert fid in self._all_fids, f"Invalid FID: {fid} is not in the dataframe"
+        if not fid in self._all_fids:
+            return None
         cost_names = [col for col in self.df_wide.columns if col.startswith(fid)]
         if not cost_names:
-            raise ValueError(f"Could not find any costs for {fid}")
+            return None
         df_loc = self.df_wide.loc[:real_date, cost_names]
         last_valid_index = df_loc.last_valid_index()
         return df_loc.loc[last_valid_index] if last_valid_index is not None else None
@@ -306,6 +306,10 @@ class TransactionCosts(object):
     def qdf(self) -> QuantamentalDataFrame:
         self.check_init()
         return self.sparse_costs.df
+
+    @staticmethod
+    def from_qdf(qdf: QuantamentalDataFrame, fids: List[str]) -> "TransactionCosts":
+        return TransactionCosts(df=qdf, fids=fids, **TransactionCosts.DEFAULT_ARGS)
 
     @classmethod
     def download(cls) -> "TransactionCosts":
