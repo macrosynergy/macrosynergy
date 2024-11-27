@@ -3,9 +3,12 @@ Utility functions for working with DataFrames.
 """
 
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.constants import FREQUENCY_MAP, FFILL_LIMITS, DAYS_PER_FREQ
 
 import warnings
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, List, Optional, Union, Dict
+
+from numbers import Number
 
 import numpy as np
 import pandas as pd
@@ -94,7 +97,7 @@ def standardise_dataframe(
         except:
             raise ValueError(fail_str)
 
-        # check if there is atleast one more column
+        # check if there is at least one more column
         if len(df.columns) < 4:
             raise ValueError(fail_str)
 
@@ -240,7 +243,7 @@ def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFr
     return (
         df.assign(ticker=df["cid"] + "_" + df["xcat"])
         .pivot(index="real_date", columns="ticker", values=value_column)
-        .rename_axis(None, axis=1)
+        .rename_axis(None, axis=1)  # TODO why rename axis?
     )
 
 
@@ -1113,6 +1116,83 @@ def categories_df(
     # how is set to "any", a potential unnecessary loss of data on certain categories
     # could arise.
     return dfc.dropna(axis=0, how="all")
+
+
+def estimate_release_frequency(
+    timeseries: Optional[pd.Series] = None,
+    df_wide: Optional[pd.DataFrame] = None,
+    atol: Optional[float] = None,
+    rtol: Optional[float] = None,
+) -> Union[Optional[str], Dict[str, Optional[str]]]:
+    """
+    Estimates the release frequency of a timeseries, by inferring the frequency of the
+    timeseries index. Before calling `pd.infer_freq`, the function drops NaNs, and rounds
+    values as specified by the tolerance parameters to allow dropping of "duplicate" values.
+
+    :param <pd.Series> timeseries: The timeseries to be used to estimate the release
+        frequency. Only one of `timeseries` or `df_wide` must be passed.
+    :param <pd.DataFrame> df_wide: The wide DataFrame to be used to estimate the release
+        frequency. This mode processes each column of the DataFrame as a timeseries. Only
+        one of `timeseries` or `df_wide` must be passed.
+    :param <float> diff_atol: The absolute tolerance for the difference between two
+    :param <float> diff_rtol: The relative tolerance for the difference between two
+    :return <str>: The estimated release frequency.
+    """
+
+    if df_wide is not None:
+        if timeseries is not None:
+            raise ValueError("Only one of `timeseries` or `df_wide` must be passed.")
+        if not isinstance(df_wide, pd.DataFrame):
+            raise TypeError("Argument `df_wide` must be a pandas DataFrame.")
+        if df_wide.empty or df_wide.index.name != "real_date":
+            raise ValueError(
+                "Argument `df_wide` must be a non-empty pandas DataFrame with a datetime index `'real_date'`."
+            )
+
+        return {
+            col: estimate_release_frequency(
+                timeseries=df_wide[col], atol=atol, rtol=rtol
+            )
+            for col in df_wide.columns
+        }
+
+    if bool(atol) and bool(rtol):
+        raise ValueError("Only one of `diff_atol` or `diff_rtol` must be passed.")
+
+    if atol:
+        if not isinstance(atol, Number) or atol <= 0:
+            raise TypeError("Argument `diff_atol` must be a float.")
+    elif rtol:
+        if not isinstance(rtol, Number):
+            raise TypeError("Argument `diff_rtol` must be a float.")
+        if not (0 <= rtol <= 1):
+            raise ValueError("Argument `diff_rtol` must be a float between 0 and 1.")
+
+    for _arg, _name in zip([atol, rtol], ["atol", "rtol"]):
+        if _arg is not None:
+            if not isinstance(_arg, Number) or _arg < 0:
+                raise TypeError(
+                    f"Argument `{_name}` must be a float greater than 0 or None."
+                )
+    if rtol or atol:
+        _scale = timeseries.abs().max() * rtol if rtol else atol
+        _dp = -int(np.floor(np.log10(_scale)))
+        timeseries: pd.Series = timeseries.round(_dp)
+    timeseries: pd.Series = timeseries.dropna().drop_duplicates(keep="first")
+
+    if (
+        not isinstance(timeseries, pd.Series)
+        or timeseries.empty
+        or not isinstance(timeseries.index, pd.DatetimeIndex)
+    ):
+        raise TypeError(
+            "Argument `timeseries` must be a non-empty pandas Series with "
+            "a datetime index `'real_date'`."
+        )
+
+    # infer the frequency of the timeseries
+
+    return pd.infer_freq(timeseries.index)
 
 
 def years_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
