@@ -1,1 +1,1 @@
-"""Util moduel for testing"""
+"""Util module for testing"""
