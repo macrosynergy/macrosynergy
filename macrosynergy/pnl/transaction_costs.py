@@ -70,6 +70,8 @@ def extrapolate_cost(
     pct90_cost: Number,
 ) -> Number:
     err_msg = "`{k}` must be a number > 0"
+    if not isinstance(trade_size, Number):
+        raise TypeError(err_msg.format(k="trade_size"))
     trade_size = abs(trade_size)
 
     for k, v in [
@@ -211,7 +213,7 @@ class SparseCosts(object):
         df_wide = df_wide.loc[change_index]
         self.df_wide = df_wide
 
-    def get_costs(self, fid: str, real_date: str) -> pd.DataFrame:
+    def get_costs(self, fid: str, real_date: str) -> pd.Series:
         """
         Returns the costs for a given FID and date.
 
