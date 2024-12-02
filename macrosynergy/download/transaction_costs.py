@@ -2,7 +2,6 @@ import datetime
 import pandas as pd
 import warnings
 import requests
-import numpy as np
 from typing import List
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import get_cid, get_xcat
@@ -34,10 +33,10 @@ def _request_wrapper(url: str, verbose: bool = True, **kwargs) -> str:
     raise requests.exceptions.RequestException(f"Failed to download {url}")
 
 
-AVAILABLE_CTYPES = ["FX", "IRS", "CDS"]
-AVAIALBLE_COSTS = ["BIDOFFER", "ROLLCOST", "SIZE"]
-AVAILABLE_STATS = ["MEDIAN", "90PCTL"]
-AVAILABLE_CATS = [
+AVAILABLE_CTYPES: List[str] = ["FX", "IRS", "CDS"]
+AVAIALBLE_COSTS: List[str] = ["BIDOFFER", "ROLLCOST", "SIZE"]
+AVAILABLE_STATS: List[str] = ["MEDIAN", "90PCTL"]
+AVAILABLE_CATS: List[str] = [
     f"{c}{t}_{s}"
     for c in AVAILABLE_CTYPES
     for t in AVAIALBLE_COSTS
