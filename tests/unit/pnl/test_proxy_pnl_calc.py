@@ -210,6 +210,25 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertWarns(UserWarning):
             _prep_dfs_for_pnl_calcs(df_wide=tdfw, rstring=self.rstring, spos=self.spos)
 
+    def test_check_df(self):
+        df = ticker_df_to_qdf(df=self.df_wide)
+
+        _check_df(df=df, rstring=self.rstring, spos=self.spos)
+
+        with self.assertRaises(TypeError):
+            _check_df(df=123, rstring=self.rstring, spos=self.spos)
+
+        # with self.assertRaises(ValueError):
+        #     dfw_copy = self.df_wide.copy()
+        #     drop_cid = get_cid(dfw_copy.columns[0])
+        #     for col in dfw_copy.columns:
+        #         if get_cid(col) == drop_cid:
+        #             dfw_copy.drop(columns=[col], inplace=True)
+
+        #     _check_df(
+        #         df=ticker_df_to_qdf(df=dfw_copy), rstring=self.rstring, spos=self.spos
+        #     )
+
 
 def mock_pnl_excl_costs(
     df_wide: pd.DataFrame, spos: str, rstring: str, pnl_name: str
