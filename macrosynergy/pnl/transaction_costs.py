@@ -2,10 +2,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import List, Union, Tuple, Optional, Dict, Callable
+
+from typing import List, Optional
 from numbers import Number
-import functools
-from macrosynergy.management.simulate import make_test_df
+
 from macrosynergy.download.transaction_costs import (
     download_transaction_costs,
     AVAIALBLE_COSTS,
@@ -15,8 +15,6 @@ from macrosynergy.management.utils import (
     reduce_df,
     get_cid,
     get_xcat,
-    ticker_df_to_qdf,
-    qdf_to_ticker_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 
@@ -129,7 +127,10 @@ def _plot_costs_func(
     colors = sns.color_palette("viridis", n_colors=len(tco.change_index))
 
     idx_dates = tco.change_index.tolist()
-    label_fmt = lambda x: pd.Timestamp(x).strftime("%Y-%m-%d")
+
+    def label_fmt(x):
+        return pd.Timestamp(x).strftime("%Y-%m-%d")
+
     labels = [
         f"{label_fmt(d1)} to {label_fmt(d2 - pd.offsets.BDay(1))}"
         for d1, d2 in zip(idx_dates[:-1], idx_dates[1:])
@@ -224,7 +225,7 @@ class SparseCosts(object):
         real_date : str
             The date to get costs for.
         """
-        if not fid in self._all_fids:
+        if fid not in self._all_fids:
             return None
         cost_names = [col for col in self.df_wide.columns if col.startswith(fid)]
         if not cost_names:
@@ -320,7 +321,8 @@ class TransactionCosts(object):
 
     def get_costs(self, fid: str, real_date: str) -> pd.Series:
         self.check_init()
-        assert fid in self.fids
+        if fid not in self.fids:
+            return None
         return self.sparse_costs.get_costs(fid=fid, real_date=real_date)
 
     @staticmethod
@@ -331,7 +333,7 @@ class TransactionCosts(object):
         pct90_size: Number,
         pct90_cost: Number,
     ) -> Number:
-        if np.isnan(trade_size):
+        if (not isinstance(trade_size, Number)) or np.isnan(trade_size):
             return 0.0
         return extrapolate_cost(
             trade_size=trade_size,
@@ -398,7 +400,7 @@ class TransactionCosts(object):
         )
 
 
-class ExampleAdapter(TransactionCosts):
+class ExampleAdapter(TransactionCosts):  # pragma: no cover
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -436,10 +438,9 @@ class ExampleAdapter(TransactionCosts):
 
 
 if __name__ == "__main__":
-    import time, random
+    import time, random  # noqa
 
     tx_costs_dates = pd.bdate_range("1999-01-01", "2022-12-30")
-    # txn_costs_obj: TransactionCosts = TransactionCosts.download()
     dftc = pd.read_pickle(r"C:\Users\PalashTyagi\Code\msx\macrosynergy\data\tc.pkl")
     txn_costs_obj: TransactionCosts = TransactionCosts(dftc, get_fids(dftc))
 
@@ -453,15 +454,3 @@ if __name__ == "__main__":
     }
 
     txn_costs_obj.plot_costs(cost_type="ROLLCOST", fids=txn_costs_obj.fids[:16], ncol=4)
-
-    # start = time.time()
-    # test_iters = 1000
-    # for i in range(test_iters):
-    #     txn_costs_obj.bidoffer(
-    #         fid="GBP_FX",
-    #         trade_size=random.randint(1, 100),
-    #         real_date=random.choice(tx_costs_dates).strftime("%Y-%m-%d"),
-    #     )
-    # end = time.time()
-    # print(f"Time taken: {end - start}")
-    # print(f"Time per iteration: {(end - start) / test_iters}")
