@@ -1,12 +1,14 @@
 """Test historical volatility estimates with simulate returns from random normal distribution"""
 
 import unittest
+import unittest.mock
+import matplotlib.pyplot
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Tuple, Union, Any, Optional
+import matplotlib
+
+from typing import List
 from numbers import Number
-from unittest import mock
-import warnings
 
 from macrosynergy.download.transaction_costs import (
     AVAIALBLE_COSTS,
@@ -19,17 +21,22 @@ from macrosynergy.pnl.transaction_costs import (
     check_df_for_txn_stats,
     get_diff_index,
     extrapolate_cost,
+    _plot_costs_func,
     SparseCosts,
     TransactionCosts,
 )
-from macrosynergy.management.utils import (
+
+from macrosynergy.management.utils import (  # noqa
     qdf_to_ticker_df,
     get_sops,
     ticker_df_to_qdf,
     _map_to_business_day_frequency,
 )
-from macrosynergy.management.types import QuantamentalDataFrame, NoneType
-from macrosynergy.management.simulate import make_test_df, simulate_returns_and_signals
+from macrosynergy.management.types import QuantamentalDataFrame, NoneType  # noqa
+from macrosynergy.management.simulate import (  # noqa
+    make_test_df,
+    simulate_returns_and_signals,
+)
 
 KNOWN_FID_ENDINGS = [f"{t}_{s}" for t in AVAIALBLE_COSTS for s in AVAILABLE_STATS]
 
@@ -48,10 +55,8 @@ def make_tx_cost_df(
         tiks = tickers
     else:
         tiks = [f"{c}_{k}" for c in cids for k in AVAILABLE_CATS]
-        fids = [f"{c}_{ct}" for c in cids for ct in AVAILABLE_CTYPES]
 
     date_range = pd.bdate_range(start=start, end=end)
-    total_dates = len(date_range)
     date_batches = [date_range[i : i + 30] for i in range(0, len(date_range), 30)]
 
     dataframes = [
@@ -77,6 +82,38 @@ def make_tx_cost_df(
         outs.append(out_df)
 
     return QuantamentalDataFrame.from_qdf_list(outs, categorical=False)
+
+
+def benchmark_extrapolate_cost(
+    trade_size: float,
+    median_size: float,
+    median_cost: float,
+    pct90_size: float,
+    pct90_cost: float,
+) -> float:
+    err_msg = "`{k}` must be a number > 0"
+    if not isinstance(trade_size, Number):
+        raise TypeError(err_msg.format(k="trade_size"))
+    trade_size = abs(trade_size)
+
+    for k, v in [
+        ("trade_size", trade_size),
+        ("median_size", median_size),
+        ("median_cost", median_cost),
+        ("pct90_size", pct90_size),
+        ("pct90_cost", pct90_cost),
+    ]:
+        if not isinstance(v, Number):
+            raise TypeError(err_msg.format(k=k))
+        if v < 0:
+            raise ValueError(err_msg.format(k=k))
+
+    if trade_size <= median_size:
+        cost = median_cost
+    else:
+        b = (pct90_cost - median_cost) / (pct90_size - median_size)
+        cost = median_cost + b * (trade_size - median_size)
+    return cost
 
 
 class TestFunctions(unittest.TestCase):
@@ -172,6 +209,32 @@ class TestFunctions(unittest.TestCase):
         good_args["trade_size"] = 1e6
         self.assertEqual(good_args["median_cost"], extrapolate_cost(**good_args))
 
+    def test_benchmark_extrapolate_cost(self):
+        for _ in range(100):
+            trade_size = np.random.randint(1, 1e7)
+            median_size = np.random.randint(1, 1e7)
+            median_cost = np.random.randint(1, 1e7)
+            pct90_size = np.random.randint(1, 1e7)
+            pct90_cost = np.random.randint(1, 1e7)
+
+            result = benchmark_extrapolate_cost(
+                trade_size=trade_size,
+                median_size=median_size,
+                median_cost=median_cost,
+                pct90_size=pct90_size,
+                pct90_cost=pct90_cost,
+            )
+
+            expected_result = extrapolate_cost(
+                trade_size=trade_size,
+                median_size=median_size,
+                median_cost=median_cost,
+                pct90_size=pct90_size,
+                pct90_cost=pct90_cost,
+            )
+
+            self.assertAlmostEqual(expected_result, result)
+
 
 class TestSparseCosts(unittest.TestCase):
     def setUp(self):
@@ -187,6 +250,8 @@ class TestSparseCosts(unittest.TestCase):
         sc = SparseCosts(self.df)
         self.assertTrue(all([fid in sc._all_fids for fid in self.fids]))
         self.assertTrue(set(self.tiks) == set(sc.df_wide.columns))
+
+        self.assertRaises(TypeError, SparseCosts, qdf_to_ticker_df(self.df))
 
     def test_get_costs(self):
         sc = SparseCosts(self.df)
@@ -205,13 +270,20 @@ class TestSparseCosts(unittest.TestCase):
             self.assertTrue(expected_result.equals(result))
 
         # test with invalid fid
-        inv_fid = "GBP_RANDOM_BIDOFFER_MEDIAN"
+        inv_fid = "AUD_RANDOM"
         result = sc.get_costs(inv_fid, rd)
         self.assertIsNone(result)
 
-        # test with valid fid, invalid cost type
-        inv_fid = "GBP_FX_RANDOM_MEDIAN"
-        result = sc.get_costs(inv_fid, rd)
+        test_sc = SparseCosts(self.df)
+        # drop one fid
+        sel_fid = test_sc._all_fids[0]
+        test_sc._all_fids = test_sc._all_fids[1:]
+        for icol in list(test_sc.df_wide.columns):
+            if icol.startswith(sel_fid):
+                test_sc.df_wide.drop(columns=icol, inplace=True)
+
+        # test with missing fid
+        result = test_sc.get_costs(sel_fid, rd)
         self.assertIsNone(result)
 
         # test with 2021 date, should return last valid date
@@ -240,11 +312,145 @@ class TestTransactionCosts(unittest.TestCase):
         )
 
     def test_init(self):
-        tc = TransactionCosts(self.df)
+        tc = TransactionCosts(df=self.df, fids=self.fids)
 
         self.assertTrue(tc.change_index.equals(tc.sparse_costs.change_index))
         self.assertTrue(tc.df_wide.equals(tc.sparse_costs.df_wide))
-        self.assertTrue(tc.qdf.equals(tc.sparse_costs.qdf))
+        self.assertTrue(tc.qdf.equals(tc.sparse_costs.df))
+
+    def test_download(self):
+        with unittest.mock.patch(
+            "macrosynergy.pnl.transaction_costs.download_transaction_costs",
+            return_value=self.df,
+        ):
+            tc = TransactionCosts.download()
+            self.assertTrue(tc.qdf.eq(self.df).all().all())
+
+    def test_from_qdf(self):
+        tc = TransactionCosts.from_qdf(self.df, fids=self.fids)
+        self.assertTrue(tc.qdf.eq(self.df).all().all())
+
+    def test_get_costs(self):
+        tc = TransactionCosts(df=self.df, fids=self.fids)
+        for _ in range(10):
+            rd = np.random.choice(self.dt_range)
+            fid = np.random.choice(self.fids)
+            result = tc.get_costs(fid, rd)
+            expected_result = tc.sparse_costs.get_costs(fid, rd)
+            self.assertTrue(expected_result.equals(result))
+
+        # test with invalid fid
+        inv_fid = "AUD_RANDOM"
+        self.assertIsNone(tc.get_costs(inv_fid, rd))
+
+    def test_extrapolate_cost(self):
+        tc = TransactionCosts(df=self.df, fids=self.fids)
+
+        for _ in range(100):
+            trade_size = np.random.randint(1, 1e7)
+            median_size = np.random.randint(1, 1e7)
+            median_cost = np.random.randint(1, 1e7)
+            pct90_size = np.random.randint(1, 1e7)
+            pct90_cost = np.random.randint(1, 1e7)
+
+            result = tc.extrapolate_cost(
+                trade_size=trade_size,
+                median_size=median_size,
+                median_cost=median_cost,
+                pct90_size=pct90_size,
+                pct90_cost=pct90_cost,
+            )
+
+            expected_result = extrapolate_cost(
+                trade_size=trade_size,
+                median_size=median_size,
+                median_cost=median_cost,
+                pct90_size=pct90_size,
+                pct90_cost=pct90_cost,
+            )
+
+            if np.isnan(expected_result):
+                self.assertTrue(np.isnan(result))
+            else:
+                self.assertAlmostEqual(expected_result, result)
+
+        self.assertEqual(tc.extrapolate_cost(None, 1, 1, 1, 1), 0)
+
+    def test_bidoffer(self):
+        tc = TransactionCosts(df=self.df, fids=self.fids)
+        # mock the tc.sparse_costs.get_costs method
+        for _ in range(100):
+            fid = np.random.choice(self.fids)
+            trade_size = np.random.randint(1, 1e7)
+            real_date = np.random.choice(self.dt_range)
+
+            result = tc.bidoffer(fid=fid, trade_size=trade_size, real_date=real_date)
+
+            rel_row = tc.sparse_costs.get_costs(fid=fid, real_date=real_date)
+            expected_result = tc.extrapolate_cost(
+                trade_size=trade_size,
+                median_size=rel_row[fid + tc.size_n],
+                median_cost=rel_row[fid + tc.tcost_n],
+                pct90_size=rel_row[fid + tc.size_l],
+                pct90_cost=rel_row[fid + tc.tcost_l],
+            )
+            if np.isnan(expected_result):
+                self.assertTrue(np.isnan(result))
+            else:
+                self.assertAlmostEqual(expected_result, result)
+
+    def test_rollcost(self):
+        tc = TransactionCosts(df=self.df, fids=self.fids)
+        for _ in range(100):
+            fid = np.random.choice(self.fids)
+            trade_size = np.random.randint(1, 1e7)
+            real_date = np.random.choice(self.dt_range)
+
+            result = tc.rollcost(fid=fid, trade_size=trade_size, real_date=real_date)
+
+            rel_row = tc.sparse_costs.get_costs(fid=fid, real_date=real_date)
+            expected_result = tc.extrapolate_cost(
+                trade_size=trade_size,
+                median_size=rel_row[fid + tc.size_n],
+                median_cost=rel_row[fid + tc.rcost_n],
+                pct90_size=rel_row[fid + tc.size_l],
+                pct90_cost=rel_row[fid + tc.rcost_l],
+            )
+            if np.isnan(expected_result):
+                self.assertTrue(np.isnan(result))
+            else:
+                self.assertAlmostEqual(expected_result, result)
+
+    def test_plot_costs_func(self):
+        matplotlib.pyplot.close("all")
+        curr_backend = matplotlib.pyplot.get_backend()
+        matplotlib.use("Agg")
+        tc = TransactionCosts(df=self.df, fids=self.fids)
+
+        good_args = {
+            "fids": self.fids[:3],
+            "cost_type": "BIDOFFER",
+            "ncol": 2,
+            "x_axis_label": "Real Date",
+            "y_axis_label": "Cost",
+            "title": "Test",
+            "title_fontsize": 28,
+            "facet_title_fontsize": 20,
+        }
+
+        with self.assertRaises(ValueError):
+            bad_args = good_args.copy()
+            bad_args["fids"] = [1, 2]
+            _plot_costs_func(tco=tc, **bad_args)
+
+        with self.assertRaises(ValueError):
+            bad_tc = TransactionCosts(df=self.df, fids=self.fids[:3])
+            bad_tc.__dict__.pop("sparse_costs")
+            _plot_costs_func(tco=bad_tc, **good_args)
+
+        tc.plot_costs(**good_args)
+        matplotlib.pyplot.close("all")
+        matplotlib.use(curr_backend)
 
 
 if __name__ == "__main__":
