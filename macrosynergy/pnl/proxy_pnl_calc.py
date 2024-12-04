@@ -6,11 +6,10 @@ import pandas as pd
 from typing import List, Union, Tuple, Optional, Dict
 from numbers import Number
 import warnings
+import macrosynergy.visuals as msv
 from macrosynergy.management.utils import (
     reduce_df,
     ticker_df_to_qdf,
-    # standardise_dataframe,
-    # qdf_to_ticker_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.pnl.transaction_costs import TransactionCosts
@@ -634,7 +633,6 @@ def plot_pnl(
 
 
 if __name__ == "__main__":
-    import macrosynergy.visuals as msv
     import os
 
     import pickle
