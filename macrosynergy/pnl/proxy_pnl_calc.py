@@ -9,8 +9,8 @@ import warnings
 from macrosynergy.management.utils import (
     reduce_df,
     ticker_df_to_qdf,
-    standardise_dataframe,
-    qdf_to_ticker_df,
+    # standardise_dataframe,
+    # qdf_to_ticker_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.pnl.transaction_costs import TransactionCosts
@@ -305,20 +305,9 @@ def _apply_trading_costs(
     pnls_list = sorted(pnlx_wide_df.columns.tolist())
     tcs_list = sorted(tc_wide_df.columns.tolist())
     # remove all that ends with tc_name_bidoffer or tc_name_rollcost
-    tcs_list = sorted(
-        set(
-            [
-                tc
-                for tc in tcs_list
-                if not any(
-                    [
-                        tc.endswith(f"_{tc_name}_{cost_type}")
-                        for cost_type in [bidoffer_name, rollcost_name]
-                    ]
-                )
-            ]
-        )
-    )
+    filter_endings = (f"_{tc_name}_{bidoffer_name}", f"_{tc_name}_{rollcost_name}")
+    tcs_list = [tc for tc in tcs_list if not str(tc).endswith(filter_endings)]
+    tcs_list = sorted(set(tcs_list))
 
     assert len(pnls_list) == len(tcs_list)
     assert set(_replace_strs(pnls_list, f"_{spos}_{pnl_name}")) == set(
@@ -358,20 +347,13 @@ def _portfolio_sums(
     glb_pnl_excl_costs = df_outs["pnl_excl_costs"].sum(axis=1, skipna=True)
 
     # Remove all that ends with tc_name_bidoffer or tc_name_rollcost
-    tcs_list = sorted(
-        set(
-            [
-                tc
-                for tc in df_outs["tc_wide"].columns.tolist()
-                if not any(
-                    [
-                        tc.endswith(f"_{tc_name}_{cost_type}")
-                        for cost_type in [bidoffer_name, rollcost_name]
-                    ]
-                )
-            ]
-        )
-    )
+    filter_endings = (f"_{tc_name}_{bidoffer_name}", f"_{tc_name}_{rollcost_name}")
+    tcs_list = [
+        tc
+        for tc in df_outs["tc_wide"].columns.tolist()
+        if not str(tc).endswith(filter_endings)
+    ]
+    tcs_list = sorted(set(tcs_list))
 
     # Sum the trading costs
     glb_tcosts = df_outs["tc_wide"].loc[:, tcs_list].sum(axis=1, skipna=True)
