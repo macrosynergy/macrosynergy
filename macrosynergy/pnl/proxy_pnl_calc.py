@@ -543,6 +543,10 @@ def proxy_pnl_calc(
         )
 
     if concat_dfs:
+        if not return_pnl_excl_costs:
+            df_outs.pop("pnl_excl_costs")
+        if not return_costs:
+            df_outs.pop("tc_wide")
         return QuantamentalDataFrame.from_qdf_list(
             list(df_outs.values()), categorical=_initialized_as_categorical
         )
