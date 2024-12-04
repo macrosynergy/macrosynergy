@@ -594,26 +594,6 @@ class TestCalculations(unittest.TestCase):
             pd.testing.assert_frame_equal(df_outs[key], expc_df_outs[key])
 
 
-# def proxy_pnl_calc(
-#     df: QuantamentalDataFrame,
-#     spos: str,
-#     rstring: str,
-#     transaction_costs_object: TransactionCosts,
-#     roll_freqs: Optional[Dict] = None,
-#     start: Optional[str] = None,
-#     end: Optional[str] = None,
-#     blacklist: Optional[Dict] = None,
-#     portfolio_name: str = "GLB",
-#     pnl_name: str = "PNL",
-#     tc_name: str = "TCOST",
-#     bidoffer_name: str = "BIDOFFER",
-#     rollcost_name: str = "ROLLCOST",
-#     return_pnl_excl_costs: bool = False,
-#     return_costs: bool = False,
-#     concat_dfs: bool = False,
-# ) -> Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]]:
-
-
 class TestProxyPNLCalc(unittest.TestCase):
 
     def setUp(self):
@@ -663,7 +643,8 @@ class TestProxyPNLCalc(unittest.TestCase):
 
         self.assertIsInstance(result, tuple)
 
-        assert False, 'PNLE and PNL are swapped'
+        assert False, "PNLE and PNL are swapped"
+
 
 if __name__ == "__main__":
     unittest.main()
