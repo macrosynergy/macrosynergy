@@ -1,10 +1,11 @@
 import unittest
-from unittest import mock
+import matplotlib.pylab
+import matplotlib.pyplot
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Union, Any, Set
-from numbers import Number
+from typing import List, Dict, Any
 import warnings
+import matplotlib
 from macrosynergy.compat import PD_NEW_DATE_FREQ
 from macrosynergy.pnl.proxy_pnl_calc import (
     _apply_trading_costs,
@@ -19,6 +20,7 @@ from macrosynergy.pnl.proxy_pnl_calc import (
     _split_returns_positions_tickers,
     _warn_and_drop_nans,
     proxy_pnl_calc,
+    plot_pnl,
 )
 from macrosynergy.pnl.transaction_costs import TransactionCosts
 
@@ -618,9 +620,7 @@ class TestProxyPNLCalc(unittest.TestCase):
         )
         self.qdf = ticker_df_to_qdf(df=self.df_wide)
         self.tc = TransactionCosts(df=make_tx_cost_df(cids=self.cids), fids=self.fids)
-
-    def test_proxy_pnl_calc(self):
-        good_args = {
+        self.good_args = {
             "df": self.qdf,
             "spos": self.spos,
             "rstring": self.rstring,
@@ -639,22 +639,93 @@ class TestProxyPNLCalc(unittest.TestCase):
             "concat_dfs": False,
         }
 
-        result = proxy_pnl_calc(**good_args)
+    def test_proxy_pnl_calc(self):
 
-        self.assertIsInstance(result, tuple)
-        self.assertEqual(len(result), 3)
-        for res in result:
+        full_result = proxy_pnl_calc(**self.good_args)
+
+        self.assertIsInstance(full_result, tuple)
+        self.assertEqual(len(full_result), 3)
+        for res in full_result:
             self.assertIsInstance(res, QuantamentalDataFrame)
 
-        pnl_found_tickers = QuantamentalDataFrame(result[0]).list_tickers()
-        pnle_found_tickers = QuantamentalDataFrame(result[1]).list_tickers()
+        pnl_found_tickers = QuantamentalDataFrame(full_result[0]).list_tickers()
+        pnle_found_tickers = QuantamentalDataFrame(full_result[1]).list_tickers()
         trunc_pnle_found_tickers = [t[:-1] for t in pnle_found_tickers]
         self.assertEqual(trunc_pnle_found_tickers, pnl_found_tickers)
 
-        found_tc_tickers = QuantamentalDataFrame(result[2]).list_tickers()
+        found_tc_tickers = QuantamentalDataFrame(full_result[2]).list_tickers()
         trunc_tc_tickers = [t.split(self.spos)[0] for t in found_tc_tickers]
         trunc_pnl_tickers = [t.split(self.spos)[0] for t in pnl_found_tickers]
         self.assertEqual(set(trunc_tc_tickers), set(trunc_pnl_tickers))
+
+        # now check with concat_dfs=True
+        self.good_args["concat_dfs"] = True
+        concat_result: QuantamentalDataFrame = proxy_pnl_calc(**self.good_args)
+        self.assertIsInstance(concat_result, QuantamentalDataFrame)
+        expected_result: QuantamentalDataFrame = pd.concat(full_result, axis=0)
+        self.assertTrue(
+            expected_result.sort_values(by=QuantamentalDataFrame.IndexCols)
+            .reset_index(drop=True)
+            .equals(
+                concat_result.sort_values(
+                    by=QuantamentalDataFrame.IndexCols
+                ).reset_index(drop=True)
+            )
+        )
+
+    def test_proxy_pnl_calc_return_args(self):
+        # call with return_costs=False
+        full_result = proxy_pnl_calc(**self.good_args)
+        args_copy = self.good_args.copy()
+
+        args_copy["return_costs"] = False
+        args_copy["concat_dfs"] = True
+        result = proxy_pnl_calc(**args_copy)
+
+        expected_result = pd.concat([full_result[0], full_result[1]], axis=0)
+
+        self.assertTrue(
+            expected_result.sort_values(by=QuantamentalDataFrame.IndexCols)
+            .reset_index(drop=True)
+            .equals(
+                result.sort_values(by=QuantamentalDataFrame.IndexCols).reset_index(
+                    drop=True
+                )
+            )
+        )
+
+    def test_proxy_pnl_calc_return_args2(self):
+        full_result = proxy_pnl_calc(**self.good_args)
+        args_copy = self.good_args.copy()
+        args_copy["return_pnl_excl_costs"] = False
+        args_copy["return_costs"] = False
+        args_copy["concat_dfs"] = True
+
+        result = proxy_pnl_calc(**args_copy)
+
+        expected_result = full_result[0]
+
+        self.assertTrue(
+            expected_result.sort_values(by=QuantamentalDataFrame.IndexCols)
+            .reset_index(drop=True)
+            .equals(
+                result.sort_values(by=QuantamentalDataFrame.IndexCols).reset_index(
+                    drop=True
+                )
+            )
+        )
+
+    def test_plot_pnl(self):
+        self.good_args["concat_dfs"] = True
+        pnl_df = proxy_pnl_calc(**self.good_args)
+        matplotlib.pyplot.close("all")
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            plot_pnl(pnl_df, portfolio_name=self.good_args["portfolio_name"])
+        matplotlib.pyplot.close("all")
+        matplotlib.use(mpl_backend)
 
 
 if __name__ == "__main__":
