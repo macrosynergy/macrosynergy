@@ -41,11 +41,62 @@ from macrosynergy.management.simulate import (  # noqa
 KNOWN_FID_ENDINGS = [f"{t}_{s}" for t in AVAIALBLE_COSTS for s in AVAILABLE_STATS]
 
 
+# def make_tx_cost_df(
+#     cids: List[str] = None,
+#     tickers: List[str] = None,
+#     start="2020-01-01",
+#     end="2025-01-01",
+# ) -> pd.DataFrame:
+#     err = "Either cids or tickers must be provided (not both)"
+#     assert bool(cids) or bool(tickers), err
+#     assert bool(cids) ^ bool(tickers), err
+
+#     if cids is None:
+#         tiks = tickers
+#     else:
+#         tiks = [f"{c}_{k}" for c in cids for k in AVAILABLE_CATS]
+
+#     date_range = pd.bdate_range(start=start, end=end, freq="BME")
+
+#     val_dict = {
+#         "BIDOFFER_MEDIAN": (0.1, 0.2),
+#         "BIDOFFER_90PCTL": (0.5, 2),
+#         "ROLLCOST_MEDIAN": (0.001, 0.006),
+#         "ROLLCOST_90PCTL": (0.007, 0.01),
+#         "SIZE_MEDIAN": (10, 20),
+#         "SIZE_90PCTL": (50, 70),
+#     }
+
+#     ct_map = {
+#         "FX": (10, 20),
+#         "IRS": (100, 150),
+#         "CDS": (1000, 1500),
+#     }
+
+#     df = pd.DataFrame(index=date_range)
+#     for tik in tiks:
+#         cid = tik.split("_")[0]
+#         # add all cols in val_dict
+#         for cost_type, (mn, mx) in val_dict.items():
+#             for fid_type, (rn, rx) in ct_map.items():
+#                 df[f"{cid}_{fid_type}{cost_type}"] = np.random.uniform(
+#                     mn, mx, len(df)
+#                 ) * np.random.uniform(rn, rx)
+
+#     df.index.name = "real_date"
+#     # forward will this to complete for every day
+#     new_index = pd.bdate_range(start=start, end=end, freq="B")
+#     df = df.reindex(new_index).ffill().bfill()
+
+
+#     return QuantamentalDataFrame.from_wide(df)
+
+
 def make_tx_cost_df(
     cids: List[str] = None,
     tickers: List[str] = None,
-    start="2020-01-01",
-    end="2025-01-01",
+    start="2015-01-01",
+    end="2020-01-01",
 ) -> pd.DataFrame:
     err = "Either cids or tickers must be provided (not both)"
     assert bool(cids) or bool(tickers), err
@@ -56,39 +107,32 @@ def make_tx_cost_df(
     else:
         tiks = [f"{c}_{k}" for c in cids for k in AVAILABLE_CATS]
 
-    date_range = pd.bdate_range(start=start, end=end, freq="BME")
+    date_range = pd.bdate_range(start=start, end=end)
+    date_batches = [date_range[i : i + 30] for i in range(0, len(date_range), 30)]
 
-    val_dict = {
-        "BIDOFFER_MEDIAN": (0.1, 0.2),
-        "BIDOFFER_90PCTL": (0.5, 2),
-        "ROLLCOST_MEDIAN": (0.001, 0.006),
-        "ROLLCOST_90PCTL": (0.007, 0.01),
-        "SIZE_MEDIAN": (10, 20),
-        "SIZE_90PCTL": (50, 70),
-    }
+    dataframes = [
+        pd.DataFrame(
+            data=abs(float(np.random.rand())),
+            index=date_batch,
+            columns=["value"],
+        )
+        .reset_index()
+        .rename(columns={"index": "real_date"})
+        for date_batch in date_batches
+    ]
 
-    ct_map = {
-        "FX": (10, 20),
-        "IRS": (100, 150),
-        "CDS": (1000, 1500),
-    }
-
-    df = pd.DataFrame(index=date_range)
+    outs = []
     for tik in tiks:
-        cid = tik.split("_")[0]
-        # add all cols in val_dict
-        for cost_type, (mn, mx) in val_dict.items():
-            for fid_type, (rn, rx) in ct_map.items():
-                df[f"{cid}_{fid_type}{cost_type}"] = np.random.uniform(
-                    mn, mx, len(df)
-                ) * np.random.uniform(rn, rx)
+        cid, xcat = tik.split("_", 1)
+        out_df = (
+            pd.concat(dataframes, axis=0)
+            .reset_index(drop=True)
+            .assign(cid=cid, xcat=xcat)
+        )
+        out_df["value"] = out_df["value"] * np.random.randint(1, 100)
+        outs.append(out_df)
 
-    df.index.name = "real_date"
-    # forward will this to complete for every day
-    new_index = pd.bdate_range(start=start, end=end, freq="B")
-    df = df.reindex(new_index).ffill().bfill()
-
-    return QuantamentalDataFrame.from_wide(df)
+    return QuantamentalDataFrame.from_qdf_list(outs, categorical=False)
 
 
 def benchmark_extrapolate_cost(
