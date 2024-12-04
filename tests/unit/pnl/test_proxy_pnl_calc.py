@@ -270,7 +270,7 @@ class TestHelperFunctions(unittest.TestCase):
 
 
 def mock_pnl_excl_costs(
-    df_wide: pd.DataFrame, spos: str, rstring: str, pnl_name: str
+    df_wide: pd.DataFrame, spos: str, rstring: str, pnle_name: str
 ) -> pd.DataFrame:
 
     pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
@@ -291,7 +291,7 @@ def mock_pnl_excl_costs(
 
     pnl_df = (pivot_returns / 100) * pivot_pos.shift(1) * prices_df.shift(1)
     pnl_df = pnl_df.loc[pnl_df.abs().sum(axis=1) > 0]
-    pnl_df.columns = [f"{col}_{spos}_{pnl_name}" for col in pnl_df.columns]
+    pnl_df.columns = [f"{col}_{spos}_{pnle_name}" for col in pnl_df.columns]
     return pnl_df
 
 
@@ -412,7 +412,7 @@ class TestCalculations(unittest.TestCase):
             "df_wide": self.df_wide.copy(),
             "spos": self.spos,
             "rstring": self.rstring,
-            "pnl_name": "pnl",
+            "pnle_name": "pnl",
         }
         _test_eq(argsx)
 
@@ -464,7 +464,7 @@ class TestCalculations(unittest.TestCase):
     def test_apply_trading_costs(self):
         # Extract a subset of tickers to use for pnlx_wide_df and tc_wide_df
         pnl_df = _pnl_excl_costs(
-            df_wide=self.df_wide, spos=self.spos, rstring=self.rstring, pnl_name="PNL"
+            df_wide=self.df_wide, spos=self.spos, rstring=self.rstring, pnle_name="PNLe"
         )
         tc_df = _calculate_trading_costs(
             df_wide=self.df_wide,
@@ -477,7 +477,7 @@ class TestCalculations(unittest.TestCase):
         )
 
         # Call the function
-        tc_name, pnl_name, pnle_name = "TC", "PNL", "PNLExcl"
+        tc_name, pnl_name, pnle_name = "TC", "PNL", "PNLe"
         bidoffer_name, rollcost_name = "BIDOFFER", "ROLLCOST"
         output_df = _apply_trading_costs(
             pnlx_wide_df=pnl_df,
@@ -501,13 +501,13 @@ class TestCalculations(unittest.TestCase):
         ]
         tcs_list = sorted(set(tcs_list))
         for pnl_col, tc_col in zip(pnl_list, tcs_list):
-            assert pnl_col.replace(f"_{self.spos}_{pnl_name}", "") == tc_col.replace(
+            assert pnl_col.replace(f"_{self.spos}_{pnle_name}", "") == tc_col.replace(
                 f"_{self.spos}_{tc_name}", ""
             )
             expc_output[pnl_col] = expc_output[pnl_col].sub(tc_df[tc_col], fill_value=0)
         expc_output = expc_output.rename(
             columns=lambda x: str(x).replace(
-                f"_{self.spos}_{pnl_name}", f"_{self.spos}_{pnle_name}"
+                f"_{self.spos}_{pnle_name}", f"_{self.spos}_{pnl_name}"
             )
         )
 
@@ -523,7 +523,7 @@ class TestCalculations(unittest.TestCase):
             df_wide=self.df_wide,
             spos=self.spos,
             rstring=self.rstring,
-            pnl_name=pnl_name,
+            pnle_name=pnle_name,
         )
         tc_wide = _calculate_trading_costs(
             df_wide=self.df_wide,
@@ -642,8 +642,19 @@ class TestProxyPNLCalc(unittest.TestCase):
         result = proxy_pnl_calc(**good_args)
 
         self.assertIsInstance(result, tuple)
+        self.assertEqual(len(result), 3)
+        for res in result:
+            self.assertIsInstance(res, QuantamentalDataFrame)
 
-        assert False, "PNLE and PNL are swapped"
+        pnl_found_tickers = QuantamentalDataFrame(result[0]).list_tickers()
+        pnle_found_tickers = QuantamentalDataFrame(result[1]).list_tickers()
+        trunc_pnle_found_tickers = [t[:-1] for t in pnle_found_tickers]
+        self.assertEqual(trunc_pnle_found_tickers, pnl_found_tickers)
+
+        found_tc_tickers = QuantamentalDataFrame(result[2]).list_tickers()
+        trunc_tc_tickers = [t.split(self.spos)[0] for t in found_tc_tickers]
+        trunc_pnl_tickers = [t.split(self.spos)[0] for t in pnl_found_tickers]
+        self.assertEqual(set(trunc_tc_tickers), set(trunc_pnl_tickers))
 
 
 if __name__ == "__main__":

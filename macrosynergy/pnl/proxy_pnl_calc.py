@@ -168,7 +168,7 @@ def _prep_dfs_for_pnl_calcs(
 
 
 def _pnl_excl_costs(
-    df_wide: pd.DataFrame, spos: str, rstring: str, pnl_name: str
+    df_wide: pd.DataFrame, spos: str, rstring: str, pnle_name: str
 ) -> pd.DataFrame:
 
     pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
@@ -200,7 +200,7 @@ def _pnl_excl_costs(
     # Drop rows with no pnl
     # nan_count_rows = pnl_df.isna().all(axis=1).sum()
     pnl_df = pnl_df.loc[pnl_df.abs().sum(axis=1) > 0]
-    pnl_df.columns = [f"{col}_{spos}_{pnl_name}" for col in pnl_df.columns]
+    pnl_df.columns = [f"{col}_{spos}_{pnle_name}" for col in pnl_df.columns]
     return pnl_df
 
 
@@ -310,20 +310,20 @@ def _apply_trading_costs(
     tcs_list = sorted(set(tcs_list))
 
     assert len(pnls_list) == len(tcs_list)
-    assert set(_replace_strs(pnls_list, f"_{spos}_{pnl_name}")) == set(
+    assert set(_replace_strs(pnls_list, f"_{spos}_{pnle_name}")) == set(
         _replace_strs(tcs_list, f"_{spos}_{tc_name}")
     )
 
     out_df = pnlx_wide_df.copy()
     for pnl_col, tc_col in zip(pnls_list, tcs_list):
-        assert pnl_col.replace(f"_{spos}_{pnl_name}", "") == tc_col.replace(
+        assert pnl_col.replace(f"_{spos}_{pnle_name}", "") == tc_col.replace(
             f"_{spos}_{tc_name}", ""
         )
 
         out_df[pnl_col] = out_df[pnl_col].sub(tc_wide_df[tc_col], fill_value=0)
 
     def __rename_pnl(x: str) -> str:
-        return str(x).replace(f"_{spos}_{pnl_name}", f"_{spos}_{pnle_name}")
+        return str(x).replace(f"_{spos}_{pnle_name}", f"_{spos}_{pnl_name}")
 
     out_df = out_df.rename(columns=lambda x: __rename_pnl(x))
 
@@ -504,7 +504,7 @@ def proxy_pnl_calc(
         df_wide=df_wide,
         spos=spos,
         rstring=rstring,
-        pnl_name=pnl_name,
+        pnle_name=pnle_name,
     )
 
     # tc_wide_df: pd.DataFrame = calculate_trading_costs(
@@ -521,8 +521,8 @@ def proxy_pnl_calc(
         tc_wide_df=df_outs["tc_wide"],
         spos=spos,
         tc_name=tc_name,
-        pnle_name=pnle_name,
         pnl_name=pnl_name,
+        pnle_name=pnle_name,
     )
 
     df_outs = _portfolio_sums(
@@ -661,7 +661,7 @@ if __name__ == "__main__":
         tc_name="TCOST",
         return_pnl_excl_costs=True,
         return_costs=True,
-        concat_dfs=True,
+        # concat_dfs=True,
     )
 
     plot_pnl(df=df_all)
