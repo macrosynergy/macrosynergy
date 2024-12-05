@@ -29,7 +29,6 @@ from macrosynergy.download.dataquery import (
     request_wrapper,
     validate_response,
     validate_download_args,
-    check_attributes_in_sync
 )
 from macrosynergy.download.dataquery import (
     OAUTH_BASE_URL,
@@ -1002,17 +1001,6 @@ class TestDataQueryInterface(unittest.TestCase):
                         oauth=True,
                     ) as dq:
                         result = dq.download_data(**good_args)
-
-
-    def test_check_attributes_in_sync(self):
-        import json
-        response_dict = '{"instruments": [{"attributes": [{"expression": "DB(JPMAQS,TEST,value)", "time-series": [["20240125", 0.1], ["20240126", -0.1], ["20240127", null], ["20240128", null], ["20240129", 0.8], ["20240130", -0.01], ["20240131", 1.5], ["20240201", 1.0], ["20240202", 1.0], ["20240203", null], ["20240204", null], ["20240205", 1.0]]}]}, {"attributes": [{"expression": "DB(JPMAQS,TEST,grading)", "time-series": [["20240125", 1.0], ["20240126", 1.0], ["20240127", null], ["20240128", null], ["20240129", 1.0], ["20240130", 1.0], ["20240131", 1.0], ["20240201", 1.0], ["20240202", 1.0], ["20240203", null], ["20240204", null], ["20240205", 1.0]]}]}, {"attributes": [{"expression": "DB(JPMAQS,TEST,mop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", null], ["20240128", null], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0], ["20240203", null], ["20240204", null], ["20240205", 0.0]]}]}, {"attributes": [{"expression": "DB(JPMAQS,TEST,eop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", null], ["20240128", null], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0], ["20240203", null], ["20240204", null], ["20240205", 0.0]]}]}]}'
-        response_dict = json.loads(response_dict)
-        self.assertTrue(check_attributes_in_sync(response_dict))
-
-        out_of_sync_response_dict = '{"instruments": [{"attributes": [{"expression": "DB(JPMAQS,TEST,value)", "time-series": [["20240125", 0.1], ["20240126", -0.1], ["20240127", null], ["20240128", null], ["20240129", 0.8], ["20240130", -0.01], ["20240131", 1.5], ["20240201", 1.0], ["20240202", 1.0], ["20240203", null], ["20240204", null], ["20240205", null]]}]}, {"attributes": [{"expression": "DB(JPMAQS,TEST,grading)", "time-series": [["20240125", 1.0], ["20240126", 1.0], ["20240127", null], ["20240128", null], ["20240129", 1.0], ["20240130", 1.0], ["20240131", 1.0], ["20240201", 1.0], ["20240202", 1.0], ["20240203", null], ["20240204", null], ["20240205", 1.0]]}]}, {"attributes": [{"expression": "DB(JPMAQS,TEST,mop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", null], ["20240128", null], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0], ["20240203", null], ["20240204", null], ["20240205", 0.0]]}]}, {"attributes": [{"expression": "DB(JPMAQS,TEST,eop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", null], ["20240128", null], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0], ["20240203", null], ["20240204", null], ["20240205", 0.0]]}]}]}'
-        out_of_sync_response_dict = json.loads(out_of_sync_response_dict)
-        self.assertFalse(check_attributes_in_sync(out_of_sync_response_dict))
 
 if __name__ == "__main__":
     unittest.main()

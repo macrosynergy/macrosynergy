@@ -43,6 +43,9 @@ class MissingDataError(ExceptionAdapter):
 class NoContentError(ExceptionAdapter):
     """Raised when no data is returned from a request."""
 
+class DataOutOfSyncError(ExceptionAdapter):
+    """Raised when data is out of sync with the expected data."""
+
 
 KNOWN_EXCEPTIONS = [
     requests.exceptions.ConnectionError,
