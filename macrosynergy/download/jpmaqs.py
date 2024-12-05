@@ -1035,7 +1035,6 @@ class JPMaQSDownload(DataQueryInterface):
         ts_list: List[dict] = self._fetch(
             url=url, params=params, tracking_id=tracking_id
         )
-        ts_list[0]['attributes'][0]["time-series"] = [['20240107', None], ['20240108', 1.0]]
         if not check_attributes_in_sync(ts_list):
             expressions = [ts['attributes'][0]['expression'] for ts in ts_list]
             error_str = f"Attributes for {expressions} are not in sync."
