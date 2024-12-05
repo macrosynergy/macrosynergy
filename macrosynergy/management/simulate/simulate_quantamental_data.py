@@ -553,7 +553,11 @@ def simulate_returns_and_signals(
 
     # TODO test simulated returns matches random walk hypothesis on the face of it
 
-    assert bool(start) ^ bool(end), "Only one of `start` or `end` is allowed."
+    atleast_one = bool(start) or bool(end)
+    both = bool(start) and bool(end)
+    if not (atleast_one and not both):
+        raise ValueError("Either `start` or `end` must be provided, but not both.")
+
     dtx = pd.Timestamp(start) if start else pd.Timestamp(end)
     dtx = pd.Timestamp(start) if start else pd.Timestamp(end) + pd.offsets.BDay(0)
     if start:
