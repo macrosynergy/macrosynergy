@@ -38,6 +38,7 @@ from macrosynergy.management.utils import (  # noqa
     update_df,
     get_cid,
     get_xcat,
+    _map_to_business_day_frequency,
 )
 import string
 import random
@@ -65,7 +66,8 @@ def make_tx_cost_df(
     else:
         tiks = [f"{c}_{k}" for c in cids for k in AVAILABLE_CATS]
 
-    date_range = pd.bdate_range(start=start, end=end, freq="BME")
+    freq = _map_to_business_day_frequency("M")
+    date_range = pd.bdate_range(start=start, end=end, freq=freq)
 
     val_dict = {
         "BIDOFFER_MEDIAN": (0.1, 0.2),
