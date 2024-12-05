@@ -29,7 +29,6 @@ from macrosynergy.download.dataquery import (
     request_wrapper,
     validate_response,
     validate_download_args,
-    check_attributes_in_sync
 )
 from macrosynergy.download.dataquery import (
     OAUTH_BASE_URL,
