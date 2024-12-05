@@ -451,7 +451,7 @@ class TestTransactionCosts(unittest.TestCase):
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _plot_costs_func(**good_args)
+            _plot_costs_func(tco=tc, **good_args)
         matplotlib.pyplot.close("all")
         matplotlib.use(curr_backend)
 
