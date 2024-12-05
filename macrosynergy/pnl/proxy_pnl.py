@@ -210,7 +210,7 @@ class ProxyPnL(object):
                     "Either pass a DataFrame with notional positions "
                     "or run `ProxyPnL.notional_positions` (and `contract_signals`) first."
                 )
-        spos: str = spos or self.sname + "_" + self.pname
+        spos: str = spos or (self.sname + "_" + self.pname)
         portfolio_name: str = portfolio_name or self.portfolio_name
         rstring: str = rstring or self.rstring
 
