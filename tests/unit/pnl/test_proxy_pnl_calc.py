@@ -1,5 +1,4 @@
 import unittest
-import matplotlib.pylab
 import matplotlib.pyplot
 import numpy as np
 import pandas as pd
