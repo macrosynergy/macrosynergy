@@ -496,16 +496,19 @@ class SignalOptimizer(BasePanelLearner):
 
         coefs = np.full(X_train.shape[1], np.nan)
 
-        if hasattr(final_estimator, "feature_importances_"):
-            coef = final_estimator.feature_importances_
-        elif hasattr(final_estimator, "coef_"):
-            coef = final_estimator.coef_
-
-        if coef.ndim == 1:
-            coefs = coef
-        elif coef.ndim == 2:
-            if coef.shape[0] == 1:
-                coefs = coef.flatten()
+        if hasattr(final_estimator, "feature_importances_") or (
+            hasattr(final_estimator, "coef_")
+        ):
+            if hasattr(final_estimator, "feature_importances_"):
+                coef = final_estimator.feature_importances_
+            elif hasattr(final_estimator, "coef_"):
+                coef = final_estimator.coef_
+            # Reshape coefficients for storage compatibility
+            if coef.ndim == 1:
+                coefs = coef
+            elif coef.ndim == 2:
+                if coef.shape[0] == 1:
+                    coefs = coef.flatten()
 
         coef_ftr_map = {ftr: coef for ftr, coef in zip(feature_names, coefs)}
         coefs = [
@@ -712,7 +715,7 @@ class SignalOptimizer(BasePanelLearner):
 
         Notes
         -----
-        Availability of feature importances is subject to the selected model having a 
+        Availability of feature importances is subject to the selected model having a
         `feature_importances_` or `coef_` attribute.
         """
         if name is None:
@@ -1153,7 +1156,7 @@ class SignalOptimizer(BasePanelLearner):
     ):
         """
         Visualise time series of feature importances for the final predictor in a
-        given pipeline, when available. 
+        given pipeline, when available.
 
         Parameters
         ----------
@@ -1186,7 +1189,7 @@ class SignalOptimizer(BasePanelLearner):
 
         By sorting by NAs, the plot displays the model feature importances for either the
         first 10 features in the dataframe or, when a feature selection module was present,
-        the 10 most frequently selected features. 
+        the 10 most frequently selected features.
         """
         # Checks
         if not isinstance(name, str):

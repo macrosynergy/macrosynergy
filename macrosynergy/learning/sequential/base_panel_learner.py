@@ -368,11 +368,11 @@ class BasePanelLearner(ABC):
         # by the lag applied.
         if self.lag != 0:
             locs: np.ndarray = (
-                np.searchsorted(self.date_levels, sorted_test_date_levels, side="left")
+                np.searchsorted(self.unique_date_levels, sorted_test_date_levels, side="left")
                 - self.lag
             )
             adj_test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
-                [self.date_levels[i] if i >= 0 else pd.NaT for i in locs]
+                [self.unique_date_levels[i] if i >= 0 else pd.NaT for i in locs]
             )
             # Now formulate correct index
             date_map = dict(zip(sorted_test_date_levels, adj_test_date_levels))
