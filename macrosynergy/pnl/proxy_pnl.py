@@ -23,22 +23,6 @@ from macrosynergy.pnl import (
 )
 
 
-def _plot_strategy(
-    df: QuantamentalDataFrame,
-    sig: str,
-    sname: str,
-    pname: str,
-    portfolio_name: str,
-    pnl_name: str,
-    tc_name: str,
-    start: str,
-    end: str,
-):
-    df_wide = qdf_to_ticker_df(df)
-    df_wide = df_wide.loc[start:end]
-    sel_tickers = [col for col in df_wide.columns]
-
-
 class ProxyPnL(object):
     def __init__(
         self,
