@@ -58,7 +58,7 @@ class ProxyPnL(object):
         self.blacklist = blacklist
         self.cs_df = None
         self.npos_df = None
-        self.df = reduce_df(df=standardise_dataframe(df), blacklist=blacklist)
+        self.df = reduce_df(df=QuantamentalDataFrame(df), blacklist=blacklist)
         self.start = start or df["real_date"].min().strftime("%Y-%m-%d")
         self.end = end or df["real_date"].max().strftime("%Y-%m-%d")
         self.rstring = rstring
