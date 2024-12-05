@@ -6,6 +6,7 @@ import matplotlib.pyplot
 import pandas as pd
 import numpy as np
 import matplotlib
+import warnings
 
 from typing import List
 from numbers import Number
@@ -26,70 +27,11 @@ from macrosynergy.pnl.transaction_costs import (
     TransactionCosts,
 )
 
-from macrosynergy.management.utils import (  # noqa
-    qdf_to_ticker_df,
-    get_sops,
-    ticker_df_to_qdf,
-    _map_to_business_day_frequency,
-)
-from macrosynergy.management.types import QuantamentalDataFrame, NoneType  # noqa
-from macrosynergy.management.simulate import (  # noqa
-    make_test_df,
-    simulate_returns_and_signals,
-)
+from macrosynergy.management.utils import qdf_to_ticker_df
+from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.compat import PD_2_0_OR_LATER
 
 KNOWN_FID_ENDINGS = [f"{t}_{s}" for t in AVAIALBLE_COSTS for s in AVAILABLE_STATS]
-
-
-# def make_tx_cost_df(
-#     cids: List[str] = None,
-#     tickers: List[str] = None,
-#     start="2020-01-01",
-#     end="2025-01-01",
-# ) -> pd.DataFrame:
-#     err = "Either cids or tickers must be provided (not both)"
-#     assert bool(cids) or bool(tickers), err
-#     assert bool(cids) ^ bool(tickers), err
-
-#     if cids is None:
-#         tiks = tickers
-#     else:
-#         tiks = [f"{c}_{k}" for c in cids for k in AVAILABLE_CATS]
-
-#     date_range = pd.bdate_range(start=start, end=end, freq="BME")
-
-#     val_dict = {
-#         "BIDOFFER_MEDIAN": (0.1, 0.2),
-#         "BIDOFFER_90PCTL": (0.5, 2),
-#         "ROLLCOST_MEDIAN": (0.001, 0.006),
-#         "ROLLCOST_90PCTL": (0.007, 0.01),
-#         "SIZE_MEDIAN": (10, 20),
-#         "SIZE_90PCTL": (50, 70),
-#     }
-
-#     ct_map = {
-#         "FX": (10, 20),
-#         "IRS": (100, 150),
-#         "CDS": (1000, 1500),
-#     }
-
-#     df = pd.DataFrame(index=date_range)
-#     for tik in tiks:
-#         cid = tik.split("_")[0]
-#         # add all cols in val_dict
-#         for cost_type, (mn, mx) in val_dict.items():
-#             for fid_type, (rn, rx) in ct_map.items():
-#                 df[f"{cid}_{fid_type}{cost_type}"] = np.random.uniform(
-#                     mn, mx, len(df)
-#                 ) * np.random.uniform(rn, rx)
-
-#     df.index.name = "real_date"
-#     # forward will this to complete for every day
-#     new_index = pd.bdate_range(start=start, end=end, freq="B")
-#     df = df.reindex(new_index).ffill().bfill()
-
-
-#     return QuantamentalDataFrame.from_wide(df)
 
 
 def make_tx_cost_df(
@@ -375,11 +317,19 @@ class TestTransactionCosts(unittest.TestCase):
             return_value=self.df,
         ):
             tc = TransactionCosts.download()
-            self.assertTrue(tc.qdf.eq(self.df).all().all())
+            if PD_2_0_OR_LATER:
+                self.assertTrue(tc.qdf.eq(self.df).all().all())
+            else:
+                self.assertTrue(
+                    pd.DataFrame(tc.qdf).eq(pd.DataFrame(self.df)).all().all()
+                )
 
     def test_from_qdf(self):
         tc = TransactionCosts.from_qdf(self.df, fids=self.fids)
-        self.assertTrue(tc.qdf.eq(self.df).all().all())
+        if PD_2_0_OR_LATER:
+            self.assertTrue(tc.qdf.eq(self.df).all().all())
+        else:
+            self.assertTrue(pd.DataFrame(tc.qdf).eq(pd.DataFrame(self.df)).all().all())
 
     def test_get_costs(self):
         tc = TransactionCosts(df=self.df, fids=self.fids)
@@ -499,7 +449,9 @@ class TestTransactionCosts(unittest.TestCase):
             bad_tc.__dict__.pop("sparse_costs")
             _plot_costs_func(tco=bad_tc, **good_args)
 
-        tc.plot_costs(**good_args)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _plot_costs_func(**good_args)
         matplotlib.pyplot.close("all")
         matplotlib.use(curr_backend)
 
