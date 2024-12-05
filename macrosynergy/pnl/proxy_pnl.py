@@ -1,17 +1,10 @@
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 from numbers import Number
-from typing import List, Union, Tuple, Optional, Dict, Any
+from typing import List, Union, Tuple, Optional
 
-from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import (
     reduce_df,
-    standardise_dataframe,
     is_valid_iso_date,
-    ticker_df_to_qdf,
-    qdf_to_ticker_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame, NoneType
 import macrosynergy.visuals as msv
@@ -232,7 +225,8 @@ class ProxyPnL(object):
 
 
 if __name__ == "__main__":
-    import pickle, os
+    import pickle
+    import os
 
     # from macrosynergy.pnl import
 
