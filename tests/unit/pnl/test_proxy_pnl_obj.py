@@ -1,12 +1,7 @@
 import unittest
-import matplotlib.pyplot
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Any
-import warnings
-from numbers import Number
-import matplotlib
-from macrosynergy.compat import PD_NEW_DATE_FREQ
+from typing import List
 from macrosynergy.management.utils import _map_to_business_day_frequency, get_cid
 from macrosynergy.pnl import (
     notional_positions,
@@ -82,13 +77,6 @@ class TestProxyPNLObject(unittest.TestCase):
         self.cids = ["USD", "EUR", "JPY", "GBP", "AUD", "CAD"]
         self.xcat = "EQ"
         n_years = 5
-        self.df = simulate_returns_and_signals(
-            cids=self.cids,
-            xcat=self.xcat,
-            return_suffix="XR",
-            years=n_years,
-            end="2025-01-01",
-        )
 
         self.tc_df = make_tx_cost_df(cids=self.cids)
         self.fids = get_fids(self.tc_df)
@@ -96,7 +84,18 @@ class TestProxyPNLObject(unittest.TestCase):
         self.pname = "POS"
         self.rstring = "XR"
         self.portfolio_name = "GLB"
-        self.ctypes = ["EQ"]
+        self.ctypes = AVAILABLE_CTYPES
+        self.df = pd.concat(
+            simulate_returns_and_signals(
+                cids=self.cids,
+                xcat=_xc,
+                return_suffix="XR",
+                signal_suffix="CSIG_STRAT",
+                years=n_years,
+                end="2025-01-01",
+            )
+            for _xc in self.ctypes
+        )
 
     def get_proxy_pnl_args(self):
         return dict(
@@ -111,11 +110,11 @@ class TestProxyPNLObject(unittest.TestCase):
     def get_contract_signals_args(self):
         return dict(
             cids=self.cids,
-            xcats=[self.xcat],
-            ctypes=AVAILABLE_CTYPES,
+            xcats=self.ctypes,
+            ctypes=self.ctypes,
             cscales=[1.0, 0.5, 0.1],
             csigns=[1, -1, 1],
-            hbasket=["USD_EQ", "EUR_EQ"],
+            hbasket=["USD_FX", "EUR_FX"],
             hscales=[0.7, 0.3],
             sig="SIG",
             hratios="HR",
@@ -125,7 +124,7 @@ class TestProxyPNLObject(unittest.TestCase):
         return dict(
             fids=self.fids,
             leverage=1.1,
-            sname="STRAT",
+            sname=self.sname,
             aum=1000,
             lback_meth="xma",
         )
@@ -134,8 +133,6 @@ class TestProxyPNLObject(unittest.TestCase):
         return dict(
             spos=self.sname + "_" + self.pname,
             portfolio_name=self.portfolio_name,
-            df=self.df,
-            # roll_freqs={"M": 1},
             rstring=self.rstring,
             pnl_name="PNL",
             tc_name="TCOST",
@@ -148,16 +145,31 @@ class TestProxyPNLObject(unittest.TestCase):
         for k, v in base_args.items():
             in_val = getattr(proxy_pnl, k)
             if isinstance(v, pd.DataFrame):
-                pd.testing.assert_frame_equal(in_val, QuantamentalDataFrame(v))
+                result = (
+                    QuantamentalDataFrame(in_val)
+                    .sort_values(by=QuantamentalDataFrame.IndexColsSortOrder)
+                    .reset_index(drop=True)
+                    .eq(
+                        QuantamentalDataFrame(v)
+                        .sort_values(by=QuantamentalDataFrame.IndexColsSortOrder)
+                        .reset_index(drop=True)
+                    )
+                    .all()
+                    .all()
+                )
+                self.assertTrue(result)
             else:
                 self.assertEqual(in_val, v)
 
     def test_flow(self):
 
         args = self.get_contract_signals_args()
+        xcats = args["xcats"].copy()
+        xcats += [f"{xc}XR" for xc in xcats]
+        xcats += [args["sig"]] + [args["hratios"]]
         df = make_test_df(
             cids=args["cids"],
-            xcats=args["xcats"] + [args["sig"]] + [args["hratios"]],
+            xcats=xcats,
             start=self.df["real_date"].min().strftime("%Y-%m-%d"),
             end=self.df["real_date"].max().strftime("%Y-%m-%d"),
         )
@@ -188,14 +200,13 @@ class TestProxyPNLObject(unittest.TestCase):
         # testing proxy_pnl_calc
         tco = TransactionCosts(self.tc_df, fids=self.fids)
 
-        proxy_pnl_args = self.get_proxy_pnl_calc_args()
-        proxy_pnl_args["df"] = pd.concat([self.df, cs_df, notional_df], axis=0)
-
-        expected_proxy_pnl_df = proxy_pnl_calc(
-            transaction_costs_object=tco, **proxy_pnl_args
-        )
+        dfx = pd.concat([df, cs_df, notional_df], axis=0)
 
         proxy_pnl_df = proxy_pnl_obj.proxy_pnl_calc(**self.get_proxy_pnl_calc_args())
+
+        expected_proxy_pnl_df = proxy_pnl_calc(
+            df=dfx, transaction_costs_object=tco, **self.get_proxy_pnl_calc_args()
+        )
 
         pd.testing.assert_frame_equal(proxy_pnl_df, expected_proxy_pnl_df)
 
