@@ -1335,16 +1335,16 @@ class TestEstimateReleaseFrequency(unittest.TestCase):
 
     def test_single_timeseries_daily(self):
         result = estimate_release_frequency(timeseries=self.timeseries_daily)
-        self.assertEqual(result, "B")
+        self.assertEqual(result, "D")
 
     def test_df_wide(self):
         result = estimate_release_frequency(df_wide=self.df_wide)
         self.assertIsInstance(result, dict)
-        self.assertEqual(result["daily"], "B")
-        self.assertEqual(result["weekly"], "W-FRI")
-        self.assertEqual(result["monthly"], "BME")
-        self.assertEqual(result["quarterly"], "BQE-DEC")
-        self.assertEqual(result["annual"], "BYE-DEC")
+        self.assertEqual(result["daily"], "D")
+        self.assertEqual(result["weekly"], "W")
+        self.assertEqual(result["monthly"], "M")
+        self.assertEqual(result["quarterly"], "Q")
+        self.assertEqual(result["annual"], "A")
 
     def test_invalid_timeseries_and_df_wide(self):
         with self.assertRaises(ValueError):
@@ -1387,13 +1387,13 @@ class TestEstimateReleaseFrequency(unittest.TestCase):
         result = estimate_release_frequency(
             timeseries=self.timeseries_monthly, atol=0.01
         )
-        self.assertEqual(result, "B")
+        self.assertEqual(result, "M")
 
     def test_timeseries_with_rtol(self):
         result = estimate_release_frequency(
             timeseries=self.timeseries_monthly, rtol=0.01
         )
-        self.assertEqual(result, "B")
+        self.assertEqual(result, "M")
 
 
 if __name__ == "__main__":
