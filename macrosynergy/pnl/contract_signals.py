@@ -327,7 +327,8 @@ def contract_signals(
         `csigns` must be of the same length as `ctypes` and `cscales`.
     hbasket : List[str]
         list of contract identifiers in the format "<cid>_<ctype>" that serve as
-        constituents of a hedging basket, if one is used. param <List[str|float]> hscales:
+        constituents of a hedging basket, if one is used.    
+    hscales : List[str|float]
         list of scaling factors (weights) for the basket. These can be either a list of
         floats or a list of category tickers that serve as basis of translation. The former
         are fixed across time, the latter variable.
