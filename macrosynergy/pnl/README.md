@@ -76,7 +76,7 @@ flowchart TD;
     CSCALES[Contract Specific Scaling]
     HR[Hedge-Ratios]
     HB[Hedge Basket]
-    CSfunc([`contract_signals`])
+    CSfunc(['contract_signals'])
     CSOutput{{Contract Signals}}
 
     subgraph CS_UINP[User Inputs]
@@ -97,16 +97,16 @@ flowchart TD
   CS{{Contract Signals}}
   AUM[AUM]
   LVG[Leverage]
-  LVGfunc[`leverage_positions`]
+  LVGfunc['leverage_positions']
   VT[Volatility Target]
-  HPVfunc([`historical_portfolio_volatility`])
-  VTPOSfunc([`volatility_target_positions`])
+  HPVfunc(['historical_portfolio_volatility'])
+  VTPOSfunc(['volatility_target_positions'])
   NP{{Notional Positions}}
   HPV{{Historical Portfolio Volatility}}
   VCV{{Variance-Covariance Matrices}}
   ESTF[Estimation Frequencies]
   ESTW[Weights per Estimation Frequency]
-  NPfunc([`notional_positions`])
+  NPfunc(['notional_positions'])
     VT_UINP -.-> VTPOSfunc
     LVG -.-> LVGfunc
 
