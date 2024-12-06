@@ -119,74 +119,12 @@ def validate_response(
         response_dict = response.json()
         if response_dict is None:
             raise InvalidResponseError(f"Response is empty.\n{error_str}")
-        if "links" in response_dict:
-            if not check_attributes_in_sync(response_dict):
-                raise InvalidResponseError(f"Attributes are not in sync.\n{error_str}")
         return response_dict
     except Exception as exc:
         if isinstance(exc, KeyboardInterrupt):
             raise exc
 
         raise InvalidResponseError(error_str + f"Error parsing response as JSON: {exc}")
-
-
-def check_attributes_in_sync(response_dict: dict) -> bool:
-    """
-    Checks if the attributes in the response are in sync with the time-series data. This
-    is performed since on occasion the ticker will have just been calculated for a new
-    date but on certain pods the data won't have updated yet but on some it will have
-    updated. This can lead to the attributes on a specific time-series being out of
-    sync.
-
-    Parameters
-    ----------
-    response_dict : dict
-        dictionary containing the response from the API.
-
-    Returns
-    -------
-    bool
-        True if the attributes are in sync, False otherwise.
-    """
-
-    if "instruments" not in response_dict:
-        return True
-
-    expressions_last_value_dict = {}
-
-    for instrument in response_dict["instruments"]:
-        attributes = instrument.get("attributes")
-        if not attributes:
-            continue
-
-        time_series = attributes[0].get("time-series")
-        if not time_series:
-            continue
-
-        last_valid_item = None
-        for i in range(len(time_series) - 1, -1, -1):
-            if time_series[i][1] is not None:
-                last_valid_item = time_series[i]
-                break
-
-        if not last_valid_item:
-            last_valid_item = time_series[0]
-
-        expression = attributes[0].get("expression")
-        if not expression:
-            last_valid_item = ["No data", 0]
-        else:
-            _, ticker, metric = expression.replace(")", "").split(",")
-
-        last_value_date = last_valid_item[0]
-        if ticker not in expressions_last_value_dict:
-            expressions_last_value_dict[ticker] = last_value_date
-        else:
-            if last_value_date != expressions_last_value_dict[ticker]:
-                return False
-
-    return True
-
 
 def request_wrapper(
     url: str,
@@ -1291,6 +1229,8 @@ class DataQueryInterface(object):
         # this is because the args can be modified by the retry mechanism
         # (eg. date format)
 
+        expressions = sorted(expressions)
+
         validate_download_args(
             expressions=expressions,
             start_date=start_date,
@@ -1385,10 +1325,10 @@ if __name__ == "__main__":
     client_secret: str = os.getenv("DQ_CLIENT_SECRET")
 
     expressions = [
-        "DB(JPMAQS,USD_EQXR_VT10,value)",
-        "DB(JPMAQS,USD_EQXR_VT10,eop_lag)",
-        "DB(JPMAQS,USD_EQXR_VT10,mop_lag)",
-        "DB(JPMAQS,USD_EQXR_VT10,grading)",
+        "DB(FXO,IV,USD,CAD,7D,25P,VOL)",
+        "DB(GFI,CAD,HR,CAN_GOVT,05Y,-1,,PVBP)",
+        "DB(MTE,usd/sofr/daily/1D/am_duration)",
+        "DB(EDG,D:DJESMI$$,PI)"
     ]
 
     with DataQueryInterface(

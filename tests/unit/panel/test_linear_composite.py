@@ -755,7 +755,13 @@ class TestAll(unittest.TestCase):
         cad_values = df[(df["xcat"] == "XR") & (df["cid"] == "CAD")]["value"].reset_index(drop=True).values
         aud_infl_values = df[(df["xcat"] == "INFL") & (df["cid"] == "AUD")]["value"].reset_index(drop=True).values
         cad_infl_values = df[(df["xcat"] == "INFL") & (df["cid"] == "CAD")]["value"].reset_index(drop=True).values
-        expected_values = (aud_values * aud_infl_values - cad_values * cad_infl_values) / (aud_infl_values + cad_infl_values)
+        
+        expected_values = (aud_values * aud_infl_values - cad_values * cad_infl_values) 
+
+        weight_magnitude = np.abs(aud_infl_values) + np.abs(cad_infl_values)
+        weight_magnitude[weight_magnitude == 0] = 1 # Avoid division by zero, since the weights are both zero the magnitude does not matter in this case
+
+        expected_values = expected_values / weight_magnitude
 
         self.assertTrue(np.allclose(lc_values, expected_values))
 
