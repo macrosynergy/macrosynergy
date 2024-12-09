@@ -295,6 +295,11 @@ def contract_signals(
 ) -> QuantamentalDataFrame:
     """
     Calculate contract-specific signals based on cross section-specific signals.
+    Each contract signal a product of the cross-section-specific signal, a scaling factor
+    or category, and a sign (+-1). Optionally, the contract signals can be hedged with a
+    basket of contracts. The hedge ratios are determined by a cross-section-specific
+    category. When hedging, the hedged signals are added to the contract signals; thus
+    yielding a single contract signal per financial contract.
 
     Parameters
     ----------
