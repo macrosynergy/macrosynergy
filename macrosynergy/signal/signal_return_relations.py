@@ -337,7 +337,7 @@ class SignalReturnRelations:
         title_fontsize: int = 16,
         size: Tuple[float, float] = None,
         legend_pos: str = "best",
-        x_labels: dict[str] = None,
+        x_labels: Dict = None,
         x_labels_rotate: int = 0,
     ):
         """
@@ -485,7 +485,7 @@ class SignalReturnRelations:
         title_fontsize: int = 16,
         size: Tuple[float, float] = None,
         legend_pos: str = "best",
-        x_labels: dict[str] = None,
+        x_labels: Dict = None,
         x_labels_rotate: int = 0,
     ):
         """
