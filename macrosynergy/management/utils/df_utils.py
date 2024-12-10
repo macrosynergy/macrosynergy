@@ -379,7 +379,7 @@ def apply_slip(
     metrics : List[str]
         List of metrics to which the slip is applied.
     raise_error : bool
-        If True, raises an error if the slip cannot be applied to all xcats in the target 
+        If True, raises an error if the slip cannot be applied to all xcats in the target
         DataFrame. If False, raises a warning instead.
 
     Raises
@@ -534,7 +534,7 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
         with NaN values.
     xcat_replace : bool
         all series belonging to the categories in the added DataFrame will be replaced,
-        rather than just the added tickers. 
+        rather than just the added tickers.
 
     Returns
     -------
@@ -1190,10 +1190,37 @@ def estimate_release_frequency(
             "a datetime index `'real_date'`."
         )
 
-    # infer the frequency of the timeseries
+    return _determine_freq(timeseries.index.tolist())
 
-    return pd.infer_freq(timeseries.index)
 
+def _determine_freq(dates: List[str]) -> str:
+    """
+    Backend function to determine the frequency of a timeseries from the dates in the
+    timeseries.
+
+    Parameters
+    ----------
+    dates : List[str]
+        A list of dates in the timeseries.
+
+    Returns
+    -------
+    str
+        The estimated frequency of the timeseries. One of 'D', 'W', 'M', 'Q', 'A'.
+    """
+    dates: pd.DatetimeIndex = pd.to_datetime(sorted(dates))
+    deltas = dates.to_series().diff().dt.days[1:]
+    frequencies = {
+        "D": 1,
+        "W": 7,
+        "M": 30,
+        "Q": 91,
+        "A": 365,
+    }
+    closest_freq = deltas.map(
+        lambda x: min(frequencies, key=lambda freq: abs(x - frequencies[freq]))
+    )
+    return closest_freq.value_counts().idxmax()
 
 def years_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
     """Returns the number of years between two dates."""
