@@ -337,6 +337,7 @@ class SignalReturnRelations:
         title_fontsize: int = 16,
         size: Tuple[float, float] = None,
         legend_pos: str = "best",
+        x_labels: dict[str] = None,
         x_labels_rotate: int = 0,
     ):
         """
@@ -369,6 +370,8 @@ class SignalReturnRelations:
         legend_pos : str
             position of legend box. Default is 'best'. See the documentation of
             matplotlib.pyplot.legend.
+        x_labels : Dict[str]
+            dictionary of x-axis labels. Default is None.
         x_labels_rotate : int
             rotation of x-axis labels. Default is 0.
         """
@@ -448,7 +451,18 @@ class SignalReturnRelations:
             color="steelblue",
         )
 
-        plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=x_labels_rotate)
+        if x_labels:
+            validated_labels = {}
+            for key, value in x_labels.items():
+                if key in self.sigs:
+                    validated_labels[key] = value
+                elif key + "_NEG" in self.sigs:
+                    validated_labels[key + "_NEG"] = value
+            labels = [validated_labels.get(xcat, xcat) for xcat in dfx.index]
+        else:
+            labels = dfx.index
+
+        plt.xticks(ticks=x_indexes, labels=labels, rotation=x_labels_rotate)
         plt.axhline(y=0.5, color="black", linestyle="-", linewidth=0.5)
 
         y_input = self.__yaxis_lim__(
@@ -471,6 +485,7 @@ class SignalReturnRelations:
         title_fontsize: int = 16,
         size: Tuple[float, float] = None,
         legend_pos: str = "best",
+        x_labels: dict[str] = None,
         x_labels_rotate: int = 0,
     ):
         """
@@ -494,6 +509,8 @@ class SignalReturnRelations:
             2-tuple of width and height of plot. If None, the default size will be applied.
         legend_pos : str
             position of legend box. Default is 'best'. See matplotlib.pyplot.legend.
+        x_labels : Dict[str]
+            dictionary of x-axis labels. Default is None.
         x_labels_rotate : int
             rotation of x-axis labels. Default is 0.
         """
@@ -572,7 +589,19 @@ class SignalReturnRelations:
         w = 0.4
         plt.bar(x_indexes - w / 2, pprobs, label="Pearson", width=w, color="lightblue")
         plt.bar(x_indexes + w / 2, kprobs, label="Kendall", width=w, color="steelblue")
-        plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=x_labels_rotate)
+
+        if x_labels:
+            validated_labels = {}
+            for key, value in x_labels.items():
+                if key in self.sigs:
+                    validated_labels[key] = value
+                elif key + "_NEG" in self.sigs:
+                    validated_labels[key + "_NEG"] = value
+            labels = [validated_labels.get(xcat, xcat) for xcat in dfx.index]
+        else:
+            labels = dfx.index
+
+        plt.xticks(ticks=x_indexes, labels=labels, rotation=x_labels_rotate)
 
         plt.axhline(
             y=0.95,
@@ -1762,25 +1791,25 @@ if __name__ == "__main__":
 
     sigs = ["CRY"]
     # Additional signals.
-    srn = SignalReturnRelations(
-        dfd,
-        rets="XR",
-        sigs=sigs,
-        sig_neg=True,
-        cosp=True,
-        freqs="Q",
-        start="2002-01-01",
-        ms_panel_test=True,
-        additional_metrics=[spearman, granger, granger_pval],
-    )
+    # srn = SignalReturnRelations(
+    #     dfd,
+    #     rets="XR",
+    #     sigs=sigs,
+    #     sig_neg=True,
+    #     cosp=True,
+    #     freqs="Q",
+    #     start="2002-01-01",
+    #     ms_panel_test=True,
+    #     additional_metrics=[spearman, granger, granger_pval],
+    # )
 
-    print(sigs)
+    # print(sigs)
 
-    df_dep = srn.summary_table()
-    print(df_dep)
+    # df_dep = srn.summary_table()
+    # print(df_dep)
 
-    dfsum = srn.single_relation_table(table_type="summary")
-    print(dfsum)
+    # dfsum = srn.single_relation_table(table_type="summary")
+    # print(dfsum)
 
     srn = SignalReturnRelations(
         dfd,
@@ -1802,6 +1831,8 @@ if __name__ == "__main__":
     srn.accuracy_bars(
         type="signals",
         title="Accuracy",
+        x_labels={"CRY": "Cry", "INFL": "Inflation", "GROWTH": "Growth"},
+        x_labels_rotate=45
     )
 
     sst = srn.single_statistic_table(stat="granger_pval")
