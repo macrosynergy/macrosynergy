@@ -448,7 +448,7 @@ class SignalReturnRelations:
             color="steelblue",
         )
 
-        plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=x_rotate)
+        plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=x_labels_rotate)
         plt.axhline(y=0.5, color="black", linestyle="-", linewidth=0.5)
 
         y_input = self.__yaxis_lim__(
