@@ -337,6 +337,7 @@ class SignalReturnRelations:
         title_fontsize: int = 16,
         size: Tuple[float, float] = None,
         legend_pos: str = "best",
+        x_labels_rotate: int = 0,
     ):
         """
         Plot bar chart for the overall and balanced accuracy metrics. For types:
@@ -368,6 +369,8 @@ class SignalReturnRelations:
         legend_pos : str
             position of legend box. Default is 'best'. See the documentation of
             matplotlib.pyplot.legend.
+        x_labels_rotate : int
+            rotation of x-axis labels. Default is 0.
         """
 
         assert type in ["cross_section", "years", "signals"]
@@ -445,7 +448,7 @@ class SignalReturnRelations:
             color="steelblue",
         )
 
-        plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=0)
+        plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=x_rotate)
         plt.axhline(y=0.5, color="black", linestyle="-", linewidth=0.5)
 
         y_input = self.__yaxis_lim__(
@@ -468,6 +471,7 @@ class SignalReturnRelations:
         title_fontsize: int = 16,
         size: Tuple[float, float] = None,
         legend_pos: str = "best",
+        x_labels_rotate: int = 0,
     ):
         """
         Plot correlation coefficients and significance. For types: cross_section and 
@@ -490,6 +494,8 @@ class SignalReturnRelations:
             2-tuple of width and height of plot. If None, the default size will be applied.
         legend_pos : str
             position of legend box. Default is 'best'. See matplotlib.pyplot.legend.
+        x_labels_rotate : int
+            rotation of x-axis labels. Default is 0.
         """
 
         assert type in ["cross_section", "years", "signals"]
@@ -566,7 +572,7 @@ class SignalReturnRelations:
         w = 0.4
         plt.bar(x_indexes - w / 2, pprobs, label="Pearson", width=w, color="lightblue")
         plt.bar(x_indexes + w / 2, kprobs, label="Kendall", width=w, color="steelblue")
-        plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=0)
+        plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=x_labels_rotate)
 
         plt.axhline(
             y=0.95,
