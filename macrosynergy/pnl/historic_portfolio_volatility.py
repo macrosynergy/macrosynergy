@@ -1,23 +1,5 @@
 """
 Estimation of Historic Portfolio Volatility.
-
-Module for calculating the historic portfolio volatility for a given strategy.  
-
-TODO Proposed workflow:
-
-    1. Create list of trigger dates for rebalance frequency.
-
-    2. Create batches of frequencies for which to estimate volatility per trigger date 
-        (memory inefficient).
-
-    3. Estimate variance-covariance matrix for each batch (per trigger date) and per frequency
-        (annualised).
-
-    4. Weight the variance-covariance matrices by the weights for each frequency into single
-        matrix.
-
-    5. Aggregate the variance-covariance matrix into a single portfolio volatility
-        estimate.
 """
 
 import logging
