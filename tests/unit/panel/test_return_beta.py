@@ -280,7 +280,7 @@ class TestAll(unittest.TestCase):
             data=self.benchmark_df["value"].to_numpy(),
             index=self.benchmark_df["real_date"],
         )
-        br = br.astype(dtype=np.float16)
+        br = br.astype(dtype=np.float64)
 
         # The method, adjusted_returns(), will compute the hedged return across the
         # entire panel. Call hedge_ratio method and pass the returned DataFrame
