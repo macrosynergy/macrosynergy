@@ -11,7 +11,7 @@ Function for visualising a facet grid of time line charts of one or more categor
 
 """
 
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -49,6 +49,7 @@ def timelines(
     aspect: Number = 1.7,
     height: Number = 3.0,
     legend_fontsize: int = 12,
+    blacklist: Dict = None,
 ):
     """
     Displays a facet grid of time line charts of one or more categories.
@@ -112,6 +113,8 @@ def timelines(
         height of plots in facet. Default is 3.
     legend_fontsize : int
         font size of legend. Default is 12.
+    blacklist : dict
+        cross-sections with date ranges that should be excluded from the dataframe.
     """
 
     if not isinstance(df, pd.DataFrame):
@@ -153,7 +156,6 @@ def timelines(
         raise ValueError(
             "`xcat_grid` and `single_chart` cannot be True simultaneously."
         )
-    # if not
 
     if cs_mean and xcat_grid:
         raise ValueError("`cs_mean` requires `xcat_grid` to be False.")
@@ -162,6 +164,15 @@ def timelines(
         raise ValueError(
             "`xcat_grid` cannot be True when multiple cross-sections are selected."
         )
+    
+    if blacklist:
+        if not isinstance(blacklist, dict):
+            raise TypeError("`blacklist` must be a dictionary.")
+        for key, value in blacklist.items():
+            if not isinstance(key, str):
+                raise TypeError("Keys in `blacklist` must be strings.")
+            if not isinstance(value, list):
+                raise TypeError("Values in `blacklist` must be lists.")
 
     if xcats is None:
         if xcat_labels:
@@ -172,7 +183,7 @@ def timelines(
         cids: List[str] = df["cid"].unique().tolist()
 
     if cumsum:
-        df = reduce_df(df, xcats=xcats, cids=cids, start=start, end=end)
+        df = reduce_df(df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist)
         df[val] = (
             df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
             .groupby(["cid", "xcat"])
@@ -181,7 +192,7 @@ def timelines(
 
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
-        df = reduce_df(df, xcats=xcats, cids=cids, start=start, end=end)
+        df = reduce_df(df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist)
         if len(xcats) > 1:
             raise ValueError("`cs_mean` cannot be True for multiple categories.")
 
@@ -236,6 +247,7 @@ def timelines(
             tickers=[cross_mean_series] if cs_mean else None,
             start=start,
             end=end,
+            blacklist=blacklist,
         ) as fp:
             fp.lineplot(
                 share_y=same_y,
@@ -268,6 +280,7 @@ def timelines(
             tickers=[cross_mean_series] if cs_mean else None,
             start=start,
             end=end,
+            blacklist=blacklist,
         ) as lp:
             lp.plot(
                 metric=val,
@@ -293,6 +306,7 @@ def timelines(
             tickers=[cross_mean_series] if cs_mean else None,
             start=start,
             end=end,
+            blacklist=blacklist,
         ) as fp:
             show_legend: bool = True if cross_mean_series else False
             show_legend = show_legend or (len(xcats) > 1)
@@ -325,6 +339,9 @@ def timelines(
 if __name__ == "__main__":
     from macrosynergy.visuals import FacetPlot
     from macrosynergy.management.simulate import make_test_df
+    import numpy as np
+
+    np.random.seed(42)
 
     cids: List[str] = [
         "USD",
@@ -391,7 +408,9 @@ if __name__ == "__main__":
         )
 
     import time
-
+    black = {"EUR": ["2012-01-01", "2018-01-01"], "GBP": ["2004-01-01", "2007-01-01"], 
+             "USD": ["2015-01-01", "2018-01-01"]}
+    
     # timer_start: float = time.time()
     timelines(
         df=df,
@@ -400,6 +419,8 @@ if __name__ == "__main__":
         xcat_labels=["ForEx", "Equity", "Real Interest Rates", "Interest Rates"],
         square_grid=True,
         cids=sel_cids[1],
+        cumsum=True,
+        blacklist=black,
         # single_chart=True,
     )
 
@@ -411,6 +432,7 @@ if __name__ == "__main__":
         # xcat_grid=False,
         single_chart=True,
         cs_mean=True,
+        blacklist=black,
     )
 
     timelines(
@@ -422,4 +444,6 @@ if __name__ == "__main__":
             "Plotting multiple cross sections for a single category \n with different "
             "y-axis!"
         ),
+        blacklist=black,
+        cumsum=True,
     )
