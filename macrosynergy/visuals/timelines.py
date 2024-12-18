@@ -83,8 +83,8 @@ def timelines(
         if True x-axis tick labels are added to all plots in grid. Default is False, i.e
         only the lowest row displays the labels.
     xcat_grid : bool
-        if True, shows a facet grid of line charts for each xcat for a single cross
-        section. Default is False, only one cross section is allowed with this option.
+        if True, shows a facet grid of line charts for each xcat for given cross
+        sections. Default is False.
     xcat_labels : List[str]
         labels to be used for xcats. If not defined, the labels will be identical to
         extended categories.
@@ -157,11 +157,6 @@ def timelines(
 
     if cs_mean and xcat_grid:
         raise ValueError("`cs_mean` requires `xcat_grid` to be False.")
-
-    if xcat_grid and (len(cids) != 1):
-        raise ValueError(
-            "`xcat_grid` cannot be True when multiple cross-sections are selected."
-        )
 
     if xcats is None:
         if xcat_labels:
