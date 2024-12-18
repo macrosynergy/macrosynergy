@@ -52,7 +52,7 @@ class TestAll(unittest.TestCase):
             {"weights": pd.DataFrame()},
             {"weights": [1, 2, "bar"]},
             {"df": pd.DataFrame()},
-            {"df": self.dfd.assign(value=np.NaN)},
+            {"df": self.dfd.assign(value=np.nan)},
             {"normalize_weights": "foo"},
             {"complete_cids": "foo"},
             {"complete_xcats": "foo"},
