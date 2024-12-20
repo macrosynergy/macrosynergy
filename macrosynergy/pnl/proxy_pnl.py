@@ -1,3 +1,7 @@
+"""
+Implementation of the ProxyPnL class.
+"""
+
 import pandas as pd
 from numbers import Number
 from typing import List, Union, Tuple, Optional
@@ -17,6 +21,46 @@ from macrosynergy.pnl import (
 
 
 class ProxyPnL(object):
+    """
+    The purpose of this class is to facilitate PnL estimation under the consideration of
+    AUM, volatility targeting or leverage, and transaction costs. The class is designed
+    to be used in a step-by-step manner, where the user first contracts signals, then
+    calculates notional positions, and finally calculates the proxy PnL.
+
+    The steps for generating the PnL are as follows:
+    - Contract signals: Contract signals for the given contracts and contract types.
+    - Notional positions: Calculate notional (dollar) positions for the given contract
+        signals.
+    - Proxy PnL calculation: Calculate the proxy PnL and transaction costs for the given
+        notional positions.
+
+    Parameters
+    ----------
+    df : QuantamentalDataFrame
+        DataFrame containing the data to be used in the PnL estimation. Initially, this
+        DataFrame should contain the data used to contract signals (i.e. raw signals).
+    transaction_costs_object : TransactionCosts
+        Object containing the transaction costs data.
+    start : str, optional
+        Start date for the PnL estimation. If not provided, the minimum date in the
+        DataFrame is used.
+    end : str, optional
+        End date for the PnL estimation. If not provided, the maximum date in the
+        DataFrame is used.
+    blacklist : dict, optional
+        The blacklist dictionary to be applied to the input data.
+    rstring : str, optional
+        A string used to specify the returns to be used in the PnL estimation.
+    portfolio_name : str, optional
+        The name given to the (current) portfolio. In the return outputs, the portfolio
+        name is used to identify and aggregate the PnL and transaction costs.
+    sname : str, optional
+        The name given to the strategy,
+    pname : str, optional
+        The name given to the positions.
+
+    """
+
     def __init__(
         self,
         df: QuantamentalDataFrame,
@@ -62,6 +106,19 @@ class ProxyPnL(object):
         *args,
         **kwargs,
     ) -> QuantamentalDataFrame:
+        """
+        Contract signals for the given contracts and contract types.
+        The method uses the same dataframe as the one used to initialize the class.
+        The function stores the contract signals DataFrame as an attribute of the class
+        (`self.cs_df`), and also returns the same DataFrame for convenience.
+
+        See :func:`macrosynergy.pnl.contract_signals` for more information on the other
+        parameters.
+
+        Returns
+        -------
+        QuantamentalDataFrame
+        """
         self.fids = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
         cs_df: QuantamentalDataFrame = contract_signals(
             df=self.df,
@@ -112,6 +169,25 @@ class ProxyPnL(object):
         Tuple[QuantamentalDataFrame, pd.DataFrame],
         Tuple[QuantamentalDataFrame, QuantamentalDataFrame, pd.DataFrame],
     ]:
+        """
+        Calculate notional positions for the given contract signals.
+        The method uses the contract signals calculated in the previous step. The user
+        may additionally provide more data that may be used as a new dataframe.
+
+        The method stores the notional positions DataFrame, the portfolio volatility
+        DataFrame, and the variance-covariance matrix DataFrame as attributes of the
+        class (`self.npos_df`, `self.pvol_df`, and `self.vcv_df`, respectively). It also
+        returns the notional positions DataFrame for convenience.
+
+        See :func:`macrosynergy.pnl.notional_positions` for more information on the other
+        parameters.
+
+        Returns
+        -------
+        QuantamentalDataFrame
+            The notional positions DataFrame
+        """
+
         fids = fids or self.fids
         if df is None:
             if hasattr(self, "cs_df") and self.cs_df is not None:
@@ -179,6 +255,24 @@ class ProxyPnL(object):
         pnl_name: str = "PNL",
         tc_name: str = "TCOST",
     ) -> Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]]:
+        """
+        Calculate the proxy PnL and transaction costs for the given notional positions.
+        The method uses the notional positions calculated in the previous step. The user
+        may additionally provide more data that may be used as a new dataframe.
+
+        The method stores the proxy PnL DataFrame, the transaction costs DataFrame, and
+        the proxy PnL excluding costs DataFrame as attributes of the class (`self.proxy_pnl`,
+        `self.txn_costs_df`, and `self.pnl_excl_costs`, respectively). It also returns the
+        proxy PnL DataFrame for convenience.
+
+        See :func:`macrosynergy.pnl.proxy_pnl_calc` for more information on the other
+        parameters.
+
+        Returns
+        -------
+        QuantamentalDataFrame
+            The proxy PnL DataFrame.
+        """
         if df is None:
             if hasattr(self, "npos_df") and self.npos_df is not None:
                 df = self.npos_df
@@ -216,6 +310,14 @@ class ProxyPnL(object):
         return self.proxy_pnl
 
     def plot_strategy(self):
+        """
+        Allows the user to plot the contract signals and notional positions in a single
+        plot.
+
+        Returns
+        -------
+        None
+        """
         csigs = self.cs_df.columns
         poss = self.npos_df.columns
 
