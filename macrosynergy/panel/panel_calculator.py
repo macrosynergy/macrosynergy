@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 from typing import List, Tuple
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df
-from macrosynergy.management.utils import drop_nan_series
+
+from macrosynergy.management.utils import drop_nan_series, reduce_df
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy import PYTHON_3_8_OR_LATER
 import re
@@ -350,7 +350,7 @@ def _replace_zeros(df: pd.DataFrame):
         cleaned dataframe.
     """
 
-    if not PYTHON_3_8_OR_LATER: # pragma: no cover
+    if not PYTHON_3_8_OR_LATER:  # pragma: no cover
         for col in df.columns:
             df[col] = df[col].replace(pd.NA, np.nan)
             df[col] = df[col].astype("float64")
@@ -414,4 +414,20 @@ if __name__ == "__main__":
     formulas = [formula, formula_2]
     df_calc = panel_calculator(
         df=dfd, calcs=formulas, cids=cids, start=start, end=end, blacklist=black
+    )
+
+    dfnew = dfd[(dfd["cid"] == "AUD") & (dfd["xcat"] == "XR")].copy()
+    dfnew["cid"] = "G2"
+    dfnew["xcat"] = "NEW"
+
+    dfd = pd.concat([dfd, dfnew], axis=0, ignore_index=True).reset_index(drop=True)
+
+    f1 = "G2_NEW = iG2_NEW"
+    df = panel_calculator(
+        df=dfd,
+        calcs=[f1],
+        cids=cids,
+        start="2010-01-01",
+        end="2020-12-31",
+        blacklist=black,
     )
