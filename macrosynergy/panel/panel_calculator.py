@@ -296,8 +296,8 @@ def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
             xcats_used += [x for x in op_list if re.match("^[A-Z]", x)]
             singles_used += [s for s in op_list if re.match("^i", s)]
 
-    single_xcats = [x[5:] for x in singles_used]
-    single_cids = [x[1:4] for x in single_xcats]
+    single_xcats = [x.split("_", 1)[1] for x in singles_used]
+    single_cids = [x.split("_", 1)[0] for x in single_xcats]
     all_xcats_used = xcats_used + single_xcats
     return all_xcats_used, singles_used, single_cids
 
