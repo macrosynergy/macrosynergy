@@ -105,20 +105,27 @@ def panel_calculator(
         df = panel_calculator(df=df, calcs=calcs, ...)
     """
 
-    # A. Asserts
+    # Check inputs
 
-    cols = ["cid", "xcat", "real_date", "value"]
-
-    col_error = f"The DataFrame must contain the necessary columns: {cols}."
-    assert set(cols).issubset(set(df.columns)), col_error
     # Removes any columns beyond the required.
+    cols = ["cid", "xcat", "real_date", "value"]
+    if not set(cols).issubset(set(df.columns)):
+        raise ValueError(
+            "The dataframe must contain the columns 'cid', 'xcat', 'real_date' and 'value'."
+        )
     df = QuantamentalDataFrame(df[cols])
     _as_categorical = df.InitializedAsCategorical
-    assert isinstance(calcs, list), "List of functions expected."
 
-    error_formula = "Each formula in the panel calculation list must be a string."
-    assert all([isinstance(elem, str) for elem in calcs]), error_formula
-    assert isinstance(cids, list), "List of cross-sections expected."
+    if not isinstance(calcs, list):
+        raise ValueError("`calcs` must be a list of strings with formulas.")
+    if not all(isinstance(elem, str) for elem in calcs):
+        raise ValueError("Each formula in the panel calculation list must be a string.")
+
+    # TODO: if cids is None, use all cids in the dataframe
+    # if cids is None:
+    #     cids = df["cid"].unique().tolist()
+    if not (isinstance(cids, list) and all(isinstance(elem, str) for elem in cids)):
+        raise ValueError("`cids` must be a list of strings with cross-sections.")
 
     _check_calcs(calcs)
 
