@@ -228,15 +228,14 @@ def time_series_check(formula: str, index: int):
     Tuple[int, bool]
     """
 
-    check = lambda a, b, c: (
-        (a.isupper() or a.isnumeric()) and b == "." and c.islower()
-    )
+    def check_str(a: str, b: str, c: str) -> bool:
+        return (a.isupper() or a.isnumeric()) and b == "." and c.islower()
 
     f = formula
     length = len(f)
     clause = False
     for i in range(index, (length - 2)):
-        if check(f[i], f[i + 1], f[i + 2]):
+        if check_str(f[i], f[i + 1], f[i + 2]):
             clause = True
             break
 
