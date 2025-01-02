@@ -22,9 +22,26 @@ class InformationStateChanges(object):
     InformationStateChanges show only data releases where there is an update in the
     indicator's value, grading or eop_lag. This offers a more compact representation of
     the data, where only releases which add information are retained.
+
     Initialize using the `from_qdf` class method to create an `InformationStateChanges`
     object from a `QuantamentalDataFrame`. The `calculate_score` method can be used to
     calculate scores for the information state changes.
+
+    Example initialization:
+
+    .. code-block:: python
+
+        from macrosynergy.download import JPMaQSDownload
+        from macrosynergy.management import InformationStateChanges
+
+        tickers = ["USD_GDPPC_SA", "GBP_GDPPC_SA"]
+
+        with JPMaQSDownload(client_id="cl_id", client_secret="cl_secret") as jpmaqs:
+            df = jpmaqs.download(tickers=tickers, metrics="all")
+
+        isc = InformationStateChanges.from_qdf(df)
+        usd_gpdppc_isc = isc["USD_GDPPC_SA"]
+
 
     Parameters
     ----------
@@ -1433,11 +1450,22 @@ def _calculate_score_on_sparse_indicator_for_class(
 
 
 if __name__ == "__main__":
-    df = pd.read_csv(
-        "data/isc.csv",
-        parse_dates=["real_date", "eop"],
-        date_format="%Y%m%d",
-    )
-    ticker = "TRY_CTOT_NSA_PI"
-    isc = InformationStateChanges.from_isc_df(df, ticker=ticker, iis=True)
-    print(isc)
+    # df = pd.read_csv(
+    #     "data/isc.csv",
+    #     parse_dates=["real_date", "eop"],
+    #     date_format="%Y%m%d",
+    # )
+    # ticker = "TRY_CTOT_NSA_PI"
+    # isc = InformationStateChanges.from_isc_df(df, ticker=ticker, iis=True)
+    # print(isc)
+
+    from macrosynergy.download import JPMaQSDownload
+    from macrosynergy.management import InformationStateChanges
+
+    tickers = ["USD_GDPPC_SA", "GBP_GDPPC_SA"]
+
+    with JPMaQSDownload() as jpmaqs:
+        df = jpmaqs.download(tickers=tickers, metrics="all")
+
+    isc = InformationStateChanges.from_qdf(df)
+    usd_gpdppc_isc = isc["USD_GDPPC_SA"]
