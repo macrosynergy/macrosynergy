@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Tuple
+from typing import Tuple, Optional
 from macrosynergy.management import business_day_dif
 from macrosynergy.management.types import QuantamentalDataFrame
 
@@ -26,6 +26,7 @@ def view_panel_dates(
     """
 
     # DataFrame of official timestamps.
+    nanmask: Optional[pd.DataFrame] = None
     if all(df.dtypes == object):
         df = df.apply(pd.to_datetime)
         # All series, in principle, should be populated to the last active release date
@@ -37,7 +38,7 @@ def view_panel_dates(
             )
         else:
             maxdate: pd.Timestamp = df.max().max()
-
+        nanmask = df.isna()
         df = business_day_dif(df=df, maxdate=maxdate)
 
         df = df.astype(float)
@@ -52,6 +53,9 @@ def view_panel_dates(
     if size is None:
         size = (max(df.shape[0] / 2, 18), max(1, df.shape[1] / 2))
 
+    if nanmask is not None:
+        nanmask = nanmask.T
+
     sns.set(rc={"figure.figsize": size})
     sns.heatmap(
         df.T,
@@ -61,6 +65,7 @@ def view_panel_dates(
         fmt=".0f",
         linewidth=1,
         cbar=False,
+        mask=nanmask,
     )
     plt.xlabel("")
     plt.ylabel("")
