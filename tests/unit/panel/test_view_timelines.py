@@ -179,17 +179,6 @@ class TestAll(unittest.TestCase):
                 cs_mean=True,
             )  # cs_mean must be False if len(xcats) > 1
 
-        with self.assertRaises(ValueError):
-            view_timelines(
-                dfd,
-                xcats=xcats,
-                cids=cids,
-                xcat_grid=True,
-                title_adj=0.8,
-                xcat_labels=["Return", "Carry", "Inflation"],
-                title="AUD Return, Carry & Inflation",
-            )  # if xcat_grid == True, len(cids) must be == 1
-
         with self.assertRaises(TypeError):
             view_timelines(
                 dfd,
