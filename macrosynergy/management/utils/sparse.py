@@ -971,10 +971,13 @@ def _calculate_score_on_sparse_indicator_for_class(
 
 class InformationStateChanges(object):
     """
-    Class to hold information state changes for a set of tickers.  Initialize using the
-    `from_qdf` class method to create an `InformationStateChanges` object from a
-    `QuantamentalDataFrame`. The `calculate_score` method can be used to calculate
-    scores for the information state changes.
+    Class to hold information state changes for a set of tickers.
+    InformationStateChanges show only data releases where there is an update in the 
+    indicator's value, grading or eop_lag. This offers a more compact representation of
+    the data, where only releases which add information are retained.
+    Initialize using the `from_qdf` class method to create an `InformationStateChanges` 
+    object from a `QuantamentalDataFrame`. The `calculate_score` method can be used to 
+    calculate scores for the information state changes.
 
     Parameters
     ----------
