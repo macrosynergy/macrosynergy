@@ -4,7 +4,7 @@ Functionality to visualize time series data as line charts.
 
 import numpy as np
 import pandas as pd
-from typing import List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 
 from macrosynergy.management.simulate import make_qdf
 
@@ -37,6 +37,7 @@ def view_timelines(
     aspect: float = 1.618,
     height: float = 2.85,
     legend_fontsize: int = 12,
+    blacklist: Dict = None,
 ):
     """
     Displays a grid with subplots of time line charts of one or more categories.
@@ -101,6 +102,8 @@ def view_timelines(
         height of plots in facet. Default is 3.
     legend_fontsize : int
         font size of legend. Default is 12.
+    blacklist : dict
+        cross-sections with date ranges that should be excluded from the dataframe.
     """
 
     msv.timelines(
@@ -130,6 +133,7 @@ def view_timelines(
         size=size,
         label_adj=label_adj,
         title_xadj=title_xadj,
+        blacklist=blacklist,
     )
 
 
