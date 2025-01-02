@@ -285,13 +285,13 @@ class NaivePnL:
 
         dfw = dfw.sort_values(["cid", "real_date"])
 
-        if rebal_freq != "daily":
-            sig_series = self.rebalancing(
-                dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
-            )
-            dfw["sig"] = np.squeeze(sig_series.to_numpy())
-        else:
-            dfw = dfw.rename({"psig": "sig"}, axis=1)
+        # if rebal_freq != "daily":
+        sig_series = self.rebalancing(
+            dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
+        )
+        dfw["sig"] = np.squeeze(sig_series.to_numpy())
+        # else:
+        #     dfw = dfw.rename({"psig": "sig"}, axis=1)
 
         # The signals are generated across the panel.
         dfw["value"] = dfw[self.ret] * dfw["sig"]
@@ -568,7 +568,11 @@ class NaivePnL:
             )["real_date"].min()
         elif rebal_freq == "weekly":
             dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
-            rebal_dates = dfw.groupby(["cid", "year", "week"])["real_date"].min()
+            rebal_dates = dfw.groupby(["cid", "year", "week"], observed=True)["real_date"].min()
+        elif rebal_freq == "daily":
+            rebal_dates = dfw.groupby(["cid", "year", "real_date"], observed=True)["real_date"].min()
+        else:
+            raise ValueError("Re-balancing frequency must be one of: daily, weekly, monthly.")
 
         # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
         r_dates_df = rebal_dates.reset_index(level=0)
@@ -592,7 +596,7 @@ class NaivePnL:
         rebal_merge = dfw[["real_date", "cid"]].merge(
             rebal_merge, how="left", on=["real_date", "cid"]
         )
-        rebal_merge["psig"] = rebal_merge["psig"].ffill().shift(rebal_slip)
+        rebal_merge["psig"] = rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
         rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 
         rebal_merge = rebal_merge.set_index("real_date")
@@ -1548,7 +1552,7 @@ if __name__ == "__main__":
         sig_op="zn_score_pan",
         sig_neg=True,
         sig_add=0.5,
-        rebal_freq="monthly",
+        rebal_freq="daily",
         vol_scale=5,
         rebal_slip=1,
         min_obs=250,
