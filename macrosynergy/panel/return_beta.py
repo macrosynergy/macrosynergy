@@ -155,7 +155,7 @@ def hedge_calculator(
     df_hrat = df_hrat.reset_index(level=0)
 
     # Merge to convert to the re-estimation frequency. The intermediary dates, daily
-    # business days between re-estimation dates, will be populated with np.NaN values.
+    # business days between re-estimation dates, will be populated with np.nan values.
     df_hr = df_ur.merge(df_hrat, on="real_date", how="left")
 
     df_hr = df_hr.drop("returns", axis=1)
