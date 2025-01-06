@@ -611,6 +611,16 @@ class TestAll(unittest.TestCase):
         basket_value = round(basket_cry.iloc[index_cry], 5)
         self.assertTrue(manual_value == basket_value)
 
+    def test_basket_method_value(self):
+        with self.assertRaises(ValueError):
+            basket_1 = Basket(
+                df=self.dfd,
+                contracts=self.contracts,
+                ret="XR_NSA",
+                cry="CRR_NSA",
+                ewgts="EWT",
+            )
+
     def test_weight_visualiser(self):
         # Will exclusively test the assert statements in the method. The various
         # visualisation tools require certain parameters to be defined (dependency
