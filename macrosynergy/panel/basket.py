@@ -74,7 +74,6 @@ class Basket(object):
         assert all(isinstance(c, str) for c in contracts), c_error
         assert isinstance(ret, str), "`ret` must be a string"
         if isinstance(ewgts, str):
-            warnings.warn("Expects a list of strings for `ewgts`. Converted to list.")
             ewgts = [ewgts]
 
         df = reduce_df_by_ticker(
