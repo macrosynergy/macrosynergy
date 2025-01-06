@@ -120,11 +120,19 @@ class Basket(object):
             pfx = [pfx] if isinstance(pfx, str) else pfx
             self.__dict__[pf_name] = pfx
 
-            dfws_pfx = {}
+            dfws_pfx: Dict[str, pd.DataFrame] = {}
             for cat in pfx:
                 ticks = [con + cat for con in self.contracts]
                 self.__dict__["ticks_" + pf_name] += ticks
                 dfws_pfx[cat] = self.pivot_dataframe(df, ticks)
+                if dfws_pfx[cat].empty:
+                    raise ValueError(f"Empty dataframe for contract-type: {cat}")
+                missing = set(ticks) - set(dfws_pfx[cat].columns)
+                if missing:
+                    raise ValueError(
+                        f"Missing tickers in dataframe for contract-type: {cat}: {missing}"
+                    )
+
         else:
             dfws_pfx = None
 
