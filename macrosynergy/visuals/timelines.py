@@ -11,7 +11,7 @@ Function for visualising a facet grid of time line charts of one or more categor
 
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -37,7 +37,8 @@ def timelines(
     same_y: bool = True,
     all_xticks: bool = False,  # ~(same_x) basically
     xcat_grid: bool = False,
-    xcat_labels: Optional[List[str]] = None,
+    xcat_labels: Union[Optional[List[str]], Dict] = None,
+    cid_labels: Union[Optional[List[str]], Dict] = None,
     single_chart: bool = False,
     label_adj: float = 0.05,
     title: Optional[str] = None,
@@ -86,9 +87,12 @@ def timelines(
     xcat_grid : bool
         if True, shows a facet grid of line charts for each xcat for given cross
         sections. Default is False.
-    xcat_labels : List[str]
+    xcat_labels : Union[Optional[List[str]], Dict]
         labels to be used for xcats. If not defined, the labels will be identical to
         extended categories.
+    cid_labels : Union[Optional[List[str]], Dict]
+        labels to be used for cids. If not defined, the labels will be identical to
+        cross-sections.
     single_chart : bool
         if True, all lines are plotted in a single chart.
     title : str
@@ -178,7 +182,9 @@ def timelines(
         cids: List[str] = df["cid"].unique().tolist()
 
     if cumsum:
-        df = reduce_df(df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist)
+        df = reduce_df(
+            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
+        )
         df[val] = (
             df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
             .groupby(["cid", "xcat"])
@@ -187,7 +193,9 @@ def timelines(
 
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
-        df = reduce_df(df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist)
+        df = reduce_df(
+            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
+        )
         if len(xcats) > 1:
             raise ValueError("`cs_mean` cannot be True for multiple categories.")
 
@@ -205,17 +213,31 @@ def timelines(
 
     if xcat_labels:
         # when `cs_mean` is True, `xcat_labels` may have one extra label
-        if len(xcat_labels) != len(xcats) and len(xcat_labels) != len(xcats) + int(
-            cs_mean
-        ):
-            raise ValueError(
-                "`xcat_labels` must have same length as `xcats` "
-                "(or one extra label if `cs_mean` is True)."
-            )
+        if isinstance(xcat_labels, list):
+            if len(xcat_labels) != len(xcats) and len(xcat_labels) != len(xcats) + int(
+                cs_mean
+            ):
+                raise ValueError(
+                    "`xcat_labels` must have same length as `xcats` "
+                    "(or one extra label if `cs_mean` is True)."
+                )
+
+    if cid_labels:
+        if isinstance(cid_labels, list):
+            if len(cid_labels) != len(cids):
+                raise ValueError("`cid_labels` must have same length as `cids`.")
+        elif isinstance(cid_labels, dict):
+            if not all([cid in cids for cid in cid_labels.keys()]):
+                raise ValueError("Keys in `cid_labels` must be a subset of `cids`.")
+        else:
+            raise TypeError("`cid_labels` must be a list or a dictionary.")
 
     if cs_mean:
         if xcat_labels is None:
             xcat_labels = [xcats[0]]
+        elif isinstance(xcat_labels, dict):
+            xcat_labels = [x for x in xcat_labels.values()]
+
         if len(xcat_labels) == 1:
             xcat_labels.append("Cross-Sectional Mean")
 
@@ -315,6 +337,7 @@ def timelines(
                 title=title,
                 # cid_xcat_grid=True,
                 cid_grid=True,
+                facet_titles=cid_labels or None,
                 title_yadjust=title_adj,
                 title_xadjust=title_xadj,
                 compare_series=cross_mean_series if cs_mean else None,
@@ -403,30 +426,32 @@ if __name__ == "__main__":
         )
 
     import time
-    black = {"EUR": ["2012-01-01", "2018-01-01"], "GBP": ["2004-01-01", "2007-01-01"], 
-             "USD": ["2015-01-01", "2018-01-01"]}
-    
-    # timer_start: float = time.time()
+
+    black = {
+        "EUR": ["2012-01-01", "2018-01-01"],
+        "GBP": ["2004-01-01", "2007-01-01"],
+        "USD": ["2015-01-01", "2018-01-01"],
+    }
+
+    timer_start: float = time.time()
     timelines(
         df=df,
         xcats=sel_xcats,
-        xcat_grid=True,
-        xcat_labels=["ForEx", "Equity", "Real Interest Rates", "Interest Rates"],
+        xcat_grid=False,
         square_grid=True,
         cids=sel_cids[1],
         cumsum=True,
         blacklist=black,
-        # single_chart=True,
+        single_chart=True,
     )
 
     timelines(
         df=df,
         xcats=sel_xcats[0],
         cids=sel_cids,
-        # cs_mean=True,
+        cs_mean=True,
         # xcat_grid=False,
         single_chart=True,
-        cs_mean=True,
         blacklist=black,
     )
 
@@ -439,6 +464,10 @@ if __name__ == "__main__":
             "Plotting multiple cross sections for a single category \n with different "
             "y-axis!"
         ),
-        blacklist=black,
+        # blacklist=black,
         cumsum=True,
+        cs_mean=True,
+        cid_labels={"USD": "Label 1", "EUR": "Label 2", "GBP": "Label 3"},
+        xcat_labels={"FXXR": "Xcat Label"},
+        # cross_mean_series=True,
     )
