@@ -126,6 +126,7 @@ def validate_response(
 
         raise InvalidResponseError(error_str + f"Error parsing response as JSON: {exc}")
 
+
 def request_wrapper(
     url: str,
     headers: Optional[Dict] = None,
@@ -1325,12 +1326,7 @@ if __name__ == "__main__":
     client_id: str = os.getenv("DQ_CLIENT_ID")
     client_secret: str = os.getenv("DQ_CLIENT_SECRET")
 
-    expressions = [
-        "DB(FXO,IV,USD,CAD,7D,25P,VOL)",
-        "DB(GFI,CAD,HR,CAN_GOVT,05Y,-1,,PVBP)",
-        "DB(MTE,usd/sofr/daily/1D/am_duration)",
-        "DB(EDG,D:DJESMI$$,PI)"
-    ]
+    expressions = ["DB(CFX,GBP,)"]
 
     with DataQueryInterface(
         client_id=client_id,
