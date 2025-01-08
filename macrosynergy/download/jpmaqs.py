@@ -143,10 +143,13 @@ def check_attributes_in_sync(ts_list) -> bool:
             last_valid_item = time_series[0]
 
         expression = attributes[0].get("expression")
+        if not "JPMAQS" in expression:
+            continue
         if not expression:
             last_valid_item = ["No data", 0]
         else:
-            _, ticker, _ = deconstruct_expression(expression)
+            cid, xcat, _ = deconstruct_expression(expression)
+            ticker = cid + "_" + xcat
 
         last_value_date = last_valid_item[0]
         if ticker not in expressions_last_value_dict:
