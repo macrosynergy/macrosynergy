@@ -1040,7 +1040,6 @@ class JPMaQSDownload(DataQueryInterface):
         if not check_attributes_in_sync(ts_list):
             expressions = [ts["attributes"][0]["expression"] for ts in ts_list]
             error_str = f"Attributes for {expressions} are not in sync."
-            self.msg_errors.append(error_str)
             raise DataOutOfSyncError(error_str)
 
         for its, ts in enumerate(ts_list):
