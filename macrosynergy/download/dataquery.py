@@ -1100,10 +1100,11 @@ class DataQueryInterface(object):
             print("Retrying failed downloads. Retry count:", retry_counter)
 
         if retry_counter > HL_RETRY_COUNT:
-            raise DownloadError(
-                f"Failed {retry_counter} times to download data all requested data.\n"
-                f"No longer retrying."
-            )
+            error_str = (f"Failed {retry_counter} times to download data all requested data.\n"
+                f"No longer retrying.")
+            if len(self.msg_errors) > 0:
+                error_str += "\n".join(self.msg_errors)
+            raise DownloadError(error_str)
 
         expr_batches: List[List[str]] = [
             expressions[i : i + self.batch_size]
