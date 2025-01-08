@@ -106,10 +106,7 @@ class TestDataQueryOAuth(unittest.TestCase):
         self.assertGreater(len(_data["attributes"][0]["time-series"]), 0)
 
     def test_download_non_jpmaqs_data(self):
-        exprs = [
-            "DB(FXO,IV,USD,CAD,7D,25P,VOL)",
-            "DB(GFI,CAD,HR,CAN_GOVT,05Y,-1,,PVBP)",
-        ]
+        exprs = ["DB(CFX,GBP,)"]
 
         with JPMaQSDownload(
             oauth=True,
