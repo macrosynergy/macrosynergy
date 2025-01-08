@@ -227,7 +227,7 @@ def timelines(
             if len(cid_labels) != len(cids):
                 raise ValueError("`cid_labels` must have same length as `cids`.")
         elif isinstance(cid_labels, dict):
-            if not all([cid in cids for cid in cid_labels.keys()]):
+            if not all([cid in cid_labels for cid in cids]):
                 raise ValueError("Keys in `cid_labels` must be a subset of `cids`.")
         else:
             raise TypeError("`cid_labels` must be a list or a dictionary.")
@@ -469,5 +469,4 @@ if __name__ == "__main__":
         cs_mean=True,
         cid_labels={"USD": "Label 1", "EUR": "Label 2", "GBP": "Label 3"},
         xcat_labels={"FXXR": "Xcat Label"},
-        # cross_mean_series=True,
     )
