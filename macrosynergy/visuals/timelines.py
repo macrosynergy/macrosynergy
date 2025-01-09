@@ -348,7 +348,7 @@ def timelines(
                 attempt_square=square_grid,
                 legend=show_legend,
                 legend_ncol=legend_ncol,
-                legend_labels=xcat_labels or None,
+                legend_labels=xcat_labels or None if cs_mean else None,
                 legend_fontsize=legend_fontsize,
                 interpolate=cumsum,
             )
