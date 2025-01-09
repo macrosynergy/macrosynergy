@@ -10,6 +10,7 @@ from macrosynergy.download.exceptions import (
     AuthenticationError,
     InvalidDataframeError,
 )
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def random_string() -> str:
@@ -103,6 +104,47 @@ class TestDataQueryOAuth(unittest.TestCase):
         self.assertEqual(_data["attributes"][0]["expression"], test_expr)
         self.assertIsInstance(_data["attributes"][0]["time-series"], list)
         self.assertGreater(len(_data["attributes"][0]["time-series"]), 0)
+
+    def test_download_non_jpmaqs_data(self):
+        exprs = ["DB(CFX,GBP,)"]
+
+        with JPMaQSDownload(
+            oauth=True,
+            client_id=os.getenv("DQ_CLIENT_ID"),
+            client_secret=os.getenv("DQ_CLIENT_SECRET"),
+            check_connection=False,
+        ) as jpmaqs:
+            data: pd.DataFrame = jpmaqs.download(
+                expressions=exprs,
+            )
+
+        self.assertIsInstance(data, pd.DataFrame)
+        self.assertFalse(data.empty)
+        try:
+            QuantamentalDataFrame(data)
+        except Exception as e:
+            self.fail(f"Failed to convert DataFrame to QuantamentalDataFrame: {e}")
+
+        self.assertTrue(set(data["cid"]) == set(exprs))
+        self.assertTrue((data["cid"] == data["xcat"]).all().all())
+
+        e_start, e_end = data["real_date"].min(), data["real_date"].max()
+
+        with JPMaQSDownload(
+            oauth=True,
+            client_id=os.getenv("DQ_CLIENT_ID"),
+            client_secret=os.getenv("DQ_CLIENT_SECRET"),
+            check_connection=False,
+        ) as jpmaqs:
+            data: pd.DataFrame = jpmaqs.download(
+                expressions=exprs, dataframe_format="wide"
+            )
+
+        self.assertIsInstance(data, pd.DataFrame)
+        self.assertFalse(data.empty)
+
+        self.assertTrue(set(data.columns) == set(exprs))
+        self.assertTrue((data.index.min() == e_start) and (data.index.max() == e_end))
 
     def test_bad_expressions(self):
         jpmaqs: JPMaQSDownload = JPMaQSDownload(

@@ -95,12 +95,13 @@ def deconstruct_expression(
             return ticker.split("_", 1) + [metric]
         except Exception as e:
             warnings.warn(
-                f"Failed to deconstruct expression `{expression}`: {e}",
+                f"Failed to deconstruct expression `{expression}`: assuming it is a non-JPMaQS expression.",
                 UserWarning,
             )
             # fail safely, return list where cid = xcat = expression,
             #  and metric = 'value'
             return [expression, expression, "value"]
+
 
 def check_attributes_in_sync(ts_list) -> bool:
     """
@@ -142,10 +143,13 @@ def check_attributes_in_sync(ts_list) -> bool:
             last_valid_item = time_series[0]
 
         expression = attributes[0].get("expression")
+        if not "JPMAQS" in expression:
+            continue
         if not expression:
             last_valid_item = ["No data", 0]
         else:
-            _, ticker, metric = expression.replace(")", "").split(",")
+            cid, xcat, _ = deconstruct_expression(expression)
+            ticker = cid + "_" + xcat
 
         last_value_date = last_valid_item[0]
         if ticker not in expressions_last_value_dict:
@@ -155,6 +159,7 @@ def check_attributes_in_sync(ts_list) -> bool:
                 return False
 
     return True
+
 
 def construct_expressions(
     tickers: Optional[List[str]] = None,
@@ -1036,9 +1041,8 @@ class JPMaQSDownload(DataQueryInterface):
             url=url, params=params, tracking_id=tracking_id
         )
         if not check_attributes_in_sync(ts_list):
-            expressions = [ts['attributes'][0]['expression'] for ts in ts_list]
+            expressions = [ts["attributes"][0]["expression"] for ts in ts_list]
             error_str = f"Attributes for {expressions} are not in sync."
-            self.msg_errors.append(error_str)
             raise DataOutOfSyncError(error_str)
 
         for its, ts in enumerate(ts_list):
