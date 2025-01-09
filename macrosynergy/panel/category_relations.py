@@ -372,7 +372,9 @@ class CategoryRelations(object):
         xcat_dict = dict(zip(xcats, xcat_trims))
 
         for k, v in xcat_dict.items():
-            df[k] = np.where(np.abs(df[k]) < v, df[k], np.nan)
+            # if the trim value is None, then leave the series as is
+            if v is not None:
+                df[k] = np.where(np.abs(df[k]) < v, df[k], np.nan)
 
         df = df.dropna(axis=0, how="any")
         return df
