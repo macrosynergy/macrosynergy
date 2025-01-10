@@ -9,7 +9,7 @@ import scipy.stats as stats
 
 from macrosynergy.learning.random_effects import RandomEffects
 
-from sklearn.metrics import accuracy_score, balanced_accuracy_score
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, matthews_corrcoef
 
 
 def create_panel_metric(
@@ -226,6 +226,34 @@ def regression_balanced_accuracy(
             )
         return np.mean(balanced_accuracies)
 
+def matthews_correlation_coefficient(y_true, y_pred, type):
+    _check_metric_params(y_true, y_pred, type)
+
+    if type == "panel":
+        return matthews_corrcoef(y_true < 0, y_pred < 0)
+    elif type == "cross_section":
+        mccs = []
+        unique_cross_sections = y_true.index.get_level_values(0).unique()
+        for cross_section in unique_cross_sections:
+            cross_section_mask = y_true.index.get_level_values(0) == cross_section
+            mccs.append(
+                matthews_corrcoef(
+                    y_true.values[cross_section_mask] < 0,
+                    y_pred[cross_section_mask] < 0,
+                )
+            )
+        return np.mean(mccs)
+    elif type == "time_periods":
+        mccs = []
+        unique_time_periods = y_true.index.get_level_values(1).unique()
+        for time_period in unique_time_periods:
+            time_period_mask = y_true.index.get_level_values(1) == time_period
+            mccs.append(
+                matthews_corrcoef(
+                    y_true.values[time_period_mask] < 0, y_pred[time_period_mask] < 0
+                )
+            )
+        return np.mean(mccs)
 
 def panel_significance_probability(
     y_true,
