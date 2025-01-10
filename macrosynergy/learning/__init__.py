@@ -27,7 +27,7 @@ from .model_evaluation import (
     regression_balanced_accuracy,
     correlation_coefficient,
     create_panel_metric,
-    matthews_correlation_coefficient,
+    regression_mcc,
 )
 from .sequential import SignalOptimizer, BetaEstimator
 
@@ -79,7 +79,7 @@ __all__ = [
     "regression_balanced_accuracy",
     "create_panel_metric",
     "correlation_coefficient",
-    "matthews_correlation_coefficient",
+    "regression_mcc",
     # signal_optimizer
     "SignalOptimizer",
     # forecasting

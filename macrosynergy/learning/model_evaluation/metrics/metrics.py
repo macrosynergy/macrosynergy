@@ -226,7 +226,7 @@ def regression_balanced_accuracy(
             )
         return np.mean(balanced_accuracies)
 
-def matthews_correlation_coefficient(y_true, y_pred, type="panel"):
+def regression_mcc(y_true, y_pred, type="panel"):
     """
     Matthews correlation coefficient between true and predicted regression labels.
     
