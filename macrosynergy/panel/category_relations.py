@@ -409,7 +409,10 @@ class CategoryRelations(object):
         for i, df_i in enumerate(df_probability):
             feat = df_i[self.xcats[0]].to_numpy()
             targ = df_i[self.xcats[1]].to_numpy()
-            coeff, pval = stats.pearsonr(feat, targ)
+            if prob_est == "kendall":
+                coeff, pval = stats.kendalltau(feat, targ)
+            else:
+                coeff, pval = stats.pearsonr(feat, targ)
             if prob_est == "map":
                 X = df_i.loc[:, self.xcats[0]]
                 X = sm.add_constant(X)
@@ -563,11 +566,12 @@ class CategoryRelations(object):
         prob_est : str
             type of estimator for probability of significant relation. The default is
             "pool", which means that all observation pairs of a panel are pooled and the
-            probability is based on that pool. The alternative is "map", denoting
+            probability is based on that pool. The alternatives are "map", denoting
             Macrosynergy panel test. This is based on a panel regression with period-
             specific random effects and greatly mitigates the issue of pseudo-replication if
-            panel features and targets are correlated across time. See also
-            https://research.macrosynergy.com/testing-macro-trading-factors/
+            panel features and targets are correlated across time. "kendall", which
+            calculates the kendall coeffient. 
+            See also https://research.macrosynergy.com/testing-macro-trading-factors/
         separator : Union[str, int]
             allows categorizing the scatter analysis by cross-section or integer. In the
             former case the argument is set to "cids" and in the latter case the argument is
@@ -597,7 +601,7 @@ class CategoryRelations(object):
         if coef_box is not None:
             assert isinstance(coef_box, str), coef_box_loc_error
 
-        assert prob_est in ["pool", "map"], "prob_est must be 'pool' or 'map'"
+        assert prob_est in ["pool", "map", "kendall"], "prob_est must be 'pool', 'kendall' or 'map'"
 
         sns.set_theme(style="whitegrid")
         dfx = self.df.copy()
@@ -1070,7 +1074,7 @@ if __name__ == "__main__":
             xlab="Carry",
             ylab="Return",
             coef_box="lower left",
-            prob_est="map",
+            prob_est="kendall",
             ax=ax[i],
         )
     plt.show()
