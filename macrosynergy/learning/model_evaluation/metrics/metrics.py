@@ -227,6 +227,24 @@ def regression_balanced_accuracy(
         return np.mean(balanced_accuracies)
 
 def matthews_correlation_coefficient(y_true, y_pred, type):
+    """
+    Matthews correlation coefficient between true and predicted regression labels.
+    
+    Parameters
+    ----------
+
+    y_true : pd.Series of shape (n_samples,)
+        True regression labels.
+
+    y_pred : array-like of shape (n_samples,)
+        Predicted regression labels.
+
+    Returns
+    -------
+
+    mcc : float
+        The Matthews correlation coefficient between true and predicted regression labels.
+    """
     _check_metric_params(y_true, y_pred, type)
 
     if type == "panel":
