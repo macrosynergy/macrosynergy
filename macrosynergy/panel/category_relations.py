@@ -564,14 +564,17 @@ class CategoryRelations(object):
             parameter. The options are standard, i.e. 'upper left', 'lower right' and so
             forth. Default is None, i.e the statistics are not displayed.
         prob_est : str
-            type of estimator for probability of significant relation. The default is
-            "pool", which means that all observation pairs of a panel are pooled and the
-            probability is based on that pool. The alternatives are "map", denoting
-            Macrosynergy panel test. This is based on a panel regression with period-
-            specific random effects and greatly mitigates the issue of pseudo-replication if
-            panel features and targets are correlated across time. "kendall", which
-            calculates the kendall coeffient. 
-            See also https://research.macrosynergy.com/testing-macro-trading-factors/
+            type of estimator for probability of significant relation.
+            - "pool" (default), which means that all observation are treated as 
+                independent and calculates Pearson's correlation coefficient. 
+            - "map", denoting Macrosynergy panel test. This is based on a panel regression 
+                with period-specific random effects and greatly mitigates the issue of 
+                pseudo-replication if panel features and targets are correlated across 
+                time. 
+                See also https://research.macrosynergy.com/testing-macro-trading-factors/
+            - "kendall", which calculates the Kendall rank correlation coefficient. It is 
+                a non-parametric statistic used to measure the strength and direction of 
+                association between two ranked variables.
         separator : Union[str, int]
             allows categorizing the scatter analysis by cross-section or integer. In the
             former case the argument is set to "cids" and in the latter case the argument is
