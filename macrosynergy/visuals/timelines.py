@@ -221,6 +221,11 @@ def timelines(
                     "`xcat_labels` must have same length as `xcats` "
                     "(or one extra label if `cs_mean` is True)."
                 )
+        elif isinstance(xcat_labels, dict):
+            if not all([x in xcat_labels for x in xcats]):
+                raise ValueError("Keys in `xcat_labels` must be a subset of `xcats`.")
+            xcat_labels = [xcat_labels[x] for x in xcats if x in xcat_labels]
+        
 
     if cid_labels:
         if isinstance(cid_labels, list):
@@ -235,9 +240,7 @@ def timelines(
     if cs_mean:
         if xcat_labels is None:
             xcat_labels = [xcats[0]]
-        elif isinstance(xcat_labels, dict):
-            xcat_labels = [x for x in xcat_labels.values()]
-
+            
         if len(xcat_labels) == 1:
             xcat_labels.append("Cross-Sectional Mean")
 
@@ -348,7 +351,7 @@ def timelines(
                 attempt_square=square_grid,
                 legend=show_legend,
                 legend_ncol=legend_ncol,
-                legend_labels=xcat_labels or None if cs_mean else None,
+                legend_labels=xcat_labels,
                 legend_fontsize=legend_fontsize,
                 interpolate=cumsum,
             )
@@ -439,21 +442,21 @@ if __name__ == "__main__":
         xcats=sel_xcats,
         xcat_grid=False,
         square_grid=True,
-        cids=sel_cids[1],
-        cumsum=True,
+        cids=sel_cids,
         blacklist=black,
-        single_chart=True,
+        same_y=True,
+        xcat_labels={"FXXR": "FX Returns", "EQXR": "Equity Returns", "RIR": "Real Interest Rate", "IR": "Interest Rate"},
     )
 
-    timelines(
-        df=df,
-        xcats=sel_xcats[0],
-        cids=sel_cids,
-        cs_mean=True,
-        # xcat_grid=False,
-        single_chart=True,
-        blacklist=black,
-    )
+    # timelines(
+    #     df=df,
+    #     xcats=sel_xcats[0],
+    #     cids=sel_cids,
+    #     cs_mean=True,
+    #     # xcat_grid=False,
+    #     single_chart=True,
+    #     blacklist=black,
+    # )
 
     timelines(
         df=df,
@@ -466,7 +469,7 @@ if __name__ == "__main__":
         ),
         # blacklist=black,
         cumsum=True,
-        cs_mean=True,
         cid_labels={"USD": "Label 1", "EUR": "Label 2", "GBP": "Label 3"},
         xcat_labels={"FXXR": "Xcat Label"},
+        cs_mean=True,
     )
