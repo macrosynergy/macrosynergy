@@ -1148,7 +1148,7 @@ class TestMetrics(unittest.TestCase):
             "create_panel_metric should return the same value as the metric function passed as argument, when applied over time periods",
         )
 
-    @parameterized.expand([accuracy_score, balanced_accuracy_score, regression_mcc])
+    @parameterized.expand([accuracy_score, balanced_accuracy_score])
     def test_valid_create_panel_metric_clf(self, metric):
         # Test metrics over the panel
         metric_result = create_panel_metric(

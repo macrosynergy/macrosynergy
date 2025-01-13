@@ -409,10 +409,9 @@ class CategoryRelations(object):
         for i, df_i in enumerate(df_probability):
             feat = df_i[self.xcats[0]].to_numpy()
             targ = df_i[self.xcats[1]].to_numpy()
+            coeff, pval = stats.pearsonr(feat, targ)
             if prob_est == "kendall":
-                coeff, pval = stats.kendalltau(feat, targ)
-            else:
-                coeff, pval = stats.pearsonr(feat, targ)
+                _, pval = stats.kendalltau(feat, targ)
             if prob_est == "map":
                 X = df_i.loc[:, self.xcats[0]]
                 X = sm.add_constant(X)
@@ -513,11 +512,13 @@ class CategoryRelations(object):
     def reg_scatter(
         self,
         title: str = None,
+        title_fontsize: int = 14,
         labels: bool = False,
         size: Tuple[float] = None,
         xlab: str = None,
         ylab: str = None,
         coef_box: str = None,
+        coef_box_size: Tuple[float] = (0.4, 2.5),
         coef_box_font_size: int = 0,
         prob_est: str = "pool",
         fit_reg: bool = True,
@@ -655,7 +656,7 @@ class CategoryRelations(object):
             if ax is None:
                 fig, ax = plt.subplots(figsize=size)
 
-            index_years = dfx.index.get_level_values(1).year
+            index_years = dfx.index.get_level_values(0).year
             years_in_df = list(index_years.unique())
 
             assert separator in years_in_df, "Separator year is not in the range."
@@ -702,12 +703,14 @@ class CategoryRelations(object):
                     prob_est=prob_est,
                     ax=ax,
                 )
-                data_table.scale(0.4, 2.5)
+                x_scale = coef_box_size[0]
+                y_scale = coef_box_size[1]
+                data_table.scale(x_scale, y_scale)
                 data_table.auto_set_font_size(set_font_size)
                 data_table.set_fontsize(coef_box_font_size)
 
             ax.legend(loc="upper right")
-            ax.set_title(title, fontsize=14)
+            ax.set_title(title, fontsize=title_fontsize)
             if xlab is not None:
                 ax.set_xlabel(xlab)
             if ylab is not None:
@@ -846,12 +849,14 @@ class CategoryRelations(object):
                     prob_est=prob_est,
                     ax=ax,
                 )
-                data_table.scale(0.4, 2.5)
+                x_scale = coef_box_size[0]
+                y_scale = coef_box_size[1]
+                data_table.scale(x_scale, y_scale)
                 data_table.auto_set_font_size(set_font_size)
                 data_table.set_fontsize(coef_box_font_size)
 
             ax.legend(loc="upper right", title="Cids")
-            ax.set_title(title, fontsize=14)
+            ax.set_title(title, fontsize=title_fontsize)
             if xlab is not None:
                 ax.set_xlabel(xlab)
             if ylab is not None:
@@ -883,7 +888,9 @@ class CategoryRelations(object):
                     coef_box_loc=coef_box,
                     ax=ax,
                 )
-                data_table.scale(0.4, 2.5)
+                x_scale = coef_box_size[0]
+                y_scale = coef_box_size[1]
+                data_table.scale(x_scale, y_scale)
                 data_table.auto_set_font_size(set_font_size)
                 data_table.set_fontsize(coef_box_font_size)
 
@@ -917,7 +924,7 @@ class CategoryRelations(object):
                         fontdict=dict(color="black", size=8),
                     )
 
-            ax.set_title(title, fontsize=14)
+            ax.set_title(title, fontsize=title_fontsize)
             if xlab is not None:
                 ax.set_xlabel(xlab)
             if ylab is not None:
