@@ -122,6 +122,10 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         X,
         y,
         figsize=(20, 5),
+        show_title=True,
+        ticksize=None,
+        labelsize=None,
+        subtitle_size=None,
     ):
         """
         Visualise the cross-validation splits.
@@ -137,6 +141,14 @@ class BasePanelSplit(BaseCrossValidator, ABC):
             The dates must be in datetime format.
         figsize : Tuple[int, int]
             Tuple of integers specifying the splitter visualisation figure size.
+        show_title : bool, optional
+            Boolean specifying whether to show the title of the figure. Default is True.
+        ticksize : int, optional
+            Integer specifying the size of the x-axis tick labels. Default is None.
+        labelsize : int, optional
+            Integer specifying the size of the y-axis labels. Default is None.
+        subtitle_size : int, optional
+            Integer specifying the size of the subplot titles. Default is None.
         """
         sns.set_theme(style="whitegrid", palette="colorblind")
 
@@ -149,6 +161,18 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                 raise TypeError("figsize must contain only integers.")
             if i <= 0:
                 raise ValueError("figsize must contain only positive integers.")
+
+        if ticksize is not None:
+            if not isinstance(ticksize, int):
+                raise TypeError("ticksize must be an integer.")
+
+        if labelsize is not None:
+            if not isinstance(labelsize, int):
+                raise TypeError("labelsize must be an integer.")
+        
+        if subtitle_size is not None:
+            if not isinstance(subtitle_size, int):
+                raise TypeError("subtitle_size must be an integer.")
 
         # Obtain relevant data
         Xy: pd.DataFrame = pd.concat([X, y], axis=1).dropna()
@@ -225,17 +249,17 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                 ax[idx].broken_barh(xranges, (-0.4, 0.8), facecolors=color, label=label)
                 ax[idx].set_xlim(real_dates.min(), real_dates.max() + difference)
                 ax[idx].set_yticks([0])
-                ax[idx].set_yticklabels([cross_sections[0]])
-                ax[idx].tick_params(axis="x", rotation=90)
-                ax[idx].set_title(f"{split_titles[idx]}")
+                ax[idx].set_yticklabels([cross_sections[0]], fontsize=labelsize)
+                ax[idx].tick_params(axis="x", rotation=90, labelsize=ticksize)
+                ax[idx].set_title(f"{split_titles[idx]}", fontsize=subtitle_size)
             elif len(split_idxs) == 1:
                 ax[cs_idx].broken_barh(
                     xranges, (-0.4, 0.8), facecolors=color, label=label
                 )
                 ax[cs_idx].set_xlim(real_dates.min(), real_dates.max() + difference)
                 ax[cs_idx].set_yticks([0])
-                ax[cs_idx].set_yticklabels([cross_sections[cs_idx]])
-                ax[cs_idx].tick_params(axis="x", rotation=90)
+                ax[cs_idx].set_yticklabels([cross_sections[cs_idx]], fontsize=labelsize)
+                ax[cs_idx].tick_params(axis="x", rotation=90, labelsize=ticksize)
             else:
                 ax[cs_idx, idx].broken_barh(
                     xranges, (-0.4, 0.8), facecolors=color, label=label
@@ -244,21 +268,28 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                     real_dates.min(), real_dates.max() + difference
                 )
                 ax[cs_idx, idx].set_yticks([0])
-                ax[cs_idx, idx].set_yticklabels([cross_sections[cs_idx]])
-                ax[cs_idx, idx].tick_params(axis="x", rotation=90)
+                ax[cs_idx, idx].set_yticklabels(
+                    [cross_sections[cs_idx]], fontsize=labelsize
+                )
+                ax[cs_idx, idx].tick_params(axis="x", rotation=90, labelsize=ticksize)
 
                 # Ensure only the last row has x-axis labels.
                 if cs_idx == len(ax) - 1:
-                    ax[cs_idx, idx].tick_params(axis="x", rotation=90)
+                    ax[cs_idx, idx].tick_params(
+                        axis="x", rotation=90, labelsize=ticksize
+                    )
                 else:
                     ax[cs_idx, idx].tick_params(axis="x", labelbottom=False)
 
                 if cs_idx == 0:
-                    ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
+                    ax[cs_idx, idx].set_title(
+                        f"{split_titles[idx]}", fontsize=subtitle_size
+                    )
 
-        plt.suptitle(
-            f"Training and test set pairs, number of training sets={self.n_splits}"
-        )
+        if show_title:
+            plt.suptitle(
+                f"Training and test set pairs, number of training sets={self.n_splits}"
+            )
         plt.legend(frameon=True)
         plt.tight_layout()
         plt.show()
