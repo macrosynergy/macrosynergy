@@ -19,16 +19,19 @@ def multiple_reg_scatter(
     title_fontsize: int = 20,
     xlab: str = "",
     ylab: str = "",
+    label_fontsize: int = 12,
     fit_reg: bool = True,
     reg_ci: int = 95,
     reg_order: int = 1,
     reg_robust: bool = False,
     coef_box: str = None,
+    coef_box_size: Tuple[float] = (0.4, 2.5),
     coef_box_font_size: int = 12,
     prob_est: str = "pool",
     separator: int = None,
     single_chart: bool = False,
     subplot_titles: bool = None,
+    subplot_title_fontsize: int = 14,
     color_cids: bool = False,
 ):
     """
@@ -105,8 +108,8 @@ def multiple_reg_scatter(
         nrows=nrow, ncols=ncol, figsize=figsize, sharex=True, sharey=True
     )
     fig.suptitle(title, x=title_xadj, y=title_yadj, fontsize=title_fontsize)
-    fig.supxlabel(xlab)
-    fig.supylabel(ylab)
+    fig.supxlabel(xlab, fontsize=label_fontsize)
+    fig.supylabel(ylab, fontsize=label_fontsize)
 
     for i, cat_rel in enumerate(cat_rels):
         row = i // ncol
@@ -146,12 +149,14 @@ def multiple_reg_scatter(
             reg_order=reg_order,
             reg_robust=reg_robust,
             coef_box=coef_box,
+            coef_box_size=coef_box_size,
             coef_box_font_size=coef_box_font_size,
             prob_est=prob_est,
             single_chart=single_chart,
             separator=separator,
             ax=ax,
             single_scatter=single_scatter,
+            title_fontsize=subplot_title_fontsize
         )
 
     plt.subplots_adjust(top=title_yadj - 0.01)
