@@ -670,6 +670,7 @@ class NaivePnL:
         xcat_labels: Union[List[str], dict] = None,
         xlab: str = "",
         ylab: str = "% of risk capital, no compounding",
+        label_fontsize: int = 12,
         share_axis_labels: bool = True,
         figsize: Tuple = (12, 7),
         aspect: float = 1.7,
@@ -876,8 +877,8 @@ class NaivePnL:
                 labels=labels,
                 title=legend_title,
             )
-            plt.xlabel(xlab)
-            plt.ylabel(ylab)
+            plt.xlabel(xlab, fontsize=label_fontsize)
+            plt.ylabel(ylab, fontsize=label_fontsize)
 
         if no_cids == 1:
             if facet:
@@ -1593,7 +1594,7 @@ if __name__ == "__main__":
         pnl_cats=["PNL_GROWTH_NEG", "Long"],
         title_fontsize=60,
         xlab="date",
-        ylab="%",
+        ylab="%"
     )
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"],
