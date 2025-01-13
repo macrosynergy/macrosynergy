@@ -123,9 +123,9 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         y,
         figsize=(20, 5),
         show_title=True,
-        ticksize=None,
-        labelsize=None,
-        subtitle_size=None,
+        tick_fontsize=None,
+        label_fontsize=None,
+        subtitle_fontsize=None,
     ):
         """
         Visualise the cross-validation splits.
@@ -143,11 +143,11 @@ class BasePanelSplit(BaseCrossValidator, ABC):
             Tuple of integers specifying the splitter visualisation figure size.
         show_title : bool, optional
             Boolean specifying whether to show the title of the figure. Default is True.
-        ticksize : int, optional
+        tick_fontsize : int, optional
             Integer specifying the size of the x-axis tick labels. Default is None.
-        labelsize : int, optional
+        label_fontsize : int, optional
             Integer specifying the size of the y-axis labels. Default is None.
-        subtitle_size : int, optional
+        subtitle_fontsize : int, optional
             Integer specifying the size of the subplot titles. Default is None.
         """
         sns.set_theme(style="whitegrid", palette="colorblind")
@@ -162,16 +162,16 @@ class BasePanelSplit(BaseCrossValidator, ABC):
             if i <= 0:
                 raise ValueError("figsize must contain only positive integers.")
 
-        if ticksize is not None:
-            if not isinstance(ticksize, int):
+        if tick_fontsize is not None:
+            if not isinstance(tick_fontsize, int):
                 raise TypeError("ticksize must be an integer.")
 
-        if labelsize is not None:
-            if not isinstance(labelsize, int):
+        if label_fontsize is not None:
+            if not isinstance(label_fontsize, int):
                 raise TypeError("labelsize must be an integer.")
         
-        if subtitle_size is not None:
-            if not isinstance(subtitle_size, int):
+        if subtitle_fontsize is not None:
+            if not isinstance(subtitle_fontsize, int):
                 raise TypeError("subtitle_size must be an integer.")
 
         # Obtain relevant data
@@ -249,17 +249,17 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                 ax[idx].broken_barh(xranges, (-0.4, 0.8), facecolors=color, label=label)
                 ax[idx].set_xlim(real_dates.min(), real_dates.max() + difference)
                 ax[idx].set_yticks([0])
-                ax[idx].set_yticklabels([cross_sections[0]], fontsize=labelsize)
-                ax[idx].tick_params(axis="x", rotation=90, labelsize=ticksize)
-                ax[idx].set_title(f"{split_titles[idx]}", fontsize=subtitle_size)
+                ax[idx].set_yticklabels([cross_sections[0]], fontsize=label_fontsize)
+                ax[idx].tick_params(axis="x", rotation=90, labelsize=tick_fontsize)
+                ax[idx].set_title(f"{split_titles[idx]}", fontsize=subtitle_fontsize)
             elif len(split_idxs) == 1:
                 ax[cs_idx].broken_barh(
                     xranges, (-0.4, 0.8), facecolors=color, label=label
                 )
                 ax[cs_idx].set_xlim(real_dates.min(), real_dates.max() + difference)
                 ax[cs_idx].set_yticks([0])
-                ax[cs_idx].set_yticklabels([cross_sections[cs_idx]], fontsize=labelsize)
-                ax[cs_idx].tick_params(axis="x", rotation=90, labelsize=ticksize)
+                ax[cs_idx].set_yticklabels([cross_sections[cs_idx]], fontsize=label_fontsize)
+                ax[cs_idx].tick_params(axis="x", rotation=90, labelsize=tick_fontsize)
             else:
                 ax[cs_idx, idx].broken_barh(
                     xranges, (-0.4, 0.8), facecolors=color, label=label
@@ -269,21 +269,21 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                 )
                 ax[cs_idx, idx].set_yticks([0])
                 ax[cs_idx, idx].set_yticklabels(
-                    [cross_sections[cs_idx]], fontsize=labelsize
+                    [cross_sections[cs_idx]], fontsize=label_fontsize
                 )
-                ax[cs_idx, idx].tick_params(axis="x", rotation=90, labelsize=ticksize)
+                ax[cs_idx, idx].tick_params(axis="x", rotation=90, labelsize=tick_fontsize)
 
                 # Ensure only the last row has x-axis labels.
                 if cs_idx == len(ax) - 1:
                     ax[cs_idx, idx].tick_params(
-                        axis="x", rotation=90, labelsize=ticksize
+                        axis="x", rotation=90, labelsize=tick_fontsize
                     )
                 else:
                     ax[cs_idx, idx].tick_params(axis="x", labelbottom=False)
 
                 if cs_idx == 0:
                     ax[cs_idx, idx].set_title(
-                        f"{split_titles[idx]}", fontsize=subtitle_size
+                        f"{split_titles[idx]}", fontsize=subtitle_fontsize
                     )
 
         if show_title:
