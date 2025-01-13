@@ -409,10 +409,9 @@ class CategoryRelations(object):
         for i, df_i in enumerate(df_probability):
             feat = df_i[self.xcats[0]].to_numpy()
             targ = df_i[self.xcats[1]].to_numpy()
+            coeff, pval = stats.pearsonr(feat, targ)
             if prob_est == "kendall":
-                coeff, pval = stats.kendalltau(feat, targ)
-            else:
-                coeff, pval = stats.pearsonr(feat, targ)
+                _, pval = stats.kendalltau(feat, targ)
             if prob_est == "map":
                 X = df_i.loc[:, self.xcats[0]]
                 X = sm.add_constant(X)
