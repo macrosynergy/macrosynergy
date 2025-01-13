@@ -678,6 +678,7 @@ class NaivePnL:
         label_adj: float = 0.05,
         title_adj: float = 0.95,
         y_label_adj: float = 0.95,
+        legend_fontsize: int = None,
     ) -> None:
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per cross
@@ -876,6 +877,7 @@ class NaivePnL:
             plt.legend(
                 labels=labels,
                 title=legend_title,
+                fontsize=legend_fontsize
             )
             plt.xlabel(xlab, fontsize=label_fontsize)
             plt.ylabel(ylab, fontsize=label_fontsize)
