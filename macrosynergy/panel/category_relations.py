@@ -656,7 +656,7 @@ class CategoryRelations(object):
             if ax is None:
                 fig, ax = plt.subplots(figsize=size)
 
-            index_years = dfx.index.get_level_values(1).year
+            index_years = dfx.index.get_level_values(0).year
             years_in_df = list(index_years.unique())
 
             assert separator in years_in_df, "Separator year is not in the range."
