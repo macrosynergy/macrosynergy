@@ -63,7 +63,8 @@ def download_transaction_costs(
         Additional keyword arguments to pass to `requests.get`. This can be used to pass
         additional headers, proxy settings, cert verification, etc.
     """
-
+    if csv_url is None or not isinstance(csv_url, str):
+        raise ValueError("Invalid CSV URL provided: {csv_url}")
     if verbose:
         print(f"Timestamp (UTC): {datetime.datetime.now(datetime.timezone.utc)}")
         print(f"Downloading trading costs data from {csv_url}")
