@@ -890,7 +890,7 @@ class NaivePnL:
         else:
             labels = labels[::-1]
 
-        ax.tick_params(axis='both', labelsize=tick_fontsize)
+        fg.tick_params(axis='both', labelsize=tick_fontsize)
         plt.axhline(y=0, color="black", linestyle="--", lw=1)
         plt.show()
 
