@@ -309,21 +309,24 @@ class ProxyPnL(object):
 
         return self.proxy_pnl
 
-    def plot_strategy(self):
+    def plot_pnl(self, title: str = "Proxy PnL", cumsum: bool = True, **kwargs):
         """
-        Allows the user to plot the contract signals and notional positions in a single
-        plot.
+        Plot the proxy PnL DataFrame. The method uses the proxy PnL calculated in the
+        previous step.
 
-        Returns
-        -------
-        None
+        Parameters
+        ----------
+        title : str, optional
+            Title of the plot.
+        cumsum : bool, optional
+            Whether to plot the cumulative sum of the proxy PnL.
+        kwargs
+            Additional keyword arguments to be passed to the `timelines` function.
+            See :func:`macrosynergy.visuals.timelines` for more information.
         """
-        csigs = self.cs_df.columns
-        poss = self.npos_df.columns
-
-        msv.FacetPlot(df=pd.concat((self.cs_df, self.npos_df), axis=0)).plot(
-            cols=csigs + poss, title="Contract Signals and Notional Positions"
-        )
+        cdf = pd.concat((self.proxy_pnl, self.pnl_excl_costs), axis=0)
+        rdf = reduce_df(cdf, cids=["GLB"])
+        msv.timelines(rdf, title=title, cumsum=cumsum)
 
 
 if __name__ == "__main__":
