@@ -667,6 +667,7 @@ class NaivePnL:
         same_y: bool = True,
         title: str = "Cumulative Naive PnL",
         title_fontsize: int = 20,
+        tick_fontsize: int = 12,
         xcat_labels: Union[List[str], dict] = None,
         xlab: str = "",
         ylab: str = "% of risk capital, no compounding",
@@ -877,6 +878,7 @@ class NaivePnL:
             plt.legend(
                 labels=labels,
                 title=legend_title,
+                title_fontsize=legend_fontsize,
                 fontsize=legend_fontsize
             )
             plt.xlabel(xlab, fontsize=label_fontsize)
@@ -888,6 +890,7 @@ class NaivePnL:
         else:
             labels = labels[::-1]
 
+        fg.tick_params(axis='both', labelsize=tick_fontsize)
         plt.axhline(y=0, color="black", linestyle="--", lw=1)
         plt.show()
 
