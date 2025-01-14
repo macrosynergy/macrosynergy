@@ -76,6 +76,7 @@ def _check_scaling_args(
 def _check_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.DataFrame:
     """
     Check the timeseries to see if the estimated frequency matches the actual frequency.
+    Raises a warning if the estimated frequency does not match the rebalancing frequency.
 
     Parameters
     ----------
@@ -83,11 +84,6 @@ def _check_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.Da
         dataframe in wide format with the contract signals.
     est_freq : str
         the estimated frequency of the contract signals.
-
-    Raises
-    ------
-    ValueError
-        if the estimated frequency does not match the actual frequency.
 
     Returns
     -------
