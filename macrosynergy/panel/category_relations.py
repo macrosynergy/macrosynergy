@@ -517,6 +517,7 @@ class CategoryRelations(object):
         size: Tuple[float] = None,
         xlab: str = None,
         ylab: str = None,
+        label_fontsize: int = 12,
         coef_box: str = None,
         coef_box_size: Tuple[float] = (0.4, 2.5),
         coef_box_font_size: int = 0,
@@ -712,9 +713,9 @@ class CategoryRelations(object):
             ax.legend(loc="upper right")
             ax.set_title(title, fontsize=title_fontsize)
             if xlab is not None:
-                ax.set_xlabel(xlab)
+                ax.set_xlabel(xlab, label_fontsize)
             if ylab is not None:
-                ax.set_ylabel(ylab)
+                ax.set_ylabel(ylab, label_fontsize)
 
         elif separator == "cids" and not single_scatter:
             assert isinstance(single_chart, bool)
