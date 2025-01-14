@@ -19,5 +19,6 @@ Submodules
    macrosynergy.pnl.contract_signals
    macrosynergy.pnl.notional_positions
    macrosynergy.pnl.historic_portfolio_volatility
+   macrosynergy.pnl.transaction_costs
 
    
