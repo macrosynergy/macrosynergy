@@ -8,7 +8,6 @@ from macrosynergy.management.utils import get_cid, get_xcat
 from io import StringIO
 
 MAX_RETRIES = 3
-# CSV_URL = "https://macrosynergy-trading-costs.s3.eu-west-2.amazonaws.com/transaction-costs.csv"
 CSV_URL = None
 
 def _request_wrapper(url: str, verbose: bool = True, **kwargs) -> str:
