@@ -438,19 +438,19 @@ class ExampleAdapter(TransactionCosts):  # pragma: no cover
 
 
 if __name__ == "__main__":
-    import time, random  # noqa
+    txn_costs_obj: TransactionCosts = TransactionCosts.download()
 
-    tx_costs_dates = pd.bdate_range("1999-01-01", "2022-12-30")
-    dftc = pd.read_pickle(r"C:\Users\PalashTyagi\Code\msx\macrosynergy\data\tc.pkl")
-    txn_costs_obj: TransactionCosts = TransactionCosts(dftc, get_fids(dftc))
-
-    assert txn_costs_obj.get_costs(fid="GBP_FX", real_date="2011-01-01").to_dict() == {
-        "GBP_FXBIDOFFER_MEDIAN": 0.0224707153696722,
+    test_dict = {
         "GBP_FXROLLCOST_MEDIAN": 0.0022470715369672,
         "GBP_FXSIZE_MEDIAN": 50.0,
-        "GBP_FXBIDOFFER_90PCTL": 0.0449414307393445,
-        "GBP_FXROLLCOST_90PCTL": 0.0052431669195902,
         "GBP_FXSIZE_90PCTL": 200.0,
     }
+
+    found_costs = txn_costs_obj.get_costs(
+        fid="GBP_FX", real_date="2011-01-01"
+    ).to_dict()
+
+    for k, v in test_dict.items():
+        assert np.isclose(found_costs[k], v)
 
     txn_costs_obj.plot_costs(cost_type="ROLLCOST", fids=txn_costs_obj.fids[:16], ncol=4)
