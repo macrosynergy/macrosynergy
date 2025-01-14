@@ -714,9 +714,9 @@ class CategoryRelations(object):
             ax.legend(loc="upper right")
             ax.set_title(title, fontsize=title_fontsize)
             if xlab is not None:
-                ax.set_xlabel(xlab, label_fontsize)
+                ax.set_xlabel(xlab, fontsize=label_fontsize)
             if ylab is not None:
-                ax.set_ylabel(ylab, label_fontsize)
+                ax.set_ylabel(ylab, fontsize=label_fontsize)
 
         elif separator == "cids" and not single_scatter:
             assert isinstance(single_chart, bool)
@@ -860,9 +860,9 @@ class CategoryRelations(object):
             ax.legend(loc="upper right", title="Cids")
             ax.set_title(title, fontsize=title_fontsize)
             if xlab is not None:
-                ax.set_xlabel(xlab, label_fontsize)
+                ax.set_xlabel(xlab, fontsize=label_fontsize)
             if ylab is not None:
-                ax.set_ylabel(ylab, label_fontsize)
+                ax.set_ylabel(ylab, fontsize=label_fontsize)
 
         elif separator is None:
             if ax is None:
@@ -928,9 +928,9 @@ class CategoryRelations(object):
 
             ax.set_title(title, fontsize=title_fontsize)
             if xlab is not None:
-                ax.set_xlabel(xlab, label_fontsize)
+                ax.set_xlabel(xlab, fontsize=label_fontsize)
             if ylab is not None:
-                ax.set_ylabel(ylab, label_fontsize)
+                ax.set_ylabel(ylab, fontsize=label_fontsize)
         else:
             ValueError("Separator must be either a valid year <int> or 'cids' <str>.")
 
