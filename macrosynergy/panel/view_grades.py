@@ -21,20 +21,31 @@ def heatmap_grades(
     title: str = None,
     size: Tuple[float] = None,
 ):
-    """Displays a heatmap of grading
-
-    :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcat', 'real_date' and 'grading'.
-    :param <List[str]> xcats: extended categorys to be checked on.
-    :param <List[str]> cids: cross sections to visualize. Default is all in  DataFrame.
-    :param <str> start: earliest date in ISO format. Default is earliest available.
-    :param <str> end: latest date in ISO format. Default is latest available.
-    :param <str> grade: name of column that contains the grades. Default is 'grading'.
-    :param <str> title: string of chart title; defaults depend on type of range plot.
-    :param <Tuple[float]> size: Tuple of width and height of graph.
-        Default is None, meaning it is set in accordance with df.
-
     """
+    Displays a heatmap of the grading for a given set of cross sections and extended
+
+    Parameters
+    ----------
+    df : ~pandas.Dataframe
+        standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
+        and 'grading'.
+    xcats : List[str]
+        extended categorys to be checked on.
+    cids : List[str]
+        cross sections to visualize. Default is all in  DataFrame.
+    start : str
+        earliest date in ISO format. Default is earliest available.
+    end : str
+        latest date in ISO format. Default is latest available.
+    grade : str
+        name of column that contains the grades. Default is 'grading'.
+    title : str
+        string of chart title; defaults depend on type of range plot.
+    size : Tuple[float]
+        Tuple of width and height of graph. Default is None, meaning it is set in
+        accordance with df.
+    """
+
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     df_cols = list(df.columns)

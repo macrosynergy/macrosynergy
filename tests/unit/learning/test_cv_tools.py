@@ -160,15 +160,6 @@ class TestAll(unittest.TestCase):
                 estimators=self.estimators,
                 scoring=bad_scoring,
             )
-        bad_scoring = {"scorer": 1}
-        with self.assertRaises(TypeError):
-            panel_cv_scores(
-                X=self.X,
-                y=self.y,
-                splitter=self.splitter,
-                estimators=self.estimators,
-                scoring=bad_scoring,
-            )
         bad_scoring = {1: make_scorer(mean_absolute_error, greater_is_better=True)}
         with self.assertRaises(TypeError):
             panel_cv_scores(

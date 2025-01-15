@@ -1,5 +1,4 @@
 """
-
 Constants used throughout the package.
 
 Frequency Mappings
@@ -47,8 +46,10 @@ ANNUALIZATION_FACTORS = {
     "BA": 1,
     "Q": 4,
     "BQ": 4,
+    "BQE": 4,
     "M": 12,
     "BM": 12,
+    "BME": 12,
     "W": 52,
     "W-FRI": 52,
     "B": 252,
@@ -67,6 +68,8 @@ FFILL_LIMITS = {
     "BM": 24,
     "BQ": 64,
     "BA": 252,
+    "BME": 24,
+    "BQE": 64,
 }
 DAYS_PER_FREQ = FFILL_LIMITS.copy()
 

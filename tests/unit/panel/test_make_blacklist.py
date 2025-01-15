@@ -114,7 +114,7 @@ class TestAll(unittest.TestCase):
 
         dfd["value"] = np.arange(0, shape[0])
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             make_blacklist(dfd, "FXXR_NSA", cids=list(cross_sections))
 
         dfd["value"] = np.repeat(0, shape[0])

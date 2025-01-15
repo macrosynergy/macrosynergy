@@ -6,6 +6,7 @@ from macrosynergy.panel.make_zn_scores import (
     make_zn_scores,
     expanding_stat,
 )
+from macrosynergy.management.utils import _map_to_business_day_frequency
 import pandas as pd
 import numpy as np
 from itertools import groupby
@@ -208,7 +209,9 @@ class TestAll(unittest.TestCase):
             test.append(np.mean(aggregate))
 
         dfw = df_copy.pivot(index="real_date", columns="cid", values="value")
-        dates_iter = self.dates_iterator(df_copy, est_freq="BM")
+
+        bfreq = _map_to_business_day_frequency("M")
+        dates_iter = self.dates_iterator(df_copy, est_freq=bfreq)
         # Test against the existing solution.
         # The below method will return a one-dimensional DataFrame hosting the neutral
         # values produced from the expanding window. The DataFrame will be daily values
@@ -374,7 +377,8 @@ class TestAll(unittest.TestCase):
         date_index = self.valid_index(column=cross_series)
 
         # Test on quarterly data.
-        dates_iter = self.dates_iterator(df, est_freq="BQ")
+        bfreq = _map_to_business_day_frequency("Q")
+        dates_iter = self.dates_iterator(df, est_freq=bfreq)
         neutral_df = expanding_stat(
             df=cross_series,
             dates_iter=dates_iter,
@@ -587,14 +591,14 @@ class TestAll(unittest.TestCase):
             r_xcat: str = "CRY"
             self.dfd.loc[
                 (self.dfd["cid"] == r_cid) & (self.dfd["xcat"] == r_xcat), "value"
-            ]: float = pd.NA
+            ] = pd.NA
             dfr: pd.DataFrame = make_zn_scores(
                 df=self.dfd,
                 xcat=r_xcat,
                 cids=self.cids,
                 start="2010-01-01",
             )
-            dfr["xcat"]: pd.Series = dfr["xcat"].str.replace("ZN", "")
+            dfr["xcat"] = dfr["xcat"].str.replace("ZN", "")
             self.assertEqual(dfr["xcat"].unique()[0], r_xcat)
             self.assertFalse(r_cid in dfr["cid"].unique())
             warnings.resetwarnings()

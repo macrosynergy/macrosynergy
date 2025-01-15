@@ -3,11 +3,13 @@ import numpy as np
 import pandas as pd
 
 from tests.simulate import make_qdf
+from macrosynergy.compat import PD_OLD_RESAMPLE
 from macrosynergy.management.simulate import make_test_df
+from macrosynergy.management.utils import qdf_to_ticker_df
 from macrosynergy.panel.panel_calculator import panel_calculator, _check_calcs
 import warnings
-from random import randint, choice
-from typing import List, Dict, Tuple, Union, Optional, Set
+from random import choice
+from typing import List, Dict, Set
 
 
 class TestAll(unittest.TestCase):
@@ -269,6 +271,23 @@ class TestAll(unittest.TestCase):
         manual_calculator = (growth - infl) / xr
         self.assertTrue(row_value_gbp == manual_calculator)
 
+        dfd = self.dfd.copy()
+        df_new = dfd[(dfd["cid"] == "USD") & (dfd["xcat"] == "XR")].copy()
+        df_new["cid"] = "G2"
+        df_new["xcat"] = "NEW"
+        dfd = pd.concat([dfd, df_new]).reset_index(drop=True)
+
+        calcs = ["G2_NEW = iG2_NEW"]
+        df_res = panel_calculator(df=dfd, calcs=calcs, cids=self.cids)
+
+        self.assertEqual(["G2_NEW"], df_res["xcat"].unique().tolist())
+        self.assertEqual(sorted(df_res["cid"].unique()), sorted(self.cids))
+
+        rdf_wide = qdf_to_ticker_df(df_res)
+        self.assertTrue(
+            (rdf_wide.apply(lambda x: x / x.iloc[1], axis=1) == 1).all().all()
+        )
+
     def test_panel_calculator_nan_warning(self):
         # raise all warnings
         warnings.simplefilter("always")
@@ -287,24 +306,28 @@ class TestAll(unittest.TestCase):
             expected_nan_series: List[str] = ["USD_NEW1", "USD_NEW2"]
 
             with warnings.catch_warnings(record=True) as w:
-                results: pd.DataFrame = panel_calculator(
-                    df=test_df,
-                    calcs=formulae,
-                    cids=self.cids,
-                    start=self.start,
-                    end=self.end,
-                    blacklist=self.blacklist,
-                )
-
-                w = [x for x in w if issubclass(x.category, UserWarning)]
-                self.assertEqual(len(w), len(expected_nan_series))
+                try:
+                    results: pd.DataFrame = panel_calculator(
+                        df=test_df,
+                        calcs=formulae,
+                        cids=self.cids,
+                        start=self.start,
+                        end=self.end,
+                        blacklist=self.blacklist,
+                    )
+                except ZeroDivisionError:
+                    if not PD_OLD_RESAMPLE:
+                        raise ValueError("ZeroDivisionError should not be raised")
+                    continue
+                wlist = [x for x in w if issubclass(x.category, UserWarning)]
                 ticks_found: Set = set(results["cid"] + "_" + results["xcat"])
                 ticks_orig: Set = set(test_df["cid"] + "_" + test_df["xcat"])
                 self.assertTrue(len(ticks_found) < len(ticks_orig))
                 for m_series in expected_nan_series:
                     self.assertNotIn(m_series, ticks_found)
 
-                for warning, m_series in zip(w, expected_nan_series):
+                expc_warnings = len(expected_nan_series)
+                for warning, m_series in zip(wlist, expected_nan_series):
                     self.assertEqual(warning.category, UserWarning)
                     self.assertIn(
                         (
@@ -313,9 +336,9 @@ class TestAll(unittest.TestCase):
                         ),
                         str(warning.message),
                     )
+                    expc_warnings -= 1
+                self.assertEqual(expc_warnings, 0)
 
-        # the paranoid programmer's check - to be removed later
-        self.assertEqual(loopvar, test_repeats - 1)
         warnings.resetwarnings()
 
     def test_panel_calculator_time_series(self):

@@ -10,6 +10,8 @@ import random
 from macrosynergy.panel.historic_vol import flat_std
 from itertools import chain
 import warnings
+import matplotlib
+import matplotlib.pyplot as plt
 
 
 def dataframe_basket(ret="XR_NSA", cry=["CRY_NSA"], start=None, end=None, black=None):
@@ -147,7 +149,13 @@ class TestAll(unittest.TestCase):
         )
         self.basket: Basket = basket
 
+        self.orig_backend = matplotlib.get_backend()
+        plt.close("all")
+        matplotlib.use("Agg")
+
     def tearDown(self) -> None:
+        plt.close("all")
+        matplotlib.use(self.orig_backend)
         return super().tearDown()
 
     # Internal method used to return a dataframe with the uniform weights and a bool
@@ -515,13 +523,14 @@ class TestAll(unittest.TestCase):
         # Secondly, test the dimensions of the concatenated dataframe.
         # The returned dataframe should have the same number of rows given the basket
         # return sums all contracts on each timestamp.
-        no_rets = len(self.dfw_ret.index)
-        no_cry = 0
-        for carry in self.dfw_cry:
-            assert isinstance(carry, pd.DataFrame)
-            no_cry += len(carry.index)
-        no_rows = no_rets + no_cry
-        self.assertTrue(no_rows == basket_2.dict_retcry["GLB_EQUAL"].shape[0])
+
+        # test if all dataframes have the same number of rows as the return dataframe.
+        test_flag = all(
+            basket_2.dict_retcry["GLB_EQUAL"].shape[0] == len(ret_df)
+            for ret_df in self.dfw_cry
+        )
+
+        self.assertTrue(test_flag)
 
         basket_2.make_basket(
             weight_meth="invsd",
@@ -532,12 +541,17 @@ class TestAll(unittest.TestCase):
             basket_name="GLB_INVERSE",
         )
         weights = [1 / 6, 1 / 12, 1 / 12, 1 / 6, 1 / 2]
-        basket_2.make_basket(
-            weight_meth="fixed",
-            weights=weights,
-            max_weight=0.55,
-            basket_name="GLB_FIXED",
-        )
+
+        with warnings.catch_warnings(record=True) as wc:
+            basket_2.make_basket(
+                weight_meth="fixed",
+                weights=weights,
+                max_weight=0.55,
+                basket_name="GLB_FIXED",
+            )
+            wlist = [w for w in wc if issubclass(w.category, RuntimeWarning)]
+            self.assertTrue(len(wlist) > 0)
+
         basket_keys = basket_2.dict_retcry.keys()
         for b in basket_keys:
             self.assertTrue(b in ["GLB_EQUAL", "GLB_INVERSE", "GLB_FIXED"])
@@ -561,8 +575,8 @@ class TestAll(unittest.TestCase):
             weight_meth="equal", max_weight=0.45, basket_name="GLB_EQUAL"
         )
         dfw_wgs = basket_2.dict_wgs["GLB_EQUAL"]
-        basket_df = basket_2.dict_retcry["GLB_EQUAL"]
-        basket_df_dates = basket_df["real_date"].to_numpy()
+        basket_df: pd.DataFrame = basket_2.dict_retcry["GLB_EQUAL"]
+        basket_df_dates = basket_df.index.to_numpy()
 
         random_index_date = dfw_ret.index[1017]
         index = np.where(basket_df_dates == random_index_date)
@@ -579,23 +593,22 @@ class TestAll(unittest.TestCase):
         manual_calculation = return_row.multiply(w_row_array).sum(axis=0)
         manual_value = round(manual_calculation, 5)
         # Test on the return category: 'XR_NSA'.
-        basket_xr = basket_df[basket_df["ticker"] == "GLB_EQUAL_XR_NSA"]
-        basket_value = round(basket_xr.iloc[index_xr]["value"], 5)
+        basket_value = round(basket_df["GLB_EQUAL_XR_NSA"].iloc[index_xr], 5)
         self.assertTrue(manual_value == basket_value)
 
         # Complete the same logic for a carry category.
-        dfw_cry = self.dfw_cry
+        dfw_cry_list = self.dfw_cry
         # List of dataframes. Extract the first dataframe corresponding to the category
         # CRY_NSA.
-        assert isinstance(dfw_cry, list)
+        assert isinstance(dfw_cry_list, list)
 
-        dfw_cry = dfw_cry[0]
+        dfw_cry = dfw_cry_list[0]
         carry_row = dfw_cry.loc[random_index_date].to_numpy()
         # Account for the different column names across the two dataframes.
         manual_value = round(np.sum(carry_row * weight_row.to_numpy()), 5)
-        basket_cry = basket_df[basket_df["ticker"] == "GLB_EQUAL_CRY_NSA"]
-        index_cry = np.where(basket_cry["real_date"] == random_index_date)[0][0]
-        basket_value = round(basket_cry.iloc[index_cry]["value"], 5)
+        basket_cry = basket_df["GLB_EQUAL_CRY_NSA"]
+        index_cry = np.where(basket_cry.index == random_index_date)[0][0]
+        basket_value = round(basket_cry.iloc[index_cry], 5)
         self.assertTrue(manual_value == basket_value)
 
     def test_weight_visualiser(self):
@@ -689,24 +702,30 @@ class TestAll(unittest.TestCase):
             blacklist=self.black,
             ewgts=None,
         )
-        basket_1.make_basket(
-            weight_meth="equal", max_weight=0.45, basket_name="GLB_EQUAL"
-        )
-        basket_1.make_basket(
-            weight_meth="invsd",
-            lback_meth="ma",
-            lback_periods=21,
-            max_weight=0.55,
-            remove_zeros=True,
-            basket_name="GLB_INVERSE",
-        )
-        weights = [1 / 6, 1 / 12, 1 / 12, 1 / 6, 1 / 2]
-        basket_1.make_basket(
-            weight_meth="fixed",
-            weights=weights,
-            max_weight=0.55,
-            basket_name="GLB_FIXED",
-        )
+
+        # catch warnings
+        with warnings.catch_warnings(record=True) as wc:
+
+            basket_1.make_basket(
+                weight_meth="equal", max_weight=0.45, basket_name="GLB_EQUAL"
+            )
+            basket_1.make_basket(
+                weight_meth="invsd",
+                lback_meth="ma",
+                lback_periods=21,
+                max_weight=0.55,
+                remove_zeros=True,
+                basket_name="GLB_INVERSE",
+            )
+            weights = [1 / 6, 1 / 12, 1 / 12, 1 / 6, 1 / 2]
+            basket_1.make_basket(
+                weight_meth="fixed",
+                weights=weights,
+                max_weight=0.55,
+                basket_name="GLB_FIXED",
+            )
+            wlist = [w for w in wc if issubclass(w.category, RuntimeWarning)]
+            self.assertTrue(len(wlist) > 0)
 
         # Test the feature that if a basket_name is not specified by the user, default
         # is equal to None, then all of the computed baskets will be returned. In this

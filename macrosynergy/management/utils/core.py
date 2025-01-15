@@ -1,6 +1,6 @@
 """
-This module contains core utility functions, as well as stand-alone functions
-that are used across the package.
+This module contains core utility functions, as well as stand-alone functions that are
+used across the package.
 """
 
 import datetime
@@ -14,6 +14,7 @@ import requests.compat
 from packaging import version
 
 from macrosynergy.management.constants import FREQUENCY_MAP
+from macrosynergy.compat import PD_NEW_DATE_FREQ
 
 
 @overload
@@ -46,12 +47,19 @@ def split_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, Lis
     ticker. The function is overloaded to accept either a single ticker or an iterable
     (e.g. list, tuple, pd.Series, np.array) of tickers.
 
-    :param <str> ticker: The ticker to be converted.
-    :param <str> mode: The mode to be used. Must be either "cid" or "xcat".
+    Parameters
+    ----------
+    ticker : str
+        The ticker to be converted.
+    mode : str
+        The mode to be used. Must be either "cid" or "xcat".  Returns
 
     Returns
-    :return <str>: The cross-sectional identifier or category.
+    -------
+    str
+        The cross-sectional identifier or category.
     """
+
     if not isinstance(mode, str):
         raise TypeError("Argument `mode` must be a string.")
 
@@ -91,11 +99,17 @@ def get_cid(ticker: Union[str, Iterable[str]]) -> Union[str, List[str]]:
     """
     Returns the cross-sectional identifier (cid) from a ticker.
 
-    :param <str> ticker: The ticker to be converted.
+    Parameters
+    ----------
+    ticker : str
+        The ticker to be converted.  Returns
 
     Returns
-    :return <str>: The cross-sectional identifier.
+    -------
+    str
+        The cross-sectional identifier.
     """
+
     return split_ticker(ticker, mode="cid")
 
 
@@ -103,11 +117,17 @@ def get_xcat(ticker: Union[str, Iterable[str]]) -> str:
     """
     Returns the category (xcat) from a ticker.
 
-    :param <str> ticker: The ticker to be converted.
+    Parameters
+    ----------
+    ticker : str
+        The ticker to be converted.  Returns
 
     Returns
-    :return <str>: The category.
+    -------
+    str
+        The category.
     """
+
     return split_ticker(ticker, mode="xcat")
 
 
@@ -144,10 +164,14 @@ def _map_to_business_day_frequency(freq: str, valid_freqs: List[str] = None) -> 
     """
     Maps a frequency string to a business frequency string.
 
-    :param <str> freq: The frequency string to be mapped.
-    :param <List[str]> valid_freqs: The valid frequency strings. If None, defaults to
-        ["D", "W". "M", "Q", "A"].
+    Parameters
+    ----------
+    freq : str
+        The frequency string to be mapped.
+    valid_freqs : List[str]
+        The valid frequency strings. If None, defaults to ["D", "W". "M", "Q", "A"].
     """
+
     if not isinstance(freq, str):
         raise TypeError("Argument `freq` must be a string.")
 
@@ -175,24 +199,38 @@ def _map_to_business_day_frequency(freq: str, valid_freqs: List[str] = None) -> 
     if freq in FREQUENCY_MAP.values():
         freq = list(FREQUENCY_MAP.keys())[list(FREQUENCY_MAP.values()).index(freq)]
 
-    if freq not in valid_freqs:
+    if freq not in valid_freqs and not ((freq in ["BME", "BQE"]) and PD_NEW_DATE_FREQ):
         raise ValueError(
             f"Frequency must be one of {valid_freqs}, but received {freq}."
         )
+
+    if PD_NEW_DATE_FREQ:
+        if freq in ["M", "Q"]:
+            return FREQUENCY_MAP[freq] + "E"
+        if freq in ["BME", "BQE"]:
+            return freq
 
     return FREQUENCY_MAP[freq]
 
 
 def form_full_url(url: str, params: Dict = {}) -> str:
     """
-    Forms a full URL from a base URL and a dictionary of parameters.
-    Useful for logging and debugging.
+    Forms a full URL from a base URL and a dictionary of parameters. Useful for logging
+    and debugging.
 
-    :param <str> url: base URL.
-    :param <dict> params: dictionary of parameters.
+    Parameters
+    ----------
+    url : str
+        base URL.
+    params : dict
+        dictionary of parameters.
 
-    :return <str>: full URL
+    Returns
+    -------
+    str
+        full URL
     """
+
     return requests.compat.quote(
         (f"{url}?{requests.compat.urlencode(params)}" if params else url),
         safe="%/:=&?~#+!$,;'@()*[]",
@@ -202,15 +240,17 @@ def form_full_url(url: str, params: Dict = {}) -> str:
 def common_cids(df: pd.DataFrame, xcats: List[str]):
     """
     Returns a list of cross-sectional identifiers (cids) for which the specified
-        categories (xcats) are available.
+    categories (xcats) are available.
 
-    :param <pd.Dataframe> df: Standardized JPMaQS DataFrame with necessary columns:
-        'cid', 'xcat', 'real_date' and 'value'.
-    :param <List[str]> xcats: A list with least two categories whose cross-sectional
-        identifiers are being considered.
-
-    return <List[str]>: List of cross-sectional identifiers for which all categories in
-        `xcats` are available.
+    Parameters
+    ----------
+    df : pd.Dataframe
+        Standardized JPMaQS DataFrame with necessary columns: 'cid', 'xcat', 'real_date'
+        and 'value'.
+    xcats : List[str]
+        A list with least two categories whose cross-sectional identifiers are being
+        considered.  return <List[str]>: List of cross-sectional identifiers for which all
+        categories in `xcats` are available.
     """
 
     if not isinstance(df, pd.DataFrame):
@@ -242,11 +282,17 @@ def generate_random_date(
     """
     Generates a random date between two dates.
 
-    :param <str> start: The start date, in the ISO format (YYYY-MM-DD).
-    :param <str> end: The end date, in the ISO format (YYYY-MM-DD).
+    Parameters
+    ----------
+    start : str
+        The start date, in the ISO format (YYYY-MM-DD).
+    end : str
+        The end date, in the ISO format (YYYY-MM-DD).  Returns
 
     Returns
-    :return <str>: The random date.
+    -------
+    str
+        The random date.
     """
 
     if not isinstance(start, (str, datetime.datetime, pd.Timestamp)):
@@ -272,11 +318,17 @@ def get_dict_max_depth(d: dict) -> int:
     """
     Returns the maximum depth of a dictionary.
 
-    :param <dict> d: The dictionary to be searched.
+    Parameters
+    ----------
+    d : dict
+        The dictionary to be searched.  Returns
 
     Returns
-    :return <int>: The maximum depth of the dictionary.
+    -------
+    int
+        The maximum depth of the dictionary.
     """
+
     return (
         1 + max(map(get_dict_max_depth, d.values()), default=0)
         if isinstance(d, dict)
@@ -286,22 +338,29 @@ def get_dict_max_depth(d: dict) -> int:
 
 def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type=None):
     """
-    Recursively searches a dictionary for a key and returns the value
-    associated with it.
+    Recursively searches a dictionary for a key and returns the value associated with
+    it.
 
-    :param <dict> d: The dictionary to be searched.
-    :param <str> key: The key to be searched for.
-    :param <bool> match_substring: If True, the function will return
-        the value of the first key that contains the substring
-        specified by the key parameter. If False, the function will
-        return the value of the first key that matches the key
-        parameter exactly. Default is False.
-    :param <Any> match_type: If not None, the function will look for
-        a key that matches the search parameters and has
-        the specified type. Default is None.
-    :return <Any>: The value associated with the key, or None if the key
-        is not found.
+    Parameters
+    ----------
+    d : dict
+        The dictionary to be searched.
+    key : str
+        The key to be searched for.
+    match_substring : bool
+        If True, the function will return the value of the first key that contains the
+        substring specified by the key parameter. If False, the function will return the
+        value of the first key that matches the key parameter exactly. Default is False.
+    match_type : Any
+        If not None, the function will look for a key that matches the search parameters
+        and has the specified type. Default is None.
+
+    Returns
+    -------
+    Any
+        The value associated with the key, or None if the key is not found.
     """
+
     if not isinstance(d, dict):
         return None
 

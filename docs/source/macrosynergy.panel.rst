@@ -17,6 +17,7 @@ Submodules
    macrosynergy.panel.converge_row
    macrosynergy.panel.granger_causality_test
    macrosynergy.panel.historic_vol
+   macrosynergy.panel.imputers
    macrosynergy.panel.linear_composite
    macrosynergy.panel.make_blacklist
    macrosynergy.panel.make_relative_category

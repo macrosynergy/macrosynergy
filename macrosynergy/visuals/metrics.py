@@ -1,17 +1,13 @@
 """
-Function for visualising the `eop_lag`, `mop_lag` or `grading` metrics for a given
-set of cross sections and extended categories.
-```python
-import macrosynergy.visuals as msv
-...
-msv.view_metrics(
-    df,
-    xcats="IR",
-    cids=["USD", "EUR", "GBP"],
-    metric='eop_lag'
-)
-...
-```
+Function for visualising the `eop_lag`, `mop_lag` or `grading` metrics for a given set
+of cross sections and extended categories. 
+
+.. code-block:: python
+
+    import macrosynergy.visuals as msv
+    ...
+    msv.view_metrics(df, xcats="IR", cids=["USD", "EUR", "GBP"], metric='eop_lag')
+
 """
 
 from typing import List, Optional, Tuple
@@ -35,29 +31,46 @@ def view_metrics(
 ) -> None:
     """
     A function to visualise the `eop_lag`, `mop_lag` or `grading` metrics for a given
-    JPMaQS dataset. It generates a heatmap, where the x-axis is the observation
-    date, the y-axis is the ticker, and the colour is the lag value.
+    JPMaQS dataset. It generates a heatmap, where the x-axis is the observation date,
+    the y-axis is the ticker, and the colour is the lag value.
 
-    :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcat', 'real_date' and 'grading', 'eop_lag' or 'mop_lag'.
-    :param <str> xcat: extended category whose lags are to be visualized.
-    :param <List[str]> cids: cross sections to visualize. Default is all in DataFrame.
-    :param <str> start: earliest date in ISO format. Default is earliest available.
-    :param <str> end: latest date in ISO format. Default is latest available.
-    :param <str> metric: name of metric to be visualized. Must be "eop_lag" (default)
-        "mop_lag" or "grading".
-    :param <str> freq: frequency of data. Must be one of "D", "W", "M", "Q", "A".
-        Default is "M".
-    :param <str> agg: aggregation method. Must be one of "mean" (default), "median",
-        "min", "max", "first" or "last".
-    :param <str> title: string of chart title; if none given default title is printed.
-    :param <Tuple[float]> figsize: Tuple (w, h) of width and height of graph.
-        Default is None, meaning it is set in accordance with df.
+    Parameters
+    ----------
+    df : ~pandas.DataFrame
+        standardized Qauntamental dataframe.
+    xcat : str
+        extended category whose lags are to be visualized.
+    cids : List[str]
+        cross sections to visualize. Default is all in DataFrame.
+    start : str
+        earliest date in ISO format. Default is earliest available.
+    end : str
+        latest date in ISO format. Default is latest available.
+    metric : str
+        name of metric to be visualized. Must be "eop_lag" (default) "mop_lag" or
+        "grading".
+    freq : str
+        frequency of data. Must be one of "D", "W", "M", "Q", "A". Default is "M".
+    agg : str
+        aggregation method. Must be one of "mean" (default), "median", "min", "max",
+        "first" or "last".
+    title : str
+        string of chart title; if none given default title is printed.
+    figsize : Tuple[float]
+        Tuple (w, h) of width and height of graph. Default is None, meaning it is set in
+        accordance with df.
 
-    :return <None>: None
+    Raises
+    ------
+    TypeError
+        if any of the inputs are of the wrong type.
+    ValueError
+        if any of the inputs are semantically incorrect.
 
-    :raises <TypeError>: if any of the inputs are of the wrong type.
-    :raises <ValueError>: if any of the inputs are semantically incorrect.
+    Returns
+    -------
+    None
+        None
     """
 
     heatmap = Heatmap(

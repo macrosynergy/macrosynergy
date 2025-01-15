@@ -29,10 +29,12 @@ from macrosynergy.management.utils import (
     _map_to_business_day_frequency,
     apply_slip,
     merge_categories,
+    estimate_release_frequency,
     Timer,
 )
 from macrosynergy.management.constants import FREQUENCY_MAP
 from macrosynergy.management.utils.math import expanding_mean_with_nan
+from macrosynergy.compat import PD_NEW_DATE_FREQ
 from tests.simulate import make_qdf
 from tests.unit.download.mock_helpers import mock_request_wrapper
 
@@ -258,9 +260,15 @@ class TestFunctions(unittest.TestCase):
                 self.fail("Warning raised unexpectedly")
 
         df_test: pd.DataFrame = df_orig.copy()
-        df_test.loc[
-            (df_test["cid"] == "AUD") & (df_test["xcat"].isin(["FXXR", "IR"])), "value"
-        ] = pd.NA
+
+        with warnings.catch_warnings(record=True) as w:
+            # all warnings will raise errors, this raises deprecated warning
+            # with older pd/np versions. the ignore filter is to suppress it
+            warnings.simplefilter("ignore")
+            df_test.loc[
+                (df_test["cid"] == "AUD") & (df_test["xcat"].isin(["FXXR", "IR"])),
+                "value",
+            ] = pd.NA
 
         warnings.simplefilter("always")
         with warnings.catch_warnings(record=True) as w:
@@ -323,6 +331,11 @@ class TestFunctions(unittest.TestCase):
             dfu: pd.DataFrame = drop_nan_series(df=df_test, raise_warning=False)
             self.assertEqual(len(w), 9)
 
+        # test with non existant column name
+        df_test: pd.DataFrame = df_orig.copy()
+        with self.assertRaises(ValueError):
+            drop_nan_series(df=df_test.rename(columns={"value": "val"}))
+
         warnings.resetwarnings()
 
     def test_qdf_to_ticker_df(self):
@@ -368,6 +381,25 @@ class TestFunctions(unittest.TestCase):
         df: pd.DataFrame = test_df.copy()
         rdf: pd.DataFrame = qdf_to_ticker_df(df=df)
         self.assertTrue(df.equals(test_df))
+
+        #  test case 4 - bad args
+        self.assertRaises(TypeError, qdf_to_ticker_df, df=test_df, value_column=1)
+
+        with warnings.catch_warnings(record=True) as w:
+            qdf_to_ticker_df(df=test_df, value_column="banana")
+            self.assertEqual(len(w), 1)
+            # check that 'Value column specified in `value_column`' is in the warning
+            self.assertTrue(
+                "Value column specified in `value_column`" in str(w[0].message)
+            )
+
+        # test case 5 - with categorical qdf
+        qdf = QuantamentalDataFrame(test_df.copy())
+        rdf = qdf_to_ticker_df(qdf)
+
+        expc_df = qdf_to_ticker_df(test_df)
+
+        self.assertTrue(rdf.equals(expc_df))
 
     def test_ticker_df_to_qdf(self):
         cids: List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
@@ -569,6 +601,11 @@ class TestFunctions(unittest.TestCase):
             df=df, groupby_columns=["cid", "xcat"], freq=freq, agg=agg_method
         )
         assert downsampled_df.shape[0] == 12
+
+        with self.assertRaises(ValueError):
+            downsample_df_on_real_date(
+                df=df, groupby_columns=["xid", "xcat"], freq=freq, agg=agg_method
+            )
 
     def test_downsample_df_on_real_date_multiple_xcats(self):
         test_cids: List[str] = ["USD", "EUR", "GBP"]
@@ -873,6 +910,10 @@ class TestFunctions(unittest.TestCase):
 
     def test_map_to_business_day_frequency(self):
         fm_copy = FREQUENCY_MAP.copy()
+        if PD_NEW_DATE_FREQ:
+            fm_copy["M"] = "BME"
+            fm_copy["Q"] = "BQE"
+
         for k in fm_copy.keys():
             self.assertEqual(
                 _map_to_business_day_frequency(k), fm_copy[k], f"Failed for {k}"
@@ -1059,10 +1100,12 @@ class TestFunctions(unittest.TestCase):
                 metrics=["value"],
                 raise_error=False,
             )
-            self.assertEqual(len(w), 3)
-            for ww in w:
-                self.assertTrue(issubclass(ww.category, UserWarning))
+            efilter = (
+                "Tickers targetted for applying slip are not present in the DataFrame."
+            )
+            wlist = [_w for _w in w if efilter in str(_w.message)]
 
+            self.assertEqual(len(wlist), 3)
         warnings.resetwarnings()
 
         with self.assertRaises(ValueError):
@@ -1210,6 +1253,21 @@ class TestFunctions(unittest.TestCase):
             )
         )
 
+        with self.assertRaises(TypeError):
+            merge_categories(
+                df=1, xcats=["XR", "CRY"], cids=["AUD"], new_xcat="NEW_CAT"
+            )
+
+        with self.assertRaises(TypeError):
+            merge_categories(
+                df=test_df, xcats=["XR", 1], cids=["AUD"], new_xcat="NEW_CAT"
+            )
+
+        with self.assertRaises(TypeError):
+            merge_categories(
+                df=test_df, xcats=["XR", "CRY"], cids=["AUD", 1], new_xcat="NEW_CAT"
+            )
+
 
 class TestTimer(unittest.TestCase):
     def test_timer(self):
@@ -1237,6 +1295,105 @@ class TestTimer(unittest.TestCase):
         self.assertIsInstance(float(t), float)
 
         self.assertIsInstance(f"{t:0.2f}", str)
+
+
+class TestEstimateReleaseFrequency(unittest.TestCase):
+    def setUp(self):
+        # Simulated time series data for testing different frequencies using business day ranges
+        # Daily frequency for 10 years using business day range
+
+        start_date = "2010-01-01"
+        end_date = "2020-01-01"
+        freqs = ["D", "W", "M", "Q", "A"]
+        daily_dates = pd.bdate_range(start=start_date, end=end_date)
+        ts_dict = {}
+        for freq in freqs:
+            dt_range = pd.bdate_range(
+                start=start_date,
+                end=end_date,
+                freq=_map_to_business_day_frequency(freq),
+            )
+            new_ts = (
+                pd.Series(data=np.random.normal(0, 1, len(dt_range)), index=dt_range)
+                .reindex(daily_dates)
+                .ffill()
+            )
+            ts_dict[freq] = new_ts
+
+        self.timeseries_daily = ts_dict["D"]
+        self.timeseries_weekly = ts_dict["W"]
+        self.timeseries_monthly = ts_dict["M"]
+        self.timeseries_quarterly = ts_dict["Q"]
+        self.timeseries_annual = ts_dict["A"]
+
+        self.df_wide = pd.concat(
+            ts_dict.values(),
+            axis=1,
+        )
+        self.df_wide.columns = ["daily", "weekly", "monthly", "quarterly", "annual"]
+        self.df_wide.index.name = "real_date"
+
+    def test_single_timeseries_daily(self):
+        result = estimate_release_frequency(timeseries=self.timeseries_daily)
+        self.assertEqual(result, "D")
+
+    def test_df_wide(self):
+        result = estimate_release_frequency(df_wide=self.df_wide)
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result["daily"], "D")
+        self.assertEqual(result["weekly"], "W")
+        self.assertEqual(result["monthly"], "M")
+        self.assertEqual(result["quarterly"], "Q")
+        self.assertEqual(result["annual"], "A")
+
+    def test_invalid_timeseries_and_df_wide(self):
+        with self.assertRaises(ValueError):
+            estimate_release_frequency(
+                timeseries=self.timeseries_daily, df_wide=self.df_wide
+            )
+
+    def test_invalid_df_wide_type(self):
+        with self.assertRaises(TypeError):
+            estimate_release_frequency(df_wide="not_a_dataframe")
+
+    def test_empty_df_wide(self):
+        with self.assertRaises(ValueError):
+            empty_df = pd.DataFrame()
+            estimate_release_frequency(df_wide=empty_df)
+
+    def test_invalid_atol_rtol_both_passed(self):
+        with self.assertRaises(ValueError):
+            estimate_release_frequency(
+                timeseries=self.timeseries_daily, atol=0.1, rtol=0.1
+            )
+
+    def test_invalid_atol_type(self):
+        with self.assertRaises(TypeError):
+            estimate_release_frequency(
+                timeseries=self.timeseries_daily, atol="not_a_number"
+            )
+
+    def test_invalid_rtol_type(self):
+        with self.assertRaises(TypeError):
+            estimate_release_frequency(
+                timeseries=self.timeseries_daily, rtol="not_a_number"
+            )
+
+    def test_invalid_rtol_value(self):
+        with self.assertRaises(ValueError):
+            estimate_release_frequency(timeseries=self.timeseries_daily, rtol=1.5)
+
+    def test_timeseries_with_atol(self):
+        result = estimate_release_frequency(
+            timeseries=self.timeseries_monthly, atol=0.01
+        )
+        self.assertEqual(result, "M")
+
+    def test_timeseries_with_rtol(self):
+        result = estimate_release_frequency(
+            timeseries=self.timeseries_monthly, rtol=0.01
+        )
+        self.assertEqual(result, "M")
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ import unittest
 from macrosynergy.signal.signal_return_relations import SignalReturnRelations
 
 from tests.simulate import make_qdf
-from sklearn.metrics import accuracy_score, precision_score
+from sklearn.metrics import accuracy_score
 from scipy import stats
 import random
 import pandas as pd
@@ -11,6 +11,7 @@ from typing import List, Dict
 import matplotlib
 from matplotlib import pyplot as plt
 from unittest.mock import patch
+import warnings
 
 
 class TestAll(unittest.TestCase):
@@ -115,13 +116,19 @@ class TestAll(unittest.TestCase):
 
         # Test that if the same frequency is passed twice it is ignored
 
-        srr = SignalReturnRelations(
-            self.dfd,
-            rets="XR",
-            sigs="CRY",
-            freqs=["D", "D"],
-            blacklist=self.blacklist,
-        )
+        with warnings.catch_warnings(record=True) as w:
+            srr = SignalReturnRelations(
+                self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs=["D", "D"],
+                blacklist=self.blacklist,
+            )
+            # assert that the warning was raised
+            expc_warning = "Frequency D is repeated, dropping repeated frequency."
+            wlist = [_w for _w in w if expc_warning in str(_w.message)]
+            self.assertTrue(len(wlist) == 1)
+
         self.assertEqual(srr.freqs, ["D"])
 
         with self.assertRaises(TypeError):
@@ -997,39 +1004,48 @@ class TestAll(unittest.TestCase):
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
 
-        sr = SignalReturnRelations(
-            df=self.dfd,
-            rets="XR",
-            sigs="CRY",
-            freqs="Q",
-            blacklist=self.blacklist,
-            slip=1,
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
 
-        try:
-            sr.single_statistic_table(stat="accuracy", show_heatmap=True)
-        except Exception as e:
-            self.fail(f"single_statistic_table raised {e} unexpectedly")
-
-        try:
-            sr.single_statistic_table(
-                stat="accuracy", show_heatmap=True, row_names=["X"], column_names=["Y"]
+            sr = SignalReturnRelations(
+                df=self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs="Q",
+                blacklist=self.blacklist,
+                slip=1,
             )
-        except Exception as e:
-            self.fail(f"single_statistic_table raised {e} unexpectedly")
 
-        try:
-            sr.single_statistic_table(
-                stat="accuracy",
-                show_heatmap=True,
-                title="Test",
-                min_color=0,
-                max_color=1,
-                annotate=False,
-                figsize=(10, 10),
-            )
-        except Exception as e:
-            self.fail(f"single_statistic_table raised {e} unexpectedly")
+            try:
+                sr.single_statistic_table(stat="accuracy", show_heatmap=True)
+            except Exception as e:
+                self.fail(f"single_statistic_table raised {e} unexpectedly")
+
+            try:
+                sr.single_statistic_table(
+                    stat="accuracy",
+                    show_heatmap=True,
+                    row_names=["X"],
+                    column_names=["Y"],
+                )
+            except Exception as e:
+                self.fail(f"single_statistic_table raised {e} unexpectedly")
+
+            try:
+                sr.single_statistic_table(
+                    stat="accuracy",
+                    show_heatmap=True,
+                    title="Test",
+                    min_color=0,
+                    max_color=1,
+                    annotate=False,
+                    figsize=(10, 10),
+                )
+            except Exception as e:
+                self.fail(f"single_statistic_table raised {e} unexpectedly")
+
+        plt.close("all")
+        matplotlib.use(self.mpl_backend)
 
 
 if __name__ == "__main__":

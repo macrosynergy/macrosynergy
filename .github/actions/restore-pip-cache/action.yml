@@ -9,39 +9,39 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ inputs.python-version }}
+  - name: Setup Python
+    uses: actions/setup-python@v5
+    with:
+      python-version: ${{ inputs.python-version }}
 
-    - name: Get Week Number
-      shell: bash
-      id: week
-      run: echo "week=$(date +%V)" >> $GITHUB_ENV
+  - name: Get Week Number
+    shell: bash
+    id: week
+    run: echo "week=$(date +%V)" >> $GITHUB_ENV
 
-    - name: Restore pip cache
-      id: cache
-      uses: actions/cache@v4
-      with:
-        # using OS-name + "pip" + hash of TOML + week number as key
-        path: ${{ env.pythonLocation }}
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}-${{ env.week }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
+  - name: Restore pip cache
+    id: cache
+    uses: actions/cache@v4
+    with:
+      # using OS-name + "pip" + hash of TOML + week number as key
+      path: ${{ env.pythonLocation }}
+      key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}-${{ env.week }}
+      restore-keys: |
+        ${{ runner.os }}-pip-
 
-    - name: Install dependencies if cache was not found (Python 3.7)
-      shell: bash
-      if: steps.cache.outputs.cache-hit != 'true' && startsWith(inputs.python-version, '3.7')
-      run: |
-        pip install . --no-deps
-        pip install -r tests/requirements-py37.txt
-        pip uninstall -y macrosynergy
-        # No explicit caching step is needed as the cache action takes care of this 
+  - name: Install dependencies if cache was not found (Python 3.7)
+    shell: bash
+    if: steps.cache.outputs.cache-hit != 'true' && startsWith(inputs.python-version, '3.7')
+    run: |
+      pip install . --no-deps
+      pip install -r tests/requirements-py37.txt
+      pip uninstall -y macrosynergy
+      # No explicit caching step is needed as the cache action takes care of this 
 
-    - name: Install dependencies if cache was not found (Python >= 3.8)
-      shell: bash
-      if: steps.cache.outputs.cache-hit != 'true' && !startsWith(inputs.python-version, '3.7')
-      run: |
-        pip install .[all]
-        pip uninstall -y macrosynergy
-        # No explicit caching step is needed as the cache action takes care of this
+  - name: Install dependencies if cache was not found (Python >= 3.8)
+    shell: bash
+    if: steps.cache.outputs.cache-hit != 'true' && !startsWith(inputs.python-version, '3.7')
+    run: |
+      pip install .[all,test]
+      pip uninstall -y macrosynergy
+      # No explicit caching step is needed as the cache action takes care of this

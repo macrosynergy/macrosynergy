@@ -39,6 +39,9 @@ from .df_utils import (
     get_eops,
     get_sops,
     merge_categories,
+    estimate_release_frequency,
+    concat_categorical,
+    _insert_as_categorical,
 )
 
 from .sparse import (
@@ -53,6 +56,8 @@ from .sparse import (
 
 from .math import (
     expanding_mean_with_nan,
+    ewm_sum,
+    calculate_cumulative_weights,
 )
 
 
@@ -97,6 +102,7 @@ __all__ = [
     "get_eops",
     "get_sops",
     "merge_categories",
+    "estimate_release_frequency",
     # Sparse Indicators
     "create_delta_data",
     "calculate_score_on_sparse_indicator",
@@ -107,4 +113,8 @@ __all__ = [
     "InformationStateChanges",
     # Math
     "expanding_mean_with_nan",
+    "ewm_sum",
+    "calculate_cumulative_weights",
+    "concat_categorical",
+    "_insert_as_categorical",
 ]

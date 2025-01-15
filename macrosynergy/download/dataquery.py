@@ -1,9 +1,8 @@
 """
-Interface for downloading data from the JPMorgan DataQuery API.
-This module is not intended to be used directly, but rather through
-macrosynergy.download.jpmaqs.py. However, for a use cases independent
-of JPMaQS, this module can be used directly to download data from the
-JPMorgan DataQuery API.
+Interface for downloading data from the JPMorgan DataQuery API. This module is not
+intended to be used directly, but rather through macrosynergy.download.jpmaqs.py.
+However, for a use cases independent of JPMaQS, this module can be used directly to
+download data from the JPMorgan DataQuery API.
 """
 
 import concurrent.futures
@@ -70,17 +69,28 @@ def validate_response(
     user_id: str,
 ) -> dict:
     """
-    Validates a response from the API. Raises an exception if the response
-    is invalid (e.g. if the response is not a 200 status code).
+    Validates a response from the API. Raises an exception if the response is invalid
+    (e.g. if the response is not a 200 status code).
 
-    :param <requests.Response> response: response object from requests.request().
+    Parameters
+    ----------
+    response : requests.Response
+        response object from requests.request().
 
-    :return <dict>: response as a dictionary. If the response is not valid,
-        this function will raise an exception.
+    Raises
+    ------
+    InvalidResponseError
+        if the response is not valid.
+    AuthenticationError
+        if the response is a 401 status code.
+    KeyboardInterrupt
+        if the user interrupts the download.
 
-    :raises <InvalidResponseError>: if the response is not valid.
-    :raises <AuthenticationError>: if the response is a 401 status code.
-    :raises <KeyboardInterrupt>: if the user interrupts the download.
+    Returns
+    -------
+    dict
+        response as a dictionary. If the response is not valid, this function will raise
+        an exception.
     """
 
     error_str: str = (
@@ -128,28 +138,47 @@ def request_wrapper(
     **kwargs,
 ) -> dict:
     """
-    Wrapper for requests.request() that handles retries and logging.
-    All parameters and kwargs are passed to requests.request().
+    Wrapper for requests.request() that handles retries and logging. All parameters and
+    kwargs are passed to requests.request().
 
-    :param <str> url: URL to request.
-    :param <dict> headers: headers to pass to requests.request().
-    :param <dict> params: params to pass to requests.request().
-    :param <str> method: HTTP method to use. Must be one of "get"
-        or "post". Defaults to "get".
-    :param <dict> kwargs: kwargs to pass to requests.request().
-    :param <str> tracking_id: default None, unique tracking ID of request.
-    :param <dict> proxy: default None, dictionary of proxy settings for request.
-    :param <Tuple[str, str]> cert: default None, tuple of string for filename
-        of certificate and key.
+    Parameters
+    ----------
+    url : str
+        URL to request.
+    headers : dict
+        headers to pass to requests.request().
+    params : dict
+        params to pass to requests.request().
+    method : str
+        HTTP method to use. Must be one of "get" or "post". Defaults to "get".
+    kwargs : dict
+        kwargs to pass to requests.request().
+    tracking_id : str
+        default None, unique tracking ID of request.
+    proxy : dict
+        default None, dictionary of proxy settings for request.
+    cert : Tuple[str, str]
+        default None, tuple of string for filename of certificate and key.
 
-    :return <dict>: response as a dictionary.
+    Raises
+    ------
+    InvalidResponseError
+        if the response is not valid.
+    AuthenticationError
+        if the response is a 401 status code.
+    DownloadError
+        if the request fails after retrying.
+    KeyboardInterrupt
+        if the user interrupts the download.
+    ValueError
+        if the method is not one of "get" or "post".
+    Exception
+        other exceptions may be raised by requests.request().
 
-    :raises <InvalidResponseError>: if the response is not valid.
-    :raises <AuthenticationError>: if the response is a 401 status code.
-    :raises <DownloadError>: if the request fails after retrying.
-    :raises <KeyboardInterrupt>: if the user interrupts the download.
-    :raises <ValueError>: if the method is not one of "get" or "post".
-    :raises <Exception>: other exceptions may be raised by requests.request().
+    Returns
+    -------
+    dict
+        response as a dictionary.
     """
 
     if method not in ["get", "post"]:
@@ -254,17 +283,27 @@ class OAuth(object):
     """
     Class for handling OAuth authentication for the DataQuery API.
 
-    :param <str> client_id: client ID for the OAuth application.
-    :param <str> client_secret: client secret for the OAuth application.
-    :param <dict> proxy: proxy to use for requests. Defaults to None.
-    :param <str> token_url: URL for getting OAuth tokens.
-    :param <str> dq_resource_id: resource ID for the JPMaQS Application.
+    Parameters
+    ----------
+    client_id : str
+        client ID for the OAuth application.
+    client_secret : str
+        client secret for the OAuth application.
+    proxy : dict
+        proxy to use for requests. Defaults to None.
+    token_url : str
+        URL for getting OAuth tokens.
+    dq_resource_id : str
+        resource ID for the JPMaQS Application.
 
-    :return <OAuth>: OAuth object.
-
-    :raises <ValueError>: if any of the parameters are semantically incorrect.
-    :raises <TypeError>: if any of the parameters are of the wrong type.
-    :raises <Exception>: other exceptions may be raised by underlying functions.
+    Raises
+    ------
+    ValueError
+        if any of the parameters are semantically incorrect.
+    TypeError
+        if any of the parameters are of the wrong type.
+    Exception
+        other exceptions may be raised by underlying functions.
     """
 
     def __init__(
@@ -308,8 +347,12 @@ class OAuth(object):
         """
         Method to check if the stored token is valid.
 
-        :return <bool>: True if the token is valid, False otherwise.
+        Returns
+        -------
+        bool
+            True if the token is valid, False otherwise.
         """
+
         if self._stored_token is None:
             logger.debug("No token stored")
             return False
@@ -333,10 +376,15 @@ class OAuth(object):
         return is_active
 
     def _get_token(self) -> str:
-        """Method to get a new OAuth token.
-
-        :return <str>: OAuth token.
         """
+        Method to get a new OAuth token.
+
+        Returns
+        -------
+        str
+            OAuth token.
+        """
+
         if not self._valid_token():
             logger.debug("Request new OAuth token")
             js = request_wrapper(
@@ -363,9 +411,10 @@ class OAuth(object):
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
         """
-        Returns a dictionary with the authentication information, in the same
-        format as the `macrosynergy.download.dataquery.CertAuth.get_auth()` method.
+        Returns a dictionary with the authentication information, in the same format as
+        the `macrosynergy.download.dataquery.CertAuth.get_auth()` method.
         """
+
         headers: Dict = {"Authorization": "Bearer " + self._get_token()}
         return {
             "headers": headers,
@@ -378,16 +427,25 @@ class CertAuth(object):
     """
     Class for handling certificate based authentication for the DataQuery API.
 
-    :param <str> username: username for the DataQuery API.
-    :param <str> password: password for the DataQuery API.
-    :param <str> crt: path to the certificate file.
-    :param <str> key: path to the key file.
+    Parameters
+    ----------
+    username : str
+        username for the DataQuery API.
+    password : str
+        password for the DataQuery API.
+    crt : str
+        path to the certificate file.
+    key : str
+        path to the key file.
 
-    :return <CertAuth>: CertAuth object.
-
-    :raises <AssertionError>: if any of the parameters are of the wrong type.
-    :raises <FileNotFoundError>: if certificate or key file is missing from filesystem.
-    :raises <Exception>: other exceptions may be raised by underlying functions.
+    Raises
+    ------
+    AssertionError
+        if any of the parameters are of the wrong type.
+    FileNotFoundError
+        if certificate or key file is missing from filesystem.
+    Exception
+        other exceptions may be raised by underlying functions.
     """
 
     def __init__(
@@ -419,9 +477,10 @@ class CertAuth(object):
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
         """
-        Returns a dictionary with the authentication information, in the same
-        format as the `macrosynergy.download.dataquery.OAuth.get_auth()` method.
+        Returns a dictionary with the authentication information, in the same format as
+        the `macrosynergy.download.dataquery.OAuth.get_auth()` method.
         """
+
         headers = {"Authorization": f"Basic {self.auth:s}"}
         user_id = "CertAuth_Username - " + self.username
         return {
@@ -449,10 +508,17 @@ def validate_download_args(
     """
     Validate the arguments passed to the `download_data()` method.
 
-    :return <bool>: True if all arguments are valid.
+    Raises
+    ------
+    TypeError
+        if any of the arguments are of the wrong type.
+    ValueError
+        if any of the arguments are semantically incorrect.
 
-    :raises <TypeError>: if any of the arguments are of the wrong type.
-    :raises <ValueError>: if any of the arguments are semantically incorrect.
+    Returns
+    -------
+    bool
+        True if all arguments are valid.
     """
 
     if expressions is None:
@@ -481,6 +547,9 @@ def validate_download_args(
     if not isinstance(delay_param, float):
         raise TypeError("`delay_param` must be a float >=0.2 (seconds).")
 
+    if delay_param < 0.0:
+        raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
+
     if delay_param < 0.2:
         warnings.warn(
             RuntimeWarning(
@@ -488,8 +557,6 @@ def validate_download_args(
                 f"Minimum recommended value is 0.2 seconds. "
             )
         )
-    if delay_param < 0.0:
-        raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
 
     if not isinstance(batch_size, int):
         raise TypeError("`batch_size` must be an integer.")
@@ -530,43 +597,58 @@ def validate_download_args(
 
 class DataQueryInterface(object):
     """
-    High level interface for the DataQuery API.
+    High level interface for the DataQuery API.  When using OAuth authentication:
 
-    When using OAuth authentication:
+    Parameters
+    ----------
+    client_id : str
+        client ID for the OAuth application.
+    client_secret : str
+        client secret for the OAuth application.  When using certificate authentication:
+    crt : str
+        path to the certificate file.
+    key : str
+        path to the key file.
+    username : str
+        username for the DataQuery API.
+    password : str
+        password for the DataQuery API.
+    oauth : bool
+        whether to use OAuth authentication. Defaults to True.
+    debug : bool
+        whether to print debug messages. Defaults to False.
+    concurrent : bool
+        whether to use concurrent requests. Defaults to True.
+    batch_size : int
+        default 20, number of expressions to send in a single request. Must be a number
+        between 1 and 20 (both included).
+    check_connection : bool
+        whether to send a check_connection request. Defaults to True.
+    base_url : str
+        base URL for the DataQuery API. Defaults to OAUTH_BASE_URL if `oauth` is True,
+        CERT_BASE_URL otherwise.
+    token_url : str
+        token URL for the DataQuery API. Defaults to OAUTH_TOKEN_URL.
+    suppress_warnings : bool
+        whether to suppress warnings. Defaults to True.
+    custom_auth : Any
+        custom authentication object. When specified oauth must be False and the object
+        must have a get_auth method. Defaults to None.
 
-    :param <str> client_id: client ID for the OAuth application.
-    :param <str> client_secret: client secret for the OAuth application.
-
-    When using certificate authentication:
-
-    :param <str> crt: path to the certificate file.
-    :param <str> key: path to the key file.
-    :param <str> username: username for the DataQuery API.
-    :param <str> password: password for the DataQuery API.
-
-    :param <bool> oauth: whether to use OAuth authentication. Defaults to True.
-    :param <bool> debug: whether to print debug messages. Defaults to False.
-    :param <bool> concurrent: whether to use concurrent requests. Defaults to True.
-    :param <int> batch_size: default 20, number of expressions to send in a single
-        request. Must be a number between 1 and 20 (both included).
-    :param <bool> check_connection: whether to send a check_connection request.
-        Defaults to True.
-    :param <str> base_url: base URL for the DataQuery API. Defaults to OAUTH_BASE_URL
-        if `oauth` is True, CERT_BASE_URL otherwise.
-    :param <str> token_url: token URL for the DataQuery API. Defaults to OAUTH_TOKEN_URL.
-    :param <bool> suppress_warnings: whether to suppress warnings. Defaults to True.
-
-    :param <Any> custom_auth: custom authentication object. When specified oauth must be 
-        False and the object must have a get_auth method. Defaults to None.
-
-    :return <DataQueryInterface>: DataQueryInterface object.
-
-    :raises <TypeError>: if any of the parameters are of the wrong type.
-    :raises <ValueError>: if any of the parameters are semantically incorrect.
-    :raises <InvalidResponseError>: if the response from the server is not valid.
-    :raises <DownloadError>: if the download fails to complete after a number of retries.
-    :raises <HeartbeatError>: if the heartbeat (check connection) fails.
-    :raises <Exception>: other exceptions may be raised by underlying functions.
+    Raises
+    ------
+    TypeError
+        if any of the parameters are of the wrong type.
+    ValueError
+        if any of the parameters are semantically incorrect.
+    InvalidResponseError
+        if the response from the server is not valid.
+    DownloadError
+        if the download fails to complete after a number of retries.
+    HeartbeatError
+        if the heartbeat (check connection) fails.
+    Exception
+        other exceptions may be raised by underlying functions.
     """
 
     def __init__(
@@ -665,15 +747,22 @@ class DataQueryInterface(object):
         dicts_list: List[Dict],
     ) -> List[str]:
         """
-        Method to get the expressions that are not available in the response.
-        Looks at the dict["attributes"][0]["expression"] field of each dict
-        in the list.
+        Method to get the expressions that are not available in the response. Looks at
+        the dict["attributes"][0]["expression"] field of each dict in the list.
 
-        :param <List[str]> expected_exprs: list of expressions that were requested.
-        :param <List[Dict]> dicts_list: list of dicts to search for the expressions.
+        Parameters
+        ----------
+        expected_exprs : List[str]
+            list of expressions that were requested.
+        dicts_list : List[Dict]
+            list of dicts to search for the expressions.
 
-        :return <List[str]>: list of expressions that were not found in the dicts.
+        Returns
+        -------
+        List[str]
+            list of expressions that were not found in the dicts.
         """
+
         found_exprs: List[str] = [
             curr_dict["attributes"][0]["expression"]
             for curr_dict in dicts_list
@@ -685,13 +774,23 @@ class DataQueryInterface(object):
         """
         Check the connection to the DataQuery API using the Heartbeat endpoint.
 
-        :param <bool> verbose: whether to print a message if the heartbeat
-            is successful. Useful for debugging. Defaults to False.
+        Parameters
+        ----------
+        verbose : bool
+            whether to print a message if the heartbeat is successful. Useful for
+            debugging. Defaults to False.
 
-        :return <bool>: True if the connection is successful, False otherwise.
+        Raises
+        ------
+        HeartbeatError
+            if the heartbeat fails.
 
-        :raises <HeartbeatError>: if the heartbeat fails.
+        Returns
+        -------
+        bool
+            True if the connection is successful, False otherwise.
         """
+
         logger.debug(f"Sleep before checking connection - {API_DELAY_PARAM} seconds")
         time.sleep(API_DELAY_PARAM)
         logger.debug("Check if connection can be established to JPMorgan DataQuery")
@@ -726,20 +825,32 @@ class DataQueryInterface(object):
         tracking_id: Optional[str] = None,
     ) -> List[Dict]:
         """
-        Make a request to the DataQuery API using the specified parameters.
-        Used to wrap a request in a thread for concurrent requests, or to
-        simplify the code for single requests. Used by the `_fetch_timeseries()`
-        method.
+        Make a request to the DataQuery API using the specified parameters. Used to wrap
+        a request in a thread for concurrent requests, or to simplify the code for
+        single requests. Used by the `_fetch_timeseries()` method.
 
-        :param <str> url: URL to request.
-        :param <dict> params: parameters to send with the request.
-        :param <dict> proxy: proxy to use for the request.
-        :param <str> tracking_id: tracking ID to use for the request.
+        Parameters
+        ----------
+        url : str
+            URL to request.
+        params : dict
+            parameters to send with the request.
+        proxy : dict
+            proxy to use for the request.
+        tracking_id : str
+            tracking ID to use for the request.
 
-        :return <List[Dict]>: list of dictionaries containing the response data.
+        Raises
+        ------
+        InvalidResponseError
+            if the response from the server is not valid.
+        Exception
+            other exceptions may be raised by underlying functions.
 
-        :raises <InvalidResponseError>: if the response from the server is not valid.
-        :raises <Exception>: other exceptions may be raised by underlying functions.
+        Returns
+        -------
+        List[Dict]
+            list of dictionaries containing the response data.
         """
 
         downloaded_data: List[Dict] = []
@@ -791,7 +902,8 @@ class DataQueryInterface(object):
     ) -> List[Dict]:
         """
         Exists to provide a wrapper for the `_fetch()` method that can be modified when
-        inheriting from this class. This method is used by the `_concurrent_loop()` method.
+        inheriting from this class. This method is used by the `_concurrent_loop()`
+        method.
         """
 
         return self._fetch(url=url, params=params, tracking_id=tracking_id)
@@ -803,20 +915,29 @@ class DataQueryInterface(object):
         verbose: bool = True,
     ) -> List[str]:
         """
-        Method to get the JPMaQS catalogue.
-        Queries the DataQuery API's Groups/Search endpoint to get the list of
-        tickers in the JPMaQS group. The group ID can be changed to fetch a
-        different group's catalogue.
+        Method to get the JPMaQS catalogue. Queries the DataQuery API's Groups/Search
+        endpoint to get the list of tickers in the JPMaQS group. The group ID can be
+        changed to fetch a different group's catalogue.
 
-        :param <str> group_id: the group ID to fetch the catalogue for. Defaults to
-            "JPMAQS".
-        :param <int> page_size: the number of tickers to fetch in a single request.
-            Defaults to 1000 (maximum allowed by the API).
+        Parameters
+        ----------
+        group_id : str
+            the group ID to fetch the catalogue for. Defaults to "JPMAQS".
+        page_size : int
+            the number of tickers to fetch in a single request. Defaults to 1000
+            (maximum allowed by the API).
 
-        :return <List[str]>: list of all tickers in the requested group.
+        Raises
+        ------
+        ValueError
+            if the response from the server is not valid.
 
-        :raises <ValueError>: if the response from the server is not valid.
+        Returns
+        -------
+        List[str]
+            list of all tickers in the requested group.
         """
+
         if not isinstance(group_id, str):
             raise TypeError("`group_id` must be a string.")
 
@@ -864,12 +985,14 @@ class DataQueryInterface(object):
         **kwargs,
     ) -> Tuple[List[Union[Dict, Any]], List[List[str]]]:
         """
-        Concurrent loop to download data from the DataQuery API.
-        Used by the `_download()` method.
+        Concurrent loop to download data from the DataQuery API. Used by the
+        `_download()` method.
 
-        :return <Tuple[List[Union[Dict, Any]], List[List[str]]]>: tuple of two lists.
-            The first list contains the downloaded data, and the second list
-            contains the failed batches.
+        Returns
+        -------
+        Tuple[List[Union[Dict, Any]], List[List[str]]]
+            tuple of two lists. The first list contains the downloaded data, and the
+            second list contains the failed batches.
         """
 
         future_objects: List[concurrent.futures.Future] = []
@@ -939,13 +1062,19 @@ class DataQueryInterface(object):
         download_outputs: List[Union[Dict, Any]],
     ) -> List[Dict]:
         """
-        Chain the download outputs from the concurrent loop into a single list.
-        Used by the `download_data()` method. Exists to provide a method that can be
-        modified when inheriting from this class.
+        Chain the download outputs from the concurrent loop into a single list. Used by
+        the `download_data()` method. Exists to provide a method that can be modified
+        when inheriting from this class.
 
-        :param <List[Union[Dict, Any]> download_outputs: list of list of dictionaries/
-            other objects.
-        :return <List[Dict]>: list of dictionaries/other objects.
+        Parameters
+        ----------
+        download_outputs : List[Union[Dict, Any]
+            list of list of dictionaries/ other objects.
+
+        Returns
+        -------
+        List[Dict]
+            list of dictionaries/other objects.
         """
 
         return list(itertools.chain.from_iterable(download_outputs))
@@ -963,18 +1092,19 @@ class DataQueryInterface(object):
         **kwargs,
     ) -> List[dict]:
         """
-        Backend method to download data from the DataQuery API.
-        Used by the `download_data()` method.
+        Backend method to download data from the DataQuery API. Used by the
+        `download_data()` method.
         """
 
         if 0 < retry_counter < HL_RETRY_COUNT:
             print("Retrying failed downloads. Retry count:", retry_counter)
 
         if retry_counter > HL_RETRY_COUNT:
-            raise DownloadError(
-                f"Failed {retry_counter} times to download data all requested data.\n"
-                f"No longer retrying."
-            )
+            error_str = (f"Failed {retry_counter} times to download data all requested data.\n"
+                f"No longer retrying.")
+            if len(self.msg_errors) > 0:
+                error_str += "\n".join(self.msg_errors)
+            raise DownloadError(error_str)
 
         expr_batches: List[List[str]] = [
             expressions[i : i + self.batch_size]
@@ -1043,29 +1173,51 @@ class DataQueryInterface(object):
         """
         Download data from the DataQuery API.
 
-        :param <List[str]> expressions: list of expressions to download.
-        :param <str> start_date: start date for the data in the ISO-8601 format
-            (YYYY-MM-DD).
-        :param <str> end_date: end date for the data in the ISO-8601 format
-            (YYYY-MM-DD).
-        :param <bool> show_progress: whether to show a progress bar for the download.
-        :param <str> endpoint: endpoint to use for the download.
-        :param <str> calender: calendar setting to use for the download.
-        :param <str> frequency: frequency of data points to use for the download.
-        :param <str> conversion: conversion setting to use for the download.
-        :param <str> nan_treatment: NaN treatment setting to use for the download.
-        :param <str> reference_data: reference data to pass to the API kwargs.
-        :param <int> retry_counter: number of times the download has been retried.
-        :param <float> delay_param: delay between requests to the API.
+        Parameters
+        ----------
+        expressions : List[str]
+            list of expressions to download.
+        start_date : str
+            start date for the data in the ISO-8601 format (YYYY-MM-DD).
+        end_date : str
+            end date for the data in the ISO-8601 format (YYYY-MM-DD).
+        show_progress : bool
+            whether to show a progress bar for the download.
+        endpoint : str
+            endpoint to use for the download.
+        calender : str
+            calendar setting to use for the download.
+        frequency : str
+            frequency of data points to use for the download.
+        conversion : str
+            conversion setting to use for the download.
+        nan_treatment : str
+            NaN treatment setting to use for the download.
+        reference_data : str
+            reference data to pass to the API kwargs.
+        retry_counter : int
+            number of times the download has been retried.
+        delay_param : float
+            delay between requests to the API.
 
-        :return <List[Dict]>: list of dictionaries containing the response data.
+        Raises
+        ------
+        ValueError
+            if any arguments are invalid or semantically incorrect (see
+            validate_download_args()).
+        DownloadError
+            if the download fails.
+        ConnectionError(HeartbeatError)
+            if the heartbeat fails.
+        Exception
+            other exceptions may be raised by underlying functions.
 
-        :raises <ValueError>: if any arguments are invalid or semantically incorrect
-            (see validate_download_args()).
-        :raises <DownloadError>: if the download fails.
-        :raises <ConnectionError(HeartbeatError)>: if the heartbeat fails.
-        :raises <Exception>: other exceptions may be raised by underlying functions.
+        Returns
+        -------
+        List[Dict]
+            list of dictionaries containing the response data.
         """
+
         tracking_id: str = TIMESERIES_TRACKING_ID
         if end_date is None:
             end_date = datetime.today().strftime("%Y-%m-%d")
@@ -1078,6 +1230,8 @@ class DataQueryInterface(object):
         # NOTE : args validated only on first call, not on retries
         # this is because the args can be modified by the retry mechanism
         # (eg. date format)
+
+        expressions = sorted(expressions)
 
         validate_download_args(
             expressions=expressions,
@@ -1172,10 +1326,7 @@ if __name__ == "__main__":
     client_id: str = os.getenv("DQ_CLIENT_ID")
     client_secret: str = os.getenv("DQ_CLIENT_SECRET")
 
-    expressions = [
-        "DB(JPMAQS,USD_EQXR_VT10,value)",
-        "DB(JPMAQS,USD_EQXR_VT10,eop_lag)",
-    ]
+    expressions = ["DB(CFX,GBP,)"]
 
     with DataQueryInterface(
         client_id=client_id,

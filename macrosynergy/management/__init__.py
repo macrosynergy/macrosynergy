@@ -32,6 +32,8 @@ from .utils.sparse import (
     InformationStateChanges,
 )
 
+from .utils.math import ewm_sum, calculate_cumulative_weights
+
 __all__ = [
     # METHODS
     "reduce_df",
@@ -66,4 +68,7 @@ __all__ = [
     "simulate_quantamental_data",
     "validate_and_reduce_qdf",
     "merge_categories",
+    # Math
+    "ewm_sum",
+    "calculate_cumulative_weights",
 ]

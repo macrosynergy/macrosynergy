@@ -367,15 +367,18 @@ class TestInformationStateChanges(unittest.TestCase):
     def test_class_methods(self) -> None:
         # test the class methods
         qdf = get_long_format_data(end="2012-01-01")
-        isc = InformationStateChanges.from_qdf(qdf)
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
         self.assertTrue(isinstance(isc, InformationStateChanges))
         self.assertTrue(isinstance(isc.isc_dict, dict))
 
         self.assertEqual(set(isc.isc_dict.keys()), set(isc.keys()))
         # can't directly check the values and items as they are not hashable
-        self.assertEqual(str(isc), str(isc.isc_dict))
-        self.assertEqual(repr(isc), repr(isc.isc_dict))
 
+        tks = (qdf["cid"] + "_" + qdf["xcat"]).unique().tolist()
+        self.assertTrue(str(tks) in str(isc))
+        self.assertEqual(
+            repr(isc), f"InformationStateChanges object with {len(tks)} tickers"
+        )
         first_dict_key = list(isc.isc_dict.keys())[0]
         self.assertTrue((isc[first_dict_key]).equals(isc.isc_dict[first_dict_key]))
 
@@ -729,6 +732,57 @@ class TestInformationStateChanges(unittest.TestCase):
         )
 
         self.assertTrue(isc_min == new_isc)
+
+    def test_return_dtypes(self):
+        # test return type - regular df
+        qdf = get_long_format_data(end="2012-01-01")
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
+        outdf = isc.to_qdf()
+
+        self.assertTrue(outdf["cid"].dtype.name == "object")
+        self.assertTrue(outdf["xcat"].dtype.name == "object")
+        self.assertTrue(isinstance(outdf, QuantamentalDataFrame))
+
+        # test return type - categorical df (not QDF)
+        qdf = get_long_format_data(end="2012-01-01")
+        qdf = QuantamentalDataFrame(qdf).copy()
+        self.assertTrue(
+            type(qdf) is pd.DataFrame,
+            "Invalid test - This should be a pd.DataFrame, not QuantamentalDataFrame",
+        )
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
+        outdf = isc.to_qdf()
+
+        self.assertTrue(outdf["cid"].dtype.name == "category")
+        self.assertTrue(outdf["xcat"].dtype.name == "category")
+        self.assertTrue(isinstance(outdf, QuantamentalDataFrame))
+
+        # test they are categorical when QDF, also initialized as categorical
+        qdf = get_long_format_data(end="2012-01-01")
+        qdf = QuantamentalDataFrame(qdf, _initialized_as_categorical=True)
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
+        outdf = isc.to_qdf()
+
+        self.assertTrue(outdf["cid"].dtype.name == "category")
+        self.assertTrue(outdf["xcat"].dtype.name == "category")
+
+        # test they are categorical when QDF from regular QDF
+        qdf = get_long_format_data(end="2012-01-01")
+        qdf = QuantamentalDataFrame(qdf, categorical=True)
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
+        outdf = isc.to_qdf()
+
+        self.assertTrue(outdf["cid"].dtype.name == "object")
+        self.assertTrue(outdf["xcat"].dtype.name == "object")
+
+        #  test they are not categorical when QDF
+        qdf = get_long_format_data(end="2012-01-01")
+        qdf = QuantamentalDataFrame(qdf, categorical=False)
+        isc = InformationStateChanges.from_qdf(qdf)
+        outdf = isc.to_qdf()
+
+        self.assertTrue(outdf["cid"].dtype.name == "object")
+        self.assertTrue(outdf["xcat"].dtype.name == "object")
 
 
 if __name__ == "__main__":

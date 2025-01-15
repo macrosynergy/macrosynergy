@@ -8,7 +8,7 @@ def view_table(
     df: pd.DataFrame,
     title: Optional[str] = None,
     title_fontsize: Optional[int] = 16,
-    figsize: Optional[Tuple[float]] = (14, 4),
+    figsize: Optional[Tuple[float, float]] = (14, 4),
     min_color: float = -1,
     max_color: float = 1,
     xlabel: Optional[str] = None,
@@ -21,17 +21,32 @@ def view_table(
     """
     Displays a DataFrame representing a table as a heatmap.
 
-    :param <pd.Dataframe> table: table to be displayed.
-    :param <str> title: string of chart title; defaults depend on type of range plot.
-    :param <int> title_fontsize: font size of chart header. Default is 16.
-    :param <Tuple[float]> figsize: Tuple (w, h) of width and height of plot.
-    :param <float> min_color: minimum value of colorbar.
-    :param <float> max_color: maximum value of colorbar.
-    :param <str> xlabel: string of x-axis label.
-    :param <str> ylabel: string of y-axis label.
-    :param <List[str]> xticklabels: list of strings to label x-axis ticks.
-    :param <List[str]> yticklabels: list of strings to label y-axis ticks.
-    :param <bool> annot: whether to annotate heatmap with values.
+    Parameters
+    ----------
+    table : ~pandas.DataFrame
+        table to be displayed.
+    title : str, optional
+        string of chart title; defaults depend on type of range plot.
+    title_fontsize : int, optional
+        font size of chart header. Default is 16.
+    figsize : Tuple[float, float], optional
+        Tuple (w, h) of width and height of plot.
+    min_color : float
+        minimum value of colorbar. Default is -1.
+    max_color : float
+        maximum value of colorbar. Default is 1.
+    xlabel : str, optional
+        string of x-axis label. Default is None.
+    ylabel : str, optional
+        string of y-axis label. Default is None.
+    xticklabels : List[str], optional
+        list of strings to label x-axis ticks. Default is None.
+    yticklabels : List[str], optional
+        list of strings to label y-axis ticks. Default is None.
+    annot : bool
+        whether to annotate heatmap with values.
+    fmt : str
+        string format for annotations. Default is '.2f'.
     """
 
     if not isinstance(df, pd.DataFrame):

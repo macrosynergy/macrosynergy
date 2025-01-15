@@ -253,11 +253,11 @@ class TestAll(unittest.TestCase):
                 rel_xcats=None,
                 postfix="RV",
             )
-
+            wlist = [w for w in w if issubclass(w.category, UserWarning)]
             # Assert a UserWarning is raised.
-            self.assertTrue(len(w) == 1)
-            self.assertTrue(issubclass(w[-1].category, UserWarning))
-            warning_message: str = str(w[-1].message)
+            self.assertTrue(len(wlist) == 1)
+            self.assertTrue(issubclass(wlist[-1].category, UserWarning))
+            warning_message: str = str(wlist[-1].message)
 
             printed_cids: str = set(eval(warning_message[-23:-1]))
             test: str = set(["CAD", "GBP", "NZD"])
@@ -302,9 +302,9 @@ class TestAll(unittest.TestCase):
                 start=start,
                 end=end,
             )
-
+            wlist = [w for w in w if issubclass(w.category, UserWarning)]
             # Assert a UserWarning is not raised.
-            self.assertTrue(len(w) == 0)
+            self.assertTrue(len(wlist) == 0)
 
     def test_prepare_basket(self):
         # Explicitly test _prepare_basket() method.

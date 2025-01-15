@@ -15,12 +15,9 @@ import sys
 # Define constants based on the Python version
 PYTHON_VERSION = sys.version_info
 PYTHON_3_8_OR_LATER = PYTHON_VERSION >= (3, 8)
+PYTHON_3_9_OR_LATER = PYTHON_VERSION >= (3, 9)
 
-from . import visuals, download, panel, pnl, management, signal
-
-if PYTHON_3_8_OR_LATER:
-    from . import learning
-
+from . import visuals, download, panel, pnl, management, signal, learning
 
 from .management.utils import check_package_version
 
@@ -34,6 +31,7 @@ __all__ = [
     "learning",
     "check_package_version",
     "PYTHON_3_8_OR_LATER",
+    "PYTHON_3_9_OR_LATER",
 ]
 
 __name__ = ["__version__"]

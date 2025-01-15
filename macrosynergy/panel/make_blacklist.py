@@ -1,6 +1,6 @@
 """
-Module with functions for processing "blacklist" data for cross-sections in a quantamental
-DataFrame.
+Module with functions for processing "blacklist" data for cross-sections in a
+quantamental DataFrame.
 """
 
 import numpy as np
@@ -9,24 +9,11 @@ from typing import List
 from itertools import groupby
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.simulate import make_qdf_black, make_qdf
-
-
-def startend(dti, start, length):
-    """Return start and end dates of a sequence as tuple
-
-    :param <DateTimeIndex> dti: datetime series of working days
-    :param <int> start: index of start
-    :param <int> length: number of sequential days
-
-    :return <Tuple[pd.Timestamp, pd.Timestamp]>: tuple of start and end date
-    """
-
-    tup = (dti[start], dti[start + (length - 1)])
-    return tup
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def make_blacklist(
-    df: pd.DataFrame,
+    df: QuantamentalDataFrame,
     xcat: str,
     cids: List[str] = None,
     start: str = None,
@@ -37,39 +24,54 @@ def make_blacklist(
     Converts binary category of standardized dataframe into a standardized dictionary
     that can serve as a blacklist for cross-sections in further analyses
 
-    :param <pd.Dataframe> df: standardized DataFrame with following columns:
-        'cid', 'xcat', 'real_date' and 'value'.
-    :param <str> xcat: category with binary values, where 1 means blacklisting and 0
-        means not blacklisting.
-    :param List<str> cids: list of cross-sections that are considered in the formation
-        of the blacklist. Per default, all available cross sections are considered.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date
-        for which the respective category is available is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date
-        for which the respective category is available is used.
-    :param <bool> nan_black: if True NaNs are blacklisted (coverted to ones). Defaults is
-        False, i.e. NaNs are converted to zeroes.
+    Parameters
+    ----------
+    df : QuantamentalDataFrame
+        standardized DataFrame with following columns: 'cid', 'xcat', 'real_date' and
+        'value'.
+    xcat : str
+        category with binary values, where 1 means blacklisting and 0 means not
+        blacklisting.
+    cids : str
+        list of cross-sections that are considered in the formation of the blacklist.
+        Per default, all available cross sections are considered.
+    start : str
+        earliest date in ISO format. Default is None and earliest date for which the
+        respective category is available is used.
+    end : str
+        latest date in ISO format. Default is None and latest date for which the
+        respective category is available is used.
+    nan_black : bool
+        if True NaNs are blacklisted (coverted to ones). Defaults is False, i.e. NaNs
+        are converted to zeroes.
 
-    :return <dict>: standardized dictionary with cross-sections as keys and tuples of
-        start and end dates of the blacklist periods in ISO formats as values.
-        If one cross section has multiple blacklist periods, numbers are added to the
-        keys (i.e. TRY_1, TRY_2, etc.)
+    Returns
+    -------
+    dict
+        standardized dictionary with cross-sections as keys and tuples of start and end
+        dates of the blacklist periods in ISO formats as values. If one cross section has
+        multiple blacklist periods, numbers are added to the keys (i.e. TRY_1, TRY_2, etc.)
     """
 
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("df must be a standardized quantamental dataframe")
+
+    df = QuantamentalDataFrame(df)
+
     dfd = reduce_df(df=df, xcats=[xcat], cids=cids, start=start, end=end)
-    assert all(
-        np.isin(dfd.value.dropna().unique(), [0, 1])
-    ), "blacklist values must all be 0/1"
+
+    if "value" not in dfd.columns:
+        raise ValueError("`value` column not found in df")
+
+    if not all(np.isin(dfd["value"].dropna().unique(), [0, 1])):
+        raise ValueError("blacklist values must all be 0/1")
 
     df_pivot = dfd.pivot(index="real_date", columns="cid", values="value")
     dates = df_pivot.index
     cids_df = list(df_pivot.columns)
 
-    if nan_black:  # replace NaNs
-        df_pivot = df_pivot.fillna(1)
-    else:
-        df_pivot = df_pivot.fillna(0)
+    # replace NaNs
+    df_pivot[df_pivot.isna()] = int(nan_black)  # 1 if nan_black else 0
 
     dates_dict = {}
     for cid in cids_df:
@@ -92,6 +94,29 @@ def make_blacklist(
                 count += 1
             si += length
     return dates_dict
+
+
+def startend(dti, start, length):
+    """
+    Return start and end dates of a sequence as tuple
+
+    Parameters
+    ----------
+    dti : DateTimeIndex
+        datetime series of working days
+    start : int
+        index of start
+    length : int
+        number of sequential days
+
+    Returns
+    -------
+    Tuple[pd.Timestamp, pd.Timestamp]
+        tuple of start and end date
+    """
+
+    tup = (dti[start], dti[start + (length - 1)])
+    return tup
 
 
 if __name__ == "__main__":

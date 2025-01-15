@@ -1,12 +1,15 @@
 """
-Module with functionality for generating mock 
-quantamental data vintages for testing purposes.
+Module with functionality for generating mock quantamental data vintages for testing
+purposes.
 """
 
 import numpy as np
 import pandas as pd
 import math
 import datetime as dt
+from typing import List
+from macrosynergy.management.utils import _map_to_business_day_frequency
+from macrosynergy.management.constants import ANNUALIZATION_FACTORS
 
 
 class VintageData:
@@ -14,31 +17,39 @@ class VintageData:
     Creates standardized dataframe of single-ticker vintages. This class creates
     standardized grade 1 and grade 2 vintage data.
 
-    :param <str> ticker: ticker name
-    :param <str> cutoff: last possible release date. The format must be '%Y-%m-%d'.
-            All other dates are calculated from this one. Default is end 2020.
-    :param <list> release_lags: list of integers in ascending order denoting lags of the
-        first, second etc. release in (calendar) days. Default is first release after 15
-        days and revision after 30 days. If days fall on weekend they will be delayed to
-        Monday.
-    :param <int> number_firsts: number of first-release vintages in the simulated data
-        set. Default is 24.
-    :param <int> shortest: number of observations in the first (shortest) vintage.
-        Default is 36.
-    :param <str> freq: letter denoting the frequency of the vintage data. Must be one of
-        'M' (monthly, default), 'Q' (quarterly)  or 'W' (weekly).
-    :param <float> start_value: expected first value of the random series. Default is 100.
-    :param <float> trend_ar: annualized trend. Default is 5% linear drift per year.
-        This is applied to the start value. If the start value is not positive the
-        linear trend is added as number.
-    :param <float> sd_ar: annualized standard deviation. Default is sqrt(12).
-    :param <float> seasonal: adds seasonal pattern (applying linear factor from low to
-        high through the year) with value denoting the average % seasonal factor through
-        the year. Default is None. The seasonal pattern makes only sense for values that
-        are strictly positive and are interpreted as indices.
-    :param <int> added_dates: number of added first release dates, used for grade 2
-        dataframe generation. Default is 12.
-
+    Parameters
+    ----------
+    ticker : str
+        ticker name
+    cutoff : str
+        last possible release date. The format must be '%Y-%m-%d'. All other dates are
+        calculated from this one. Default is end 2020.
+    release_lags : list
+        list of integers in ascending order denoting lags of the first, second etc.
+        release in (calendar) days. Default is first release after 15 days and revision
+        after 30 days. If days fall on weekend they will be delayed to Monday.
+    number_firsts : int
+        number of first-release vintages in the simulated data set. Default is 24.
+    shortest : int
+        number of observations in the first (shortest) vintage. Default is 36.
+    freq : str
+        letter denoting the frequency of the vintage data. Must be one of 'M' (monthly,
+        default), 'Q' (quarterly)  or 'W' (weekly).
+    start_value : float
+        expected first value of the random series. Default is 100.
+    trend_ar : float
+        annualized trend. Default is 5% linear drift per year. This is applied to the
+        start value. If the start value is not positive the linear trend is added as number.
+    sd_ar : float
+        annualized standard deviation. Default is sqrt(12).
+    seasonal : float
+        adds seasonal pattern (applying linear factor from low to high through the year)
+        with value denoting the average % seasonal factor through the year. Default is None.
+        The seasonal pattern makes only sense for values that are strictly positive and are
+        interpreted as indices.
+    added_dates : int
+        number of added first release dates, used for grade 2 dataframe generation.
+        Default is 12.
     """
 
     def __init__(
@@ -62,8 +73,8 @@ class VintageData:
         self.number_firsts = number_firsts
         self.shortest = shortest
 
-        self.freq = freq
-        self.freq_int = dict(zip(["Q", "M", "W"], [4, 12, 52]))
+        self.freq = _map_to_business_day_frequency(freq)
+        self.freq_int = ANNUALIZATION_FACTORS
         self.af = self.freq_int[freq]
 
         self.start_value = start_value
@@ -80,11 +91,19 @@ class VintageData:
         Validates that the dates passed are valid timestamp expressions and will convert
         to the required form '%Y-%m-%d'.
 
-        :param <str> date_string: valid date expression. For instance, "1st January,
-            2000."
-        :raises <TypeError>: if the date_string is not a string.
-        :raises <ValueError>: if the date_string is not in the correct format.
+        Parameters
+        ----------
+        date_string : str
+            valid date expression. For instance, "1st January, 2000."
+
+        Raises
+        ------
+        TypeError
+            if the date_string is not a string.
+        ValueError
+            if the date_string is not in the correct format.
         """
+
         date_error = "Expected form of string: '%Y-%m-%d'."
         if date_string is not None:
             if not isinstance(date_string, str):
@@ -109,14 +128,21 @@ class VintageData:
         Method used to seasonally adjust the series. Economic data can vary according to
         the season.
 
-        :param <List[pd.Timestamps]> obs_dates: observation dates for the series.
-        :param <List[float]> seas_factors: seasonal factors.
-        :param <List[float]> values: existing values that have not been seasonally
-            adjusted.
+        Parameters
+        ----------
+        obs_dates : List[pd.Timestamps]
+            observation dates for the series.
+        seas_factors : List[float]
+            seasonal factors.
+        values : List[float]
+            existing values that have not been seasonally adjusted.
 
-        :return <List[float]>: returns a list of values which have been adjusted
-            seasonally
+        Returns
+        -------
+        List[float]
+            returns a list of values which have been adjusted seasonally
         """
+
         if self.freq == "W":
             week_dates = obs_dates.isocalendar().week
             condition = np.where(week_dates > 52)[0]
@@ -153,7 +179,7 @@ class VintageData:
 
         seas_factors = self.seasonal / np.std(linear_scale)
         seas_factors *= linear_scale
-
+        df_rels: List[pd.DataFrame] = []
         for i, eop_date in enumerate(eop_dates):
             v = vin_lengths[i]
             if i > 0:
@@ -188,7 +214,9 @@ class VintageData:
                         "value": values,
                     }
                 )
-                df_gr1 = pd.concat([df_gr1, df_rel], ignore_index=True)
+                df_rels.append(df_rel)
+
+        df_gr1 = pd.concat(df_rels, ignore_index=True)
 
         df_gr1["grading"] = 1
         return self.add_ticker_parts(df_gr1)
@@ -197,11 +225,14 @@ class VintageData:
         """
         Simulates an explicitly graded dataframe with a column 'grading'.
 
-        :param <list> grading: optional addition of grading column. List of grades used
-            from lowest to highest.
-            Default is None. Must be a subset of [3, 2.2, 2.1, 1].
-        :param <list> upgrades: indices of release dates at which the series upgrade.
-            Must have length of grading minus one. Default is None.
+        Parameters
+        ----------
+        grading : list
+            optional addition of grading column. List of grades used from lowest to
+            highest. Default is None. Must be a subset of [3, 2.2, 2.1, 1].
+        upgrades : list
+            indices of release dates at which the series upgrade. Must have length of
+            grading minus one. Default is None.
         """
 
         assert len(upgrades) == (len(grading) - 1)
@@ -224,13 +255,17 @@ class VintageData:
 
     def make_grade2(self):
         """
-        Method used to construct a dataframe that consists of each respective observation
-        date and the corresponding release date(s) (the release dates are computed using
-        the observation date and the time-period(s) specified in the field
-        "release_lags").
+        Method used to construct a dataframe that consists of each respective
+        observation date and the corresponding release date(s) (the release dates are
+        computed using the observation date and the time-period(s) specified in the
+        field "release_lags").
 
-        :return <pd.DataFrame>: Will return the DataFrame with the additional columns.
+        Returns
+        -------
+        pd.DataFrame
+            Will return the DataFrame with the additional columns.
         """
+
         ref_date = self.cutoff - dt.timedelta(self.release_lags[0])
         ref_date = ref_date.replace(day=1)
 
@@ -259,7 +294,6 @@ class VintageData:
         df_gr2["release_date"] = data
         df_gr2["observation_date"] = eop_arr
         df_gr2["ticker"] = self.ticker
-        print(df_gr2)
 
         return self.add_ticker_parts(df_gr2)
 
@@ -267,10 +301,17 @@ class VintageData:
         """
         Method used to add the associated tickers.
 
-        :param <pd.DataFrame> df: standardised dataframe.
+        Parameters
+        ----------
+        df : pd.DataFrame
+            standardised dataframe.
 
-        :return <pd.DataFrame>: Will return the DataFrame with the additional columns.
+        Returns
+        -------
+        pd.DataFrame
+            Will return the DataFrame with the additional columns.
         """
+
         old_cols = list(df.columns)
         add_cols = ["cross_section", "category_code", "adjustment", "transformation"]
         ticker_parts = self.ticker.split("_", 3)

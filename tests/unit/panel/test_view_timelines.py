@@ -14,6 +14,7 @@ class TestAll(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         # Prevents plots from being displayed during tests.
+        plt.close("all")
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
         self.mock_show = patch("matplotlib.pyplot.show").start()
@@ -178,17 +179,6 @@ class TestAll(unittest.TestCase):
                 cs_mean=True,
             )  # cs_mean must be False if len(xcats) > 1
 
-        with self.assertRaises(ValueError):
-            view_timelines(
-                dfd,
-                xcats=xcats,
-                cids=cids,
-                xcat_grid=True,
-                title_adj=0.8,
-                xcat_labels=["Return", "Carry", "Inflation"],
-                title="AUD Return, Carry & Inflation",
-            )  # if xcat_grid == True, len(cids) must be == 1
-
         with self.assertRaises(TypeError):
             view_timelines(
                 dfd,
@@ -238,6 +228,140 @@ class TestAll(unittest.TestCase):
                 title="AUD Return, Carry & Inflation",
                 xcat_grid=True,
             )  # df must have a column named 'cid'
+
+    def test_view_timelines_invalid_xcat_labels(self):
+        cids = self.cids
+        xcats = self.xcats
+        dfd = self.dfd
+
+        with self.assertRaises(ValueError):
+            view_timelines(
+                dfd,
+                xcats=xcats,
+                cids=cids[0],
+                xcat_grid=True,
+                title_adj=0.8,
+                xcat_labels=["Return", "Carry"],
+                title="AUD Return, Carry & Inflation",
+            )
+
+        with self.assertRaises(ValueError):
+            view_timelines(
+                dfd,
+                xcats=xcats,
+                cids=cids[0],
+                xcat_grid=True,
+                title_adj=0.8,
+                xcat_labels={xcats[0]: "Return", xcats[1]: "Carry"},
+                title="AUD Return, Carry & Inflation",
+            )
+
+        with self.assertRaises(ValueError):
+            view_timelines(
+                dfd,
+                xcats=xcats,
+                cids=cids[0],
+                xcat_grid=True,
+                title_adj=0.8,
+                xcat_labels={
+                    xcats[0]: "Return",
+                    xcats[1]: "Carry",
+                    "invalid": "Inflation",
+                },
+                title="AUD Return, Carry & Inflation",
+            )
+
+    def test_view_timelines_invalid_cid_labels(self):
+        cids = self.cids
+        xcats = self.xcats
+        dfd = self.dfd
+
+        with self.assertRaises(ValueError):
+            view_timelines(
+                dfd,
+                xcats=xcats[0],
+                cids=cids,
+                xcat_grid=True,
+                title_adj=0.8,
+                cid_labels=["AUD", "CAD"],
+                title="Test",
+            )
+
+        with self.assertRaises(ValueError):
+            view_timelines(
+                dfd,
+                xcats=xcats[0],
+                cids=cids,
+                xcat_grid=True,
+                title_adj=0.8,
+                cid_labels={cids[0]: "AUD", cids[1]: "GBP"},
+                title="Test",
+            )
+
+        with self.assertRaises(ValueError):
+            view_timelines(
+                dfd,
+                xcats=xcats[0],
+                cids=cids,
+                xcat_grid=True,
+                title_adj=0.8,
+                cid_labels={
+                    cids[0]: "AUD",
+                    cids[1]: "USD",
+                    "invalid": "GBP",
+                },
+                title="Test",
+            )
+
+    def test_view_timelines_valid_xcat_labels(self):
+        cids = self.cids
+        xcats = self.xcats
+        dfd = self.dfd
+
+        view_timelines(
+            dfd,
+            xcats=xcats,
+            cids=cids[0],
+            xcat_grid=True,
+            title_adj=0.8,
+            xcat_labels=["Return", "Carry", "Inflation"],
+            title="AUD",
+        )
+        
+        view_timelines(
+            dfd,
+            xcats=xcats,
+            cids=cids[0],
+            xcat_grid=True,
+            title_adj=0.8,
+            xcat_labels={xcats[0]: "Return", xcats[1]: "Carry", xcats[2]: "Inflation"},
+            title="AUD",
+        )
+
+    def test_view_timelines_valid_cid_labels(self):
+        cids = self.cids
+        xcats = self.xcats
+        dfd = self.dfd
+
+        view_timelines(
+            dfd,
+            xcats=xcats[0],
+            cids=cids,
+            xcat_grid=True,
+            title_adj=0.8,
+            cid_labels=["AUD", "CAD", "GBP", "NZD"],
+            title="Test",
+        )
+        
+        view_timelines(
+            dfd,
+            xcats=xcats[0],
+            cids=cids,
+            xcat_grid=True,
+            title_adj=0.8,
+            cid_labels={"AUD": "label1", "CAD": "label2", "GBP": "label3", "NZD": "label4"},
+            title="Test",
+        )
 
 
 if __name__ == "__main__":
