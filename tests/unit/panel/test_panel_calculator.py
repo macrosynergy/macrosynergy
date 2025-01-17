@@ -5,10 +5,11 @@ import pandas as pd
 from tests.simulate import make_qdf
 from macrosynergy.compat import PD_OLD_RESAMPLE
 from macrosynergy.management.simulate import make_test_df
+from macrosynergy.management.utils import qdf_to_ticker_df
 from macrosynergy.panel.panel_calculator import panel_calculator, _check_calcs
 import warnings
-from random import randint, choice
-from typing import List, Dict, Tuple, Union, Optional, Set
+from random import choice
+from typing import List, Dict, Set
 
 
 class TestAll(unittest.TestCase):
@@ -269,6 +270,23 @@ class TestAll(unittest.TestCase):
 
         manual_calculator = (growth - infl) / xr
         self.assertTrue(row_value_gbp == manual_calculator)
+
+        dfd = self.dfd.copy()
+        df_new = dfd[(dfd["cid"] == "USD") & (dfd["xcat"] == "XR")].copy()
+        df_new["cid"] = "G2"
+        df_new["xcat"] = "NEW"
+        dfd = pd.concat([dfd, df_new]).reset_index(drop=True)
+
+        calcs = ["G2_NEW = iG2_NEW"]
+        df_res = panel_calculator(df=dfd, calcs=calcs, cids=self.cids)
+
+        self.assertEqual(["G2_NEW"], df_res["xcat"].unique().tolist())
+        self.assertEqual(sorted(df_res["cid"].unique()), sorted(self.cids))
+
+        rdf_wide = qdf_to_ticker_df(df_res)
+        self.assertTrue(
+            (rdf_wide.apply(lambda x: x / x.iloc[1], axis=1) == 1).all().all()
+        )
 
     def test_panel_calculator_nan_warning(self):
         # raise all warnings

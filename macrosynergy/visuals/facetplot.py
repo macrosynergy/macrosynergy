@@ -206,7 +206,7 @@ class FacetPlot(Plotter):
         axis_fontsize: int = 12,
         # subplot arguments
         facet_size: Optional[Tuple[Number, Number]] = None,
-        facet_titles: Optional[List[str]] = None,
+        facet_titles: Optional[Union[List[str], Dict[str,str]]] = None,
         facet_title_fontsize: int = 14,
         facet_title_xadjust: Number = 0.5,
         facet_title_yadjust: Number = 1.0,
@@ -428,6 +428,17 @@ class FacetPlot(Plotter):
                 legend: bool = False
             else:
                 facet_titles: List[str] = tickers_to_plot
+        elif isinstance(facet_titles, dict):
+            if cid_grid:
+                if not all([x in facet_titles.keys() for x in _cids]):
+                    raise ValueError(
+                        "Facet titles dictionary does not contain all cids."
+                    )
+            elif xcat_grid:
+                if not all([x in facet_titles.keys() for x in _xcats]):
+                    raise ValueError(
+                        "Facet titles dictionary does not contain all xcats."
+                    )
 
         if not any([cid_grid, xcat_grid, cid_xcat_grid]):
             # each ticker gets its own plot
@@ -472,10 +483,15 @@ class FacetPlot(Plotter):
                 if tks == [compare_series]:
                     continue
 
+                if isinstance(facet_titles, dict):
+                    facet_title = facet_titles[fvar]
+                else:
+                    facet_title = facet_titles[i]
+
                 plot_dict[i] = {
                     "X": "real_date",
                     "Y": tks + ([compare_series] if compare_series else []),
-                    "title": facet_titles[i],
+                    "title": facet_title,  # facet_titles
                 }
                 # plot_dict[i] --> Dict[str, Union[str, List[str]]]
 

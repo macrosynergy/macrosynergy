@@ -372,7 +372,9 @@ class CategoryRelations(object):
         xcat_dict = dict(zip(xcats, xcat_trims))
 
         for k, v in xcat_dict.items():
-            df[k] = np.where(np.abs(df[k]) < v, df[k], np.nan)
+            # if the trim value is None, then leave the series as is
+            if v is not None:
+                df[k] = np.where(np.abs(df[k]) < v, df[k], np.nan)
 
         df = df.dropna(axis=0, how="any")
         return df
@@ -408,6 +410,8 @@ class CategoryRelations(object):
             feat = df_i[self.xcats[0]].to_numpy()
             targ = df_i[self.xcats[1]].to_numpy()
             coeff, pval = stats.pearsonr(feat, targ)
+            if prob_est == "kendall":
+                _, pval = stats.kendalltau(feat, targ)
             if prob_est == "map":
                 X = df_i.loc[:, self.xcats[0]]
                 X = sm.add_constant(X)
@@ -508,11 +512,15 @@ class CategoryRelations(object):
     def reg_scatter(
         self,
         title: str = None,
+        title_fontsize: int = 14,
         labels: bool = False,
         size: Tuple[float] = None,
         xlab: str = None,
         ylab: str = None,
+        label_fontsize: int = 12,
+        tick_fontsize: int = 12,
         coef_box: str = None,
+        coef_box_size: Tuple[float] = (0.4, 2.5),
         coef_box_font_size: int = 0,
         prob_est: str = "pool",
         fit_reg: bool = True,
@@ -559,13 +567,17 @@ class CategoryRelations(object):
             parameter. The options are standard, i.e. 'upper left', 'lower right' and so
             forth. Default is None, i.e the statistics are not displayed.
         prob_est : str
-            type of estimator for probability of significant relation. The default is
-            "pool", which means that all observation pairs of a panel are pooled and the
-            probability is based on that pool. The alternative is "map", denoting
-            Macrosynergy panel test. This is based on a panel regression with period-
-            specific random effects and greatly mitigates the issue of pseudo-replication if
-            panel features and targets are correlated across time. See also
-            https://research.macrosynergy.com/testing-macro-trading-factors/
+            type of estimator for probability of significant relation.
+            - "pool" (default), which means that all observation are treated as 
+                independent and calculates Pearson's correlation coefficient. 
+            - "map", denoting Macrosynergy panel test. This is based on a panel regression 
+                with period-specific random effects and greatly mitigates the issue of 
+                pseudo-replication if panel features and targets are correlated across 
+                time. 
+                See also https://research.macrosynergy.com/testing-macro-trading-factors/
+            - "kendall", which calculates the Kendall rank correlation coefficient. It is 
+                a non-parametric statistic used to measure the strength and direction of 
+                association between two ranked variables.
         separator : Union[str, int]
             allows categorizing the scatter analysis by cross-section or integer. In the
             former case the argument is set to "cids" and in the latter case the argument is
@@ -595,7 +607,7 @@ class CategoryRelations(object):
         if coef_box is not None:
             assert isinstance(coef_box, str), coef_box_loc_error
 
-        assert prob_est in ["pool", "map"], "prob_est must be 'pool' or 'map'"
+        assert prob_est in ["pool", "map", "kendall"], "prob_est must be 'pool', 'kendall' or 'map'"
 
         sns.set_theme(style="whitegrid")
         dfx = self.df.copy()
@@ -646,7 +658,7 @@ class CategoryRelations(object):
             if ax is None:
                 fig, ax = plt.subplots(figsize=size)
 
-            index_years = dfx.index.get_level_values(1).year
+            index_years = dfx.index.get_level_values(0).year
             years_in_df = list(index_years.unique())
 
             assert separator in years_in_df, "Separator year is not in the range."
@@ -693,16 +705,18 @@ class CategoryRelations(object):
                     prob_est=prob_est,
                     ax=ax,
                 )
-                data_table.scale(0.4, 2.5)
+                x_scale = coef_box_size[0]
+                y_scale = coef_box_size[1]
+                data_table.scale(x_scale, y_scale)
                 data_table.auto_set_font_size(set_font_size)
                 data_table.set_fontsize(coef_box_font_size)
 
             ax.legend(loc="upper right")
-            ax.set_title(title, fontsize=14)
+            ax.set_title(title, fontsize=title_fontsize)
             if xlab is not None:
-                ax.set_xlabel(xlab)
+                ax.set_xlabel(xlab, fontsize=label_fontsize)
             if ylab is not None:
-                ax.set_ylabel(ylab)
+                ax.set_ylabel(ylab, fontsize=label_fontsize)
 
         elif separator == "cids" and not single_scatter:
             assert isinstance(single_chart, bool)
@@ -837,16 +851,18 @@ class CategoryRelations(object):
                     prob_est=prob_est,
                     ax=ax,
                 )
-                data_table.scale(0.4, 2.5)
+                x_scale = coef_box_size[0]
+                y_scale = coef_box_size[1]
+                data_table.scale(x_scale, y_scale)
                 data_table.auto_set_font_size(set_font_size)
                 data_table.set_fontsize(coef_box_font_size)
 
             ax.legend(loc="upper right", title="Cids")
-            ax.set_title(title, fontsize=14)
+            ax.set_title(title, fontsize=title_fontsize)
             if xlab is not None:
-                ax.set_xlabel(xlab)
+                ax.set_xlabel(xlab, fontsize=label_fontsize)
             if ylab is not None:
-                ax.set_ylabel(ylab)
+                ax.set_ylabel(ylab, fontsize=label_fontsize)
 
         elif separator is None:
             if ax is None:
@@ -874,7 +890,9 @@ class CategoryRelations(object):
                     coef_box_loc=coef_box,
                     ax=ax,
                 )
-                data_table.scale(0.4, 2.5)
+                x_scale = coef_box_size[0]
+                y_scale = coef_box_size[1]
+                data_table.scale(x_scale, y_scale)
                 data_table.auto_set_font_size(set_font_size)
                 data_table.set_fontsize(coef_box_font_size)
 
@@ -908,14 +926,15 @@ class CategoryRelations(object):
                         fontdict=dict(color="black", size=8),
                     )
 
-            ax.set_title(title, fontsize=14)
+            ax.set_title(title, fontsize=title_fontsize)
             if xlab is not None:
-                ax.set_xlabel(xlab)
+                ax.set_xlabel(xlab, fontsize=label_fontsize)
             if ylab is not None:
-                ax.set_ylabel(ylab)
+                ax.set_ylabel(ylab, fontsize=label_fontsize)
         else:
             ValueError("Separator must be either a valid year <int> or 'cids' <str>.")
 
+        ax.tick_params(axis='both', labelsize=tick_fontsize)
         plt.tight_layout()
         if show_plot:
             plt.show()
@@ -1068,7 +1087,7 @@ if __name__ == "__main__":
             xlab="Carry",
             ylab="Return",
             coef_box="lower left",
-            prob_est="map",
+            prob_est="kendall",
             ax=ax[i],
         )
     plt.show()

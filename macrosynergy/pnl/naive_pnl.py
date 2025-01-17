@@ -285,13 +285,13 @@ class NaivePnL:
 
         dfw = dfw.sort_values(["cid", "real_date"])
 
-        if rebal_freq != "daily":
-            sig_series = self.rebalancing(
-                dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
-            )
-            dfw["sig"] = np.squeeze(sig_series.to_numpy())
-        else:
-            dfw = dfw.rename({"psig": "sig"}, axis=1)
+        # if rebal_freq != "daily":
+        sig_series = self.rebalancing(
+            dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
+        )
+        dfw["sig"] = np.squeeze(sig_series.to_numpy())
+        # else:
+        #     dfw = dfw.rename({"psig": "sig"}, axis=1)
 
         # The signals are generated across the panel.
         dfw["value"] = dfw[self.ret] * dfw["sig"]
@@ -568,7 +568,11 @@ class NaivePnL:
             )["real_date"].min()
         elif rebal_freq == "weekly":
             dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
-            rebal_dates = dfw.groupby(["cid", "year", "week"])["real_date"].min()
+            rebal_dates = dfw.groupby(["cid", "year", "week"], observed=True)["real_date"].min()
+        elif rebal_freq == "daily":
+            rebal_dates = dfw.groupby(["cid", "year", "real_date"], observed=True)["real_date"].min()
+        else:
+            raise ValueError("Re-balancing frequency must be one of: daily, weekly, monthly.")
 
         # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
         r_dates_df = rebal_dates.reset_index(level=0)
@@ -592,7 +596,7 @@ class NaivePnL:
         rebal_merge = dfw[["real_date", "cid"]].merge(
             rebal_merge, how="left", on=["real_date", "cid"]
         )
-        rebal_merge["psig"] = rebal_merge["psig"].ffill().shift(rebal_slip)
+        rebal_merge["psig"] = rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
         rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 
         rebal_merge = rebal_merge.set_index("real_date")
@@ -663,9 +667,11 @@ class NaivePnL:
         same_y: bool = True,
         title: str = "Cumulative Naive PnL",
         title_fontsize: int = 20,
+        tick_fontsize: int = 12,
         xcat_labels: Union[List[str], dict] = None,
         xlab: str = "",
         ylab: str = "% of risk capital, no compounding",
+        label_fontsize: int = 12,
         share_axis_labels: bool = True,
         figsize: Tuple = (12, 7),
         aspect: float = 1.7,
@@ -673,6 +679,7 @@ class NaivePnL:
         label_adj: float = 0.05,
         title_adj: float = 0.95,
         y_label_adj: float = 0.95,
+        legend_fontsize: int = None,
     ) -> None:
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per cross
@@ -871,9 +878,11 @@ class NaivePnL:
             plt.legend(
                 labels=labels,
                 title=legend_title,
+                title_fontsize=legend_fontsize,
+                fontsize=legend_fontsize
             )
-            plt.xlabel(xlab)
-            plt.ylabel(ylab)
+            plt.xlabel(xlab, fontsize=label_fontsize)
+            plt.ylabel(ylab, fontsize=label_fontsize)
 
         if no_cids == 1:
             if facet:
@@ -881,6 +890,7 @@ class NaivePnL:
         else:
             labels = labels[::-1]
 
+        fg.tick_params(axis='both', labelsize=tick_fontsize)
         plt.axhline(y=0, color="black", linestyle="--", lw=1)
         plt.show()
 
@@ -1548,7 +1558,7 @@ if __name__ == "__main__":
         sig_op="zn_score_pan",
         sig_neg=True,
         sig_add=0.5,
-        rebal_freq="monthly",
+        rebal_freq="daily",
         vol_scale=5,
         rebal_slip=1,
         min_obs=250,
@@ -1589,7 +1599,7 @@ if __name__ == "__main__":
         pnl_cats=["PNL_GROWTH_NEG", "Long"],
         title_fontsize=60,
         xlab="date",
-        ylab="%",
+        ylab="%"
     )
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"],

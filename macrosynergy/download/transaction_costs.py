@@ -8,7 +8,6 @@ from macrosynergy.management.utils import get_cid, get_xcat
 from io import StringIO
 
 MAX_RETRIES = 3
-# CSV_URL = "https://macrosynergy-trading-costs.s3.eu-west-2.amazonaws.com/transaction-costs.csv"
 CSV_URL = None
 
 def _request_wrapper(url: str, verbose: bool = True, **kwargs) -> str:
@@ -63,7 +62,8 @@ def download_transaction_costs(
         Additional keyword arguments to pass to `requests.get`. This can be used to pass
         additional headers, proxy settings, cert verification, etc.
     """
-
+    if csv_url is None or not isinstance(csv_url, str):
+        raise ValueError("Invalid CSV URL provided: {csv_url}")
     if verbose:
         print(f"Timestamp (UTC): {datetime.datetime.now(datetime.timezone.utc)}")
         print(f"Downloading trading costs data from {csv_url}")
