@@ -1,38 +1,45 @@
-from typing import List
+import warnings
+from typing import List, Optional
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management import reduce_df
 
 
 def extend_history(
     df: pd.DataFrame,
     new_xcat: str,
-    cids: List[str] = None,
+    cids: Optional[List[str]] = None,
     hierarchy: List[str] = [],
     backfill: bool = False,
     start: str = None,
 ):
     """
-    Extends the history of a dataframe by creating a new xcat with the same values as the original xcat.
-    
+    Extends the history of a dataframe by creating a new xcat by combining hierarchical categories.
+    The method prioritizes superior categories for the new xcat and supplements with inferior ones
+    where superior category data is unavailable.
+
     Parameters
     ----------
     df : pd.DataFrame
-        The dataframe to extend.
+        The dataframe containing categories that are to be extended.
     new_xcat : str
         The name of the new xcat.
     cids : List[str], optional
-        The cids to extend. If None, all cids are extended.
-    hierarchy : List[str], optional
-        The hierarchy of the xcat to extend. If empty, the xcat is extended as is.
+        The cross sections to extend. If None, all cids available for any category in 'hierarchy' are extended.
+    hierarchy : List[str]
+         list of categories from best to worst for representation of the concept.
+         Inferior categories are only used to extend the history of the superior ones.
+         The new category consists of the best representation category values
+         and inferior category values that are available prior to any superior.
     backfill : bool, optional
         If True, the new xcat is backfilled to the start date of the original xcat.
     start : str, optional
         The start date of the new xcat. If backfill is True, this is the start date of the backfill.
-    
+
     Returns
     -------
     ~pandas.DataFrame
@@ -54,9 +61,25 @@ def extend_history(
 
     extended_results = []
 
+    df, _, cids_in_df = reduce_df(df=df, xcats=hierarchy, cids=cids, out_all=True)
+
+    if df.empty:
+        raise ValueError("No data available for the specified cids and categories.")
+    
+    if cids is None:
+        cids = cids_in_df
+    else:
+        missing_cids = list(set(cids) - set(cids_in_df))
+        cids = cids_in_df
+        if len(missing_cids) > 0:
+            warnings.warn(
+                f"Warning: cids {missing_cids} do not exist for any category in hierarchy. They will be ignored."
+            )
+
     for cid in cids:
 
         cid_df = df[df["cid"] == cid]
+
         extended_series = pd.DataFrame()
 
         for category in hierarchy:
@@ -91,7 +114,7 @@ def extend_history(
                         }
                     )
                     extended_series = pd.concat([backfilled_data, extended_series])
-        else:
+        elif start is not None:
             extended_series = extended_series[extended_series["real_date"] >= start]
 
         # Add new_xcat and cid
@@ -118,16 +141,17 @@ def _extend_history_checks(
         raise TypeError("df must be a pandas DataFrame")
     if not isinstance(new_xcat, str):
         raise TypeError("new_xcat must be a string")
-    if not isinstance(cids, list):
-        raise TypeError("cids must be a list")
+    if cids is not None:
+        if not isinstance(cids, list):
+            raise TypeError("cids must be a list")
+        if not all(isinstance(cid, str) for cid in cids):
+            raise TypeError("cids must be a list of strings")
     if not isinstance(hierarchy, list):
         raise TypeError("hierarchy must be a list")
     if not isinstance(backfill, bool):
-        raise ValueError("backfill must be a boolean")
-    if not isinstance(start, str):
+        raise TypeError("backfill must be a boolean")
+    if start is not None and not isinstance(start, str):
         raise TypeError("start must be a string")
-    if not all(isinstance(cid, str) for cid in cids):
-        raise TypeError("cids must be a list of strings")
     if not all(isinstance(cat, str) for cat in hierarchy):
         raise TypeError("hierarchy must be a list of strings")
 
@@ -161,7 +185,7 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     df = extend_history(
-        dfd, "INFL1", cids, ["INFL", "INFL0"], backfill=True, start="1995-01-01"
+        dfd, "INFL1", cids, ["INFL", "INFL0"], backfill=False, start=None
     )
 
     pass
