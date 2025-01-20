@@ -555,6 +555,9 @@ def proxy_pnl_calc(
 
     # # Convert to QDFs
     for key in df_outs.keys():
+        if df_outs[key].empty:
+            assert key != "pnl_excl_costs", "PnL excluding costs is empty."
+            continue
         df_outs[key] = QuantamentalDataFrame.from_wide(
             df_outs[key], categorical=_initialized_as_categorical
         )
