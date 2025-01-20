@@ -63,7 +63,7 @@ def download_transaction_costs(
         additional headers, proxy settings, cert verification, etc.
     """
     if csv_url is None or not isinstance(csv_url, str):
-        raise ValueError("Invalid CSV URL provided: {csv_url}")
+        raise ValueError(f"Invalid CSV URL provided: {csv_url}")
     if verbose:
         print(f"Timestamp (UTC): {datetime.datetime.now(datetime.timezone.utc)}")
         print(f"Downloading trading costs data from {csv_url}")
