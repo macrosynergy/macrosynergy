@@ -36,9 +36,9 @@ def extend_history(
          The new category consists of the best representation category values
          and inferior category values that are available prior to any superior.
     backfill : bool, optional
-        If True, the new xcat is backfilled to the start date of the original xcat.
+        If True, the new xcat is backfilled to the start date specified by the 'start' parameter.
     start : str, optional
-        The start date of the new xcat. If backfill is True, this is the start date of the backfill.
+        The start date of the new xcat. If backfill is True, this values will be backfilled up to this date.
 
     Returns
     -------
@@ -65,7 +65,7 @@ def extend_history(
 
     if df.empty:
         raise ValueError("No data available for the specified cids and categories.")
-    
+
     if cids is None:
         cids = cids_in_df
     else:
@@ -132,11 +132,32 @@ def extend_history(
 def _extend_history_checks(
     df: pd.DataFrame,
     new_xcat: str,
-    cids: List[str] = None,
+    cids: Optional[List[str]] = None,
     hierarchy: List[str] = [],
     backfill: bool = False,
     start: str = None,
 ):
+    """
+    Checks for inputs to `extend_history`.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The dataframe containing categories that are to be extended.
+    new_xcat : str
+        The name of the new xcat.
+    cids : List[str], optional
+        The cross sections to extend. If None, all cids available for any category in 'hierarchy' are extended.
+    hierarchy : List[str]
+         list of categories from best to worst for representation of the concept.
+         Inferior categories are only used to extend the history of the superior ones.
+         The new category consists of the best representation category values
+         and inferior category values that are available prior to any superior.
+    backfill : bool, optional
+        If True, the new xcat is backfilled to the start date specified by the 'start' parameter.
+    start : str, optional
+        The start date of the new xcat. If backfill is True, this values will be backfilled up to this date.
+    """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame")
     if not isinstance(new_xcat, str):
