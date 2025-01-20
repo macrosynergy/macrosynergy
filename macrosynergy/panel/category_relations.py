@@ -607,7 +607,11 @@ class CategoryRelations(object):
         if coef_box is not None:
             assert isinstance(coef_box, str), coef_box_loc_error
 
-        assert prob_est in ["pool", "map", "kendall"], "prob_est must be 'pool', 'kendall' or 'map'"
+        assert prob_est in [
+            "pool",
+            "map",
+            "kendall",
+        ], "prob_est must be 'pool', 'kendall' or 'map'"
 
         sns.set_theme(style="whitegrid")
         dfx = self.df.copy()
@@ -937,7 +941,8 @@ class CategoryRelations(object):
         else:
             ValueError("Separator must be either a valid year <int> or 'cids' <str>.")
 
-        ax.tick_params(axis='both', labelsize=tick_fontsize)
+        if isinstance(ax, plt.Axes):
+            ax.tick_params(axis="both", labelsize=tick_fontsize)
         plt.tight_layout()
         if show_plot:
             plt.show()
