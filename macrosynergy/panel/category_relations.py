@@ -274,8 +274,8 @@ class CategoryRelations(object):
         xcats: List[str],
         metrics: List[str],
     ) -> pd.DataFrame:
-        """ 
-        Calls the utility function apply_slip_util defined in df_utils. 
+        """
+        Calls the utility function apply_slip_util defined in df_utils.
         """
         return apply_slip_util(
             df=df, slip=slip, cids=cids, xcats=xcats, metrics=metrics, raise_error=False
@@ -291,7 +291,7 @@ class CategoryRelations(object):
         expln_var: str,
     ):
         """
-        Apply time-series changes to the explanatory variable. Calculates first 
+        Apply time-series changes to the explanatory variable. Calculates first
         differences or percentage changes of the time series.
 
         Parameters
@@ -301,7 +301,7 @@ class CategoryRelations(object):
             the explanatory variable; second column hosts the dependent variable. The
             DataFrame's index is the real-date and cross-section.
         change : str
-            type of change to be applied. Can be 'diff' for first-differencing or 'pch' 
+            type of change to be applied. Can be 'diff' for first-differencing or 'pch'
             for percentage change.
         n_periods : int
             number of base periods in df over which the change is applied.
@@ -568,15 +568,15 @@ class CategoryRelations(object):
             forth. Default is None, i.e the statistics are not displayed.
         prob_est : str
             type of estimator for probability of significant relation.
-            - "pool" (default), which means that all observation are treated as 
-                independent and calculates Pearson's correlation coefficient. 
-            - "map", denoting Macrosynergy panel test. This is based on a panel regression 
-                with period-specific random effects and greatly mitigates the issue of 
-                pseudo-replication if panel features and targets are correlated across 
-                time. 
+            - "pool" (default), which means that all observation are treated as
+                independent and calculates Pearson's correlation coefficient.
+            - "map", denoting Macrosynergy panel test. This is based on a panel regression
+                with period-specific random effects and greatly mitigates the issue of
+                pseudo-replication if panel features and targets are correlated across
+                time.
                 See also https://research.macrosynergy.com/testing-macro-trading-factors/
-            - "kendall", which calculates the Kendall rank correlation coefficient. It is 
-                a non-parametric statistic used to measure the strength and direction of 
+            - "kendall", which calculates the Kendall rank correlation coefficient. It is
+                a non-parametric statistic used to measure the strength and direction of
                 association between two ranked variables.
         separator : Union[str, int]
             allows categorizing the scatter analysis by cross-section or integer. In the
@@ -658,7 +658,10 @@ class CategoryRelations(object):
             if ax is None:
                 fig, ax = plt.subplots(figsize=size)
 
-            index_years = dfx.index.get_level_values(0).year
+            if "real_date" not in dfx.index.names:
+                raise ValueError("`real_date` expected in index names.")
+            rdt_index = list(dfx.index.names).index("real_date")
+            index_years = dfx.index.get_level_values(rdt_index).year
             years_in_df = list(index_years.unique())
 
             assert separator in years_in_df, "Separator year is not in the range."

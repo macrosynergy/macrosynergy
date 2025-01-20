@@ -826,6 +826,7 @@ class SignalOptimizer(BasePanelLearner):
         cap=None,
         ftrs_renamed=None,
         figsize=(12, 8),
+        tick_fontsize=None,
     ):
         """
         Visualise the features chosen by the final selector in a scikit-learn pipeline
@@ -849,6 +850,8 @@ class SignalOptimizer(BasePanelLearner):
             Default is None, which uses the original feature names.
         figsize : tuple of floats or ints, optional
             Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        tick_fontsize : int, optional
+            Font size of the ticks on the heatmap. Default is None.
 
         Notes
         -----
@@ -859,7 +862,11 @@ class SignalOptimizer(BasePanelLearner):
         """
         # Checks
         self._checks_feature_selection_heatmap(
-            name=name, title=title, ftrs_renamed=ftrs_renamed, figsize=figsize
+            name=name,
+            title=title,
+            ftrs_renamed=ftrs_renamed,
+            figsize=figsize,
+            tick_fontsize=tick_fontsize,
         )
 
         # Get the selected features for the specified pipeline to visualise selection.
@@ -890,6 +897,8 @@ class SignalOptimizer(BasePanelLearner):
         else:
             sns.heatmap(selected_ftrs.T, cmap="binary", cbar=False)
         plt.title(title)
+        plt.xticks(fontsize=tick_fontsize)  # X-axis tick font size
+        plt.yticks(fontsize=tick_fontsize)
         plt.show()
 
     def _checks_feature_selection_heatmap(
@@ -898,6 +907,7 @@ class SignalOptimizer(BasePanelLearner):
         title=None,
         ftrs_renamed=None,
         figsize=(12, 8),
+        tick_fontsize=None,
     ):
         """
         Checks for the feature_selection_heatmap method.
@@ -914,6 +924,8 @@ class SignalOptimizer(BasePanelLearner):
             Default is None, which uses the original feature names.
         figsize : tuple of floats or ints, optional
             Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        tick_fontsize : int, optional
+            Font size of the ticks on the heatmap. Default is None.
         """
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
@@ -955,6 +967,10 @@ class SignalOptimizer(BasePanelLearner):
                         in the pipeline {name}.
                         """
                     )
+
+        if tick_fontsize is not None:
+            if not isinstance(tick_fontsize, int):
+                raise TypeError("The tick_fontsize argument must be an integer.")
 
     def correlations_heatmap(
         self,
@@ -1787,6 +1803,7 @@ if __name__ == "__main__":
     so.feature_importance_timeplot("LR")
     so.coefs_stackedbarplot("LR")
     so.nsplits_timeplot("LR")
+    so.feature_selection_heatmap("LR", tick_fontsize=20)
 
     # Test a random forest
     from sklearn.ensemble import RandomForestRegressor
