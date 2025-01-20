@@ -519,23 +519,28 @@ def proxy_pnl_calc(
         pnle_name=pnle_name,
     )
 
-    # tc_wide_df: pd.DataFrame = calculate_trading_costs(
-    df_outs["tc_wide"] = _calculate_trading_costs(
-        df_wide=df_wide,
-        spos=spos,
-        rstring=rstring,
-        transaction_costs=transaction_costs_object,
-        tc_name=tc_name,
-    )
+    # Calculate the trading costs and the PnL including costs
+    # These calcs can only be run if transaction_costs_object is provided
+    if transaction_costs_applied:
+        df_outs["tc_wide"] = _calculate_trading_costs(
+            df_wide=df_wide,
+            spos=spos,
+            rstring=rstring,
+            transaction_costs=transaction_costs_object,
+            tc_name=tc_name,
+        )
 
-    df_outs["pnl_incl_costs"] = _apply_trading_costs(
-        pnlx_wide_df=df_outs["pnl_excl_costs"],
-        tc_wide_df=df_outs["tc_wide"],
-        spos=spos,
-        tc_name=tc_name,
-        pnl_name=pnl_name,
-        pnle_name=pnle_name,
-    )
+        df_outs["pnl_incl_costs"] = _apply_trading_costs(
+            pnlx_wide_df=df_outs["pnl_excl_costs"],
+            tc_wide_df=df_outs["tc_wide"],
+            spos=spos,
+            tc_name=tc_name,
+            pnl_name=pnl_name,
+            pnle_name=pnle_name,
+        )
+    else:
+        df_outs["pnl_incl_costs"] = pd.DataFrame()
+        df_outs["tc_wide"] = pd.DataFrame()
 
     df_outs = _portfolio_sums(
         df_outs=df_outs,
@@ -553,6 +558,9 @@ def proxy_pnl_calc(
         df_outs[key] = QuantamentalDataFrame.from_wide(
             df_outs[key], categorical=_initialized_as_categorical
         )
+
+    if not transaction_costs_applied:
+        return df_outs["pnl_excl_costs"]
 
     if concat_dfs:
         if not return_pnl_excl_costs:
