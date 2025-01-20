@@ -905,6 +905,7 @@ class NaivePnL:
         x_label: str = "",
         y_label: str = "",
         figsize: Optional[Tuple[float, float]] = None,
+        tick_fontsize: int = None,
     ):
         """
         Display heatmap of signals across times and cross-sections.
@@ -931,6 +932,8 @@ class NaivePnL:
             label for the y-axis. Default is None.
         figsize : (float, float)
             width and height in inches. Default is (14, number of cross sections).
+        tick_fontsize : int
+            font size for the ticks. Default is None.
 
 
         .. note::
@@ -987,6 +990,9 @@ class NaivePnL:
         ax.set(xlabel=x_label, ylabel=y_label)
         ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
         ax.set_title(title, fontsize=14)
+        
+        ax.tick_params(axis="x", labelsize=tick_fontsize)
+        ax.tick_params(axis="y", labelsize=tick_fontsize)
 
         plt.show()
 
