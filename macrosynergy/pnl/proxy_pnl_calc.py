@@ -374,7 +374,7 @@ def proxy_pnl_calc(
     df: QuantamentalDataFrame,
     spos: str,
     rstring: str,
-    transaction_costs_object: TransactionCosts,
+    transaction_costs_object: Optional[TransactionCosts],
     roll_freqs: Optional[Dict] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
@@ -408,7 +408,9 @@ def proxy_pnl_calc(
     transaction_costs_object : TransactionCosts
         an initialized TransactionCosts object
         (macrosynergy.pnl.transaction_costs.TransactionCosts) that contains the transaction
-        costs data.
+        costs data. If the user does not have access to the TransactionCosts object, or does
+        not want to use transaction costs, the function can be called with
+        `transaction_costs_object=None`.
     roll_freqs : dict
         dictionary of roll frequencies for each contract type. This must use the
         contract types as keys and frequency string ("w", "m", or "q") as values. The
@@ -444,22 +446,25 @@ def proxy_pnl_calc(
     concat_dfs : bool
         whether to concatenate the output dataframes. Default is False.
 
+    Notes
+    -----
+    Transaction costs as % of notional are considered to be a linear function of size,
+    with the slope determined by the normal and large positions, if all relevant series
+    are applied.
+
     Returns
     -------
     Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]
         When either of `return_pnl_excl_costs` or `return_costs` is True, the function
         returns a tuple of the PnL excluding costs, the PnL including costs, and the trading
         costs. Otherwise, it returns the PnL including costs. If `concat_dfs` is True, the
-        function concatenates any output dataframes and returns a single dataframe.  N.B.:
-        Transaction costs as % of notional are considered to be a linear function of size,
-        with the slope determined by the normal and large positions, if all relevant series
-        are applied.
+        function concatenates any output dataframes and returns a single dataframe.
     """
 
     for _varx, _namex, _typex in [
         (df, "df", QuantamentalDataFrame),
         (spos, "spos", str),
-        (transaction_costs_object, "transaction_costs", TransactionCosts),
+        (transaction_costs_object, "transaction_costs", (TransactionCosts, type(None))),
         (roll_freqs, "roll_freqs", (dict, type(None))),
         (start, "start", (str, type(None))),
         (end, "end", (str, type(None))),
@@ -470,6 +475,14 @@ def proxy_pnl_calc(
 
         if _typex in [list, str, dict] and len(_varx) == 0:
             raise ValueError(f"`{_namex}` must not be an empty {str(_typex)}")
+
+    transaction_costs_applied: bool = transaction_costs_object is not None
+    warn_str = "No transaction costs object provided. Only PnL excluding costs will be calculated."
+    if not transaction_costs_applied:
+        return_costs = False
+        return_pnl_excl_costs = True
+        concat_dfs = False
+        warnings.warn(warn_str)
 
     if roll_freqs is not None:
         raise NotImplementedError(
