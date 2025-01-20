@@ -64,7 +64,7 @@ class ProxyPnL(object):
     def __init__(
         self,
         df: QuantamentalDataFrame,
-        transaction_costs_object: TransactionCosts,
+        transaction_costs_object: Optional[TransactionCosts],
         start: Optional[str] = None,
         end: Optional[str] = None,
         blacklist: Optional[dict] = None,
@@ -83,14 +83,23 @@ class ProxyPnL(object):
         self.start = start or df["real_date"].min().strftime("%Y-%m-%d")
         self.end = end or df["real_date"].max().strftime("%Y-%m-%d")
         self.rstring = rstring
+        self.transaction_costs_object: Optional[TransactionCosts] = None
         if not all(map(is_valid_iso_date, [self.start, self.end])):
             raise ValueError(f"Invalid date format: {self.start}, {self.end}")
 
-        if not isinstance(transaction_costs_object, TransactionCosts):
-            raise ValueError("Invalid transaction costs object.")
-        else:
+        if transaction_costs_object is None:
+            pass  # allowed for no-transaction-costs case
+        elif isinstance(transaction_costs_object, TransactionCosts):
             transaction_costs_object.check_init()
             self.transaction_costs_object: TransactionCosts = transaction_costs_object
+        else:
+            raise ValueError(
+                "Invalid type for `transaction_costs_object`. Expected `TransactionCosts` object."
+            )
+
+        assert hasattr(
+            self, "transaction_costs_object"
+        ), "Failed to initialize `self.transaction_costs_object`"
 
     def contract_signals(
         self,
