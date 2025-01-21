@@ -23,6 +23,7 @@ def make_relative_value(
     complete_cross: bool = False,
     rel_meth: str = "subtract",
     rel_xcats: List[str] = None,
+    rel_reference: str = "mean",
     postfix: str = "R",
 ):
     """
@@ -68,6 +69,9 @@ def make_relative_value(
         extended category name of the relative values. Will displace the original
         category names: xcat + postfix. The order should reflect the order of the passed
         categories.
+    rel_reference : str
+        reference point for the relative value calculation. Default is 'mean'. Alternative
+        is 'median'.
     postfix : str
         acronym to be appended to `xcat` string to give the name for relative value
         category. Only applies if rel_xcats is None. Default is 'R'
@@ -108,6 +112,9 @@ def make_relative_value(
             )
 
         rel_xcats_dict = dict(zip(xcats, rel_xcats))
+
+    if rel_reference not in ["mean", "median"]:
+        raise ValueError("rel_reference must be 'mean' or 'median'.")
 
     df = QuantamentalDataFrame(df)
     # Intersect parameter set to False. Therefore, cross sections across the categories
@@ -163,12 +170,16 @@ def make_relative_value(
         )
 
         if len(basket) > 1:
-            # Mean of (available) cross sections at each point in time. If all
+            # rel_reference of (available) cross sections at each point in time. If all
             # cross sections defined in the "basket" data structure are not available for
-            # a specific date, compute the mean over the available subset.
-            bm = dfb.groupby(by="real_date").mean(numeric_only=True)
+            # a specific date, compute the rel_reference over the available subset.
+            if rel_reference == "mean":
+                bm = dfb.groupby(by="real_date").mean(numeric_only=True)
+            elif rel_reference == "median":
+                bm = dfb.groupby(by="real_date").median(numeric_only=True)
         elif len(basket) == 1:
             # Relative value is mapped against a single cross section.
+            # Mean and median are equivalent for a single cross section.
             bm = dfb.set_index("real_date")[["value"]]
         else:
             # Category is not defined over all cross sections in the basket and
