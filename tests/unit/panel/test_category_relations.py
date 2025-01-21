@@ -781,23 +781,80 @@ class TestAll(unittest.TestCase):
 
     def test_xcat_chg1(self):
         # Test the first-differencing and percentage change methods
-        cids_test = ["USD", "GBP", "JPY", "EUR"]
-        xcats_test = ["XCAT1", "XCAT2"]
+        try:
+            cids_test = ["USD", "GBP", "JPY", "EUR"]
+            xcats_test = ["XCAT1", "XCAT2"]
 
-        dfx = make_test_df(cids=cids_test, xcats=xcats_test, start="2010-01-01")
+            dfx = make_test_df(cids=cids_test, xcats=xcats_test, start="2010-01-01")
 
-        cr = CategoryRelations(
-            df=dfx,
-            xcats=xcats_test,
-            cids=cids_test,
-            freq="M",
-            lag=1,
-            xcat_aggs=["last", "sum"],
-            slip=1,
-            xcat1_chg="diff",
-        )
+            cr = CategoryRelations(
+                df=dfx,
+                xcats=xcats_test,
+                cids=cids_test,
+                freq="M",
+                lag=1,
+                xcat_aggs=["last", "sum"],
+                slip=1,
+                xcat1_chg="diff",
+            )
 
-        cr.reg_scatter(coef_box="lower right", prob_est="kendall", separator=2012)
+            cr.reg_scatter(coef_box="lower right", prob_est="kendall", separator=2012)
+        except:
+            self.fail(
+                "CategoryRelations failed when using seperator=2012, xcat1_chg=diff"
+            )
+
+    def test_reg_scatter_no_label(self):
+        try:
+            cids_test = ["USD", "GBP", "JPY", "EUR"]
+            xcats_test = ["XCAT1", "XCAT2"]
+
+            dfx = make_test_df(cids=cids_test, xcats=xcats_test, start="2010-01-01")
+
+            cr = CategoryRelations(
+                df=dfx,
+                xcats=xcats_test,
+                cids=cids_test,
+                freq="M",  # TODO in principle select monthly to get more accurate picture...
+                lag=0,
+                xcat_aggs=["last", "last"],
+                start="2000-01-01",
+                xcat_trims=[None, None],
+            )
+
+            cr.reg_scatter(
+                labels=False,
+                coef_box="upper left",
+                title="FX consistent core CPI excess inflation",
+                xlab="ZN-scored signal",
+                ylab="signal",
+                separator="cids",
+            )
+        except:
+            self.fail(
+                "CategoryRelations failed when using seperator=cids, labels=False"
+            )
+
+    def test_int_seperator(self):
+        try:
+            cids_test = ["USD", "GBP", "JPY", "EUR"]
+            xcats_test = ["XCAT1", "XCAT2"]
+
+            dfx = make_test_df(cids=cids_test, xcats=xcats_test, start="2010-01-01")
+
+            cr = CategoryRelations(
+                df=dfx,
+                xcats=xcats_test,
+                cids=cids_test,
+                freq="M",
+                lag=1,
+                xcat_aggs=["last", "sum"],
+                slip=1,
+            )
+
+            cr.reg_scatter(coef_box="lower right", prob_est="kendall", separator=2012)
+        except:
+            self.fail("CategoryRelations failed when using seperator=2012")
 
 
 if __name__ == "__main__":

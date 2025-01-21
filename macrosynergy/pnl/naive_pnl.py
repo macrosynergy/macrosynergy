@@ -667,6 +667,7 @@ class NaivePnL:
         same_y: bool = True,
         title: str = "Cumulative Naive PnL",
         title_fontsize: int = 20,
+        tick_fontsize: int = 12,
         xcat_labels: Union[List[str], dict] = None,
         xlab: str = "",
         ylab: str = "% of risk capital, no compounding",
@@ -678,6 +679,7 @@ class NaivePnL:
         label_adj: float = 0.05,
         title_adj: float = 0.95,
         y_label_adj: float = 0.95,
+        legend_fontsize: int = None,
     ) -> None:
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per cross
@@ -876,6 +878,8 @@ class NaivePnL:
             plt.legend(
                 labels=labels,
                 title=legend_title,
+                title_fontsize=legend_fontsize,
+                fontsize=legend_fontsize
             )
             plt.xlabel(xlab, fontsize=label_fontsize)
             plt.ylabel(ylab, fontsize=label_fontsize)
@@ -886,6 +890,7 @@ class NaivePnL:
         else:
             labels = labels[::-1]
 
+        fg.tick_params(axis='both', labelsize=tick_fontsize)
         plt.axhline(y=0, color="black", linestyle="--", lw=1)
         plt.show()
 
@@ -900,6 +905,7 @@ class NaivePnL:
         x_label: str = "",
         y_label: str = "",
         figsize: Optional[Tuple[float, float]] = None,
+        tick_fontsize: int = None,
     ):
         """
         Display heatmap of signals across times and cross-sections.
@@ -926,6 +932,8 @@ class NaivePnL:
             label for the y-axis. Default is None.
         figsize : (float, float)
             width and height in inches. Default is (14, number of cross sections).
+        tick_fontsize : int
+            font size for the ticks. Default is None.
 
 
         .. note::
@@ -982,6 +990,9 @@ class NaivePnL:
         ax.set(xlabel=x_label, ylabel=y_label)
         ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
         ax.set_title(title, fontsize=14)
+        
+        ax.tick_params(axis="x", labelsize=tick_fontsize)
+        ax.tick_params(axis="y", labelsize=tick_fontsize)
 
         plt.show()
 

@@ -1,6 +1,7 @@
 from .basket import Basket
 from .category_relations import CategoryRelations
 from .converge_row import ConvergeRow
+from .extend_history import extend_history
 from .return_beta import return_beta, beta_display
 from .historic_vol import historic_vol
 from .linear_composite import linear_composite
@@ -20,6 +21,7 @@ __all__ = [
     "Basket",
     "CategoryRelations",
     "ConvergeRow",
+    "extend_history",
     "return_beta",
     "beta_display",
     "historic_vol",
