@@ -529,6 +529,16 @@ class TestAll(unittest.TestCase):
 
         # Check that the blacklist is a dictionary
 
-        # Check that the blacklist contains the correct cids
+        self.assertTrue(isinstance(blacklist, dict))
 
+        # Check that the blacklist contains the correct cids
+        self.assertTrue(set(blacklist.keys()) == set(expected_XR_blacklist.keys()))
         # Check that the blacklist contains the correct dates
+        self.assertTrue(
+            all(
+                [
+                    blacklist[cid] == expected_XR_blacklist[cid]
+                    for cid in expected_XR_blacklist.keys()
+                ]
+            )
+        )
