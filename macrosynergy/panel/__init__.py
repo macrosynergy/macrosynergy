@@ -10,12 +10,13 @@ from .make_relative_value import make_relative_value
 from .make_relative_category import make_relative_category
 from .make_zn_scores import make_zn_scores
 from .panel_calculator import panel_calculator
-from .panel_extension import BaseImputerPanel, MeanImputerPanel, MedianImputerPanel
+from .panel_imputer import BaseImputerPanel, MeanImputerPanel, MedianImputerPanel
 from .view_correlations import correl_matrix
 from .view_grades import heatmap_grades
 from .view_ranges import view_ranges
 from .view_timelines import view_timelines
 from .view_metrics import view_metrics
+
 __all__ = [
     "Basket",
     "CategoryRelations",

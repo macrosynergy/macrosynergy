@@ -9,6 +9,31 @@ from macrosynergy.management.utils.df_utils import reduce_df
 
 
 class BaseImputerPanel:
+    """
+    Base class for imputing missing values in a panel DataFrame. Defines an overall
+    structure for how the imputation should be performed, without the imputation method.
+    Separate subclasses should be created for each imputation method, which will have a
+    defined impute technique.
+
+    Parameters
+    ----------
+    df : ~pandas.DataFrame
+        DataFrame containing the panel data.
+    xcats : List[str]
+        List of extended categories.
+    cids : List[str]
+        List of cross sections.
+    start : str
+        Start date in ISO format.
+    end : str
+        End date in ISO format.
+    min_cids : int
+        Minimum number of cross sections required to perform imputation on a specific
+        real date. Default is len(cids) // 2.
+    postfix : str
+        Postfix to add to the extended categories after imputation. Default is "F".
+    """
+
     def __init__(
         self,
         df: pd.DataFrame,
@@ -111,9 +136,26 @@ class BaseImputerPanel:
         self.df = QuantamentalDataFrame(self.df, categorical=_as_categorical)
 
     def get_impute_function(self, group):
-        raise NotImplementedError("get_impute_function must be implemented in a subclass")
+        """
+        Abstract method that should be implemented in a subclass. Defines the imputation
+        technique to be used on a group of values.
+        """
+        raise NotImplementedError(
+            "get_impute_function must be implemented in a subclass"
+        )
 
     def generate_blacklist(self, diff: pd.DataFrame):
+        """
+        Generates a dictionary of cross sections and dates that have been imputed in the
+        same format as a blacklist dictionary. For each cross section it stores a date
+        range where imputation has been performed.
+
+        Parameters
+        ----------
+        diff : ~pandas.DataFrame
+            DataFrame containing the differences between the original and imputed
+            DataFrames.
+        """
         grouped = diff.groupby(["xcat", "cid"])
 
         for (xcat, cid), group in grouped:
@@ -148,6 +190,11 @@ class BaseImputerPanel:
 
 
 class MeanImputerPanel(BaseImputerPanel):
+    """
+    Imputer class that fills missing values with the global cross-sectional mean.
+    If the group has less than min_cids non-missing values, the group is left as is.
+    """
+
     def get_impute_function(self, group):
         if group.count() >= self.min_cids:
             self.imputed = True
@@ -156,6 +203,11 @@ class MeanImputerPanel(BaseImputerPanel):
 
 
 class MedianImputerPanel(BaseImputerPanel):
+    """
+    Imputer class that fills missing values with the global cross-sectional median.
+    If the group has less than min_cids non-missing values, the group is left as is.
+    """
+
     def get_impute_function(self, group):
         if group.count() >= self.min_cids:
             self.imputed = True

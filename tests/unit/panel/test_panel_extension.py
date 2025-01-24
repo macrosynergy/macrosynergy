@@ -7,7 +7,11 @@ import warnings
 
 from macrosynergy.management.types.qdf.classes import QuantamentalDataFrame
 from tests.simulate import make_qdf
-from macrosynergy.panel.panel_extension import MeanImputerPanel, MedianImputerPanel, BaseImputerPanel
+from macrosynergy.panel.panel_imputer import (
+    MeanImputerPanel,
+    MedianImputerPanel,
+    BaseImputerPanel,
+)
 
 
 class TestAll(unittest.TestCase):
