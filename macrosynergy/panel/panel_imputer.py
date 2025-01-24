@@ -90,7 +90,7 @@ class BasePanelImputer:
         self.df = QuantamentalDataFrame(
             reduce_df(df, xcats=xcats, start=self.start, end=self.end).dropna()
         )
-        self._as_categorical = self.df.InitializedAsCategorical
+        self._as_categorical = df.InitializedAsCategorical
 
     def impute(self):
         """
