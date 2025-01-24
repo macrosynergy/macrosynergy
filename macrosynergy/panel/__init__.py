@@ -5,6 +5,7 @@ from .extend_history import extend_history
 from .return_beta import return_beta, beta_display
 from .historic_vol import historic_vol
 from .linear_composite import linear_composite
+from .imputers import impute_panel
 from .make_blacklist import make_blacklist
 from .make_relative_value import make_relative_value
 from .make_relative_category import make_relative_category
@@ -30,6 +31,7 @@ __all__ = [
     "make_relative_value",
     "make_relative_category",
     "make_zn_scores",
+    "impute_panel",
     "panel_calculator",
     "BasePanelImputer",
     "MeanPanelImputer",
