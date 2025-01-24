@@ -8,9 +8,9 @@ import warnings
 from macrosynergy.management.types.qdf.classes import QuantamentalDataFrame
 from tests.simulate import make_qdf
 from macrosynergy.panel.panel_imputer import (
-    MeanImputerPanel,
-    MedianImputerPanel,
-    BaseImputerPanel,
+    MeanPanelImputer,
+    MedianPanelImputer,
+    BasePanelImputer,
 )
 
 
@@ -76,7 +76,7 @@ class TestAll(unittest.TestCase):
         # Test if the BaseImputerPanel class raises a TypeError when the df argument is not
         # a pandas DataFrame
         with self.assertRaises(TypeError):
-            BaseImputerPanel(
+            BasePanelImputer(
                 df=1,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -87,7 +87,7 @@ class TestAll(unittest.TestCase):
         # Test if the BaseImputerPanel class raises a ValueError when the df argument is not
         # a quantamental DataFrame
         with self.assertRaises(ValueError):
-            BaseImputerPanel(
+            BasePanelImputer(
                 df=pd.DataFrame(columns=["A", "B", "C"]),
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -98,7 +98,7 @@ class TestAll(unittest.TestCase):
         # Test if the BaseImputerPanel class raises a TypeError when the xcats argument is
         # not a list
         with self.assertRaises(TypeError):
-            BaseImputerPanel(
+            BasePanelImputer(
                 df=self.dfd,
                 xcats="XR",
                 cids=self.all_cids,
@@ -109,7 +109,7 @@ class TestAll(unittest.TestCase):
         # Test if the BaseImputerPanel class raises a TypeError when the cids argument is
         # not a list
         with self.assertRaises(TypeError):
-            BaseImputerPanel(
+            BasePanelImputer(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids="AUD",
@@ -120,7 +120,7 @@ class TestAll(unittest.TestCase):
         # Test if the BaseImputerPanel class raises a TypeError when the start argument is
         # not a string
         with self.assertRaises(TypeError):
-            BaseImputerPanel(
+            BasePanelImputer(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -131,7 +131,7 @@ class TestAll(unittest.TestCase):
         # Test if the BaseImputerPanel class raises a ValueError when the start argument is not
         # a valid date of format YYYY-MM-DD
         with self.assertRaises(ValueError):
-            BaseImputerPanel(
+            BasePanelImputer(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -142,7 +142,7 @@ class TestAll(unittest.TestCase):
         # Test if the BaseImputerPanel class raises a TypeError when the end argument is
         # not a string
         with self.assertRaises(TypeError):
-            BaseImputerPanel(
+            BasePanelImputer(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -153,7 +153,7 @@ class TestAll(unittest.TestCase):
         # Test if the BaseImputerPanel class raises a ValueError when the end argument is
         # not a valid date of format YYYY-MM-DD
         with self.assertRaises(ValueError):
-            BaseImputerPanel(
+            BasePanelImputer(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -164,7 +164,7 @@ class TestAll(unittest.TestCase):
         # Test if the BaseImputerPanel class raises a TypeError when the min_cids argument
         # is not an integer
         with self.assertRaises(TypeError):
-            BaseImputerPanel(
+            BasePanelImputer(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -176,7 +176,7 @@ class TestAll(unittest.TestCase):
         # Test if the BaseImputerPanel class raises a TypeError when the min_cids argument
         # is less than 0
         with self.assertRaises(TypeError):
-            BaseImputerPanel(
+            BasePanelImputer(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -188,7 +188,7 @@ class TestAll(unittest.TestCase):
         # Test if the BaseImputerPanel class raises a TypeError when the postfix argument
         # is not a string
         with self.assertRaises(TypeError):
-            BaseImputerPanel(
+            BasePanelImputer(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -199,7 +199,7 @@ class TestAll(unittest.TestCase):
 
         # Test if min_cids is greater than the number of unique cids in the df argument
         with self.assertRaises(ValueError):
-            BaseImputerPanel(
+            BasePanelImputer(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -229,7 +229,7 @@ class TestAll(unittest.TestCase):
                 "value",
             ] = cid_value_dict[cid]
 
-        panel = MeanImputerPanel(
+        panel = MeanPanelImputer(
             df=self.dfd,
             xcats=self.xcats,
             cids=self.all_cids,
@@ -270,7 +270,7 @@ class TestAll(unittest.TestCase):
                 "value",
             ] = cid_value_dict[cid]
 
-        panel = MedianImputerPanel(
+        panel = MedianPanelImputer(
             df=self.dfd,
             xcats=self.xcats,
             cids=self.all_cids,
@@ -305,7 +305,7 @@ class TestAll(unittest.TestCase):
             original_filtered_df.index[random_indices]
         )
 
-        panel = MeanImputerPanel(
+        panel = MeanPanelImputer(
             df=original_filtered_df,
             xcats=self.xcats,
             cids=self.all_cids,
@@ -339,7 +339,7 @@ class TestAll(unittest.TestCase):
     def test_impute_on_cid_that_doesnt_exist(self):
         self.dataframe_generator()
 
-        panel = MeanImputerPanel(
+        panel = MeanPanelImputer(
             df=self.dfd,
             xcats=self.xcats,
             cids=["BRL"],
@@ -378,7 +378,7 @@ class TestAll(unittest.TestCase):
         random_indices = np.random.choice(self.dfd.index, 100, replace=False)
         self.dfd = self.dfd.drop(self.dfd.index[random_indices])
 
-        panel = MeanImputerPanel(
+        panel = MeanPanelImputer(
             df=self.dfd,
             xcats=self.xcats,
             cids=self.cids,
@@ -417,7 +417,7 @@ class TestAll(unittest.TestCase):
             "value",
         ] = np.nan
 
-        panel = MeanImputerPanel(
+        panel = MeanPanelImputer(
             df=self.dfd,
             xcats=self.xcats,
             cids=self.all_cids,
@@ -460,7 +460,7 @@ class TestAll(unittest.TestCase):
             UserWarning,
             match="No imputation was performed. Consider changing the impute_method or min_cids.",
         ):
-            panel = MeanImputerPanel(
+            panel = MeanPanelImputer(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -480,7 +480,7 @@ class TestAll(unittest.TestCase):
     def test_return_blacklist(self):
         self.dataframe_generator()
 
-        panel = MeanImputerPanel(
+        panel = MeanPanelImputer(
             df=self.dfd,
             xcats=self.xcats,
             cids=self.cids,
@@ -517,7 +517,7 @@ class TestAll(unittest.TestCase):
     def test_postfix(self):
         self.dataframe_generator()
 
-        panel = MeanImputerPanel(
+        panel = MeanPanelImputer(
             df=self.dfd,
             xcats=self.xcats,
             cids=self.cids,

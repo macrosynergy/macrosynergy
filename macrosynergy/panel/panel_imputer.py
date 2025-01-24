@@ -8,7 +8,7 @@ from macrosynergy.management.types.qdf.classes import QuantamentalDataFrame
 from macrosynergy.management.utils.df_utils import reduce_df
 
 
-class BaseImputerPanel:
+class BasePanelImputer:
     """
     Base class for imputing missing values in a panel DataFrame. Defines an overall
     structure for how the imputation should be performed, without the imputation method.
@@ -189,7 +189,7 @@ class BaseImputerPanel:
         return self.df
 
 
-class MeanImputerPanel(BaseImputerPanel):
+class MeanPanelImputer(BasePanelImputer):
     """
     Imputer class that fills missing values with the global cross-sectional mean.
     If the group has less than min_cids non-missing values, the group is left as is.
@@ -202,7 +202,7 @@ class MeanImputerPanel(BaseImputerPanel):
         return group
 
 
-class MedianImputerPanel(BaseImputerPanel):
+class MedianPanelImputer(BasePanelImputer):
     """
     Imputer class that fills missing values with the global cross-sectional median.
     If the group has less than min_cids non-missing values, the group is left as is.
