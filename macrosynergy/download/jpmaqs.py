@@ -1584,23 +1584,21 @@ def custom_download(
 if __name__ == "__main__":
     cids = ["AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "EUR", "GBP", "USD"]
     xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
-    tickers = "USD_CPIH_SA_P1M1ML12"
     start_date: str = "2024-01-07"
-    # end_date: str = "2024-02-09"
+    end_date: str = "2024-02-09"
 
     with JPMaQSDownload(
         client_id=os.getenv("DQ_CLIENT_ID"),
         client_secret=os.getenv("DQ_CLIENT_SECRET"),
     ) as jpmaqs:
         data = jpmaqs.download(
-            tickers=tickers,
+            xcats=xcats,
+            cids=cids,
             metrics="value",
             start_date=start_date,
-            # end_date=end_date,
+            end_date=end_date,
             show_progress=True,
             report_time_taken=True,
-            calender=""
-            
         )
         print(data.info())
         print(data)
