@@ -87,12 +87,15 @@ class BasePanelImputer:
         self.imputed = False
         self.blacklist = {xcat: {} for xcat in xcats}
 
-        complete_df = reduce_df(
-            df, xcats=xcats, start=self.start, end=self.end
-        ).dropna()
-        complete_df = QuantamentalDataFrame(complete_df)
-        _as_categorical = complete_df.InitializedAsCategorical
+        self.df = QuantamentalDataFrame(
+            reduce_df(df, xcats=xcats, start=self.start, end=self.end).dropna()
+        )
+        self._as_categorical = self.df.InitializedAsCategorical
 
+    def impute(self):
+        """
+        Returns the imputed DataFrame.
+        """
         business_dates = (
             pd.date_range(start=self.start, end=self.end, freq="B")
             .strftime("%Y-%m-%d")
@@ -100,24 +103,24 @@ class BasePanelImputer:
         )
 
         full_idx = pd.MultiIndex.from_product(
-            [business_dates, xcats, cids], names=["real_date", "xcat", "cid"]
+            [business_dates, self.xcats, self.cids], names=["real_date", "xcat", "cid"]
         )
 
-        self.df = pd.DataFrame(index=full_idx).reset_index()
-        self.df["real_date"] = pd.to_datetime(self.df["real_date"])
-        self.df = self.df.merge(
-            complete_df,
+        imputed_df = pd.DataFrame(index=full_idx).reset_index()
+        imputed_df["real_date"] = pd.to_datetime(imputed_df["real_date"])
+        imputed_df = imputed_df.merge(
+            self.df,
             how="outer",
             on=["real_date", "xcat", "cid"],
             suffixes=("", ""),
         )
 
-        self.df["value"] = self.df.groupby(["real_date", "xcat"])["value"].transform(
-            self.get_impute_function
-        )
+        imputed_df["value"] = imputed_df.groupby(["real_date", "xcat"])[
+            "value"
+        ].transform(self.get_impute_function)
 
-        diff = complete_df.merge(
-            self.df, how="outer", on=["real_date", "xcat", "cid"], suffixes=("", "_")
+        diff = self.df.merge(
+            imputed_df, how="outer", on=["real_date", "xcat", "cid"], suffixes=("", "_")
         )
         diff["imputed"] = diff["value"].isnull() & ~diff["value_"].isnull()
 
@@ -128,12 +131,12 @@ class BasePanelImputer:
                 "No imputation was performed. Consider changing the impute_method or min_cids."
             )
 
-        self.df = reduce_df(
-            self.df, cids=cids, xcats=xcats, start=self.start, end=self.end
+        imputed_df = reduce_df(
+            imputed_df, cids=self.cids, xcats=self.xcats, start=self.start, end=self.end
         )
-        self.df["xcat"] = self.df["xcat"] + self.postfix
-        self.df.dropna(inplace=True)
-        self.df = QuantamentalDataFrame(self.df, categorical=_as_categorical)
+        imputed_df["xcat"] = imputed_df["xcat"] + self.postfix
+        imputed_df.dropna(inplace=True)
+        return QuantamentalDataFrame(imputed_df, categorical=self._as_categorical)
 
     def get_impute_function(self, group):
         """
@@ -183,10 +186,11 @@ class BasePanelImputer:
                     self.blacklist[xcat][f"{cid}_{i+1}"] = (row["start"], row["end"])
 
     def return_blacklist(self, xcat: str = None):
+        if not self.imputed:
+            warnings.warn(
+                "No imputation was performed. The blacklist is empty.", RuntimeWarning
+            )
         return self.blacklist if xcat is None else self.blacklist[xcat]
-
-    def return_filled_df(self):
-        return self.df
 
 
 class MeanPanelImputer(BasePanelImputer):

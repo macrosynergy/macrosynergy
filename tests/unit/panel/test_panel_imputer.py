@@ -239,7 +239,7 @@ class TestAll(unittest.TestCase):
             postfix="",
         )
 
-        filled_df = panel.return_filled_df()
+        filled_df = panel.impute()
 
         imputed_value = filled_df[
             (filled_df["real_date"] == "2015-01-02")
@@ -280,7 +280,7 @@ class TestAll(unittest.TestCase):
             postfix="",
         )
 
-        filled_df = panel.return_filled_df()
+        filled_df = panel.impute()
 
         imputed_value = filled_df[
             (filled_df["real_date"] == "2015-01-02")
@@ -290,7 +290,7 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(np.isclose(imputed_value, expected_median, rtol=1e-5))
 
-    def test_return_filled_df(self):
+    def test_impute(self):
         self.dataframe_generator()
 
         original_filtered_df = self.dfd[
@@ -315,9 +315,9 @@ class TestAll(unittest.TestCase):
             postfix="",
         )
 
-        filled_df = panel.return_filled_df()
+        filled_df = panel.impute()
 
-        # Check that the return_filled_df method is a QuantamentalDataFrame
+        # Check that the impute method is a QuantamentalDataFrame
         self.assertIsInstance(filled_df, QuantamentalDataFrame)
 
         # Check that the filled_df does not edit any of the data that is already present
@@ -333,7 +333,7 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(merged_df["value_x"].equals(merged_df["value_y"]))
 
-        # Check that the return_filled_df contains no nans (since min_cids = 0)
+        # Check that the impute contains no nans (since min_cids = 0)
         self.assertFalse(filled_df.isnull().values.any())
 
     def test_impute_on_cid_that_doesnt_exist(self):
@@ -349,7 +349,7 @@ class TestAll(unittest.TestCase):
             postfix="",
         )
 
-        filled_df = panel.return_filled_df()
+        filled_df = panel.impute()
 
         # Check that values are imputeted for cids that don't exist in the original df
         self.assertTrue("BRL" in filled_df["cid"].unique())
@@ -388,7 +388,7 @@ class TestAll(unittest.TestCase):
             postfix="",
         )
 
-        filled_df = panel.return_filled_df()
+        filled_df = panel.impute()
 
         for date in pd.date_range(start=self.start, end=self.end, freq="B"):
             for xcat in self.xcats:
@@ -427,7 +427,7 @@ class TestAll(unittest.TestCase):
             postfix="",
         )
 
-        filled_df = panel.return_filled_df()
+        filled_df = panel.impute()
 
         # Check that the filled_df contains no imputed values where there are less observations
         # than the min_cids
@@ -456,21 +456,22 @@ class TestAll(unittest.TestCase):
 
         # Check a warning is thrown to say that no imputation was performed
 
+        panel = MeanPanelImputer(
+            df=self.dfd,
+            xcats=self.xcats,
+            cids=self.all_cids,
+            start=self.start,
+            end=self.end,
+            min_cids=5,
+            postfix="",
+        )
+
         with pytest.warns(
             UserWarning,
             match="No imputation was performed. Consider changing the impute_method or min_cids.",
         ):
-            panel = MeanPanelImputer(
-                df=self.dfd,
-                xcats=self.xcats,
-                cids=self.all_cids,
-                start=self.start,
-                end=self.end,
-                min_cids=5,
-                postfix="",
-            )
+            filled_df = panel.impute()
 
-        filled_df = panel.return_filled_df()
         trimmed_self_dfd = self.dfd[
             (self.dfd["real_date"] >= self.start) & (self.dfd["real_date"] <= self.end)
         ]
@@ -495,6 +496,14 @@ class TestAll(unittest.TestCase):
             "NZD": (pd.Timestamp("2020-10-01"), pd.Timestamp("2020-12-31")),
             "USD": (pd.Timestamp("2020-11-02"), pd.Timestamp("2020-12-31")),
         }
+
+        with pytest.warns(
+            RuntimeWarning,
+            match="No imputation was performed. The blacklist is empty.",
+        ):
+            blacklist = panel.return_blacklist("XR")
+
+        _ = panel.impute()
 
         blacklist = panel.return_blacklist("XR")
 
@@ -527,7 +536,7 @@ class TestAll(unittest.TestCase):
             postfix="_new",
         )
 
-        filled_df = panel.return_filled_df()
+        filled_df = panel.impute()
 
         postfix_xcats = [xcat + "_new" for xcat in self.xcats]
 
