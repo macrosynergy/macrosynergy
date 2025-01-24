@@ -57,7 +57,8 @@ class PanelExtension(object):
             raise ValueError(
                 "min_cids must be less than or equal to the number of unique cids in df"
             )
-
+        self.cids = cids
+        self.xcats = xcats
         self.start = start
         self.end = end
         self.impute_method = impute_method
@@ -90,12 +91,20 @@ class PanelExtension(object):
             complete_df,
             how="outer",
             on=["real_date", "xcat", "cid"],
-            suffixes=("", self.postfix),
+            suffixes=("", ""),
         )
 
         self.df["value"] = self.df.groupby(["real_date", "xcat"])["value"].transform(
             self.get_impute_function
         )
+        # Get difference between the two dataframes
+        diff = complete_df.merge(
+            self.df, how="outer", on=["real_date", "xcat", "cid"], suffixes=("", "_")
+        )
+        diff["imputed"] = diff["value"].isnull() & ~diff["value_"].isnull()
+        # diff = diff[diff["imputed"]].drop(columns=["value", "value_"])
+        self.generate_blacklist(diff)
+
         if not self.imputed:
             warnings.warn(
                 "No imputation was performed. Consider changing the impute_method or min_cids."
@@ -116,7 +125,6 @@ class PanelExtension(object):
     def impute_mean(self, group):
         if group.count() >= self.min_cids:
             self.imputed = True
-            self.add_to_blacklist(timestamp=group.name[0], xcat=group.name[1])
             return group.fillna(group.mean())
         else:
             return group
@@ -124,31 +132,39 @@ class PanelExtension(object):
     def impute_median(self, group):
         if group.count() >= self.min_cids:
             self.imputed = True
-            self.add_to_blacklist(timestamp=group.name[0], xcat=group.name[1])
             return group.fillna(group.median())
         else:
             return group
 
-    def add_to_blacklist(self, cid: str, timestamp: str, xcat: str):
-        xcat_blacklist = self.blacklist[xcat]
-        if cid not in xcat_blacklist and cid + "_1" not in xcat_blacklist:
-            xcat_blacklist[cid] = [(timestamp, timestamp)]
-        elif cid in xcat_blacklist:
-            # If current timestamp is one business day after the last timestamp in the blacklist
-            # then replace last timestamp with current timestamp
-            # Else change name of key to cid_1 and add current timestamp to blacklist under cid_2
-            last_timestamp = xcat_blacklist[cid][-1][-1]
+    def generate_blacklist(self, diff: pd.DataFrame):
+        grouped = diff.groupby(["xcat", "cid"])
+
+        for (xcat, cid), group in grouped:
+            imputed_group = group[group["imputed"]]
+            if imputed_group.empty:
+                continue
+
+            imputed_group = imputed_group.sort_values("real_date")
+
+            consecutive_groups = (imputed_group.index.to_series().diff() == 1).cumsum()
+
+            date_ranges = (
+                imputed_group.groupby(consecutive_groups)
+                .agg(start=("real_date", "first"), end=("real_date", "last"))
+                .reset_index(drop=True)
+            )
+
+            if len(date_ranges) == 1:
+                self.blacklist[xcat][cid] = (
+                    date_ranges.iloc[0]["start"],
+                    date_ranges.iloc[0]["end"],
+                )
+            else:
+                for i, row in date_ranges.iterrows():
+                    self.blacklist[xcat][f"{cid}_{i+1}"] = (row["start"], row["end"])
 
     def return_blacklist(self, xcat: str = None):
-        blacklist_output = {}
-        xcat_blacklist = self.blacklist.get(xcat)
-        for key, date_ranges in xcat_blacklist.items():
-            if len(date_ranges) == 1:
-                blacklist_output[key] = (date_ranges[0][0], date_ranges[0][-1])
-            else:
-                for i, date_range in enumerate(date_ranges, start=1):
-                    blacklist_output[key + "_" + str(i)] = (date_range[0], date_range[-1])
-        return blacklist_output
+        return self.blacklist if xcat is None else self.blacklist[xcat]
 
     def return_filled_df(self):
         return self.df

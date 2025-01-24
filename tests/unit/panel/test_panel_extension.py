@@ -521,8 +521,8 @@ class TestAll(unittest.TestCase):
         expected_XR_blacklist = {
             "CAD": (pd.Timestamp("2020-12-01"), pd.Timestamp("2020-12-31")),
             "GBP": (pd.Timestamp("2020-12-01"), pd.Timestamp("2020-12-31")),
-            "NZD": (pd.Timestamp("2020-10-01"), pd.Timestamp("2020-10-01")),
-            "USD": (pd.Timestamp("2020-10-31"), pd.Timestamp("2020-10-31")),
+            "NZD": (pd.Timestamp("2020-10-01"), pd.Timestamp("2020-12-31")),
+            "USD": (pd.Timestamp("2020-11-02"), pd.Timestamp("2020-12-31")),
         }
 
         blacklist = panel.return_blacklist("XR")
