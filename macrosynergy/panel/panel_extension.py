@@ -8,7 +8,7 @@ from macrosynergy.management.types.qdf.classes import QuantamentalDataFrame
 from macrosynergy.management.utils.df_utils import reduce_df
 
 
-class PanelExtension(object):
+class BaseImputerPanel:
     def __init__(
         self,
         df: pd.DataFrame,
@@ -16,7 +16,6 @@ class PanelExtension(object):
         cids: List[str],
         start: str,
         end: str,
-        impute_method: str = "mean",
         min_cids: int = None,
         postfix: str = "F",
     ):
@@ -42,10 +41,6 @@ class PanelExtension(object):
                 end = datetime.strptime(end, "%Y-%m-%d")
             except ValueError:
                 raise ValueError("end must be in the format 'YYYY-MM-DD'")
-        if not isinstance(impute_method, str):
-            raise TypeError("impute_method must be a string")
-        elif impute_method not in ["mean", "median"]:
-            raise ValueError("impute_method must be either 'mean' or 'median'")
         if min_cids is None:
             min_cids = len(cids) // 2
         elif not isinstance(min_cids, int) or min_cids < 0:
@@ -57,11 +52,11 @@ class PanelExtension(object):
             raise ValueError(
                 "min_cids must be less than or equal to the number of unique cids in df"
             )
+
         self.cids = cids
         self.xcats = xcats
         self.start = start
         self.end = end
-        self.impute_method = impute_method
         self.min_cids = min_cids
         self.postfix = postfix
         self.imputed = False
@@ -79,12 +74,10 @@ class PanelExtension(object):
             .tolist()
         )
 
-        # Create a multiindex from the product of business dates, xcats and cids
         full_idx = pd.MultiIndex.from_product(
             [business_dates, xcats, cids], names=["real_date", "xcat", "cid"]
         )
 
-        # Create a dataframe with the full index and the value column filled with the values in complete_df and if it doesn't exist, fill it with imputed value and then nan
         self.df = pd.DataFrame(index=full_idx).reset_index()
         self.df["real_date"] = pd.to_datetime(self.df["real_date"])
         self.df = self.df.merge(
@@ -97,44 +90,28 @@ class PanelExtension(object):
         self.df["value"] = self.df.groupby(["real_date", "xcat"])["value"].transform(
             self.get_impute_function
         )
-        # Get difference between the two dataframes
+
         diff = complete_df.merge(
             self.df, how="outer", on=["real_date", "xcat", "cid"], suffixes=("", "_")
         )
         diff["imputed"] = diff["value"].isnull() & ~diff["value_"].isnull()
-        # diff = diff[diff["imputed"]].drop(columns=["value", "value_"])
+
         self.generate_blacklist(diff)
 
         if not self.imputed:
             warnings.warn(
                 "No imputation was performed. Consider changing the impute_method or min_cids."
             )
+
         self.df = reduce_df(
             self.df, cids=cids, xcats=xcats, start=self.start, end=self.end
         )
-
+        self.df["xcat"] = self.df["xcat"] + self.postfix
         self.df.dropna(inplace=True)
         self.df = QuantamentalDataFrame(self.df, categorical=_as_categorical)
 
     def get_impute_function(self, group):
-        if self.impute_method == "mean":
-            return self.impute_mean(group)
-        elif self.impute_method == "median":
-            return self.impute_median(group)
-
-    def impute_mean(self, group):
-        if group.count() >= self.min_cids:
-            self.imputed = True
-            return group.fillna(group.mean())
-        else:
-            return group
-
-    def impute_median(self, group):
-        if group.count() >= self.min_cids:
-            self.imputed = True
-            return group.fillna(group.median())
-        else:
-            return group
+        raise NotImplementedError("get_impute_function must be implemented in a subclass")
 
     def generate_blacklist(self, diff: pd.DataFrame):
         grouped = diff.groupby(["xcat", "cid"])
@@ -168,3 +145,19 @@ class PanelExtension(object):
 
     def return_filled_df(self):
         return self.df
+
+
+class MeanImputerPanel(BaseImputerPanel):
+    def get_impute_function(self, group):
+        if group.count() >= self.min_cids:
+            self.imputed = True
+            return group.fillna(group.mean())
+        return group
+
+
+class MedianImputerPanel(BaseImputerPanel):
+    def get_impute_function(self, group):
+        if group.count() >= self.min_cids:
+            self.imputed = True
+            return group.fillna(group.median())
+        return group

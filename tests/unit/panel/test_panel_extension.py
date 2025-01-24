@@ -7,7 +7,7 @@ import warnings
 
 from macrosynergy.management.types.qdf.classes import QuantamentalDataFrame
 from tests.simulate import make_qdf
-from macrosynergy.panel.panel_extension import PanelExtension
+from macrosynergy.panel.panel_extension import MeanImputerPanel, MedianImputerPanel, BaseImputerPanel
 
 
 class TestAll(unittest.TestCase):
@@ -69,10 +69,10 @@ class TestAll(unittest.TestCase):
     def test_panel_extension_arg_types(self):
         self.dataframe_generator()
 
-        # Test if the PanelExtension class raises a TypeError when the df argument is not
+        # Test if the BaseImputerPanel class raises a TypeError when the df argument is not
         # a pandas DataFrame
         with self.assertRaises(TypeError):
-            PanelExtension(
+            BaseImputerPanel(
                 df=1,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -80,10 +80,10 @@ class TestAll(unittest.TestCase):
                 end=self.end,
             )
 
-        # Test if the PanelExtension class raises a ValueError when the df argument is not
+        # Test if the BaseImputerPanel class raises a ValueError when the df argument is not
         # a quantamental DataFrame
         with self.assertRaises(ValueError):
-            PanelExtension(
+            BaseImputerPanel(
                 df=pd.DataFrame(columns=["A", "B", "C"]),
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -91,10 +91,10 @@ class TestAll(unittest.TestCase):
                 end=self.end,
             )
 
-        # Test if the PanelExtension class raises a TypeError when the xcats argument is
+        # Test if the BaseImputerPanel class raises a TypeError when the xcats argument is
         # not a list
         with self.assertRaises(TypeError):
-            PanelExtension(
+            BaseImputerPanel(
                 df=self.dfd,
                 xcats="XR",
                 cids=self.all_cids,
@@ -102,10 +102,10 @@ class TestAll(unittest.TestCase):
                 end=self.end,
             )
 
-        # Test if the PanelExtension class raises a TypeError when the cids argument is
+        # Test if the BaseImputerPanel class raises a TypeError when the cids argument is
         # not a list
         with self.assertRaises(TypeError):
-            PanelExtension(
+            BaseImputerPanel(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids="AUD",
@@ -113,10 +113,10 @@ class TestAll(unittest.TestCase):
                 end=self.end,
             )
 
-        # Test if the PanelExtension class raises a TypeError when the start argument is
+        # Test if the BaseImputerPanel class raises a TypeError when the start argument is
         # not a string
         with self.assertRaises(TypeError):
-            PanelExtension(
+            BaseImputerPanel(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -124,10 +124,10 @@ class TestAll(unittest.TestCase):
                 end=self.end,
             )
 
-        # Test if the PanelExtension class raises a Value when the start argument is not
+        # Test if the BaseImputerPanel class raises a ValueError when the start argument is not
         # a valid date of format YYYY-MM-DD
         with self.assertRaises(ValueError):
-            PanelExtension(
+            BaseImputerPanel(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -135,10 +135,10 @@ class TestAll(unittest.TestCase):
                 end=self.end,
             )
 
-        # Test if the PanelExtension class raises a TypeError when the end argument is
+        # Test if the BaseImputerPanel class raises a TypeError when the end argument is
         # not a string
         with self.assertRaises(TypeError):
-            PanelExtension(
+            BaseImputerPanel(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -146,10 +146,10 @@ class TestAll(unittest.TestCase):
                 end=1,
             )
 
-        # Test if the PanelExtension class raises a ValueError when the end argument is
+        # Test if the BaseImputerPanel class raises a ValueError when the end argument is
         # not a valid date of format YYYY-MM-DD
         with self.assertRaises(ValueError):
-            PanelExtension(
+            BaseImputerPanel(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -157,34 +157,10 @@ class TestAll(unittest.TestCase):
                 end="01-01-2000",
             )
 
-        # Test if the PanelExtension class raises a TypeError when the impute_method
-        # argument is not a string
-        with self.assertRaises(TypeError):
-            PanelExtension(
-                df=self.dfd,
-                xcats=self.xcats,
-                cids=self.all_cids,
-                start=self.start,
-                end=self.end,
-                impute_method=1,
-            )
-
-        # Test if the PanelExtension class raises a ValueError when the impute_method
-        # argument is not either 'mean' or 'median'
-        with self.assertRaises(ValueError):
-            PanelExtension(
-                df=self.dfd,
-                xcats=self.xcats,
-                cids=self.all_cids,
-                start=self.start,
-                end=self.end,
-                impute_method="mode",
-            )
-
-        # Test if the PanelExtension class raises a TypeError when the min_cids argument
+        # Test if the BaseImputerPanel class raises a TypeError when the min_cids argument
         # is not an integer
         with self.assertRaises(TypeError):
-            PanelExtension(
+            BaseImputerPanel(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -193,10 +169,10 @@ class TestAll(unittest.TestCase):
                 min_cids="1",
             )
 
-        # Test if the PanelExtension class raises a TypeError when the min_cids argument
+        # Test if the BaseImputerPanel class raises a TypeError when the min_cids argument
         # is less than 0
         with self.assertRaises(TypeError):
-            PanelExtension(
+            BaseImputerPanel(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -205,10 +181,10 @@ class TestAll(unittest.TestCase):
                 min_cids=-1,
             )
 
-        # Test if the PanelExtension class raises a TypeError when the postfix argument
+        # Test if the BaseImputerPanel class raises a TypeError when the postfix argument
         # is not a string
         with self.assertRaises(TypeError):
-            PanelExtension(
+            BaseImputerPanel(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -219,7 +195,7 @@ class TestAll(unittest.TestCase):
 
         # Test if min_cids is greater than the number of unique cids in the df argument
         with self.assertRaises(ValueError):
-            PanelExtension(
+            BaseImputerPanel(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -227,6 +203,88 @@ class TestAll(unittest.TestCase):
                 end=self.end,
                 min_cids=6,
             )
+
+    def test_mean_imputed_values(self):
+        self.dataframe_generator()
+
+        cid_value_dict = {
+            "AUD": 0.5,
+            "CAD": -0.6,
+            "GBP": 123.7,
+            "NZD": 1230.8,
+            "USD": -0.19,
+        }
+
+        expected_mean = np.mean(list(cid_value_dict.values()))
+
+        for cid in self.cids:
+            self.dfd.loc[
+                (self.dfd["real_date"] == "2015-01-02")
+                & (self.dfd["cid"] == cid)
+                & (self.dfd["xcat"] == "XR"),
+                "value",
+            ] = cid_value_dict[cid]
+
+        panel = MeanImputerPanel(
+            df=self.dfd,
+            xcats=self.xcats,
+            cids=self.all_cids,
+            start=self.start,
+            end=self.end,
+            min_cids=0,
+            postfix="",
+        )
+
+        filled_df = panel.return_filled_df()
+
+        imputed_value = filled_df[
+            (filled_df["real_date"] == "2015-01-02")
+            & (filled_df["xcat"] == "XR")
+            & (filled_df["cid"] == "ZAR")
+        ]["value"].values[0]
+
+        self.assertTrue(np.isclose(imputed_value, expected_mean, rtol=1e-5))
+
+    def test_median_imputed_values(self):
+        self.dataframe_generator()
+
+        cid_value_dict = {
+            "AUD": 0.5,
+            "CAD": -0.6,
+            "GBP": 123.7,
+            "NZD": 1230.8,
+            "USD": -0.19,
+        }
+
+        expected_median = np.median(list(cid_value_dict.values()))
+
+        for cid in self.cids:
+            self.dfd.loc[
+                (self.dfd["real_date"] == "2015-01-02")
+                & (self.dfd["cid"] == cid)
+                & (self.dfd["xcat"] == "XR"),
+                "value",
+            ] = cid_value_dict[cid]
+
+        panel = MedianImputerPanel(
+            df=self.dfd,
+            xcats=self.xcats,
+            cids=self.all_cids,
+            start=self.start,
+            end=self.end,
+            min_cids=0,
+            postfix="",
+        )
+
+        filled_df = panel.return_filled_df()
+
+        imputed_value = filled_df[
+            (filled_df["real_date"] == "2015-01-02")
+            & (filled_df["xcat"] == "XR")
+            & (filled_df["cid"] == "ZAR")
+        ]["value"].values[0]
+
+        self.assertTrue(np.isclose(imputed_value, expected_median, rtol=1e-5))
 
     def test_return_filled_df(self):
         self.dataframe_generator()
@@ -243,7 +301,7 @@ class TestAll(unittest.TestCase):
             original_filtered_df.index[random_indices]
         )
 
-        panel = PanelExtension(
+        panel = MeanImputerPanel(
             df=original_filtered_df,
             xcats=self.xcats,
             cids=self.all_cids,
@@ -277,7 +335,7 @@ class TestAll(unittest.TestCase):
     def test_impute_on_cid_that_doesnt_exist(self):
         self.dataframe_generator()
 
-        panel = PanelExtension(
+        panel = MeanImputerPanel(
             df=self.dfd,
             xcats=self.xcats,
             cids=["BRL"],
@@ -316,7 +374,7 @@ class TestAll(unittest.TestCase):
         random_indices = np.random.choice(self.dfd.index, 100, replace=False)
         self.dfd = self.dfd.drop(self.dfd.index[random_indices])
 
-        panel = PanelExtension(
+        panel = MeanImputerPanel(
             df=self.dfd,
             xcats=self.xcats,
             cids=self.cids,
@@ -340,97 +398,6 @@ class TestAll(unittest.TestCase):
                         == 1
                     )
 
-    def test_mean_imputed_values(self):
-        self.dataframe_generator()
-
-        # For a specific date set the values for each cid and xcat to some specified
-        # values
-
-        cid_value_dict = {
-            "AUD": 0.5,
-            "CAD": -0.6,
-            "GBP": 123.7,
-            "NZD": 1230.8,
-            "USD": -0.19,
-        }
-
-        expected_mean = np.mean(list(cid_value_dict.values()))
-
-        for cid in self.cids:
-            self.dfd.loc[
-                (self.dfd["real_date"] == "2015-01-02")
-                & (self.dfd["cid"] == cid)
-                & (self.dfd["xcat"] == "XR"),
-                "value",
-            ] = cid_value_dict[cid]
-
-        panel = PanelExtension(
-            df=self.dfd,
-            xcats=self.xcats,
-            cids=self.all_cids,
-            start=self.start,
-            end=self.end,
-            min_cids=0,
-            postfix="",
-        )
-
-        filled_df = panel.return_filled_df()
-
-        # Check that the mean imputed values are correct
-        imputed_value = filled_df[
-            (filled_df["real_date"] == "2015-01-02")
-            & (filled_df["xcat"] == "XR")
-            & (filled_df["cid"] == "ZAR")
-        ]["value"].values[0]
-
-        self.assertTrue(np.isclose(imputed_value, expected_mean, rtol=1e-5))
-
-    def test_median_imputed_values(self):
-        self.dataframe_generator()
-
-        # For a specific date set the values for each cid and xcat to some specified
-        # values
-
-        cid_value_dict = {
-            "AUD": 0.5,
-            "CAD": -0.6,
-            "GBP": 123.7,
-            "NZD": 1230.8,
-            "USD": -0.19,
-        }
-
-        expected_median = np.median(list(cid_value_dict.values()))
-
-        for cid in self.cids:
-            self.dfd.loc[
-                (self.dfd["real_date"] == "2015-01-02")
-                & (self.dfd["cid"] == cid)
-                & (self.dfd["xcat"] == "XR"),
-                "value",
-            ] = cid_value_dict[cid]
-
-        panel = PanelExtension(
-            df=self.dfd,
-            xcats=self.xcats,
-            cids=self.all_cids,
-            start=self.start,
-            end=self.end,
-            impute_method="median",
-            min_cids=0,
-            postfix="",
-        )
-
-        filled_df = panel.return_filled_df()
-
-        # Check that the mean imputed values are correct
-        imputed_value = filled_df[
-            (filled_df["real_date"] == "2015-01-02")
-            & (filled_df["xcat"] == "XR")
-            & (filled_df["cid"] == "ZAR")
-        ]["value"].values[0]
-
-        self.assertTrue(np.isclose(imputed_value, expected_median, rtol=1e-5))
-
     def test_min_cids(self):
         self.dataframe_generator()
 
@@ -446,7 +413,7 @@ class TestAll(unittest.TestCase):
             "value",
         ] = np.nan
 
-        panel = PanelExtension(
+        panel = MeanImputerPanel(
             df=self.dfd,
             xcats=self.xcats,
             cids=self.all_cids,
@@ -489,7 +456,7 @@ class TestAll(unittest.TestCase):
             UserWarning,
             match="No imputation was performed. Consider changing the impute_method or min_cids.",
         ):
-            panel = PanelExtension(
+            panel = MeanImputerPanel(
                 df=self.dfd,
                 xcats=self.xcats,
                 cids=self.all_cids,
@@ -509,10 +476,10 @@ class TestAll(unittest.TestCase):
     def test_return_blacklist(self):
         self.dataframe_generator()
 
-        panel = PanelExtension(
+        panel = MeanImputerPanel(
             df=self.dfd,
             xcats=self.xcats,
-            cids=self.all_cids,
+            cids=self.cids,
             start="2010-01-01",
             end="2020-12-31",
             min_cids=1,
@@ -542,3 +509,22 @@ class TestAll(unittest.TestCase):
                 ]
             )
         )
+
+    def test_postfix(self):
+        self.dataframe_generator()
+
+        panel = MeanImputerPanel(
+            df=self.dfd,
+            xcats=self.xcats,
+            cids=self.cids,
+            start="2010-01-01",
+            end="2020-12-31",
+            min_cids=1,
+            postfix="_new",
+        )
+
+        filled_df = panel.return_filled_df()
+
+        postfix_xcats = [xcat + "_new" for xcat in self.xcats]
+
+        self.assertTrue(set(filled_df["xcat"].unique()) == set(postfix_xcats))
