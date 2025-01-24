@@ -501,7 +501,7 @@ class TestAll(unittest.TestCase):
             RuntimeWarning,
             match="No imputation was performed. The blacklist is empty.",
         ):
-            blacklist = panel.return_blacklist("XR")
+            _ = panel.return_blacklist("XR")
 
         _ = panel.impute()
 
