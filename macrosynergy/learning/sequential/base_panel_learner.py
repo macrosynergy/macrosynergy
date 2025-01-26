@@ -371,7 +371,7 @@ class BasePanelLearner(ABC):
                 np.searchsorted(
                     self.unique_date_levels, sorted_test_date_levels, side="left"
                 )
-                - self.lag
+                - 1
             )
             adj_test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
                 [self.unique_date_levels[i] if i >= 0 else pd.NaT for i in locs]
