@@ -531,6 +531,7 @@ class TestAll(unittest.TestCase):
         _ = panel.impute()
 
         blacklist = panel.return_blacklist("XR")
+        print(blacklist)
 
         # Check that the blacklist is a dictionary
 
