@@ -39,8 +39,8 @@ class BasePanelImputer:
         df: pd.DataFrame,
         xcats: List[str],
         cids: List[str],
-        start: str,
-        end: str,
+        start: str = None,
+        end: str = None,
         min_cids: int = None,
         postfix: str = "F",
     ):
@@ -52,6 +52,8 @@ class BasePanelImputer:
             raise TypeError("xcats must be a list")
         if not isinstance(cids, list):
             raise TypeError("cids must be a list")
+        if start is None:
+            start = df["real_date"].min().strftime("%Y-%m-%d")
         if not isinstance(start, str):
             raise TypeError("start must be a string")
         else:
@@ -59,6 +61,8 @@ class BasePanelImputer:
                 start = datetime.strptime(start, "%Y-%m-%d")
             except ValueError:
                 raise ValueError("start must be in the format 'YYYY-MM-DD'")
+        if end is None:
+            end = df["real_date"].max().strftime("%Y-%m-%d")
         if not isinstance(end, str):
             raise TypeError("end must be a string")
         else:
