@@ -119,7 +119,7 @@ class BasePanelImputer:
             suffixes=("", ""),
         )
 
-        imputed_df["value"] = imputed_df.groupby(["real_date", "xcat"])[
+        imputed_df["value"] = imputed_df.groupby(["real_date", "xcat"], observed=True)[
             "value"
         ].transform(self.get_impute_function)
 
@@ -163,7 +163,7 @@ class BasePanelImputer:
             DataFrame containing the differences between the original and imputed
             DataFrames.
         """
-        grouped = diff.groupby(["xcat", "cid"])
+        grouped = diff.groupby(["xcat", "cid"], observed=True)
 
         for (xcat, cid), group in grouped:
             group.reset_index(drop=True, inplace=True)
@@ -176,7 +176,7 @@ class BasePanelImputer:
             consecutive_groups = (imputed_group.index.to_series().diff() != 1).cumsum()
 
             date_ranges = (
-                imputed_group.groupby(consecutive_groups)
+                imputed_group.groupby(consecutive_groups, observed=True)
                 .agg(start=("real_date", "first"), end=("real_date", "last"))
                 .reset_index(drop=True)
             )
