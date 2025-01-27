@@ -36,7 +36,7 @@ class TestAll(unittest.TestCase):
         )
 
         df_cids.loc["AUD"] = ["2000-01-01", "2020-12-31", 0.1, 1]
-        df_cids.loc["CAD"] = ["2001-01-01", "2020-11-30", 0, 1]
+        df_cids.loc["CAD"] = ["2000-01-01", "2020-11-30", 0, 1]
         df_cids.loc["GBP"] = ["2002-01-01", "2020-11-30", 0, 2]
         df_cids.loc["NZD"] = ["2002-01-01", "2020-09-30", -0.1, 2]
         df_cids.loc["USD"] = [date, "2020-10-30", 0.2, 2]
@@ -492,11 +492,7 @@ class TestAll(unittest.TestCase):
         )
 
         expected_XR_blacklist = {
-            "CAD_1": (
-                pd.Timestamp("2000-01-03 00:00:00"),
-                pd.Timestamp("2000-12-29 00:00:00"),
-            ),
-            "CAD_2": (
+            "CAD": (
                 pd.Timestamp("2020-12-01 00:00:00"),
                 pd.Timestamp("2020-12-31 00:00:00"),
             ),
