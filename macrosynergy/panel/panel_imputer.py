@@ -166,13 +166,14 @@ class BasePanelImputer:
         grouped = diff.groupby(["xcat", "cid"])
 
         for (xcat, cid), group in grouped:
+            group.reset_index(drop=True, inplace=True)
             imputed_group = group[group["imputed"]]
             if imputed_group.empty:
                 continue
 
             imputed_group = imputed_group.sort_values("real_date")
 
-            consecutive_groups = (imputed_group.index.to_series().diff() == 1).cumsum()
+            consecutive_groups = (imputed_group.index.to_series().diff() != 1).cumsum()
 
             date_ranges = (
                 imputed_group.groupby(consecutive_groups)
