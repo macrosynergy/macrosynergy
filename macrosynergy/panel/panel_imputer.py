@@ -167,7 +167,7 @@ class BasePanelImputer:
 
         for (xcat, cid), group in grouped:
             group = group.sort_values(["real_date"]).reset_index(drop=True)
-            imputed_group = group[group["imputed"] == True]
+            imputed_group = group[group["imputed"]]
             if imputed_group.empty:
                 continue
 
