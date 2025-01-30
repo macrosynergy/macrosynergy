@@ -122,6 +122,8 @@ class NaivePnL:
         sequential: bool = True,
         neutral: str = "zero",
         thresh: float = None,
+        entry_barrier: float = None,
+        exit_barrier: float = None,
     ):
         """
         Calculate daily PnL and add to class instance.
@@ -180,6 +182,10 @@ class NaivePnL:
             threshold. Therefore, the threshold is the maximum absolute score value that the
             function is allowed to produce. The minimum threshold is one standard deviation.
             Default is no threshold.
+        entry_barrier : float
+            threshold value for the signal to enter a position. Default is None.
+        exit_barrier : float
+            threshold value for the signal to exit a position. Default is None.
 
 
         Notes
@@ -289,7 +295,15 @@ class NaivePnL:
         sig_series = self.rebalancing(
             dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
         )
+
         dfw["sig"] = np.squeeze(sig_series.to_numpy())
+        if entry_barrier is not None and exit_barrier is not None:
+            dfw.rename({"sig": "prev_sig"}, axis=1, inplace=True)
+            dfw["psig"] = dfw.apply(self._apply_barriers, axis=1, sig=sig, entry_barrier=entry_barrier, exit_barrier=exit_barrier)
+            sig_series = self.rebalancing(
+                dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
+            )
+            dfw["sig"] = np.squeeze(sig_series.to_numpy())
         # else:
         #     dfw = dfw.rename({"psig": "sig"}, axis=1)
 
@@ -450,6 +464,19 @@ class NaivePnL:
                     self.df = update_df(self.df, dfa)
 
         return bm_dict
+    
+    @staticmethod
+    def _apply_barriers(row, sig, entry_barrier, exit_barrier):
+        if row["prev_sig"] is None or np.isnan(row["prev_sig"]) or row["prev_sig"] == 0:
+            if abs(row[sig]) >= entry_barrier:
+                return np.sign(row[sig])
+            else:
+                return 0
+        if abs(row[sig]) > exit_barrier:
+            return np.sign(row[sig])
+        else:
+            return 0
+        
 
     @staticmethod
     def _make_signal(
@@ -461,6 +488,8 @@ class NaivePnL:
         sequential: bool = True,
         neutral: str = "zero",
         thresh: float = None,
+        entry_barrier: float = None,
+        exit_barrier: float = None,
     ):
         """
         Helper function used to produce the raw signal that forms the basis for
@@ -1561,10 +1590,24 @@ if __name__ == "__main__":
 
     pnl.make_pnl(
         sig="GROWTH",
-        sig_op="zn_score_pan",
-        sig_neg=True,
-        sig_add=0.5,
-        rebal_freq="daily",
+        sig_op="binary",
+        entry_barrier=1.0,
+        exit_barrier=0.0,
+        # sig_neg=True,
+        # sig_add=0.5,
+        rebal_freq="monthly",
+        vol_scale=5,
+        rebal_slip=1,
+        min_obs=250,
+        thresh=2,
+    )
+
+    pnl.make_pnl(
+        sig="GROWTH",
+        sig_op="binary",
+        # sig_neg=True,
+        # sig_add=0.5,
+        rebal_freq="monthly",
         vol_scale=5,
         rebal_slip=1,
         min_obs=250,
