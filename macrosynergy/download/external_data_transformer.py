@@ -26,12 +26,12 @@ class DataFrameTransformer(BaseTransformer):
 
         # Case 2 - Dataframe has some multiindexing in the columns
         elif isinstance(data.columns, pd.MultiIndex):
-            df.stack(level=[0, 1]).reset_index().rename(columns=mapping)
+            data.stack(level=[0, 1]).reset_index().rename(columns=mapping)
             return QuantamentalDataFrame(data)
 
         # Case 3 - Dataframe has some multiindexing in the indexes
         elif isinstance(data.index, pd.MultiIndex):
-            df.stack(level=0).reset_index().rename(columns=mapping)
+            data.stack(level=0).reset_index().rename(columns=mapping)
             return QuantamentalDataFrame(data)
         
         # Case 4 - Need to split into xcat and cid
