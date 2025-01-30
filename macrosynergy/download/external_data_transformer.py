@@ -1,39 +1,73 @@
+from abc import ABC, abstractmethod
 import pandas as pd
 
-class ExternalDataTransformer(object):
-    def __init__(self):
+from macrosynergy.management.types.qdf.classes import QuantamentalDataFrame
+
+
+class BaseTransformer(ABC):
+    @abstractmethod
+    def transform(self, data, **kwargs):
         pass
 
-    def transform(self, data: object, mapping) -> pd.DataFrame:
-        """
-        Transform the external data to the desired format.
-        """
-        raise NotImplementedError("Subclasses must implement this method.")
-    
 
-class DataframeTransformer(ExternalDataTransformer):
-    def __init__(self):
-        super().__init__()
-
-    def transform(self, df: pd.DataFrame, mapping) -> pd.DataFrame:
-        """
-        Transform the external data to the desired format.
-        """
-        if not isinstance(df, pd.DataFrame):
-            raise TypeError("df must be a pandas DataFrame")
+class DataFrameTransformer(BaseTransformer):
+    def transform(self, data, mapping):
+        if data.empty:
+            raise ValueError("DataFrame is empty.")
         if not isinstance(mapping, dict):
-            raise TypeError("mapping must be a dictionary")
-        if df.empty:
-            raise ValueError("df cannot be empty")
+            raise TypeError("Mapping must be a dictionary.")
+
+        # Case 1 - Mapping is a dictionary of columns to rename.
+        if set(mapping.keys()).issubset(data.columns):
+            data = data.rename(columns=mapping).drop(
+                columns=set(data.columns) - set(mapping.keys())
+            )
+            return QuantamentalDataFrame(data)
+
+        # Case 2 - Dataframe has some multiindexing in the columns
+        elif isinstance(data.columns, pd.MultiIndex):
+            df.stack(level=[0, 1]).reset_index().rename(columns=mapping)
+            return QuantamentalDataFrame(data)
+
+        # Case 3 - Dataframe has some multiindexing in the indexes
+        elif isinstance(data.index, pd.MultiIndex):
+            df.stack(level=0).reset_index().rename(columns=mapping)
+            return QuantamentalDataFrame(data)
         
-        # Possible dataframe inputs
-        # 1. df with columns that need to be renamed
-        # 2. df with columns that need to be dropped
-        # 3. df with columns that need to be renamed and dropped
-        # 4. df where columns and rows need to be pivoted
-        # 5. df where columns and rows need to be pivoted and renamed
-        # 6. df where columns and rows need to be pivoted, renamed and dropped
+        # Case 4 - Need to split into xcat and cid
+        else:
+            raise ValueError(
+                "Mapping keys must be a subset of the DataFrame columns and names" 
+                " of indexes/multiindexes."
+            )
 
-        # For cid and xcat columns, possibility of having to split by a character after
-        # transformation of dataframe
 
+
+def transform_to_qdf(data, **kwargs):
+    if isinstance(data, pd.DataFrame):
+        return DataFrameTransformer().transform(
+            data, mapping=kwargs.get("mapping", {})
+        )
+    else:
+        raise TypeError(
+            "data format has not been implemented, please create a new transformer "
+            "class that inherits from BaseTransformer and use the transform method "
+            "directly."
+        )
+
+
+if __name__ == "__main__":
+    df = pd.DataFrame(
+        {
+            "a": [1, 2, 3],
+            "b": ["s", "g", "q"],
+            "c": ["baap", "boop", "beep"],
+            "date": ["2021-01-01", "2021-01-02", "2021-01-03"],
+        }
+    )
+
+    new_df = transform_to_qdf(
+        df, mapping={"a": "value", "b": "cid", "c": "xcat", "date": "real_date"}
+    )
+
+    print(new_df)
