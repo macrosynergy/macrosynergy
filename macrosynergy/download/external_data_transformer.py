@@ -19,20 +19,20 @@ class DataFrameTransformer(BaseTransformer):
 
         # Case 1 - Mapping is a dictionary of columns to rename.
         if set(mapping.keys()).issubset(data.columns):
-            data = data.rename(columns=mapping).drop(
+            df = data.rename(columns=mapping).drop(
                 columns=set(data.columns) - set(mapping.keys())
             )
-            return QuantamentalDataFrame(data)
+            return QuantamentalDataFrame(df)
 
         # Case 2 - Dataframe has some multiindexing in the columns
         elif isinstance(data.columns, pd.MultiIndex):
-            data.stack(level=[0, 1]).reset_index().rename(columns=mapping)
-            return QuantamentalDataFrame(data)
+            df = data.stack(level=[0, 1]).reset_index().rename(columns=mapping)
+            return QuantamentalDataFrame(df)
 
         # Case 3 - Dataframe has some multiindexing in the indexes
         elif isinstance(data.index, pd.MultiIndex):
-            data.stack(level=0).reset_index().rename(columns=mapping)
-            return QuantamentalDataFrame(data)
+            df = data.stack(level=0).reset_index().rename(columns=mapping)
+            return QuantamentalDataFrame(df)
         
         # Case 4 - Need to split into xcat and cid
         else:
