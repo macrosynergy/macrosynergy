@@ -140,8 +140,8 @@ class NaivePnL:
             add a constant to the signal after initial transformation. This allows to
             give PnLs a long or short bias relative to the signal score. Default is 0.
         sig_mult : float
-            multiply a constant to the signal after initial tranformation. Default
-            is 1.
+            multiply a constant to the signal after initial tranformation and after
+            sig_add has been added too. Default is 1.
         sig_neg : str
             if True the PnL is based on the negative value of the transformed signal.
             Default is False.
