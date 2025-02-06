@@ -36,7 +36,7 @@ class TestAll(unittest.TestCase):
         )
 
         df_cids.loc["AUD"] = ["2000-01-01", "2020-12-31", 0.1, 1]
-        df_cids.loc["CAD"] = ["2001-01-01", "2020-11-30", 0, 1]
+        df_cids.loc["CAD"] = ["2000-01-01", "2020-11-30", 0, 1]
         df_cids.loc["GBP"] = ["2002-01-01", "2020-11-30", 0, 2]
         df_cids.loc["NZD"] = ["2002-01-01", "2020-09-30", -0.1, 2]
         df_cids.loc["USD"] = [date, "2020-10-30", 0.2, 2]
@@ -53,10 +53,10 @@ class TestAll(unittest.TestCase):
             ],
         )
 
-        df_xcats.loc["XR"] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-        df_xcats.loc["CRY"] = ["2011-01-01", "2020-12-31", 1, 2, 0.95, 1]
-        df_xcats.loc["GROWTH"] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 1]
-        df_xcats.loc["INFL"] = ["2011-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
+        df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+        df_xcats.loc["CRY"] = ["2001-01-01", "2020-12-31", 1, 2, 0.95, 1]
+        df_xcats.loc["GROWTH"] = ["2000-01-01", "2020-10-30", 1, 2, 0.9, 1]
+        df_xcats.loc["INFL"] = ["2000-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
 
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.dfd: pd.DataFrame = dfd
@@ -485,16 +485,41 @@ class TestAll(unittest.TestCase):
             df=self.dfd,
             xcats=self.xcats,
             cids=self.cids,
-            start="2010-01-01",
+            start="2000-01-01",
             end="2020-12-31",
             min_cids=1,
+            postfix="I",
         )
 
         expected_XR_blacklist = {
-            "CAD": (pd.Timestamp("2020-12-01"), pd.Timestamp("2020-12-31")),
-            "GBP": (pd.Timestamp("2020-12-01"), pd.Timestamp("2020-12-31")),
-            "NZD": (pd.Timestamp("2020-10-01"), pd.Timestamp("2020-12-31")),
-            "USD": (pd.Timestamp("2020-11-02"), pd.Timestamp("2020-12-31")),
+            "CAD": (
+                pd.Timestamp("2020-12-01 00:00:00"),
+                pd.Timestamp("2020-12-31 00:00:00"),
+            ),
+            "GBP_1": (
+                pd.Timestamp("2000-01-03 00:00:00"),
+                pd.Timestamp("2001-12-31 00:00:00"),
+            ),
+            "GBP_2": (
+                pd.Timestamp("2020-12-01 00:00:00"),
+                pd.Timestamp("2020-12-31 00:00:00"),
+            ),
+            "NZD_1": (
+                pd.Timestamp("2000-01-03 00:00:00"),
+                pd.Timestamp("2001-12-31 00:00:00"),
+            ),
+            "NZD_2": (
+                pd.Timestamp("2020-10-01 00:00:00"),
+                pd.Timestamp("2020-12-31 00:00:00"),
+            ),
+            "USD_1": (
+                pd.Timestamp("2000-01-03 00:00:00"),
+                pd.Timestamp("2001-12-31 00:00:00"),
+            ),
+            "USD_2": (
+                pd.Timestamp("2020-11-02 00:00:00"),
+                pd.Timestamp("2020-12-31 00:00:00"),
+            ),
         }
 
         with pytest.warns(
@@ -506,6 +531,7 @@ class TestAll(unittest.TestCase):
         _ = panel.impute()
 
         blacklist = panel.return_blacklist("XR")
+        print(blacklist)
 
         # Check that the blacklist is a dictionary
 
