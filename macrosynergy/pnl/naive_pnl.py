@@ -297,9 +297,20 @@ class NaivePnL:
         )
 
         dfw["sig"] = np.squeeze(sig_series.to_numpy())
-        if entry_barrier is not None and exit_barrier is not None:
+
+        # Code to do history dependent binary pnl
+        if entry_barrier is not None and exit_barrier is not None and sig_op == "binary":
             dfw.rename({"sig": "prev_sig"}, axis=1, inplace=True)
-            dfw["psig"] = dfw.apply(self._apply_barriers, axis=1, sig=sig, entry_barrier=entry_barrier, exit_barrier=exit_barrier)
+            dfw["psig"] = dfw.apply(
+                self._apply_barriers, 
+                axis=1, 
+                sig=sig, 
+                entry_barrier=entry_barrier, 
+                exit_barrier=exit_barrier
+            )
+            dfw["psig"] = dfw.groupby("cid", observed=True)["psig"].shift(1)
+
+            dfw = dfw.sort_values(["cid", "real_date"])
             sig_series = self.rebalancing(
                 dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
             )
@@ -1591,7 +1602,7 @@ if __name__ == "__main__":
     pnl.make_pnl(
         sig="GROWTH",
         sig_op="binary",
-        entry_barrier=1.0,
+        entry_barrier=0.0000001,
         exit_barrier=0.0,
         # sig_neg=True,
         # sig_add=0.5,
