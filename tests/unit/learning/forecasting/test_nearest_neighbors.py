@@ -54,7 +54,7 @@ class TestKNeighborsClassifier(unittest.TestCase):
         self.X_nan["nan_col"] = np.nan
         self.X_ones = self.X.copy()
         self.X_ones["intercept"] = 1
-        self.y = df["XR"]
+        self.y = np.sign(df["XR"])
         self.y_nan = self.y.copy()
         self.y_nan.iloc[0] = np.nan
 
@@ -77,19 +77,116 @@ class TestKNeighborsClassifier(unittest.TestCase):
         pass 
 
     def test_types_fit(self):
-        pass 
+        # X - when a dataframe
+        knn = KNNClassifier()
+        self.assertRaises(TypeError, knn.fit, X=1, y=self.y)
+        self.assertRaises(TypeError, knn.fit, X="X", y=self.y)
+        self.assertRaises(ValueError, knn.fit, X=self.X.reset_index(), y=self.y)
+        self.assertRaises(ValueError, knn.fit, X=self.X_nan, y=self.y)
+        self.assertRaises(ValueError, knn.fit, X=self.X_nan.values, y=self.y)
+        # X - when a numpy array
+        self.assertRaises(ValueError, knn.fit, X=self.X.reset_index().values, y=self.y)
+        self.assertRaises(
+            ValueError, knn.fit, X=self.X_nan.reset_index(drop=True).values, y=self.y
+        )
+        # y - when a series
+        self.assertRaises(TypeError, knn.fit, X=self.X, y=1)
+        self.assertRaises(TypeError, knn.fit, X=self.X, y="y")
+        self.assertRaises(TypeError, knn.fit, X=self.X, y = pd.DataFrame(self.y))
+        self.assertRaises(ValueError, knn.fit, X=self.X, y=self.y.reset_index()["cid"])
+        self.assertRaises(ValueError, knn.fit, X=self.X, y=self.y_nan)
+        self.assertRaises(ValueError, knn.fit, X=self.X, y=self.y_nan.values)
+        # y - when a numpy array
+        self.assertRaises(
+            ValueError, knn.fit, X=self.X.values, y=np.zeros((len(self.X), 2))
+        )
+        self.assertRaises(
+            ValueError, knn.fit, X=self.X.values, y=np.array([np.nan] * len(self.X))
+        )
+
+        self.assertRaises(ValueError, knn.fit, X=self.X, y=self.y[:-1])
 
     def test_valid_fit(self):
         pass 
 
     def test_types_predict(self):
-        pass
+        knn = KNNClassifier().fit(self.X, self.y)
+        # X - when a dataframe
+        self.assertRaises(TypeError, knn.predict, X=1)
+        self.assertRaises(TypeError, knn.predict, X="X")
+        self.assertRaises(ValueError, knn.predict, X=self.X.iloc[:, :-1])
+        self.assertRaises(ValueError, knn.predict, X=self.X_nan.values)
+        self.assertRaises(
+            ValueError,
+            knn.predict,
+            X=pd.DataFrame(
+                data = np.array([["hello"] * self.X.shape[1]] * self.X.shape[0]),
+                columns = self.X.columns,
+                index = self.X.index,
+            ),
+        )
+        self.assertRaises(
+            ValueError,
+            knn.predict,
+            X=pd.DataFrame(
+                data = np.array([[np.nan] * self.X.shape[1]] * self.X.shape[0]),
+                columns = self.X.columns,
+                index = self.X.index,
+            ),
+        )
+        # X - when a numpy array
+        self.assertRaises(ValueError, knn.predict, X=np.expand_dims(np.array(self.X), 0))
+        self.assertRaises(
+            ValueError,
+            knn.predict,
+            X=np.array([["hello"] * self.X.shape[1]] * self.X.shape[0])
+        )
+        self.assertRaises(
+            ValueError,
+            knn.predict,
+            X=np.array([[np.nan] * self.X.shape[1]] * self.X.shape[0])
+        )
 
     def test_valid_predict(self):
         pass
 
     def test_types_predict_proba(self):
-        pass
+        knn = KNNClassifier().fit(self.X, self.y)
+        # X - when a dataframe
+        self.assertRaises(TypeError, knn.predict_proba, X=1)
+        self.assertRaises(TypeError, knn.predict_proba, X="X")
+        self.assertRaises(ValueError, knn.predict_proba, X=self.X.iloc[:, :-1])
+        self.assertRaises(ValueError, knn.predict_proba, X=self.X_nan.values)
+        self.assertRaises(
+            ValueError,
+            knn.predict_proba,
+            X=pd.DataFrame(
+                data = np.array([["hello"] * self.X.shape[1]] * self.X.shape[0]),
+                columns = self.X.columns,
+                index = self.X.index,
+            ),
+        )
+        self.assertRaises(
+            ValueError,
+            knn.predict_proba,
+            X=pd.DataFrame(
+                data = np.array([[np.nan] * self.X.shape[1]] * self.X.shape[0]),
+                columns = self.X.columns,
+                index = self.X.index,
+            ),
+        )
+        # X - when a numpy array
+        self.assertRaises(ValueError, knn.predict_proba, X=np.expand_dims(np.array(self.X), 0))
+        self.assertRaises(
+            ValueError,
+            knn.predict_proba,
+            X=np.array([["hello"] * self.X.shape[1]] * self.X.shape[0])
+        )
+        self.assertRaises(
+            ValueError,
+            knn.predict_proba,
+            X=np.array([[np.nan] * self.X.shape[1]] * self.X.shape[0])
+        )
 
     def test_valid_predict_proba(self):
         pass
