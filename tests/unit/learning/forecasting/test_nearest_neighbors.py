@@ -128,8 +128,26 @@ class TestKNeighborsClassifier(unittest.TestCase):
 
         self.assertRaises(ValueError, knn.fit, X=self.X, y=self.y[:-1])
 
-    def test_valid_fit(self):
-        pass
+    @parameterized.expand(["uniform", "distance"])
+    def test_valid_fit(self, weights):
+        """
+        Test that the fit method works under different scenarios. The neighbors will be checked
+        against the sklearn implementation.
+        """
+        # Default initialization
+        knn_my = KNNClassifier(weights=weights).fit(self.X, self.y)
+        knn_theirs = KNeighborsClassifier(n_neighbors = int(np.sqrt(len(self.X))), weights = weights).fit(self.X, self.y)
+        self.assertTrue(np.allclose(knn_my.knn_.kneighbors(self.X)[0], knn_theirs.kneighbors(self.X)[0]))
+
+        # Integer n_neighbors
+        knn_my = KNNClassifier(n_neighbors=5, weights=weights).fit(self.X, self.y)
+        knn_theirs = KNeighborsClassifier(n_neighbors = 5, weights = weights).fit(self.X, self.y)
+        self.assertTrue(np.allclose(knn_my.knn_.kneighbors(self.X)[0], knn_theirs.kneighbors(self.X)[0]))
+
+        # Floating point n_neighbors
+        knn_my = KNNClassifier(n_neighbors=0.5, weights=weights).fit(self.X, self.y)
+        knn_theirs = KNeighborsClassifier(n_neighbors = int(0.5 * len(self.X)), weights = weights).fit(self.X, self.y)
+        self.assertTrue(np.allclose(knn_my.knn_.kneighbors(self.X)[0], knn_theirs.kneighbors(self.X)[0]))
 
     def test_types_predict(self):
         knn = KNNClassifier().fit(self.X, self.y)
@@ -169,8 +187,24 @@ class TestKNeighborsClassifier(unittest.TestCase):
             X=np.array([[np.nan] * self.X.shape[1]] * self.X.shape[0])
         )
 
-    def test_valid_predict(self):
-        pass
+    @parameterized.expand(["uniform", "distance"])
+    def test_valid_predict(self, weights):
+        """
+        Test that the predict method works under different initialization cases. 
+        The predictions will be checked against the sklearn implementation.
+        """
+        # Default initialization
+        knn_my = KNNClassifier(weights = weights).fit(self.X, self.y)
+        knn_theirs = KNeighborsClassifier(n_neighbors = int(np.sqrt(len(self.X))), weights = weights).fit(self.X, self.y)
+        self.assertTrue(np.allclose(knn_my.predict(self.X), knn_theirs.predict(self.X)))
+        # Integer n_neighbors
+        knn_my = KNNClassifier(n_neighbors=5, weights=weights).fit(self.X, self.y)
+        knn_theirs = KNeighborsClassifier(n_neighbors = 5, weights = weights).fit(self.X, self.y)
+        self.assertTrue(np.allclose(knn_my.predict(self.X), knn_theirs.predict(self.X)))
+        # Floating point n_neighbors
+        knn_my = KNNClassifier(n_neighbors=0.5, weights=weights).fit(self.X, self.y)
+        knn_theirs = KNeighborsClassifier(n_neighbors = int(0.5 * len(self.X)), weights = weights).fit(self.X, self.y)
+        self.assertTrue(np.allclose(knn_my.predict(self.X), knn_theirs.predict(self.X)))
 
     def test_types_predict_proba(self):
         knn = KNNClassifier().fit(self.X, self.y)
