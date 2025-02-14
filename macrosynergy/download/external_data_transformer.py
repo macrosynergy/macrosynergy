@@ -27,12 +27,16 @@ class DataFrameTransformer(BaseTransformer):
         # Case 2 - Dataframe has some multiindexing in the columns
         elif isinstance(data.columns, pd.MultiIndex):
             df = data.stack(level=[0, 1]).reset_index()
+            if "value" not in mapping.values():
+                mapping[0] = "value"
             df.rename(columns=mapping, inplace=True)
             return QuantamentalDataFrame(df)
 
         # Case 3 - Dataframe has some multiindexing in the indexes
         elif isinstance(data.index, pd.MultiIndex):
             df = data.stack(level=0).reset_index()
+            if "value" not in mapping.values():
+                mapping[0] = "value"
             df.rename(columns=mapping, inplace=True)
             return QuantamentalDataFrame(df)
         
