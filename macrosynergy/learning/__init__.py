@@ -45,6 +45,7 @@ from .forecasting import (
     LADRegressionSystem,
     RidgeRegressionSystem,
     CorrelationVolatilitySystem,
+    KNNClassifier,
 )
 
 from .random_effects import RandomEffects
@@ -85,6 +86,7 @@ __all__ = [
     # forecasting
     "NaiveRegressor",
     "LADRegressor",
+    "KNNClassifier",
     "SignWeightedLADRegressor",
     "TimeWeightedLADRegressor",
     "SignWeightedLinearRegression",
