@@ -78,21 +78,25 @@ class TestKNeighborsClassifier(unittest.TestCase):
         knn = KNNClassifier()
         self.assertEqual(knn.n_neighbors, "sqrt")
         self.assertEqual(knn.weights, "uniform")
+        self.assertEqual(knn.knn_, None)
         # Integer n_neighbors
         knn = KNNClassifier(n_neighbors=1, weights="distance")
         self.assertEqual(knn.n_neighbors, 1)
         self.assertEqual(knn.weights, "distance")
+        self.assertEqual(knn.knn_, None)
         knn = KNNClassifier(n_neighbors=1, weights="uniform")
         self.assertEqual(knn.n_neighbors, 1)
         self.assertEqual(knn.weights, "uniform")
+        self.assertEqual(knn.knn_, None)
         # Float n_neighbors
         knn = KNNClassifier(n_neighbors=0.5, weights="distance")
         self.assertEqual(knn.n_neighbors, 0.5)
         self.assertEqual(knn.weights, "distance")
+        self.assertEqual(knn.knn_, None)
         knn = KNNClassifier(n_neighbors=0.5, weights="uniform")
         self.assertEqual(knn.n_neighbors, 0.5)
         self.assertEqual(knn.weights, "uniform")
-
+        self.assertEqual(knn.knn_, None)
 
     def test_types_fit(self):
         # X - when a dataframe
@@ -125,7 +129,7 @@ class TestKNeighborsClassifier(unittest.TestCase):
         self.assertRaises(ValueError, knn.fit, X=self.X, y=self.y[:-1])
 
     def test_valid_fit(self):
-        pass 
+        pass
 
     def test_types_predict(self):
         knn = KNNClassifier().fit(self.X, self.y)
