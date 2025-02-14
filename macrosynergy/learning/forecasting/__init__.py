@@ -20,7 +20,7 @@ from .naive_predictors import (
     NaiveRegressor,
 )
 
-from .nearest_neighbors import KNNClassifier
+from .neighbors.nearest_neighbors import KNNClassifier
 
 __all__ = [
     "LADRegressor",
