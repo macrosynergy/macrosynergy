@@ -244,5 +244,21 @@ class TestKNeighborsClassifier(unittest.TestCase):
             X=np.array([[np.nan] * self.X.shape[1]] * self.X.shape[0])
         )
 
-    def test_valid_predict_proba(self):
-        pass
+    @parameterized.expand(["uniform", "distance"])
+    def test_valid_predict_proba(self, weights):
+        """
+        Test that the predict method works under different initialization cases. 
+        The predictions will be checked against the sklearn implementation.
+        """
+        # Default initialization
+        knn_my = KNNClassifier(weights = weights).fit(self.X, self.y)
+        knn_theirs = KNeighborsClassifier(n_neighbors = int(np.sqrt(len(self.X))), weights = weights).fit(self.X, self.y)
+        self.assertTrue(np.allclose(knn_my.predict_proba(self.X), knn_theirs.predict_proba(self.X)))
+        # Integer n_neighbors
+        knn_my = KNNClassifier(n_neighbors=5, weights=weights).fit(self.X, self.y)
+        knn_theirs = KNeighborsClassifier(n_neighbors = 5, weights = weights).fit(self.X, self.y)
+        self.assertTrue(np.allclose(knn_my.predict_proba(self.X), knn_theirs.predict_proba(self.X)))
+        # Floating point n_neighbors
+        knn_my = KNNClassifier(n_neighbors=0.5, weights=weights).fit(self.X, self.y)
+        knn_theirs = KNeighborsClassifier(n_neighbors = int(0.5 * len(self.X)), weights = weights).fit(self.X, self.y)
+        self.assertTrue(np.allclose(knn_my.predict_proba(self.X), knn_theirs.predict_proba(self.X)))
