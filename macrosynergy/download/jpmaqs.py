@@ -143,10 +143,13 @@ def check_attributes_in_sync(ts_list) -> bool:
             last_valid_item = time_series[0]
 
         expression = attributes[0].get("expression")
+        if not "JPMAQS" in expression:
+            continue
         if not expression:
             last_valid_item = ["No data", 0]
         else:
-            _, ticker, _ = deconstruct_expression(expression)
+            cid, xcat, _ = deconstruct_expression(expression)
+            ticker = cid + "_" + xcat
 
         last_value_date = last_valid_item[0]
         if ticker not in expressions_last_value_dict:
@@ -1040,7 +1043,6 @@ class JPMaQSDownload(DataQueryInterface):
         if not check_attributes_in_sync(ts_list):
             expressions = [ts["attributes"][0]["expression"] for ts in ts_list]
             error_str = f"Attributes for {expressions} are not in sync."
-            self.msg_errors.append(error_str)
             raise DataOutOfSyncError(error_str)
 
         for its, ts in enumerate(ts_list):
@@ -1590,9 +1592,9 @@ if __name__ == "__main__":
         client_secret=os.getenv("DQ_CLIENT_SECRET"),
     ) as jpmaqs:
         data = jpmaqs.download(
-            cids=cids,
             xcats=xcats,
-            metrics="all",
+            cids=cids,
+            metrics="value",
             start_date=start_date,
             end_date=end_date,
             show_progress=True,

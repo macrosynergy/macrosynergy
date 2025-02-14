@@ -10,6 +10,7 @@ def view_panel_dates(
     df: pd.DataFrame,
     size: Tuple[float, float] = None,
     use_last_businessday: bool = True,
+    header: str = None,
 ):
     """
     Visualize panel dates with color codes.
@@ -43,11 +44,12 @@ def view_panel_dates(
         df = df.astype(float)
         # Ideally the data type should be int, but Pandas cannot represent NaN as int.
         # -- https://pandas.pydata.org/pandas-docs/stable/user_guide/gotchas.html#support-for-integer-na
-
-        header = f"Missing days up to {maxdate.strftime('%Y-%m-%d')}"
+        if header is None:
+            header = f"Missing days up to {maxdate.strftime('%Y-%m-%d')}"
 
     else:
-        header = "Start years of quantamental indicators."
+        if header is None:
+            header = "Start years of quantamental indicators."
 
     if size is None:
         size = (max(df.shape[0] / 2, 18), max(1, df.shape[1] / 2))

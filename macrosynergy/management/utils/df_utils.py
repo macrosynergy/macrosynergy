@@ -566,11 +566,11 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
 
     error_message = (
         "The two Quantamental DataFrames must share at least "
-        "four columns including than 'real_date', 'cid', and 'xcat'."
+        "four columns including 'real_date', 'cid', and 'xcat'."
     )
 
-    all_cols = df_cols.union(df_add_cols)
-    if all_cols != df_cols and all_cols != df_add_cols:
+    all_cols_set = df_cols.union(df_add_cols)
+    if not len(all_cols_set - set(QuantamentalDataFrame.IndexCols)):
         raise ValueError(error_message)
 
     if not xcat_replace:

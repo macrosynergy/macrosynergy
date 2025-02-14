@@ -27,6 +27,7 @@ from .model_evaluation import (
     regression_balanced_accuracy,
     correlation_coefficient,
     create_panel_metric,
+    regression_mcc,
 )
 from .sequential import SignalOptimizer, BetaEstimator
 
@@ -44,6 +45,7 @@ from .forecasting import (
     LADRegressionSystem,
     RidgeRegressionSystem,
     CorrelationVolatilitySystem,
+    KNNClassifier,
 )
 
 from .random_effects import RandomEffects
@@ -78,11 +80,13 @@ __all__ = [
     "regression_balanced_accuracy",
     "create_panel_metric",
     "correlation_coefficient",
+    "regression_mcc",
     # signal_optimizer
     "SignalOptimizer",
     # forecasting
     "NaiveRegressor",
     "LADRegressor",
+    "KNNClassifier",
     "SignWeightedLADRegressor",
     "TimeWeightedLADRegressor",
     "SignWeightedLinearRegression",

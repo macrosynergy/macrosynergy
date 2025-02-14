@@ -18,6 +18,7 @@ from macrosynergy.learning import (
     sortino_ratio,
     correlation_coefficient,
     create_panel_metric,
+    regression_mcc,
 )
 
 from parameterized import parameterized

@@ -6,6 +6,7 @@ from .metrics import (
     sortino_ratio,
     correlation_coefficient,
     create_panel_metric,
+    regression_mcc
 )
 
 from .scorers import (
@@ -21,4 +22,5 @@ __all__ = [
     "sortino_ratio",
     "correlation_coefficient",
     "create_panel_metric",
+    "regression_mcc"
 ]

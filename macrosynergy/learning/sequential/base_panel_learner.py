@@ -368,8 +368,10 @@ class BasePanelLearner(ABC):
         # by the lag applied.
         if self.lag != 0:
             locs: np.ndarray = (
-                np.searchsorted(self.unique_date_levels, sorted_test_date_levels, side="left")
-                - self.lag
+                np.searchsorted(
+                    self.unique_date_levels, sorted_test_date_levels, side="left"
+                )
+                - 1
             )
             adj_test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
                 [self.unique_date_levels[i] if i >= 0 else pd.NaT for i in locs]
@@ -877,6 +879,8 @@ class BasePanelLearner(ABC):
         title=None,
         cap=5,
         figsize=(12, 8),
+        title_fontsize=None,
+        tick_fontsize=None,
     ):
         """
         Visualized optimal models used for signal calculation.
@@ -893,6 +897,10 @@ class BasePanelLearner(ABC):
             models are the 'cap' most frequently occurring in the pipeline.
         figsize : tuple, optional
             Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        title_fontsize : int, optional
+            Font size for the title. Default is None.
+        tick_fontsize : int, optional
+            Font size for the ticks. Default is None.
 
         Notes
         -----
@@ -901,7 +909,14 @@ class BasePanelLearner(ABC):
         the model selection process.
         """
         # Checks
-        self._checks_models_heatmap(name=name, title=title, cap=cap, figsize=figsize)
+        self._checks_models_heatmap(
+            name=name,
+            title=title,
+            cap=cap,
+            figsize=figsize,
+            title_fontsize=title_fontsize,
+            tick_fontsize=tick_fontsize,
+        )
 
         # Get the chosen models for the specified pipeline to visualise selection.
         chosen_models = self.get_optimal_models(name=name).sort_values(by="real_date")
@@ -937,7 +952,10 @@ class BasePanelLearner(ABC):
             sns.heatmap(binary_matrix, cmap="binary_r", cbar=False)
         else:
             sns.heatmap(binary_matrix, cmap="binary", cbar=False)
-        plt.title(title)
+        plt.title(title, fontsize=title_fontsize)
+
+        plt.xticks(fontsize=tick_fontsize)  # X-axis tick font size
+        plt.yticks(fontsize=tick_fontsize)
         plt.show()
 
     def _check_init(
@@ -1000,7 +1018,7 @@ class BasePanelLearner(ABC):
             raise TypeError("All elements in xcats must be strings.")
         difference_xcats = set(xcats) - set(df["xcat"].unique())
         if difference_xcats != set():
-                raise ValueError(f"{str(difference_xcats)} not in the dataframe.")
+            raise ValueError(f"{str(difference_xcats)} not in the dataframe.")
 
         # cids checks
         if cids is not None:
@@ -1389,6 +1407,8 @@ class BasePanelLearner(ABC):
         title=None,
         cap=5,
         figsize=(12, 8),
+        title_fontsize=None,
+        tick_fontsize=None,
     ):
         """
         Checks for the models_heatmap method.
@@ -1404,6 +1424,10 @@ class BasePanelLearner(ABC):
             The chosen models are the 'cap' most frequently occurring in the process.
         figsize : tuple, optional
             Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        title_fontsize : int, optional
+            Font size for the title. Default is None.
+        tick_fontsize : int, optional
+            Font size for the ticks. Default is None.
         """
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
@@ -1436,6 +1460,18 @@ class BasePanelLearner(ABC):
                     "The elements of the figsize tuple must be floats or ints."
                 )
 
+        if title_fontsize is not None:
+            if not isinstance(title_fontsize, int):
+                raise TypeError("The title_fontsize argument must be an integer.")
+            if title_fontsize < 0:
+                raise ValueError("The title_fontsize argument must be non-negative.")
+
+        if tick_fontsize is not None:
+            if not isinstance(tick_fontsize, int):
+                raise TypeError("The tick_fontsize argument must be an integer.")
+            if tick_fontsize < 0:
+                raise ValueError("The tick_fontsize argument must be non-negative.")
+
     def _get_base_splits(self, inner_splitters):
         """Get the initial number of splits for each splitter."""
         base_splits = {}
@@ -1461,7 +1497,7 @@ class BasePanelLearner(ABC):
     def _remove_results(self, conditions):
         """
         Remove rows from results DataFrames based on conditions.
-        
+
         Parameters
         ----------
         conditions : list of tuples

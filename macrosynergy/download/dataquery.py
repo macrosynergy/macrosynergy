@@ -126,6 +126,7 @@ def validate_response(
 
         raise InvalidResponseError(error_str + f"Error parsing response as JSON: {exc}")
 
+
 def request_wrapper(
     url: str,
     headers: Optional[Dict] = None,
@@ -215,6 +216,7 @@ def request_wrapper(
                 prepared_request,
                 proxies=proxy,
                 cert=cert,
+                timeout=10
             ) as response:
                 if isinstance(response, requests.Response):
                     return validate_response(response=response, user_id=user_id)
@@ -1099,10 +1101,11 @@ class DataQueryInterface(object):
             print("Retrying failed downloads. Retry count:", retry_counter)
 
         if retry_counter > HL_RETRY_COUNT:
-            raise DownloadError(
-                f"Failed {retry_counter} times to download data all requested data.\n"
-                f"No longer retrying."
-            )
+            error_str = (f"Failed {retry_counter} times to download data all requested data.\n"
+                f"No longer retrying.")
+            if len(self.msg_errors) > 0:
+                error_str += "\n".join(self.msg_errors)
+            raise DownloadError(error_str)
 
         expr_batches: List[List[str]] = [
             expressions[i : i + self.batch_size]
@@ -1324,12 +1327,7 @@ if __name__ == "__main__":
     client_id: str = os.getenv("DQ_CLIENT_ID")
     client_secret: str = os.getenv("DQ_CLIENT_SECRET")
 
-    expressions = [
-        "DB(FXO,IV,USD,CAD,7D,25P,VOL)",
-        "DB(GFI,CAD,HR,CAN_GOVT,05Y,-1,,PVBP)",
-        "DB(MTE,usd/sofr/daily/1D/am_duration)",
-        "DB(EDG,D:DJESMI$$,PI)"
-    ]
+    expressions = ["DB(CFX,GBP,)"]
 
     with DataQueryInterface(
         client_id=client_id,

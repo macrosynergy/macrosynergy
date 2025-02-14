@@ -111,6 +111,7 @@ class NaivePnL:
         sig: str,
         sig_op: str = "zn_score_pan",
         sig_add: float = 0,
+        sig_mult: float = 1,
         sig_neg: bool = False,
         pnl_name: Optional[str] = None,
         rebal_freq: str = "daily",
@@ -138,6 +139,9 @@ class NaivePnL:
         sig_add : float
             add a constant to the signal after initial transformation. This allows to
             give PnLs a long or short bias relative to the signal score. Default is 0.
+        sig_mult : float
+            multiply a constant to the signal after initial tranformation and after
+            sig_add has been added too. Default is 1.
         sig_neg : str
             if True the PnL is based on the negative value of the transformed signal.
             Default is False.
@@ -208,6 +212,7 @@ class NaivePnL:
                 "sig_add",
                 (Number),
             ),  # testing for number instead of (float, int)
+            (sig_mult, "sig_mult", (Number)),
             (sig_neg, "sig_neg", bool),
             (pnl_name, "pnl_name", (str, type(None))),
             (rebal_freq, "rebal_freq", str),
@@ -275,6 +280,7 @@ class NaivePnL:
             neg = ""
 
         dfw["psig"] += sig_add
+        dfw["psig"] *= sig_mult
 
         self._winsorize(df=dfw["psig"], thresh=thresh)
 
@@ -667,9 +673,11 @@ class NaivePnL:
         same_y: bool = True,
         title: str = "Cumulative Naive PnL",
         title_fontsize: int = 20,
+        tick_fontsize: int = 12,
         xcat_labels: Union[List[str], dict] = None,
         xlab: str = "",
         ylab: str = "% of risk capital, no compounding",
+        label_fontsize: int = 12,
         share_axis_labels: bool = True,
         figsize: Tuple = (12, 7),
         aspect: float = 1.7,
@@ -677,6 +685,7 @@ class NaivePnL:
         label_adj: float = 0.05,
         title_adj: float = 0.95,
         y_label_adj: float = 0.95,
+        legend_fontsize: int = None,
     ) -> None:
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per cross
@@ -875,9 +884,11 @@ class NaivePnL:
             plt.legend(
                 labels=labels,
                 title=legend_title,
+                title_fontsize=legend_fontsize,
+                fontsize=legend_fontsize
             )
-            plt.xlabel(xlab)
-            plt.ylabel(ylab)
+            plt.xlabel(xlab, fontsize=label_fontsize)
+            plt.ylabel(ylab, fontsize=label_fontsize)
 
         if no_cids == 1:
             if facet:
@@ -885,6 +896,7 @@ class NaivePnL:
         else:
             labels = labels[::-1]
 
+        fg.tick_params(axis='both', labelsize=tick_fontsize)
         plt.axhline(y=0, color="black", linestyle="--", lw=1)
         plt.show()
 
@@ -899,6 +911,7 @@ class NaivePnL:
         x_label: str = "",
         y_label: str = "",
         figsize: Optional[Tuple[float, float]] = None,
+        tick_fontsize: int = None,
     ):
         """
         Display heatmap of signals across times and cross-sections.
@@ -925,6 +938,8 @@ class NaivePnL:
             label for the y-axis. Default is None.
         figsize : (float, float)
             width and height in inches. Default is (14, number of cross sections).
+        tick_fontsize : int
+            font size for the ticks. Default is None.
 
 
         .. note::
@@ -981,6 +996,9 @@ class NaivePnL:
         ax.set(xlabel=x_label, ylabel=y_label)
         ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
         ax.set_title(title, fontsize=14)
+        
+        ax.tick_params(axis="x", labelsize=tick_fontsize)
+        ax.tick_params(axis="y", labelsize=tick_fontsize)
 
         plt.show()
 
@@ -1593,7 +1611,7 @@ if __name__ == "__main__":
         pnl_cats=["PNL_GROWTH_NEG", "Long"],
         title_fontsize=60,
         xlab="date",
-        ylab="%",
+        ylab="%"
     )
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"],

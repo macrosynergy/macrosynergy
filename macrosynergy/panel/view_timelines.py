@@ -4,7 +4,7 @@ Functionality to visualize time series data as line charts.
 
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 
 from macrosynergy.management.simulate import make_qdf
 
@@ -25,7 +25,8 @@ def view_timelines(
     same_y: bool = True,
     all_xticks: bool = False,
     xcat_grid: bool = False,
-    xcat_labels: Optional[List[str]] = None,
+    xcat_labels: Union[Optional[List[str]], Dict] = None,
+    cid_labels: Union[Optional[List[str]], Dict] = None,
     single_chart: bool = False,
     label_adj: float = 0.05,
     title: Optional[str] = None,
@@ -75,9 +76,12 @@ def view_timelines(
     xcat_grid : bool
         if True, shows a facet grid of line charts for each category for a single cross
         section. Default is False, only one cross section is allowed with this option.
-    xcat_labels : List[str]
+    xcat_labels : Union[Optional[List[str]], Dict]
         labels to be used for xcats. If not defined, the labels will be identical to
         extended categories.
+    cid_labels : Union[Optional[List[str]], Dict]
+        labels to be used for cids. If not defined, the labels will be identical to
+        cross-sections.
     single_chart : bool
         if True, all lines are plotted in a single chart.
     title : str
@@ -120,6 +124,7 @@ def view_timelines(
         all_xticks=all_xticks,
         xcat_grid=xcat_grid,
         xcat_labels=xcat_labels,
+        cid_labels=cid_labels,
         single_chart=single_chart,
         title=title,
         legend_ncol=legend_ncol,
