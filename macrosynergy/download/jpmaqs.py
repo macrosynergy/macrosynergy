@@ -1592,9 +1592,9 @@ if __name__ == "__main__":
         client_secret=os.getenv("DQ_CLIENT_SECRET"),
     ) as jpmaqs:
         data = jpmaqs.download(
-            cids=cids,
             xcats=xcats,
-            metrics="all",
+            cids=cids,
+            metrics="value",
             start_date=start_date,
             end_date=end_date,
             show_progress=True,
