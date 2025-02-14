@@ -123,10 +123,15 @@ class KNNClassifier(ClassifierMixin, BaseEstimator):
         """
         Check the parameters passed to the __init__ method.
         """
+        # n_neighbors
         if not isinstance(n_neighbors, (int, float, str)):
             raise TypeError("n_neighbors must be an int, float, or str")
         if isinstance(n_neighbors, str) and n_neighbors != "sqrt":
             raise ValueError('n_neighbors must be "sqrt" if it is a str')
+        if isinstance(n_neighbors, float) and ((n_neighbors <= 0) or (n_neighbors >= 1)):
+            raise ValueError("n_neighbors must be between 0 and 1 if it is a float")
+        if isinstance(n_neighbors, int) and n_neighbors <= 0:
+            raise ValueError("n_neighbors must be greater than 0 if it is an int")
         if not isinstance(weights, str):
             raise TypeError("weights must be a str")
         if weights not in ["uniform", "distance"]:
