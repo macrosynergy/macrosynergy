@@ -74,7 +74,25 @@ class TestKNeighborsClassifier(unittest.TestCase):
         self.assertRaises(ValueError, KNNClassifier, weights="hello")
         
     def test_valid_init(self):
-        pass 
+        # Test default values
+        knn = KNNClassifier()
+        self.assertEqual(knn.n_neighbors, "sqrt")
+        self.assertEqual(knn.weights, "uniform")
+        # Integer n_neighbors
+        knn = KNNClassifier(n_neighbors=1, weights="distance")
+        self.assertEqual(knn.n_neighbors, 1)
+        self.assertEqual(knn.weights, "distance")
+        knn = KNNClassifier(n_neighbors=1, weights="uniform")
+        self.assertEqual(knn.n_neighbors, 1)
+        self.assertEqual(knn.weights, "uniform")
+        # Float n_neighbors
+        knn = KNNClassifier(n_neighbors=0.5, weights="distance")
+        self.assertEqual(knn.n_neighbors, 0.5)
+        self.assertEqual(knn.weights, "distance")
+        knn = KNNClassifier(n_neighbors=0.5, weights="uniform")
+        self.assertEqual(knn.n_neighbors, 0.5)
+        self.assertEqual(knn.weights, "uniform")
+
 
     def test_types_fit(self):
         # X - when a dataframe
