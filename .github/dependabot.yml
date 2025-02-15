@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pip"
+    directory: "/tests"
+    schedule:
+      interval: "weekly"
+    ignore:
+      - dependency-name: "numpy"
+      - dependency-name: "pandas"
+      - dependency-name: "seaborn"
+      - dependency-name: "matplotlib"
+      - dependency-name: "statsmodels"
+      - dependency-name: "scikit-learn"
+      - dependency-name: "jinja2"
+      - dependency-name: "tqdm"
