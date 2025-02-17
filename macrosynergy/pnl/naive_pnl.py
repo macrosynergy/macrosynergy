@@ -111,6 +111,7 @@ class NaivePnL:
         sig: str,
         sig_op: str = "zn_score_pan",
         sig_add: float = 0,
+        sig_mult: float = 1,
         sig_neg: bool = False,
         pnl_name: Optional[str] = None,
         rebal_freq: str = "daily",
@@ -138,6 +139,9 @@ class NaivePnL:
         sig_add : float
             add a constant to the signal after initial transformation. This allows to
             give PnLs a long or short bias relative to the signal score. Default is 0.
+        sig_mult : float
+            multiply a constant to the signal after initial tranformation and after
+            sig_add has been added too. Default is 1.
         sig_neg : str
             if True the PnL is based on the negative value of the transformed signal.
             Default is False.
@@ -208,6 +212,7 @@ class NaivePnL:
                 "sig_add",
                 (Number),
             ),  # testing for number instead of (float, int)
+            (sig_mult, "sig_mult", (Number)),
             (sig_neg, "sig_neg", bool),
             (pnl_name, "pnl_name", (str, type(None))),
             (rebal_freq, "rebal_freq", str),
@@ -275,6 +280,7 @@ class NaivePnL:
             neg = ""
 
         dfw["psig"] += sig_add
+        dfw["psig"] *= sig_mult
 
         self._winsorize(df=dfw["psig"], thresh=thresh)
 
@@ -905,6 +911,7 @@ class NaivePnL:
         x_label: str = "",
         y_label: str = "",
         figsize: Optional[Tuple[float, float]] = None,
+        tick_fontsize: int = None,
     ):
         """
         Display heatmap of signals across times and cross-sections.
@@ -931,6 +938,8 @@ class NaivePnL:
             label for the y-axis. Default is None.
         figsize : (float, float)
             width and height in inches. Default is (14, number of cross sections).
+        tick_fontsize : int
+            font size for the ticks. Default is None.
 
 
         .. note::
@@ -987,6 +996,9 @@ class NaivePnL:
         ax.set(xlabel=x_label, ylabel=y_label)
         ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
         ax.set_title(title, fontsize=14)
+        
+        ax.tick_params(axis="x", labelsize=tick_fontsize)
+        ax.tick_params(axis="y", labelsize=tick_fontsize)
 
         plt.show()
 

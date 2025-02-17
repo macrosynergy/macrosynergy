@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import pandas as pd
 
@@ -44,6 +45,12 @@ def impute_panel(
         This class is still **experimental**: the predictions and the API might change
         without any deprecation cycle.
     """
+
+    warnings.warn(
+        "This function is deprecated and will be removed very soon, please use the" 
+        "panel_imputer class instead.",
+        FutureWarning
+    )
 
     # Checks
     if not isinstance(df, pd.DataFrame):
