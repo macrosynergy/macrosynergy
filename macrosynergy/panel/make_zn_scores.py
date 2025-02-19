@@ -31,6 +31,7 @@ def make_zn_scores(
     thresh: float = None,
     pan_weight: float = 1,
     postfix: str = "ZN",
+    unscore: bool = False,
 ) -> pd.DataFrame:
     """
     Computes z-scores for a panel around a neutral level ("zn scores").
@@ -83,6 +84,11 @@ def make_zn_scores(
         parameters are all specific to cross section.
     postfix : str
         string appended to category name for output; default is "ZN".
+    unscore : bool, default False
+        If True, the function will apply the specified threshold to z-scores,
+        but return values on the original scale. The `thresh` parameter will
+        determine the z-score limits, and the winsorized values will be
+        converted back to the original scale before being returned.
 
     Returns
     -------
@@ -180,7 +186,7 @@ def make_zn_scores(
         )
 
     if pan_weight > 0:
-        df_neutral = expanding_stat(
+        df_neutral_pan = expanding_stat(
             dfw,
             dates_iter,
             stat=neutral,
@@ -188,18 +194,22 @@ def make_zn_scores(
             min_obs=min_obs,
             iis=iis,
         )
-        dfx = dfw.sub(df_neutral["value"], axis=0)
-        df_mabs = expanding_stat(
-            dfx.abs(),
+        dfx_pan = dfw.sub(df_neutral_pan["value"], axis=0)
+        df_mabs_pan = expanding_stat(
+            dfx_pan.abs(),
             dates_iter,
             stat="mean",
             sequential=sequential,
             min_obs=min_obs,
             iis=iis,
         )
-        dfw_zns_pan = dfx.div(df_mabs["value"], axis="rows")
+        dfw_zns_pan = dfx_pan.div(df_mabs_pan["value"], axis="rows")
 
     if pan_weight < 1:
+        cid_dfx = {}
+        cid_mabs = {}
+        cid_neutral = {}
+        # dfw_zns_css.loc[:, cid] * cid_mabs[cid] + cid_neutral[cid]
         for cid in cross_sections:
             dfi = dfw[cid]
 
@@ -227,11 +237,28 @@ def make_zn_scores(
             zns_css_df = dfx / df_mabs
             dfw_zns_css.loc[:, cid] = zns_css_df["value"]
 
+            cid_dfx[cid] = dfx
+            cid_mabs[cid] = df_mabs["value"]
+            cid_neutral[cid] = df_neutral["value"]
+
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
     dfw_zns = dfw_zns.dropna(axis=0, how="all")
 
     if thresh is not None:
         dfw_zns.clip(lower=-thresh, upper=thresh, inplace=True)
+
+    if unscore:
+        dfw_zns = _unscore_dfw_zns(
+            dfw_zns,
+            dfw_zns_pan,
+            dfw_zns_css,
+            df_mabs_pan,
+            df_neutral_pan,
+            cid_mabs,
+            cid_neutral,
+            cross_sections,
+            pan_weight
+        )
 
     # --- Reformatting of output into standardised DataFrame.
 
@@ -357,6 +384,82 @@ def _get_expanding_count(X: pd.DataFrame, min_periods: int = 1):
     return X.expanding(min_periods).count().sum(1).to_numpy()
 
 
+def _unscore_dfw_zns(
+    dfw_zns: pd.DataFrame,
+    dfw_zns_pan: pd.DataFrame,
+    dfw_zns_css: pd.DataFrame,
+    df_mabs_pan: pd.DataFrame,
+    df_neutral_pan: pd.DataFrame,
+    cid_mabs: dict,
+    cid_neutral: dict,
+    cross_sections: list,
+    pan_weight: float
+) -> pd.DataFrame:
+    """
+    Unscore the blended panel and cross-sectional components of dfw_zns.
+
+    Parameters
+    ----------
+    dfw_zns : pd.DataFrame
+        The combined z-scored DataFrame.
+    dfw_zns_pan : pd.DataFrame
+        The panel component of dfw_zns.
+    dfw_zns_css : pd.DataFrame
+        The cross-sectional component of dfw_zns.
+    df_mabs_pan : pd.DataFrame
+        Mean absolute deviation for the panel component.
+    df_neutral_pan : pd.DataFrame
+        Neutral component for the panel component.
+    cid_mabs : dict
+        Dictionary of mean absolute deviations per cross-section.
+    cid_neutral : dict
+        Dictionary of neutral components per cross-section.
+    cross_sections : list
+        List of cross-section identifiers.
+    pan_weight : float
+        The weight of the panel component, ranging from 0 to 1.
+
+    Returns
+    -------
+    pd.DataFrame
+        The unscored DataFrame.
+    """
+
+
+    if pan_weight > 0:
+        dfw_zns_pan = (dfw_zns - (dfw_zns_css * (1 - pan_weight))) / pan_weight
+        dfw_unscored_pan = dfw_zns_pan.mul(df_mabs_pan["value"], axis=0).add(
+            df_neutral_pan["value"], axis=0
+        )
+    else:
+        dfw_unscored_pan = pd.DataFrame(
+            0, index=dfw_zns.index, columns=dfw_zns.columns
+        )
+
+    if pan_weight < 1:
+        dfw_zns_css = (dfw_zns - (dfw_zns_pan * pan_weight)) / (1 - pan_weight)
+        dfw_unscored_css = pd.DataFrame(
+            index=dfw_zns.index, columns=dfw_zns.columns
+        )
+        for cid in cross_sections:
+            dfw_unscored_css[cid] = (
+                dfw_zns_css[cid] * cid_mabs[cid]
+            ) + cid_neutral[cid]
+    else:
+        dfw_unscored_css = pd.DataFrame(
+            0, index=dfw_zns.index, columns=dfw_zns.columns
+        )
+
+    if pan_weight == 1:
+        dfw_unscored = dfw_unscored_pan
+    elif pan_weight == 0:
+        dfw_unscored = dfw_unscored_css
+    else:
+        dfw_unscored = dfw_unscored_css
+    dfw_zns = dfw_unscored
+
+    return dfw_unscored
+
 if __name__ == "__main__":
     np.random.seed(1)
 
@@ -390,92 +493,94 @@ if __name__ == "__main__":
 
     # Monthly: panel + cross.
     dfzm = make_zn_scores(
-        dfd,
+        dfd.copy(deep=True),
         xcat="XR",
         sequential=True,
-        cids=cids,
-        blacklist=black,
-        iis=True,
-        neutral="mean",
-        pan_weight=0.75,
-        min_obs=261,
-        est_freq="m",
-    )
-    print(dfzm)
-
-    # Weekly: panel + cross.
-    dfzw = make_zn_scores(
-        dfd,
-        xcat="XR",
-        sequential=True,
-        cids=cids,
-        blacklist=black,
-        iis=False,
+        # cids=cids,
+        # blacklist=black,
+        # iis=True,
         neutral="mean",
         pan_weight=0.5,
         min_obs=261,
-        est_freq="w",
+        est_freq="m",
+        unscore=True,
+        # thresh=5
     )
+    print(dfzm)
 
-    # Daily: panel. Neutral and mean absolute deviation will be computed daily.
-    dfzd = make_zn_scores(
-        dfd,
-        xcat="XR",
-        sequential=True,
-        cids=cids,
-        blacklist=black,
-        iis=True,
-        neutral="mean",
-        pan_weight=1.0,
-        min_obs=261,
-        est_freq="d",
-    )
+    # # Weekly: panel + cross.
+    # dfzw = make_zn_scores(
+    #     dfd,
+    #     xcat="XR",
+    #     sequential=True,
+    #     cids=cids,
+    #     blacklist=black,
+    #     iis=False,
+    #     neutral="mean",
+    #     pan_weight=0.5,
+    #     min_obs=261,
+    #     est_freq="w",
+    # )
 
-    # Daily: cross.
-    dfd["ticker"] = dfd["cid"] + "_" + dfd["xcat"]
-    dfzd = make_zn_scores(
-        dfd,
-        xcat="XR",
-        sequential=True,
-        cids=cids,
-        blacklist=black,
-        iis=True,
-        neutral="mean",
-        pan_weight=0.0,
-        min_obs=261,
-        est_freq="d",
-    )
+    # # Daily: panel. Neutral and mean absolute deviation will be computed daily.
+    # dfzd = make_zn_scores(
+    #     dfd,
+    #     xcat="XR",
+    #     sequential=True,
+    #     cids=cids,
+    #     blacklist=black,
+    #     iis=True,
+    #     neutral="mean",
+    #     pan_weight=1.0,
+    #     min_obs=261,
+    #     est_freq="d",
+    # )
 
-    panel_df = make_zn_scores(
-        dfd,
-        "CRY",
-        cids,
-        start="2010-01-04",
-        blacklist=black,
-        sequential=False,
-        min_obs=0,
-        neutral="mean",
-        iis=True,
-        thresh=None,
-        pan_weight=0.75,
-        postfix="ZN",
-    )
+    # # Daily: cross.
+    # dfd["ticker"] = dfd["cid"] + "_" + dfd["xcat"]
+    # dfzd = make_zn_scores(
+    #     dfd,
+    #     xcat="XR",
+    #     sequential=True,
+    #     cids=cids,
+    #     blacklist=black,
+    #     iis=True,
+    #     neutral="mean",
+    #     pan_weight=0.0,
+    #     min_obs=261,
+    #     est_freq="d",
+    # )
 
-    print(panel_df)
+    # panel_df = make_zn_scores(
+    #     dfd,
+    #     "CRY",
+    #     cids,
+    #     start="2010-01-04",
+    #     blacklist=black,
+    #     sequential=False,
+    #     min_obs=0,
+    #     neutral="mean",
+    #     iis=True,
+    #     thresh=None,
+    #     pan_weight=0.75,
+    #     postfix="ZN",
+    # )
 
-    panel_df_7 = make_zn_scores(
-        dfd,
-        "CRY",
-        cids,
-        start="2010-01-04",
-        blacklist=black,
-        sequential=False,
-        min_obs=0,
-        neutral="zero",
-        iis=True,
-        thresh=None,
-        pan_weight=0.75,
-        postfix="ZN",
-    )
+    # print(panel_df)
 
-    print(panel_df_7)
+    # panel_df_7 = make_zn_scores(
+    #     dfd,
+    #     "CRY",
+    #     cids,
+    #     start="2010-01-04",
+    #     blacklist=black,
+    #     sequential=False,
+    #     min_obs=0,
+    #     neutral="zero",
+    #     iis=True,
+    #     thresh=None,
+    #     pan_weight=0.75,
+    #     postfix="ZN",
+    # )
+
+    # print(panel_df_7)
