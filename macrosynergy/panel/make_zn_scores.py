@@ -185,6 +185,7 @@ def make_zn_scores(
             "Please adjust the `min_obs` parameter."
         )
 
+    dfx_pan, df_mabs_pan, df_neutral_pan = None, None, None
     if pan_weight > 0:
         df_neutral_pan = expanding_stat(
             dfw,
@@ -205,11 +206,8 @@ def make_zn_scores(
         )
         dfw_zns_pan = dfx_pan.div(df_mabs_pan["value"], axis="rows")
 
+    cid_dfx, cid_mabs, cid_neutral = {}, {}, {}
     if pan_weight < 1:
-        cid_dfx = {}
-        cid_mabs = {}
-        cid_neutral = {}
-        # dfw_zns_css.loc[:, cid] * cid_mabs[cid] + cid_neutral[cid]
         for cid in cross_sections:
             dfi = dfw[cid]
 
@@ -242,6 +240,7 @@ def make_zn_scores(
             cid_neutral[cid] = df_neutral["value"]
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
+    
     dfw_zns = dfw_zns.dropna(axis=0, how="all")
 
     if thresh is not None:
@@ -425,7 +424,6 @@ def _unscore_dfw_zns(
         The unscored DataFrame.
     """
 
-
     if pan_weight > 0:
         dfw_zns_pan = (dfw_zns - (dfw_zns_css * (1 - pan_weight))) / pan_weight
         dfw_unscored_pan = dfw_zns_pan.mul(df_mabs_pan["value"], axis=0).add(
@@ -502,85 +500,85 @@ if __name__ == "__main__":
         neutral="mean",
         pan_weight=0.5,
         min_obs=261,
-        est_freq="m",
+        est_freq="D",
         unscore=True,
         # thresh=5
     )
     print(dfzm)
 
-    # # Weekly: panel + cross.
-    # dfzw = make_zn_scores(
-    #     dfd,
-    #     xcat="XR",
-    #     sequential=True,
-    #     cids=cids,
-    #     blacklist=black,
-    #     iis=False,
-    #     neutral="mean",
-    #     pan_weight=0.5,
-    #     min_obs=261,
-    #     est_freq="w",
-    # )
+    # Weekly: panel + cross.
+    dfzw = make_zn_scores(
+        dfd,
+        xcat="XR",
+        sequential=True,
+        cids=cids,
+        blacklist=black,
+        iis=False,
+        neutral="mean",
+        pan_weight=0.5,
+        min_obs=261,
+        est_freq="w",
+    )
 
-    # # Daily: panel. Neutral and mean absolute deviation will be computed daily.
-    # dfzd = make_zn_scores(
-    #     dfd,
-    #     xcat="XR",
-    #     sequential=True,
-    #     cids=cids,
-    #     blacklist=black,
-    #     iis=True,
-    #     neutral="mean",
-    #     pan_weight=1.0,
-    #     min_obs=261,
-    #     est_freq="d",
-    # )
+    # Daily: panel. Neutral and mean absolute deviation will be computed daily.
+    dfzd = make_zn_scores(
+        dfd,
+        xcat="XR",
+        sequential=True,
+        cids=cids,
+        blacklist=black,
+        iis=True,
+        neutral="mean",
+        pan_weight=1.0,
+        min_obs=261,
+        est_freq="d",
+    )
 
-    # # Daily: cross.
-    # dfd["ticker"] = dfd["cid"] + "_" + dfd["xcat"]
-    # dfzd = make_zn_scores(
-    #     dfd,
-    #     xcat="XR",
-    #     sequential=True,
-    #     cids=cids,
-    #     blacklist=black,
-    #     iis=True,
-    #     neutral="mean",
-    #     pan_weight=0.0,
-    #     min_obs=261,
-    #     est_freq="d",
-    # )
+    # Daily: cross.
+    dfd["ticker"] = dfd["cid"] + "_" + dfd["xcat"]
+    dfzd = make_zn_scores(
+        dfd,
+        xcat="XR",
+        sequential=True,
+        cids=cids,
+        blacklist=black,
+        iis=True,
+        neutral="mean",
+        pan_weight=0.0,
+        min_obs=261,
+        est_freq="d",
+    )
 
-    # panel_df = make_zn_scores(
-    #     dfd,
-    #     "CRY",
-    #     cids,
-    #     start="2010-01-04",
-    #     blacklist=black,
-    #     sequential=False,
-    #     min_obs=0,
-    #     neutral="mean",
-    #     iis=True,
-    #     thresh=None,
-    #     pan_weight=0.75,
-    #     postfix="ZN",
-    # )
+    panel_df = make_zn_scores(
+        dfd,
+        "CRY",
+        cids,
+        start="2010-01-04",
+        blacklist=black,
+        sequential=False,
+        min_obs=0,
+        neutral="mean",
+        iis=True,
+        thresh=None,
+        pan_weight=0.75,
+        postfix="ZN",
+    )
 
-    # print(panel_df)
+    print(panel_df)
 
-    # panel_df_7 = make_zn_scores(
-    #     dfd,
-    #     "CRY",
-    #     cids,
-    #     start="2010-01-04",
-    #     blacklist=black,
-    #     sequential=False,
-    #     min_obs=0,
-    #     neutral="zero",
-    #     iis=True,
-    #     thresh=None,
-    #     pan_weight=0.75,
-    #     postfix="ZN",
-    # )
+    panel_df_7 = make_zn_scores(
+        dfd,
+        "CRY",
+        cids,
+        start="2010-01-04",
+        blacklist=black,
+        sequential=False,
+        min_obs=0,
+        neutral="zero",
+        iis=True,
+        thresh=None,
+        pan_weight=0.75,
+        postfix="ZN",
+    )
 
-    # print(panel_df_7)
+    print(panel_df_7)

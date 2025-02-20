@@ -11,6 +11,7 @@ import pandas as pd
 import numpy as np
 from itertools import groupby
 from typing import List, Dict, Callable
+from parameterized import parameterized
 
 
 class TestAll(unittest.TestCase):
@@ -665,6 +666,58 @@ class TestAll(unittest.TestCase):
 
         expanding_count = _get_expanding_count(df, 1)
         self.assertTrue(np.isclose(expanding_count[-1], n_rows * n_cols))
+
+    @parameterized.expand([[0.0, True], [0.5, False]])
+    def test_unscore(self, pan_weight, nothing):
+
+        df_panel = make_zn_scores(
+            self.dfd,
+            "CRY",
+            self.cids,
+            sequential=True,
+            min_obs=0,
+            iis=False,
+            neutral="mean",
+            thresh=None,
+            postfix="ZN",
+            pan_weight=pan_weight,
+            unscore=True,
+        )
+        df_panel = df_panel.sort_values(by=["cid", "xcat", "real_date"])
+
+        expected_values = (
+            self.dfd.sort_values(by=["cid", "xcat", "real_date"])
+            .groupby(["cid", "xcat"], group_keys=False)
+            .apply(lambda g: g.iloc[1:])
+        )
+
+        np.testing.assert_array_almost_equal(
+            df_panel["value"].values,
+            expected_values.sort_values(by=["cid", "xcat", "real_date"])["value"].values,
+            decimal=4,
+        )
+        
+    def test_unscore_panel(self):
+        pan_weight = 1
+        df_panel = make_zn_scores(
+            self.dfd,
+            "CRY",
+            self.cids,
+            sequential=True,
+            min_obs=0,
+            iis=False,
+            neutral="mean",
+            thresh=None,
+            postfix="ZN",
+            pan_weight=pan_weight,
+            unscore=True,
+        )
+        df_panel = df_panel.sort_values(by=["cid", "xcat", "real_date"])
+        np.testing.assert_array_almost_equal(
+            df_panel["value"].values,
+            self.dfd.sort_values(by=["cid", "xcat", "real_date"])["value"].values,
+            decimal=4,
+        )
 
 
 if __name__ == "__main__":
