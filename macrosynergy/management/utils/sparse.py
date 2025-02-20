@@ -16,6 +16,9 @@ from macrosynergy.management.utils import (
 from macrosynergy.management.types import QuantamentalDataFrame
 
 
+SCORE_BY_OPTIONS = {"diff": "diff", "level": "value"}
+
+
 class InformationStateChanges(object):
     """
     Class to hold information state changes for a set of tickers.
@@ -445,6 +448,7 @@ class InformationStateChanges(object):
         custom_method: Optional[Callable] = None,
         custom_method_kwargs: Dict = {},
         volatility_forecast: bool = True,
+        score_by: str = "diff",
     ):
         """
         Calculate score on sparse indicator for the InformationStateChanges object.
@@ -475,6 +479,11 @@ class InformationStateChanges(object):
         volatility_forecast : bool
             If True (default), the volatility forecast is shifted one period forward to
             align with the information state changes.
+        score_by : str
+            The method to use for scoring. If "diff" (default), the score is calculated
+            based on the difference between the information state changes. If "level", the
+            score is calculated based on the value ('level') of the information state
+            change.
 
         Returns
         -------
@@ -492,6 +501,7 @@ class InformationStateChanges(object):
             custom_method=custom_method,
             custom_method_kwargs=custom_method_kwargs,
             volatility_forecast=volatility_forecast,
+            score_by=score_by,
         )
         return self
 
@@ -1400,6 +1410,7 @@ def _calculate_score_on_sparse_indicator_for_class(
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
     volatility_forecast: bool = True,
+    score_by: str = "diff",
 ):
     """
     Calculate score on sparse indicator for a class. Effectively a re-implementation of
@@ -1413,6 +1424,15 @@ def _calculate_score_on_sparse_indicator_for_class(
     assert hasattr(cls, "isc_dict") and isinstance(
         cls.isc_dict, dict
     ), "`InformationStateChanges` object not initialized"
+
+    if score_by not in SCORE_BY_OPTIONS.keys():
+        raise ValueError(f"`score_by` must be one of {list(SCORE_BY_OPTIONS.keys())}")
+
+    score_by_column = SCORE_BY_OPTIONS[score_by]
+
+    for key, v in cls.isc_dict.items():
+        if not score_by_column in v.columns:
+            raise ValueError(f"Column `{score_by_column}` not in for ticker {key}")
 
     curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
     if custom_method is not None:
@@ -1431,7 +1451,7 @@ def _calculate_score_on_sparse_indicator_for_class(
     )
     for key, v in cls.isc_dict.items():
         mask_rel = (v["version"] == 0) if isc_version == 0 else (v["version"] >= 0)
-        s = v.loc[mask_rel, "diff"]
+        s = v.loc[mask_rel, score_by_column]
         result: pd.Series = curr_method(s, **method_kwargs)
         columns = [kk for kk in v.columns if kk != "std"]
         v = pd.merge(
@@ -1444,7 +1464,7 @@ def _calculate_score_on_sparse_indicator_for_class(
         v["std"] = v["std"].ffill()
         if iis:
             v["std"] = v["std"].bfill()
-        v["zscore"] = v["diff"] / v["std"]
+        v["zscore"] = v[score_by_column] / v["std"]
 
         cls.isc_dict[key] = v
 
