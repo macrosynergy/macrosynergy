@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Union, Optional, Callable, Tuple, Literal
+from typing import Dict, List, Any, Union, Optional, Callable, Tuple
 from collections.abc import KeysView, ValuesView, ItemsView
 from numbers import Number
 import json
@@ -448,7 +448,7 @@ class InformationStateChanges(object):
         custom_method: Optional[Callable] = None,
         custom_method_kwargs: Dict = {},
         volatility_forecast: bool = True,
-        score_by: Literal["diff", "level"] = "diff",
+        score_by: str = "diff",
     ):
         """
         Calculate score on sparse indicator for the InformationStateChanges object.
@@ -479,7 +479,7 @@ class InformationStateChanges(object):
         volatility_forecast : bool
             If True (default), the volatility forecast is shifted one period forward to
             align with the information state changes.
-        score_by : Literal["diff", "level"]
+        score_by : str
             The method to use for scoring. If "diff" (default), the score is calculated
             based on the difference between the information state changes. If "level", the
             score is calculated based on the value ('level') of the information state
@@ -1410,7 +1410,7 @@ def _calculate_score_on_sparse_indicator_for_class(
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
     volatility_forecast: bool = True,
-    score_by: Literal["diff", "level"] = "diff",
+    score_by: str = "diff",
 ):
     """
     Calculate score on sparse indicator for a class. Effectively a re-implementation of
