@@ -448,6 +448,7 @@ class InformationStateChanges(object):
         custom_method: Optional[Callable] = None,
         custom_method_kwargs: Dict = {},
         volatility_forecast: bool = True,
+        score_by: Literal["diff", "level"] = "diff",
     ):
         """
         Calculate score on sparse indicator for the InformationStateChanges object.
@@ -478,6 +479,11 @@ class InformationStateChanges(object):
         volatility_forecast : bool
             If True (default), the volatility forecast is shifted one period forward to
             align with the information state changes.
+        score_by : Literal["diff", "level"]
+            The method to use for scoring. If "diff" (default), the score is calculated
+            based on the difference between the information state changes. If "level", the
+            score is calculated based on the value ('level') of the information state
+            change.
 
         Returns
         -------
@@ -495,6 +501,7 @@ class InformationStateChanges(object):
             custom_method=custom_method,
             custom_method_kwargs=custom_method_kwargs,
             volatility_forecast=volatility_forecast,
+            score_by=score_by,
         )
         return self
 
