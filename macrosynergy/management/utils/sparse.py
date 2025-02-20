@@ -1432,7 +1432,7 @@ def _calculate_score_on_sparse_indicator_for_class(
 
     for key, v in cls.isc_dict.items():
         if not score_by_column in v.columns:
-            raise ValueError(f"Column {score_by_column} not in for ticker {key}")
+            raise ValueError(f"Column `{score_by_column}` not in for ticker {key}")
 
     curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
     if custom_method is not None:
