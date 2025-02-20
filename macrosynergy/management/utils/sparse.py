@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Union, Optional, Callable, Tuple
+from typing import Dict, List, Any, Union, Optional, Callable, Tuple, Literal
 from collections.abc import KeysView, ValuesView, ItemsView
 from numbers import Number
 import json
@@ -14,6 +14,9 @@ from macrosynergy.management.utils import (
     is_valid_iso_date,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
+
+
+SCORE_BY_OPTIONS = {"diff": "diff", "level": "value"}
 
 
 class InformationStateChanges(object):
@@ -1400,6 +1403,7 @@ def _calculate_score_on_sparse_indicator_for_class(
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
     volatility_forecast: bool = True,
+    score_by: Literal["diff", "level"] = "diff",
 ):
     """
     Calculate score on sparse indicator for a class. Effectively a re-implementation of
@@ -1413,6 +1417,15 @@ def _calculate_score_on_sparse_indicator_for_class(
     assert hasattr(cls, "isc_dict") and isinstance(
         cls.isc_dict, dict
     ), "`InformationStateChanges` object not initialized"
+
+    if score_by not in SCORE_BY_OPTIONS.keys():
+        raise ValueError(f"`score_by` must be one of {list(SCORE_BY_OPTIONS.keys())}")
+
+    score_by_column = SCORE_BY_OPTIONS[score_by]
+
+    for key, v in cls.isc_dict.items():
+        if not score_by_column in v.columns:
+            raise ValueError(f"Column {score_by_column} not in for ticker {key}")
 
     curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
     if custom_method is not None:
@@ -1431,7 +1444,7 @@ def _calculate_score_on_sparse_indicator_for_class(
     )
     for key, v in cls.isc_dict.items():
         mask_rel = (v["version"] == 0) if isc_version == 0 else (v["version"] >= 0)
-        s = v.loc[mask_rel, "diff"]
+        s = v.loc[mask_rel, score_by_column]
         result: pd.Series = curr_method(s, **method_kwargs)
         columns = [kk for kk in v.columns if kk != "std"]
         v = pd.merge(
@@ -1444,7 +1457,7 @@ def _calculate_score_on_sparse_indicator_for_class(
         v["std"] = v["std"].ffill()
         if iis:
             v["std"] = v["std"].bfill()
-        v["zscore"] = v["diff"] / v["std"]
+        v["zscore"] = v[score_by_column] / v["std"]
 
         cls.isc_dict[key] = v
 
