@@ -395,7 +395,7 @@ def _unscore_dfw_zns(
     pan_weight: float
 ) -> pd.DataFrame:
     """
-    Unscore the blended panel and cross-sectional components of dfw_zns.
+    Unscore the weighted panel and cross-sectional components of dfw_zns.
 
     Parameters
     ----------
@@ -494,9 +494,9 @@ if __name__ == "__main__":
         dfd.copy(deep=True),
         xcat="XR",
         sequential=True,
-        # cids=cids,
-        # blacklist=black,
-        # iis=True,
+        cids=cids,
+        blacklist=black,
+        iis=True,
         neutral="mean",
         pan_weight=0.5,
         min_obs=261,
