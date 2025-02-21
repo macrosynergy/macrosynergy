@@ -709,7 +709,6 @@ class TestAll(unittest.TestCase):
             min_obs=0,
             iis=False,
             neutral="mean",
-            thresh=0.1,
             postfix="ZN",
             pan_weight=pan_weight,
             unscore=True,
