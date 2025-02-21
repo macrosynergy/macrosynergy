@@ -568,14 +568,18 @@ class CategoryRelations(object):
             forth. Default is None, i.e the statistics are not displayed.
         prob_est : str
             type of estimator for probability of significant relation.
-            - "pool" (default), which means that all observation are treated as
+
+            - "pool" (default)
+                which means that all observation are treated as
                 independent and calculates Pearson's correlation coefficient.
-            - "map", denoting Macrosynergy panel test. This is based on a panel regression
+            - "map"
+                denoting Macrosynergy panel test. This is based on a panel regression
                 with period-specific random effects and greatly mitigates the issue of
                 pseudo-replication if panel features and targets are correlated across
                 time.
                 See also https://research.macrosynergy.com/testing-macro-trading-factors/
-            - "kendall", which calculates the Kendall rank correlation coefficient. It is
+            - "kendall"
+                which calculates the Kendall rank correlation coefficient. It is
                 a non-parametric statistic used to measure the strength and direction of
                 association between two ranked variables.
         separator : Union[str, int]
