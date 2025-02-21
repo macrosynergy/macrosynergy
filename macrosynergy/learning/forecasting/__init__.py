@@ -20,8 +20,11 @@ from .naive_predictors import (
     NaiveRegressor,
 )
 
+from .neighbors.nearest_neighbors import KNNClassifier
+
 __all__ = [
     "LADRegressor",
+    "KNNClassifier",
     "SignWeightedLADRegressor",
     "TimeWeightedLADRegressor",
     "SignWeightedLinearRegression",

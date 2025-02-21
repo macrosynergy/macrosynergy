@@ -24,6 +24,7 @@ def check_availability(
     start_years: bool = True,
     missing_recent: bool = True,
     use_last_businessday: bool = True,
+    title: str = None,
 ):
     """
     Wrapper for visualizing start and end dates of a filtered DataFrame.
@@ -72,11 +73,11 @@ def check_availability(
     if start_years:
         dfs = check_startyears(dfx)
         visual_paneldates(
-            dfs, size=start_size, use_last_businessday=use_last_businessday
+            dfs, size=start_size, use_last_businessday=use_last_businessday, title=title
         )
     if missing_recent:
         dfe = check_enddates(dfx)
-        visual_paneldates(dfe, size=end_size, use_last_businessday=use_last_businessday)
+        visual_paneldates(dfe, size=end_size, use_last_businessday=use_last_businessday, title=title)
 
 
 def missing_in_df(
@@ -215,7 +216,10 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp) -> pd.DataFrame:
 
 
 def visual_paneldates(
-    df: pd.DataFrame, size: Tuple[float] = None, use_last_businessday: bool = True
+    df: pd.DataFrame,
+    size: Tuple[float] = None,
+    use_last_businessday: bool = True,
+    title: str = None,
 ):
     """
     Visualize panel dates with color codes.
@@ -231,7 +235,9 @@ def visual_paneldates(
         the end date. Default is True.
     """
 
-    msv.view_panel_dates(df=df, size=size, use_last_businessday=use_last_businessday)
+    msv.view_panel_dates(
+        df=df, size=size, use_last_businessday=use_last_businessday, header=title
+    )
 
 
 if __name__ == "__main__":
