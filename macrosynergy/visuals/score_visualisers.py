@@ -246,6 +246,7 @@ class ScoreVisualisers:
         cmap_range: Tuple[float, float] = None,
         horizontal_divider: bool = False,
         vertical_divider: bool = False,
+        divider_position: int = None,
     ):
         """
         Helper function to plot the heatmap.
@@ -272,9 +273,9 @@ class ScoreVisualisers:
         ax.set_title(title, fontsize=title_fontsize)
 
         if horizontal_divider:
-            ax.hlines([1], *ax.get_xlim(), linewidth=2, color="black")
+            ax.hlines([divider_position], *ax.get_xlim(), linewidth=2, color="black")
         if vertical_divider:
-            ax.vlines([1], *ax.get_ylim(), linewidth=2, color="black")
+            ax.vlines([divider_position], *ax.get_ylim(), linewidth=2, color="black")
 
         plt.xticks(**(xticks or {"rotation": 45, "ha": "right"}))
         plt.tight_layout()
@@ -307,6 +308,8 @@ class ScoreVisualisers:
         round_decimals: int = 2,
         cmap: str = None,
         cmap_range: Tuple[float, float] = None,
+        sort_by_composite: bool = False,
+        composite_to_end: bool = False,
     ):
         """
         View heatmap of the scores at the specified or latest available date.
@@ -375,11 +378,19 @@ class ScoreVisualisers:
         dfw.index.name = None
 
         composite_zscore = self.xcat_comp
+
+        if sort_by_composite:
+            if composite_zscore not in xcats:
+                raise ValueError(
+                    "Composite category must be in xcats to sort by composite"
+                )
+            dfw = dfw.sort_values(by=composite_zscore, ascending=False)
         if composite_zscore in xcats:
-            dfw = dfw[
-                [composite_zscore]
-                + [xcat for xcat in xcats if xcat != composite_zscore]
-            ]
+            if composite_to_end:
+                ordering = [xcat for xcat in xcats if xcat != composite_zscore] + [composite_zscore]
+            else:
+                ordering = [composite_zscore] + [xcat for xcat in xcats if xcat != composite_zscore]
+            dfw = dfw[ordering]
         else:
             dfw = dfw[xcats]
 
@@ -400,6 +411,11 @@ class ScoreVisualisers:
 
         horizontal_divider = transpose and composite_zscore in xcats
         vertical_divider = not transpose and composite_zscore in xcats
+        if composite_zscore in xcats:
+            if composite_to_end:
+                divider_position = len(xcats) - 1
+            else:
+                divider_position = 1
 
         self._plot_heatmap(
             dfw,
@@ -413,6 +429,7 @@ class ScoreVisualisers:
             cmap_range=cmap_range,
             horizontal_divider=horizontal_divider,
             vertical_divider=vertical_divider,
+            divider_position=divider_position,
         )
 
     def view_score_evolution(
@@ -516,7 +533,7 @@ class ScoreVisualisers:
                     self.df["real_date"].max()
                 ]
                 print("Latest day: ", self.df["real_date"].max())
-            if freq == "Q":
+            if freq == "BQE":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
                 ) + ["Latest"]
@@ -525,7 +542,7 @@ class ScoreVisualisers:
                     "Latest"
                 ]
         else:
-            if freq == "Q":
+            if freq == "BQE":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")
                 )
@@ -656,7 +673,7 @@ class ScoreVisualisers:
                     self.df["real_date"].max()
                 ]
                 print("Latest day: ", self.df["real_date"].max())
-            if freq == "Q":
+            if freq == "BQE":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
                 ) + ["Latest"]
@@ -665,7 +682,7 @@ class ScoreVisualisers:
                     "Latest"
                 ]
         else:
-            if freq == "Q":
+            if freq == "BQE":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")
                 )
@@ -799,21 +816,23 @@ if __name__ == "__main__":
         rescore_composite=True,
     )
 
-    sv.view_snapshot(
-        cids=["USD"],
-        xcats=xcats + ["Composite"],
-        transpose=True,
-        figsize=(14, 12),
-    )
+    # sv.view_snapshot(
+    #     cids=["USD", "EUR", "JPY", "GBP", "CHF"],
+    #     xcats=xcats + ["Composite"],
+    #     figsize=(14, 12),
+    #     sort_by_composite=True,
+    #     composite_to_end=True,
+    #     transpose=False,
+    # )
     sv.view_cid_evolution(
-        cid="USD", xcats=xcats + ["Composite"], freq="A", transpose=False
+        cid="USD", xcats=xcats + ["Composite"], freq="Q", transpose=False
     )
-    sv.view_score_evolution(
-        xcat="GGIEDGDP_NSA",
-        cids=cids,
-        freq="BA",
-        transpose=False,
-        start="2010-01-01",
-        title="AHKSJDA",
-        include_latest_day=True,
-    )
+    # sv.view_score_evolution(
+    #     xcat="GGIEDGDP_NSA",
+    #     cids=cids,
+    #     freq="BA",
+    #     transpose=False,
+    #     start="2010-01-01",
+    #     title="AHKSJDA",
+    #     include_latest_day=True,
+    # )
