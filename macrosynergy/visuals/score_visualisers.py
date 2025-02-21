@@ -533,7 +533,7 @@ class ScoreVisualisers:
                     self.df["real_date"].max()
                 ]
                 print("Latest day: ", self.df["real_date"].max())
-            if freq == "Q":
+            if freq == "BQE":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
                 ) + ["Latest"]
@@ -542,7 +542,7 @@ class ScoreVisualisers:
                     "Latest"
                 ]
         else:
-            if freq == "Q":
+            if freq == "BQE":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")
                 )
@@ -673,7 +673,7 @@ class ScoreVisualisers:
                     self.df["real_date"].max()
                 ]
                 print("Latest day: ", self.df["real_date"].max())
-            if freq == "Q":
+            if freq == "BQE":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
                 ) + ["Latest"]
@@ -682,7 +682,7 @@ class ScoreVisualisers:
                     "Latest"
                 ]
         else:
-            if freq == "Q":
+            if freq == "BQE":
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")
                 )
@@ -816,23 +816,23 @@ if __name__ == "__main__":
         rescore_composite=True,
     )
 
-    sv.view_snapshot(
-        cids=["USD", "EUR", "JPY", "GBP", "CHF"],
-        xcats=xcats + ["Composite"],
-        figsize=(14, 12),
-        sort_by_composite=True,
-        composite_to_end=True,
-        transpose=False,
-    )
+    # sv.view_snapshot(
+    #     cids=["USD", "EUR", "JPY", "GBP", "CHF"],
+    #     xcats=xcats + ["Composite"],
+    #     figsize=(14, 12),
+    #     sort_by_composite=True,
+    #     composite_to_end=True,
+    #     transpose=False,
+    # )
     sv.view_cid_evolution(
-        cid="USD", xcats=xcats + ["Composite"], freq="A", transpose=False
+        cid="USD", xcats=xcats + ["Composite"], freq="Q", transpose=False
     )
-    sv.view_score_evolution(
-        xcat="GGIEDGDP_NSA",
-        cids=cids,
-        freq="BA",
-        transpose=False,
-        start="2010-01-01",
-        title="AHKSJDA",
-        include_latest_day=True,
-    )
+    # sv.view_score_evolution(
+    #     xcat="GGIEDGDP_NSA",
+    #     cids=cids,
+    #     freq="BA",
+    #     transpose=False,
+    #     start="2010-01-01",
+    #     title="AHKSJDA",
+    #     include_latest_day=True,
+    # )
