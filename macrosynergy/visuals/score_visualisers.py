@@ -522,7 +522,7 @@ class ScoreVisualisers:
             ):
                 dfw_resampled.loc[
                     self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
-                ] = dfw.ffill().loc[
+                ] = dfw.loc[
                     self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
                 ]
                 print(
@@ -530,7 +530,7 @@ class ScoreVisualisers:
                     self.df["real_date"].max() - pd.tseries.offsets.BDay(1),
                 )
             else:
-                dfw_resampled.loc[self.df["real_date"].max()] = dfw.ffill().loc[
+                dfw_resampled.loc[self.df["real_date"].max()] = dfw.loc[
                     self.df["real_date"].max()
                 ]
                 print("Latest day: ", self.df["real_date"].max())
@@ -663,7 +663,7 @@ class ScoreVisualisers:
             ):
                 dfw_resampled.loc[
                     self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
-                ] = dfw.ffill().loc[
+                ] = dfw.loc[
                     self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
                 ]
                 print(
@@ -671,7 +671,7 @@ class ScoreVisualisers:
                     self.df["real_date"].max() - pd.tseries.offsets.BDay(1),
                 )
             else:
-                dfw_resampled.loc[self.df["real_date"].max()] = dfw.ffill().loc[
+                dfw_resampled.loc[self.df["real_date"].max()] = dfw.loc[
                     self.df["real_date"].max()
                 ]
                 print("Latest day: ", self.df["real_date"].max())
@@ -814,6 +814,10 @@ if __name__ == "__main__":
             metrics=["all"],
             show_progress=True,
         )
+
+    # Remove data for 24th Feb 2025 for "GGIEDGDP_NSA"
+
+    df = df[~((df["cid"] == "USD") & (df["xcat"] == "GGIEDGDP_NSA") & (df["real_date"] == "2025-02-24"))]
 
     sv = ScoreVisualisers(
         df,
