@@ -411,6 +411,7 @@ class ScoreVisualisers:
 
         horizontal_divider = transpose and composite_zscore in xcats
         vertical_divider = not transpose and composite_zscore in xcats
+        divider_position = None
         if composite_zscore in xcats:
             if composite_to_end:
                 divider_position = len(xcats) - 1
@@ -720,6 +721,7 @@ class ScoreVisualisers:
 
         horizontal_divider = not transpose and self.xcat_comp in xcats
         vertical_divider = transpose and self.xcat_comp in xcats
+        divider_position = None
         if composite_zscore in xcats:
             if composite_to_end:
                 divider_position = len(xcats) - 1
@@ -832,7 +834,7 @@ if __name__ == "__main__":
         transpose=False,
     )
     sv.view_cid_evolution(
-        cid="USD", xcats=xcats + ["Composite"], freq="Q", transpose=False
+        cid="USD", xcats=xcats, freq="Q", transpose=False
     )
     sv.view_score_evolution(
         xcat="GGIEDGDP_NSA",
