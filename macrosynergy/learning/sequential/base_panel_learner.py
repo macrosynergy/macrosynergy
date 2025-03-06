@@ -310,6 +310,7 @@ class BasePanelLearner(ABC):
         n_splits_add,
         n_jobs_inner,
         base_splits,
+        timestamp=None,
     ):
         """
         Worker function for parallel processing of the learning process.
@@ -347,6 +348,9 @@ class BasePanelLearner(ABC):
             Number of jobs to run in parallel for the inner loop. Default is 1.
         base_splits : dict
             Dictionary of initial number of splits for each inner splitter.
+        timestamp : pd.Timestamp, optional
+            Date to record predictions and model diagnostics. Default is None. If None,
+            the earliest date in the test set is used (which is then adjusted for lag).
 
         Returns
         -------
@@ -421,7 +425,7 @@ class BasePanelLearner(ABC):
             y_train=y_train,
             X_test=X_test,
             y_test=y_test,
-            timestamp=adj_test_date_levels.min(),
+            timestamp=adj_test_date_levels.min() if timestamp is None else timestamp,
             adjusted_test_index=test_index,
         )
 
