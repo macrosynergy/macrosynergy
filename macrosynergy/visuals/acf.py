@@ -251,6 +251,7 @@ def _plot_acf(
             figsize=figsize,
             title=title,
             cid_grid=True,
+            interpolate=True,
             **kwargs,
         )
 
@@ -429,6 +430,7 @@ if __name__ == "__main__":
         )
     df['value'] = df['value'] * (np.arange(len(df)) % 20 == 0)
     df['grading'] = np.nan
+    
     plot_acf(
         df,
         cids=sel_cids,
@@ -437,4 +439,5 @@ if __name__ == "__main__":
         remove_zero_predictor=True,
         lags=30,
     )
-    # plot_pacf(df, cids=sel_cids, xcat="FXXR", title="ACF Facet Plot", remove_zero_predictor=True)
+
+    plot_pacf(df, cids=sel_cids, xcat="FXXR", title="ACF Facet Plot", remove_zero_predictor=True)
