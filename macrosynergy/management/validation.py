@@ -134,6 +134,10 @@ def validate_and_reduce_qdf(
             cids.remove(m_cid)
         for m_xcat in m_xcats:
             xcats.remove(m_xcat)
+            
+    elif intersect:
+        cids = r_cids
+        xcats = r_xcats
 
     if df.empty:
         raise ValueError(

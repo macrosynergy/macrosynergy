@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,7 +15,7 @@ def plot_acf(
     df: pd.DataFrame,
     cids: List[str],
     xcat: str,
-    lags: int = 30,
+    lags: Union[int, Sequence] = 30,
     alpha: float = 0.05,
     remove_zero_predictor: bool = False,
     start: Optional[str] = None,
@@ -38,8 +38,9 @@ def plot_acf(
         List of cids to plot.
     xcat : str
         The xcat to filter and plot ACFs for.
-    lags : int, default=30
-        Number of lags for ACF calculation.
+    lags : Union[int, Sequence], default=30
+        Number of lags for ACF calculation. If an integer, the lags from 1 to lags are plotted.
+        If a sequence is provided, the lags are plotted as given.
     alpha : float, default=0.05
         Significance level for the confidence intervals.
     remove_zero_predictor : bool, default=False
@@ -81,6 +82,9 @@ def plot_acf(
         share_x=share_x,
         share_y=share_y,
     )
+
+    if title is None:
+        title = f"Autocorrelation Function (ACF) for {xcat}"
 
     plot_func = _statsmodels_plot_acf_wrapper
     plot_func_kwargs = {"lags": lags, "alpha": alpha}
@@ -131,8 +135,9 @@ def plot_pacf(
         List of cids to plot.
     xcat : str
         The xcat to filter and plot PACFs for.
-    lags : int, default=30
-        Number of lags for PACF calculation.
+    lags : Union[int, Sequence], default=30
+        Number of lags for PACF calculation. If an integer, the lags from 1 to lags are plotted.
+        If a sequence is provided, the lags are plotted as given.
     alpha : float, default=0.05
         Significance level for the confidence intervals.
     remove_zero_predictor : bool, default=False
@@ -177,6 +182,9 @@ def plot_pacf(
         share_y=share_y,
     )
 
+    if title is None:
+        title = f"Partial Autocorrelation Function (PACF) for {xcat}"
+
     plot_func = _statsmodels_plot_pacf_wrapper
     plot_func_kwargs = {"lags": lags, "alpha": alpha, "method": method}
 
@@ -215,9 +223,6 @@ def _plot_acf(
     **kwargs,
 ):
 
-    if len(cids) <= 3:
-        kwargs["ncols"] = len(cids)
-    cids = sorted(cids)
     with FacetPlot(
         df=df,
         xcats=[xcat],
@@ -227,10 +232,16 @@ def _plot_acf(
         end=end,
         blacklist=blacklist,
         tickers=None,
+        metrics=['value']
     ) as fp:
 
         if remove_zero_predictor:
-            fp.df = fp.df.loc[(fp.df != 0).any(axis=1)]
+            fp.df = fp.df.loc[fp.df['value'] != 0]
+
+        if len(fp.cids) <= 3:
+            kwargs["ncols"] = len(fp.cids)
+
+        fp.cids = sorted(fp.cids)
 
         fp.lineplot(
             plot_func=plot_func,
@@ -280,7 +291,7 @@ def _checks_plot_acf(
     if len(df.columns) < 4:
         df = df.copy().reset_index()
 
-    if not isinstance(lags, int):
+    if not isinstance(lags, (int, np.ndarray, list, tuple)):
         raise TypeError("`lags` must be an integer.")
 
     if not isinstance(alpha, float):
@@ -297,8 +308,18 @@ def _checks_plot_acf(
 
     if not isinstance(xcat, str):
         raise TypeError("`xcat` must be a string.")
+
+    if xcat not in df["xcat"].unique():
+        raise ValueError(f"`xcat` {xcat} not found in the DataFrame.")
+
     if isinstance(cids, str):
         cids: List[str] = [cids]
+
+    if not isinstance(cids, list):
+        raise TypeError("`cids` must be a list.")
+
+    if not all(isinstance(cid, str) for cid in cids):
+        raise TypeError("All elements in `cids` must be strings.")
 
     if blacklist:
         if not isinstance(blacklist, dict):
@@ -406,6 +427,14 @@ if __name__ == "__main__":
             .reset_index(drop=True)
             .copy()
         )
-
-    plot_acf(df, cids=["GBP"], xcat="FXXR", title="ACF Facet Plot", remove_zero_predictor=False)
-    plot_pacf(df, cids=sel_cids, xcat="FXXR", title="ACF Facet Plot", remove_zero_predictor=True)
+    df['value'] = df['value'] * (np.arange(len(df)) % 20 == 0)
+    df['grading'] = np.nan
+    plot_acf(
+        df,
+        cids=sel_cids,
+        xcat="FXXR",
+        # title="ACF Facet Plot",
+        remove_zero_predictor=True,
+        lags=30,
+    )
+    # plot_pacf(df, cids=sel_cids, xcat="FXXR", title="ACF Facet Plot", remove_zero_predictor=True)
