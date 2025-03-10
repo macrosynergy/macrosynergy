@@ -217,6 +217,7 @@ def request_wrapper(
                 prepared_request,
                 proxies=proxy,
                 cert=cert,
+                timeout=300
             ) as response:
                 if isinstance(response, requests.Response):
                     return validate_response(response=response, user_id=user_id)
