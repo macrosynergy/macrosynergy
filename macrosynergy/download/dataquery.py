@@ -93,19 +93,10 @@ def validate_response(
         an exception.
     """
 
-    error_str: str = (
-        f"Response: {response}\n"
-        f"User ID: {user_id}\n"
-        f"Requested URL: {response.request.url}\n"
-        f"Response status code: {response.status_code}\n"
-        f"Response headers: {response.headers}\n"
-        f"Response text: {response.text}\n"
-        f"DataQuery Interaction ID: {response.headers.get('x-dataquery-interaction-id', 'N/A')}\n"
-        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}; \n"
-    )
     # TODO : Use response.raise_for_status() as a better way to check for errors
     if not response.ok:
         logger.info("Response status is NOT OK : %s", response.status_code)
+        error_str = format_invalid_response_msg(response, user_id)
         if response.status_code == 401:
             raise AuthenticationError(error_str)
 
@@ -119,13 +110,35 @@ def validate_response(
     try:
         response_dict = response.json()
         if response_dict is None:
+            error_str = format_invalid_response_msg(response, user_id)
             raise InvalidResponseError(f"Response is empty.\n{error_str}")
         return response_dict
     except Exception as exc:
         if isinstance(exc, KeyboardInterrupt):
             raise exc
 
+        error_str = format_invalid_response_msg(response, user_id)
         raise InvalidResponseError(error_str + f"Error parsing response as JSON: {exc}")
+
+
+def format_invalid_response_msg(response: requests.Response, user_id: str) -> str:
+    """
+    This function formats an error message for an invalid response from the API.
+    Should only be called if there is an error in the response (as the functions adds the
+    response text to the error message).
+    """
+    error_str: str = (
+        f"Response: {response}\n"
+        f"User ID: {user_id}\n"
+        f"Requested URL: {response.request.url}\n"
+        f"Response status code: {response.status_code}\n"
+        f"Response headers: {response.headers}\n"
+        f"Response text: {response.text}\n"
+        f"DataQuery Interaction ID: {response.headers.get('x-dataquery-interaction-id', 'N/A')}\n"
+        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}; \n"
+    )
+
+    return error_str
 
 
 def request_wrapper(
