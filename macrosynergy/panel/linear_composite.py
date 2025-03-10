@@ -60,7 +60,7 @@ def linear_composite(
         available categories of cross sections. Per default the coefficients are normalized
         so that they add up to one for each period. This can be changed with the argument
         `normalize_weights`. The third case is the assignment of a weighting category. This
-        only applies to combinations of cross sections. In this care the weighting category
+        only applies to combinations of cross sections. In this case the weighting category
         is multiplied for each period with the corresponding value of main category of the
         same cross section. Per default the weight category values are normalized so that
         they add up to one for each period. This can be changed with the argument
