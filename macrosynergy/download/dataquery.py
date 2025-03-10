@@ -100,6 +100,7 @@ def validate_response(
         f"Response status code: {response.status_code}\n"
         f"Response headers: {response.headers}\n"
         f"Response text: {response.text}\n"
+        f"DataQuery Interaction ID: {response.headers.get('x-dataquery-interaction-id', 'N/A')}\n"
         f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}; \n"
     )
     # TODO : Use response.raise_for_status() as a better way to check for errors

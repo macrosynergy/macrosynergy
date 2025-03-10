@@ -5,16 +5,17 @@ facet plot containing any number of subplots. Given that the class allows return
 FacetPlot itself: effectively allowing for a recursive facet plot.
 """
 
-from typing import Dict, List, Optional, Tuple, Union
+from numbers import Number
+from typing import Any, Dict, List, Optional, Tuple, Union, Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.gridspec import GridSpec
+from statsmodels.graphics.tsaplots import plot_acf
 
-from macrosynergy.visuals.plotter import Plotter
 from macrosynergy.management.types import QuantamentalDataFrame
-from numbers import Number
+from macrosynergy.visuals.plotter import Plotter
 
 
 def _get_square_grid(
@@ -206,7 +207,7 @@ class FacetPlot(Plotter):
         axis_fontsize: int = 12,
         # subplot arguments
         facet_size: Optional[Tuple[Number, Number]] = None,
-        facet_titles: Optional[Union[List[str], Dict[str,str]]] = None,
+        facet_titles: Optional[Union[List[str], Dict[str, str]]] = None,
         facet_title_fontsize: int = 14,
         facet_title_xadjust: Number = 0.5,
         facet_title_yadjust: Number = 1.0,
@@ -225,6 +226,8 @@ class FacetPlot(Plotter):
         save_to_file: Optional[str] = None,
         dpi: int = 300,
         return_figure: bool = False,
+        plot_func=None,
+        plot_func_kwargs: Dict[str, Any] = {},
         *args,
         **kwargs,
     ):
@@ -348,6 +351,11 @@ class FacetPlot(Plotter):
             DPI of the saved image. Default is `300`.
         return_figure : bool
             Return the figure object. Default is `False`.
+        plot_func : callable
+            The plotting function to use. The function must have parameters real_dates, values,
+            and ax, and it will be passed these.Default is None.
+        plot_func_kwargs : dict
+            Additional arguments to pass to the plotting function. Default is `{}`.
 
 
         .. note::
@@ -614,7 +622,11 @@ class FacetPlot(Plotter):
 
                 if not interpolate:
                     X, Y = self._insert_nans(X, Y)
-                ax_i.plot(X, Y, **plot_func_args)
+
+                if plot_func is None:
+                    ax_i.plot(X, Y, **plot_func_args)
+                else:
+                    plot_func(real_dates=X, values=Y, ax=ax_i, **plot_func_kwargs)
 
             if not cid_xcat_grid:
                 if facet_titles:
@@ -757,9 +769,9 @@ class FacetPlot(Plotter):
 
 if __name__ == "__main__":
     # from macrosynergy.visuals import FacetPlot
-    from macrosynergy.management.simulate import make_test_df
-
     import time
+
+    from macrosynergy.management.simulate import make_test_df
 
     np.random.seed(0)
 
