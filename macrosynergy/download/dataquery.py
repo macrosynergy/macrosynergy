@@ -93,7 +93,6 @@ def validate_response(
         an exception.
     """
 
-    # TODO : Use response.raise_for_status() as a better way to check for errors
     if not response.ok:
         logger.info("Response status is NOT OK : %s", response.status_code)
         error_str = format_invalid_response_msg(response, user_id)
