@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Optional
 from statsmodels.tsa.arima_process import ArmaProcess
 import random
 from macrosynergy.management.utils import reduce_df_by_ticker
@@ -53,7 +53,7 @@ def make_qdf(
     df_cids: pd.DataFrame,
     df_xcats: pd.DataFrame,
     back_ar: float = 0,
-    seed: int = 2,
+    seed: Optional[int] = 2,
 ) -> pd.DataFrame:
     """
     Make quantamental DataFrame with basic columns: 'cid', 'xcat', 'real_date', 'value'
@@ -76,7 +76,7 @@ def make_qdf(
     :param <float> back_ar: float between 0 and 1 denoting set autocorrelation of the
         background factor. Default is zero.
     seed : int
-        seed for random number generation. Default is 2.
+        seed for random number generation. Default is None.
 
     :return <pd.DataFrame>: basic quantamental dataframe according to specifications.
     """

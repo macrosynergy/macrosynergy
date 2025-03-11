@@ -112,7 +112,10 @@ def temporary_seed(seed: int):
 
 
 def make_qdf(
-    df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0, seed: int = 2
+    df_cids: pd.DataFrame,
+    df_xcats: pd.DataFrame,
+    back_ar: float = 0,
+    seed: Optional[int] = None,
 ) -> QuantamentalDataFrame:
     """
     Make quantamental DataFrame with basic columns: 'cid', 'xcat', 'real_date', 'value'.
@@ -137,7 +140,7 @@ def make_qdf(
         float between 0 and 1 denoting set auto-correlation of the background factor.
         Default is zero.
     seed : int
-        seed for random number generation. Default is 2.
+        seed for random number generation. Default is None.
 
     Returns
     -------
