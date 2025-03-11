@@ -25,6 +25,7 @@ def plot_acf(
     title: Optional[str] = None,
     share_x: bool = True,
     share_y: bool = True,
+    zero: bool = False,
     **kwargs,
 ):
     """
@@ -63,6 +64,8 @@ def plot_acf(
         Share x-axis across all subplots.
     share_y : bool, default=True
         Share y-axis across all subplots.
+    zero : bool, default=False
+        Include the zero lag in the plot.
     kwargs : Dict
         Additional keyword arguments for the plot passed directly to Facetplot.lineplot.
     """
@@ -87,7 +90,7 @@ def plot_acf(
         title = f"Autocorrelation Function (ACF) for {xcat}"
 
     plot_func = _statsmodels_plot_acf_wrapper
-    plot_func_kwargs = {"lags": lags, "alpha": alpha}
+    plot_func_kwargs = {"lags": lags, "alpha": alpha, "zero": zero}
 
     _plot_acf(
         df=df,
@@ -122,6 +125,7 @@ def plot_pacf(
     title: Optional[str] = None,
     share_x: bool = True,
     share_y: bool = True,
+    zero: bool = False,
     **kwargs,
 ):
     """
@@ -162,6 +166,8 @@ def plot_pacf(
         Share x-axis across all subplots.
     share_y : bool, default=True
         Share y-axis across all subplots.
+    zero : bool, default=False
+        Include the zero lag in the plot.
     kwargs : Dict
         Additional keyword arguments for the plot passed directly to Facetplot.lineplot.
     """
@@ -186,7 +192,7 @@ def plot_pacf(
         title = f"Partial Autocorrelation Function (PACF) for {xcat}"
 
     plot_func = _statsmodels_plot_pacf_wrapper
-    plot_func_kwargs = {"lags": lags, "alpha": alpha, "method": method}
+    plot_func_kwargs = {"lags": lags, "alpha": alpha, "method": method, "zero": zero}
 
     _plot_acf(
         df=df,
@@ -440,4 +446,4 @@ if __name__ == "__main__":
         lags=30,
     )
 
-    plot_pacf(df, cids=sel_cids, xcat="FXXR", title="ACF Facet Plot", remove_zero_predictor=True)
+    plot_pacf(df, cids=sel_cids, xcat="FXXR", title="ACF Facet Plot", remove_zero_predictor=True, zero=True)
