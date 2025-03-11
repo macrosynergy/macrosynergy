@@ -97,7 +97,7 @@ def adjust_weights_backend(
         cid_weight = df_weights_wide[cid]
         cid_adj_zns = df_adj_zns_wide[cid]
 
-        result = cid_adj_zns * cid_weight.apply(method) * param
+        result = cid_weight * cid_adj_zns.apply(method) * param
         dfw_result[cid] = result
 
     return dfw_result
