@@ -16,6 +16,8 @@ from macrosynergy.management.utils import (
     get_cid,
     get_xcat,
 )
+import contextlib
+import random
 
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
@@ -91,7 +93,30 @@ def dataframe_generator(
     return df_add, work_days
 
 
-def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
+@contextlib.contextmanager
+def temporary_seed(seed: int):
+    """
+    A context manager that temporarily sets the seed for both NumPy and Python's random.
+    """
+    np_state = np.random.get_state()
+    random_state = random.getstate()
+
+    np.random.seed(seed)
+    random.seed(seed)
+
+    try:
+        yield
+    finally:
+        np.random.set_state(np_state)
+        random.setstate(random_state)
+
+
+def make_qdf(
+    df_cids: pd.DataFrame,
+    df_xcats: pd.DataFrame,
+    back_ar: float = 0,
+    seed: Optional[int] = None,
+) -> QuantamentalDataFrame:
     """
     Make quantamental DataFrame with basic columns: 'cid', 'xcat', 'real_date', 'value'.
 
@@ -114,12 +139,20 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     back_ar : float
         float between 0 and 1 denoting set auto-correlation of the background factor.
         Default is zero.
+    seed : int
+        seed for random number generation. Default is None.
 
     Returns
     -------
     pd.DataFrame
         basic quantamental DataFrame according to specifications.
     """
+    with temporary_seed(seed):
+        qdf = _make_qdf(df_cids, df_xcats, back_ar)
+    return qdf
+
+
+def _make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
 
     df_list = []
 
