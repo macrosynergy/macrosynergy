@@ -3,17 +3,11 @@ Class to produce point forecasts of returns given knowledge of an indicator stat
 specific date. 
 """
 
-import numbers
-
-import matplotlib.colors as mcolors
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 from sklearn.feature_selection import SelectorMixin
 from sklearn.pipeline import Pipeline
 
-from macrosynergy.learning import ExpandingIncrementPanelSplit
 from macrosynergy.learning.sequential import BasePanelLearner
 from macrosynergy.management.utils import concat_categorical, _insert_as_categorical
 from macrosynergy.management.types import QuantamentalDataFrame
@@ -55,14 +49,15 @@ class ReturnForecaster(BasePanelLearner):
 
     Notes
     -----
-    This class is a simple interface to produce a single period forward
+    This class is an interface to produce a single period forward
     forecast. The `real_date` parameter specifies the date of the information state used
     to generate the forecast. As an example, if the provided date is "2025-03-01", a 
     monthly frequency is specified and the lag is 1, a check ensuring that all factors are
     available on "2025-03-01" is performed. If the check is successful, the information
     states on this date are set aside, and the previous data is downsampled to monthly
-    (with the features lagged by 1 period).  On this dataset, model selection and fitting
-    happen - and the forecast is produced for the single out-of-sample period (March 2025).
+    (with the features lagged by 1 period to ensure no lookahead bias). On this dataset,
+    model selection and fitting happen - and the forecast is produced for the single
+    out-of-sample period (March 2025).
     """
     def __init__(
         self,
@@ -78,7 +73,7 @@ class ReturnForecaster(BasePanelLearner):
     ):
         # First check that all factors are available on the real date
         # and that the date is in the dataframe
-        #self._check_factor_availability(df, xcats, real_date)
+        self._check_factor_availability(df, xcats, real_date)
         self.real_date = pd.to_datetime(real_date)
         # Separate in-sample and out-of-sample data
         df_train = df[df.real_date < real_date]
@@ -536,6 +531,202 @@ class ReturnForecaster(BasePanelLearner):
 
         return ftr_corr_data
     
+    def get_optimized_signals(self, name=None):
+        """
+        Returns forward forecasts for those previously calculated.
+
+        Parameters
+        ----------
+        name : str or list, optional
+            Label(s) of forecasts. Default is all stored in the
+            class instance.
+
+        Returns
+        -------
+        pd.DataFrame
+            Pandas dataframe in JPMaQS format of forecasts stored on the dates these
+            could have been calculated.
+        """
+        if name is None:
+            preds = self.preds
+        else:
+            if isinstance(name, str):
+                name = [name]
+            elif not isinstance(name, list):
+                raise TypeError(
+                    "The process name must be a string or a list of strings."
+                )
+
+            for n in name:
+                if n not in self.preds.xcat.unique():
+                    raise ValueError(
+                        f"""The process name '{n}' is not in the list of already-run
+                        pipelines. Please check the name carefully. If correct, please run 
+                        calculate_predictions() first.
+                        """
+                    )
+            preds = self.preds[self.preds.xcat.isin(name)]
+        # return self.preds[self.preds.xcat.isin(name)]
+        signals_df = QuantamentalDataFrame(
+            df=preds,
+            categorical=self.df.InitializedAsCategorical,
+        ).to_original_dtypes()
+        return signals_df
+    
+    def get_selected_features(self, name=None):
+        """
+        Returns the selected features at the forecast dates for one or more pipelines.
+
+        Parameters
+        ----------
+        name: str or list, optional
+            Label(s) of forecasts. Default is all stored in the
+            class instance.
+
+        Returns
+        -------
+        pd.DataFrame
+            Pandas dataframe of the selected features at each retraining date.
+        """
+        if name is None:
+            return self.selected_ftrs
+        else:
+            if isinstance(name, str):
+                name = [name]
+            elif not isinstance(name, list):
+                raise TypeError(
+                    "The process name must be a string or a list of strings."
+                )
+
+            for n in name:
+                if n not in self.selected_ftrs.name.unique():
+                    raise ValueError(
+                        f"""The process name '{n}' is not in the list of already-run
+                        pipelines. Please check the name carefully. If correct, please run 
+                        calculate_predictions() first.
+                        """
+                    )
+            return self.selected_ftrs[self.selected_ftrs.name.isin(name)]
+        
+    def get_feature_importances(self, name=None):
+        """
+        Returns model feature importances at forecasting time. 
+
+        Parameters
+        ----------
+        name: str or list, optional
+            Label(s) of forecasts. Default is all stored in the
+            class instance.
+
+        Returns
+        -------
+        pd.DataFrame
+            Pandas dataframe of the feature importances, if available.
+
+        Notes
+        -----
+        Availability of feature importances is subject to the selected model having a
+        `feature_importances_` or `coef_` attribute.
+        """
+        if name is None:
+            return self.feature_importances
+        else:
+            if isinstance(name, str):
+                name = [name]
+            elif not isinstance(name, list):
+                raise TypeError(
+                    "The process name must be a string or a list of strings."
+                )
+
+            for n in name:
+                if n not in self.feature_importances.name.unique():
+                    raise ValueError(
+                        f"""The process name '{n}' is not in the list of already-run
+                        pipelines. Please check the name carefully. If correct, please run 
+                        calculate_predictions() first.
+                        """
+                    )
+            return self.feature_importances[
+                self.feature_importances.name.isin(name)
+            ].sort_values(by="real_date")
+        
+    def get_intercepts(self, name=None):
+        """
+        Returns model intercepts at forecasting time.
+
+        Parameters
+        ----------
+        name: str or list, optional
+            Label(s) of forecasts. Default is all stored in the
+            class instance.
+
+        Returns
+        -------
+        pd.DataFrame
+            Pandas dataframe of the intercepts.
+        """
+        if name is None:
+            return self.intercepts
+        else:
+            if isinstance(name, str):
+                name = [name]
+            elif not isinstance(name, list):
+                raise TypeError(
+                    "The process name must be a string or a list of strings."
+                )
+
+            for n in name:
+                if n not in self.intercepts.name.unique():
+                    raise ValueError(
+                        f"""The process name '{n}' is not in the list of already-run
+                        pipelines. Please check the name carefully. If correct, please run 
+                        calculate_predictions() first.
+                        """
+                    )
+            return self.intercepts[self.intercepts.name.isin(name)].sort_values(
+                by="real_date"
+            )
+        
+    def get_feature_correlations(
+        self,
+        name=None,
+    ):
+        """
+        Returns dataframe of feature correlations at forecasting time.
+
+        Parameters
+        ----------
+        name: str or list, optional
+            Label(s) of forecasts. Default is all stored in the
+            class instance.
+
+        Returns
+        -------
+        pd.DataFrame
+            Pandas dataframe of the correlations between the features passed into a model
+            pipeline and the post-processed features inputted into the final model.
+        """
+        if name is None:
+            return self.ftr_corr
+        else:
+            if isinstance(name, str):
+                name = [name]
+            elif not isinstance(name, list):
+                raise TypeError(
+                    "The process name must be a string or a list of strings."
+                )
+
+            for n in name:
+                if n not in self.ftr_corr.name.unique():
+                    raise ValueError(
+                        f"""Either the process name '{n}' is not in the list of already-run
+                        pipelines, or no correlations were stored for this pipeline.
+                        Please check the name carefully. If correct, please run 
+                        calculate_predictions() first.
+                        """
+                    )
+            return self.ftr_corr[self.ftr_corr.name.isin(name)]
+    
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
     from macrosynergy.management.types import QuantamentalDataFrame
@@ -585,7 +776,7 @@ if __name__ == "__main__":
             ])
         },
         hyperparameters = {
-            "Ridge": {}
+            "Ridge": {"ridge__alpha": [0.1, 1, 10]}
         },
         scorers = {
             "sharpe": make_scorer(sharpe_ratio, greater_is_better=True),
@@ -593,5 +784,20 @@ if __name__ == "__main__":
         inner_splitters = {
             "Expanding": ExpandingKFoldPanelSplit(5),
         },
-        cv_summary = "mean-std",
+        cv_summary = "mean",
     )
+
+    print("Forecasts:")
+    print(rf.get_optimized_signals())
+
+    print("\nModel selection:")
+    print(rf.get_optimal_models())
+
+    print("\nSelected features:")
+    print(rf.get_selected_features())
+
+    print("\nFeature importances:")
+    print(rf.get_feature_importances())
+
+    print("\nIntercepts:")
+    print(rf.get_intercepts())
