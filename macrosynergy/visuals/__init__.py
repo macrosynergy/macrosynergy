@@ -12,6 +12,7 @@ from .ranges import view_ranges
 from .table import view_table
 from .multiple_reg_scatter import multiple_reg_scatter
 from .score_visualisers import ScoreVisualisers
+from .acf import plot_acf, plot_pacf
 
 
 __all__ = [
@@ -28,4 +29,6 @@ __all__ = [
     "view_panel_dates",
     "multiple_reg_scatter",
     "ScoreVisualisers",
+    "plot_acf",
+    "plot_pacf",
 ]
