@@ -231,6 +231,8 @@ def adjust_weights(
 
     df_res = QuantamentalDataFrame.from_wide(dfw_res, categorical=result_as_categorical)
 
+    df_res = df_res.dropna(how="any", axis=0)
+
     return df_res
 
 
