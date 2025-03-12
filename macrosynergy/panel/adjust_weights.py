@@ -160,7 +160,11 @@ def normalize_weights(df_weights_wide: pd.DataFrame) -> pd.DataFrame:
     pd.DataFrame
         DataFrame with normalized weights (sum of each row is 1).
     """
-    df_weights_wide = df_weights_wide.div(df_weights_wide.sum(axis=1), axis=0)
+    nan_mask = df_weights_wide.isna()
+    df_weights_wide = df_weights_wide[~nan_mask].div(
+        df_weights_wide[~nan_mask].abs().sum(axis=1),
+        axis=0,
+    )
     return df_weights_wide
 
 
