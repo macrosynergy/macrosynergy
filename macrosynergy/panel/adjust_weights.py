@@ -92,15 +92,8 @@ def adjust_weights_backend(
 
     assert set(df_weights_wide.columns) == set(df_adj_zns_wide.columns)
     assert set(df_weights_wide.index) == set(df_adj_zns_wide.index)
-    cids = sorted(df_weights_wide.columns)
-    dfw_result = pd.DataFrame(index=df_weights_wide.index)
 
-    for cid in cids:
-        cid_weight = df_weights_wide[cid]
-        cid_adj_zns = df_adj_zns_wide[cid]
-
-        result = cid_weight * cid_adj_zns.apply(method) * param
-        dfw_result[cid] = result
+    dfw_result = df_weights_wide * df_adj_zns_wide.apply(method) * param
 
     return dfw_result
 
