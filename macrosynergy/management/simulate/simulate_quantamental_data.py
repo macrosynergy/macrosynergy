@@ -94,10 +94,13 @@ def dataframe_generator(
 
 
 @contextlib.contextmanager
-def temporary_seed(seed: int):
+def temporary_seed(seed: Optional[int]):
     """
     A context manager that temporarily sets the seed for both NumPy and Python's random.
     """
+    if seed is None or not isinstance(seed, int):
+        return  # no seed - do nothing.
+
     np_state = np.random.get_state()
     random_state = random.getstate()
 
