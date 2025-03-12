@@ -252,6 +252,8 @@ def adjust_weights(
 
     df_res = df_res.dropna(how="any", axis=0)
 
+    assert np.allclose(df_res.groupby('real_date')['value'].sum(), 1)
+
     return df_res
 
 
