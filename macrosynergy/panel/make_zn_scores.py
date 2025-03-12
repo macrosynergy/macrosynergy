@@ -240,7 +240,7 @@ def make_zn_scores(
             cid_neutral[cid] = df_neutral["value"]
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
-    
+
     dfw_zns = dfw_zns.dropna(axis=0, how="all")
 
     if thresh is not None:
@@ -256,7 +256,7 @@ def make_zn_scores(
             cid_mabs,
             cid_neutral,
             cross_sections,
-            pan_weight
+            pan_weight,
         )
 
     # --- Reformatting of output into standardised DataFrame.
@@ -344,7 +344,12 @@ def expanding_stat(
                 .sum()
                 / expanding_count
             )
-            df_mean = df_mean.dropna().loc[dates]
+            try:
+                df_mean = df_mean.dropna().loc[dates]
+            except KeyError as e:
+                err_str = 'Some dates in "dates_iter" have no corresponding data.'
+                raise KeyError(err_str) from e
+
             df_mean.name = "value"
             df_out.update(df_mean)
         else:
@@ -392,7 +397,7 @@ def _unscore_dfw_zns(
     cid_mabs: dict,
     cid_neutral: dict,
     cross_sections: list,
-    pan_weight: float
+    pan_weight: float,
 ) -> pd.DataFrame:
     """
     Unscore the weighted panel and cross-sectional components of dfw_zns.
