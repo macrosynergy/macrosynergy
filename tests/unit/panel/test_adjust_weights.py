@@ -1,6 +1,7 @@
 import unittest
 from typing import Callable
 from numbers import Number
+import warnings
 import numpy as np
 import pandas as pd
 from macrosynergy.compat import PD_2_0_OR_LATER
@@ -28,7 +29,7 @@ class TestAdjustReturnsTypeChecks(unittest.TestCase):
             "adj_zns": "adj_zns",
             "method": lambda x: x,  # valid callable
             "param": 3.14,  # valid number
-            "cids": ["US", "UK"],
+            "cids": ["USD", "GBP", "JPY"],
         }
 
     def test_valid_input(self):
@@ -69,6 +70,11 @@ class TestAdjustReturnsTypeChecks(unittest.TestCase):
         args["cids"] = ["US", 123]
         with self.assertRaises(TypeError):
             check_types(**args)
+
+    def test_invalid_qdf(self):
+        # this tests uses adjust_returns directly
+        with self.assertRaises(TypeError):
+            adjust_weights(qdf=pd.DataFrame(), **self.valid_args)
 
 
 class TestAdjustReturnsMissingLogic(unittest.TestCase):
@@ -358,6 +364,11 @@ class TestAdjustWeightsMain(unittest.TestCase):
         nan_weights_mask = np.random.random(len(self.qdf)) < 0.2
         self.qdf.loc[nan_weights_mask, "value"] = np.nan
 
+        all_nan_date: pd.Timestamp = np.random.choice(self.qdf["real_date"].unique())
+        self.qdf.loc[
+            (self.qdf["real_date"] == all_nan_date) & self.qdf["xcat"].eq("AZ"), "value"
+        ] = np.nan
+
         args = {
             "weights": "WG",
             "adj_zns": "AZ",
@@ -367,7 +378,15 @@ class TestAdjustWeightsMain(unittest.TestCase):
         }
 
         expc_result = expected_adjusted_weights(df=self.qdf, **args)
-        adjusted = adjust_weights(df=self.qdf, **args)
+
+        with warnings.catch_warnings(record=True) as w:
+            adjusted = adjust_weights(df=self.qdf, **args)
+
+            last_warn = w[-1].message.args[0]
+            ts_str = pd.Timestamp(all_nan_date).strftime("%Y-%m-%d")
+            err_str = "dates have no data"
+            self.assertIn(ts_str, last_warn)
+            self.assertIn(err_str, last_warn)
 
         self.assertFalse(adjusted.isna().any().any())
         assert np.allclose(adjusted.groupby("real_date")["value"].sum(), 1)
