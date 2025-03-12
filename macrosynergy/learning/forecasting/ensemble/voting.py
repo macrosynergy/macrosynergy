@@ -193,7 +193,7 @@ if __name__ == "__main__":
     X_train = train.drop(columns=["XR"])
     y_train = np.sign(train["XR"])
 
-    vr = VotingClassifer(
+    vr = VotingClassifier(
         estimators = [
             ("lr", LogisticRegression()),
             ("rf", RandomForestClassifier())
