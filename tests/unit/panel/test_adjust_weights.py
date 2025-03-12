@@ -74,7 +74,7 @@ class TestAdjustReturnsTypeChecks(unittest.TestCase):
     def test_invalid_qdf(self):
         # this tests uses adjust_returns directly
         with self.assertRaises(TypeError):
-            adjust_weights(qdf=pd.DataFrame(), **self.valid_args)
+            adjust_weights(df=pd.DataFrame(), **self.valid_args)
 
 
 class TestAdjustReturnsMissingLogic(unittest.TestCase):
