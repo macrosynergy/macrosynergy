@@ -12,6 +12,7 @@ from macrosynergy.panel.adjust_weights import (
     check_missing_cids_xcats,
     split_weights_adj_zns,
     normalize_weights,
+    adjust_weights_backend,
 )
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import (
@@ -202,6 +203,63 @@ class TestSplitWeightsAdjZns(unittest.TestCase):
                     with self.assertRaises(ValueError) as context:
                         split_weights_adj_zns(df, self.weights, self.adj_zns)
                     self.assertIn("Missing tickers", str(context.exception))
+
+
+def get_primes(n):
+    """Return a list of the first n prime numbers."""
+    primes = []
+    num = 2
+    while len(primes) < n:
+        for p in primes:
+            if num % p == 0:
+                break
+        else:
+            primes.append(num)
+        num += 1
+    return primes
+
+
+class TestAdjustWeightsBackend(unittest.TestCase):
+    def setUp(self):
+        self.cids = ["USD", "EUR", "JPY", "GBP", "AUD", "CAD", "CHF", "CNY"]
+        self.xcats = ["WG", "AZ"]
+        tickers = [f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats]
+        self.tickers = list(np.random.permutation(tickers))
+        self.ticker_weights = dict(zip(self.tickers, get_primes(len(self.tickers))))
+
+        self.expected_results = {
+            _cid: np.prod(
+                [
+                    self.ticker_weights[ticker]
+                    for ticker in self.tickers
+                    if get_cid(ticker) == _cid
+                ]
+            )
+            for _cid in self.cids
+        }
+
+        start, end = "2020-01-01", "2021-02-01"
+        temp_df = make_test_df(tickers=self.tickers, start=start, end=end)
+        wdf = qdf_to_ticker_df(temp_df)
+        for ticker, weight in self.ticker_weights.items():
+            wdf[ticker] = weight
+        self.wdf = wdf
+        self.qdf = ticker_df_to_qdf(wdf)
+
+        self.df_weights_wide, self.df_adj_zns_wide = split_weights_adj_zns(
+            self.qdf, weights="WG", adj_zns="AZ"
+        )
+
+    def test_adjust_weights_backend(self):
+        adjusted = adjust_weights_backend(
+            self.df_weights_wide, self.df_adj_zns_wide, lambda x: x, 1
+        )
+        for cid, expected in self.expected_results.items():
+            with self.subTest(cid=cid):
+                # check that there is one unique value in the colum
+                uval = list(set(adjusted[cid]))
+                self.assertEqual(len(uval), 1)
+                self.assertAlmostEqual(uval[0], expected)
 
 
 if __name__ == "__main__":
