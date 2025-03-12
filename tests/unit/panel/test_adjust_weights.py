@@ -262,5 +262,42 @@ class TestAdjustWeightsBackend(unittest.TestCase):
                 self.assertAlmostEqual(uval[0], expected)
 
 
+class TestAdjustWeightsMain(unittest.TestCase):
+    def setUp(self):
+        self.cids = ["USD", "EUR", "JPY", "GBP", "AUD", "CAD", "CHF", "CNY"]
+        self.xcats = ["WG", "AZ"]
+        tickers = [f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats]
+        self.tickers = list(np.random.permutation(tickers))
+        self.ticker_weights = dict(zip(self.tickers, get_primes(len(self.tickers))))
+
+        self.expected_results = {
+            _cid: np.prod(
+                [
+                    self.ticker_weights[ticker]
+                    for ticker in self.tickers
+                    if get_cid(ticker) == _cid
+                ]
+            )
+            for _cid in self.cids
+        }
+
+        start, end = "2020-01-01", "2021-02-01"
+        temp_df = make_test_df(tickers=self.tickers, start=start, end=end)
+        wdf = qdf_to_ticker_df(temp_df)
+        for ticker, weight in self.ticker_weights.items():
+            wdf[ticker] = weight
+        self.wdf = wdf
+        self.qdf = ticker_df_to_qdf(wdf)
+
+    def test_adjust_weights(self):
+        args = {
+            "df": self.qdf,
+            "weights": "WG",
+            "adj_zns": "AZ",
+            "method": lambda x: x,
+            "param": 1,
+        }
+        
+        
 if __name__ == "__main__":
     unittest.main()
