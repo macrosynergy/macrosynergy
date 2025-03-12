@@ -178,7 +178,7 @@ def normalize_weights(df_weights_wide: pd.DataFrame) -> pd.DataFrame:
 
     # assert that all rows sum to 1 or are all NaN
     if not norm_rows.all() and all_nan_rows.size == 0:
-        raise Exception("Normalization failed weights do not sum to 1")
+        raise Exception("Normalization failed; weights do not sum to 1")
 
     return df_weights_wide
 
