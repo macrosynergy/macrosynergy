@@ -67,6 +67,8 @@ def adjust_weights_backend(
     """
     Backend function for adjust_weights. Applies the `method` function to the weights and
     multiplies the result by the adjustment factors, and by the parameter `param`.
+    Expects the input DataFrames to be in wide format, with the same columns AND index
+    (see macrosynergy.panel.adjust_weights.split_weights_adj_zns).
 
     Parameters
     ----------
@@ -89,6 +91,7 @@ def adjust_weights_backend(
     """
 
     assert set(df_weights_wide.columns) == set(df_adj_zns_wide.columns)
+    assert set(df_weights_wide.index) == set(df_adj_zns_wide.index)
     cids = sorted(df_weights_wide.columns)
     dfw_result = pd.DataFrame(index=df_weights_wide.index)
 
@@ -133,6 +136,10 @@ def split_weights_adj_zns(
     df_weights_wide = QuantamentalDataFrame(df_weights).to_wide()
     df_adj_zns_wide = QuantamentalDataFrame(df_adj_zns).to_wide()
 
+    combined_index = df_weights_wide.index.union(df_adj_zns_wide.index)
+    df_weights_wide = df_weights_wide.reindex(combined_index)
+    df_adj_zns_wide = df_adj_zns_wide.reindex(combined_index)
+
     df_weights_wide.columns = get_cid(df_weights_wide)
     df_adj_zns_wide.columns = get_cid(df_adj_zns_wide)
 
@@ -162,11 +169,17 @@ def normalize_weights(df_weights_wide: pd.DataFrame) -> pd.DataFrame:
     pd.DataFrame
         DataFrame with normalized weights (sum of each row is 1).
     """
-    nan_mask = df_weights_wide.isna()
-    df_weights_wide = df_weights_wide[~nan_mask].div(
-        df_weights_wide[~nan_mask].abs().sum(axis=1),
-        axis=0,
+    df_weights_wide = df_weights_wide.div(
+        df_weights_wide.sum(axis="columns"), axis="index"
     )
+
+    norm_rows = df_weights_wide.sum(axis="columns").apply(lambda x: np.isclose(x, 1))
+    all_nan_rows = df_weights_wide.index[df_weights_wide.isnull().all(axis="columns")]
+
+    # assert that all rows sum to 1 or are all NaN
+    if not norm_rows.all() and all_nan_rows.size == 0:
+        raise Exception("Normalization failed weights do not sum to 1")
+
     return df_weights_wide
 
 
@@ -225,7 +238,13 @@ def adjust_weights(
 
     dfw_res = adjust_weights_backend(df_weights_wide, df_adj_zns_wide, method, param)
 
-    df_weights_wide = normalize_weights(dfw_res)
+    all_nan_rows = dfw_res.index[dfw_res.isnull().all(axis="columns")]
+    if all_nan_rows.size > 0:
+        err = "The following dates have no data after applying the adjustment, and will be dropped:"
+        warnings.warn(f"{err} {all_nan_rows}")
+        dfw_res = dfw_res.dropna(how="all", axis="rows")
+
+    dfw_res = normalize_weights(dfw_res)
 
     dfw_res.columns = list(map(lambda x: f"{x}_{adj_name}", dfw_res.columns))
 
