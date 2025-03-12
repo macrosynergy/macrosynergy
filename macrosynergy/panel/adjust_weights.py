@@ -225,7 +225,7 @@ def adjust_weights(
 
     dfw_res = adjust_weights_backend(df_weights_wide, df_adj_zns_wide, method, param)
 
-    df_weights_wide = normalize_weights(df_weights_wide)
+    df_weights_wide = normalize_weights(dfw_res)
 
     dfw_res.columns = list(map(lambda x: f"{x}_{adj_name}", dfw_res.columns))
 
