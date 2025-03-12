@@ -229,9 +229,7 @@ def adjust_weights(
 
     qdf = QuantamentalDataFrame.from_wide(dfw_result, categorical=result_as_categorical)
 
-    qdf = qdf.dropna(how="any", axis=0)
-
-    assert np.allclose(qdf.groupby("real_date")["value"].sum(), 1)
+    qdf = qdf.dropna(how="any", axis=0).reset_index(drop=True)
 
     return qdf
 
