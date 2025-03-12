@@ -46,11 +46,12 @@ from .forecasting import (
     RidgeRegressionSystem,
     CorrelationVolatilitySystem,
     KNNClassifier,
+    ProbabilityEstimator,
+    VotingRegressor,
+    VotingClassifier,
 )
 
 from .random_effects import RandomEffects
-
-from .forecasting import ProbabilityEstimator
 
 __all__ = [
     # splitters
@@ -96,6 +97,8 @@ __all__ = [
     "ModifiedLinearRegression",
     "ModifiedSignWeightedLinearRegression",
     "ModifiedTimeWeightedLinearRegression",
+    "VotingRegressor",
+    "VotingClassifier",
     # market beta estimation
     "BetaEstimator",
     # regression system

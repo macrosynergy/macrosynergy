@@ -60,7 +60,7 @@ class VotingRegressor(skl.VotingRegressor):
 
         return self
     
-class VotingClassifer(skl.VotingClassifier):
+class VotingClassifier(skl.VotingClassifier):
     """
     Classification model that votes on the predictions of many classifiers.
 
