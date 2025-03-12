@@ -1,11 +1,9 @@
 import unittest
+from typing import Callable
 from numbers import Number
-from typing import Callable, List
-
 import numpy as np
 import pandas as pd
-
-from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.compat import PD_2_0_OR_LATER
 from macrosynergy.panel.adjust_weights import (
     adjust_weights,
     check_types,
@@ -19,7 +17,6 @@ from macrosynergy.management.utils import (
     ticker_df_to_qdf,
     reduce_df,
     get_cid,
-    get_xcat,
     qdf_to_ticker_df,
 )
 
@@ -157,7 +154,12 @@ class TestNormalizeWeights(unittest.TestCase):
                     )
 
         # verify that NaNs are preserved
-        self.assertTrue(normalized_df.isna().equals(df_with_nans.isna()))
+        # self.assertTrue(normalized_df.isna().equals(df_with_nans.isna()))
+        for col in normalized_df.columns:
+            with self.subTest(col=col):
+                pd.testing.assert_series_equal(
+                    normalized_df[col].isna(), df_with_nans[col].isna()
+                )
 
     def test_normalization_zero_sum(self):
         df_zero = self.df_valid.copy()
@@ -261,6 +263,50 @@ class TestAdjustWeightsBackend(unittest.TestCase):
                 self.assertEqual(len(uval), 1)
                 self.assertAlmostEqual(uval[0], expected)
 
+    def test_adjust_weights_backend_nan(self):
+        # randomly set some values to NaN
+        nan_weights_mask = np.random.random(self.df_weights_wide.shape) < 0.2
+        self.df_weights_wide[nan_weights_mask] = np.nan
+
+        nan_adj_zns_mask = np.random.random(self.df_adj_zns_wide.shape) < 0.2
+        self.df_adj_zns_wide[nan_adj_zns_mask] = np.nan
+
+        def _method(x):
+            return x
+
+        adjusted = adjust_weights_backend(
+            df_adj_zns_wide=self.df_adj_zns_wide,
+            df_weights_wide=self.df_weights_wide,
+            method=_method,
+            param=1,
+        )
+
+        expc_res = self.df_weights_wide * self.df_adj_zns_wide.apply(_method) * 1
+        self.assertTrue(adjusted.equals(expc_res))
+
+
+def expected_adjusted_weights(
+    df: pd.DataFrame,
+    weights: str,
+    adj_zns: str,
+    method: Callable,
+    param: Number,
+    adj_name: str,
+) -> pd.DataFrame:
+    cids = list(set(df["cid"]))
+    check_types(weights, adj_zns, method, param, cids)
+    df, r_xcats, r_cids = reduce_df(
+        df, cids=cids, xcats=[weights, adj_zns], intersect=True, out_all=True
+    )
+    check_missing_cids_xcats(weights, adj_zns, cids, r_xcats, r_cids)
+    df_weights_wide, df_adj_zns_wide = split_weights_adj_zns(df, weights, adj_zns)
+    df_weights_wide = normalize_weights(df_weights_wide)
+    dfw_result = adjust_weights_backend(df_weights_wide, df_adj_zns_wide, method, param)
+    dfw_result = dfw_result.dropna(how="all", axis="rows")
+    dfw_result = normalize_weights(dfw_result)
+    dfw_result.columns = list(map(lambda x: f"{x}_{adj_name}", dfw_result.columns))
+    return ticker_df_to_qdf(dfw_result).dropna(how="any", axis=0).reset_index(drop=True)
+
 
 class TestAdjustWeightsMain(unittest.TestCase):
     def setUp(self):
@@ -282,22 +328,55 @@ class TestAdjustWeightsMain(unittest.TestCase):
         }
 
         start, end = "2020-01-01", "2021-02-01"
-        temp_df = make_test_df(tickers=self.tickers, start=start, end=end)
+        temp_df = make_test_df(
+            tickers=self.tickers, start=start, end=end, style="linear"
+        )
         wdf = qdf_to_ticker_df(temp_df)
         for ticker, weight in self.ticker_weights.items():
-            wdf[ticker] = weight
+            wdf[ticker] *= weight
         self.wdf = wdf
         self.qdf = ticker_df_to_qdf(wdf)
 
     def test_adjust_weights(self):
         args = {
-            "df": self.qdf,
             "weights": "WG",
             "adj_zns": "AZ",
             "method": lambda x: x,
             "param": 1,
+            "adj_name": "ADJWGT",
         }
-        
-        
+
+        expc_result = expected_adjusted_weights(df=self.qdf, **args)
+        adjusted = adjust_weights(df=self.qdf, **args)
+
+        if PD_2_0_OR_LATER:
+            self.assertTrue(adjusted.equals(expc_result))
+        else:
+            self.assertTrue(adjusted.eq(expc_result).all().all())
+
+    def test_adjust_weights_with_nans(self):
+        nan_weights_mask = np.random.random(len(self.qdf)) < 0.2
+        self.qdf.loc[nan_weights_mask, "value"] = np.nan
+
+        args = {
+            "weights": "WG",
+            "adj_zns": "AZ",
+            "method": lambda x: x,
+            "param": 1,
+            "adj_name": "ADJWGT",
+        }
+
+        expc_result = expected_adjusted_weights(df=self.qdf, **args)
+        adjusted = adjust_weights(df=self.qdf, **args)
+
+        self.assertFalse(adjusted.isna().any().any())
+        assert np.allclose(adjusted.groupby("real_date")["value"].sum(), 1)
+
+        if PD_2_0_OR_LATER:
+            self.assertTrue(adjusted.equals(expc_result))
+        else:
+            self.assertTrue(adjusted.eq(expc_result).all().all())
+
+
 if __name__ == "__main__":
     unittest.main()
