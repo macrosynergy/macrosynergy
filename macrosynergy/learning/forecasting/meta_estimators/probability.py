@@ -1,3 +1,6 @@
+import numpy as np
+import pandas as pd
+
 from sklearn.base import BaseEstimator, ClassifierMixin, MetaEstimatorMixin
 
 class ProbabilityEstimator(BaseEstimator, MetaEstimatorMixin, ClassifierMixin):
@@ -18,7 +21,7 @@ class ProbabilityEstimator(BaseEstimator, MetaEstimatorMixin, ClassifierMixin):
     """
     def __init__(self, classifier):
         if not isinstance(classifier, ClassifierMixin):
-            raise ValueError("classifier must be a scikit-learn classifier.")
+            raise TypeError("classifier must be a scikit-learn classifier.")
         
         self.classifier = classifier
         self.classes_ = [-1,1]
@@ -44,7 +47,9 @@ class ProbabilityEstimator(BaseEstimator, MetaEstimatorMixin, ClassifierMixin):
 
         # Store feature importances
         if hasattr(self.classifier, "feature_importances_"):
-            self.feature_importances_ = self.classifier.feature_importances_ 
+            self.feature_importances_ = self.classifier.feature_importances_
+        elif hasattr(self.classifier, "coef_"):
+            self.feature_importances_ = np.abs(self.classifier.coef_) / np.sum(np.abs(self.classifier.coef_))
 
         return self
     
