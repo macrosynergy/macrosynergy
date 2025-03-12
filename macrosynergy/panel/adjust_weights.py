@@ -177,7 +177,6 @@ def adjust_weights(
     method: Callable,
     param: Number,
     cids: List[str] = None,
-    normalize: bool = True,
     adj_name: str = "ADJWGT",
 ):
     """
@@ -199,8 +198,6 @@ def adjust_weights(
         Parameter that will be passed to the method function.
     cids : List[str], optional
         List of cids to adjust. If None, all cids will be adjusted. Default is None.
-    normalize : bool, optional
-        If True, the weights will be normalized before being adjusted. Default is True.
     adj_name : str, optional
         Name of the resulting xcat. Default is "ADJWGT".
     """
@@ -224,10 +221,11 @@ def adjust_weights(
 
     df_weights_wide, df_adj_zns_wide = split_weights_adj_zns(df, weights, adj_zns)
 
-    if normalize:
-        df_weights_wide = normalize_weights(df_weights_wide)
+    df_weights_wide = normalize_weights(df_weights_wide)
 
     dfw_res = adjust_weights_backend(df_weights_wide, df_adj_zns_wide, method, param)
+
+    df_weights_wide = normalize_weights(df_weights_wide)
 
     dfw_res.columns = list(map(lambda x: f"{x}_{adj_name}", dfw_res.columns))
 
