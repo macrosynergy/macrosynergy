@@ -90,7 +90,6 @@ def adjust_weights_backend(
 
     assert set(df_weights_wide.columns) == set(df_adj_zns_wide.columns)
     cids = sorted(df_weights_wide.columns)
-    results = []
     dfw_result = pd.DataFrame(index=df_weights_wide.index)
 
     for cid in cids:
