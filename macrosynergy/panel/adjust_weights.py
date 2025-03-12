@@ -4,25 +4,12 @@ Implementation of adjust_weights.
 
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Union, Optional, Tuple, Type, Set, Callable
+from typing import List, Tuple, Callable
 import warnings
 from numbers import Number
-from packaging import version
-from macrosynergy.management.utils import (
-    reduce_df,
-    is_valid_iso_date,
-    get_cid,
-    get_xcat,
-)
+from macrosynergy.management.utils import reduce_df, get_cid
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.types import QuantamentalDataFrame
-
-
-PD_FUTURE_STACK = (
-    dict(future_stack=True)
-    if version.parse(pd.__version__) > version.parse("2.1.0")
-    else dict(dropna=False)
-)
 
 
 def check_missing_cids_xcats(weights, adj_zns, cids, r_xcats, r_cids):
@@ -79,7 +66,7 @@ def adjust_weights_backend(
         DataFrame with adjustment factors in wide format.
 
     method : Callable
-        Function that will be applied to the weights to adjust them. This function must
+        Function that will be applied to the weights to adjust them.
 
     param : Number
         Parameter that will be passed to the method function.
@@ -180,7 +167,7 @@ def adjust_weights(
     df: QuantamentalDataFrame,
     weights: str,
     adj_zns: str,
-    method: Callable,
+    method: Callable[[Number], Number],
     param: Number,
     cids: List[str] = None,
     adj_name: str = "ADJWGT",
@@ -198,8 +185,7 @@ def adjust_weights(
         Name of the xcat containing the adjustment factors.
     method : Callable
         Function that will be applied to the weights to adjust them. This function must
-        take a single array-like argument and return an array-like object of the same
-        shape.
+        conform to `f(x: Number, *args) -> Number`.
     param : Number
         Parameter that will be passed to the method function.
     cids : List[str], optional
