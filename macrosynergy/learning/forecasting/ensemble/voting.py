@@ -36,7 +36,11 @@ class VotingRegressor(skl.VotingRegressor):
 
         Parameters
         ----------
-
+        X : pd.DataFrame or np.ndarray
+            Pandas dataframe or numpy array of input features.
+        y : pd.Series or pd.DataFrame or np.ndarray
+            Pandas series, dataframe or numpy array of targets associated with each sample
+            in X.
         """
         # Checks 
         self._check_fit_params(X, y)
@@ -65,6 +69,9 @@ class VotingRegressor(skl.VotingRegressor):
         return self
     
     def _check_fit_params(self, X, y):
+        """
+        Checks for fit method parameters
+        """
         # X
         if not isinstance(X, (pd.DataFrame, np.ndarray)):
             raise TypeError(
@@ -145,7 +152,16 @@ class VotingClassifier(skl.VotingClassifier):
 
         Parameters
         ----------
+        X : pd.DataFrame or np.ndarray
+            Pandas dataframe or numpy array of input features.
+        y : pd.Series or pd.DataFrame or np.ndarray
+            Pandas series, dataframe or numpy array of targets associated with each sample
+            in X.
         """
+        # Checks
+        self._check_fit_params(X, y)
+
+        # Fit classifiers
         super().fit(X, y, sample_weight, **fit_params)
 
         # Calculate feature importances
@@ -171,6 +187,47 @@ class VotingClassifier(skl.VotingClassifier):
             self.feature_importances_ /= np.sum(self.feature_importances_)
 
         return self
+    
+    def _check_fit_params(self, X, y):
+        """
+        Checks for fit method parameters
+        """
+        # X
+        if not isinstance(X, (pd.DataFrame, np.ndarray)):
+            raise TypeError(
+                "Input feature matrix for the voting regressor must be either a pandas "
+                "dataframe or numpy array."
+            )
+        if isinstance(X, np.ndarray):
+            if X.ndim != 2:
+                raise ValueError(
+                    "When the input feature matrix for the voting regressor is a "
+                    "numpy array, it must have two dimensions."
+                )
+        # y
+        if not isinstance(y, (pd.Series, pd.DataFrame, np.ndarray)):
+            raise TypeError(
+                "Target vector for the voting regressor must be either a pandas series, "
+                "dataframe or numpy array."
+            )
+        if isinstance(y, pd.DataFrame):
+            if y.shape[1] != 1:
+                raise ValueError(
+                    "The dependent variable dataframe must have only one column. If used "
+                    "as part of an sklearn pipeline, ensure that previous steps return "
+                    "a pandas series or dataframe."
+                )
+        if isinstance(y, np.ndarray):
+            if y.ndim != 1:
+                raise ValueError(
+                    "When the target vector for the voting regressor is a numpy "
+                    "array, it must have one dimension."
+                )
+        if X.shape[0] != y.shape[0]:
+            raise ValueError(
+                "The number of samples in the input feature matrix must match the number "
+                "of samples in the target vector."
+            )
 
 
 if __name__ == "__main__":
