@@ -50,6 +50,8 @@ from .forecasting import (
 
 from .random_effects import RandomEffects
 
+from .forecasting import ProbabilityEstimator
+
 __all__ = [
     # splitters
     "ExpandingKFoldPanelSplit",
@@ -103,4 +105,6 @@ __all__ = [
     "CorrelationVolatilitySystem",
     # random effects
     "RandomEffects",
+    # Meta estimators
+    "ProbabilityEstimator",
 ]

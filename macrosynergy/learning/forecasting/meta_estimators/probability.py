@@ -41,6 +41,8 @@ class ProbabilityEstimator(BaseEstimator, MetaEstimatorMixin, ClassifierMixin):
 
         # Model fitting
         self.classifier.fit(X, y)
+
+        # Store feature importances
         if hasattr(self.classifier, "feature_importances_"):
             self.feature_importances_ = self.classifier.feature_importances_ 
 
