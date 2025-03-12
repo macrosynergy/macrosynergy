@@ -127,8 +127,8 @@ def split_weights_adj_zns(
         factors), with one column per cid.
     """
 
-    df_weights = df[df["xcat"] == weights]
-    df_adj_zns = df[df["xcat"] == adj_zns]
+    df_weights = df.loc[df["xcat"] == weights]
+    df_adj_zns = df.loc[df["xcat"] == adj_zns]
 
     df_weights_wide = QuantamentalDataFrame(df_weights).to_wide()
     df_adj_zns_wide = QuantamentalDataFrame(df_adj_zns).to_wide()
