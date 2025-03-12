@@ -137,10 +137,13 @@ def split_weights_adj_zns(
     df_weights_wide.columns = get_cid(df_weights_wide)
     df_adj_zns_wide.columns = get_cid(df_adj_zns_wide)
 
-    miss_left = list(set(df_weights_wide.columns) - set(df_adj_zns_wide.columns))
-    miss_right = list(set(df_adj_zns_wide.columns) - set(df_weights_wide.columns))
-    if miss_left or miss_right:
-        raise ValueError(f"Mismatched columns: {miss_left + miss_right}")
+    zns_missing_in_weights = set(df_adj_zns_wide.columns) - set(df_weights_wide.columns)
+    weights_missing_in_zns = set(df_weights_wide.columns) - set(df_adj_zns_wide.columns)
+    zns_missing_in_weights = [f"{c}_{adj_zns}" for c in zns_missing_in_weights]
+    weights_missing_in_zns = [f"{c}_{weights}" for c in weights_missing_in_zns]
+    all_missing = zns_missing_in_weights + weights_missing_in_zns
+    if all_missing:
+        raise ValueError(f"Missing tickers: {all_missing}")
 
     return df_weights_wide, df_adj_zns_wide
 
