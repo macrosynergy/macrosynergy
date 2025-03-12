@@ -236,25 +236,25 @@ def adjust_weights(
 
     df_weights_wide = normalize_weights(df_weights_wide)
 
-    dfw_res = adjust_weights_backend(df_weights_wide, df_adj_zns_wide, method, param)
+    dfw_result = adjust_weights_backend(df_weights_wide, df_adj_zns_wide, method, param)
 
-    all_nan_rows = dfw_res.index[dfw_res.isnull().all(axis="columns")]
+    all_nan_rows = dfw_result.index[dfw_result.isnull().all(axis="columns")]
     if all_nan_rows.size > 0:
         err = "The following dates have no data after applying the adjustment, and will be dropped:"
         warnings.warn(f"{err} {all_nan_rows}")
-        dfw_res = dfw_res.dropna(how="all", axis="rows")
+        dfw_result = dfw_result.dropna(how="all", axis="rows")
 
-    dfw_res = normalize_weights(dfw_res)
+    dfw_result = normalize_weights(dfw_result)
 
-    dfw_res.columns = list(map(lambda x: f"{x}_{adj_name}", dfw_res.columns))
+    dfw_result.columns = list(map(lambda x: f"{x}_{adj_name}", dfw_result.columns))
 
-    df_res = QuantamentalDataFrame.from_wide(dfw_res, categorical=result_as_categorical)
+    qdf = QuantamentalDataFrame.from_wide(dfw_result, categorical=result_as_categorical)
 
-    df_res = df_res.dropna(how="any", axis=0)
+    qdf = qdf.dropna(how="any", axis=0)
 
-    assert np.allclose(df_res.groupby('real_date')['value'].sum(), 1)
+    assert np.allclose(qdf.groupby("real_date")["value"].sum(), 1)
 
-    return df_res
+    return qdf
 
 
 if __name__ == "__main__":
