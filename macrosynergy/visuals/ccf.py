@@ -1,24 +1,27 @@
 """
-Functions used to visualize Autoco
+Functions used to visualize cross-correlation functions.
 """
 
 from numbers import Number
-from typing import Callable, Dict, List, Optional, Tuple, Union, Sequence
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from statsmodels.graphics.tsaplots import plot_acf as plot_acf_sm
-from statsmodels.graphics.tsaplots import plot_pacf as plot_pacf_sm
+import statsmodels.api as sm
+
+
+import numpy as np
+import matplotlib.pyplot as plt
 
 from macrosynergy.visuals import FacetPlot
 
 
-def plot_acf(
+def plot_ccf(
     df: pd.DataFrame,
     cids: List[str],
-    xcat: str,
+    xcats: str,
     lags: Union[int, Sequence] = 30,
     alpha: float = 0.05,
     remove_zero_predictor: bool = False,
@@ -41,10 +44,10 @@ def plot_acf(
         The input DataFrame with columns ['real_date', 'cid', 'xcat', 'value'].
     cids : List[str]
         List of cids to plot.
-    xcat : str
-        The xcat to filter and plot ACFs for.
+    xcats : str
+        The xcat to filter and plot ccfs for.
     lags : Union[int, Sequence], default=30
-        Number of lags for ACF calculation. If an integer, the lags from 1 to lags are plotted.
+        Number of lags for ccf calculation. If an integer, the lags from 1 to lags are plotted.
         If a sequence is provided, the lags are plotted as given.
     alpha : float, default=0.05
         Significance level for the confidence intervals.
@@ -74,32 +77,38 @@ def plot_acf(
         Additional keyword arguments for the plot passed directly to Facetplot.lineplot.
     """
 
-    _checks_plot_acf(
-        df=df,
-        cids=cids,
-        xcat=xcat,
-        lags=lags,
-        alpha=alpha,
-        remove_zero_predictor=remove_zero_predictor,
-        start=start,
-        end=end,
-        blacklist=blacklist,
-        figsize=figsize,
-        title=title,
-        share_x=share_x,
-        share_y=share_y,
-    )
+    # _checks_plot_ccf(
+    #     df=df,
+    #     cids=cids,
+    #     xcat=xcat,
+    #     lags=lags,
+    #     alpha=alpha,
+    #     remove_zero_predictor=remove_zero_predictor,
+    #     start=start,
+    #     end=end,
+    #     blacklist=blacklist,
+    #     figsize=figsize,
+    #     title=title,
+    #     share_x=share_x,
+    #     share_y=share_y,
+    # )
 
     if title is None:
-        title = f"Autocorrelation Function (ACF) for {xcat}"
+        title = f"Cross-correlation for {xcats}"
 
-    plot_func = _statsmodels_plot_acf_wrapper
-    plot_func_kwargs = {"lags": lags, "alpha": alpha, "zero": zero}
+    plot_func = _plot_ccf_wrapper
+    plot_func_kwargs = {
+        "lags": lags,
+        "alpha": alpha,
+        "zero": zero,
+        "signal_xcat": xcats[0],
+        "target_xcat": xcats[1],
+    }
 
-    _plot_acf(
+    _plot_ccf(
         df=df,
         cids=cids,
-        xcat=xcat,
+        xcats=xcats,
         plot_func=plot_func,
         plot_func_kwargs=plot_func_kwargs,
         remove_zero_predictor=remove_zero_predictor,
@@ -114,112 +123,10 @@ def plot_acf(
     )
 
 
-def plot_pacf(
+def _plot_ccf(
     df: pd.DataFrame,
     cids: List[str],
-    xcat: str,
-    lags: int = 30,
-    alpha=0.05,
-    remove_zero_predictor: bool = False,
-    method="ywm",
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    blacklist: Optional[Dict[str, List[str]]] = None,
-    figsize: Tuple[float, float] = (16, 9),
-    title: Optional[str] = None,
-    share_x: bool = True,
-    share_y: bool = True,
-    zero: bool = False,
-    **kwargs,
-):
-    """
-    Plots a facet grid of partial autocorrelation functions for a given xcat and multiple cids.
-
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        The input DataFrame with columns ['real_date', 'cid', 'xcat', 'value'].
-    cids : List[str]
-        List of cids to plot.
-    xcat : str
-        The xcat to filter and plot PACFs for.
-    lags : Union[int, Sequence], default=30
-        Number of lags for PACF calculation. If an integer, the lags from 1 to lags are plotted.
-        If a sequence is provided, the lags are plotted as given.
-    alpha : float, default=0.05
-        Significance level for the confidence intervals.
-    remove_zero_predictor : bool, default=False
-        Remove zeros from the input series.
-    method : str, default='ywm'
-        Method for Statsmodel's PACF calculation. Must be one of ['ywm', 'ywmle', 'yw', 'ywadjusted', 'ols', 'ols-adjusted'].
-    blacklist : dict
-        cross-sections with date ranges that should be excluded from the data frame. If
-        one cross-section has several blacklist periods append numbers to the cross-section
-        code.
-    start : str
-        ISO-8601 formatted date string. Select data from this date onwards. If None, all
-        dates are selected.
-    end : str
-        ISO-8601 formatted date string. Select data up to and including this date. If
-        None, all dates are selected.
-    figsize : Tuple[float, float], default=(16,9)
-        Figure size for the plot.
-    title : Optional[str], default=None
-        Title for the plot.
-    share_x : bool, default=True
-        Share x-axis across all subplots.
-    share_y : bool, default=True
-        Share y-axis across all subplots.
-    zero : bool, default=False
-        Include the zero lag in the plot.
-    kwargs : Dict
-        Additional keyword arguments for the plot passed directly to Facetplot.lineplot.
-    """
-    _checks_plot_acf(
-        df=df,
-        cids=cids,
-        xcat=xcat,
-        lags=lags,
-        alpha=alpha,
-        remove_zero_predictor=remove_zero_predictor,
-        method=method,
-        start=start,
-        end=end,
-        blacklist=blacklist,
-        figsize=figsize,
-        title=title,
-        share_x=share_x,
-        share_y=share_y,
-    )
-
-    if title is None:
-        title = f"Partial Autocorrelation Function (PACF) for {xcat}"
-
-    plot_func = _statsmodels_plot_pacf_wrapper
-    plot_func_kwargs = {"lags": lags, "alpha": alpha, "method": method, "zero": zero}
-
-    _plot_acf(
-        df=df,
-        cids=cids,
-        xcat=xcat,
-        plot_func=plot_func,
-        plot_func_kwargs=plot_func_kwargs,
-        remove_zero_predictor=remove_zero_predictor,
-        start=start,
-        end=end,
-        blacklist=blacklist,
-        figsize=figsize,
-        title=title,
-        share_x=share_x,
-        share_y=share_y,
-        **kwargs,
-    )
-
-
-def _plot_acf(
-    df: pd.DataFrame,
-    cids: List[str],
-    xcat: str,
+    xcats: str,
     plot_func: Callable,
     plot_func_kwargs: Dict,
     remove_zero_predictor: bool = False,
@@ -235,18 +142,18 @@ def _plot_acf(
 
     with FacetPlot(
         df=df,
-        xcats=[xcat],
+        xcats=xcats,
         cids=cids,
         intersect=True,
         start=start,
         end=end,
         blacklist=blacklist,
         tickers=None,
-        metrics=['value']
+        metrics=["value"],
     ) as fp:
 
         if remove_zero_predictor:
-            fp.df = fp.df.loc[fp.df['value'] != 0]
+            fp.df = fp.df.loc[fp.df["value"] != 0]
 
         if len(fp.cids) <= 3:
             kwargs["ncols"] = len(fp.cids)
@@ -266,27 +173,77 @@ def _plot_acf(
         )
 
 
-def _statsmodels_plot_acf_wrapper(df, plt_dict, ax, **kwargs):
+def _plot_ccf_wrapper(
+    df, plt_dict, signal_xcat, target_xcat, ax=None, lags=[0, 1, 2, 3], **kwargs
+):
     """
-    Wrapper function for statsmodels plot_acf.
+    Wrapper function to manually compute and plot cross-correlation.
+
+    Parameters:
+    - df: Multi-indexed DataFrame (cid, xcat) with a 'value' column.
+    - plt_dct: Dictionary containing ticker names ("Y" and optionally "X"),
+               where the ticker format is "cid_xcat" (e.g., "AUD_FXXR").
+    - ax: Matplotlib axis (optional).
+    - lags: Number of lags to compute.
+    - kwargs: Expected to contain:
+        - "Y": Target ticker in the format "cid_xcat"
+        - "X": signal ticker in the format "cid_xcat"
     """
-    y = plt_dict["Y"][0]
-    cid, xcat = str(y).split("_", 1)
-    selected_df = df.loc[cid, xcat]
-    plot_acf_sm(x=selected_df['value'], ax=ax, **kwargs)
+
+    # Extract cid and xcat from target ticker (e.g., "AUD_FXXR" → cid="AUD", xcat="FXXR")
+    cid = plt_dict["Y"][0].split("_")[0]
+
+    # Filter the DataFrame to get the target series
+    target_df = (
+        df.loc[(cid, target_xcat), ["real_date", "value"]]
+        .rename(columns={"value": "value_target"})
+        .reset_index(drop=True)
+    )
+    signal_df = (
+        df.loc[(cid, signal_xcat), ["real_date", "value"]]
+        .rename(columns={"value": "value_signal"})
+        .reset_index(drop=True)
+    )
+
+    # Merge on 'real_date' to align both series
+    merged_df = target_df.merge(signal_df, on="real_date")
+
+    # # Extract aligned series
+    # target_series = merged_df["value_target"]
+    # signal_series = merged_df["value_signal"]
+
+    # Compute cross-correlation manually
+    cross_corrs = []
+    lags=[0, 1, 2, 3]
+    for lag in lags:
+        shifted_signal = merged_df["value_signal"].shift(lag)  # Shift predictor forward
+        shifted_target = merged_df["value_target"]
+
+        valid_data = merged_df.dropna(subset=["value_signal", "value_target"])
+
+        if len(valid_data) > 0:
+            corr = shifted_signal.corr(shifted_target)  # Compute Pearson correlation
+        else:
+            corr = np.nan  # Avoid errors when no valid data
+
+        cross_corrs.append(corr)
+
+    # Plot the manually computed cross-correlation
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 5))
+
+    ax.stem(lags, cross_corrs)
+    ax.axhline(0, color="black", linestyle="--", lw=1)
+    # ax.set_xlabel("Lag")
+    # ax.set_ylabel("Cross-Correlation")
+    ax.set_title(f"Cross-Correlation: {signal_xcat} vs. {target_xcat}")
+    plt.xticks(lags)
+    # plt.gca().xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+
+    return ax
 
 
-def _statsmodels_plot_pacf_wrapper(df, plt_dict, ax, **kwargs):
-    """
-    Wrapper function for statsmodels plot_pacf.
-    """
-    y = plt_dict["Y"][0]
-    cid, xcat = str(y).split("_", 1)
-    selected_df = df.loc[cid, xcat]
-    plot_pacf_sm(x=selected_df['value'], ax=ax, **kwargs)
-
-
-def _checks_plot_acf(
+def _checks_plot_ccf(
     df: pd.DataFrame,
     cids: List[str],
     xcat: str,
@@ -444,16 +401,14 @@ if __name__ == "__main__":
             .reset_index(drop=True)
             .copy()
         )
-    df['value'] = df['value'] * (np.arange(len(df)) % 20 == 0)
-    df['grading'] = np.nan
-    
-    plot_acf(
+    df.loc[df["xcat"] == "EQXR", "value"] *= (np.arange(len(df.loc[df["xcat"] == "EQXR", "value"])) % 20 == 0)
+    df["grading"] = np.nan
+
+    plot_ccf(
         df,
         cids=sel_cids,
-        xcat="FXXR",
-        # title="ACF Facet Plot",
-        remove_zero_predictor=True,
-        lags=30,
+        xcats=["EQXR", "FXXR"],
+        # title="ccf Facet Plot",
+        remove_zero_predictor=False,
+        lags=5,
     )
-
-    plot_pacf(df, cids=sel_cids, xcat="FXXR", title="ACF Facet Plot", remove_zero_predictor=True, zero=True)

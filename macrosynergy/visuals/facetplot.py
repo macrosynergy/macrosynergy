@@ -594,6 +594,10 @@ class FacetPlot(Plotter):
                 )
 
             is_empty_plot = False
+            
+            if plot_func is not None:
+                plot_func(df=self.df, plt_dict=plt_dct, ax=ax_i, **plot_func_kwargs)
+                continue
 
             for iy, y in enumerate(plt_dct["Y"]):
                 cidx, xcatx = str(y).split("_", 1)
@@ -826,19 +830,19 @@ if __name__ == "__main__":
     with FacetPlot(
         df,
     ) as fp:
-        fp.lineplot(
-            cids=cids_A,
-            share_x=True,
-            xcat_grid=True,
-            ncols=2,
-            title=(
-                "Test Title with a very long title to see how it looks, \n and a "
-                "new line - why not?"
-            ),
-            # save_to_file="test_0.png",
-            ax_hline=75,
-            show=True,
-        )
+        # fp.lineplot(
+        #     cids=cids_A,
+        #     share_x=True,
+        #     xcat_grid=True,
+        #     ncols=2,
+        #     title=(
+        #         "Test Title with a very long title to see how it looks, \n and a "
+        #         "new line - why not?"
+        #     ),
+        #     # save_to_file="test_0.png",
+        #     ax_hline=75,
+        #     show=True,
+        # )
 
         fp.lineplot(
             cids=cids_B,
