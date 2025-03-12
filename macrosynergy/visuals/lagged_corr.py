@@ -1,28 +1,21 @@
 """
-Functions used to visualize cross-correlation functions.
+Functions used to visualize lagged correlation between two series.
 """
 
-from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
-import statsmodels.api as sm
-
-
-import numpy as np
-import matplotlib.pyplot as plt
 
 from macrosynergy.visuals import FacetPlot
 
 
-def plot_ccf(
+def plot_lagged_correlation(
     df: pd.DataFrame,
     cids: List[str],
-    xcats: str,
-    lags: Union[int, Sequence] = 30,
+    xcats: List[str],
+    lags: Union[int, Sequence] = 3,
     alpha: float = 0.05,
     remove_zero_predictor: bool = False,
     start: Optional[str] = None,
@@ -36,7 +29,7 @@ def plot_ccf(
     **kwargs,
 ):
     """
-    Plots a facet grid of autocorrelation functions for a given xcat and multiple cids.
+    Plots a facet grid of lagged correlation plots for two given xcats and multiple cids.
 
     Parameters:
     -----------
@@ -44,13 +37,11 @@ def plot_ccf(
         The input DataFrame with columns ['real_date', 'cid', 'xcat', 'value'].
     cids : List[str]
         List of cids to plot.
-    xcats : str
-        The xcat to filter and plot ccfs for.
+    xcats : List[str]
+        A list of two xcats to plot the lagged correlation between.
     lags : Union[int, Sequence], default=30
-        Number of lags for ccf calculation. If an integer, the lags from 1 to lags are plotted.
+        Number of lags for the correlation calculation. If an integer, the lags from 0 to lags are plotted.
         If a sequence is provided, the lags are plotted as given.
-    alpha : float, default=0.05
-        Significance level for the confidence intervals.
     remove_zero_predictor : bool, default=False
         Remove zeros from the input series.
     blacklist : dict
@@ -71,47 +62,44 @@ def plot_ccf(
         Share x-axis across all subplots.
     share_y : bool, default=True
         Share y-axis across all subplots.
-    zero : bool, default=False
-        Include the zero lag in the plot.
     kwargs : Dict
         Additional keyword arguments for the plot passed directly to Facetplot.lineplot.
     """
 
-    # _checks_plot_ccf(
-    #     df=df,
-    #     cids=cids,
-    #     xcat=xcat,
-    #     lags=lags,
-    #     alpha=alpha,
-    #     remove_zero_predictor=remove_zero_predictor,
-    #     start=start,
-    #     end=end,
-    #     blacklist=blacklist,
-    #     figsize=figsize,
-    #     title=title,
-    #     share_x=share_x,
-    #     share_y=share_y,
-    # )
+    _checks_plot_lc(
+        df=df,
+        cids=cids,
+        xcats=xcats,
+        lags=lags,
+        remove_zero_predictor=remove_zero_predictor,
+        start=start,
+        end=end,
+        blacklist=blacklist,
+        figsize=figsize,
+        title=title,
+        share_x=share_x,
+        share_y=share_y,
+    )
 
     if title is None:
-        title = f"Cross-correlation for {xcats}"
+        title = f"Lagged correlation for {xcats[0]} and {xcats[1]}"
 
-    plot_func = _plot_ccf_wrapper
+    plot_func = _plot_lagged_corr
     plot_func_kwargs = {
         "lags": lags,
         "alpha": alpha,
         "zero": zero,
         "signal_xcat": xcats[0],
         "target_xcat": xcats[1],
+        "remove_zero_predictor": remove_zero_predictor,
     }
 
-    _plot_ccf(
+    _lagged_corr_facetplot_wrapper(
         df=df,
         cids=cids,
         xcats=xcats,
         plot_func=plot_func,
         plot_func_kwargs=plot_func_kwargs,
-        remove_zero_predictor=remove_zero_predictor,
         start=start,
         end=end,
         blacklist=blacklist,
@@ -123,13 +111,12 @@ def plot_ccf(
     )
 
 
-def _plot_ccf(
+def _lagged_corr_facetplot_wrapper(
     df: pd.DataFrame,
     cids: List[str],
-    xcats: str,
+    xcats: List[str],
     plot_func: Callable,
     plot_func_kwargs: Dict,
-    remove_zero_predictor: bool = False,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[Dict[str, List[str]]] = None,
@@ -152,9 +139,6 @@ def _plot_ccf(
         metrics=["value"],
     ) as fp:
 
-        if remove_zero_predictor:
-            fp.df = fp.df.loc[fp.df["value"] != 0]
-
         if len(fp.cids) <= 3:
             kwargs["ncols"] = len(fp.cids)
 
@@ -169,31 +153,29 @@ def _plot_ccf(
             title=title,
             cid_grid=True,
             interpolate=True,
+            legend=False,
             **kwargs,
         )
 
 
-def _plot_ccf_wrapper(
-    df, plt_dict, signal_xcat, target_xcat, ax=None, lags=[0, 1, 2, 3], **kwargs
+def _plot_lagged_corr(
+    df,
+    plt_dict,
+    signal_xcat,
+    target_xcat,
+    ax=None,
+    lags=[0, 1, 2, 3],
+    remove_zero_predictor=True,
+    **kwargs,
 ):
     """
-    Wrapper function to manually compute and plot cross-correlation.
-
-    Parameters:
-    - df: Multi-indexed DataFrame (cid, xcat) with a 'value' column.
-    - plt_dct: Dictionary containing ticker names ("Y" and optionally "X"),
-               where the ticker format is "cid_xcat" (e.g., "AUD_FXXR").
-    - ax: Matplotlib axis (optional).
-    - lags: Number of lags to compute.
-    - kwargs: Expected to contain:
-        - "Y": Target ticker in the format "cid_xcat"
-        - "X": signal ticker in the format "cid_xcat"
+    Compute and plot cross-correlation.
     """
+    if isinstance(lags, int):
+        lags = list(range(lags + 1))
 
-    # Extract cid and xcat from target ticker (e.g., "AUD_FXXR" → cid="AUD", xcat="FXXR")
     cid = plt_dict["Y"][0].split("_")[0]
 
-    # Filter the DataFrame to get the target series
     target_df = (
         df.loc[(cid, target_xcat), ["real_date", "value"]]
         .rename(columns={"value": "value_target"})
@@ -205,52 +187,43 @@ def _plot_ccf_wrapper(
         .reset_index(drop=True)
     )
 
-    # Merge on 'real_date' to align both series
     merged_df = target_df.merge(signal_df, on="real_date")
 
-    # # Extract aligned series
-    # target_series = merged_df["value_target"]
-    # signal_series = merged_df["value_signal"]
-
-    # Compute cross-correlation manually
     cross_corrs = []
-    lags=[0, 1, 2, 3]
     for lag in lags:
-        shifted_signal = merged_df["value_signal"].shift(lag)  # Shift predictor forward
+        shifted_signal = merged_df["value_signal"].shift(lag)
         shifted_target = merged_df["value_target"]
 
-        valid_data = merged_df.dropna(subset=["value_signal", "value_target"])
+        valid_mask = shifted_signal.notna() & shifted_target.notna()
 
-        if len(valid_data) > 0:
-            corr = shifted_signal.corr(shifted_target)  # Compute Pearson correlation
-        else:
-            corr = np.nan  # Avoid errors when no valid data
+        if remove_zero_predictor:
+            valid_mask &= shifted_signal != 0
+
+        corr = (
+            shifted_signal[valid_mask].corr(shifted_target[valid_mask])
+            if valid_mask.any()
+            else np.nan
+        )
 
         cross_corrs.append(corr)
 
-    # Plot the manually computed cross-correlation
     if ax is None:
         fig, ax = plt.subplots(figsize=(8, 5))
 
     ax.stem(lags, cross_corrs)
     ax.axhline(0, color="black", linestyle="--", lw=1)
-    # ax.set_xlabel("Lag")
-    # ax.set_ylabel("Cross-Correlation")
-    ax.set_title(f"Cross-Correlation: {signal_xcat} vs. {target_xcat}")
+    ax.set_title(cid)
     plt.xticks(lags)
-    # plt.gca().xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
 
     return ax
 
 
-def _checks_plot_ccf(
+def _checks_plot_lc(
     df: pd.DataFrame,
     cids: List[str],
-    xcat: str,
+    xcats: List[str],
     lags: int = 30,
-    alpha=0.05,
     remove_zero_predictor: bool = False,
-    method="ywm",
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[Dict[str, List[str]]] = None,
@@ -266,10 +239,7 @@ def _checks_plot_ccf(
         df = df.copy().reset_index()
 
     if not isinstance(lags, (int, np.ndarray, list, tuple)):
-        raise TypeError("`lags` must be an integer.")
-
-    if not isinstance(alpha, float):
-        raise TypeError("`alpha` must be a number.")
+        raise TypeError("`lags` must be an integer or list of integers.")
 
     if not isinstance(remove_zero_predictor, bool):
         raise TypeError("`remove_zero_predictor` must be a boolean.")
@@ -280,11 +250,11 @@ def _checks_plot_ccf(
     if end is None:
         end: str = pd.Timestamp(df["real_date"].max()).strftime("%Y-%m-%d")
 
-    if not isinstance(xcat, str):
+    if not isinstance(xcats, list):
         raise TypeError("`xcat` must be a string.")
 
-    if xcat not in df["xcat"].unique():
-        raise ValueError(f"`xcat` {xcat} not found in the DataFrame.")
+    if not all(isinstance(xcat, str) for xcat in xcats):
+        raise TypeError("All elements in `xcats` must be strings)")
 
     if isinstance(cids, str):
         cids: List[str] = [cids]
@@ -303,10 +273,6 @@ def _checks_plot_ccf(
                 raise TypeError("Keys in `blacklist` must be strings.")
             if not isinstance(value, list):
                 raise TypeError("Values in `blacklist` must be lists.")
-
-    valid_methods = ["ywm", "ywmle", "yw", "ywadjusted", "ols", "ols-adjusted"]
-    if method not in valid_methods:
-        raise ValueError(f"Invalid value for method. Must be one of {valid_methods}.")
 
     if not isinstance(figsize, tuple):
         raise TypeError("`figsize` must be a tuple.")
@@ -401,14 +367,16 @@ if __name__ == "__main__":
             .reset_index(drop=True)
             .copy()
         )
-    df.loc[df["xcat"] == "EQXR", "value"] *= (np.arange(len(df.loc[df["xcat"] == "EQXR", "value"])) % 20 == 0)
+    df.loc[df["xcat"] == "EQXR", "value"] *= (
+        np.arange(len(df.loc[df["xcat"] == "EQXR", "value"])) % 20 == 0
+    )
     df["grading"] = np.nan
 
-    plot_ccf(
+    plot_lagged_correlation(
         df,
         cids=sel_cids,
         xcats=["EQXR", "FXXR"],
         # title="ccf Facet Plot",
-        remove_zero_predictor=False,
-        lags=5,
+        remove_zero_predictor=True,
+        lags=[1, 2],
     )

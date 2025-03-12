@@ -2,13 +2,10 @@
 Functions used to visualize Autoco
 """
 
-from numbers import Number
 from typing import Callable, Dict, List, Optional, Tuple, Union, Sequence
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 from statsmodels.graphics.tsaplots import plot_acf as plot_acf_sm
 from statsmodels.graphics.tsaplots import plot_pacf as plot_pacf_sm
 
@@ -30,6 +27,7 @@ def plot_acf(
     share_x: bool = True,
     share_y: bool = True,
     zero: bool = False,
+    auto_ylims: bool = True,
     **kwargs,
 ):
     """
@@ -70,6 +68,8 @@ def plot_acf(
         Share y-axis across all subplots.
     zero : bool, default=False
         Include the zero lag in the plot.
+    auto_ylims : bool, default=True
+        Automatically set the y-axis limits for each subplot.
     kwargs : Dict
         Additional keyword arguments for the plot passed directly to Facetplot.lineplot.
     """
@@ -94,7 +94,12 @@ def plot_acf(
         title = f"Autocorrelation Function (ACF) for {xcat}"
 
     plot_func = _statsmodels_plot_acf_wrapper
-    plot_func_kwargs = {"lags": lags, "alpha": alpha, "zero": zero}
+    plot_func_kwargs = {
+        "lags": lags,
+        "alpha": alpha,
+        "zero": zero,
+        "auto_ylims": auto_ylims,
+    }
 
     _plot_acf(
         df=df,
@@ -130,6 +135,7 @@ def plot_pacf(
     share_x: bool = True,
     share_y: bool = True,
     zero: bool = False,
+    auto_ylims: bool = True,
     **kwargs,
 ):
     """
@@ -172,6 +178,8 @@ def plot_pacf(
         Share y-axis across all subplots.
     zero : bool, default=False
         Include the zero lag in the plot.
+    auto_ylims : bool, default=True
+        Automatically set the y-axis limits for each subplot.
     kwargs : Dict
         Additional keyword arguments for the plot passed directly to Facetplot.lineplot.
     """
@@ -196,7 +204,13 @@ def plot_pacf(
         title = f"Partial Autocorrelation Function (PACF) for {xcat}"
 
     plot_func = _statsmodels_plot_pacf_wrapper
-    plot_func_kwargs = {"lags": lags, "alpha": alpha, "method": method, "zero": zero}
+    plot_func_kwargs = {
+        "lags": lags,
+        "alpha": alpha,
+        "method": method,
+        "zero": zero,
+        "auto_ylims": auto_ylims,
+    }
 
     _plot_acf(
         df=df,
@@ -242,11 +256,11 @@ def _plot_acf(
         end=end,
         blacklist=blacklist,
         tickers=None,
-        metrics=['value']
+        metrics=["value"],
     ) as fp:
 
         if remove_zero_predictor:
-            fp.df = fp.df.loc[fp.df['value'] != 0]
+            fp.df = fp.df.loc[fp.df["value"] != 0]
 
         if len(fp.cids) <= 3:
             kwargs["ncols"] = len(fp.cids)
@@ -273,7 +287,7 @@ def _statsmodels_plot_acf_wrapper(df, plt_dict, ax, **kwargs):
     y = plt_dict["Y"][0]
     cid, xcat = str(y).split("_", 1)
     selected_df = df.loc[cid, xcat]
-    plot_acf_sm(x=selected_df['value'], ax=ax, **kwargs)
+    plot_acf_sm(x=selected_df["value"], ax=ax, title=cid, **kwargs)
 
 
 def _statsmodels_plot_pacf_wrapper(df, plt_dict, ax, **kwargs):
@@ -283,7 +297,7 @@ def _statsmodels_plot_pacf_wrapper(df, plt_dict, ax, **kwargs):
     y = plt_dict["Y"][0]
     cid, xcat = str(y).split("_", 1)
     selected_df = df.loc[cid, xcat]
-    plot_pacf_sm(x=selected_df['value'], ax=ax, **kwargs)
+    plot_pacf_sm(x=selected_df["value"], ax=ax, title=cid, **kwargs)
 
 
 def _checks_plot_acf(
@@ -444,16 +458,23 @@ if __name__ == "__main__":
             .reset_index(drop=True)
             .copy()
         )
-    df['value'] = df['value'] * (np.arange(len(df)) % 20 == 0)
-    df['grading'] = np.nan
-    
+    df["value"] = df["value"] * (np.arange(len(df)) % 20 == 0)
+    df["grading"] = np.nan
+
     plot_acf(
         df,
         cids=sel_cids,
         xcat="FXXR",
         # title="ACF Facet Plot",
         remove_zero_predictor=True,
-        lags=30,
+        lags=[5, 6, 7],
     )
 
-    plot_pacf(df, cids=sel_cids, xcat="FXXR", title="ACF Facet Plot", remove_zero_predictor=True, zero=True)
+    plot_pacf(
+        df,
+        cids=sel_cids,
+        xcat="FXXR",
+        title="ACF Facet Plot",
+        remove_zero_predictor=True,
+        zero=True,
+    )
