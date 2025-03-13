@@ -1,5 +1,5 @@
 """
-Functions used to visualize Autoco
+Functions used to visualize autocorrelation and partial autocorrelation functions.
 """
 
 from typing import Callable, Dict, List, Optional, Tuple, Union, Sequence
