@@ -120,8 +120,8 @@ def split_weights_adj_zns(
     df_weights_wide = df_weights_wide.reindex(combined_index)
     df_adj_zns_wide = df_adj_zns_wide.reindex(combined_index)
 
-    df_weights_wide.columns = get_cid(df_weights_wide)
-    df_adj_zns_wide.columns = get_cid(df_adj_zns_wide)
+    df_weights_wide.columns = get_cid(df_weights_wide.columns)
+    df_adj_zns_wide.columns = get_cid(df_adj_zns_wide.columns)
 
     zns_missing_in_weights = set(df_adj_zns_wide.columns) - set(df_weights_wide.columns)
     weights_missing_in_zns = set(df_weights_wide.columns) - set(df_adj_zns_wide.columns)
