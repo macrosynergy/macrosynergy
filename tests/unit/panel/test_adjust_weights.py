@@ -24,11 +24,15 @@ from macrosynergy.management.utils import (
 
 class TestAdjustReturnsTypeChecks(unittest.TestCase):
     def setUp(self):
+        def _sigmoid(x, a=1, b=1, c=0):
+            return a / (1 + np.exp(-b * (x - c)))
+
+        _params = {"a": 1, "b": 1, "c": 0}
         self.valid_args = {
             "weights": "weights",
             "adj_zns": "adj_zns",
-            "method": lambda x: x,  # valid callable
-            "param": 3.14,  # valid number
+            "method": _sigmoid,
+            "params": _params,
             "cids": ["USD", "GBP", "JPY"],
         }
 
@@ -45,7 +49,7 @@ class TestAdjustReturnsTypeChecks(unittest.TestCase):
             "weights": [123, None, []],
             "adj_zns": [456, None, {}],
             "method": [42, "not callable", None],
-            "param": ["string", None, {}],
+            "params": ["string", None, [{"a": 1}]],
         }
         for param, bad_values in invalids.items():
             for bad_val in bad_values:
@@ -67,7 +71,7 @@ class TestAdjustReturnsTypeChecks(unittest.TestCase):
     def test_invalid_cids_contents(self):
         """Test that passing a list with non-string elements in 'cids' raises TypeError."""
         args = self.valid_args.copy()
-        args["cids"] = ["US", 123]
+        args["cids"] = ["USD", 123]
         with self.assertRaises(TypeError):
             check_types(**args)
 
@@ -233,6 +237,8 @@ class TestAdjustWeightsBackend(unittest.TestCase):
         self.xcats = ["WG", "AZ"]
         tickers = [f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats]
         self.tickers = list(np.random.permutation(tickers))
+
+        # prime numbers have been chosen so the weights can be easily tested
         self.ticker_weights = dict(zip(self.tickers, get_primes(len(self.tickers))))
 
         self.expected_results = {
@@ -260,7 +266,10 @@ class TestAdjustWeightsBackend(unittest.TestCase):
 
     def test_adjust_weights_backend(self):
         adjusted = adjust_weights_backend(
-            self.df_weights_wide, self.df_adj_zns_wide, lambda x: x, 1
+            self.df_weights_wide,
+            self.df_adj_zns_wide,
+            lambda x: x,
+            # no params
         )
         for cid, expected in self.expected_results.items():
             with self.subTest(cid=cid):
@@ -284,11 +293,27 @@ class TestAdjustWeightsBackend(unittest.TestCase):
             df_adj_zns_wide=self.df_adj_zns_wide,
             df_weights_wide=self.df_weights_wide,
             method=_method,
-            param=1,
         )
 
         expc_res = self.df_weights_wide * self.df_adj_zns_wide.apply(_method) * 1
         self.assertTrue(adjusted.equals(expc_res))
+
+    def test_adjust_weights_backend_params(self):
+        def _method(x, a=1, b=1):
+            return x * a * b
+
+        _params = {"a": 0}
+
+        adjusted = adjust_weights_backend(
+            df_adj_zns_wide=self.df_adj_zns_wide,
+            df_weights_wide=self.df_weights_wide,
+            method=_method,
+            params=_params,
+        )
+
+        expc_res = self.df_weights_wide * self.df_adj_zns_wide.apply(_method, **_params)
+        self.assertTrue(adjusted.equals(expc_res))
+        self.assertTrue((adjusted == 0).all().all())
 
 
 def expected_adjusted_weights(
@@ -296,18 +321,20 @@ def expected_adjusted_weights(
     weights: str,
     adj_zns: str,
     method: Callable,
-    param: Number,
+    params: dict,
     adj_name: str,
 ) -> pd.DataFrame:
     cids = list(set(df["cid"]))
-    check_types(weights, adj_zns, method, param, cids)
+    check_types(weights, adj_zns, method, params, cids)
     df, r_xcats, r_cids = reduce_df(
         df, cids=cids, xcats=[weights, adj_zns], intersect=True, out_all=True
     )
     check_missing_cids_xcats(weights, adj_zns, cids, r_xcats, r_cids)
     df_weights_wide, df_adj_zns_wide = split_weights_adj_zns(df, weights, adj_zns)
     df_weights_wide = normalize_weights(df_weights_wide)
-    dfw_result = adjust_weights_backend(df_weights_wide, df_adj_zns_wide, method, param)
+    dfw_result = adjust_weights_backend(
+        df_weights_wide, df_adj_zns_wide, method, params
+    )
     dfw_result = dfw_result.dropna(how="all", axis="rows")
     dfw_result = normalize_weights(dfw_result)
     dfw_result.columns = list(map(lambda x: f"{x}_{adj_name}", dfw_result.columns))
@@ -348,7 +375,7 @@ class TestAdjustWeightsMain(unittest.TestCase):
             "weights": "WG",
             "adj_zns": "AZ",
             "method": lambda x: x,
-            "param": 1,
+            "params": {},
             "adj_name": "ADJWGT",
         }
 
@@ -373,11 +400,12 @@ class TestAdjustWeightsMain(unittest.TestCase):
             "weights": "WG",
             "adj_zns": "AZ",
             "method": lambda x: x,
-            "param": 1,
+            "params": {},
             "adj_name": "ADJWGT",
         }
 
-        expc_result = expected_adjusted_weights(df=self.qdf, **args)
+        with warnings.catch_warnings(record=True) as w:
+            expc_result = expected_adjusted_weights(df=self.qdf, **args)
 
         with warnings.catch_warnings(record=True) as w:
             adjusted = adjust_weights(df=self.qdf, **args)
@@ -395,6 +423,31 @@ class TestAdjustWeightsMain(unittest.TestCase):
             self.assertTrue(adjusted.equals(expc_result))
         else:
             self.assertTrue(adjusted.eq(expc_result).all().all())
+
+    def test_adjust_weights_all_zeros(self):
+        nan_weights_mask = np.random.random(len(self.qdf)) < 0.2
+        self.qdf.loc[nan_weights_mask, "value"] = np.nan
+
+        all_nan_date: pd.Timestamp = np.random.choice(self.qdf["real_date"].unique())
+        self.qdf.loc[
+            (self.qdf["real_date"] == all_nan_date) & self.qdf["xcat"].eq("AZ"), "value"
+        ] = np.nan
+
+        def _method(x, a=1):
+            return x * a
+
+        args = {
+            "weights": "WG",
+            "adj_zns": "AZ",
+            "method": _method,
+            "params": {"a": 0},
+            "adj_name": "ADJWGT",
+        }
+
+        with self.assertRaises(ValueError) as context:
+            with warnings.catch_warnings(record=True) as w:
+                adjust_weights(df=self.qdf, **args)
+            self.assertIn("The resulting DataFrame is empty", str(context.exception))
 
 
 if __name__ == "__main__":
