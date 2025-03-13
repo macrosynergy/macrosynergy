@@ -1,6 +1,5 @@
 import unittest
 from typing import Callable
-from numbers import Number
 import warnings
 import numpy as np
 import pandas as pd
@@ -445,7 +444,7 @@ class TestAdjustWeightsMain(unittest.TestCase):
         }
 
         with self.assertRaises(ValueError) as context:
-            with warnings.catch_warnings(record=True) as w:
+            with warnings.catch_warnings(record=True):
                 adjust_weights(df=self.qdf, **args)
             self.assertIn("The resulting DataFrame is empty", str(context.exception))
 
