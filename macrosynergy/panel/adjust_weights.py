@@ -7,7 +7,7 @@ import pandas as pd
 from typing import List, Tuple, Callable, Dict, Any
 import warnings
 from numbers import Number
-from macrosynergy.management.utils import reduce_df, get_cid, ticker_df_to_qdf
+from macrosynergy.management.utils import reduce_df, get_cid
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.types import QuantamentalDataFrame
 
