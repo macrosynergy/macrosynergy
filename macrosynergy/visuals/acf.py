@@ -1,5 +1,5 @@
 """
-Functions used to visualize Autoco
+Functions used to visualize autocorrelation and partial autocorrelation functions.
 """
 
 from typing import Callable, Dict, List, Optional, Tuple, Union, Sequence
@@ -426,7 +426,7 @@ if __name__ == "__main__":
     ]  # ["USD", "EUR", "GBP"]
     sel_xcats: List[str] = ["FXXR", "EQXR", "RIR", "IR"]
     r_styles: List[str] = [
-        "linear",
+        "four-bit-sine",
         "decreasing-linear",
         "sharp-hill",
         "sine",
@@ -458,6 +458,7 @@ if __name__ == "__main__":
             .reset_index(drop=True)
             .copy()
         )
+
     df["value"] = df["value"] * (np.arange(len(df)) % 20 == 0)
     df["grading"] = np.nan
 
@@ -468,6 +469,7 @@ if __name__ == "__main__":
         # title="ACF Facet Plot",
         remove_zero_predictor=True,
         lags=[5, 6, 7],
+        share_y=True,
     )
 
     plot_pacf(
@@ -477,4 +479,6 @@ if __name__ == "__main__":
         title="ACF Facet Plot",
         remove_zero_predictor=True,
         zero=True,
+        lags=[5, 6, 7],
+        share_y=True,
     )
