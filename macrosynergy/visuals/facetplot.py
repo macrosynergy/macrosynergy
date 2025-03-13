@@ -594,6 +594,10 @@ class FacetPlot(Plotter):
                 )
 
             is_empty_plot = False
+            
+            if plot_func is not None:
+                plot_func(df=self.df, plt_dict=plt_dct, ax=ax_i, **plot_func_kwargs)
+                continue
 
             for iy, y in enumerate(plt_dct["Y"]):
                 cidx, xcatx = str(y).split("_", 1)
