@@ -252,7 +252,7 @@ if __name__ == "__main__":
         """
         return amplitude / (1 + np.exp(-steepness * (x - midpoint)))
 
-    params = {"amplitude": np.nan, "steepness": np.nan, "midpoint": np.nan}
+    params = {"amplitude": 1, "steepness": 4, "midpoint": 1}
 
     df_res = adjust_weights(df, "weights", "adj_zns", sigmoid, params)
     print(df_res)
