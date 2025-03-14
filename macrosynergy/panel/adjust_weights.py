@@ -45,8 +45,10 @@ def check_types(
         if not isinstance(_var, _type):
             raise TypeError(f"{_name} must be a {_type}, not {type(_var)}")
 
-    if cids is not None and not all(isinstance(cid, str) for cid in cids):
-        raise TypeError("`cids` must be a list of strings")
+    if cids is not None and (
+        not all(isinstance(cid, str) for cid in cids) or len(cids) == 0
+    ):
+        raise TypeError("`cids` must be a None(default) or a non-empty list of strings")
 
 
 def adjust_weights_backend(
