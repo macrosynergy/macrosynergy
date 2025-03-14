@@ -174,6 +174,7 @@ def adjust_weights(
     method: Callable[[Number], Number],
     params: Dict[str, Any] = {},
     cids: List[str] = None,
+    normalize: bool = True,
     adj_name: str = "ADJWGT",
 ):
     """
@@ -182,18 +183,21 @@ def adjust_weights(
     Parameters
     ----------
     df : QuantamentalDataFrame
-        QuantamentalDataFrame with weights and adjustment xcats for all cids.
+        QuantamentalDataFrame with weights and adjustment categories for all cross-sections.
     weights : str
-        Name of the xcat containing the weights.
+        Name of the category containing the weights.
     adj_zns : str
-        Name of the xcat containing the adjustment factors.
+        Name of the category containing the adjustment factors.
     method : Callable
         Function that will be applied to the weights to adjust them. This function must
-        conform to `f(x: Number, *args) -> Number`.
+        conform to `f(x: Number, **params) -> Number`.
     params : Dict[str, Any], optional
         Parameters to be passed to the method function. Default is {}.
     cids : List[str], optional
-        List of cids to adjust. If None, all cids will be adjusted. Default is None.
+        List of cross-sections to adjust. If None, all cross-sections will be adjusted. Default is None.
+    normalize : bool, optional
+        If True, the resulting weights will be normalized to sum to one for each date for
+        the entire list of cross-sections. Default is True.
     adj_name : str, optional
         Name of the resulting xcat. Default is "ADJWGT".
     """
@@ -216,7 +220,7 @@ def adjust_weights(
 
     df_weights_wide, df_adj_zns_wide = split_weights_adj_zns(df, weights, adj_zns)
 
-    df_weights_wide = normalize_weights(df_weights_wide)
+    # no need to normalize weights before applying the adjustment
 
     dfw_result = adjust_weights_backend(
         df_weights_wide, df_adj_zns_wide, method, params
@@ -227,8 +231,8 @@ def adjust_weights(
         err = "The following dates have no data after applying the adjustment, and will be dropped:"
         warnings.warn(f"{err} {all_nan_rows}")
         dfw_result = dfw_result.dropna(how="all", axis="rows")
-
-    dfw_result = normalize_weights(dfw_result)
+    if normalize:
+        dfw_result = normalize_weights(dfw_result)
 
     if dfw_result.isna().all().all():
         raise ValueError(
@@ -249,9 +253,7 @@ if __name__ == "__main__":
     df = pd.concat([df, dfb], axis=0)
 
     def sigmoid(x, amplitude=1.0, steepness=1.0, midpoint=0.0):
-        """
-        Sigmoid function with parameters for amplitude, steepness, and midpoint.
-        """
+        """Sigmoid function with parameters for amplitude, steepness, and midpoint."""
         return amplitude / (1 + np.exp(-steepness * (x - midpoint)))
 
     params = {"amplitude": 1, "steepness": 4, "midpoint": 1}
