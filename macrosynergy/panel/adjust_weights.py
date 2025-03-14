@@ -237,7 +237,7 @@ def adjust_weights(
             " the method function, and it's parameters."
         )
 
-    dfw_result.columns = list(map(lambda x: f"{x}_{adj_name}", dfw_result.columns))
+    dfw_result.columns += f"_{adj_name}"
     qdf = QuantamentalDataFrame.from_wide(dfw_result, categorical=result_as_categorical)
     qdf = qdf.dropna(how="any", axis=0).reset_index(drop=True)
     return qdf
