@@ -201,8 +201,8 @@ def adjust_weights(
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("df must be a QuantamentalDataFrame")
 
-    df = QuantamentalDataFrame(df)
-    result_as_categorical = df.InitializedAsCategorical
+    df: QuantamentalDataFrame = QuantamentalDataFrame(df)
+    result_as_categorical: bool = df.InitializedAsCategorical
 
     if cids is None:
         cids = df["cid"].unique().tolist()
