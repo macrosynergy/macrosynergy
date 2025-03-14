@@ -264,4 +264,7 @@ if __name__ == "__main__":
     params = {"amplitude": 1, "steepness": 4, "midpoint": 1}
 
     df_res = adjust_weights(df, "weights", "adj_zns", sigmoid, params)
+
+    assert np.allclose(df_res.groupby("real_date")["value"].sum(), 100)
+
     print(df_res)
