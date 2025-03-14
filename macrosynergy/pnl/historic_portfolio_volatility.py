@@ -717,7 +717,6 @@ def historic_portfolio_vol(
     # TODO create function for this? Also, do we want to create the set of failures (not just first one)?
     _check_input_arguments(
         arguments=[
-            (df, "df", pd.DataFrame),
             (sname, "sname", str),
             (fids, "fids", list),
             (rstring, "rstring", str),

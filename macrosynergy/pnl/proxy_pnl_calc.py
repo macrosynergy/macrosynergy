@@ -462,7 +462,6 @@ def proxy_pnl_calc(
     """
 
     for _varx, _namex, _typex in [
-        (df, "df", QuantamentalDataFrame),
         (spos, "spos", str),
         (transaction_costs_object, "transaction_costs", (TransactionCosts, type(None))),
         (roll_freqs, "roll_freqs", (dict, type(None))),
