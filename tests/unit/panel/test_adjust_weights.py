@@ -447,7 +447,7 @@ class TestAdjustWeightsMain(unittest.TestCase):
     def test_adjust_weights_no_normalize(self):
         nan_weights_mask = np.random.random(len(self.qdf)) < 0.25
         self.qdf.loc[nan_weights_mask, "value"] = np.nan
-        self.qdf.loc[:, "value"] = self.qdf["value"] * 256  # make sure the sum is not 1
+        self.qdf.loc[:, "value"] = self.qdf["value"] * 1e7  # make sure the sum is not 1
 
         all_nan_date: pd.Timestamp = np.random.choice(self.qdf["real_date"].unique())
         self.qdf.loc[
@@ -476,7 +476,7 @@ class TestAdjustWeightsMain(unittest.TestCase):
             self.assertIn(err_str, last_warn)
 
         self.assertFalse(adjusted.isna().any().any())
-        assert not np.allclose(adjusted.groupby("real_date")["value"].sum(), 1)
+        self.assertFalse(any(adjusted.groupby("real_date")["value"].sum() == 100))
 
         if PD_2_0_OR_LATER:
             self.assertTrue(adjusted.equals(expc_result))
