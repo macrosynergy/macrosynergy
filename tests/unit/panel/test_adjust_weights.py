@@ -336,7 +336,7 @@ def expected_adjusted_weights(
     )
     dfw_result = dfw_result.dropna(how="all", axis="rows")
     if normalize:
-        dfw_result = normalize_weights(dfw_result)
+        dfw_result = normalize_weights(dfw_result) * 100
     dfw_result.columns = list(map(lambda x: f"{x}_{adj_name}", dfw_result.columns))
     return ticker_df_to_qdf(dfw_result).dropna(how="any", axis=0).reset_index(drop=True)
 
@@ -417,7 +417,7 @@ class TestAdjustWeightsMain(unittest.TestCase):
             self.assertIn(err_str, last_warn)
 
         self.assertFalse(adjusted.isna().any().any())
-        assert np.allclose(adjusted.groupby("real_date")["value"].sum(), 1)
+        self.assertTrue(np.allclose(adjusted.groupby("real_date")["value"].sum(), 100))
 
         if PD_2_0_OR_LATER:
             self.assertTrue(adjusted.equals(expc_result))
