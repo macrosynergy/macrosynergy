@@ -181,6 +181,7 @@ def adjust_weights(
 ):
     """
     Adjusts the weights of a given xcat by a given adjustment xcat using a given method.
+    The resulting weights will be scaled to sum to 100% for each date.
 
     Parameters
     ----------
@@ -234,7 +235,9 @@ def adjust_weights(
         warnings.warn(f"{err} {all_nan_rows}")
         dfw_result = dfw_result.dropna(how="all", axis="rows")
     if normalize:
+        # normalize and scale to 100%
         dfw_result = normalize_weights(dfw_result)
+        dfw_result = dfw_result * 100
 
     if dfw_result.isna().all().all():
         raise ValueError(
