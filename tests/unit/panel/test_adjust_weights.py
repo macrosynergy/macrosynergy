@@ -163,12 +163,7 @@ class TestNormalizeWeights(unittest.TestCase):
                     )
 
         # verify that NaNs are preserved
-        # self.assertTrue(normalized_df.isna().equals(df_with_nans.isna()))
-        for col in normalized_df.columns:
-            with self.subTest(col=col):
-                pd.testing.assert_series_equal(
-                    normalized_df[col].isna(), df_with_nans[col].isna()
-                )
+        self.assertTrue(normalized_df.isna().equals(df_with_nans.isna()))
 
     def test_normalization_zero_sum(self):
         df_zero = self.df_valid.copy()
