@@ -1190,8 +1190,6 @@ def estimate_release_frequency(
             "a datetime index `'real_date'`."
         )
 
-    # infer the frequency of the timeseries
-
     return _determine_freq(timeseries.index.tolist())
 
 
@@ -1223,7 +1221,6 @@ def _determine_freq(dates: List[str]) -> str:
         lambda x: min(frequencies, key=lambda freq: abs(x - frequencies[freq]))
     )
     return closest_freq.value_counts().idxmax()
-
 
 def years_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
     """Returns the number of years between two dates."""
