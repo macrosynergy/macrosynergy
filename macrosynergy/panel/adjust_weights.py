@@ -40,12 +40,12 @@ def check_types(
         (adj_zns, "adj_zns", str),
         (method, "method", Callable),
         (params, "param", dict),
-        (cids, "cids", list),
+        (cids, "cids", (list, type(None))),
     ]:
         if not isinstance(_var, _type):
             raise TypeError(f"{_name} must be a {_type}, not {type(_var)}")
 
-    if not all(isinstance(cid, str) for cid in cids):
+    if cids is not None and not all(isinstance(cid, str) for cid in cids):
         raise TypeError("`cids` must be a list of strings")
 
 
@@ -204,14 +204,13 @@ def adjust_weights(
     df: QuantamentalDataFrame = QuantamentalDataFrame(df)
     result_as_categorical: bool = df.InitializedAsCategorical
 
-    if cids is None:
-        cids = df["cid"].unique().tolist()
-
     check_types(weights, adj_zns, method, params, cids)
 
     df, r_xcats, r_cids = reduce_df(
         df, cids=cids, xcats=[weights, adj_zns], intersect=True, out_all=True
     )
+    if cids is None:
+        cids = df["cid"].unique().tolist()
 
     check_missing_cids_xcats(weights, adj_zns, cids, r_xcats, r_cids)
 
@@ -245,6 +244,9 @@ def adjust_weights(
 
 if __name__ == "__main__":
     df = make_test_df(xcats=["weights", "adj_zns"], cids=["cid1", "cid2", "cid3"])
+    dfb = make_test_df(xcats=["some_xcat", "other_xcat"], cids=["cid1", "cid2", "cid4"])
+
+    df = pd.concat([df, dfb], axis=0)
 
     def sigmoid(x, amplitude=1.0, steepness=1.0, midpoint=0.0):
         """
