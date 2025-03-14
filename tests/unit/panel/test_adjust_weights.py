@@ -60,7 +60,7 @@ class TestAdjustReturnsTypeChecks(unittest.TestCase):
 
     def test_invalid_cids_type(self):
         """Test that passing a non-list for 'cids' raises TypeError."""
-        for bad_val in [123, "not a list", None]:
+        for bad_val in [123, "not a list", []]:
             with self.subTest(bad_value=bad_val):
                 args = self.valid_args.copy()
                 args["cids"] = bad_val
@@ -322,6 +322,7 @@ def expected_adjusted_weights(
     method: Callable,
     params: dict,
     adj_name: str,
+    normalize: bool = True,
 ) -> pd.DataFrame:
     cids = list(set(df["cid"]))
     check_types(weights, adj_zns, method, params, cids)
@@ -330,12 +331,12 @@ def expected_adjusted_weights(
     )
     check_missing_cids_xcats(weights, adj_zns, cids, r_xcats, r_cids)
     df_weights_wide, df_adj_zns_wide = split_weights_adj_zns(df, weights, adj_zns)
-    df_weights_wide = normalize_weights(df_weights_wide)
     dfw_result = adjust_weights_backend(
         df_weights_wide, df_adj_zns_wide, method, params
     )
     dfw_result = dfw_result.dropna(how="all", axis="rows")
-    dfw_result = normalize_weights(dfw_result)
+    if normalize:
+        dfw_result = normalize_weights(dfw_result)
     dfw_result.columns = list(map(lambda x: f"{x}_{adj_name}", dfw_result.columns))
     return ticker_df_to_qdf(dfw_result).dropna(how="any", axis=0).reset_index(drop=True)
 
@@ -447,6 +448,45 @@ class TestAdjustWeightsMain(unittest.TestCase):
             with warnings.catch_warnings(record=True):
                 adjust_weights(df=self.qdf, **args)
             self.assertIn("The resulting DataFrame is empty", str(context.exception))
+
+    def test_adjust_weights_no_normalize(self):
+        nan_weights_mask = np.random.random(len(self.qdf)) < 0.25
+        self.qdf.loc[nan_weights_mask, "value"] = np.nan
+        self.qdf.loc[:, "value"] = self.qdf["value"] * 256  # make sure the sum is not 1
+
+        all_nan_date: pd.Timestamp = np.random.choice(self.qdf["real_date"].unique())
+        self.qdf.loc[
+            (self.qdf["real_date"] == all_nan_date) & self.qdf["xcat"].eq("AZ"), "value"
+        ] = np.nan
+
+        args = {
+            "weights": "WG",
+            "adj_zns": "AZ",
+            "method": lambda x: x,
+            "params": {},
+            "adj_name": "ADJWGT",
+            "normalize": False,
+        }
+
+        with warnings.catch_warnings(record=True) as w:
+            expc_result = expected_adjusted_weights(df=self.qdf, **args)
+
+        with warnings.catch_warnings(record=True) as w:
+            adjusted = adjust_weights(df=self.qdf, **args)
+
+            last_warn = w[-1].message.args[0]
+            ts_str = pd.Timestamp(all_nan_date).strftime("%Y-%m-%d")
+            err_str = "dates have no data"
+            self.assertIn(ts_str, last_warn)
+            self.assertIn(err_str, last_warn)
+
+        self.assertFalse(adjusted.isna().any().any())
+        assert not np.allclose(adjusted.groupby("real_date")["value"].sum(), 1)
+
+        if PD_2_0_OR_LATER:
+            self.assertTrue(adjusted.equals(expc_result))
+        else:
+            self.assertTrue(adjusted.eq(expc_result).all().all())
 
 
 if __name__ == "__main__":
