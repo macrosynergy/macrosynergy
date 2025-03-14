@@ -136,6 +136,18 @@ def validate_and_reduce_qdf(
             xcats.remove(m_xcat)
             
     elif intersect:
+        if len(r_cids) == 0:
+            raise ValueError(
+                "The arguments provided resulted in an empty DataFrame when "
+                "filtered. There are no intersecting cids."
+            )
+        
+        if len(r_xcats) == 0:
+            raise ValueError(
+                "The arguments provided resulted in an empty DataFrame when "
+                "filtered. There are no intersecting xcats."
+            )
+
         cids = r_cids
         xcats = r_xcats
 
