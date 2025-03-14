@@ -105,7 +105,7 @@ def split_weights_adj_zns(
         Name of the xcat to be used as weights.
 
     adj_zns : str
-        Name of the xcat to be used as adjustment factors.
+        Name of the z-n score xcat to be used as adjustment factors.
 
     Returns
     -------
