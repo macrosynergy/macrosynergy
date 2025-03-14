@@ -4,7 +4,7 @@ Implementation of adjust_weights.
 
 import numpy as np
 import pandas as pd
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Callable, Dict, Any
 import warnings
 from numbers import Number
 from macrosynergy.management.utils import reduce_df, get_cid
@@ -26,7 +26,11 @@ def check_missing_cids_xcats(weights, adj_zns, cids, r_xcats, r_cids):
 
 
 def check_types(
-    weights: str, adj_zns: str, method: Callable, param: Number, cids: List[str]
+    weights: str,
+    adj_zns: str,
+    method: Callable,
+    params: Dict[str, Any],
+    cids: List[str],
 ):
     """
     Type checking for the input variables of adjust_weights.
@@ -35,7 +39,7 @@ def check_types(
         (weights, "weights", str),
         (adj_zns, "adj_zns", str),
         (method, "method", Callable),
-        (param, "param", Number),
+        (params, "param", dict),
         (cids, "cids", list),
     ]:
         if not isinstance(_var, _type):
@@ -49,7 +53,7 @@ def adjust_weights_backend(
     df_weights_wide: pd.DataFrame,
     df_adj_zns_wide: pd.DataFrame,
     method: Callable,
-    param: Number,
+    params: Dict[str, Any] = {},
 ) -> pd.DataFrame:
     """
     Backend function for adjust_weights. Applies the `method` function to the weights and
@@ -68,8 +72,8 @@ def adjust_weights_backend(
     method : Callable
         Function that will be applied to the weights to adjust them.
 
-    param : Number
-        Parameter that will be passed to the method function.
+    params : Dict[str, Any], optional
+        Parameters to be passed to the method function. Default is {}.
 
     Returns
     -------
@@ -80,7 +84,7 @@ def adjust_weights_backend(
     assert set(df_weights_wide.columns) == set(df_adj_zns_wide.columns)
     assert set(df_weights_wide.index) == set(df_adj_zns_wide.index)
 
-    dfw_result = df_weights_wide * df_adj_zns_wide.apply(method) * param
+    dfw_result = df_weights_wide * df_adj_zns_wide.apply(method, **params)
 
     return dfw_result
 
@@ -168,7 +172,7 @@ def adjust_weights(
     weights: str,
     adj_zns: str,
     method: Callable[[Number], Number],
-    param: Number,
+    params: Dict[str, Any] = {},
     cids: List[str] = None,
     adj_name: str = "ADJWGT",
 ):
@@ -186,8 +190,8 @@ def adjust_weights(
     method : Callable
         Function that will be applied to the weights to adjust them. This function must
         conform to `f(x: Number, *args) -> Number`.
-    param : Number
-        Parameter that will be passed to the method function.
+    params : Dict[str, Any], optional
+        Parameters to be passed to the method function. Default is {}.
     cids : List[str], optional
         List of cids to adjust. If None, all cids will be adjusted. Default is None.
     adj_name : str, optional
@@ -203,7 +207,7 @@ def adjust_weights(
     if cids is None:
         cids = df["cid"].unique().tolist()
 
-    check_types(weights, adj_zns, method, param, cids)
+    check_types(weights, adj_zns, method, params, cids)
 
     df, r_xcats, r_cids = reduce_df(
         df, cids=cids, xcats=[weights, adj_zns], intersect=True, out_all=True
@@ -215,7 +219,9 @@ def adjust_weights(
 
     df_weights_wide = normalize_weights(df_weights_wide)
 
-    dfw_result = adjust_weights_backend(df_weights_wide, df_adj_zns_wide, method, param)
+    dfw_result = adjust_weights_backend(
+        df_weights_wide, df_adj_zns_wide, method, params
+    )
 
     all_nan_rows = dfw_result.index[dfw_result.isnull().all(axis="columns")]
     if all_nan_rows.size > 0:
@@ -225,22 +231,28 @@ def adjust_weights(
 
     dfw_result = normalize_weights(dfw_result)
 
+    if dfw_result.isna().all().all():
+        raise ValueError(
+            "The resulting DataFrame is empty. Please check the input data,"
+            " the method function, and it's parameters."
+        )
+
     dfw_result.columns = list(map(lambda x: f"{x}_{adj_name}", dfw_result.columns))
-
     qdf = QuantamentalDataFrame.from_wide(dfw_result, categorical=result_as_categorical)
-
     qdf = qdf.dropna(how="any", axis=0).reset_index(drop=True)
-
     return qdf
 
 
 if __name__ == "__main__":
     df = make_test_df(xcats=["weights", "adj_zns"], cids=["cid1", "cid2", "cid3"])
 
-    def sigmoid(x):
-        return 1 / (1 + np.exp(-1 * x))
+    def sigmoid(x, amplitude=1.0, steepness=1.0, midpoint=0.0):
+        """
+        Sigmoid function with parameters for amplitude, steepness, and midpoint.
+        """
+        return amplitude / (1 + np.exp(-steepness * (x - midpoint)))
 
-    param = 3.14
+    params = {"amplitude": 1, "steepness": 4, "midpoint": 1}
 
-    df_res = adjust_weights(df, "weights", "adj_zns", sigmoid, param)
+    df_res = adjust_weights(df, "weights", "adj_zns", sigmoid, params)
     print(df_res)
