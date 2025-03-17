@@ -338,7 +338,7 @@ def expected_adjusted_weights(
 
 class TestAdjustWeightsMain(unittest.TestCase):
     def setUp(self):
-        self.cids = ["USD", "EUR", "JPY", "GBP", "AUD", "CAD", "CHF", "CNY"]
+        self.cids = ["USD", "EUR", "JPY", "GBP", "AUD"]
         self.xcats = ["WG", "AZ"]
         tickers = [f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats]
         self.tickers = list(np.random.permutation(tickers))
@@ -482,6 +482,38 @@ class TestAdjustWeightsMain(unittest.TestCase):
             self.assertTrue(adjusted.equals(expc_result))
         else:
             self.assertTrue(adjusted.eq(expc_result).all().all())
+
+    def test_adjust_weights_missing_cids(self):
+        args = {
+            "weights": "WG",
+            "adj_zns": "AZ",
+            "method": lambda x: x,
+            "params": {},
+            "adj_name": "ADJWGT",
+        }
+
+        df = self.qdf.copy()
+        df = df[df["cid"] != "USD"]
+
+        with self.assertRaises(ValueError) as context:
+            adjust_weights(df=df, cids=self.cids, **args)
+            
+    def test_adjust_weights_cids_not_specified(self):
+        args = {
+            "weights": "WG",
+            "adj_zns": "AZ",
+            "method": lambda x: x,
+            "params": {},
+            "adj_name": "ADJWGT",
+        }
+
+        df = self.qdf.copy()
+        df = df[df["cid"] != "USD"]
+
+        try:
+            adjust_weights(df=df, **args)
+        except Exception as e:
+            self.fail(f"Unexpected exception raised: {e}")
 
 
 if __name__ == "__main__":
