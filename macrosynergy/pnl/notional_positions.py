@@ -336,9 +336,10 @@ def notional_positions(
         and the specified strategy in USD million. The contract signals have the following
         format "<cid>_<ctype>_<sname>_<pname>".
     """
+    if not isinstance(df, QuantamentalDataFrame):
+        raise ValueError("`df` must be a QuantamentalDataFrame.")
 
     for varx, namex, typex in [
-        (df, "df", QuantamentalDataFrame),
         (sname, "sname", str),
         (fids, "fids", list),
         (aum, "aum", Number),
