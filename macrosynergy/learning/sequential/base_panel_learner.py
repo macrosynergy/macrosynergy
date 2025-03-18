@@ -1169,12 +1169,13 @@ class BasePanelLearner(ABC):
 
         # outer splitter
         # TODO: come back and change to WalkForwardPanelSplit
-        if not isinstance(
-            outer_splitter, (ExpandingFrequencyPanelSplit, ExpandingIncrementPanelSplit)
-        ):
-            raise TypeError(
-                "outer_splitter must be an instance of ExpandingFrequencyPanelSplit or ExpandingIncrementPanelSplit."
-            )
+        if outer_splitter:
+            if not isinstance(
+                outer_splitter, (ExpandingFrequencyPanelSplit, ExpandingIncrementPanelSplit)
+            ):
+                raise TypeError(
+                    "outer_splitter must be an instance of ExpandingFrequencyPanelSplit or ExpandingIncrementPanelSplit."
+                )
 
         # inner splitters
         if not isinstance(inner_splitters, dict):
