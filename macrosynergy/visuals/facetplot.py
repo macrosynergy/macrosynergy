@@ -575,7 +575,7 @@ class FacetPlot(Plotter):
 
         axs: Union[np.ndarray, plt.Axes] = outer_gs.subplots(
             sharex=share_x,
-            sharey=share_y,
+            sharey=False,
         )
 
         if not isinstance(axs, np.ndarray):
@@ -594,7 +594,7 @@ class FacetPlot(Plotter):
                 )
 
             is_empty_plot = False
-            
+
             if plot_func is not None:
                 plot_func(df=self.df, plt_dict=plt_dct, ax=ax_i, **plot_func_kwargs)
                 continue
@@ -678,6 +678,20 @@ class FacetPlot(Plotter):
         if share_x:
             for target_ax in ax_list[(len(plot_dict) - grid_dim[0]) :]:
                 target_ax.xaxis.set_tick_params(labelbottom=True)
+
+        if share_y:
+            ymins, ymaxs = zip(*(ax.get_ylim() for ax in ax_list))
+            global_min, global_max = min(ymins), max(ymaxs)
+            abs_max = max(abs(global_min), abs(global_max))
+            global_min, global_max = -abs_max, abs_max
+            for ax in ax_list:
+                ax.set_ylim(global_min, global_max)
+
+            width, height = grid_dim
+            for idx, ax in enumerate(ax_list):
+                col_idx = idx % width
+                if col_idx != 0:
+                    ax.tick_params(labelleft=False)
 
         if legend:
             if "lower" in legend_loc and legend_ncol < grid_dim[0]:
