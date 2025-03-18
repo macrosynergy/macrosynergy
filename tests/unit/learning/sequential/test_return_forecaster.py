@@ -10,7 +10,9 @@ from unittest.mock import patch
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import Ridge, LinearRegression
 from sklearn.ensemble import RandomForestRegressor
-from macrosynergy.learning import PanelPCA, PanelStandardScaler, LassoSelector
+from sklearn.metrics import r2_score, make_scorer
+
+from macrosynergy.learning import PanelPCA, PanelStandardScaler, LassoSelector, SignalOptimizer, RollingKFoldPanelSplit
 
 class TestReturnForecaster(unittest.TestCase):
     @classmethod
@@ -97,3 +99,25 @@ class TestReturnForecaster(unittest.TestCase):
                 }
             }
         ]
+
+        self.names = ["Ridge", "Var+LR", "RF", "PCA+Ridge"]
+
+        self.sos = []
+        self.rfs = []
+
+        for i in range(len(self.pipelines)):
+            # For each pipeline, run a sequential process
+            so = SignalOptimizer(
+                df = self.df,
+                xcats = ["CPI", "GROWTH", "RIR", "XR"],
+            )
+            so.calculate_predictions(
+                name = "SO_" + self.names[i],
+                models = self.pipelines[i],
+                hyperparameters = self.hyperparameters[i],
+                scorers = {"R2": make_scorer(r2_score)},
+                inner_splitters = {
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+            self.sos.append(so)
