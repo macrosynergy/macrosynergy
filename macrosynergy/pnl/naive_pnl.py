@@ -1110,7 +1110,16 @@ class NaivePnL:
         label_dict: Optional[Dict[str, str]] = None,
     ):
         """
-        Table of key PnL statistics.
+        Returns a table of PnL statistics containing the following metrics:
+            - Return - percentage, annualized
+            - Standard Deviation - percentage, annualized
+            - Sharpe Ratio
+            - Sortino Ratio
+            - Max 21-Day Draw - percentage
+            - Max 6-Month Draw - percentage
+            - Peak to Trough Draw - percentage
+            - Top 5% Monthly PnL Share
+            - Traded Months
 
         Parameters
         ----------
