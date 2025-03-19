@@ -654,6 +654,12 @@ class ScoreVisualisers:
         df = self.df[self.df["cid"] == cid]
         df = df if start is None else df[df["real_date"] >= start]
         df = df[df["xcat"].isin(xcats)]
+        
+        # If there is an xcat that does not exist in the DataFrame, remove it and warn
+        for xcat in xcats:
+            if xcat not in df["xcat"].unique():
+                xcats.remove(xcat)
+                warnings.warn(f"{xcat} not in the DataFrame")
 
         dfw = df.pivot(index="real_date", columns="xcat", values="value")
         dfw.columns.name = None
@@ -842,22 +848,22 @@ if __name__ == "__main__":
         rescore_composite=True,
     )
 
-    sv.view_snapshot(
-        cids=["USD", "EUR", "JPY", "GBP", "CHF"],
-        xcats=xcats + ["Composite"],
-        figsize=(14, 12),
-        sort_by_composite=True,
-        composite_to_end=True,
-        transpose=False,
-        yticks_rotation=45,
-    )
-    sv.view_cid_evolution(cid="USD", xcats=xcats, freq="Q", transpose=False)
-    sv.view_score_evolution(
-        xcat="GGIEDGDP_NSA",
-        cids=cids,
-        freq="BA",
-        transpose=False,
-        start="2010-01-01",
-        title="AHKSJDA",
-        include_latest_day=True,
-    )
+    # sv.view_snapshot(
+    #     cids=["USD", "EUR", "JPY", "GBP", "CHF"],
+    #     xcats=xcats + ["Composite"],
+    #     figsize=(14, 12),
+    #     sort_by_composite=True,
+    #     composite_to_end=True,
+    #     transpose=False,
+    #     yticks_rotation=45,
+    # )
+    sv.view_cid_evolution(cid="USD", xcats=xcats + ["Composite", "BEEP"] , freq="A", transpose=False)
+    # sv.view_score_evolution(
+    #     xcat="GGIEDGDP_NSA",
+    #     cids=cids,
+    #     freq="BA",
+    #     transpose=False,
+    #     start="2010-01-01",
+    #     title="AHKSJDA",
+    #     include_latest_day=True,
+    # )
