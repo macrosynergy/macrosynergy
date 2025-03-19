@@ -1,6 +1,6 @@
 """
-Basket class for calculating the returns and carries of baskets 
-of financial contracts using various weighting methods.
+Basket class for calculating the returns and carries of baskets of financial contracts
+using various weighting methods.
 """
 
 import numpy as np
@@ -9,10 +9,11 @@ import seaborn as sns
 import warnings
 
 import random
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Dict
 from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
 from macrosynergy.management.utils import reduce_df_by_ticker
 from macrosynergy.panel.converge_row import ConvergeRow
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.simulate import make_qdf
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -20,27 +21,39 @@ import matplotlib.dates as mdates
 
 class Basket(object):
     """
-    Calculates the returns and carries of baskets of financial contracts using
-    various weighting methods.
+    Calculates the returns and carries of baskets of financial contracts using various
+    weighting methods.
 
-    :param <pd.Dataframe> df: standardized DataFrame containing the columns: 'cid',
-        'xcat', 'real_date' and 'value'.
-    :param <List[str]> contracts: base tickers (combinations of cross-sections and
-        base categories) that define the contracts that go into the basket.
-    :param <str> ret: return category postfix to be appended to the contract base;
-        default is "XR_NSA".
-    :param <List[str] or str> cry: carry category postfix; default is None. The field
-        can either be a single carry or multiple carries defined in a List.
-    :param <str> start: earliest date in ISO 8601 format. Default is None.
-    :param <str> end: latest date in ISO 8601 format. Default is None.
-    :param <dict> blacklist: cross-sections with date ranges that should be excluded
-        from the DataFrame. If one cross-section has several blacklist periods append
-        numbers to the cross-section code.
-    :param <List[str]> ewgts: one or more postfixes that may identify exogenous weight
-        categories. Similar to return postfixes they are appended to base tickers.
+    Parameters
+    ----------
+    df : ~pandas.Dataframe
+        standardized DataFrame containing the columns: 'cid', 'xcat', 'real_date' and
+        'value'.
+    contracts : List[str]
+        base tickers (combinations of cross-sections and base categories) that define
+        the contracts that go into the basket.
+    ret : str
+        return category postfix to be appended to the contract base; default is
+        "XR_NSA".
+    cry : List[str] or str
+        carry category postfix; default is None. The field can either be a single carry
+        or multiple carries defined in a List.
+    start : str
+        earliest date in ISO 8601 format. Default is None.
+    end : str
+        latest date in ISO 8601 format. Default is None.
+    blacklist : dict
+        cross-sections with date ranges that should be excluded from the DataFrame. If
+        one cross-section has several blacklist periods append numbers to the cross-section
+        code.
+    ewgts : List[str]
+        one or more postfixes that may identify exogenous weight categories. Similar to
+        return postfixes they are appended to base tickers.
 
-    N.B.: Each instance of the class will update associated standardised DataFrames,
-    containing return and carry categories, and external weights.
+
+    .. note::
+        Each instance of the class will update associated standardised DataFrames,
+        containing return and carry categories, and external weights.
     """
 
     def __init__(
@@ -54,13 +67,14 @@ class Basket(object):
         blacklist: dict = None,
         ewgts: List[str] = None,
     ):
-        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-        df = df[["cid", "xcat", "real_date", "value"]]
-
+        df = QuantamentalDataFrame(df[["cid", "xcat", "real_date", "value"]])
+        self._as_categorical = df.InitializedAsCategorical
         assert isinstance(contracts, list)
         c_error = "Contracts must be a list of strings."
         assert all(isinstance(c, str) for c in contracts), c_error
         assert isinstance(ret, str), "`ret` must be a string"
+        if isinstance(ewgts, str):
+            ewgts = [ewgts]
 
         df = reduce_df_by_ticker(
             df, start=start, end=end, ticks=None, blacklist=blacklist
@@ -86,13 +100,17 @@ class Basket(object):
         Adds multiple attributes to class based on postfixes that denote carry or
         external weight types.
 
-        :param <pd.DataFrame> df: original, standardised DataFrame.
-        :param <List[str]> pfx: category postfixes involved in the basket calculation.
-        :param <str> pf_name: associated name of the postfix "cry" or "wgt".
-
-        Note: These are [1] flags of existence of carry and weight strings in class,
-        [2] lists of tickers related to all postfixes, [3] a dictionary of wide time
-        series panel dataframes for all postfixes.
+        Parameters
+        ----------
+        df : ~pandas.DataFrame
+            original, standardised DataFrame.
+        pfx : List[str]
+            category postfixes involved in the basket calculation.
+        pf_name : str
+            associated name of the postfix "cry" or "wgt".  Note: These are [1] flags of
+            existence of carry and weight strings in class, [2] lists of tickers related to
+            all postfixes, [3] a dictionary of wide time series panel dataframes for all
+            postfixes.
         """
 
         pfx_flag = pfx is not None
@@ -104,32 +122,48 @@ class Basket(object):
             pfx = [pfx] if isinstance(pfx, str) else pfx
             self.__dict__[pf_name] = pfx
 
-            dfws_pfx = {}
+            dfws_pfx: Dict[str, pd.DataFrame] = {}
             for cat in pfx:
                 ticks = [con + cat for con in self.contracts]
                 self.__dict__["ticks_" + pf_name] += ticks
                 dfws_pfx[cat] = self.pivot_dataframe(df, ticks)
+                if dfws_pfx[cat].empty:
+                    raise ValueError(f"Empty dataframe for contract-type: {cat}")
+                missing = set(ticks) - set(dfws_pfx[cat].columns)
+                if missing:
+                    raise ValueError(
+                        f"Missing tickers in dataframe for contract-type: {cat}: {missing}"
+                    )
+
         else:
             dfws_pfx = None
 
         self.__dict__["dfws_" + pf_name] = dfws_pfx
 
     @staticmethod
-    def pivot_dataframe(df, tick_list):
+    def pivot_dataframe(df: QuantamentalDataFrame, tick_list: List[str]):
         """
         Reduces the standardised DataFrame to include a subset of the possible tickers
         and, subsequently returns a wide dataframe: each column corresponds to a ticker.
 
-        :param <List[str]> tick_list: list of the respective tickers.
-        :param <pd.DataFrame> df: standardised dataframe.
+        Parameters
+        ----------
+        tick_list : List[str]
+            list of the respective tickers.
+        df : ~pandas.DataFrame
+            standardised dataframe.
 
-        :return <pd.DataFrame> dfw: wide dataframe.
+        Returns
+        -------
+        ~pandas.DataFrame
+            wide dataframe.
         """
 
-        df["ticker"] = df["cid"] + "_" + df["xcat"]
-        dfx = df[df["ticker"].isin(tick_list)]
-        dfw = dfx.pivot(index="real_date", columns="ticker", values="value")
-        return dfw
+        return (
+            QuantamentalDataFrame(df=df)
+            .reduce_df_by_ticker(tickers=tick_list)
+            .to_wide()
+        )
 
     @staticmethod
     def date_check(date_string):
@@ -138,9 +172,12 @@ class Basket(object):
         to the required form '%Y-%m-%d'. Will raise an assertion if not in the expected
         form.
 
-        :param <str> date_string: valid date expression. For instance, "1st January,
-            2000."
+        Parameters
+        ----------
+        date_string : str
+            valid date expression. For instance, "1st January, 2000."
         """
+
         date_error = "Expected form of string: '%Y-%m-%d'."
         if date_string is not None:
             try:
@@ -155,8 +192,12 @@ class Basket(object):
         """
         Checks if all rows in dataframe add up to roughly 1.
 
-        :param <pd.DataFrame> weight: weight dataframe.
+        Parameters
+        ----------
+        weight : ~pandas.DataFrame
+            weight dataframe.
         """
+
         check = weight.sum(axis=1)
         c = ~((abs(check - 1) < 1e-6) | (abs(check) < 1e-6))
         assert not any(c), f"weights must sum to one (or zero), not: {check[c]}"
@@ -166,18 +207,26 @@ class Basket(object):
         """
         Enforces maximum weight caps or - if impossible applies equal weight.
 
-        :param <pd.DataFrame> weights: Corresponding weight matrix. Multidimensional.
-        :param <float> max_weight: Upper-bound on the weight allowed for each
-            cross-section.
+        Parameters
+        ----------
+        weights : ~pandas.DataFrame
+            Corresponding weight matrix. Multidimensional.
+        max_weight : float
+            Upper-bound on the weight allowed for each cross-section.
 
-        :return <pd.DataFrame>: Will return the modified weight DataFrame.
+        Returns
+        -------
+        ~pandas.DataFrame
+            Will return the modified weight DataFrame.
 
-        N.B.: If the maximum weight is less than the equal weight weight, this replaces
-        the computed weight with the equal weight. For instance,
-        [np.nan, 0.63, np.nan, np.nan, 0.27] becomes [np.nan, 0.5, np.nan, np.nan, 0.5].
-        Otherwise, the function calls the ConvergeRow Class to ensure all weights
-        "converge" to a value within the upper-bound. Allow for a margin of error set to
-        0.001.
+
+        .. note::
+            If the maximum weight is
+            less than the equal weight weight, this replaces the computed weight with the
+            equal weight. For instance, [np.nan, 0.63, np.nan, np.nan, 0.27] becomes
+            [np.nan, 0.5, np.nan, np.nan, 0.5]. Otherwise, the function calls the
+            ConvergeRow Class to ensure all weights "converge" to a value within the upper-
+            bound. Allow for a margin of error set to 0.001.
         """
 
         dfw_wgs = weights.to_numpy()
@@ -192,12 +241,21 @@ class Basket(object):
         """
         Calculates dataframe of equal weights based on available return data.
 
-        :param <pd.DataFrame> df_ret: wide time-indexed data frame of returns.
+        Parameters
+        ----------
+        df_ret : ~pandas.DataFrame
+            wide time-indexed data frame of returns.
 
-        :return <pd.DataFrame>: dataframe of weights.
+        Returns
+        -------
+        ~pandas.DataFrame
+            dataframe of weights.
 
-        Note: The method determines the  number of non-NA cross-sections per timestamp,
-        and subsequently distributes the weights evenly across non-NA cross-sections.
+
+        Notes
+        -----
+        The method determines the number of non-NA cross-sections per timestamp, and
+        subsequently distributes the weights evenly across non-NA cross-sections.
         """
 
         act_cross = ~df_ret.isnull()
@@ -220,10 +278,17 @@ class Basket(object):
         Calculates fixed weights based on a single list of values and a corresponding
         return panel dataframe.
 
-        :param <pd.DataFrame> df_ret: Return series matrix. Multidimensional.
-        :param <List[float]> weights: List of floats determining weight allocation.
+        Parameters
+        ----------
+        df_ret : ~pandas.DataFrame
+            Return series matrix. Multidimensional.
+        weights : List[float]
+            List of floats determining weight allocation.
 
-        :return <pd.DataFrame>: panel of weights
+        Returns
+        -------
+        ~pandas.DataFrame
+            panel of weights
         """
 
         act_cross = ~df_ret.isnull()
@@ -254,20 +319,29 @@ class Basket(object):
         """
         Calculates weights inversely proportionate to recent return standard deviations.
 
-        :param <pd.DataFrame> dfw_ret: panel dataframe of returns.
-        :param <str> lback_meth: Lookback method for "invsd" weighting method. Default is
-            "xma".
-        :param <int> lback_periods: Lookback periods. Default is 21.  Half-time for "xma"
-            and full lookback period for "ma".
-        :param <Bool> remove_zeros: Any returns that are exact zeros will not be included
-            in the lookback window and prior non-zero values are added to the window
-            instead.
+        Parameters
+        ----------
+        dfw_ret : ~pandas.DataFrame
+            panel dataframe of returns.
+        lback_meth : str
+            Lookback method for "invsd" weighting method. Default is "xma".
+        lback_periods : int
+            Lookback periods. Default is 21.  Half-time for "xma" and full lookback
+            period for "ma".
+        remove_zeros : Bool
+            Any returns that are exact zeros will not be included in the lookback window
+            and prior non-zero values are added to the window instead.
 
-        :return <pd.DataFrame>: Dataframe of weights.
+        Returns
+        -------
+        ~pandas.DataFrame
+            Dataframe of weights.
 
-        N.B.: The rolling standard deviation will be calculated either using the standard
-        moving average (ma) or the exponential moving average (xma). Both will require
-        returns before a first weight can be computed.
+
+        .. note::
+            The rolling standard deviation will be calculated either using the standard
+            moving average (ma) or the exponential moving average (xma). Both will require
+            returns before a first weight can be computed.
         """
 
         if lback_meth == "ma":
@@ -297,13 +371,19 @@ class Basket(object):
         """
         Returns weights based on an external weighting category.
 
-        :param <pd.DataFrame> dfw_ret: Standard wide dataframe of returns across time and
-            contracts.
-        :param <pd.DataFrame> dfw_wgt: Standard wide dataframe of weight category values
-            across time and contracts.
-        :param <str> weight_meth:
+        Parameters
+        ----------
+        dfw_ret : ~pandas.DataFrame
+            Standard wide dataframe of returns across time and contracts.
+        dfw_wgt : ~pandas.DataFrame
+            Standard wide dataframe of weight category values across time and contracts.
+        weight_meth : str
 
-        :return <pd.DataFrame>: Dataframe of weights.
+
+        Returns
+        -------
+        ~pandas.DataFrame
+            Dataframe of weights.
         """
 
         negative_condition = np.any((dfw_wgt < 0).to_numpy())
@@ -341,25 +421,36 @@ class Basket(object):
         """
         Returns wide dataframe of weights to be used for basket series.
 
-        :param <str> weight_meth: method used for weighting constituent returns and
-            carry. The parameter can receive either a single weight method or
-            multiple weighting methods. See `make_basket` docstring.
-        :param <List[float]> weights: single list of weights corresponding to the base
-            tickers in `contracts` argument. This is only relevant for the fixed weight
-            method.
-        :param <str> lback_meth: look-back method for "invsd" weighting method. Default
-            is Exponential MA, "ema". The alternative is simple moving average, "ma".
-        :param <int> lback_periods: look-back periods for "invsd" weighting method.
-            Default is 21.  Half-time for "xma" and full lookback period for "ma".
-        :param <str> ewgt: Exogenous weight postfix that defines the weight value panel.
-            Only needed for the 'values' or 'inv_values' method.
-        :param <float> max_weight: maximum weight of a single contract. Default is 1, i.e
-            zero restrictions. The purpose of the restriction is to limit concentration
-            within the basket.
-        :param <bool> remove_zeros: removes the zeros. Default is set to True.
+        Parameters
+        ----------
+        weight_meth : str
+            method used for weighting constituent returns and carry. The parameter can
+            receive either a single weight method or multiple weighting methods. See
+            `make_basket` docstring.
+        weights : List[float]
+            single list of weights corresponding to the base tickers in `contracts`
+            argument. This is only relevant for the fixed weight method.
+        lback_meth : str
+            look-back method for "invsd" weighting method. Default is Exponential MA,
+            "ema". The alternative is simple moving average, "ma".
+        lback_periods : int
+            look-back periods for "invsd" weighting method. Default is 21.  Half-time
+            for "xma" and full lookback period for "ma".
+        ewgt : str
+            Exogenous weight postfix that defines the weight value panel. Only needed
+            for the 'values' or 'inv_values' method.
+        max_weight : float
+            maximum weight of a single contract. Default is 1, i.e zero restrictions.
+            The purpose of the restriction is to limit concentration within the basket.
+        remove_zeros : bool
+            removes the zeros. Default is set to True.
 
-        return: <pd.DataFrame>: wide dataframe of contract weights across time.
+        Returns
+        -------
+        pd.DataFrame
+            wide dataframe of contract weights across time.
         """
+
         assert 0.0 < max_weight <= 1.0
         assert weight_meth in ["equal", "fixed", "values", "inv_values", "invsd"]
 
@@ -425,11 +516,18 @@ class Basket(object):
         pandas multiply operation requires the column names, of both dataframes involved
         in the binary operation, to be identical.
 
-        :param <pd.DataFrame> df_cat: return or carry dataframe.
-        :param <pd.DataFrame> dfw_wgs: weight dataframe.
+        Parameters
+        ----------
+        df_cat : ~pandas.DataFrame
+            return or carry dataframe.
+        dfw_wgs : ~pandas.DataFrame
+            weight dataframe.
 
-        :return <pd.DataFrame> dfw_wgs: modified weight dataframe (column names will map
-            to the other dataframe received).
+        Returns
+        -------
+        ~pandas.DataFrame
+            modified weight dataframe (column names will map to the other dataframe
+            received).
         """
 
         df_cat = df_cat.reindex(sorted(df_cat.columns), axis=1)
@@ -449,16 +547,22 @@ class Basket(object):
         carries etc. Therefore, with their broad application, the column names of the
         dataframe should correspond to the ticker postfix of each contract.
 
-        :param <pd.DataFrame> dfw_wgs: weight dataframe.
+        Parameters
+        ----------
+        dfw_wgs : ~pandas.DataFrame
+            weight dataframe.
 
-        :return <pd.DataFrame> dfw_wgs: weight dataframe with updated columns names.
+        Returns
+        -------
+        ~pandas.DataFrame
+            weight dataframe with updated columns names.
         """
 
         dfw_weight_names = lambda w_name: w_name[: w_name.find(self.w_field)]
         if self.wgt_flag and self.exo_w_postfix is not None:
-            self.__dict__["w_field"] = self.exo_w_postfix
+            self.w_field = self.exo_w_postfix
         else:
-            self.__dict__["w_field"] = self.ret
+            self.w_field = self.ret
 
         cols = list(map(dfw_weight_names, dfw_wgs.columns))
         dfw_wgs.columns = cols
@@ -480,41 +584,54 @@ class Basket(object):
         """
         Calculates all basket performance categories.
 
-        :param <str> weight_meth: method used for weighting constituent returns and
-            carry. The parameter can receive either a single weight method or
-            multiple weighting methods. The options are as follows:
-            [1] "equal": all constituents with non-NA returns have the same weight.
-                This is the default.
-            [2] "fixed": weights are proportionate to a single list of values provided
-                which are passed to argument `weights` (each value corresponds to a
-                single contract).
-            [3] "invsd": weights based on inverse to standard deviations of recent
-                returns.
-            [4] "values": weights proportionate to a panel of values of exogenous weight
-                category.
-            [5] "inv_values": weights are inversely proportionate to of values of
-                exogenous weight category.
-        :param <List[float]> weights: single list of weights corresponding to the base
-            tickers in `contracts` argument. This is only relevant for the fixed weight
-            method.
-        :param <str> lback_meth: look-back method for "invsd" weighting method. Default
-            is Exponential MA, "ema". The alternative is simple moving average, "ma".
-        :param <int> lback_periods: look-back periods for "invsd" weighting method.
-            Default is 21.  Half-time for "xma" and full lookback period for "ma".
-        :param <str> ewgt: Exogenous weight postfix that defines the weight value panel.
-            Only needed for the 'values' or 'inv_values' method.
-        :param <float> max_weight: maximum weight of a single contract. Default is 1, i.e
-            zero restrictions. The purpose of the restriction is to limit concentration
-            within the basket.
-        :param <bool> remove_zeros: removes the zeros. Default is set to True.
-        :param <str> basket_name: name of basket base ticker (analogous to contract name)
-            to be used for return and (possibly) carry are calculated. Default is
-            "GLB_ALL".
+        Parameters
+        ----------
+        weight_meth : str
+            method used for weighting constituent returns and carry. The parameter can
+            receive either a single weight method or multiple weighting methods. The options
+            are as follows:
+
+            - [1] "equal": all constituents with non-NA returns have the same
+            weight. This is the default.
+
+            - [2] "fixed": weights are proportionate to a single
+            list of values provided which are passed to argument `weights` (each value
+            corresponds to a single contract).
+
+            - [3] "invsd": weights based on inverse to
+            standard deviations of recent returns.
+
+            - [4] "values": weights proportionate to a
+            panel of values of exogenous weight category.
+
+            - [5] "inv_values": weights are
+            inversely proportionate to of values of exogenous weight category.
+
+        weights : List[float]
+            single list of weights corresponding to the base tickers in `contracts`
+            argument. This is only relevant for the fixed weight method.
+        lback_meth : str
+            look-back method for "invsd" weighting method. Default is Exponential MA,
+            "ema". The alternative is simple moving average, "ma".
+        lback_periods : int
+            look-back periods for "invsd" weighting method. Default is 21.  Half-time
+            for "xma" and full lookback period for "ma".
+        ewgt : str
+            Exogenous weight postfix that defines the weight value panel. Only needed
+            for the 'values' or 'inv_values' method.
+        max_weight : float
+            maximum weight of a single contract. Default is 1, i.e zero restrictions.
+            The purpose of the restriction is to limit concentration within the basket.
+        remove_zeros : bool
+            removes the zeros. Default is set to True.
+        basket_name : str
+            name of basket base ticker (analogous to contract name) to be used for
+            return and (possibly) carry are calculated. Default is "GLB_ALL".
         """
 
         assert isinstance(weight_meth, str), "`weight_meth` must be string"
 
-        self.__dict__["exo_w_postfix"] = ewgt
+        self.exo_w_postfix: str = ewgt
         dfw_wgs = self.make_weights(
             weight_meth=weight_meth,
             weights=weights,
@@ -529,27 +646,27 @@ class Basket(object):
         dfw_wgs_copy = self.column_manager(df_cat=self.dfw_ret, dfw_wgs=dfw_wgs)
 
         dfw_bret = self.dfw_ret.multiply(dfw_wgs_copy).sum(axis=1)
-        dfxr = dfw_bret.to_frame("value").reset_index()
         basket_ret = basket_name + "_" + self.ret
-        dfxr = dfxr.assign(ticker=basket_ret)[select]
-        store = [dfxr]
-
+        store = [dfw_bret.to_frame(basket_ret)]
+        if not hasattr(self, "cry_flag"):
+            raise ValueError("Please initialise the class to use this method. ")
+        self.cry_flag: bool
         if self.cry_flag:
             cry_list = []
             for cr in self.cry:
                 dfw_wgs_copy = self.column_manager(
                     df_cat=self.dfws_cry[cr], dfw_wgs=dfw_wgs
                 )
-                dfw_bcry = self.dfws_cry[cr].multiply(dfw_wgs_copy).sum(axis=1)
-                dfcry = dfw_bcry.to_frame("value").reset_index()
-                basket_cry = basket_name + "_" + cr
-                dfcry = dfcry.assign(ticker=basket_cry)[select]
-                cry_list.append(dfcry)
+                self.dfws_cry: Dict[str, pd.DataFrame]
+                dfw_bcry: pd.Series = (
+                    self.dfws_cry[cr].multiply(dfw_wgs_copy).sum(axis=1)
+                )
+                tkr = basket_name + "_" + cr
+                cry_list.append(dfw_bcry.to_frame(tkr))
 
             store += cry_list
 
-        df_retcry = pd.concat(store)
-        df_retcry = df_retcry.reset_index(drop=True)
+        df_retcry = pd.concat(store, axis=1)
         self.dict_retcry[basket_name] = df_retcry
 
         self.dict_wgs[basket_name] = self.column_weights(dfw_wgs)
@@ -568,29 +685,38 @@ class Basket(object):
         size: Tuple[int, int] = (7, 7),
     ):
         """
-        Method used to visualise the weights associated with each contract in the basket.
+        Method used to visualise the weights associated with each contract in the
+        basket.
 
-        :param <str> basket_name: name of basket whose weights are visualized
-        :param <str> start_date: start date of he visualisation period.
-        :param <str> end_date: end date of the visualization period.
-        :param <bool> subplots: contract weights are displayed on different plots (True)
-            or on a single plot (False).
-        :param <bool> facet_grid: parameter used to break up the plot into multiple
-            cartesian coordinate systems. If the basket consists of a high number of
-            contracts, using the Facet Grid is recommended.
-        :param <bool> scatter: if the facet_grid parameter is set to True there are two
-            options: i) scatter plot if there a lot of blacklist periods; ii) line plot
-            for continuous series.
-        :param <bool> all_tickers: if True (default) all weights are displayed.
-            If set to False `single-ticker` must be specified.
-        :param <str> single_ticker: individual ticker for further, more detailed,
-            analysis.
-        :param <bool> percentage_change: graphical display used to further assimilate the
-            fluctuations in the contract's weight. The graphical display is limited to a
-            single contract. Therefore, pass the ticker into the parameter
-            "single_ticker".
-        :param <Tuple[int, int]> size: size of the plot. Default is (7, 7).
-
+        Parameters
+        ----------
+        basket_name : str
+            name of basket whose weights are visualized
+        start_date : str
+            start date of he visualisation period.
+        end_date : str
+            end date of the visualization period.
+        subplots : bool
+            contract weights are displayed on different plots (True) or on a single plot
+            (False).
+        facet_grid : bool
+            parameter used to break up the plot into multiple cartesian coordinate
+            systems. If the basket consists of a high number of contracts, using the Facet
+            Grid is recommended.
+        scatter : bool
+            if the facet_grid parameter is set to True there are two options: i) scatter
+            plot if there a lot of blacklist periods; ii) line plot for continuous series.
+        all_tickers : bool
+            if True (default) all weights are displayed. If set to False `single-ticker`
+            must be specified.
+        single_ticker : str
+            individual ticker for further, more detailed, analysis.
+        percentage_change : bool
+            graphical display used to further assimilate the fluctuations in the
+            contract's weight. The graphical display is limited to a single contract.
+            Therefore, pass the ticker into the parameter "single_ticker".
+        size : Tuple[int, int]
+            size of the plot. Default is (7, 7).
         """
 
         date_conv = lambda d: pd.Timestamp(d).strftime("%Y-%m-%d %X")
@@ -634,6 +760,7 @@ class Basket(object):
                 dfw_wgs = dfw_wgs[[single_ticker]]
 
             if facet_grid:
+                dfw_wgs.columns.name = "ticker"
                 df_stack = dfw_wgs.stack().to_frame("value").reset_index()
                 df_stack = df_stack.sort_values(["ticker", "real_date"])
                 no_contracts = dfw_wgs.shape[1]
@@ -703,10 +830,16 @@ class Basket(object):
         returns a standardised dataframe with the columns 'cid', 'xcat', 'real_date' and
         'value. The 'ticker' column is broken up to produce the two new columns.
 
-        :param <pd.DataFrame> df:
+        Parameters
+        ----------
+        df : ~pandas.DataFrame
 
-        :return <pd.DataFrame> df: standardised dataframe.
+        Returns
+        -------
+        ~pandas.DataFrame
+            standardised dataframe.
         """
+
         select = ["cid", "xcat", "real_date", "value"]
 
         cid_func = lambda t: t.split("_")[0]
@@ -726,13 +859,17 @@ class Basket(object):
         Return standardized dataframe of basket performance data based on one or more
         weighting methods.
 
-        :param <str or List[str]> basket_names: single basket name or list for which
-            performance data are to be returned. If none is given all baskets added to
-            the instance are selected.
+        Parameters
+        ----------
+        basket_names : str or List[str]
+            single basket name or list for which performance data are to be returned. If
+            none is given all baskets added to the instance are selected.
 
-        :return <pd.Dataframe>: standardized DataFrame with the basket return and
-            (possibly) carry data in standard form, i.e. columns 'cid', 'xcat',
-            'real_date' and 'value'.
+        Returns
+        -------
+        QuantamentalDataFrame
+            standardized DataFrame with the basket return and (possibly) carry data in
+            standard form, i.e. columns 'cid', 'xcat', 'real_date' and 'value'.
         """
 
         if basket_names is None:
@@ -750,23 +887,29 @@ class Basket(object):
             except KeyError as e:
                 print(f"Basket not found - call make_basket() method first: {e}.")
             else:
-                dfw_retcry = self.column_split(dfw_retcry)
-                dfw_retcry = dfw_retcry.sort_values(["xcat", "real_date"])
-                ret_baskets.append(dfw_retcry)
+                qdf = QuantamentalDataFrame.from_wide(dfw_retcry)
+                ret_baskets.append(qdf)
 
-        return_df = pd.concat(ret_baskets)
-        return return_df.reset_index(drop=True)
+        return_df = QuantamentalDataFrame.from_qdf_list(ret_baskets)
+        return QuantamentalDataFrame(
+            df=return_df, _initialized_as_categorical=self._as_categorical
+        ).to_original_dtypes()
 
     def return_weights(self, basket_names: Union[str, List[str]] = None):
         """
         Return the standardised dataframe containing the corresponding weights used to
         compute the basket.
 
-        :param <str or List[str]> basket_names: single basket name or list for which
-            performance data are to be returned. If none is given all baskets added to
-            the instance are selected.
+        Parameters
+        ----------
+        basket_names : str or List[str]
+            single basket name or list for which performance data are to be returned. If
+            none is given all baskets added to the instance are selected.
 
-        :return <pd.Dataframe>: standardized DataFrame with basket weights.
+        Returns
+        -------
+        QuantamentalDataFrame
+            standardized DataFrame with basket weights.
         """
 
         if basket_names is None:
@@ -782,20 +925,18 @@ class Basket(object):
 
         for b in basket_names:
             try:
-                dfw_wgs = self.dict_wgs[b]
+                dfw_wgs: pd.DataFrame = self.dict_wgs[b]
             except KeyError as e:
                 print(f"Basket not found - call make_basket() method first: {e}.")
             else:
-                w = dfw_wgs.stack().to_frame("value").reset_index()
-                w = self.column_split(df=w)
-                w = w.sort_values(["cid", "real_date"])
+                pfx = f"_{b}_WGT"
+                qdf = QuantamentalDataFrame.from_wide(dfw_wgs).rename_xcats(postfix=pfx)
+                weight_baskets.append(qdf)
 
-                w = w.loc[w.value > 0, select]
-                w["xcat"] += "_" + b + "_" + "WGT"
-                weight_baskets.append(w)
-
-        return_df = pd.concat(weight_baskets)
-        return return_df.reset_index(drop=True)
+        return QuantamentalDataFrame(
+            df=QuantamentalDataFrame.from_qdf_list(weight_baskets),
+            _initialized_as_categorical=self._as_categorical,
+        ).to_original_dtypes()
 
 
 if __name__ == "__main__":

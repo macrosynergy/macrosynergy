@@ -3,7 +3,7 @@ import unittest
 import unittest.mock
 from typing import List, Optional
 from unittest.mock import patch
-
+from macrosynergy.management.simulate import make_test_df
 import matplotlib
 import numpy as np
 import pandas as pd
@@ -180,6 +180,45 @@ class TestAll(unittest.TestCase):
         extracted_xcat = eval(lines[0].split(":")[1].strip())
         self.assertTrue(len(extracted_xcat) == 1)
         self.assertTrue(extracted_xcat[0] == random_xcat)
+
+        with self.assertRaises(TypeError):
+            missing_in_df(df=1, xcats=xcats, cids=cids)
+
+        with self.assertRaises(ValueError):
+            missing_in_df(df=dfd[0:0], xcats=xcats, cids=cids)
+
+        with self.assertRaises(TypeError):
+            missing_in_df(df=dfd, xcats=[1], cids=cids)
+
+        self.assertIsNone(missing_in_df(df=dfd, xcats=["apple", "banana"], cids=cids))
+
+    def test_check_availability(self):
+
+        cids: List[str] = self.cids
+        xcats: List[str] = self.xcats
+
+        df = make_test_df(cids=cids, xcats=xcats)
+
+        with self.assertRaises(TypeError):
+            check_availability(df=df, xcats=xcats, cids=cids, start_years="True")
+
+        with self.assertRaises(TypeError):
+            check_availability(df=df, xcats=xcats, cids=cids, missing_recent="True")
+
+        with self.assertRaises(ValueError):
+            bad_cids = ["apple", "banana"]
+            check_availability(df=df, xcats=xcats, cids=bad_cids)
+
+    def test_check_availability_start_years(self):
+
+        check_availability(
+            df=self.dfd, xcats=self.xcats, cids=self.cids, start_years=True
+        )
+
+    def test_check_availability_missing_recent(self):
+        check_availability(
+            df=self.dfd, xcats=self.xcats, cids=self.cids, missing_recent=True
+        )
 
 
 if __name__ == "__main__":

@@ -11,16 +11,26 @@ from macrosynergy.management import make_qdf
 
 class RandomEffects(BaseEstimator):
     """
-    A custom sklearn estimator that fits a random effects model.
+    Random effects model for inference on panel data.
+
+    Parameters
+    ----------
+    group_col : str
+        The column of a multi-indexed pandas dataframe to group by, for placing of
+        random effects.
+    fit_intercept : bool
+        Whether or not to fit an intercept term.
+
+    Notes
+    -----
+    A random effects model is a way of attributing variance in a dependent variable to
+    variance in a group of observations (i.e. error variance), in a structured manner.
+    In the context of panel data, we often use this to account for cross-sectional
+    correlations by imposing period-specific effects. However, this model is solely
+    for inference and is not predictive.
     """
 
-    def __init__(self, group_col: str = "real_date", fit_intercept: bool = True):
-        """
-        Initialize the RandomEffects estimator.
-
-        :param group_col: The column of a Pandas MultiIndexed DataFrame to group by.
-        :param fit_intercept: Whether to fit an intercept term.
-        """
+    def __init__(self, group_col="real_date", fit_intercept=True):
         if not isinstance(group_col, str):
             raise TypeError("group_col must be a string.")
         if not isinstance(fit_intercept, bool):
@@ -46,16 +56,21 @@ class RandomEffects(BaseEstimator):
         self.total_ss = None
         self.nobs = None
 
-    def fit(self, X: Union[pd.DataFrame, pd.Series], y: Union[pd.DataFrame, pd.Series]):
+    def fit(self, X, y):
         """
         Fit the random effects model.
 
-        :param X: Pandas DataFrame or Series of features with a multiIndex
-            containing the group column.
-        :param y: Pandas DataFrame or Series of target values with the same index
-            as X.
+        Parameters
+        ----------
+        X : Pandas DataFrame or Series
+            Input feature matrix.
+        y : Pandas DataFrame or Series
+            Target values with the same index as X.
 
-        :return: The fitted estimator.
+        Returns
+        -------
+        self
+            The fitted estimator.
         """
 
         X, y = self.check_X_y(X, y)
@@ -67,12 +82,16 @@ class RandomEffects(BaseEstimator):
 
         return self
 
-    def _fit(self, df_x: pd.DataFrame, df_y: pd.DataFrame):
+    def _fit(self, df_x, df_y):
         """
-        Fit the random effects model.
+        Private method for fitting the random effects model.
 
-        :param df_x: Pandas DataFrame of features.
-        :param df_y: Pandas DataFrame of target values.
+        Parameters
+        ----------
+        df_x : Pandas DataFrame
+            Features.
+        df_y : Pandas DataFrame
+            Targets.
         """
 
         y_demeaned = self._demean(df_y)
@@ -165,15 +184,24 @@ class RandomEffects(BaseEstimator):
         self.total_ss = total_ss
         self.nobs = nobs
 
-    def _demean(self, df: pd.DataFrame):
+    def _demean(self, df):
         """
         Demean the groups as specified by self.group_col.
 
-        Note: If the model is fit with an intercept, the grand mean
-            is added back to the demeaned DataFrame.
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Dataframe with `self.group_col` as a level in its multiIndex.
 
-        :param df: Pandas DataFrame with `self.group_col` as a level in
-            its multiIndex.
+        Returns
+        -------
+        pd.DataFrame
+            The demeaned DataFrame.
+
+        Notes
+        -----
+        If the model is fit with an intercept, the grand mean is added back to the
+        demeaned DataFrame.
         """
         mu = df.groupby(level=self.group_col).transform("mean")
         df_demeaned = df - mu
@@ -182,21 +210,44 @@ class RandomEffects(BaseEstimator):
         else:
             return df_demeaned
 
-    def _cov(self, x: np.ndarray, ssr: np.ndarray, nobs: int):
+    def _cov(self, x, ssr, nobs):
         """
         Compute the covariance matrix of the parameter estimates.
 
-        :param x: The design matrix.
-        :param ssr: The sum of squared residuals.
-        :param nobs: The number of observations.
+        Parameters
+        ----------
+        x : np.ndarray
+            The design matrix.
+        ssr : float
+            The sum of squared residuals.
+        nobs : int
+            The number of observations.
+
+        Returns
+        -------
+        np.ndarray
+            The estimated covariance matrix.
         """
         s2 = float(ssr.item()) / nobs
-        cov = s2 * np.linalg.inv(x.T @ x)
+        cov = s2 * np.linalg.inv(x.T @ x)  # TODO: Could use pinv?
         return cov
 
-    def check_X_y(
-        self, X: Union[pd.DataFrame, pd.Series], y: Union[pd.DataFrame, pd.Series]
-    ):
+    def check_X_y(self, X, y):
+        """
+        Checks for the input data.
+
+        Parameters
+        ----------
+        X : pd.DataFrame or pd.Series
+            Input feature matrix
+        y : pd.DataFrame or pd.Series
+            Target values with the same index as X.
+
+        Returns
+        -------
+        pd.DataFrame, pd.DataFrame
+            The input data.
+        """
 
         X = self._df_checks(X)
         y = self._df_checks(y)
@@ -206,11 +257,19 @@ class RandomEffects(BaseEstimator):
 
         return X, y
 
-    def _df_checks(self, df: Union[pd.DataFrame, pd.Series]):
+    def _df_checks(self, df):
         """
         Perform checks on the DataFrame input.
 
-        :param df: The DataFrame to check.
+        Parameters
+        ----------
+        df : pd.DataFrame or pd.Series
+            The DataFrame to check.
+
+        Returns
+        -------
+        pd.DataFrame
+            The DataFrame with checks performed.
         """
         if isinstance(df, pd.Series):
             df = df.to_frame()
@@ -230,6 +289,11 @@ class RandomEffects(BaseEstimator):
     def pvals(self):
         """
         Compute the p-values for the parameter estimates.
+
+        Returns
+        -------
+        pd.Series
+            The p-values.
         """
         zstat = self.params / self.std_errors
         pvals = 2 * (1 - stats.norm.cdf(np.abs(zstat)))

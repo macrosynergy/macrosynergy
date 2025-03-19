@@ -1,5 +1,5 @@
 """
-"Naive" PnLs with limited signal options and disregarding transaction costs.
+"Naive" profit-and-loss (PnL) calculations with basic signal options, disregarding transaction costs.
 """
 
 from dataclasses import dataclass
@@ -21,33 +21,39 @@ from macrosynergy.management.utils import (
     update_df,
     _map_to_business_day_frequency,
 )
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.signal import SignalReturnRelations
 
 
 class NaivePnL:
     """
-    Computes and collects illustrative PnLs with limited signal options and
-    disregarding transaction costs.
+    Computes and collects illustrative PnLs with limited signal options and disregarding
+    transaction costs.
 
-    :param <pd.Dataframe> df: standardized DataFrame with the following necessary
-        columns: 'cid', 'xcat', 'real_date' and 'value'.
-    :param <str> ret: return category.
-    :param <List[str]> sigs: signal categories. Able to pass in multiple possible signals
-        to the Class' constructor and their respective vintages will be held on the
-        instance's DataFrame. The signals can subsequently be referenced through the
-        self.make_pnl() method which receives a single signal per call.
-    :param <List[str]> cids: cross sections that are traded. Default is all in the
-        dataframe.
-    :param <str, List[str]> bms: list of benchmark tickers for which
-        correlations are displayed against PnL strategies.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date
-        in df is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date in df
-        is used.
-    :param <dict> blacklist: cross-sections with date ranges that should be excluded
-        from the dataframe.
-
+    Parameters
+    ----------
+    df : ~pandas.Dataframe
+        standardized DataFrame with the following necessary columns: 'cid', 'xcat',
+        'real_date' and 'value'.
+    ret : str
+        return category.
+    sigs : List[str]
+        signal categories. Able to pass in multiple possible signals to the Class'
+        constructor and their respective vintages will be held on the instance's DataFrame.
+        The signals can subsequently be referenced through the self.make_pnl() method which
+        receives a single signal per call.
+    cids : List[str]
+        cross sections that are traded. Default is all in the dataframe.
+    bms : str, List[str]
+        list of benchmark tickers for which correlations are displayed against PnL
+        strategies.
+    start : str
+        earliest date in ISO format. Default is None and earliest date in df is used.
+    end : str
+        latest date in ISO format. Default is None and latest date in df is used.
+    blacklist : dict
+        cross-sections with date ranges that should be excluded from the dataframe.
     """
 
     def __init__(
@@ -61,8 +67,10 @@ class NaivePnL:
         end: str = None,
         blacklist: dict = None,
     ):
-        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+        cols = ["cid", "xcat", "real_date", "value"]
 
+        df = QuantamentalDataFrame(df[cols])
+        self._as_categorical = df.InitializedAsCategorical
         # Will host the benchmarks.
         self.dfd = df
 
@@ -70,7 +78,6 @@ class NaivePnL:
         self.ret = ret
         xcats = [ret] + sigs
 
-        cols = ["cid", "xcat", "real_date", "value"]
         # Potentially excludes the benchmarks but will be held on the instance level
         # through self.dfd.
         self.df, self.xcats, self.cids = reduce_df(
@@ -81,8 +88,6 @@ class NaivePnL:
 
         ticker_func = lambda t: t[0] + "_" + t[1]
         self.tickers = list(map(ticker_func, product(self.cids, self.xcats)))
-
-        self.df["real_date"] = pd.to_datetime(self.df["real_date"])
 
         # Data structure used to track all of the generated PnLs from make_pnl() method.
         self.pnl_names = []
@@ -101,173 +106,12 @@ class NaivePnL:
 
         self.pnl_params = {}
 
-    def add_bm(self, df: pd.DataFrame, bms: List[str], tickers: List[str]):
-        """
-        Returns a dictionary with benchmark return series.
-
-        :param <pd.DataFrame> df: aggregate DataFrame passed into the Class.
-        :param <List[str]> bms: benchmark return tickers.
-        :param <List[str]> tickers: the available tickers held in the reduced DataFrame.
-            The reduced DataFrame consists exclusively of the signal & return categories.
-        """
-
-        bm_dict = {}
-
-        for bm in bms:
-            # Accounts for appending "_NEG" to the ticker.
-            bm_s = bm.split("_", maxsplit=1)
-            cid = bm_s[0]
-            xcat = bm_s[1]
-            dfa = df[(df["cid"] == cid) & (df["xcat"] == xcat)]
-
-            if dfa.shape[0] == 0:
-                print(f"{bm} has no observations in the DataFrame.")
-            else:
-                df_single_bm = dfa.pivot(
-                    index="real_date", columns="xcat", values="value"
-                )
-                df_single_bm.columns = [bm]
-                bm_dict[bm] = df_single_bm
-                if bm not in tickers:
-                    self.df = update_df(self.df, dfa)
-
-        return bm_dict
-
-    @staticmethod
-    def _make_signal(
-        dfx: pd.DataFrame,
-        sig: str,
-        sig_op: str = "zn_score_pan",
-        min_obs: int = 252,
-        iis: bool = True,
-        sequential: bool = True,
-        neutral: str = "zero",
-        thresh: float = None,
-    ):
-        """
-        Helper function used to produce the raw signal that forms the basis for
-        positioning.
-
-        :param <pd.DataFrame> dfx: DataFrame defined over the return & signal category.
-        :param <str> sig: name of the raw signal.
-        :param <str> sig_op: signal transformation.
-        :param <int> min_obs: the minimum number of observations required to calculate
-            zn_scores. Default is 252.
-        :param <bool> iis: if True (default) zn-scores are also calculated for the initial
-            sample period defined by min_obs, on an in-sample basis, to avoid losing
-            history.
-        :param <bool> sequential: if True (default) score parameters are estimated
-            sequentially with concurrently available information only.
-        :param <str> neutral: method to determine neutral level.
-        :param <float> thresh: threshold value beyond which scores are winsorized,
-
-        """
-
-        if sig_op == "binary":
-            dfw = dfx.pivot(index=["cid", "real_date"], columns="xcat", values="value")
-            dfw["psig"] = np.sign(dfw[sig])
-        elif sig_op == "raw":
-            dfw = dfx.pivot(index=["cid", "real_date"], columns="xcat", values="value")
-            dfw["psig"] = dfw[sig]
-        else:
-            panw = 1 if sig_op == "zn_score_pan" else 0
-            # The re-estimation frequency for the neutral level and standard deviation
-            # will be the same as the re-balancing frequency. For instance, if the
-            # neutral level is computed weekly, a material change in the signal will only
-            # manifest along a similar timeline. Therefore, re-estimation and
-            # re-balancing frequencies match.
-            df_ms = make_zn_scores(
-                dfx,
-                xcat=sig,
-                neutral=neutral,
-                pan_weight=panw,
-                sequential=sequential,
-                min_obs=min_obs,
-                iis=iis,
-                thresh=thresh,
-            )
-
-            df_ms = df_ms.drop("xcat", axis=1)
-            df_ms["xcat"] = "psig"
-
-            dfx_concat = pd.concat([dfx, df_ms])
-            dfw = dfx_concat.pivot(
-                index=["cid", "real_date"], columns="xcat", values="value"
-            )
-
-        # Reconstruct the DataFrame to recognise the signal's start date for each
-        # individual cross-section
-        dfw_list = []
-        for c, cid_df in dfw.groupby(level=0):
-            first_date = cid_df.loc[:, "psig"].first_valid_index()
-            cid_df = cid_df.loc[first_date:, :]
-            dfw_list.append(cid_df)
-        return pd.concat(dfw_list)
-
-    @staticmethod
-    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0):
-        """
-        The signals are calculated daily and for each individual cross-section defined in
-        the panel. However, re-balancing a position can occur more infrequently than
-        daily. Therefore, produce the re-balancing values according to the more
-        infrequent timeline (weekly or monthly).
-
-        :param <pd.Dataframe> dfw: DataFrame with each category represented by a column
-            and the daily signal is also included with the column name 'psig'.
-        :param <str> rebal_freq: re-balancing frequency for positions according to signal
-            must be one of 'daily' (default), 'weekly' or 'monthly'.
-        :param <str> rebal_slip: re-balancing slippage in days.
-
-        :return <pd.Series>: will return a pd.Series containing the associated signals
-            according to the re-balancing frequency.
-        """
-
-        # The re-balancing days are the first of the respective time-periods because of
-        # the shift forward by one day applied earlier in the code. Therefore, only
-        # concerned with the minimum date of each re-balance period.
-        dfw["year"] = dfw["real_date"].dt.year
-        if rebal_freq == "monthly":
-            dfw["month"] = dfw["real_date"].dt.month
-            rebal_dates = dfw.groupby(["cid", "year", "month"])["real_date"].min()
-        elif rebal_freq == "weekly":
-            dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
-            rebal_dates = dfw.groupby(["cid", "year", "week"])["real_date"].min()
-
-        # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
-        r_dates_df = rebal_dates.reset_index(level=0)
-        r_dates_df.reset_index(drop=True, inplace=True)
-        dfw = dfw[["real_date", "psig", "cid"]]
-
-        # Isolate the required signals on the re-balancing dates. Only concerned with the
-        # respective signal on the re-balancing date. However, the produced DataFrame
-        # will only be defined over the re-balancing dates. Therefore, merge the
-        # aforementioned DataFrame with the original DataFrame such that all business
-        # days are included. The intermediary dates, dates between re-balancing dates,
-        # will initially be populated by NA values. To ensure the signal is used for the
-        # duration between re-balancing dates, forward fill the computed signal over the
-        # associated dates.
-
-        # The signal is computed for each individual cross-section. Therefore, merge on
-        # the real_date and the cross-section.
-        rebal_merge = r_dates_df.merge(dfw, how="left", on=["real_date", "cid"])
-        # Re-establish the daily date series index where the intermediary dates, between
-        # the re-balancing dates, will be populated using a forward fill.
-        rebal_merge = dfw[["real_date", "cid"]].merge(
-            rebal_merge, how="left", on=["real_date", "cid"]
-        )
-        rebal_merge["psig"] = rebal_merge["psig"].ffill().shift(rebal_slip)
-        rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
-
-        rebal_merge = rebal_merge.set_index("real_date")
-        sig_series = rebal_merge.drop(["cid"], axis=1)
-
-        return sig_series
-
     def make_pnl(
         self,
         sig: str,
         sig_op: str = "zn_score_pan",
         sig_add: float = 0,
+        sig_mult: float = 1,
         sig_neg: bool = False,
         pnl_name: Optional[str] = None,
         rebal_freq: str = "daily",
@@ -283,60 +127,83 @@ class NaivePnL:
         """
         Calculate daily PnL and add to class instance.
 
-        :param <str> sig: name of raw signal that is basis for positioning. The signal
-            is assumed to be recorded at the end of the day prior to position taking.
-        :param <str> sig_op: signal transformation options; must be one of
-            'zn_score_pan', 'zn_score_cs', 'binary', or 'raw'. The default is 'zn_score_pan'.
-            'zn_score_pan': transforms raw signals into z-scores around zero value
-            based on the whole panel. The neutral level & standard deviation will use the
-            cross-section of panels.
-            'zn_score_cs': transforms signals to z-scores around zero based on
-            cross-section alone.
-            'binary': transforms signals into uniform long/shorts (1/-1) across all
-            sections.
-            N.B.: zn-score here means standardized score with zero being the natural
-            neutral level and standardization through division by mean absolute value.
-        :param <float> sig_add: add a constant to the signal after initial transformation.
-            This allows to give PnLs a long or short bias relative to the signal
-            score. Default is 0.
-        :param <str> sig_neg: if True the PnL is based on the negative value of the
-            transformed signal. Default is False.
-        :param <str> pnl_name: name of the PnL to be generated and stored.
-            Default is None, i.e. a default name is given. The default name will be:
-            'PNL_<signal name>[_<NEG>]', with the last part added if sig_neg has been
-            set to True.
-            Previously calculated PnLs of the same name will be overwritten. This means
-            that if a set of PnLs are to be compared, each PnL requires a distinct name.
-        :param <str> rebal_freq: re-balancing frequency for positions according to signal
-            must be one of 'daily' (default), 'weekly' or 'monthly'. The re-balancing is
-            only concerned with the signal value on the re-balancing date which is
-            delimited by the frequency chosen.
-            Additionally, the re-balancing frequency will be applied to make_zn_scores()
-            if used as the method to produce the raw signals.
-        :param <str> rebal_slip: re-balancing slippage in days. Default is 1 which
-            means that it takes one day to re-balance the position and that the new
-            positions produce PnL from the second day after the signal has been recorded.
-        :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
-            This is for comparative visualization and not out-of-sample. Default is none.
-        :param <float> leverage: leverage applied to the raw signal when a `vol_scale` is
-            not defined. Default is 1.0, i.e., position size is 1 or 100% of implied risk
-            capital.
-        :param <int> min_obs: the minimum number of observations required to calculate
-            zn_scores. Default is 252.
-        :param <bool> iis: if True (default) zn-scores are also calculated for the initial
-            sample period defined by min_obs, on an in-sample basis, to avoid losing
-            history.
-        :param <bool> sequential: if True (default) score parameters (neutral level and
-            standard deviations) are estimated sequentially with concurrently available
-            information only.
-        :param <str> neutral: method to determine neutral level. Default is 'zero'.
-            Alternatives are 'mean' and "median".
-        :param <float> thresh: threshold value beyond which scores are winsorized,
-            i.e. contained at that threshold. Therefore, the threshold is the maximum
-            absolute score value that the function is allowed to produce. The minimum
-            threshold is one standard deviation. Default is no threshold.
+        Parameters
+        ----------
+        sig : str
+            name of raw signal that is basis for positioning. The signal is assumed to
+            be recorded at the end of the day prior to position taking.
+        sig_op : str
+            signal transformation options; must be one of 'zn_score_pan', 'zn_score_cs',
+            'binary', or 'raw'. The default is 'zn_score_pan'. See notes below for
+            further details.
+        sig_add : float
+            add a constant to the signal after initial transformation. This allows to
+            give PnLs a long or short bias relative to the signal score. Default is 0.
+        sig_mult : float
+            multiply a constant to the signal after initial tranformation and after
+            sig_add has been added too. Default is 1.
+        sig_neg : str
+            if True the PnL is based on the negative value of the transformed signal.
+            Default is False.
+        pnl_name : str
+            name of the PnL to be generated and stored. Default is None, i.e. a default
+            name is given. The default name will be: 'PNL_<signal name>[_<NEG>]', with the
+            last part added if sig_neg has been set to True. Previously calculated PnLs of
+            the same name will be overwritten. This means that if a set of PnLs are to be
+            compared, each PnL requires a distinct name.
+        rebal_freq : str
+            re-balancing frequency for positions according to signal must be one of
+            'daily' (default), 'weekly' or 'monthly'. The re-balancing is only concerned
+            with the signal value on the re-balancing date which is delimited by the
+            frequency chosen. Additionally, the re-balancing frequency will be applied to
+            make_zn_scores() if used as the method to produce the raw signals.
+        rebal_slip : str
+            re-balancing slippage in days. Default is 1 which means that it takes one
+            day to re-balance the position and that the new positions produce PnL from the
+            second day after the signal has been recorded.
+        vol_scale : bool
+            ex-post scaling of PnL to annualized volatility given. This is for
+            comparative visualization and not out-of-sample. Default is none.
+        leverage : float
+            leverage applied to the raw signal when a `vol_scale` is not defined.
+            Default is 1.0, i.e., position size is 1 or 100% of implied risk capital.
+        min_obs : int
+            the minimum number of observations required to calculate zn_scores. Default
+            is 252.
+        iis : bool
+            if True (default) zn-scores are also calculated for the initial sample
+            period defined by min_obs, on an in-sample basis, to avoid losing history.
+        sequential : bool
+            if True (default) score parameters (neutral level and standard deviations)
+            are estimated sequentially with concurrently available information only.
+        neutral : str
+            method to determine neutral level. Default is 'zero'. Alternatives are
+            'mean' and "median".
+        thresh : float
+            threshold value beyond which scores are winsorized, i.e. contained at that
+            threshold. Therefore, the threshold is the maximum absolute score value that the
+            function is allowed to produce. The minimum threshold is one standard deviation.
+            Default is no threshold.
 
+
+        Notes
+        -----
+        When `sig_op = "zn_score_pan"`, raw signals are transformed into zn-scores
+        around a neutral value where pooled panel statistics are calculated.
+
+        When `sig_op = "zn_score_cs"`, raw signals are transformed into zn-scores
+        around a neutral value where statistics are calculated by cross section alone.
+
+        When `sig_op = "binary"`, transforms signals into uniform long/shorts (1/-1) across
+        all cross sections.
+
+        When `sig_op = "raw"`, no transformation is applied to the signal.
+
+        See Also
+        --------
+        macrosynergy.panel.make_zn_scores : compute zn-scores for a panel.
         """
+
         for varx, name, typex in (
             (sig, "sig", str),
             (sig_op, "sig_op", str),
@@ -345,6 +212,7 @@ class NaivePnL:
                 "sig_add",
                 (Number),
             ),  # testing for number instead of (float, int)
+            (sig_mult, "sig_mult", (Number)),
             (sig_neg, "sig_neg", bool),
             (pnl_name, "pnl_name", (str, type(None))),
             (rebal_freq, "rebal_freq", str),
@@ -412,23 +280,24 @@ class NaivePnL:
             neg = ""
 
         dfw["psig"] += sig_add
+        dfw["psig"] *= sig_mult
 
         self._winsorize(df=dfw["psig"], thresh=thresh)
 
         # Multi-index DataFrame with a natural minimum lag applied.
-        dfw["psig"] = dfw["psig"].groupby(level=0).shift(1)
+        dfw["psig"] = dfw["psig"].groupby(level=0, observed=True).shift(1)
         dfw.reset_index(inplace=True)
         dfw = dfw.rename_axis(None, axis=1)
 
         dfw = dfw.sort_values(["cid", "real_date"])
 
-        if rebal_freq != "daily":
-            sig_series = self.rebalancing(
-                dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
-            )
-            dfw["sig"] = np.squeeze(sig_series.to_numpy())
-        else:
-            dfw = dfw.rename({"psig": "sig"}, axis=1)
+        # if rebal_freq != "daily":
+        sig_series = self.rebalancing(
+            dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
+        )
+        dfw["sig"] = np.squeeze(sig_series.to_numpy())
+        # else:
+        #     dfw = dfw.rename({"psig": "sig"}, axis=1)
 
         # The signals are generated across the panel.
         dfw["value"] = dfw[self.ret] * dfw["sig"]
@@ -441,11 +310,22 @@ class NaivePnL:
         df_pnl_all = df_pnl.groupby(["real_date"]).sum(numeric_only=True)
         df_pnl_all = df_pnl_all[df_pnl_all["value"].cumsum() != 0]
         # Returns are computed for each cross-section and across the panel.
-        df_pnl_all["cid"] = "ALL"
+        if df_pnl["cid"].dtype.name == "category":
+            df_pnl_all["cid"] = pd.Categorical.from_codes(
+                codes=[0] * len(df_pnl_all), categories=["ALL"]
+            )
+        else:
+            df_pnl_all["cid"] = "ALL"
+
         df_pnl_all = df_pnl_all.reset_index()[df_pnl.columns]
         # Will be inclusive of each individual cross-section's signal-adjusted return and
         # the aggregated panel return.
-        df_pnl = pd.concat([df_pnl, df_pnl_all])
+
+        pnn = ("PNL_" + sig + neg) if pnl_name is None else pnl_name
+
+        df_pnl = QuantamentalDataFrame.from_long_df(df_pnl, xcat=pnn)
+        df_pnl_all = QuantamentalDataFrame.from_long_df(df_pnl_all, xcat=pnn)
+        df_pnl = QuantamentalDataFrame.from_qdf_list([df_pnl, df_pnl_all])
 
         if vol_scale is not None:
             leverage = vol_scale * (df_pnl_all["value"].std() * np.sqrt(261)) ** (-1)
@@ -453,18 +333,21 @@ class NaivePnL:
         assert isinstance(leverage, (float, int)), err_lev  # sanity check
         df_pnl["value"] = df_pnl["value"] * leverage
 
-        pnn = ("PNL_" + sig + neg) if pnl_name is None else pnl_name
         # Populating the signal dictionary is required for the display methods:
         self.signal_df[pnn] = dfw.loc[:, ["cid", "real_date", "sig"]]
 
-        df_pnl["xcat"] = pnn
         if pnn in self.pnl_names:
             self.df = self.df[~(self.df["xcat"] == pnn)]
         else:
             self.pnl_names = self.pnl_names + [pnn]
 
-        agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
+        # agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
+        agg_df = QuantamentalDataFrame.from_qdf_list([self.df, df_pnl[self.df.columns]])
         self.df = agg_df.reset_index(drop=True)
+
+        self.df = QuantamentalDataFrame(
+            self.df, _initialized_as_categorical=self._as_categorical
+        )
 
         self.pnl_params[pnn] = PnLParams(
             pnl_name=pnn,
@@ -486,20 +369,23 @@ class NaivePnL:
         leverage: float = 1.0,
     ):
         """
-        The long-only returns will be computed which act as a basis for comparison
+        Computes long-only returns which may act as a basis for comparison
         against the signal-adjusted returns. Will take a long-only position in the
         category passed to the parameter 'self.ret'.
 
-        :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
-            This is for comparative visualization and not out-of-sample, and is applied
-            to the long-only position. Default is None.
-        :param <str> label: associated label that will be mapped to the long-only
-            DataFrame. The label will be used in the plotting graphic for plot_pnls().
-            If a label is not defined, the default will be the name of the return
-            category.
-        :param <float> leverage: leverage applied to the raw signal when a `vol_scale` is
-            not defined. Default is 1.0, i.e., position size is 1 or 100% of implied risk
-            capital.
+        Parameters
+        ----------
+        vol_scale : bool
+            ex-post scaling of PnL to annualized volatility given. This is for
+            comparative visualization and not out-of-sample, and is applied to the long-only
+            position. Default is None.
+        label : str
+            associated label that will be mapped to the long-only DataFrame. The label
+            will be used in the plotting graphic for plot_pnls(). If a label is not defined,
+            the default will be the name of the return category.
+        leverage : float
+            leverage applied to the raw signal when a `vol_scale` is not defined.
+            Default is 1.0, i.e., position size is 1 or 100% of implied risk capital.
         """
 
         if vol_scale is not None:
@@ -527,12 +413,202 @@ class NaivePnL:
             dfw=dfx, vol_scale=vol_scale, label=label, leverage=leverage
         )
 
-        self.df: pd.DataFrame = pd.concat([self.df, df_long])
+        self.df = QuantamentalDataFrame.from_qdf_list([self.df, df_long])
 
         if label not in self.pnl_names:
             self.pnl_names = self.pnl_names + [label]
 
         self.df = self.df.reset_index(drop=True)
+
+    def add_bm(self, df: pd.DataFrame, bms: List[str], tickers: List[str]):
+        """
+        Returns a dictionary with benchmark return series.
+
+        Parameters
+        ----------
+        df : ~pandas.DataFrame
+            aggregate DataFrame passed into the Class.
+        bms : List[str]
+            benchmark return tickers.
+        tickers : List[str]
+            the available tickers held in the reduced DataFrame. The reduced DataFrame
+            consists exclusively of the signal & return categories.
+        """
+
+        bm_dict = {}
+
+        for bm in bms:
+            # Accounts for appending "_NEG" to the ticker.
+            bm_s = bm.split("_", maxsplit=1)
+            cid = bm_s[0]
+            xcat = bm_s[1]
+            dfa = df[(df["cid"] == cid) & (df["xcat"] == xcat)]
+
+            if dfa.shape[0] == 0:
+                print(f"{bm} has no observations in the DataFrame.")
+            else:
+                df_single_bm = dfa.pivot(
+                    index="real_date", columns="xcat", values="value"
+                )
+                df_single_bm.columns = [bm]
+                bm_dict[bm] = df_single_bm
+                if bm not in tickers:
+                    self.df = update_df(self.df, dfa)
+
+        return bm_dict
+
+    @staticmethod
+    def _make_signal(
+        dfx: pd.DataFrame,
+        sig: str,
+        sig_op: str = "zn_score_pan",
+        min_obs: int = 252,
+        iis: bool = True,
+        sequential: bool = True,
+        neutral: str = "zero",
+        thresh: float = None,
+    ):
+        """
+        Helper function used to produce the raw signal that forms the basis for
+        positioning.
+
+        Parameters
+        ----------
+        dfx : ~pandas.DataFrame
+            DataFrame defined over the return & signal category.
+        sig : str
+            name of the raw signal.
+        sig_op : str
+            signal transformation.
+        min_obs : int
+            the minimum number of observations required to calculate zn_scores. Default
+            is 252.
+        iis : bool
+            if True (default) zn-scores are also calculated for the initial sample
+            period defined by min_obs, on an in-sample basis, to avoid losing history.
+        sequential : bool
+            if True (default) score parameters are estimated sequentially with
+            concurrently available information only.
+        neutral : str
+            method to determine neutral level.
+        thresh : float
+            threshold value beyond which scores are winsorized,
+        """
+
+        if sig_op == "binary":
+            dfw = dfx.pivot(index=["cid", "real_date"], columns="xcat", values="value")
+            dfw["psig"] = np.sign(dfw[sig])
+        elif sig_op == "raw":
+            dfw = dfx.pivot(index=["cid", "real_date"], columns="xcat", values="value")
+            dfw["psig"] = dfw[sig]
+        else:
+            panw = 1 if sig_op == "zn_score_pan" else 0
+            # The re-estimation frequency for the neutral level and standard deviation
+            # will be the same as the re-balancing frequency. For instance, if the
+            # neutral level is computed weekly, a material change in the signal will only
+            # manifest along a similar timeline. Therefore, re-estimation and
+            # re-balancing frequencies match.
+            df_ms = make_zn_scores(
+                dfx,
+                xcat=sig,
+                neutral=neutral,
+                pan_weight=panw,
+                sequential=sequential,
+                min_obs=min_obs,
+                iis=iis,
+                thresh=thresh,
+            )
+
+            df_ms = df_ms.drop("xcat", axis=1)
+            df_ms = QuantamentalDataFrame.from_long_df(df_ms, xcat="psig")
+
+            dfx_concat = pd.concat([dfx, df_ms])
+            dfw = dfx_concat.pivot(
+                index=["cid", "real_date"], columns="xcat", values="value"
+            )
+
+        # Reconstruct the DataFrame to recognise the signal's start date for each
+        # individual cross-section
+        dfw_list = []
+        for c, cid_df in dfw.groupby(level=0, observed=True):
+            first_date = cid_df.loc[:, "psig"].first_valid_index()
+            cid_df = cid_df.loc[first_date:, :]
+            dfw_list.append(cid_df)
+        return pd.concat(dfw_list)
+
+    @staticmethod
+    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0):
+        """
+        The signals are calculated daily and for each individual cross-section defined
+        in the panel. However, re-balancing a position can occur more infrequently than
+        daily. Therefore, produce the re-balancing values according to the more
+        infrequent timeline (weekly or monthly).
+
+        Parameters
+        ----------
+        dfw : ~pandas.Dataframe
+            DataFrame with each category represented by a column and the daily signal is
+            also included with the column name 'psig'.
+        rebal_freq : str
+            re-balancing frequency for positions according to signal must be one of
+            'daily' (default), 'weekly' or 'monthly'.
+        rebal_slip : str
+            re-balancing slippage in days.
+
+        Returns
+        -------
+        ~pandas.Series
+            will return a pd.Series containing the associated signals according to the
+            re-balancing frequency.
+        """
+
+        # The re-balancing days are the first of the respective time-periods because of
+        # the shift forward by one day applied earlier in the code. Therefore, only
+        # concerned with the minimum date of each re-balance period.
+        dfw["year"] = dfw["real_date"].dt.year
+        if rebal_freq == "monthly":
+            dfw["month"] = dfw["real_date"].dt.month
+            rebal_dates = dfw.groupby(
+                ["cid", "year", "month"],
+                observed=True,
+            )["real_date"].min()
+        elif rebal_freq == "weekly":
+            dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
+            rebal_dates = dfw.groupby(["cid", "year", "week"], observed=True)["real_date"].min()
+        elif rebal_freq == "daily":
+            rebal_dates = dfw.groupby(["cid", "year", "real_date"], observed=True)["real_date"].min()
+        else:
+            raise ValueError("Re-balancing frequency must be one of: daily, weekly, monthly.")
+
+        # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
+        r_dates_df = rebal_dates.reset_index(level=0)
+        r_dates_df.reset_index(drop=True, inplace=True)
+        dfw = dfw[["real_date", "psig", "cid"]]
+
+        # Isolate the required signals on the re-balancing dates. Only concerned with the
+        # respective signal on the re-balancing date. However, the produced DataFrame
+        # will only be defined over the re-balancing dates. Therefore, merge the
+        # aforementioned DataFrame with the original DataFrame such that all business
+        # days are included. The intermediary dates, dates between re-balancing dates,
+        # will initially be populated by NA values. To ensure the signal is used for the
+        # duration between re-balancing dates, forward fill the computed signal over the
+        # associated dates.
+
+        # The signal is computed for each individual cross-section. Therefore, merge on
+        # the real_date and the cross-section.
+        rebal_merge = r_dates_df.merge(dfw, how="left", on=["real_date", "cid"])
+        # Re-establish the daily date series index where the intermediary dates, between
+        # the re-balancing dates, will be populated using a forward fill.
+        rebal_merge = dfw[["real_date", "cid"]].merge(
+            rebal_merge, how="left", on=["real_date", "cid"]
+        )
+        rebal_merge["psig"] = rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
+        rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
+
+        rebal_merge = rebal_merge.set_index("real_date")
+        sig_series = rebal_merge.drop(["cid"], axis=1)
+
+        return sig_series
 
     @staticmethod
     def long_only_pnl(
@@ -542,30 +618,37 @@ class NaivePnL:
         leverage: float = 1.0,
     ):
         """
-        Method used to compute the PnL accrued from simply taking a long-only position in
-        the category, 'self.ret'. The returns from the category are not predicated on any
-        exogenous signal.
+        Method used to compute the PnL accrued from simply taking a long-only position
+        in the category, 'self.ret'. The returns from the category are not predicated on
+        any exogenous signal.
 
-        :param <pd.DataFrame> dfw:
-        :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
-            This is for comparative visualization and not out-of-sample. Default is none.
-        :param <str> label: associated label that will be mapped to the long-only
-            DataFrame.
-        :param <float> leverage: leverage applied to the raw signal when a `vol_scale` is
-            not defined. Default is 1.0, i.e., position size is 1 or 100% of implied risk
-            capital.
+        Parameters
+        ----------
+        dfw : ~pandas.DataFrame
 
-        :return <pd.DataFrame> panel_pnl: standardised dataframe containing exclusively
-            the return category, and the long-only panel return.
+        vol_scale : bool
+            ex-post scaling of PnL to annualized volatility given. This is for
+            comparative visualization and not out-of-sample. Default is none.
+        label : str
+            associated label that will be mapped to the long-only DataFrame.
+        leverage : float
+            leverage applied to the raw signal when a `vol_scale` is not defined.
+            Default is 1.0, i.e., position size is 1 or 100% of implied risk capital.
+
+        Returns
+        -------
+        ~pandas.DataFrame
+            standardised dataframe containing exclusively the return category, and the
+            long-only panel return.
         """
+
         lev_err = "`leverage` must be a numerical value greater than 0."
 
         dfw_long = dfw.reset_index(drop=True)
 
         panel_pnl = dfw_long.groupby(["real_date"]).sum(numeric_only=True)
         panel_pnl = panel_pnl.reset_index(level=0)
-        panel_pnl["cid"] = "ALL"
-        panel_pnl["xcat"] = label
+        panel_pnl = QuantamentalDataFrame.from_long_df(panel_pnl, cid="ALL", xcat=label)
 
         if vol_scale is not None:
             leverage = vol_scale * (panel_pnl["value"].std() * np.sqrt(261)) ** (-1)
@@ -574,7 +657,10 @@ class NaivePnL:
             raise TypeError(lev_err)
         panel_pnl["value"] = panel_pnl["value"] * leverage
 
-        return panel_pnl[["cid", "xcat", "real_date", "value"]]
+        return QuantamentalDataFrame(
+            panel_pnl[["cid", "xcat", "real_date", "value"]],
+            _initialized_as_categorical=True,
+        ).to_original_dtypes()
 
     def plot_pnls(
         self,
@@ -587,9 +673,11 @@ class NaivePnL:
         same_y: bool = True,
         title: str = "Cumulative Naive PnL",
         title_fontsize: int = 20,
+        tick_fontsize: int = 12,
         xcat_labels: Union[List[str], dict] = None,
         xlab: str = "",
         ylab: str = "% of risk capital, no compounding",
+        label_fontsize: int = 12,
         share_axis_labels: bool = True,
         figsize: Tuple = (12, 7),
         aspect: float = 1.7,
@@ -597,44 +685,60 @@ class NaivePnL:
         label_adj: float = 0.05,
         title_adj: float = 0.95,
         y_label_adj: float = 0.95,
+        legend_fontsize: int = None,
     ) -> None:
         """
-        Plot line chart of cumulative PnLs, single PnL, multiple PnL types per
-        cross section, or multiple cross sections per PnL type.
+        Plot line chart of cumulative PnLs, single PnL, multiple PnL types per cross
+        section, or multiple cross sections per PnL type.
 
-        :param <List[str]> pnl_cats: list of PnL categories that should be plotted.
-        :param <List[str]> pnl_cids: list of cross sections to be plotted;
-            default is 'ALL' (global PnL).
-            Note: one can only have multiple PnL categories or multiple cross sections,
-            not both.
-        :param <str> start: earliest date in ISO format. Default is None and earliest
-            date in df is used.
-        :param <str> end: latest date in ISO format. Default is None and latest date
-            in df is used.
-        :param <bool> facet: parameter to control whether each PnL series is plotted on
-            its own respective grid using Seaborn's FacetGrid. Default is False and all
-            series will be plotted in the same graph.
-        :param <int> ncol: number of columns in facet grid. Default is 3. If the total
-            number of PnLs is less than ncol, the number of columns will be adjusted on
-            runtime.
-        :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
-        :param <str> title: allows entering text for a custom chart header.
-        :param <int> title_fontsize: font size for the title. Default is 20.
-        :param <List[str]> xcat_labels: custom labels to be used for the PnLs.
-        :param <str> xlab: label for x-axis of the plot (or subplots if faceted),
-            default is None (empty string)..
-        :param <str> ylab: label for y-axis of the plot (or subplots if faceted),
-            default is '% of risk capital, no compounding'.
-        :param <bool> share_axis_labels: if True (default) the axis labels are shared by
-            all subplots in the facet grid.
-        :param <tuple> figsize: tuple of plot width and height. Default is (12 , 7).
-        :param <float> aspect: width-height ratio for plots in facet. Default is 1.7.
-        :param <float> height: height of plots in facet. Default is 3.
-        :param <float> label_adj: parameter that sets bottom of figure to fit the label.
-            Default is 0.05.
-        :param <float> title_adj: parameter that sets top of figure to accommodate title.
-            Default is 0.95.
-        :param <float> y_label_adj: parameter that sets left of figure to fit the y-label.
+        Parameters
+        ----------
+        pnl_cats : List[str]
+            list of PnL categories that should be plotted.
+        pnl_cids : List[str]
+            list of cross sections to be plotted; default is 'ALL' (global PnL). Note:
+            one can only have multiple PnL categories or multiple cross sections, not both.
+        start : str
+            earliest date in ISO format. Default is None and earliest date in df is
+            used.
+        end : str
+            latest date in ISO format. Default is None and latest date in df is used.
+        facet : bool
+            parameter to control whether each PnL series is plotted on its own
+            respective grid using Seaborn's FacetGrid. Default is False and all series will
+            be plotted in the same graph.
+        ncol : int
+            number of columns in facet grid. Default is 3. If the total number of PnLs
+            is less than ncol, the number of columns will be adjusted on runtime.
+        same_y : bool
+            if True (default) all plots in facet grid share same y axis.
+        title : str
+            allows entering text for a custom chart header.
+        title_fontsize : int
+            font size for the title. Default is 20.
+        xcat_labels : List[str]
+            custom labels to be used for the PnLs.
+        xlab : str
+            label for x-axis of the plot (or subplots if faceted), default is None
+            (empty string)..
+        ylab : str
+            label for y-axis of the plot (or subplots if faceted), default is '% of risk
+            capital, no compounding'.
+        share_axis_labels : bool
+            if True (default) the axis labels are shared by all subplots in the facet
+            grid.
+        figsize : tuple
+            tuple of plot width and height. Default is (12 , 7).
+        aspect : float
+            width-height ratio for plots in facet. Default is 1.7.
+        height : float
+            height of plots in facet. Default is 3.
+        label_adj : float
+            parameter that sets bottom of figure to fit the label. Default is 0.05.
+        title_adj : float
+            parameter that sets top of figure to accommodate title. Default is 0.95.
+        y_label_adj : float
+            parameter that sets left of figure to fit the y-label.
         """
 
         if pnl_cats is None:
@@ -721,7 +825,7 @@ class NaivePnL:
                 labels = pnl_cids.copy()
             legend_title = "Cross Section(s)"
 
-        dfx["cum_value"] = dfx.groupby(plot_by).cumsum(numeric_only=True)
+        dfx["cum_value"] = dfx.groupby(plot_by, observed=True).cumsum(numeric_only=True)
 
         if facet:
             fg = sns.FacetGrid(
@@ -780,9 +884,11 @@ class NaivePnL:
             plt.legend(
                 labels=labels,
                 title=legend_title,
+                title_fontsize=legend_fontsize,
+                fontsize=legend_fontsize
             )
-            plt.xlabel(xlab)
-            plt.ylabel(ylab)
+            plt.xlabel(xlab, fontsize=label_fontsize)
+            plt.ylabel(ylab, fontsize=label_fontsize)
 
         if no_cids == 1:
             if facet:
@@ -790,6 +896,7 @@ class NaivePnL:
         else:
             labels = labels[::-1]
 
+        fg.tick_params(axis='both', labelsize=tick_fontsize)
         plt.axhline(y=0, color="black", linestyle="--", lw=1)
         plt.show()
 
@@ -804,25 +911,39 @@ class NaivePnL:
         x_label: str = "",
         y_label: str = "",
         figsize: Optional[Tuple[float, float]] = None,
+        tick_fontsize: int = None,
     ):
         """
         Display heatmap of signals across times and cross-sections.
 
-        :param <str> pnl_name: name of naive PnL whose signals are displayed.
-            N.B.: Signal is here is the value that actually determines
-            the concurrent PnL.
-        :param <List[str]> pnl_cids: cross-sections. Default is all available.
-        :param <str> start: earliest date in ISO format. Default is None and earliest
-            date in df is used.
-        :param <str> end: latest date in ISO format. Default is None and latest date
-            in df is used.
-        :param <str> freq: frequency for which signal average is displayed.
-            Default is monthly ('m'). The only alternative is quarterly ('q').
-        :param <str> title: allows entering text for a custom chart header.
-        :param <str> x_label: label for the x-axis. Default is None.
-        :param <str> y_label: label for the y-axis. Default is None.
-        :param <(float, float)> figsize: width and height in inches.
-            Default is (14, number of cross sections).
+        Parameters
+        ----------
+        pnl_name : str
+            name of naive PnL whose signals are displayed.
+        pnl_cids : List[str]
+            cross-sections. Default is all available.
+        start : str
+            earliest date in ISO format. Default is None and earliest date in df is
+            used.
+        end : str
+            latest date in ISO format. Default is None and latest date in df is used.
+        freq : str
+            frequency for which signal average is displayed. Default is monthly ('m').
+            The only alternative is quarterly ('q').
+        title : str
+            allows entering text for a custom chart header.
+        x_label : str
+            label for the x-axis. Default is None.
+        y_label : str
+            label for the y-axis. Default is None.
+        figsize : (float, float)
+            width and height in inches. Default is (14, number of cross sections).
+        tick_fontsize : int
+            font size for the ticks. Default is None.
+
+
+        .. note::
+            Signal is here is the value that actually determines the concurrent PnL.
         """
 
         if not isinstance(pnl_name, str):
@@ -875,6 +996,9 @@ class NaivePnL:
         ax.set(xlabel=x_label, ylabel=y_label)
         ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
         ax.set_title(title, fontsize=14)
+        
+        ax.tick_params(axis="x", labelsize=tick_fontsize)
+        ax.tick_params(axis="y", labelsize=tick_fontsize)
 
         plt.show()
 
@@ -889,19 +1013,26 @@ class NaivePnL:
         """
         Display aggregate signal strength and - potentially - direction.
 
-        :param <str> pnl_name: name of the PnL whose signal is to be visualized.
-            N.B.: The referenced signal corresponds to the series that determines the
-            concurrent PnL.
-        :param <str> freq: frequency at which the signal is visualized. Default is
-            monthly ('m'). The alternative is quarterly ('q').
-        :param <str> metric: the type of signal value. Default is "direction".
-            Alternative is "strength".
-        :param <str> title: allows entering text for a custom chart header. Default will
-            be "Directional Bar Chart of <pnl_name>.".
-        :param <str> y_label: label for the y-axis. Default is the sum of standard
-            deviations across the panel corresponding to the default signal
-            transformation: 'zn_score_pan'.
+        Parameters
+        ----------
+        pnl_name : str
+            name of the PnL whose signal is to be visualized.
+        freq : str
+            frequency at which the signal is visualized. Default is monthly ('m'). The
+            alternative is quarterly ('q').
+        metric : str
+            the type of signal value. Default is "direction". Alternative is "strength".
+        title : str
+            allows entering text for a custom chart header. Default will be "Directional
+            Bar Chart of <pnl_name>.".
+        y_label : str
+            label for the y-axis. Default is the sum of standard deviations across the
+            panel corresponding to the default signal transformation: 'zn_score_pan'.
 
+
+        .. note::
+            The referenced signal corresponds to the series that determines the concurrent
+            PnL.
         """
 
         assert isinstance(pnl_name, str), (
@@ -981,20 +1112,25 @@ class NaivePnL:
         """
         Table of key PnL statistics.
 
-        :param <List[str]> pnl_cats: list of PnL categories that should be plotted.
-        :param <List[str]> pnl_cids: list of cross-sections to be plotted; default is
-            'ALL' (global PnL).
-            Note: one can only have multiple PnL categories or multiple cross-sections,
-            not both.
-        :param <str> start: earliest date in ISO format. Default is None and earliest
-            date in df is used.
-        :param <str> end: latest date in ISO format. Default is None and latest date
-            in df is used.
-        :param <dict[str, str]> label_dict: dictionary with keys as pnl_cats and values
-            as new labels for the PnLs.
+        Parameters
+        ----------
+        pnl_cats : List[str]
+            list of PnL categories that should be plotted.
+        pnl_cids : List[str]
+            list of cross-sections to be plotted; default is 'ALL' (global PnL). Note:
+            one can only have multiple PnL categories or multiple cross-sections, not both.
+        start : str
+            earliest date in ISO format. Default is None and earliest date in df is
+            used.
+        end : str
+            latest date in ISO format. Default is None and latest date in df is used.
+        label_dict : dict[str, str]
+            dictionary with keys as pnl_cats and values as new labels for the PnLs.
 
-        :return <pd.DataFrame>: standardized DataFrame with key PnL performance
-            statistics.
+        Returns
+        -------
+        ~pandas.DataFrame
+            standardized DataFrame with key PnL performance statistics.
         """
 
         error_cids = "List of cross-sections expected."
@@ -1122,18 +1258,28 @@ class NaivePnL:
         """
         Return dataframe with PnLs.
 
-        :param <List[str]> pnl_names: list of names of PnLs to be returned.
-            Default is 'ALL'.
-        :param <bool> cs: inclusion of cross section PnLs. Default is False.
+        Parameters
+        ----------
+        pnl_names : List[str]
+            list of names of PnLs to be returned. Default is 'ALL'.
+        cs : bool
+            inclusion of cross section PnLs. Default is False.
 
-        :return <pd.DataFrame>: custom DataFrame with PnLs
+        Returns
+        -------
+        ~pandas.DataFrame
+            custom DataFrame with PnLs
         """
+
         selected_pnls = pnl_names if pnl_names is not None else self.pnl_names
 
         filter_1 = self.df["xcat"].isin(selected_pnls)
         filter_2 = self.df["cid"] == "ALL" if not cs else True
 
-        return self.df[filter_1 & filter_2]
+        return QuantamentalDataFrame(
+            self.df[filter_1 & filter_2],
+            _initialized_as_categorical=self._as_categorical,
+        ).to_original_dtypes()
 
     def _winsorize(self, df: pd.DataFrame, thresh: float):
         if thresh is not None:
@@ -1165,29 +1311,55 @@ def create_results_dataframe(
     """
     Create a DataFrame with key performance metrics for the signals and PnLs.
 
-    :param <str> title: title of the DataFrame.
-    :param <pd.DataFrame> df: DataFrame with the data.
-    :param <str> ret: name of the return signal.
-    :param <Union[str, List[str]> sigs: name of the comparative signal(s).
-    :param <Union[str, List[str]> cids: name of the cross-section(s).
-    :param <Union[str, List[str]> sig_ops: operation(s) to be applied to the signal(s).
-    :param <Union[float, List[float]> sig_adds: value(s) to be added to the signal(s).
-    :param <Union[str, List[str]> neutrals: neutralization method(s) to be applied.
-    :param <Union[float, List[float]> threshs: threshold(s) to be applied to the signal(s).
-    :param <str> bm: name of the benchmark signal.
-    :param <Union[bool, List[bool]> sig_negs: whether the signal(s) should be negated.
-    :param <bool> cosp: whether the signals should be cross-sectionally standardized.
-    :param <str> start: start date of the analysis.
-    :param <str> end: end date of the analysis.
-    :param <dict> blacklist: dictionary with the blacklisted dates.
-    :param <Union[str, List[str]> freqs: frequency of the rebalancing.
-    :param <Union[str, List[str]> agg_sigs: aggregation method(s) for the signal(s).
-    :param <dict> sigs_renamed: dictionary with the renamed signals.
-    :param <int> fwin: frequency of the rolling window.
-    :param <int> slip: slippage to be applied to the PnLs.
+    Parameters
+    ----------
+    title : str
+        title of the DataFrame.
+    df : ~pandas.DataFrame
+        DataFrame with the data.
+    ret : str
+        name of the return signal.
+    sigs : Union[str, List[str]
+        name of the comparative signal(s).
+    cids : Union[str, List[str]
+        name of the cross-section(s).
+    sig_ops : Union[str, List[str]
+        operation(s) to be applied to the signal(s).
+    sig_adds : Union[float, List[float]
+        value(s) to be added to the signal(s).
+    neutrals : Union[str, List[str]
+        neutralization method(s) to be applied.
+    threshs : Union[float, List[float]
+        threshold(s) to be applied to the signal(s).
+    bm : str
+        name of the benchmark signal.
+    sig_negs : Union[bool, List[bool]
+        whether the signal(s) should be negated.
+    cosp : bool
+        whether the signals should be cross-sectionally standardized.
+    start : str
+        start date of the analysis.
+    end : str
+        end date of the analysis.
+    blacklist : dict
+        dictionary with the blacklisted dates.
+    freqs : Union[str, List[str]
+        frequency of the rebalancing.
+    agg_sigs : Union[str, List[str]
+        aggregation method(s) for the signal(s).
+    sigs_renamed : dict
+        dictionary with the renamed signals.
+    fwin : int
+        frequency of the rolling window.
+    slip : int
+        slippage to be applied to the PnLs.
 
-    :return <pd.DataFrame>: DataFrame with the performance metrics.
+    Returns
+    -------
+    ~pandas.DataFrame
+        DataFrame with the performance metrics.
     """
+
     # Get the signals table and isolate relevant performance metrics
 
     def check_list_type(type, var):
@@ -1398,7 +1570,7 @@ if __name__ == "__main__":
         sig_op="zn_score_pan",
         sig_neg=True,
         sig_add=0.5,
-        rebal_freq="monthly",
+        rebal_freq="daily",
         vol_scale=5,
         rebal_slip=1,
         min_obs=250,
@@ -1439,7 +1611,7 @@ if __name__ == "__main__":
         pnl_cats=["PNL_GROWTH_NEG", "Long"],
         title_fontsize=60,
         xlab="date",
-        ylab="%",
+        ylab="%"
     )
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"],

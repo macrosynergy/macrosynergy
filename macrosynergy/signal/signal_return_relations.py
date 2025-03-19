@@ -18,6 +18,7 @@ from macrosynergy.management.utils import (
     reduce_df,
     categories_df,
 )
+from macrosynergy.management.types import QuantamentalDataFrame
 import macrosynergy.visuals as msv
 
 # Ensure warnings are printed
@@ -26,48 +27,77 @@ warnings.simplefilter("always")
 
 class SignalReturnRelations:
     """
-    Class for analysing and visualizing signal and a return series.
+    Class for analysing and visualizing signals and return series. The class is designed
+    to provide a comprehensive analysis of the relationship between signals and returns
+    across different frequencies and aggregation methods. The class can be used
+    to calculate and visualize the following metrics:
 
-    :param <pd.Dataframe> df: standardized DataFrame with the following necessary
-        columns: 'cid', 'xcat', 'real_date' and 'value.
-    :param <str, List[str]> rets: one or several target return categories.
-    :param <str, List[str]> sigs: list of signal categories to be considered for which
-        detailed relational statistics can be calculated.
-    :param <bool, List[bool]> sig_neg: if set to True puts the signal in negative terms
-        for all analysis. If more than one signal is tested, `sig_neg` must be a
-        same-order list of the same length as the signals, containing a True for each
-        signal that needs to be put in negative terms. Default is False.
-    :param <bool> cosp: If True the comparative statistics are calculated only for the
-        "communal sample periods", i.e. periods and cross-sections that have values
-        for all compared signals. Default is False.
-    :param <str> start: earliest date in ISO format. Default is None in which case the
-        earliest date available will be used.
-    :param <str> end: latest date in ISO format. Default is None in which case the
-        latest date in the df will be used.
-    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
-        the data frame. If one cross-section has several blacklist periods append numbers
-        to the cross-section code.
-    :param <str, List[str]> freqs: letters denoting all frequencies at which the series
-        may be sampled. This must be a selection of 'D', 'W', 'M', 'Q', 'A'. Default is
-        only 'M'. The return series will always be summed over the sample period. The
-        signal series will be aggregated according to the values of `agg_sigs`.
-    :param <str, List[str]> agg_sigs: aggregation method applied to the signal values in
-        down-sampling. The default is "last". Alternatives are "mean", "median" and "sum".
-        If a single aggregation type is chosen for multiple signal categories it is
-        applied to all of them.
-    :param <int> fwin: forward window of return category in base periods. Default is 1.
-        This conceptually corresponds to the holding period of a position in
-        accordance with the signal.
-    :param <int> slip: implied slippage of feature availability for relationship with
-        the target category. This mimics the relationship between trading signals and
-        returns, which is often characterized by a delay due to the setup of positions.
-        Technically, this is a negative lag (early arrival) of the target category
-        in working days prior to any frequency conversion. Default is 0.
-    :param <bool> ms_panel_test: if True the Macrosynergy Panel test is calculated. Please
-        note that this is a very time-consuming operation and should be used only if you
-        require the result.
-    :param <List[Callable]> additional_metrics: list of additional metrics to be
-        calculated and added to the output table.
+    - Accuracy
+    - Balanced accuracy
+    - Positive signal ratio
+    - Positive return ratio
+    - Positive precision
+    - Negative precision
+    - Pearson correlation
+    - Pearson correlation p-value
+    - Kendall correlation
+    - Kendall correlation p-value
+    - AUC
+    - Macrosynergy Panel test
+
+    Parameters
+    ----------
+    df : ~pandas.DataFrame
+        standardized DataFrame with the following necessary columns: 'cid', 'xcat',
+        'real_date' and 'value.
+    rets : str, List[str]
+        one or several target return categories.
+    sigs : str, List[str]
+        list of signal categories to be considered for which detailed relational
+        statistics can be calculated.
+    sig_neg : bool, List[bool]
+        if set to True puts the signal in negative terms for all analysis. If more than
+        one signal is tested, `sig_neg` must be an ordered list of the same length as the
+        signals, containing a True for each signal that needs to be negative.
+        Default is False.
+    cosp : bool
+        If True the comparative statistics are calculated only for the "communal sample
+        periods", i.e. periods and cross-sections that have values for all compared 
+        signals. Default is False.
+    start : str
+        earliest date in ISO format. Default is None in which case the earliest date
+        available will be used.
+    end : str
+        latest date in ISO format. Default is None in which case the latest date in the
+        dataframe will be used.
+    blacklist : dict
+        cross-sections with date ranges that should be excluded from the data frame. If
+        one cross-section has several blacklist periods append numbers to the cross-section
+        code.
+    freqs : str, List[str]
+        letters denoting all frequencies at which the series may be sampled. This must
+        be a selection of 'D', 'W', 'M', 'Q', 'A'. Default is only 'M'. The return series
+        will always be summed over the sample period. The signal series will be aggregated
+        according to the values of `agg_sigs`.
+    agg_sigs : str, List[str]
+        aggregation method applied to the signal values in down-sampling. The default is
+        "last". Alternatives are "mean", "median" and "sum". If a single aggregation type is
+        chosen for multiple signal categories it is applied to all of them.
+    fwin : int
+        forward window of return category in base periods. Default is 1. This
+        conceptually corresponds to the holding period of a position in accordance with the
+        signal.
+    slip : int
+        implied slippage of feature availability for relationship with the target
+        category. This mimics the relationship between trading signals and returns, which is
+        often characterized by a delay due to the setup of positions. Technically, this is a
+        negative lag (early arrival) of the target category in working days prior to any
+        frequency conversion. Default is 0.
+    ms_panel_test : bool
+        if True the Macrosynergy Panel test is calculated. Please note that this is a
+        very time-consuming operation and should be used only if you require the result.
+    additional_metrics : List[Callable]
+        list of additional metrics to be calculated and added to the output table.
     """
 
     def __init__(
@@ -108,8 +138,8 @@ class SignalReturnRelations:
                 "Dataframe columns must be of value: 'cid', 'xcat','real_date' and  \
                 'value'"
             )
-
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+        df = QuantamentalDataFrame(df)
 
         self.dic_freq = {
             "D": "daily",
@@ -230,6 +260,7 @@ class SignalReturnRelations:
         if len(self.signs) != len(self.sigs):
             raise ValueError("Signs must have a length equal to signals")
 
+        self.xcats = self.rets + self.sigs
         self.df = reduce_df(
             df,
             xcats=self.xcats,
@@ -242,16 +273,20 @@ class SignalReturnRelations:
         for sig in self.sigs:
             if self.signs[self.sigs.index(sig)]:
                 self.df.loc[self.df["xcat"] == sig, "value"] *= -1
-                self.df.loc[self.df["xcat"] == sig, "xcat"] = (
-                    self.df.loc[self.df["xcat"] == sig, "xcat"] + "_NEG"
-                )
+                if type(self.df) is QuantamentalDataFrame:
+                    self.df = self.df.rename_xcats({sig: f"{sig}_NEG"})
+                else:
+                    self.df.loc[self.df["xcat"] == sig, "xcat"] = (
+                        self.df.loc[self.df["xcat"] == sig, "xcat"] + "_NEG"
+                    )
+
                 self.sigs[self.sigs.index(sig)] = f"{sig}_NEG"
 
         self.original_df = self.df.copy()
 
     def __rival_sigs__(self, ret, sigs=None):
         """
-        Produces the panel-level table for the additional signals.
+        Helper function used to produce the panel-level table for the additional signals.
         """
 
         if sigs is None:
@@ -270,13 +305,19 @@ class SignalReturnRelations:
 
     @staticmethod
     def __yaxis_lim__(accuracy_df: pd.DataFrame):
-        """Determines the range the y-axis is defined over.
-
-        :param <pd.DataFrame> accuracy_df: two dimensional DataFrame with accuracy &
-            balanced accuracy columns.
-
-        N.B.: The returned range will always be below 0.5.
         """
+        Helper function to determine the range the y-axis is defined over.
+
+        Parameters
+        ----------
+        accuracy_df : ~pandas.DataFrame
+            two dimensional DataFrame with accuracy & balanced accuracy columns.
+
+
+        .. note::
+            The returned range will always be below 0.5.
+        """
+
         y_axis = lambda min_correl: min_correl > 0.45
         min_value = accuracy_df.min().min()
         # Ensures any accuracy statistics greater than 0.5 are more pronounced given the
@@ -294,24 +335,47 @@ class SignalReturnRelations:
         type: str = "cross_section",
         title: str = None,
         title_fontsize: int = 16,
-        size: Tuple[float] = None,
+        size: Tuple[float, float] = None,
         legend_pos: str = "best",
+        x_labels: Dict = None,
+        x_labels_rotate: int = 0,
     ):
         """
         Plot bar chart for the overall and balanced accuracy metrics. For types:
-        cross_section and years. If sigs is not specified, then the first signal in the
-        list of signals will be used.
+        cross_section and years.
 
-        :param <str> type: type of segment over which bars are drawn. Either
-            "cross_section" (default), "years" or "signals".
-        :param <str> title: chart header - default will be applied if none is chosen.
-        :param <int> title_fontsize: font size of chart header. Default is 16.
-        :param <Tuple[float]> size: 2-tuple of width and height of plot - default will be
-            applied if none is chosen.
-        :param <str> legend_pos: position of legend box. Default is 'best'.
-            See the documentation of matplotlib.pyplot.legend.
-
+        Parameters
+        ----------
+        ret : str, optional
+            return category. Default is None, in which case the first return category will
+            be used.
+        sigs : str, or List[str], optional
+            signal category. Default is None, in which case all signals will be used.
+        freq : str, optional
+            frequency to be used in analysis. Default is None, in which case the first
+            frequency will be used.
+        agg_sig : str, optional
+            aggregation method to be used in analysis. Default is None, in which case the
+            first aggregation method will be used.
+        type : str, optional
+            type of segment over which bars are drawn. Either "cross_section" (default),
+            "years" or "signals".
+        title : str, optional
+            chart header - default will be applied if none is chosen.
+        title_fontsize : int
+            font size of chart header. Default is 16.
+        size : Tuple[float], optional
+            2-tuple of width and height of plot - default will be applied if none is
+            chosen.
+        legend_pos : str
+            position of legend box. Default is 'best'. See the documentation of
+            matplotlib.pyplot.legend.
+        x_labels : Dict[str]
+            dictionary of x-axis labels. Default is None.
+        x_labels_rotate : int
+            rotation of x-axis labels. Default is 0.
         """
+
         assert type in ["cross_section", "years", "signals"]
 
         if sigs is None:
@@ -387,7 +451,18 @@ class SignalReturnRelations:
             color="steelblue",
         )
 
-        plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=0)
+        if x_labels:
+            validated_labels = {}
+            for key, value in x_labels.items():
+                if key in self.sigs:
+                    validated_labels[key] = value
+                elif key + "_NEG" in self.sigs:
+                    validated_labels[key + "_NEG"] = value
+            labels = [validated_labels.get(xcat, xcat) for xcat in dfx.index]
+        else:
+            labels = dfx.index
+
+        plt.xticks(ticks=x_indexes, labels=labels, rotation=x_labels_rotate)
         plt.axhline(y=0.5, color="black", linestyle="-", linewidth=0.5)
 
         y_input = self.__yaxis_lim__(
@@ -408,24 +483,38 @@ class SignalReturnRelations:
         type: str = "cross_section",
         title: str = None,
         title_fontsize: int = 16,
-        size: Tuple[float] = None,
+        size: Tuple[float, float] = None,
         legend_pos: str = "best",
+        x_labels: Dict = None,
+        x_labels_rotate: int = 0,
     ):
         """
-        Plot correlation coefficients and significance.
+        Plot correlation coefficients and significance. For types: cross_section and 
+        years.
 
-        :param <str> ret: return category. Default is the first return category.
-        :param <str> sig: signal category. Default is the first signal category.
-        :param <str> type: type of segment over which bars are drawn. Either
-            "cross_section" (default), "years" or "signals".
-        :param <str> title: chart header. Default will be applied if none is chosen.
-        :param <int> title_fontsize: font size of chart header. Default is 16.
-        :param <Tuple[float]> size: 2-tuple of width and height of plot.
-            Default will be applied if none is chosen.
-        :param <str> legend_pos: position of legend box. Default is 'best'.
-            See matplotlib.pyplot.legend.
-
+        Parameters
+        ----------
+        ret : str, optional
+            return category. Default is the first return category.
+        sig : str, List[str], optional
+            signal category. Default is the first signal category.
+        type : str, optional
+            type of segment over which bars are drawn. Either "cross_section" (default),
+            "years" or "signals".
+        title : str, optional
+            chart header. Default is None, in which case the default title will be applied.
+        title_fontsize : int
+            font size of chart header. Default is 16.
+        size : Tuple[float, float], optional
+            2-tuple of width and height of plot. If None, the default size will be applied.
+        legend_pos : str
+            position of legend box. Default is 'best'. See matplotlib.pyplot.legend.
+        x_labels : Dict[str]
+            dictionary of x-axis labels. Default is None.
+        x_labels_rotate : int
+            rotation of x-axis labels. Default is 0.
         """
+
         assert type in ["cross_section", "years", "signals"]
 
         if freq is None:
@@ -500,7 +589,19 @@ class SignalReturnRelations:
         w = 0.4
         plt.bar(x_indexes - w / 2, pprobs, label="Pearson", width=w, color="lightblue")
         plt.bar(x_indexes + w / 2, kprobs, label="Kendall", width=w, color="steelblue")
-        plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=0)
+
+        if x_labels:
+            validated_labels = {}
+            for key, value in x_labels.items():
+                if key in self.sigs:
+                    validated_labels[key] = value
+                elif key + "_NEG" in self.sigs:
+                    validated_labels[key + "_NEG"] = value
+            labels = [validated_labels.get(xcat, xcat) for xcat in dfx.index]
+        else:
+            labels = dfx.index
+
+        plt.xticks(ticks=x_indexes, labels=labels, rotation=x_labels_rotate)
 
         plt.axhline(
             y=0.95,
@@ -522,9 +623,14 @@ class SignalReturnRelations:
         """
         Slice DataFrame by year, cross-section, or use full panel.
 
-        :param <pd.DataFrame> df: standardised DataFrame.
-        :param <str> cs: individual segment, cross-section or year.
-        :param <str> cs_type: segmentation type.
+        Parameters
+        ----------
+        df : ~pandas.DataFrame
+            standardised DataFrame.
+        cs : str
+            individual segment, cross-section or year.
+        cs_type : str
+            segmentation type.
         """
 
         # Row names of cross-sections or years.
@@ -547,14 +653,22 @@ class SignalReturnRelations:
     ) -> pd.DataFrame:
         """
         Function used to call the apply slip method that is defined in
-        management/utils.py
+        `macrosynergy.management.df_utils`.
 
-        :param <pd.DataFrame> df: standardised DataFrame.
-        :param <int> slip: slip value to apply to df.
-        :param <List[str]> cids: list of cids in df to apply slip.
-        :param <List[str]> xcats: list of xcats in df to apply slip.
-        :param <List[str]> metrics: list of metrics in df to apply slip.
+        Parameters
+        ----------
+        df : ~pandas.DataFrame
+            standardised DataFrame.
+        slip : int
+            slip value to apply to df.
+        cids : List[str]
+            list of cids in df to apply slip.
+        xcats : List[str]
+            list of xcats in df to apply slip.
+        metrics : List[str]
+            list of metrics in df to apply slip.
         """
+
         return apply_slip_util(
             df=df, slip=slip, cids=cids, xcats=xcats, metrics=metrics, raise_error=False
         )
@@ -563,10 +677,19 @@ class SignalReturnRelations:
     def is_list_of_strings(variable: Any) -> bool:
         """
         Function used to test whether a variable is a list of strings, to avoid the
-        compiler saying a string is a list of characters
-        :param <Any> variable: variable to be tested.
-        :return <bool>: True if variable is a list of strings, False otherwise.
+        compiler saying a string is a list of characters.
+
+        Parameters
+        ----------
+        variable : Any
+            variable to be tested.
+
+        Returns
+        -------
+        bool
+            True if variable is a list of strings, False otherwise.
         """
+
         return isinstance(variable, list) and all(
             isinstance(item, str) for item in variable
         )
@@ -574,20 +697,21 @@ class SignalReturnRelations:
     def manipulate_df(self, xcat: str, freq: str, agg_sig: str):
         """
         Used to manipulate the DataFrame to the desired format for the analysis. Firstly
-        reduces the dataframe to only include data outside of the blacklist and data that
-        is relevant to xcat and sig. Then applies the slip to the dataframe. It then
-        converts the dataframe to the desired format for the analysis and checks whether
-        any negative signs should be introduced.
+        reduces the dataframe to only include data outside of the blacklist and data
+        that is relevant to xcat and sig. Then applies the slip to the dataframe. It
+        then converts the dataframe to the desired format for the analysis and checks
+        whether any negative signs should be introduced.
 
-        :param <str> xcat: xcat to be analysed.
-        :param <str> freq: frequency to be used in analysis.
-        :param <str> agg_sig: aggregation method to be used in analysis.
-        :param <str> sig: signal to be analysed.
-        :param <bool> sst: Boolean that specifies whether this function is to be used for
-            a single statistic table.
-        :param <Optional[pd.DataFrame]> df_result: DataFrame to be used for single
-            statistic table. `None` by default, and when using with `sst` set to `False`.
+        Parameters
+        ----------
+        xcat : str
+            xcat to be analysed.
+        freq : str
+            frequency to be used in analysis.
+        agg_sig : str
+            aggregation method to be used in analysis.
         """
+
         self.df = self.original_df.copy()
 
         cids = None if self.cids is None else self.cids
@@ -634,21 +758,30 @@ class SignalReturnRelations:
     def __communal_sample__(self, df: pd.DataFrame, signal: str, ret: str):
         """
         On a multi-index DataFrame, where the outer index are the cross-sections and the
-        inner index are the timestamps, exclude any row where all signals do not have
-        a realised value.
+        inner index are the timestamps, exclude any row where all signals do not have a
+        realised value.
 
-        :param <pd.Dataframe> df: standardized DataFrame with the following necessary
-            columns: 'cid', 'xcat', 'real_date' and 'value'.
+        Parameters
+        ----------
+        df : ~pandas.DataFrame
+            standardized DataFrame with the following necessary columns: 'cid', 'xcat',
+            'real_date' and 'value'.
+        signal : str
+            signal category.
+        ret : str
+            return category.
 
-        NB.:
-        Remove the return category from establishing the intersection to preserve the
-        maximum amount of signal data available (required because of the applied lag).
+        .. note::
+            Remove the return category from establishing the intersection to preserve the
+            maximum amount of signal data available (required because of the applied lag).
         """
 
         df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values="value")
 
         storage = []
-        for c, cid_df in df_w.groupby(level=0):
+        cid_name: str
+        cid_df: pd.DataFrame
+        for cid_name, cid_df in df_w.groupby(level=0, observed=True):
             cid_df = cid_df[signal + [ret]]
 
             final_df = pd.DataFrame(
@@ -668,13 +801,13 @@ class SignalReturnRelations:
                 s_date = intersection_df.index[0]
                 e_date = intersection_df.index[-1]
 
-                final_df.loc[(c, s_date):(c, e_date), signal] = (
+                final_df.loc[(cid_name, s_date):(cid_name, e_date), signal] = (
                     intersection_df.to_numpy()
                 )
                 storage.append(final_df)
             else:
                 warnings.warn(
-                    f"Cross-section {c} has no common sample periods for the signals \
+                    f"Cross-section {cid_name} has no common sample periods for the signals \
                     {signal} and return {ret}."
                 )
 
@@ -696,12 +829,20 @@ class SignalReturnRelations:
         Method used to compute the evaluation metrics across segments: cross-section,
         yearly or category level.
 
-        :param <pd.DataFrame> df_segment: segmented DataFrame.
-        :param <pd.DataFrame> df_out: metric DataFrame where the index will be all
-            segments for the respective segmentation type.
-        :param <str> segment: segment which could either be an individual cross-section,
-            year or category. Will form the index of the returned DataFrame.
-        :param <str> signal: signal category.
+        Parameters
+        ----------
+        df_segment : ~pandas.DataFrame
+            segmented DataFrame.
+        df_out : ~pandas.DataFrame
+            metric DataFrame where the index will be all segments for the respective
+            segmentation type.
+        segment : str
+            segment which could either be an individual cross-section, year or category.
+            Will form the index of the returned DataFrame.
+        signal : str
+            signal category.
+        ret : str
+            return category.
         """
 
         # Account for NaN values between the single respective signal and return. Only
@@ -757,7 +898,23 @@ class SignalReturnRelations:
 
         return df_out
 
-    def map_pval(self, ret_vals, sig_vals):
+    def map_pval(self, ret_vals, sig_vals) -> float:
+        """
+        Calculates the p-value using statsmodels MixedLM.
+
+        Parameters
+        ----------
+        ret_vals : ~pandas.Series
+            return values.
+        sig_vals : ~pandas.Series
+            signal values.
+
+        Returns
+        -------
+        float
+            p-value of the MixedLM model.
+        """
+
         if (
             not "cid" in ret_vals.index.names
             or ret_vals.index.get_level_values("cid").nunique() <= 1
@@ -785,13 +942,27 @@ class SignalReturnRelations:
         pval_string = re.summary().tables[1].iloc[1, 3]
         return float(pval_string)
 
-    def __output_table__(self, cs_type: str = "cids", ret=None, sig=None, srt=False):
+    def __output_table__(
+        self,
+        cs_type: str = "cids",
+        ret: str = None,
+        sig: str = None,
+        srt: bool = False,
+    ):
         """
-        Creates a DataFrame with information on the signal-return relation across
-        cross-sections or years and, additionally, the panel.
+        Creates a DataFrame with information on the signal-return relation across cross-
+        sections or years and, additionally, the panel.
 
-        :param <str> cs_type: the segmentation type.
-
+        Parameters
+        ----------
+        cs_type : str
+            the segmentation type.
+        ret : str
+            return category. Default is the first return category.
+        sig : str
+            signal category. Default is the first signal category.
+        srt : bool
+            if True, the DataFrame will be sorted by the cross-sections. Default is False.
         """
 
         if ret is None:
@@ -865,16 +1036,28 @@ class SignalReturnRelations:
 
     def calculate_single_stat(
         self, stat: str, ret: str = None, sig: str = None, type: str = None
-    ):
+    ) -> float:
         """
         Calculates a single statistic for a given signal-return relation.
 
-        :param <str> stat: statistic to be calculated.
-        :param <str> ret: return category. Default is the first return category.
-        :param <str> sig: signal category. Default is the first signal category.
-        :param <str> cstype: type of segment over which bars are drawn. Either
-            "panel" (default), "years" or "signals".
+        Parameters
+        ----------
+        stat : str
+            statistic to be calculated.
+        ret : str
+            return category. Default is the first return category.
+        sig : str
+            signal category. Default is the first signal category.
+        type : str
+            type of segment over which bars are drawn. Either "panel" (default), "years"
+            or "signals".
+
+        Returns
+        -------
+        float
+            statistic value.
         """
+
         r = [ret]
         r.append(sig)
         df = self.df[r]
@@ -973,6 +1156,23 @@ class SignalReturnRelations:
                 return np.mean(np.array(list_of_results) < 0.5)
 
     def summary_table(self, cross_section: bool = False, years: bool = False):
+        """
+        Generates a summary table for the signal-return relations.
+
+        Parameters
+        ----------
+        cross_section : bool
+            if True, the summary table will be generated for cross-sections.
+        years : bool
+            if True, the summary table will be generated for years. Must be False if
+            cross_section is True.
+
+        Returns
+        -------
+        ~pandas.DataFrame
+            summary table.
+        """
+
         warnings.warn(
             "summary_table() has been deprecated will be removed in a subsequent "
             "version, please now use single_relation_table(table_type='summary').",
@@ -1026,22 +1226,33 @@ class SignalReturnRelations:
         freq: str = None,
         agg_sigs: str = None,
         table_type: str = None,
-    ):
+    ) -> pd.DataFrame:
         """
         Computes all the statistics for one specific signal-return relation:
 
-        :param <str> ret: single target return category. Default is first in target
-            return list of the class.
-        :param <str> xcat: single signal category to be considered. Default is first in
-            feature category list of the class.
-        :param <str> freq: letter denoting single frequency at which the series will
-            be sampled. This must be one of the frequencies selected for the class.
-            If not specified uses the freq stored in the class.
-        :param <str> agg_sigs: aggregation method applied to the signal values in
-            down-sampling.
-        :param <str> table_type: type of table to be returned. Either "summary", "years",
-            "cross_section".
+        Parameters
+        ----------
+        ret : str
+            single target return category. Default is first in target return list of the
+            class.
+        xcat : str
+            single signal category to be considered. Default is first in feature
+            category list of the class.
+        freq : str
+            letter denoting single frequency at which the series will be sampled. This
+            must be one of the frequencies selected for the class. If not specified uses the
+            freq stored in the class.
+        agg_sigs : str
+            aggregation method applied to the signal values in down-sampling.
+        table_type : str
+            type of table to be returned. Either "summary", "years", "cross_section".
+
+        Returns
+        -------
+        ~pandas.DataFrame
+            table with the statistics for the single signal-return relation.
         """
+
         self.df = self.original_df
         if ret is None:
             ret = self.rets if not isinstance(self.rets, list) else self.rets[0]
@@ -1090,14 +1301,10 @@ class SignalReturnRelations:
                 [
                     self.__output_table__(
                         cs_type="years", ret=ret, sig=sig, srt=False
-                    ).iloc[
-                        :3,
-                    ],
+                    ).iloc[:3],
                     self.__output_table__(
                         cs_type="cids", ret=ret, sig=sig, srt=False
-                    ).iloc[
-                        1:3,
-                    ],
+                    ).iloc[1:3],
                 ],
                 axis=0,
             )
@@ -1141,19 +1348,24 @@ class SignalReturnRelations:
     ):
         """
         Calculates all the statistics for each return and signal category specified with
-        each frequency and aggregation method, note that if none are defined it does this
-        for all categories, frequencies and aggregation methods that were stored in the
-        class.
+        each frequency and aggregation method, note that if none are defined it does
+        this for all categories, frequencies and aggregation methods that were stored in
+        the class.
 
-        :param <str, List[str]> rets: target return category
-        :param <str, List[str]> xcats: signal categories to be considered
-        :param <str, List[str]> freqs: letters denoting frequency at which the series
-            are to be sampled.
-            This must be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq
-            stored in the class.
-        :param <str, List[str]> agg_sigs: aggregation methods applied to the signal
-            values in down-sampling.
+        Parameters
+        ----------
+        rets : str, List[str]
+            target return category
+        xcats : str, List[str]
+            signal categories to be considered
+        freqs : str, List[str]
+            letters denoting frequency at which the series are to be sampled. This must
+            be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq stored in the
+            class.
+        agg_sigs : str, List[str]
+            aggregation methods applied to the signal values in down-sampling.
         """
+
         self.df = self.original_df
         self.xcats = list(self.df["xcat"].unique())
         if rets is None:
@@ -1257,50 +1469,71 @@ class SignalReturnRelations:
         return_name_dict: Optional[Dict[str, str]] = None,
         min_color: Optional[float] = None,
         max_color: Optional[float] = None,
-        figsize: Tuple[float] = (14, 8),
+        figsize: Tuple[float, float] = (14, 8),
         annotate: bool = True,
         round: int = 5,
     ):
         """
-        Creates a table which shows the specified statistic for each row and
-        column specified as arguments:
+        Creates a table which shows the specified statistic for each row and column
+        specified as arguments:
 
-        :param <str> stat: type of statistic to be displayed (this can be any of
-            the column names of summary_table).
-        :param <str> type: type of the statistic displayed. This can be based on
-            the overall panel ("panel", default), an
-            average of annual panels (mean_years), an average of cross-sectional
-            relations ("mean_cids"), the positive ratio across years("pr_years"),
-            positive ratio across sections ("pr_cids").
-        :param <List[str]> rows: row indices, which can be return categories,
-            feature categories, frequencies and/or aggregations. The choice is
-            made through a list of one or more of "xcat", "ret", "freq" and
-            "agg_sigs". The default is ["xcat", "agg_sigs"] resulting in index
-            strings (<agg_signs>) or if only one aggregation is available.
-        :param <List[str]> columns: column indices, which can be return
-            categories, feature categories, frequencies and/or aggregations. The
-            choice is made through a list of one or more of "xcat", "ret", "freq"
-            and "agg_sigs". The default is ["ret", "freq] resulting in index
-            strings () or if only one frequency is available.
-        :param <bool> show_heatmap: if True, the table is visualized as a
-            heatmap. Default is False.
-        :param <str> title: plot title; if none given default title is shown.
-        :param <int> title_fontsize: font size of title. Default is 16.
-        :param <List[str]> row_names: specifies the labels of rows in the heatmap.
-            If None, the indices of the generated DataFrame are used.
-        :param <List[str]> column_names: specifies the labels of columns in the
-            heatmap. If None, the columns of the generated DataFrame are used.
-        :param <float> min_color: minimum value of the color scale. Default
-            is None, in which case the minimum value of the table is used.
-        :param <float> max_color: maximum value of the color scale. Default
-            is None, in which case the maximum value of the table is used.
-        :param <Tuple[float]> figsize: Tuple (w, h) of width and height of graph.
-        :param <bool> annotate: if True, the values are annotated in the heatmap.
-        :param <int> round: number of decimals to round the values to on the
-            heatmap's annotations.
+        Parameters
+        ----------
+        stat : str
+            type of statistic to be displayed (this can be any of the column names of
+            summary_table).
+        type : str
+            type of the statistic displayed. This can be based on the overall panel
+            ("panel", default), an average of annual panels (mean_years), an average of
+            cross-sectional relations ("mean_cids"), the positive ratio across
+            years("pr_years"), positive ratio across sections ("pr_cids").
+        rows : List[str]
+            row indices, which can be return categories, feature categories, frequencies
+            and/or aggregations. The choice is made through a list of one or more of "xcat",
+            "ret", "freq" and "agg_sigs". The default is ["xcat", "agg_sigs"] resulting in
+            index strings (<agg_signs>) or if only one aggregation is available.
+        columns : List[str]
+            column indices, which can be return categories, feature categories,
+            frequencies and/or aggregations. The choice is made through a list of one or
+            more of "xcat", "ret", "freq" and "agg_sigs". The default is ["ret", "freq]
+            resulting in index strings () or if only one frequency is available.
+        show_heatmap : bool
+            if True, the table is visualized as a heatmap. Default is False.
+        title : str, optional
+            plot title. Default is None in which case the default title is used.
+        title_fontsize : int
+            font size of title. Default is 16.
+        row_names : List[str]
+            specifies the labels of rows in the heatmap. Default is None, the indices of
+            the generated DataFrame are used.
+        column_names : List[str]
+            specifies the labels of columns in the heatmap. Default is None, the columns
+            of the generated DataFrame are used.
+        signal_name_dict : dict, optional
+            dictionary mapping the signal names to the desired names in the heatmap.
+            Default is None, in which case the signal names are used.
+        return_name_dict : dict, optional
+            dictionary mapping the return names to the desired names in the heatmap.
+            Default is None, in which case the return names are used.
+        min_color : float, optional
+            minimum value of the color scale. Default is None, in which case the minimum
+            value of the table is used.
+        max_color : float, optional
+            maximum value of the color scale. Default is None, in which case the maximum
+            value of the table is used.
+        figsize : Tuple[float, float]
+            Tuple (w, h) of width and height of graph. Default is (14, 8).
+        annotate : bool
+            Default is True, where the values shown in the heatmap are annotated.
+        round : int
+            number of decimals to round the values to on the heatmap's annotations.
 
-        :return <pd.DataFrame>: DataFrame with the specified statistic for each row and column
+        Returns
+        -------
+        ~pandas.DataFrame
+            DataFrame with the specified statistic for each row and column.
         """
+
         self.df = self.original_df.copy()
 
         if not stat in self.metrics:
@@ -1414,13 +1647,19 @@ class SignalReturnRelations:
         Creates two lists of strings that will be used as the row and column labels for
         the resulting dataframe.
 
-        :param <dict> rows_dict: dictionary containing the each value for each of the
-            xcat, ret, freq and agg_sigs categories.
-        :param <List[str]> rows: list of strings specifying which of the categories are
-            included in the rows of the dataframe.
-        :param <List[str]> columns: list of strings specifying which of the categories
-            are included in the columns of the dataframe.
+        Parameters
+        ----------
+        rows_dict : dict
+            dictionary containing the each value for each of the xcat, ret, freq and
+            agg_sigs categories.
+        rows : List[str]
+            list of strings specifying which of the categories are included in the rows
+            of the dataframe.
+        columns : List[str]
+            list of strings specifying which of the categories are included in the
+            columns of the dataframe.
         """
+
         label_dict = {
             "xcat": "Signal",
             "ret": "Return",
@@ -1469,10 +1708,15 @@ class SignalReturnRelations:
         """
         Calculates which row/column the hash belongs to.
 
-        :param <str> hash: hash of the statistic.
-        :param <List[str]> rowcols: list of strings specifying which of the categories
-        are in the rows/columns of the dataframe.
+        Parameters
+        ----------
+        hash : str
+            hash of the statistic.
+        rowcols : List[str]
+            list of strings specifying which of the categories are in the rows/columns
+            of the dataframe.
         """
+
         result = ""
         idx: List[str] = ["ret", "xcat", "freq", "agg_sigs"]
         assert all([x in idx for x in rowcols]), "rowcols must be a subset of idx"
@@ -1495,7 +1739,6 @@ class SignalReturnRelations:
 
 
 if __name__ == "__main__":
-
     cids = ["AUD", "CAD", "GBP", "NZD", "USD"]
     xcats = ["XR", "XRH", "CRY", "GROWTH", "INFL"]
     df_cids = pd.DataFrame(
@@ -1548,25 +1791,25 @@ if __name__ == "__main__":
 
     sigs = ["CRY"]
     # Additional signals.
-    srn = SignalReturnRelations(
-        dfd,
-        rets="XR",
-        sigs=sigs,
-        sig_neg=True,
-        cosp=True,
-        freqs="Q",
-        start="2002-01-01",
-        ms_panel_test=True,
-        additional_metrics=[spearman, granger, granger_pval],
-    )
+    # srn = SignalReturnRelations(
+    #     dfd,
+    #     rets="XR",
+    #     sigs=sigs,
+    #     sig_neg=True,
+    #     cosp=True,
+    #     freqs="Q",
+    #     start="2002-01-01",
+    #     ms_panel_test=True,
+    #     additional_metrics=[spearman, granger, granger_pval],
+    # )
 
-    print(sigs)
+    # print(sigs)
 
-    df_dep = srn.summary_table()
-    print(df_dep)
+    # df_dep = srn.summary_table()
+    # print(df_dep)
 
-    dfsum = srn.single_relation_table(table_type="summary")
-    print(dfsum)
+    # dfsum = srn.single_relation_table(table_type="summary")
+    # print(dfsum)
 
     srn = SignalReturnRelations(
         dfd,
@@ -1588,6 +1831,8 @@ if __name__ == "__main__":
     srn.accuracy_bars(
         type="signals",
         title="Accuracy",
+        x_labels={"CRY": "Cry", "INFL": "Inflation", "GROWTH": "Growth"},
+        x_labels_rotate=45
     )
 
     sst = srn.single_statistic_table(stat="granger_pval")

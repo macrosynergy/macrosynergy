@@ -3,19 +3,27 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Tuple
 from macrosynergy.management import business_day_dif
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def view_panel_dates(
-    df: pd.DataFrame, size: Tuple[float] = None, use_last_businessday: bool = True
+    df: pd.DataFrame,
+    size: Tuple[float, float] = None,
+    use_last_businessday: bool = True,
+    header: str = None,
 ):
     """
     Visualize panel dates with color codes.
 
-    :param <pd.DataFrame> df: DataFrame cross sections rows and category columns.
-    :param <Tuple[float]> size: tuple of floats with width/length of displayed heatmap.
-    :param <bool> use_last_businessday: boolean indicating whether or not to use the
-        last business day before today as the end date. Default is True.
-
+    Parameters
+    ----------
+    df : ~pandas.DataFrame
+        A standardized Quantamental DataFrame with dates as index and series as columns.
+    size : Tuple[float, float]
+        tuple of floats with width/length of displayed heatmap.
+    use_last_businessday : bool
+        boolean indicating whether or not to use the last business day before today as
+        the end date. Default is True.
     """
 
     # DataFrame of official timestamps.
@@ -36,11 +44,12 @@ def view_panel_dates(
         df = df.astype(float)
         # Ideally the data type should be int, but Pandas cannot represent NaN as int.
         # -- https://pandas.pydata.org/pandas-docs/stable/user_guide/gotchas.html#support-for-integer-na
-
-        header = f"Missing days up to {maxdate.strftime('%Y-%m-%d')}"
+        if header is None:
+            header = f"Missing days up to {maxdate.strftime('%Y-%m-%d')}"
 
     else:
-        header = "Start years of quantamental indicators."
+        if header is None:
+            header = "Start years of quantamental indicators."
 
     if size is None:
         size = (max(df.shape[0] / 2, 18), max(1, df.shape[1] / 2))

@@ -25,32 +25,46 @@ def view_ranges(
     legend_loc: str = None,
     legend_bbox_to_anchor: Tuple[float] = None,
 ):
-    """Plots averages and various ranges across sections for one or more categories.
-
-    :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcat', 'real_date' and at least one column with values of interest.
-    :param <List[str]> xcats: extended categories to be checked on. Default is all
-        in the DataFrame.
-    :param <List[str]> cids: cross sections to plot. Default is all in DataFrame.
-    :param <str> start: earliest date in ISO format. Default earliest date in df.
-    :param <str> end: latest date in ISO format. Default is latest date in df.
-    :param <str> val: name of column that contains the values. Default is 'value'.
-    :param <str> kind: type of range plot. Default is 'bar'; other option is 'box'.
-    :param <str> sort_cids_by: criterion for sorting cids on x-axis;
-        Arguments can be 'mean' and 'std'. Default is None, i.e. original order. Ordering
-        will be based on the first category if the category is defined over the complete
-        panel. Otherwise, mean and standard deviation calculated, of the cross-sections,
-        computed across all categories.
-    :param <str> title: string of chart title; defaults depend on type of range plot.
-    :param <str> ylab: y label. Default is no label.
-    :param <Tuple[float]> size: Tuple of width and height of graph. Default is (16, 8).
-    :param <List[str]> xcat_labels: custom labels to be used for the ranges.
-    :param <str> legend_loc: location of legend; passed to matplotlib.pyplot.legend().
-        Default is 'upper center'.
-    :param <Tuple[float]> legend_bbox_to_anchor: passed to matplotlib.pyplot.legend().
-        Default is (0.5, -0.15).
-
     """
+    Plots averages and various ranges across sections for one or more categories.
+
+    Parameters
+    ----------
+    df : ~pandas.Dataframe
+        standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
+        and at least one column with values of interest.
+    xcats : List[str]
+        extended categories to be checked on. Default is all in the DataFrame.
+    cids : List[str]
+        cross sections to plot. Default is all in DataFrame.
+    start : str
+        earliest date in ISO format. Default earliest date in df.
+    end : str
+        latest date in ISO format. Default is latest date in df.
+    val : str
+        name of column that contains the values. Default is 'value'.
+    kind : str
+        type of range plot. Default is 'bar'; other option is 'box'.
+    sort_cids_by : str
+        criterion for sorting cids on x-axis; Arguments can be 'mean' and 'std'. Default
+        is None, i.e. original order. Ordering will be based on the first category if the
+        category is defined over the complete panel. Otherwise, mean and standard deviation
+        calculated, of the cross-sections, computed across all categories.
+    title : str
+        string of chart title; defaults depend on type of range plot.
+    ylab : str
+        y label. Default is no label.
+    size : Tuple[float]
+        Tuple of width and height of graph. Default is (16, 8).
+    xcat_labels : Union[List[str], Dict[str, str]]
+        custom labels to be used for the ranges.
+    legend_loc : str
+        location of legend; passed to matplotlib.pyplot.legend(). Default is 'upper
+        center'.
+    legend_bbox_to_anchor : Tuple[float]
+        passed to matplotlib.pyplot.legend(). Default is (0.5, -0.15).
+    """
+
     if legend_bbox_to_anchor is None and legend_loc is None:
         # -0.15 puts the legend below the x-labels if there are only 2 xcats.
         # If there is more than 2 xcats we need to move the legend further down by a

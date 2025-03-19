@@ -1002,6 +1002,5 @@ class TestDataQueryInterface(unittest.TestCase):
                     ) as dq:
                         result = dq.download_data(**good_args)
 
-
 if __name__ == "__main__":
     unittest.main()

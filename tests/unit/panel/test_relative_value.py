@@ -306,6 +306,21 @@ class TestAll(unittest.TestCase):
             # Assert a UserWarning is not raised.
             self.assertTrue(len(wlist) == 0)
 
+        with self.assertRaises(ValueError):
+            dfd_1 = make_relative_value(
+                df=dfdx,
+                xcats=xcats,
+                cids=cids,
+                start=start,
+                end=end,
+                blacklist=None,
+                basket=self.cids,
+                rel_meth="subtract",
+                rel_xcats=rel_xcats,
+                rel_reference="INVALID",
+                postfix=None,
+            )
+
     def test_prepare_basket(self):
         # Explicitly test _prepare_basket() method.
         dfd: pd.DataFrame = self.dfd
@@ -476,7 +491,6 @@ class TestAll(unittest.TestCase):
             [f"{cd}{self.xcats[0]}RV" for cd in ["AUD", "CAD", "GBP"]]
         )
         self.assertEqual(out_basket_tickers, expct_basket_tickers)
-
 
 if __name__ == "__main__":
     unittest.main()

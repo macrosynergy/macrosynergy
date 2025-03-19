@@ -1,76 +1,76 @@
-from . import predictors
-
-from .panel_time_series_split import (
+from .splitters import (
     ExpandingKFoldPanelSplit,
     RollingKFoldPanelSplit,
+    RecencyKFoldPanelSplit,
     ExpandingIncrementPanelSplit,
     ExpandingFrequencyPanelSplit,
-    BasePanelSplit,
 )
 from .cv_tools import panel_cv_scores
-from .transformers import (
+
+from .preprocessing import (
     LassoSelector,
     LarsSelector,
     MapSelector,
-    ENetSelector,
     ZnScoreAverager,
     PanelMinMaxScaler,
     PanelStandardScaler,
-    FeatureAverager,
+    BasePanelScaler,
+    BasePanelSelector,
+    PanelPCA,
 )
-from .metrics import (
+from .model_evaluation import (
     neg_mean_abs_corr,
     panel_significance_probability,
     sharpe_ratio,
     sortino_ratio,
     regression_accuracy,
     regression_balanced_accuracy,
+    correlation_coefficient,
+    create_panel_metric,
+    regression_mcc,
 )
-from .signal_optimizer import SignalOptimizer
+from .sequential import SignalOptimizer, BetaEstimator
 
-from .predictors import (
-    NaivePredictor,
-    BaseWeightedRegressor,
-    WeightedLinearRegression,
+from .forecasting import (
+    LADRegressor,
+    NaiveRegressor,
     SignWeightedLinearRegression,
     TimeWeightedLinearRegression,
-    WeightedLADRegressor,
     SignWeightedLADRegressor,
     TimeWeightedLADRegressor,
-    LADRegressor,
-    BaseRegressionSystem,
-    LADRegressionSystem,
-    RidgeRegressionSystem,
-    LinearRegressionSystem,
-    CorrelationVolatilitySystem,
     ModifiedLinearRegression,
     ModifiedSignWeightedLinearRegression,
     ModifiedTimeWeightedLinearRegression,
-    BaseModifiedRegressor,
+    LinearRegressionSystem,
+    LADRegressionSystem,
+    RidgeRegressionSystem,
+    CorrelationVolatilitySystem,
+    KNNClassifier,
 )
-
-from .beta_estimator import BetaEstimator
 
 from .random_effects import RandomEffects
 
 __all__ = [
-    # panel_time_series_split
+    # splitters
     "ExpandingKFoldPanelSplit",
     "RollingKFoldPanelSplit",
+    "RecencyKFoldPanelSplit",
     "ExpandingIncrementPanelSplit",
     "ExpandingFrequencyPanelSplit",
     "BasePanelSplit",
     # cv_tools
     "panel_cv_scores",
-    # transformers
-    "FeatureAverager",
+    # preprocessing
+    "BasePanelSelector",
     "LassoSelector",
     "LarsSelector",
     "MapSelector",
-    "ENetSelector",
+    # transformers
+    "BasePanelScaler",
     "PanelMinMaxScaler",
     "PanelStandardScaler",
     "ZnScoreAverager",
+    "PanelPCA",
     # metrics
     "neg_mean_abs_corr",
     "panel_significance_probability",
@@ -78,26 +78,25 @@ __all__ = [
     "sortino_ratio",
     "regression_accuracy",
     "regression_balanced_accuracy",
+    "create_panel_metric",
+    "correlation_coefficient",
+    "regression_mcc",
     # signal_optimizer
     "SignalOptimizer",
-    # predictors
+    # forecasting
+    "NaiveRegressor",
     "LADRegressor",
-    "NaivePredictor",
+    "KNNClassifier",
     "SignWeightedLADRegressor",
-    "BaseWeightedRegressor",
     "TimeWeightedLADRegressor",
     "SignWeightedLinearRegression",
     "TimeWeightedLinearRegression",
     "ModifiedLinearRegression",
     "ModifiedSignWeightedLinearRegression",
     "ModifiedTimeWeightedLinearRegression",
-    "BaseModifiedRegressor",
     # market beta estimation
     "BetaEstimator",
-    "WeightedLinearRegression",
-    "WeightedLADRegressor",
     # regression system
-    "BaseRegressionSystem",
     "LADRegressionSystem",
     "RidgeRegressionSystem",
     "LinearRegressionSystem",

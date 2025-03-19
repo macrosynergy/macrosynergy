@@ -4,8 +4,10 @@ import numpy as np
 import pandas as pd
 from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY, PD_OLD_RESAMPLE
 from tests.simulate import make_qdf
+from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import (
     reduce_df,
+    reduce_df_by_ticker,
     categories_df,
     _map_to_business_day_frequency,
 )
@@ -44,9 +46,7 @@ class TestAll(unittest.TestCase):
         df_xcats.loc["INFL", :] = ["2011-01-01", "2020-12-31", 0, 3, 0, 0.6]
         df_xcats.loc["GDP", :] = ["2011-01-01", "2020-12-31", 0, 1, 0, 0.7]
 
-        random.seed(1)
-        np.random.seed(0)
-        self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75, seed=0)
 
     def tearDown(self) -> None:
         return super().tearDown()
@@ -65,6 +65,9 @@ class TestAll(unittest.TestCase):
         # Test the dimensions through the date keys.
         self.assertTrue(dfd_x["real_date"].min() == pd.to_datetime("2013-01-01"))
         self.assertTrue(dfd_x["real_date"].max() == pd.to_datetime("2019-01-01"))
+
+        with self.assertRaises(TypeError):
+            reduce_df(df=1, xcats=["CRY"], cids=self.cids[0:2])
 
     def test_reduce_df_single_xcat(self):
         dfd_x1 = reduce_df(
@@ -484,6 +487,35 @@ class TestAll(unittest.TestCase):
             )
             == 0
         )
+
+    def test_categories_df_errors(self):
+        with self.assertRaises(ValueError):
+            categories_df(
+                self.dfd,
+                xcats=["CRY"],
+                cids=self.cids,
+                freq="M",
+                xcat_aggs=["mean", "last"],
+            )
+
+        with self.assertRaises(ValueError):
+            bad_df = self.dfd.copy()
+            bad_df = bad_df[bad_df["cid"] != self.cids[0]]
+            categories_df(
+                self.dfd,
+                xcats=["CRY"],
+                cids=self.cids,
+                freq="M",
+                xcat_aggs=["mean", "last"],
+            )
+
+    def test_reduce_df_by_ticker(self):
+        dfd = make_test_df()
+        res_df = reduce_df_by_ticker(df=dfd, ticks=None, start=None, end=None)
+        self.assertTrue(dfd.equals(res_df.drop(columns="ticker")))
+
+        expc_tickers = dfd["cid"] + "_" + dfd["xcat"]
+        self.assertTrue(expc_tickers.equals(res_df["ticker"]))
 
 
 if __name__ == "__main__":

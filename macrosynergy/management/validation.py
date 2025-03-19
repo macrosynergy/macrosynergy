@@ -38,31 +38,41 @@ def validate_and_reduce_qdf(
     end: Optional[str] = None,
 ):
     """
-    Validates the inputs to a function that takes a DataFrame as its first argument.
-    The DataFrame is then reduced according to the inputs.
+    Validates the inputs to a function that takes a DataFrame as its first argument. The
+    DataFrame is then reduced according to the inputs.
 
-    :param <pd.DataFrame> df: A DataFrame with the following columns:
-        'cid', 'xcat', 'real_date', and at least one metric from -
-        'value', 'grading', 'eop_lag', or 'mop_lag'.
-    :param <List[str]> cids: A list of cids to select from the DataFrame.
-        If None, all cids are selected.
-    :param <List[str]> xcats: A list of xcats to select from the DataFrame.
-        If None, all xcats are selected.
-    :param <List[str]> metrics: A list of metrics to select from the DataFrame.
-        If None, all metrics are selected.
-    :param <bool> intersect: if True only retains cids that are available for
-        all xcats. Default is False.
-    :param <List[str]> tickers: A list of tickers that will be selected from the DataFrame
-        if they exist, regardless of start, end, blacklist, and intersect arguments.
-    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
-        the data frame. If one cross-section has several blacklist periods append numbers
-        to the cross-section code.
-    :param <str> start: ISO-8601 formatted date string. Select data from
-        this date onwards. If None, all dates are selected.
-    :param <str> end: ISO-8601 formatted date string. Select data up to
-        and including this date. If None, all dates are selected.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        A DataFrame with the following columns: 'cid', 'xcat', 'real_date', and at least
+        one metric from - 'value', 'grading', 'eop_lag', or 'mop_lag'.
+    cids : List[str]
+        A list of cids to select from the DataFrame. If None, all cids are selected.
+    xcats : List[str]
+        A list of xcats to select from the DataFrame. If None, all xcats are selected.
+    metrics : List[str]
+        A list of metrics to select from the DataFrame. If None, all metrics are
+        selected.
+    intersect : bool
+        if True only retains cids that are available for all xcats. Default is False.
+    tickers : List[str]
+        A list of tickers that will be selected from the DataFrame if they exist,
+        regardless of start, end, blacklist, and intersect arguments.
+    blacklist : dict
+        cross-sections with date ranges that should be excluded from the data frame. If
+        one cross-section has several blacklist periods append numbers to the cross-section
+        code.
+    start : str
+        ISO-8601 formatted date string. Select data from this date onwards. If None, all
+        dates are selected.
+    end : str
+        ISO-8601 formatted date string. Select data up to and including this date. If
+        None, all dates are selected.
 
-    :return <QDFArgs>: A NamedTuple that contains the validated arguments.
+    Returns
+    -------
+    QDFArgs
+        A NamedTuple that contains the validated arguments.
     """
 
     df: pd.DataFrame = df.copy()
@@ -124,6 +134,22 @@ def validate_and_reduce_qdf(
             cids.remove(m_cid)
         for m_xcat in m_xcats:
             xcats.remove(m_xcat)
+            
+    elif intersect:
+        if len(r_cids) == 0:
+            raise ValueError(
+                "The arguments provided resulted in an empty DataFrame when "
+                "filtered. There are no intersecting cids."
+            )
+        
+        if len(r_xcats) == 0:
+            raise ValueError(
+                "The arguments provided resulted in an empty DataFrame when "
+                "filtered. There are no intersecting xcats."
+            )
+
+        cids = r_cids
+        xcats = r_xcats
 
     if df.empty:
         raise ValueError(
@@ -138,12 +164,21 @@ def _get_ticker_df(df: pd.DataFrame, tickers: List[str], metrics: Optional[List[
     """
     Filters a QuantamentalDataFrame by tickers.
 
-    :param <pd.DataFrame> df: a Pandas DataFrame.
-    :param <List[str]> metrics: a list of metrics.
-    :param <List[str]> tickers: a list of tickers.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        a Pandas DataFrame.
+    metrics : List[str]
+        a list of metrics.
+    tickers : List[str]
+        a list of tickers.
 
-    :return <pd.DataFrame>: the filtered DataFrame.
+    Returns
+    -------
+    pd.DataFrame
+        the filtered DataFrame.
     """
+
     df_tickers: List[pd.DataFrame] = [pd.DataFrame()]
     for ticker in tickers:
         _cid, _xcat = ticker.split("_", 1)
@@ -161,14 +196,23 @@ def _validate_start_and_end_dates(df: pd.DataFrame, start: str, end: str):
     """
     Determines start and end dates for a DataFrame.
 
-    :param <pd.DataFrame> df: DataFrame to be filtered.
-    :param <str> start: ISO-8601 formatted date string. If None,
-        the earliest date in the DataFrame is used.
-    :param <str> end: ISO-8601 formatted date string. If None,
-        the latest date in the DataFrame is used.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame to be filtered.
+    start : str
+        ISO-8601 formatted date string. If None, the earliest date in the DataFrame is
+        used.
+    end : str
+        ISO-8601 formatted date string. If None, the latest date in the DataFrame is
+        used.
 
-    :return <Tuple[str]>: Tuple of start and end dates.
+    Returns
+    -------
+    Tuple[str]
+        Tuple of start and end dates.
     """
+
     if start is None:
         start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
     if end is None:
@@ -184,11 +228,19 @@ def _validate_metrics(df: pd.DataFrame, metrics: List[str]):
     """
     Validates the metrics passed to a function.
 
-    :param <pd.DataFrame> df: a Pandas DataFrame.
-    :param <List[str]> metrics: a list of metrics to be checked.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        a Pandas DataFrame.
+    metrics : List[str]
+        a list of metrics to be checked.
 
-    :return <List[str]>: a list of metrics to be used.
+    Returns
+    -------
+    List[str]
+        a list of metrics to be used.
     """
+
     required_columns: List[str] = ["real_date", "cid", "xcat"]
     if metrics is None:
         metrics: List[str] = list(set(df.columns) - set(required_columns))
@@ -204,17 +256,27 @@ def _set_or_find_missing_in_df(
     df: pd.DataFrame, col_name: str, values: Optional[List], param_name: str
 ):
     """
-    Returns the values passed to a function and a list of values that are not found
-    in a specific column of a DataFrame. If values is None, all unique values in the
+    Returns the values passed to a function and a list of values that are not found in a
+    specific column of a DataFrame. If values is None, all unique values in the
     DataFrame are returned.
 
-    :param <pd.DataFrame> df: a Pandas DataFrame.
-    :param <str> col_name: name of column in the DataFrame.
-    :param <List> values: list of values to be checked.
-    :param <str> param_name: name of parameter passed to function.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        a Pandas DataFrame.
+    col_name : str
+        name of column in the DataFrame.
+    values : List
+        list of values to be checked.
+    param_name : str
+        name of parameter passed to function.
 
-    :return <List>: list of values that are not in the DataFrame.
+    Returns
+    -------
+    List
+        list of values that are not in the DataFrame.
     """
+
     missing_values: List = []
     if values is None:
         values = df[col_name].unique().tolist()
@@ -229,13 +291,23 @@ def _find_missing_in_df(df: pd.DataFrame, col_name: str, values: List, param_nam
     """
     Finds values in a list that are not in a specific column of a DataFrame.
 
-    :param <pd.DataFrame> df: a Pandas DataFrame.
-    :param <str> col_name: name of column in the DataFrame.
-    :param <List> values: list of values to be checked.
-    :param <str> param_name: name of parameter passed to function.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        a Pandas DataFrame.
+    col_name : str
+        name of column in the DataFrame.
+    values : List
+        list of values to be checked.
+    param_name : str
+        name of parameter passed to function.
 
-    :return <List>: list of values that are not in the DataFrame.
+    Returns
+    -------
+    List
+        list of values that are not in the DataFrame.
     """
+
     missing: List = []
     if not set(values).issubset(set(df[col_name].unique())):
         # warn
@@ -247,27 +319,3 @@ def _find_missing_in_df(df: pd.DataFrame, col_name: str, values: List, param_nam
         missing = list(set(values) - set(df[col_name].unique()))
 
     return missing
-
-
-def _validate_Xy_learning(X: pd.DataFrame, y: Union[pd.DataFrame, pd.Series]):
-    """
-    Validates the expected long-format inputs and targets expected for the learning
-    submodule.
-    """
-    if not isinstance(X, pd.DataFrame):
-        raise TypeError("The X argument must be a pandas DataFrame.")
-    if not isinstance(y, pd.Series) and not isinstance(y, pd.DataFrame):
-        raise TypeError("The y argument must be a pandas Series or DataFrame.")
-    if not isinstance(X.index, pd.MultiIndex):
-        raise ValueError("X must be multi-indexed.")
-    if not isinstance(y.index, pd.MultiIndex):
-        raise ValueError("y must be multi-indexed.")
-    if not isinstance(X.index.get_level_values(1)[0], datetime.date):
-        raise TypeError("The inner index of X must be datetime.date.")
-    if not isinstance(y.index.get_level_values(1)[0], datetime.date):
-        raise TypeError("The inner index of y must be datetime.date.")
-    if not X.index.equals(y.index):
-        raise ValueError(
-            "The indices of the input dataframe X and the output dataframe y don't "
-            "match."
-        )

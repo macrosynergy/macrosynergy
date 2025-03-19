@@ -1,6 +1,5 @@
 """
-Functions used to visualize correlations across categories or cross-sections of
-panels.
+Functions used to visualize correlations across categories or cross-sections of panels.
 """
 
 import itertools
@@ -15,6 +14,7 @@ from matplotlib import pyplot as plt
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import _map_to_business_day_frequency, reduce_df
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def view_correlation(
@@ -43,69 +43,86 @@ def view_correlation(
     **kwargs: Any,
 ):
     """
-    Visualize correlation across categories or cross-sections of panels.
+    Displays a correlation matrix across categories or cross-sections of panels.
 
-    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
-        'cid', 'xcat', 'real_date' and at least one column with values of interest.
-    :param <List[str]> xcats: extended categories to be correlated. Default is all in the
-        DataFrame. If xcats contains only one category the correlation coefficients
-        across cross sections are displayed. If xcats contains more than one category,
-        the correlation coefficients across categories are displayed. Additionally, the
-        order of the xcats received will be mirrored in the correlation matrix.
-    :param <List[str]> cids: cross sections to be correlated. Default is all in the
-        DataFrame.
-    :param <List[str]> xcats_secondary: an optional second set of extended categories.
-        If xcats_secondary is provided, correlations will be calculated between the
-        categories in xcats and xcats_secondary.
-    :param <List[str]> cids_secondary: an optional second list of cross sections. If
-        cids_secondary is provided correlations will be calculated and visualized between
-        these two sets.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date
-        in df is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date in df
-        is used.
-    :param <str> val: name of column that contains the values of interest. Default is
-        'value'.
-    :param <str> freq: frequency option. Per default the correlations are calculated
-        based on the native frequency of the datetimes in 'real_date', which is business
-        daily. Down-sampling options include weekly ('W'), monthly ('M'), or quarterly
-        ('Q') mean.
-    :param <bool> cluster: if True the series in the correlation matrix are reordered
-        by hierarchical clustering. Default is False.
-    :param <dict> lags: optional dictionary of lags applied to respective categories.
-        The key will be the category and the value is the lag or lags. If a
-        category has multiple lags applied, pass in a list of lag values. The lag factor
-        will be appended to the category name in the correlation matrix.
-        If xcats_secondary is not none, this parameter will specify lags for the
-        categories in xcats.
-        N.B.: Lags can include a 0 if the original should also be correlated.
-    :param <dict> lags_secondary: optional dictionary of lags applied to the second set of
-        categories if xcats_secondary is provided.
-    :param <str> title: chart heading. If none is given, a default title is used.
-    :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
-        is (14, 8).
-    :param <int> title_fontsize: font size of the title. Default is 20.
-    :param <int> fontsize: font size of the title. Default is 14.
-    :param <float> max_color: maximum values of positive/negative correlation
-        coefficients for color scale. Default is none. If a value is given it applies
-        symmetrically to positive and negative values.
-    :param <bool> show: if True the figure will be displayed, else the axis object is returned.
-        Default is True.
-    :param <Optional[Union[List[str], Dict[str, str]]]> xcat_labels: optional list or 
-        dictionary of labels for xcats. A list should be in the same order as xcats, a 
-        dictionary should map from each xcat to its label.
-    :param <Optional[Union[List[str], Dict[str, str]]]> xcat_secondary_labels: optional 
-        list or dictionary of labels for xcats_secondary.
-    :param <Union[float, int]> cbar_shrink: shrinkage factor of the color bar. Default is 0.5.
-    :param <int> cbar_fontsize: font size of the color bar. Default is 12.
-    :param <Dict> **kwargs: Arbitrary keyword arguments that are passed to seaborn.heatmap.
+    Parameters
+    ----------
+    df : ~pandas.DataFrame
+        standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
+        'real_date' and at least one column with values of interest.
+    xcats : List[str]
+        extended categories to be correlated. Default is all in the DataFrame. If xcats
+        contains only one category the correlation coefficients across cross sections are
+        displayed. If xcats contains more than one category, the correlation coefficients
+        across categories are displayed. Additionally, the order of the xcats received will
+        be mirrored in the correlation matrix.
+    cids : List[str]
+        cross sections to be correlated. Default is all in the DataFrame.
+    xcats_secondary : List[str]
+        an optional second set of extended categories. If xcats_secondary is provided,
+        correlations will be calculated between the categories in xcats and xcats_secondary.
+    cids_secondary : List[str]
+        an optional second list of cross sections. If cids_secondary is provided
+        correlations will be calculated and visualized between these two sets.
+    start : str
+        earliest date in ISO format. Default is None and earliest date in df is used.
+    end : str
+        latest date in ISO format. Default is None and latest date in df is used.
+    val : str
+        name of column that contains the values of interest. Default is 'value'.
+    freq : str
+        frequency option. Per default the correlations are calculated based on the
+        native frequency of the datetimes in 'real_date', which is business daily. Down-
+        sampling options include weekly ('W'), monthly ('M'), or quarterly ('Q') mean.
+    cluster : bool
+        if True the series in the correlation matrix are reordered by hierarchical
+        clustering. Default is False.
+    lags : dict
+        optional dictionary of lags applied to respective categories. The key will be
+        the category and the value is the lag or lags. If a category has multiple lags
+        applied, pass in a list of lag values. The lag factor will be appended to the
+        category name in the correlation matrix. If xcats_secondary is not none, this
+        parameter will specify lags for the categories in xcats.
+    lags_secondary : dict
+        optional dictionary of lags applied to the second set of categories if
+        xcats_secondary is provided.
+    title : str
+        chart heading. If none is given, a default title is used.
+    size : Tuple[float]
+        two-element tuple setting width/height of figure. Default is (14, 8).
+    title_fontsize : int
+        font size of the title. Default is 20.
+    fontsize : int
+        font size of the title. Default is 14.
+    max_color : float
+        maximum values of positive/negative correlation coefficients for color scale.
+        Default is none. If a value is given it applies symmetrically to positive and
+        negative values.
+    show : bool
+        if True the figure will be displayed, else the axis object is returned. Default
+        is True.
+    xcat_labels : Optional[Union[List[str], Dict[str, str]]]
+        optional list or dictionary of labels for xcats. A list should be in the same
+        order as xcats, a dictionary should map from each xcat to its label.
+    xcat_secondary_labels : Optional[Union[List[str], Dict[str, str]]]
+        optional list or dictionary of labels for xcats_secondary.
+    cbar_shrink : Union[float, int]
+        shrinkage factor of the color bar. Default is 0.5.
+    cbar_fontsize : int
+        font size of the color bar. Default is 12.
+    **kwargs : Dict
+        Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
-    N.B:. The function displays the heatmap of a correlation matrix across categories or
-    cross-sections (depending on which parameter has received multiple elements).
+
+    .. note::
+        Lags (`lags`) can include a 0 if the original should also be correlated.
+
+    .. note::
+        The function displays the heatmap of a correlation matrix across categories or
+        cross-sections (depending on which parameter has received multiple elements).
     """
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-    col_names = ["cid", "xcat", "real_date", val]
-    df = df[col_names]
+
+    df = QuantamentalDataFrame(df[["cid", "xcat", "real_date", val]])
 
     if freq is not None:
         freq = _map_to_business_day_frequency(freq=freq, valid_freqs=["W", "M", "Q"])
@@ -290,10 +307,14 @@ def _parse_xcat_labels(xcats: List[str], xcat_labels: Union[List[str], Dict[str,
     """
     Parse xcat labels for correlation plot.
 
-    :param <List[str]> xcats: extended categories to be correlated.
-    :param <Union[List[str], Dict[str, str]]> xcat_labels: optional list or dictionary of
-        labels for the extended categories.
+    Parameters
+    ----------
+    xcats : List[str]
+        extended categories to be correlated.
+    xcat_labels : Union[List[str], Dict[str, str]]
+        optional list or dictionary of labels for the extended categories.
     """
+
     labels_dict = {}
     if xcat_labels is not None:
         assert len(xcat_labels) == len(xcats), (
@@ -319,14 +340,21 @@ def _transform_df_for_cross_sectional_corr(
     Pivots dataframe and down-samples according to the specified frequency so that
     correlation can be calculated between cross-sections.
 
-    :param <pd.Dataframe> df: standardized JPMaQS DataFrame.
-    :param <str> val: name of column that contains the values of interest. Default is
-        'value'.
-    :param <str> freq: Down-sampling frequency option. By default values are not
-        down-sampled.
+    Parameters
+    ----------
+    df : ~pandas.DataFrame
+        standardized JPMaQS DataFrame.
+    val : str
+        name of column that contains the values of interest. Default is 'value'.
+    freq : str
+        Down-sampling frequency option. By default values are not down-sampled.
 
-    :return <pd.Dataframe>: The transformed dataframe.
+    Returns
+    -------
+    pd.Dataframe
+        The transformed dataframe.
     """
+
     df_w = df.pivot(index="real_date", columns="cid", values=val)
     if freq is not None:
         df_w = df_w.resample(freq).mean()
@@ -341,15 +369,25 @@ def _transform_df_for_cross_category_corr(
     Pivots dataframe and down-samples according to the specified frequency so that
     correlation can be calculated between extended categories.
 
-    :param <pd.Dataframe> df: standardized JPMaQS DataFrame.
-    :param <List[str]> xcats: extended categories to be correlated.
-    :param <str> val: name of column that contains the values of interest. Default is
-        'value'.
-    :param <str> freq: Down-sampling frequency. By default values are not down-sampled.
-    :param <dict> lags: optional dictionary of lags applied to respective categories.
+    Parameters
+    ----------
+    df : ~pandas.DataFrame
+        standardized JPMaQS DataFrame.
+    xcats : List[str]
+        extended categories to be correlated.
+    val : str
+        name of column that contains the values of interest. Default is 'value'.
+    freq : str
+        Down-sampling frequency. By default values are not down-sampled.
+    lags : dict
+        optional dictionary of lags applied to respective categories.
 
-    :return <pd.Dataframe>: The transformed dataframe.
+    Returns
+    -------
+    pd.Dataframe
+        The transformed dataframe.
     """
+
     df_w: pd.DataFrame = df.pivot(
         index=("cid", "real_date"), columns="xcat", values=val
     )
@@ -382,10 +420,15 @@ def lag_series(
     """
     Method used to lag respective categories.
 
-    :param <pd.DataFrame> df_w: multi-index DataFrame where the columns are the
-        categories, and the two indices are the cross-sections and real-dates.
-    :param <dict> lags: dictionary of lags applied to respective categories.
-    :param <List[str]> xcats: extended categories to be correlated.
+    Parameters
+    ----------
+    df_w : ~pandas.DataFrame
+        multi-index DataFrame where the columns are the categories, and the two indices
+        are the cross-sections and real-dates.
+    lags : dict
+        dictionary of lags applied to respective categories.
+    xcats : List[str]
+        extended categories to be correlated.
     """
 
     lag_type = "The lag data structure must be of type <dict>."
@@ -440,12 +483,20 @@ def _cluster_correlations(
     """
     Rearrange a correlation dataframe so that more similar values are clustered.
 
-    :param <pd.Dataframe> corr: dataframe representing a correlation matrix.
-    :param <bool> is_symmetric: if True, rows and columns are rearranged identically.
-        If False, only rows are reordered.
+    Parameters
+    ----------
+    corr : ~pandas.DataFrame
+        dataframe representing a correlation matrix.
+    is_symmetric : bool
+        if True, rows and columns are rearranged identically. If False, only rows are
+        reordered.
 
-    :return <pd.Dataframe>: The sorted correlation dataframe.
+    Returns
+    -------
+    pd.Dataframe
+        The sorted correlation dataframe.
     """
+
     # Get pairwise distances of the dataframe's rows.
     d = sch.distance.pdist(corr)
 

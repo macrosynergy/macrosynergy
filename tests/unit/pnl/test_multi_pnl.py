@@ -1,14 +1,17 @@
-from macrosynergy.management.simulate.simulate_quantamental_data import make_test_df
-from macrosynergy.pnl.naive_pnl import NaivePnL
-from macrosynergy.pnl.multi_pnl import MultiPnL
-from macrosynergy.management.utils import reduce_df
 import unittest
+from typing import Dict, List, Tuple, Union
 from unittest.mock import patch
+
+import matplotlib
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Union
-import matplotlib
 from matplotlib import pyplot as plt
+
+from macrosynergy.management.simulate.simulate_quantamental_data import \
+    make_test_df
+from macrosynergy.management.utils import reduce_df
+from macrosynergy.pnl.multi_pnl import MultiPnL
+from macrosynergy.pnl.naive_pnl import NaivePnL
 
 
 class TestMultiPnL(unittest.TestCase):
@@ -93,8 +96,8 @@ class TestMultiPnL(unittest.TestCase):
         ma_pnl = MultiPnL()
         ma_pnl.add_pnl(self.pnl1, [self.PNL_XCAT_1, "LONG"])
         ma_pnl.add_pnl(self.pnl2, [self.PNL_XCAT_2, "LONG"])
-        self.assertTrue(f"{self.PNL_XCAT_1}/EQXR" in ma_pnl.pnl_xcats())
-        self.assertTrue(f"{self.PNL_XCAT_2}/FXXR" in ma_pnl.pnl_xcats())
+        self.assertTrue(f"{self.PNL_XCAT_1}/EQXR" in ma_pnl.pnl_xcats)
+        self.assertTrue(f"{self.PNL_XCAT_2}/FXXR" in ma_pnl.pnl_xcats)
 
     def test_add_pnl_duplicate(self):
         ma_pnl = MultiPnL()
@@ -137,9 +140,9 @@ class TestMultiPnL(unittest.TestCase):
         ma_pnl.add_pnl(self.pnl1, [self.PNL_XCAT_1, "LONG"])
         ma_pnl.add_pnl(self.pnl2, [self.PNL_XCAT_2, "LONG"])
         ma_pnl.combine_pnls(["LONG/FXXR", "LONG/EQXR"], composite_pnl_xcat="LONG")
-        self.assertTrue("LONG" in ma_pnl.pnl_xcats())
-        self.assertTrue("LONG/EQXR" in ma_pnl.pnl_xcats())
-        self.assertTrue("LONG/FXXR" in ma_pnl.pnl_xcats())
+        self.assertTrue("LONG" in ma_pnl.pnl_xcats)
+        self.assertTrue("LONG/EQXR" in ma_pnl.pnl_xcats)
+        self.assertTrue("LONG/FXXR" in ma_pnl.pnl_xcats)
 
         # Assert combined pnl is overwritten rather than duplicated
         df_len = len(ma_pnl.get_pnls())

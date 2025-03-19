@@ -3,7 +3,12 @@ import numpy as np
 import pandas as pd
 
 from typing import Any, List
-from macrosynergy.management.types import NoneType, QuantamentalDataFrame
+from macrosynergy.management.types import (
+    NoneType,
+    QuantamentalDataFrame,
+    SubscriptableMeta,
+    ArgValidationMeta,
+)
 from macrosynergy.management.simulate import make_test_df
 
 
@@ -64,7 +69,68 @@ class TestTypes(unittest.TestCase):
             .reset_index(drop=True)
         )
         df_S = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
+        self.assertTrue((df_S == df_Q).all().all())
+
+        # test with categorical=False
+        df_Q = (
+            QuantamentalDataFrame(df, categorical=False)
+            .sort_values(["cid", "xcat", "real_date"])
+            .reset_index(drop=True)
+        )
+        df_S = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
         self.assertTrue(df_Q.equals(df_S))
+
+
+class TestSubscriptableMeta(unittest.TestCase):
+    class Sample(metaclass=SubscriptableMeta):
+        @staticmethod
+        def foo():
+            return "bar"
+
+        @staticmethod
+        def hello():
+            return "world"
+
+        @classmethod
+        def class_method(cls):
+            return "class method"
+
+        def instance_method(self):
+            return "instance method"
+
+    def test_valid_method_subscription(self):
+        self.assertEqual(self.Sample["foo"](), "bar")
+        self.assertEqual(self.Sample["hello"](), "world")
+        self.assertEqual(self.Sample["class_method"](), "class method")
+
+    def test_invalid_method_subscription(self):
+        with self.assertRaises(KeyError):
+            self.Sample["non_existent_method"]
+
+    def test_instance_method_subscription(self):
+        self.Sample["instance_method"]
+
+
+class TestArgValidationMeta(unittest.TestCase):
+    class Sample(metaclass=ArgValidationMeta):
+        def greet(self, name: str):
+            return f"Hello, {name}!"
+
+        def add(self, a: int, b: int) -> int:
+            return a + b
+
+    def setUp(self):
+        self.sample = self.Sample()
+
+    def test_method_with_arg_validation(self):
+        self.assertEqual(self.sample.greet("Alice"), "Hello, Alice!")
+        with self.assertRaises(TypeError):
+            self.sample.greet(99)
+
+    def test_add_method_with_arg_validation(self):
+        self.assertEqual(self.sample.add(3, 4), 7)
+        with self.assertRaises(TypeError):
+            self.sample.add(3, "4")
 
 
 if __name__ == "__main__":

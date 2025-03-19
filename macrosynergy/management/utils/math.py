@@ -16,17 +16,34 @@ def expanding_mean_with_nan(
     dfw: pd.DataFrame, absolute: bool = False
 ) -> List[np.float64]:
     """
-    Computes a rolling median of a vector of floats and returns the results. NaNs will be
-    consumed.
+    Calculate the expanding mean of a DataFrame's values across rows, handling NaN values.
 
-    :param <QuantamentalDataFrame> dfw: "wide" dataframe with time index and
-        cross-sections as columns.
-    :param <bool> absolute: if True, the rolling mean will be computed on the magnitude
-        of each value. Default is False.
+    This function computes the expanding (cumulative) mean of all elements in the 
+    DataFrame `dfw`, row-by-row. NaN values are ignored in the summation, ensuring they 
+    do not affect the calculation. If `absolute` is set to True, it uses the absolute 
+    values of elements for the expanding mean calculation. The function returns a list 
+    of expanding mean values, with each element corresponding to the expanding mean up to 
+    that row.
 
-    :return <List[float]> ret: a list containing the median values. The number of computed
-        median values held inside the list will correspond to the number of timestamps
-        the series is defined over.
+    Parameters
+    ----------
+    dfw : pd.DataFrame
+        A DataFrame with a datetime index (or convertible to datetime) and numeric data 
+        across its columns. The index is expected to represent timestamps.
+    absolute : bool, optional
+        If True, computes the expanding mean using the absolute values of the DataFrame's 
+        elements, by default False.
+
+    Returns
+    -------
+    List[np.float64]
+        A list containing the expanding mean for each row of the DataFrame.
+
+    Raises
+    ------
+    TypeError
+        If `dfw` is not a DataFrame, if its index cannot be converted to timestamps, or if 
+        `absolute` is not a boolean.
     """
 
     if not isinstance(dfw, pd.DataFrame):
@@ -72,30 +89,41 @@ def expanding_mean_with_nan(
 def ewm_sum(df: pd.DataFrame, halflife: Number):
     """
     Compute the exponentially weighted moving sum of a DataFrame.
-    
-    :param <pd.DataFrame> df: DataFrame in the wide format for which to calculate weights.
-    :param <Number> halflife: The halflife of the exponential decay.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame in the wide format for which to calculate weights.
+    halflife : Number
+        The halflife of the exponential decay.
     """
+
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Method expects to receive a pd.DataFrame.")
     if not isinstance(halflife, Number):
         raise TypeError("The parameter `halflife` must be of type `<Number>`.")
-    
+
     weights = calculate_cumulative_weights(df, halflife)
     return df.ewm(halflife=halflife).mean().mul(weights, axis=0)
-    
+
+
 def calculate_cumulative_weights(df: pd.DataFrame, halflife: Number):
     """
-    Calculate the cumulative moving exponential weights for a DataFrame. 
-        
-    :param <pd.DataFrame> df: DataFrame in the wide format for which to calculate weights.
-    :param <Number> halflife: The halflife of the exponential decay.
+    Calculate the cumulative moving exponential weights for a DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame in the wide format for which to calculate weights.
+    halflife : Number
+        The halflife of the exponential decay.
     """
+
     n = len(df)
-    raw_weights = [(1/2) ** (i / halflife) for i in range(n)]
+    raw_weights = [(1 / 2) ** (i / halflife) for i in range(n)]
 
     cumulative_weights = np.cumsum(raw_weights)
-    
+
     return pd.Series(cumulative_weights, index=df.index)
 
 

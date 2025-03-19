@@ -733,6 +733,117 @@ class TestInformationStateChanges(unittest.TestCase):
 
         self.assertTrue(isc_min == new_isc)
 
+    def test_return_dtypes(self):
+        # test return type - regular df
+        qdf = get_long_format_data(end="2012-01-01")
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
+        outdf = isc.to_qdf()
+
+        self.assertTrue(outdf["cid"].dtype.name == "object")
+        self.assertTrue(outdf["xcat"].dtype.name == "object")
+        self.assertTrue(isinstance(outdf, QuantamentalDataFrame))
+
+        # test return type - categorical df (not QDF)
+        qdf = get_long_format_data(end="2012-01-01")
+        qdf = QuantamentalDataFrame(qdf).copy()
+        self.assertTrue(
+            type(qdf) is pd.DataFrame,
+            "Invalid test - This should be a pd.DataFrame, not QuantamentalDataFrame",
+        )
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
+        outdf = isc.to_qdf()
+
+        self.assertTrue(outdf["cid"].dtype.name == "category")
+        self.assertTrue(outdf["xcat"].dtype.name == "category")
+        self.assertTrue(isinstance(outdf, QuantamentalDataFrame))
+
+        # test they are categorical when QDF, also initialized as categorical
+        qdf = get_long_format_data(end="2012-01-01")
+        qdf = QuantamentalDataFrame(qdf, _initialized_as_categorical=True)
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
+        outdf = isc.to_qdf()
+
+        self.assertTrue(outdf["cid"].dtype.name == "category")
+        self.assertTrue(outdf["xcat"].dtype.name == "category")
+
+        # test they are categorical when QDF from regular QDF
+        qdf = get_long_format_data(end="2012-01-01")
+        qdf = QuantamentalDataFrame(qdf, categorical=True)
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
+        outdf = isc.to_qdf()
+
+        self.assertTrue(outdf["cid"].dtype.name == "object")
+        self.assertTrue(outdf["xcat"].dtype.name == "object")
+
+        #  test they are not categorical when QDF
+        qdf = get_long_format_data(end="2012-01-01")
+        qdf = QuantamentalDataFrame(qdf, categorical=False)
+        isc = InformationStateChanges.from_qdf(qdf)
+        outdf = isc.to_qdf()
+
+        self.assertTrue(outdf["cid"].dtype.name == "object")
+        self.assertTrue(outdf["xcat"].dtype.name == "object")
+
+
+class TestInformationStateChangesScoreBy(unittest.TestCase):
+    def test_score_by_diff(self):
+        qdf = get_long_format_data(end="2015-01-01")
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
+
+        isc_score_by_diff = InformationStateChanges.from_qdf(qdf, score_by="diff")
+
+        for ticker in isc.keys():
+            self.assertTrue(isc[ticker].equals(isc_score_by_diff[ticker]))
+
+    def test_score_by_level(self):
+        qdf = get_long_format_data(end="2015-01-01")
+
+        isc_score_by_level = InformationStateChanges.from_qdf(qdf, score_by="level")
+        isc_score_by_diff = InformationStateChanges.from_qdf(qdf, score_by="diff")
+
+        all_isna = []
+        for ticker in isc_score_by_diff.keys():
+            if isc_score_by_level[ticker]["zscore"].isna().all():
+                all_isna.append(ticker)
+                continue
+            self.assertFalse(
+                isc_score_by_diff[ticker].equals(isc_score_by_level[ticker])
+            )
+
+        if len(all_isna) == len(isc_score_by_diff.keys()):
+            self.fail("All tickers have NaNs in zscore when using score_by='level'")
+
+    def test_score_by_patch(self):
+        qdf = get_long_format_data(end="2015-01-01")
+
+        for sc_by in ["level", "diff"]:
+            with unittest.mock.patch(
+                "macrosynergy.management.utils.sparse._calculate_score_on_sparse_indicator_for_class"
+            ) as mock:
+                isc = InformationStateChanges.from_qdf(qdf, norm=True, score_by=sc_by)
+                mock.assert_called_once()
+                self.assertEqual(mock.call_args[1]["score_by"], sc_by)
+
+    def test_score_by_invalid_method(self):
+        qdf = get_long_format_data(end="2015-01-01")
+
+        with self.assertRaises(ValueError):
+            InformationStateChanges.from_qdf(qdf, score_by="banana")
+
+    def test_score_by_unplanned_method(self):
+        qdf = get_long_format_data(end="2015-01-01")
+        test_options = {"apple": "banana"}
+        expected_err = "Column `banana` not in"
+        with unittest.mock.patch(
+            "macrosynergy.management.utils.sparse.SCORE_BY_OPTIONS", test_options
+        ):
+            try:
+                InformationStateChanges.from_qdf(qdf, score_by="apple")
+            except ValueError as e:
+                self.assertIn(expected_err, str(e))
+            except Exception as e:
+                self.fail(f"Expected ValueError, got {type(e)}")
+
 
 if __name__ == "__main__":
     unittest.main()

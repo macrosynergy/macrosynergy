@@ -346,12 +346,13 @@ class TestAll(unittest.TestCase):
         dfd_test = pd.concat([dfd_growth, dfd_1_rv])
         dfd_test = dfd_test.reset_index(drop=True)
 
-        with self.assertRaises(ValueError):
-            dfd_update = update_df(
-                df=dfd_growth,
-                df_add=dfd_1_rv.rename(columns={"value": "BEEP"}),
-                xcat_replace=True,
-            )
+        # test that it allows adding new columns
+        testing_df: pd.DataFrame = update_df(
+            df=dfd_growth,
+            df_add=dfd_1_rv.rename(columns={"value": "BEEP"}),
+            xcat_replace=True,
+        )
+        self.assertTrue(set(["value", "grading", "BEEP"]).issubset(testing_df.columns))
 
         dfd_update = update_df(df=dfd_growth, df_add=dfd_1_rv, xcat_replace=True)
         self.assertTrue(dfd_test.shape == dfd_update.shape)
@@ -446,6 +447,13 @@ class TestAll(unittest.TestCase):
 
         result_df = update_df(empty_df, test_df)
         self.assertTrue(test_df.equals(result_df))
+
+    def test_update_tickers_errors(self):
+        with self.assertRaises(TypeError):
+            update_tickers(df=1, df_add=self.dfd)
+
+        with self.assertRaises(TypeError):
+            update_tickers(df=self.dfd, df_add=1)
 
 
 if __name__ == "__main__":

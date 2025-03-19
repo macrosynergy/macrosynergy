@@ -2,8 +2,9 @@ import unittest
 import random
 import numpy as np
 import pandas as pd
-import os
+import warnings
 from typing import List
+
 from macrosynergy.management.simulate import (
     make_qdf,
     make_qdf_black,
@@ -12,7 +13,6 @@ from macrosynergy.management.simulate import (
     make_test_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.utils import get_cid, get_xcat
 
 
 class Test_All(unittest.TestCase):
@@ -72,6 +72,8 @@ class Test_All(unittest.TestCase):
 
         random.seed(1)
         self.black_dfd = make_qdf_black(df_cids, df_xcats, self.blackout)
+        self.df_xcats = df_xcats
+        self.df_cids = df_cids
 
     @staticmethod
     def handle_nan(arr):
@@ -130,22 +132,6 @@ class Test_All(unittest.TestCase):
         self.assertEqual(
             np.max(self.dfd.loc[filt1, "real_date"]), pd.to_datetime("2020-11-30")
         )
-
-    def test_qdf_correl(self):
-        self.df_construction()
-        # self.assertGreater(self.cor_coef(self.dfd, 'AUD_XR', 'CAD_XR'), 0)
-        # self.assertGreater(self.cor_coef(self.dfd, 'AUD_XR', 'GBP_XR'), 0)
-
-    def test_qdf_ar(self):
-        self.df_construction()
-        filt1 = (self.dfd["cid"] == "AUD") & (self.dfd["xcat"] == "CRY")
-        # self.assertGreater(self.ar1_coef(self.dfd.loc[filt1, 'value']), 0.25)
-
-        filt1 = (self.dfd["cid"] == "CAD") & (self.dfd["xcat"] == "CRY")
-        # self.assertGreater(self.ar1_coef(self.dfd.loc[filt1, 'value']), 0.25)
-
-        filt1 = (self.dfd["cid"] == "GBP") & (self.dfd["xcat"] == "CRY")
-        # self.assertGreater(self.ar1_coef(self.dfd.loc[filt1, 'value']), 0.25)
 
     def test_make_qdf_black(self):
         self.df_construct_black()
@@ -212,6 +198,27 @@ class Test_All(unittest.TestCase):
         # "weekend handler" will shift the date forwards.
         self.assertTrue(pd.to_datetime("2021-11-22") == dates_df[-1])
 
+        for date_tuple in [
+            ("2000-01-01", "2010-11-01"),
+            ("2019-01-16", "2021-01-01"),
+        ]:
+            with warnings.catch_warnings(record=True) as w:
+                self.blackout["AUD"] = date_tuple
+                make_qdf_black(self.df_cids, self.df_xcats, self.blackout)
+                self.assertTrue(len(w) == 1)
+                self.assertTrue(
+                    issubclass(w[-1].category, UserWarning)
+                    and "Blackout period date not within data series range."
+                    in str(w[-1].message)
+                )
+
+        # test works with weekends
+        self.blackout["AUD"] = ("2019-01-19", "2019-11-23")
+        x = make_qdf_black(self.df_cids, self.df_xcats, self.blackout)
+
+        ts = [pd.Timestamp("2019-01-19"), pd.Timestamp("2019-11-23")]
+        self.assertTrue(x[(x["cid"] == "AUD") & (x["real_date"].isin(ts))].empty)
+
     def test_generate_lines(self):
         # generate_lines(sig_len : uint, style : str) -> Union[np.ndarray, Dict[str, np.ndarray]]
         test_len: int = 100
@@ -239,6 +246,11 @@ class Test_All(unittest.TestCase):
         self.assertRaises(ValueError, generate_lines, sig_len=test_len, style=r_str)
         self.assertRaises(ValueError, generate_lines, sig_len=-10, style=line_styles[0])
         self.assertRaises(ValueError, generate_lines, sig_len=0, style=line_styles[0])
+
+        self.assertRaises(
+            TypeError, generate_lines, sig_len="apple", style=line_styles[0]
+        )
+        self.assertRaises(TypeError, generate_lines, sig_len=test_len, style=10)
 
         r: np.ndarray = generate_lines(sig_len=test_len, style=line_styles[0])
         l: List[bool] = []
@@ -292,11 +304,32 @@ class Test_All(unittest.TestCase):
                         )
                     )
 
+    def test_make_test_args(self):
+        self.assertRaises(TypeError, make_test_df, tickers=10)
+        self.assertRaises(TypeError, make_test_df, metrics=10)
+        self.assertRaises(TypeError, make_test_df, xcats=5, cids=5)
+        self.assertRaises(ValueError, make_test_df, cids=[], xcats=["XR"])
+        self.assertRaises(TypeError, make_test_df, cids=["USD"], xcats=["XR", 10])
+        self.assertRaises(ValueError, make_test_df, start="apple")
+
+        cids, xcats, metrics = "AUD", "XR", "value"
+
+        dfa = make_test_df(cids=cids, xcats=xcats, metrics=metrics, style="linear")
+        dfb = make_test_df(
+            cids=[cids], xcats=[xcats], metrics=[metrics], style="linear"
+        )
+
+        self.assertTrue(dfa.equals(dfb))
+
+        dfa = make_test_df(tickers="AUD_FXXR_NSA", style="linear")
+        dfb = make_test_df(tickers=["AUD_FXXR_NSA"], style="linear")
+        self.assertTrue(dfa.equals(dfb))
+
     def test_make_test_df_errors(self):
         good_args: dict = {
             "cids": ["AUD", "CAD", "GBP", "USD"],
             "xcats": ["XR", "IR"],
-            "tickers": ["USD_FXXR_NSA"],
+            # "tickers": ["USD_FXXR_NSA"],
             "metrics": ["all"],
             "start": "2010-01-01",
             "end": "2020-12-31",
@@ -308,7 +341,9 @@ class Test_All(unittest.TestCase):
         for argx in good_args.keys():
             bad_args: dict = good_args.copy()
             bad_args[argx] = 10
-            self.assertRaises(TypeError, make_test_df, **bad_args)
+            self.assertRaises(
+                TypeError, make_test_df, **bad_args, msg=f"Testing {argx}"
+            )
 
         # test value errors
         for argx in ["cids", "xcats"]:
@@ -325,9 +360,7 @@ class Test_All(unittest.TestCase):
 
     def test_make_test_df_metrics(self):
         good_args: dict = {
-            "cids": ["AUD", "CAD", "GBP", "USD"],
-            "xcats": ["XR", "IR"],
-            "tickers": ["USD_FXXR_NSA"],
+            "tickers": ["USD_FXXR_NSA", "GBP_FXXR_NSA"],
             "metrics": ["all"],
             "start": "2010-01-01",
             "end": "2020-12-31",
@@ -347,6 +380,85 @@ class Test_All(unittest.TestCase):
             self.assertTrue(
                 set(df.columns) - set(QuantamentalDataFrame.IndexCols) == {metric}
             )
+
+
+class TestMakeQDF(unittest.TestCase):
+    def setUp(self):
+        # Sample data for df_cids
+        self.df_cids = pd.DataFrame(
+            {
+                "earliest": ["2020-01-01", "2020-01-01"],
+                "latest": ["2021-01-01", "2021-01-01"],
+                "mean_add": [0.5, -0.5],
+                "sd_mult": [1.0, 1.5],
+            },
+            index=["cid1", "cid2"],
+        )
+
+        # Sample data for df_xcats
+        self.df_xcats = pd.DataFrame(
+            {
+                "earliest": ["2020-01-01", "2020-01-01"],
+                "latest": ["2021-01-01", "2021-01-01"],
+                "mean_add": [1.0, -1.0],
+                "sd_mult": [0.8, 1.2],
+                "ar_coef": [0.2, 0.5],
+                "back_coef": [0.0, 0.3],
+            },
+            index=["xcat1", "xcat2"],
+        )
+
+    def test_make_qdf_output_structure(self):
+        # Test that the output has the correct structure
+        result = make_qdf(self.df_cids, self.df_xcats)
+        expected_columns = ["cid", "xcat", "real_date", "value"]
+        self.assertTrue(all(column in result.columns for column in expected_columns))
+
+    def test_make_qdf_non_empty(self):
+        # Test that the resulting DataFrame is not empty
+        result = make_qdf(self.df_cids, self.df_xcats)
+        self.assertGreater(len(result), 0)
+
+    def test_make_qdf_dates_range(self):
+        # Test that the dates in the result are within the specified range
+        result = make_qdf(self.df_cids, self.df_xcats)
+        min_date = pd.to_datetime(
+            min(self.df_cids["earliest"].min(), self.df_xcats["earliest"].min())
+        )
+        max_date = pd.to_datetime(
+            max(self.df_cids["latest"].max(), self.df_xcats["latest"].max())
+        )
+        self.assertTrue(result["real_date"].min() >= min_date)
+        self.assertTrue(result["real_date"].max() <= max_date)
+
+    def test_make_qdf_values_non_nan(self):
+        # Test that there are no NaN values in the 'value' column
+        result = make_qdf(self.df_cids, self.df_xcats)
+        self.assertFalse(result["value"].isna().any())
+
+    def test_make_qdf_autocorrelation_effect(self):
+        # Test that the autocorrelation and background coefficient have some effect on the values
+        df_xcats_with_back = self.df_xcats.copy()
+        df_xcats_with_back["back_coef"] = [0.5, 0.7]
+        result_with_back = make_qdf(self.df_cids, df_xcats_with_back)
+        result_without_back = make_qdf(self.df_cids, self.df_xcats)
+        # Assert that the values are different when back_coef is present
+        self.assertFalse(
+            np.allclose(result_with_back["value"], result_without_back["value"])
+        )
+
+    def test_make_qdf_seed(self):
+
+        dfa = make_qdf(self.df_cids, self.df_xcats, seed=1)
+        dfb = make_qdf(self.df_cids, self.df_xcats, seed=1)
+
+        self.assertTrue(dfa.equals(dfb))
+
+        dfc = make_qdf(self.df_cids, self.df_xcats, seed=128)
+        dfd = make_qdf(self.df_cids, self.df_xcats, seed=128)
+
+        self.assertTrue(dfd.equals(dfc))
+        self.assertFalse(dfa.equals(dfc))
 
 
 if __name__ == "__main__":
