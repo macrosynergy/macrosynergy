@@ -401,14 +401,13 @@ class ScoreVisualisers:
             dfw = dfw[xcats]
 
         if xcat_labels:
-            if set(self._apply_postfix(list(xcat_labels.keys()))) >= set(dfw.columns):
-                dfw.columns = [
-                    xcat_labels.get(
-                        self._strip_postfix([xcat])[0],
-                        xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
-                    )
-                    for xcat in dfw.columns
-                ]
+            dfw.columns = [
+                xcat_labels.get(
+                    self._strip_postfix([xcat])[0],
+                    xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
+                )
+                for xcat in dfw.columns
+            ]
 
         if transpose:
             dfw = dfw.transpose()
@@ -714,16 +713,13 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled[xcats]
 
         if xcat_labels:
-            if set(self._apply_postfix(list(xcat_labels.keys()))) >= set(
-                dfw_resampled.columns
-            ):
-                dfw_resampled.columns = [
-                    xcat_labels.get(
-                        self._strip_postfix([xcat])[0],
-                        xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
-                    )
-                    for xcat in dfw_resampled.columns
-                ]
+            dfw_resampled.columns = [
+                xcat_labels.get(
+                    self._strip_postfix([xcat])[0],
+                    xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
+                )
+                for xcat in dfw_resampled.columns
+            ]
 
         dfw_resampled = dfw_resampled.transpose()
 
@@ -848,22 +844,22 @@ if __name__ == "__main__":
         rescore_composite=True,
     )
 
-    # sv.view_snapshot(
-    #     cids=["USD", "EUR", "JPY", "GBP", "CHF"],
-    #     xcats=xcats + ["Composite"],
-    #     figsize=(14, 12),
-    #     sort_by_composite=True,
-    #     composite_to_end=True,
-    #     transpose=False,
-    #     yticks_rotation=45,
-    # )
+    sv.view_snapshot(
+        cids=["USD", "EUR", "JPY", "GBP", "CHF"],
+        xcats=xcats + ["Composite"],
+        figsize=(14, 12),
+        sort_by_composite=True,
+        composite_to_end=True,
+        transpose=False,
+        yticks_rotation=45,
+    )
     sv.view_cid_evolution(cid="USD", xcats=xcats + ["Composite", "BEEP"] , freq="A", transpose=False)
-    # sv.view_score_evolution(
-    #     xcat="GGIEDGDP_NSA",
-    #     cids=cids,
-    #     freq="BA",
-    #     transpose=False,
-    #     start="2010-01-01",
-    #     title="AHKSJDA",
-    #     include_latest_day=True,
-    # )
+    sv.view_score_evolution(
+        xcat="GGIEDGDP_NSA",
+        cids=cids,
+        freq="BA",
+        transpose=False,
+        start="2010-01-01",
+        title="AHKSJDA",
+        include_latest_day=True,
+    )
