@@ -139,6 +139,7 @@ class TestReturnForecaster(unittest.TestCase):
                 inner_splitters = {
                     "Rolling": RollingKFoldPanelSplit(5),
                 },
+                store_correlations=True if i==3 else False,
             )
 
             # For each pipeline, run a forecast on November 30th 2020
@@ -150,6 +151,7 @@ class TestReturnForecaster(unittest.TestCase):
                 inner_splitters = {
                     "Rolling": RollingKFoldPanelSplit(5),
                 },
+                store_correlations=True if i==3 else False,
             )
 
         # Create invalid blacklist dictionaries for the different experiments
@@ -241,4 +243,36 @@ class TestReturnForecaster(unittest.TestCase):
         rf_preds.iloc[:,2] = rf_preds.iloc[:,2].str.split("_").str[1]
 
         np.testing.assert_array_equal(so_preds.values, rf_preds.values)
+
+        # Check the feature importances for each model align
+        so_fi = self.so.get_feature_importances()[self.so.get_feature_importances().real_date==pd.Timestamp(year=2020, month=11, day=30)].dropna()
+        rf_fi = self.rf.get_feature_importances().dropna()
+        so_fi.iloc[:,1] = so_fi.iloc[:,1].str.split("_").str[1]
+        rf_fi.iloc[:,1] = rf_fi.iloc[:,1].str.split("_").str[1]
+
+        np.testing.assert_array_equal(so_fi.values, rf_fi.values)
+
+        # Check the intercepts for each model align
+        so_int = self.so.get_intercepts()[self.so.get_intercepts().real_date==pd.Timestamp(year=2020, month=11, day=30)].dropna()
+        rf_int = self.rf.get_intercepts().dropna()
+        so_int.iloc[:,1] = so_int.iloc[:,1].str.split("_").str[1]
+        rf_int.iloc[:,1] = rf_int.iloc[:,1].str.split("_").str[1]
+
+        np.testing.assert_array_equal(so_int.values, rf_int.values)
+
+        # Check feature selection aligns
+        so_fs = self.so.get_selected_features()[self.so.get_selected_features().real_date==pd.Timestamp(year=2020, month=11, day=30)]
+        rf_fs = self.rf.get_selected_features()
+        so_fs.iloc[:,1] = so_fs.iloc[:,1].str.split("_").str[1]
+        rf_fs.iloc[:,1] = rf_fs.iloc[:,1].str.split("_").str[1]
+
+        np.testing.assert_array_equal(so_fs.values, rf_fs.values)
+
+        # Check that the feature correlations are appropriately calculated
+        so_corr = self.so.get_feature_correlations()[self.so.get_feature_correlations().real_date==pd.Timestamp(year=2020, month=11, day=30)]
+        rf_corr = self.rf.get_feature_correlations()
+        so_corr.iloc[:,1] = so_corr.iloc[:,1].str.split("_").str[1]
+        rf_corr.iloc[:,1] = rf_corr.iloc[:,1].str.split("_").str[1]
+
+        np.testing.assert_array_equal(so_corr.values, rf_corr.values)
 
