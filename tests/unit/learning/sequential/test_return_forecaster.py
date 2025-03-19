@@ -12,7 +12,7 @@ from sklearn.linear_model import Ridge, LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score, make_scorer
 
-from macrosynergy.learning import PanelPCA, PanelStandardScaler, LassoSelector, SignalOptimizer, RollingKFoldPanelSplit
+from macrosynergy.learning import PanelPCA, PanelStandardScaler, LassoSelector, SignalOptimizer, RollingKFoldPanelSplit, ReturnForecaster
 
 class TestReturnForecaster(unittest.TestCase):
     @classmethod
@@ -57,18 +57,18 @@ class TestReturnForecaster(unittest.TestCase):
             {
                 "Ridge": Pipeline([
                     ("scaler", PanelStandardScaler()),
-                    ("ridge", Ridge())
+                    ("ridge", Ridge(random_state = 42))
                 ]),
             },
             {
                 "Var+LR": Pipeline([
                     ("scaler", PanelStandardScaler()),
-                    ("selector", LassoSelector(n_components = 2)),
+                    ("selector", LassoSelector(n_factors = 2)),
                     ("lr", LinearRegression())
                 ]),
             },
             {
-                "RF": RandomForestRegressor(random_state = 1),
+                "RF": RandomForestRegressor(random_state = 1, n_estimators=20, max_depth = 3),
             },
             {
                 "PCA+Ridge": Pipeline([
@@ -102,16 +102,36 @@ class TestReturnForecaster(unittest.TestCase):
 
         self.names = ["Ridge", "Var+LR", "RF", "PCA+Ridge"]
 
-        self.sos = []
-        self.rfs = []
+        self.evaluation_date = "2020-11-30" # Aim to produce forecast for December 2020
+
+        self.black_valid = {
+            "AUD": (
+                pd.Timestamp(year=2018, month=9, day=1),
+                pd.Timestamp(year=2020, month=4, day=1),
+            ),
+            "GBP": (
+                pd.Timestamp(year=2019, month=6, day=1),
+                pd.Timestamp(year=2020, month=12, day=31),
+            ),
+        }
+
+        # Initialize signal optimizer and return forecaster classes
+        self.so = SignalOptimizer(
+            df = self.df,
+            xcats = ["CPI", "GROWTH", "RIR", "XR"],
+            blacklist = self.black_valid,
+        )
+
+        self.rf = ReturnForecaster(
+            df = self.df,
+            xcats = ["CPI", "GROWTH", "RIR", "XR"],
+            real_date = self.evaluation_date,
+            blacklist = self.black_valid,
+        )
 
         for i in range(len(self.pipelines)):
             # For each pipeline, run a sequential process
-            so = SignalOptimizer(
-                df = self.df,
-                xcats = ["CPI", "GROWTH", "RIR", "XR"],
-            )
-            so.calculate_predictions(
+            self.so.calculate_predictions(
                 name = "SO_" + self.names[i],
                 models = self.pipelines[i],
                 hyperparameters = self.hyperparameters[i],
@@ -120,4 +140,105 @@ class TestReturnForecaster(unittest.TestCase):
                     "Rolling": RollingKFoldPanelSplit(5),
                 },
             )
-            self.sos.append(so)
+
+            # For each pipeline, run a forecast on November 30th 2020
+            self.rf.calculate_predictions(
+                name = "RF_" + self.names[i],
+                models = self.pipelines[i],
+                hyperparameters = self.hyperparameters[i],
+                scorers = {"R2": make_scorer(r2_score)},
+                inner_splitters = {
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+
+        # Create invalid blacklist dictionaries for the different experiments
+        self.black_invalid1 = {
+            "AUD": ["2018-09-01", "2018-10-01"],
+            "GBP": ["2019-06-01", "2100-01-01"],
+        }
+        self.black_invalid2 = {
+            "AUD": ("2018-09-01", "2018-10-01"),
+            "GBP": ("2019-06-01", "2100-01-01"),
+        }
+        self.black_invalid3 = {
+            "AUD": [
+                pd.Timestamp(year=2018, month=9, day=1),
+                pd.Timestamp(year=2018, month=10, day=1),
+            ],
+            "GBP": [
+                pd.Timestamp(year=2019, month=6, day=1),
+                pd.Timestamp(year=2100, month=1, day=1),
+            ],
+        }
+        self.black_invalid4 = {
+            "AUD": (pd.Timestamp(year=2018, month=9, day=1),),
+            "GBP": (
+                pd.Timestamp(year=2019, month=6, day=1),
+                pd.Timestamp(year=2100, month=1, day=1),
+            ),
+        }
+        self.black_invalid5 = {
+            1: (
+                pd.Timestamp(year=2018, month=9, day=1),
+                pd.Timestamp(year=2018, month=10, day=1),
+            ),
+            2: (
+                pd.Timestamp(year=2019, month=6, day=1),
+                pd.Timestamp(year=2100, month=1, day=1),
+            ),
+        }
+
+    @classmethod
+    def tearDownClass(self) -> None:
+        patch.stopall()
+        plt.close("all")
+        matplotlib.use(self.mpl_backend)
+
+    def test_valid_init(self):
+        """
+        Test that the initialization of ReturnForecaster results in the same dataset
+        as the initialization of SignalOptimizer.
+        """
+        # Return forecaster training and test sets
+        X_train_rf = self.rf.X
+        y_train_rf = self.rf.y
+        X_test_rf = self.rf.X_test
+
+        # Signal optimizer training and test sets
+        X = self.so.X
+        y = self.so.y
+        X_train_so = X[X.index.get_level_values(1) <= pd.Timestamp(year=2020, month=11, day=30)]
+        y_train_so = y[y.index.get_level_values(1) <= pd.Timestamp(year=2020, month=11, day=30)]
+        X_test_so = X[X.index.get_level_values(1) > pd.Timestamp(year=2020, month=11, day=30)]
+
+        # Check that each training set is the same 
+        np.testing.assert_array_equal(X_train_rf.values, X_train_so.values)
+        np.testing.assert_array_equal(y_train_rf.values, y_train_so.values)
+
+        # Check that each test set is the same
+        np.testing.assert_array_equal(X_test_rf.values, X_test_so.values)
+
+    def test_valid_functionality(self):
+        """
+        Test that ReturnForecaster and SignalOptimizer give the same results when run with
+        the same parameters at the end of November 2020.
+        """
+        # First check that the models selected are the same on the evaluation date
+        so_models_selected = self.so.get_optimal_models()[self.so.get_optimal_models().real_date==pd.Timestamp(year=2020, month=11, day=30)]
+        rf_models_selected = self.rf.get_optimal_models()
+
+        # First rename the model names to match
+        so_models_selected.iloc[:,1] = so_models_selected.iloc[:,1].str.split("_").str[1]
+        rf_models_selected.iloc[:,1] = rf_models_selected.iloc[:,1].str.split("_").str[1]
+
+        np.testing.assert_array_equal(so_models_selected.values, rf_models_selected.values)
+
+        # Check that the predictions for each pipeline align
+        so_preds = self.so.get_optimized_signals()[self.so.get_optimized_signals().real_date==pd.Timestamp(year=2020, month=11, day=30)].dropna()
+        rf_preds = self.rf.get_optimized_signals()
+        so_preds.iloc[:,2] = so_preds.iloc[:,2].str.split("_").str[1]
+        rf_preds.iloc[:,2] = rf_preds.iloc[:,2].str.split("_").str[1]
+
+        np.testing.assert_array_equal(so_preds.values, rf_preds.values)
+

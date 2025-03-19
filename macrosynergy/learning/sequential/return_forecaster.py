@@ -1,6 +1,6 @@
 """
-Class to produce point forecasts of returns given knowledge of an indicator state on a 
-specific date. 
+Class to produce point forecasts of returns given knowledge of an indicator state on a
+specific date.
 """
 
 import numpy as np
@@ -9,12 +9,18 @@ from sklearn.feature_selection import SelectorMixin
 from sklearn.pipeline import Pipeline
 
 from macrosynergy.learning.sequential import BasePanelLearner
-from macrosynergy.management.utils import concat_categorical, _insert_as_categorical
+from macrosynergy.management.utils import (
+    concat_categorical,
+    _insert_as_categorical,
+    reduce_df,
+)
+from macrosynergy.management.types import QuantamentalDataFrame
+
 
 class ReturnForecaster(BasePanelLearner):
     """
-    Class to produce return forecasts for a single forward frequency, based on the 
-    indicator states at a specific date. 
+    Class to produce return forecasts for a single forward frequency, based on the
+    indicator states at a specific date.
 
     Parameters
     ----------
@@ -49,12 +55,13 @@ class ReturnForecaster(BasePanelLearner):
     -----
     This class is a simple interface to produce a single period forward
     forecast. The `real_date` parameter specifies the date of the information state used
-    to generate the forecast. As an example, if the provided date is "2025-03-01", a 
+    to generate the forecast. As an example, if the provided date is "2025-03-01", a
     monthly frequency is specified and the lag is 1, the information
     states on this date are set aside, and the previous data is downsampled to monthly
     (with the features lagged by 1 period).  On this dataset, model selection and fitting
     happen - and the forecast is produced for the single out-of-sample period (March 2025).
     """
+
     def __init__(
         self,
         df,
@@ -67,32 +74,40 @@ class ReturnForecaster(BasePanelLearner):
         xcat_aggs=["last", "sum"],
         generate_labels=None,
     ):
-        
+        # Checks not covered by
+
         # First check that all factors are available on the real date
         # and that the date is in the dataframe
         self.real_date = pd.to_datetime(real_date)
         self._check_factor_availability(df, xcats, self.real_date)
-        
+
         # Separate in-sample and out-of-sample data
-        df_train = df[df.real_date < real_date]
-        df_test = df[df.real_date == real_date]
+        df_train = df[df.real_date <= self.real_date]  # COME BACK AND JUSTIFY THIS
+        df_test = df[df.real_date == self.real_date]
 
         # Set up supervised learning training set
         super().__init__(
-            df = df_train,
-            xcats = xcats,
-            cids = cids,
-            start = None,
-            end = None,
-            blacklist = blacklist,
-            freq = freq,
-            lag = lag,
+            df=df_train,
+            xcats=xcats,
+            cids=cids,
+            start=None,
+            end=None,
+            blacklist=blacklist,
+            freq=freq,
+            lag=lag,
             xcat_aggs=xcat_aggs,
             generate_labels=generate_labels,
         )
 
         # Set up out-of-sample dataset for forecasting
-        self.X_test = df_test.pivot(index = ["cid", "real_date"], columns = "xcat", values = "value")[self.X.columns].dropna()
+        self.X_test = (
+            reduce_df(df=df_test, blacklist=blacklist)
+            .pivot(index=["cid", "real_date"], columns="xcat", values="value")[
+                self.X.columns
+            ]
+            .dropna()
+        )
+        self.unique_test_levels = self.X_test.index.get_level_values(0).unique()
 
         # Set up data structures for analytics
         self.preds = pd.DataFrame(columns=["real_date", "cid", "xcat", "value"]).astype(
@@ -163,8 +178,8 @@ class ReturnForecaster(BasePanelLearner):
         normalize_fold_results=False,
         cv_summary="mean",
         n_iter=None,
-        n_jobs_cv = 1,
-        n_jobs_model = 1,
+        n_jobs_cv=1,
+        n_jobs_model=1,
         store_correlations=False,
     ):
         """
@@ -255,7 +270,7 @@ class ReturnForecaster(BasePanelLearner):
             n_jobs_inner=n_jobs_cv,
             base_splits=base_splits,
             n_splits_add=None,
-            timestamp = self.real_date,
+            timestamp=self.real_date,
         )
 
         self._check_duplicate_results(name)
@@ -280,14 +295,18 @@ class ReturnForecaster(BasePanelLearner):
             index=self.X_test.index, columns=[name], data=np.nan, dtype="float32"
         )
         # Create quantamental dataframe of forecasts
-        model = models[optim_results["model_choice"][1]].set_params(**optim_results["model_choice"][3]).fit(self.X, self.y)
+        model = (
+            models[optim_results["model_choice"][1]]
+            .set_params(**optim_results["model_choice"][3])
+            .fit(self.X, self.y)
+        )
         forecasts = model.predict(self.X_test)
-        forecasts_df.iloc[:,0] = forecasts
+        forecasts_df.iloc[:, 0] = forecasts
 
         if self.blacklist is not None:
             for cross_section, periods in self.blacklist.items():
                 cross_section_key = cross_section.split("_")[0]
-                if cross_section_key in self.unique_xs_levels:
+                if cross_section_key in self.unique_test_levels:
                     forecasts_df.loc[
                         (cross_section_key, slice(periods[0], periods[1])), :
                     ] = np.nan
@@ -356,7 +375,7 @@ class ReturnForecaster(BasePanelLearner):
             self.ftr_corr,
             ftr_corr_df_long,
         )
-    
+
     def _check_duplicate_results(self, name):
         conditions = [
             ("preds", "xcat", name),
@@ -487,7 +506,7 @@ class ReturnForecaster(BasePanelLearner):
         }
 
         return split_result
-    
+
     def _get_ftr_corr_data(self, pipeline_name, optimal_model, X_train, timestamp):
         """
         Returns a list of correlations between the input features to a pipeline and the
@@ -555,7 +574,7 @@ class ReturnForecaster(BasePanelLearner):
             ftr_corr_data = []
 
         return ftr_corr_data
-    
+
     def get_optimized_signals(self, name=None):
         """
         Returns forward forecasts for one or more pipelines.
@@ -597,7 +616,7 @@ class ReturnForecaster(BasePanelLearner):
         ).to_original_dtypes()
 
         return signals_df
-    
+
     def get_selected_features(self, name=None):
         """
         Returns the selected features for one or more pipelines.
@@ -632,7 +651,7 @@ class ReturnForecaster(BasePanelLearner):
                         """
                     )
             return self.selected_ftrs[self.selected_ftrs.name.isin(name)]
-        
+
     def get_feature_importances(self, name=None):
         """
         Returns feature importances for one or more pipelines.
@@ -675,7 +694,7 @@ class ReturnForecaster(BasePanelLearner):
             return self.feature_importances[
                 self.feature_importances.name.isin(name)
             ].sort_values(by="real_date")
-        
+
     def get_intercepts(self, name=None):
         """
         Returns intercepts for one or more pipelines.
@@ -713,7 +732,7 @@ class ReturnForecaster(BasePanelLearner):
             return self.intercepts[self.intercepts.name.isin(name)].sort_values(
                 by="real_date"
             )
-        
+
     def get_feature_correlations(
         self,
         name=None,
@@ -753,7 +772,7 @@ class ReturnForecaster(BasePanelLearner):
                         """
                     )
             return self.ftr_corr[self.ftr_corr.name.isin(name)]
-    
+
     def _check_factor_availability(self, df, xcats, real_date):
         """
         Check the date is in the dataframe and all categories are available on the date.
@@ -766,23 +785,30 @@ class ReturnForecaster(BasePanelLearner):
                 f"Real date {real_date} is either not larger than the earliest date in the dataframe"
                 " or nor smaller or equal to the latest date in the dataframe."
             )
-        
+
         # Check that the date is in the dataframe
         if real_date not in df.real_date.unique():
             raise ValueError(f"Real date {real_date} is not in the dataframe.")
-        
+
         # Check that all categories are available on the date
-        num_categories = len(df[df.real_date==real_date].xcat.unique())
+        num_categories = len(df[df.real_date == real_date].xcat.unique())
         if num_categories != len(xcats):
             raise ValueError(
                 f"Not all categories are available on the real date {real_date}."
             )
-    
+
+
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
     from macrosynergy.management.types import QuantamentalDataFrame
 
-    from macrosynergy.learning import ExpandingKFoldPanelSplit, sharpe_ratio, MapSelector, PanelStandardScaler, PanelPCA
+    from macrosynergy.learning import (
+        ExpandingKFoldPanelSplit,
+        sharpe_ratio,
+        MapSelector,
+        PanelStandardScaler,
+        PanelPCA,
+    )
 
     from sklearn.metrics import make_scorer
     from sklearn.linear_model import Ridge, LinearRegression
@@ -807,98 +833,88 @@ if __name__ == "__main__":
     df_xcats.loc["INFL"] = ["2012-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-    
+
     # Initialize the return forecaster
     rf = ReturnForecaster(
-        df = dfd,
-        xcats = ["CRY", "GROWTH", "INFL", "XR"],
-        real_date = "2020-02-28",
-        freq = "M",
-        lag = 1,
-        xcat_aggs = ["last", "sum"],
+        df=dfd,
+        xcats=["CRY", "GROWTH", "INFL", "XR"],
+        real_date="2020-02-28",
+        freq="M",
+        lag=1,
+        xcat_aggs=["last", "sum"],
     )
 
     rf.calculate_predictions(
-        name = "ridge1",
-        models = {
-            "Ridge": Pipeline([
-                ("scaler", StandardScaler()),
-                ("ridge", Ridge())
-            ])
-        },
-        hyperparameters = {
-            "Ridge": {}
-        },
-        scorers = {
+        name="ridge1",
+        models={"Ridge": Pipeline([("scaler", StandardScaler()), ("ridge", Ridge())])},
+        hyperparameters={"Ridge": {}},
+        scorers={
             "sharpe": make_scorer(sharpe_ratio, greater_is_better=True),
         },
-        inner_splitters = {
+        inner_splitters={
             "Expanding": ExpandingKFoldPanelSplit(5),
         },
-        cv_summary = "mean-std",
+        cv_summary="mean-std",
     )
 
     rf.calculate_predictions(
-        name = "ridge100",
-        models = {
-            "Ridge": Pipeline([
-                ("scaler", StandardScaler()),
-                ("ridge", Ridge(alpha = 100))
-            ])
+        name="ridge100",
+        models={
+            "Ridge": Pipeline(
+                [("scaler", StandardScaler()), ("ridge", Ridge(alpha=100))]
+            )
         },
-        hyperparameters = {
-            "Ridge": {}
-        },
-        scorers = {
+        hyperparameters={"Ridge": {}},
+        scorers={
             "sharpe": make_scorer(sharpe_ratio, greater_is_better=True),
         },
-        inner_splitters = {
+        inner_splitters={
             "Expanding": ExpandingKFoldPanelSplit(5),
         },
-        cv_summary = "mean-std",
+        cv_summary="mean-std",
     )
 
     rf.calculate_predictions(
-        name = "var+lr",
-        models = {
-            "Ridge": Pipeline([
-                ("scaler", PanelStandardScaler()),
-                ("selector", MapSelector(n_factors = 2)),
-                ("ridge", LinearRegression())
-            ])
+        name="var+lr",
+        models={
+            "Ridge": Pipeline(
+                [
+                    ("scaler", PanelStandardScaler()),
+                    ("selector", MapSelector(n_factors=2)),
+                    ("ridge", LinearRegression()),
+                ]
+            )
         },
-        hyperparameters = {
-            "Ridge": {}
-        },
-        scorers = {
+        hyperparameters={"Ridge": {}},
+        scorers={
             "sharpe": make_scorer(sharpe_ratio, greater_is_better=True),
         },
-        inner_splitters = {
+        inner_splitters={
             "Expanding": ExpandingKFoldPanelSplit(5),
         },
-        cv_summary = "mean-std",
+        cv_summary="mean-std",
     )
 
     rf.calculate_predictions(
-        name = "pca+lr",
-        models = {
-            "Ridge": Pipeline([
-                ("scaler", PanelStandardScaler()),
-                ("selector", PanelPCA(n_components = 2, adjust_signs = True)),
-                ("ridge", LinearRegression())
-            ])
+        name="pca+lr",
+        models={
+            "Ridge": Pipeline(
+                [
+                    ("scaler", PanelStandardScaler()),
+                    ("selector", PanelPCA(n_components=2, adjust_signs=True)),
+                    ("ridge", LinearRegression()),
+                ]
+            )
         },
-        hyperparameters = {
-            "Ridge": {}
-        },
-        scorers = {
+        hyperparameters={"Ridge": {}},
+        scorers={
             "sharpe": make_scorer(sharpe_ratio, greater_is_better=True),
         },
-        inner_splitters = {
+        inner_splitters={
             "Expanding": ExpandingKFoldPanelSplit(5),
         },
-        cv_summary = "mean-std",
-        store_correlations=True
+        cv_summary="mean-std",
+        store_correlations=True,
     )
 
     print(rf.get_optimized_signals())
