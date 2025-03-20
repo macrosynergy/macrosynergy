@@ -123,7 +123,7 @@ class ReturnForecaster(BasePanelLearner):
             lag=lag,
             xcat_aggs=xcat_aggs,
             generate_labels=generate_labels,
-            skip_checks=True
+            skip_checks=True # So that the checks aren't run twice
         )
 
         # Set up out-of-sample dataset for forecasting
