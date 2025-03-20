@@ -1328,3 +1328,87 @@ class TestReturnForecaster(unittest.TestCase):
 
         np.testing.assert_array_equal(so_corr.values, rf_corr.values)
 
+    def test_types_get_optimized_signals(self):
+        """
+        Test that the get_optimized_signals parameter checking works as expected.
+        """
+        rf = self.rf
+
+        # Test invalid names are caught
+        with self.assertRaises(TypeError):
+            rf.get_optimized_signals(name=1)
+        with self.assertRaises(TypeError):
+            rf.get_optimized_signals(name={})
+
+        # Test an error is raised if a wrong name is passed
+        with self.assertRaises(ValueError):
+            rf.get_optimized_signals(name=["test", "test2"])
+        with self.assertRaises(ValueError):
+            rf.get_optimized_signals(name="test2")
+
+        # Test that if no signals have been calculated, an error is raised
+        rf = ReturnForecaster(
+            df=self.df,
+            xcats=self.xcats,
+            real_date=self.evaluation_date,
+        )
+        with self.assertRaises(ValueError):
+            rf.get_optimized_signals(name="test2")
+
+    def test_valid_get_optimized_signals(self):
+        """
+        Test that the get_optimized_signals method returns a dataframe in the 
+        expected format.
+        """
+        signals = self.rf.get_optimized_signals()
+        self.assertIsInstance(signals, pd.DataFrame)
+        self.assertEqual(signals.shape[1], 4)
+        self.assertEqual(signals.columns[0], "real_date")
+        self.assertEqual(signals.columns[1], "cid")
+        self.assertEqual(signals.columns[2], "xcat")
+        self.assertEqual(signals.columns[3], "value")
+        self.assertTrue(len(signals) > 0)
+        self.assertTrue(len(signals) == len(self.pipelines)*(len(self.cids)-1)) # -1 because of a blacklisted country
+        self.assertTrue(signals["value"].dtype == np.float32)
+
+    def test_types_get_selected_features(self):
+        """
+        Test that the get_selected_features parameter checking works as expected.
+        """
+        rf = self.rf
+
+        # Test invalid names are caught
+        with self.assertRaises(TypeError):
+            rf.get_selected_features(name=1)
+        with self.assertRaises(TypeError):
+            rf.get_selected_features(name={})
+
+        # Test an error is raised if a wrong name is passed
+        with self.assertRaises(ValueError):
+            rf.get_selected_features(name=["test", "test2"])
+        with self.assertRaises(ValueError):
+            rf.get_selected_features(name="test2")
+
+        # Test that if no signals have been calculated, an error is raised
+        rf = ReturnForecaster(
+            df=self.df,
+            xcats=self.xcats,
+            real_date=self.evaluation_date,
+        )
+        with self.assertRaises(ValueError):
+            rf.get_optimized_signals(name="test2")
+
+    def test_valid_get_selected_features(self):
+        """
+        Test that the get_selected_features method returns a dataframe in the 
+        expected format.
+        """
+        selected_ftrs = self.rf.get_selected_features()
+        self.assertIsInstance(selected_ftrs, pd.DataFrame)
+        self.assertEqual(selected_ftrs.shape[1], 5)
+        self.assertEqual(selected_ftrs.columns[0], "real_date")
+        self.assertEqual(selected_ftrs.columns[1], "name")
+        for i in range(2, 5):
+            self.assertEqual(selected_ftrs.columns[i], self.rf.X.columns[i - 2])
+        self.assertTrue(len(selected_ftrs) > 0)
+        self.assertTrue(len(selected_ftrs) == len(self.pipelines))
