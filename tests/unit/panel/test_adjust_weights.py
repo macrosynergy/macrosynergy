@@ -181,6 +181,12 @@ class TestNormalizeWeights(unittest.TestCase):
                     expected = df_zero.loc[idx] / df_zero.loc[idx].sum()
                     pd.testing.assert_series_equal(row, expected)
 
+    def test_normalize_random_exception(self):
+        self.df_valid[np.random.random(self.df_valid.shape) < 0.2] = np.inf
+
+        with self.assertRaises(Exception):
+            normalize_weights(self.df_valid)
+
 
 class TestSplitWeightsAdjZns(unittest.TestCase):
     def setUp(self):
