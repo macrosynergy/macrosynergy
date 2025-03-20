@@ -210,6 +210,35 @@ class TestSplitWeightsAdjZns(unittest.TestCase):
                         split_weights_adj_zns(df, self.weights, self.adj_zns)
                     self.assertIn("Missing tickers", str(context.exception))
 
+    def test_missing_dates_filling(self):
+        # choose 20% of the dates to be missing
+        all_dates = self.df["real_date"].unique().tolist()
+        missing_dates = np.random.choice(
+            all_dates, int(0.1 * len(all_dates)), replace=False
+        )
+
+        # remove the missing dates from the dataframe for adj_zns
+        self.df.loc[
+            (self.df["real_date"].isin(missing_dates))
+            & (self.df["xcat"] == self.adj_zns),
+            "value",
+        ] = np.nan
+
+        with warnings.catch_warnings(record=True) as w:
+            _, df_adj_zns_wide = split_weights_adj_zns(
+                self.df, self.weights, self.adj_zns
+            )
+            self.assertTrue(len(w) > 0)
+            last_warn = w[-1].message.args[0]
+            for date in missing_dates:
+                with self.subTest(date=date):
+                    self.assertIn(date.strftime("%Y-%m-%d"), last_warn)
+
+        # check that the missing dates have been filled with 1
+        for date in missing_dates:
+            with self.subTest(date=date):
+                self.assertTrue(np.allclose(df_adj_zns_wide.loc[date].values, 1))
+
 
 def get_primes(n):
     """Return a list of the first n prime numbers."""
@@ -326,6 +355,9 @@ def expected_adjusted_weights(
     )
     check_missing_cids_xcats(weights, adj_zns, cids, r_xcats, r_cids)
     df_weights_wide, df_adj_zns_wide = split_weights_adj_zns(df, weights, adj_zns)
+    nan_rows = df_adj_zns_wide.isna().all(axis="columns")
+    df_adj_zns_wide.loc[nan_rows] = 1
+
     dfw_result = adjust_weights_backend(
         df_weights_wide, df_adj_zns_wide, method, params
     )
@@ -355,9 +387,12 @@ class TestAdjustWeightsMain(unittest.TestCase):
             for _cid in self.cids
         }
 
-        start, end = "2020-01-01", "2021-02-01"
+        self.start, self.end = "2020-01-01", "2021-02-01"
         temp_df = make_test_df(
-            tickers=self.tickers, start=start, end=end, style="linear"
+            tickers=self.tickers,
+            start=self.start,
+            end=self.end,
+            style="linear",
         )
         wdf = qdf_to_ticker_df(temp_df)
         for ticker, weight in self.ticker_weights.items():
@@ -383,9 +418,6 @@ class TestAdjustWeightsMain(unittest.TestCase):
             self.assertTrue(adjusted.eq(expc_result).all().all())
 
     def test_adjust_weights_with_nans(self):
-        nan_weights_mask = np.random.random(len(self.qdf)) < 0.2
-        self.qdf.loc[nan_weights_mask, "value"] = np.nan
-
         all_nan_date: pd.Timestamp = np.random.choice(self.qdf["real_date"].unique())
         self.qdf.loc[
             (self.qdf["real_date"] == all_nan_date) & self.qdf["xcat"].eq("AZ"), "value"
@@ -407,7 +439,7 @@ class TestAdjustWeightsMain(unittest.TestCase):
 
             last_warn = w[-1].message.args[0]
             ts_str = pd.Timestamp(all_nan_date).strftime("%Y-%m-%d")
-            err_str = "dates have no data"
+            err_str = "Missing ZNs data (will be filled with 1"
             self.assertIn(ts_str, last_warn)
             self.assertIn(err_str, last_warn)
 
@@ -444,10 +476,11 @@ class TestAdjustWeightsMain(unittest.TestCase):
                 adjust_weights(df=self.qdf, **args)
             self.assertIn("The resulting DataFrame is empty", str(context.exception))
 
-    def test_adjust_weights_no_normalize(self):
+    def test_adjust_weights_nans_and_no_normalize(self):
         nan_weights_mask = np.random.random(len(self.qdf)) < 0.25
         self.qdf.loc[nan_weights_mask, "value"] = np.nan
-        self.qdf.loc[:, "value"] = self.qdf["value"] * 1e7  # make sure the sum is not 1
+        # make sure the sum is not 100
+        self.qdf.loc[:, "value"] = self.qdf["value"] * 1e7
 
         all_nan_date: pd.Timestamp = np.random.choice(self.qdf["real_date"].unique())
         self.qdf.loc[
@@ -469,11 +502,18 @@ class TestAdjustWeightsMain(unittest.TestCase):
         with warnings.catch_warnings(record=True) as w:
             adjusted = adjust_weights(df=self.qdf, **args)
 
-            last_warn = w[-1].message.args[0]
+            split_warning = w[-2].message.args[0]
             ts_str = pd.Timestamp(all_nan_date).strftime("%Y-%m-%d")
-            err_str = "dates have no data"
-            self.assertIn(ts_str, last_warn)
-            self.assertIn(err_str, last_warn)
+            err_str = "Missing ZNs data (will be filled with 1"
+            self.assertIn(ts_str, split_warning)
+            self.assertIn(err_str, split_warning)
+
+            miss_dates = set(pd.bdate_range(self.start, self.end)) - set(
+                adjusted["real_date"]
+            )
+            nan_date_warning = w[-1].message.args[0]
+            for mdt in miss_dates:
+                self.assertIn(mdt.strftime("%Y-%m-%d"), nan_date_warning)
 
         self.assertFalse(adjusted.isna().any().any())
         self.assertFalse(any(adjusted.groupby("real_date")["value"].sum() == 100))
@@ -497,7 +537,7 @@ class TestAdjustWeightsMain(unittest.TestCase):
 
         with self.assertRaises(ValueError) as context:
             adjust_weights(df=df, cids=self.cids, **args)
-            
+
     def test_adjust_weights_cids_not_specified(self):
         args = {
             "weights": "WG",
