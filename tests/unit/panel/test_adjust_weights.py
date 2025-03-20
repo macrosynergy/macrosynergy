@@ -219,8 +219,8 @@ class TestSplitWeightsAdjZns(unittest.TestCase):
     def test_missing_dates_filling(self):
         # choose 20% of the dates to be missing
         all_dates = self.df["real_date"].unique().tolist()
-        missing_dates = np.random.choice(
-            all_dates, int(0.1 * len(all_dates)), replace=False
+        missing_dates = pd.to_datetime(
+            np.random.choice(all_dates, int(0.1 * len(all_dates)), replace=False)
         )
 
         # remove the missing dates from the dataframe for adj_zns
@@ -239,12 +239,14 @@ class TestSplitWeightsAdjZns(unittest.TestCase):
                 last_warn = w[-1].message.args[0]
                 for date in missing_dates:
                     with self.subTest(date=date):
-                        self.assertIn(date.strftime("%Y-%m-%d"), last_warn)
+                        self.assertIn(
+                            pd.Timestamp(date).strftime("%Y-%m-%d"), last_warn
+                        )
 
         # check that the missing dates have been filled with 1
         for date in missing_dates:
             with self.subTest(date=date):
-                self.assertTrue(np.allclose(df_adj_zns_wide.loc[date].values, 1))
+                self.assertTrue(np.allclose(df_adj_zns_wide.loc[pd.Timestamp(date)], 1))
 
 
 def get_primes(n):
