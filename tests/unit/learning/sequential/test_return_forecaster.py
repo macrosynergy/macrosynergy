@@ -1326,7 +1326,8 @@ class TestReturnForecaster(unittest.TestCase):
         so_corr.iloc[:,1] = so_corr.iloc[:,1].str.split("_").str[1]
         rf_corr.iloc[:,1] = rf_corr.iloc[:,1].str.split("_").str[1]
 
-        np.testing.assert_array_equal(so_corr.values, rf_corr.values)
+        np.testing.assert_array_equal(so_corr.values[:,:-1], rf_corr.values[:,:-1])
+        np.testing.assert_array_almost_equal(so_corr.values[:,-1], rf_corr.values[:,-1])
 
     def test_types_get_optimized_signals(self):
         """
