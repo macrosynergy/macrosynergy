@@ -218,6 +218,7 @@ def adjust_weights(
     start: Optional[str] = None,
     end: Optional[str] = None,
     normalize: bool = True,
+    normalize_to_pct: bool = False,
     adj_name: str = "ADJWGT",
 ):
     """
@@ -239,9 +240,16 @@ def adjust_weights(
         Parameters to be passed to the method function. Default is {}.
     cids : List[str], optional
         List of cross-sections to adjust. If None, all cross-sections will be adjusted. Default is None.
+    start : str, optional
+        Start date for the adjustment as YYYY-MM-DD. Default is None.
+    end : str, optional
+        End date for the adjustment as YYYY-MM-DD. Default is None.
     normalize : bool, optional
         If True, the resulting weights will be normalized to sum to one for each date for
         the entire list of cross-sections. Default is True.
+    normalize_to_pct : bool, optional
+        If True, the resulting weights will be scaled to 100%. Default is False.
+        This only applies if `normalize` is True.
     adj_name : str, optional
         Name of the resulting xcat. Default is "ADJWGT".
     """
@@ -284,7 +292,8 @@ def adjust_weights(
     if normalize:
         # normalize and scale to 100%
         dfw_result = normalize_weights(dfw_result)
-        dfw_result = dfw_result * 100
+        if normalize_to_pct:
+            dfw_result *= 100
 
     if dfw_result.isna().all().all():
         raise ValueError(
