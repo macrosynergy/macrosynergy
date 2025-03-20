@@ -130,8 +130,18 @@ def split_weights_adj_zns(
     df_weights_wide = QuantamentalDataFrame(df_weights).to_wide()
     df_adj_zns_wide = QuantamentalDataFrame(df_adj_zns).to_wide()
 
-    # convert the weights to absolute values (no negative weights in this use case)
-    df_weights_wide = df_weights_wide.abs()
+    # cannot tolerate negative weights
+    if any(df_weights_wide[~df_weights_wide.isna()].lt(0).any()):
+        na_frame = QuantamentalDataFrame.from_wide(
+            df_weights_wide[
+                df_weights_wide[~df_weights_wide.isna()].lt(0).any(axis="columns")
+            ]
+        )
+
+        na_frame = na_frame[na_frame["value"] < 0]
+        raise ValueError(
+            f"Negative weights found in the dataframe. Please check the following data:\n{na_frame}"
+        )
 
     combined_index = df_weights_wide.index.union(df_adj_zns_wide.index)
     df_weights_wide = df_weights_wide.reindex(combined_index)
@@ -292,9 +302,10 @@ if __name__ == "__main__":
     df = make_test_df(xcats=["weights", "adj_zns"], cids=["cid1", "cid2", "cid3"])
     dfb = make_test_df(xcats=["some_xcat", "other_xcat"], cids=["cid1", "cid2", "cid4"])
 
-    nan_mask = np.random.rand(len(df)) < 0.25
-    df.loc[nan_mask, "value"] = np.nan
-
+    # nan_mask = np.random.rand(len(df)) < 0.01
+    # df.loc[nan_mask, "value"] = np.nan
+    # nan_mask = np.random.rand(len(df)) < 0.1
+    # df.loc[nan_mask, "value"] *= -1
     df = pd.concat([df, dfb], axis=0)
 
     def sigmoid(x, amplitude=1.0, steepness=1.0, midpoint=0.0):
