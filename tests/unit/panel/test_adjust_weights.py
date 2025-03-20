@@ -248,6 +248,27 @@ class TestSplitWeightsAdjZns(unittest.TestCase):
             with self.subTest(date=date):
                 self.assertTrue(np.allclose(df_adj_zns_wide.loc[pd.Timestamp(date)], 1))
 
+    def test_negative_weights(self):
+        # choose 20% of the dates to be missing
+        all_dates = self.df["real_date"].unique().tolist()
+        negative_date = pd.Timestamp(np.random.choice(all_dates, 1, replace=False)[0])
+
+        # random cid
+        cid = np.random.choice(self.cids)
+        self.df.loc[
+            (self.df["real_date"] == negative_date)
+            & (self.df["cid"] == cid)
+            & (self.df["xcat"] == self.weights),
+            "value",
+        ] = -1
+
+        with self.assertRaises(ValueError) as context:
+            split_weights_adj_zns(self.df, self.weights, self.adj_zns)
+
+            # chec that the and the cid are in the error message
+            self.assertIn(cid, str(context.exception))
+            self.assertIn(negative_date.strftime("%Y-%m-%d"), str(context.exception))
+
 
 def get_primes(n):
     """Return a list of the first n prime numbers."""
