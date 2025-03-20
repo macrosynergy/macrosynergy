@@ -40,6 +40,7 @@ class BasePanelLearner(ABC):
         lag=1,
         xcat_aggs=["last", "sum"],
         generate_labels=None,
+        skip_checks=False,
     ):
         """
         Initialize a sequential learning process over a panel.
@@ -77,6 +78,8 @@ class BasePanelLearner(ABC):
         generate_labels : callable, optional
             Function to transform the dependent variable, usually into
             classification labels. Default is None.
+        skip_checks : bool, optional
+            Whether to skip the initialization checks. Default is False.
 
         Notes
         -----
@@ -106,18 +109,19 @@ class BasePanelLearner(ABC):
             https://arxiv.org/abs/1807.02811
         """
         # Checks
-        self._check_init(
-            df,
-            xcats,
-            cids,
-            start,
-            end,
-            blacklist,
-            freq,
-            lag,
-            xcat_aggs,
-            generate_labels,
-        )
+        if not skip_checks:
+            self._check_init(
+                df,
+                xcats,
+                cids,
+                start,
+                end,
+                blacklist,
+                freq,
+                lag,
+                xcat_aggs,
+                generate_labels,
+            )
         # Attributes
         self.df = QuantamentalDataFrame(df)
         self.xcats = xcats

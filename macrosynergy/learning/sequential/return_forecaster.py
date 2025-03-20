@@ -74,6 +74,19 @@ class ReturnForecaster(BasePanelLearner):
         xcat_aggs=["last", "sum"],
         generate_labels=None,
     ):
+        # Parent checks
+        self._check_init(
+            df=df,
+            xcats=xcats,
+            cids=cids,
+            start=None,
+            end=None,
+            blacklist=blacklist,
+            freq=freq,
+            lag=lag,
+            xcat_aggs=xcat_aggs,
+            generate_labels=generate_labels,
+        )
         # Additional checks to those carried in the parent class
         if not isinstance(real_date, str):
             raise TypeError("The real_date argument must be a string.")
@@ -110,6 +123,7 @@ class ReturnForecaster(BasePanelLearner):
             lag=lag,
             xcat_aggs=xcat_aggs,
             generate_labels=generate_labels,
+            skip_checks=True
         )
 
         # Set up out-of-sample dataset for forecasting

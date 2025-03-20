@@ -4,6 +4,9 @@ import unittest
 import matplotlib
 import matplotlib.pyplot as plt
 
+import parameterized
+import itertools
+
 from macrosynergy.management import make_qdf
 from unittest.mock import patch
 
@@ -196,6 +199,224 @@ class TestReturnForecaster(unittest.TestCase):
         patch.stopall()
         plt.close("all")
         matplotlib.use(self.mpl_backend)
+
+    def test_types_init(self):
+        """
+        Test appropriate errors are raised when the input types are incorrect.
+        """
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=pd.Series([]),
+                xcats=self.xcats,
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats="invalid",
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=[1, 2, 3],
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                cids="invalid",
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                cids=[1, 2, 3],
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=pd.DataFrame([]),
+                xcats=self.xcats,
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=["invalid"],
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats + ["invalid"],
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                cids=self.cids + ["invalid"],
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                start=1,
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                end=1,
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                blacklist=list(),
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                blacklist={1: "invalid"},
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                blacklist={"CAD": "invalid"},
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                blacklist={"CAD": tuple()},
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                freq=1,
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                freq="invalid",
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                lag="invalid",
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                lag=-1,real_date = self.evaluation_date,
+            )
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                xcat_aggs="invalid",
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                xcat_aggs=[1, "sum"],
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                xcat_aggs=["last", 1],
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                xcat_aggs=[1, 2],
+                real_date = self.evaluation_date,
+            )
+        # generate_labels should be a callable or None
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                generate_labels=1,
+                real_date = self.evaluation_date,
+            )
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                generate_labels="invalid",
+                real_date = self.evaluation_date,
+            )
+
+        # real date
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                real_date=1,
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                real_date="hello",
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                real_date="2014-01-01",
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                real_date="2013-06-01",
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                real_date="2025-01-01",
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                real_date="2014-01-01",
+            )
+        with self.assertRaises(ValueError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                real_date="2018-07-07", # weekend
+            )
 
     def test_valid_init(self):
         """
