@@ -86,7 +86,7 @@ def adjust_weights_backend(
     assert set(df_weights_wide.columns) == set(df_adj_zns_wide.columns)
     assert set(df_weights_wide.index) == set(df_adj_zns_wide.index)
 
-    dfw_result = df_weights_wide * df_adj_zns_wide.apply(method, **params)
+    dfw_result = df_weights_wide * df_adj_zns_wide.map(method, **params)
 
     return dfw_result
 
