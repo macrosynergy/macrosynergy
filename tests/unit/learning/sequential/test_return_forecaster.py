@@ -1412,3 +1412,86 @@ class TestReturnForecaster(unittest.TestCase):
             self.assertEqual(selected_ftrs.columns[i], self.rf.X.columns[i - 2])
         self.assertTrue(len(selected_ftrs) > 0)
         self.assertTrue(len(selected_ftrs) == len(self.pipelines))
+
+    def test_types_get_feature_importances(self):
+        """
+        Test that the get_feature_importances parameter checking works as expected.
+        """
+        rf = self.rf
+
+        # Test invalid names are caught
+        with self.assertRaises(TypeError):
+            rf.get_feature_importances(name=1)
+        with self.assertRaises(TypeError):
+            rf.get_feature_importances(name={})
+
+        # Test an error is raised if a wrong name is passed
+        with self.assertRaises(ValueError):
+            rf.get_feature_importances(name=["test", "test2"])
+        with self.assertRaises(ValueError):
+            rf.get_feature_importances(name="test2")
+
+        # Test that if no signals have been calculated, an error is raised
+        rf = ReturnForecaster(
+            df=self.df,
+            xcats=self.xcats,
+            real_date=self.evaluation_date,
+        )
+        with self.assertRaises(ValueError):
+            rf.get_feature_importances(name="test2")
+
+    def test_valid_get_feature_importances(self):
+        """
+        Test that the get_feature_importances method returns a dataframe in the 
+        expected format.
+        """
+        ftrs = self.rf.get_feature_importances()
+        self.assertIsInstance(ftrs, pd.DataFrame)
+        self.assertEqual(ftrs.shape[1], 5)
+        self.assertEqual(ftrs.columns[0], "real_date")
+        self.assertEqual(ftrs.columns[1], "name")
+        for i in range(2, 5):
+            self.assertEqual(ftrs.columns[i], self.rf.X.columns[i - 2])
+        self.assertTrue(len(ftrs) > 0)
+        self.assertTrue(len(ftrs) == len(self.pipelines))
+
+    def test_types_get_intercepts(self):
+        """
+        Test that the get_intercepts parameter checking works as expected.
+        """
+        rf = self.rf
+
+        # Test invalid names are caught
+        with self.assertRaises(TypeError):
+            rf.get_intercepts(name=1)
+        with self.assertRaises(TypeError):
+            rf.get_intercepts(name={})
+
+        # Test an error is raised if a wrong name is passed
+        with self.assertRaises(ValueError):
+            rf.get_intercepts(name=["test", "test2"])
+        with self.assertRaises(ValueError):
+            rf.get_intercepts(name="test2")
+
+        # Test that if no signals have been calculated, an error is raised
+        rf = ReturnForecaster(
+            df=self.df,
+            xcats=self.xcats,
+            real_date=self.evaluation_date,
+        )
+        with self.assertRaises(ValueError):
+            rf.get_intercepts(name="test2")
+
+    def test_valid_get_intercepts(self):
+        """
+        Test that the get_intercepts method returns a dataframe in the 
+        expected format.
+        """
+        ftrs = self.rf.get_intercepts()
+        self.assertIsInstance(ftrs, pd.DataFrame)
+        self.assertEqual(ftrs.shape[1], 3)
+        self.assertEqual(ftrs.columns[0], "real_date")
+        self.assertEqual(ftrs.columns[1], "name")
+        self.assertEqual(ftrs.columns[2], "intercepts")
+        self.assertTrue(len(ftrs) > 0)
+        self.assertTrue(len(ftrs) == len(self.pipelines))
