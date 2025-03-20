@@ -122,6 +122,9 @@ def split_weights_adj_zns(
     df_weights_wide = QuantamentalDataFrame(df_weights).to_wide()
     df_adj_zns_wide = QuantamentalDataFrame(df_adj_zns).to_wide()
 
+    # convert the weights to absolute values (no negative weights in this use case)
+    df_weights_wide = df_weights_wide.abs()
+
     combined_index = df_weights_wide.index.union(df_adj_zns_wide.index)
     df_weights_wide = df_weights_wide.reindex(combined_index)
     df_adj_zns_wide = df_adj_zns_wide.reindex(combined_index)
