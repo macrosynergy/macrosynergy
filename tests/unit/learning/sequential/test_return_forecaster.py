@@ -9,13 +9,14 @@ import itertools
 
 from macrosynergy.management import make_qdf
 from unittest.mock import patch
+import scipy.stats as stats
 
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import Ridge, LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score, make_scorer
 
-from macrosynergy.learning import PanelPCA, PanelStandardScaler, LassoSelector, SignalOptimizer, RollingKFoldPanelSplit, ReturnForecaster
+from macrosynergy.learning import PanelPCA, RandomEffects, ExpandingKFoldPanelSplit, PanelStandardScaler, LassoSelector, SignalOptimizer, RollingKFoldPanelSplit, ReturnForecaster
 
 class TestReturnForecaster(unittest.TestCase):
     @classmethod
@@ -441,6 +442,836 @@ class TestReturnForecaster(unittest.TestCase):
 
         # Check that each test set is the same
         np.testing.assert_array_equal(X_test_rf.values, X_test_so.values)
+
+    def test_types_calculate_predictions(self):
+        # Name
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name=1,
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name=True,
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+
+        # Models
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=1,
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models={},
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models={1: LinearRegression()},
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models={"LR": 1},
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models={"LR": RandomEffects()},
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+
+        # Hyperparameters
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=1,
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={},
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # wrong length of hyperparameter dict
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={"linreg": {"fit_intercept": [True, False]}},
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # check hyperparameter dict is a nested dict
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={"linreg": 1, "ridge": 1},
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={
+                    "linreg": 1,
+                    "ridge": {"fit_intercept": [True, False]},
+                },
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={
+                    "ridge": 1,
+                    "linreg": {"fit_intercept": [True, False]},
+                },
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={
+                    "ridge": {1: [True, False]},
+                    "linreg": {"fit_intercept": [True, False]},
+                },
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # Check inner hparam dictionaries specify a grid
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={
+                    "ridge": {"fit_intercept": 1},
+                    "linreg": {"fit_intercept": [True, False]},
+                },
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={
+                    "linreg": {"fit_intercept": 1},
+                    "ridge": {"fit_intercept": [True, False]},
+                },
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={
+                    "ridge": {"fit_intercept": 1},
+                    "linreg": {"fit_intercept": 1},
+                },
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # Scorers should be a dict
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers=1,
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # Scorers dict shouldn't be empty
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # Scorer keys should be strings
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={1: make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score), 1: make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # Scorer values should be scorers
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": 1},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # Inner splitters should be a dict
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters=1,
+            )
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters=ExpandingKFoldPanelSplit(),
+            )
+        # Inner splitters dict shouldn't be empty
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={},
+            )
+        # Inner splitters keys should be strings
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={1: ExpandingKFoldPanelSplit()},
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
+                    1: ExpandingKFoldPanelSplit(n_splits=10),
+                },
+            )
+        # Inner splitters values should be splitters
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={"ExpandingKFold": 1},
+            )
+        # Search type should be a string
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type=1,
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # Search type should be either "grid" or "prior"
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="invalid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(NotImplementedError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="bayes",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # Normalize_fold_results should be a boolean
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                normalize_fold_results=1,
+            )
+        # If normalize_fold_results is True, then at least 2 hparams should
+        # be provided for each model
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={
+                    "ridge": {"alpha": [0.1]},
+                    "linreg": {"fit_intercept": [True, False]},
+                },
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                normalize_fold_results=True,
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={
+                    "ridge": {"alpha": [0.1, 1, 10]},
+                    "linreg": {"fit_intercept": [True]},
+                },
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                normalize_fold_results=True,
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={
+                    "ridge": {"alpha": [0.1]},
+                    "linreg": {"fit_intercept": [True]},
+                },
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                normalize_fold_results=True,
+            )
+        # Test structure of the hyperparameter grid when
+        # search_type is "prior"
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=1,
+                search_type="prior",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={},
+                search_type="prior",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # wrong length of hyperparameter dict
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={"LR": {}},
+                search_type="prior",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # wrong model names in hyperparameter dict
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={"LR": {}, "L2": {}},
+                search_type="prior",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # invalid hyperparameter dictionary
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={"linreg": {1: {}}},
+                search_type="prior",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={"linreg": {1: {}}, "ridge": {1: {}}},
+                search_type="prior",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # hyperparameter values are neither grids nor distributions
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={
+                    "linreg": {"fit_intercept": [True, False]},
+                    "ridge": {"alpha": 1},
+                },
+                search_type="prior",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={
+                    "linreg": {"fit_intercept": 1},
+                    "ridge": {"alpha": stats.expon()},
+                },
+                search_type="prior",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        # cv_summary should be str or callable
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                cv_summary=1,
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                cv_summary="invalid",
+            )
+        # min_cids should be an int
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                min_cids="invalid",
+            )
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                min_cids=7.2,
+            )
+        # n_iter should be a positive int, if not None
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="prior",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                n_iter="invalid",
+            )
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="prior",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                n_iter=None,
+            )
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="prior",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                n_iter=3.4,
+            )
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="prior",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                n_iter=3.4,
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="prior",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                n_iter=-3,
+            )
+        # n_jobs should be an integer >= -1
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv="invalid",
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=-2,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_model="invalid",
+                n_jobs_cv=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_model=-2,
+                n_jobs_cv=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+
+        # store_correlations
+        with self.assertRaises(TypeError):
+            self.rf.calculate_predictions(
+                name="test",
+                models=self.pipelines[0],
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                store_correlations=1,
+            )
+        # If store_correlations is True, then models must be pipelines
+        with self.assertRaises(ValueError):
+            self.rf.calculate_predictions(
+                name="test",
+                models={"LR": LinearRegression()},
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=self.hyperparameters[0],
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+                store_correlations=True,
+            )
 
     def test_valid_functionality(self):
         """
