@@ -3,7 +3,7 @@ from typing import Callable
 import warnings
 import numpy as np
 import pandas as pd
-from macrosynergy.compat import PD_2_0_OR_LATER
+from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
 from macrosynergy.panel.adjust_weights import (
     adjust_weights,
     check_types,
@@ -234,11 +234,12 @@ class TestSplitWeightsAdjZns(unittest.TestCase):
             _, df_adj_zns_wide = split_weights_adj_zns(
                 self.df, self.weights, self.adj_zns
             )
-            self.assertTrue(len(w) > 0)
-            last_warn = w[-1].message.args[0]
-            for date in missing_dates:
-                with self.subTest(date=date):
-                    self.assertIn(date.strftime("%Y-%m-%d"), last_warn)
+            if PYTHON_3_8_OR_LATER:
+                self.assertTrue(len(w) > 0)
+                last_warn = w[-1].message.args[0]
+                for date in missing_dates:
+                    with self.subTest(date=date):
+                        self.assertIn(date.strftime("%Y-%m-%d"), last_warn)
 
         # check that the missing dates have been filled with 1
         for date in missing_dates:

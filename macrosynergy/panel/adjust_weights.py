@@ -10,6 +10,7 @@ from numbers import Number
 from macrosynergy.management.utils import reduce_df, get_cid
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.compat import PYTHON_3_8_OR_LATER
 
 
 def check_missing_cids_xcats(weights, adj_zns, cids, r_xcats, r_cids):
@@ -90,7 +91,10 @@ def adjust_weights_backend(
     assert set(df_weights_wide.columns) == set(df_adj_zns_wide.columns)
     assert set(df_weights_wide.index) == set(df_adj_zns_wide.index)
 
-    dfw_result = df_weights_wide * df_adj_zns_wide.map(method, **params)
+    if PYTHON_3_8_OR_LATER:
+        dfw_result = df_weights_wide * df_adj_zns_wide.map(method, **params)
+    else:
+        dfw_result = df_weights_wide * df_adj_zns_wide.applymap(method, **params)
 
     return dfw_result
 
