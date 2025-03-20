@@ -4,7 +4,7 @@ Implementation of adjust_weights.
 
 import numpy as np
 import pandas as pd
-from typing import List, Tuple, Callable, Dict, Any
+from typing import List, Tuple, Callable, Dict, Any, Optional
 import warnings
 from numbers import Number
 from macrosynergy.management.utils import reduce_df, get_cid
@@ -31,6 +31,8 @@ def check_types(
     method: Callable,
     params: Dict[str, Any],
     cids: List[str],
+    start: Optional[str] = None,
+    end: Optional[str] = None,
 ):
     """
     Type checking for the input variables of adjust_weights.
@@ -41,6 +43,8 @@ def check_types(
         (method, "method", Callable),
         (params, "param", dict),
         (cids, "cids", (list, type(None))),
+        (start, "start", (str, type(None))),
+        (end, "end", (str, type(None))),
     ]:
         if not isinstance(_var, _type):
             raise TypeError(f"{_name} must be a {_type}, not {type(_var)}")
@@ -179,6 +183,8 @@ def adjust_weights(
     method: Callable[[Number], Number],
     params: Dict[str, Any] = {},
     cids: List[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
     normalize: bool = True,
     adj_name: str = "ADJWGT",
 ):
@@ -214,10 +220,16 @@ def adjust_weights(
     df: QuantamentalDataFrame = QuantamentalDataFrame(df)
     result_as_categorical: bool = df.InitializedAsCategorical
 
-    check_types(weights, adj_zns, method, params, cids)
+    check_types(weights, adj_zns, method, params, cids, start, end)
 
     df, r_xcats, r_cids = reduce_df(
-        df, cids=cids, xcats=[weights, adj_zns], intersect=True, out_all=True
+        df,
+        cids=cids,
+        xcats=[weights, adj_zns],
+        start=start,
+        end=end,
+        intersect=True,
+        out_all=True,
     )
     if cids is None:
         cids = df["cid"].unique().tolist()
