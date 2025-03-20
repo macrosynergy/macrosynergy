@@ -144,17 +144,37 @@ def split_weights_adj_zns(
     if all_missing:
         raise ValueError(f"Missing tickers: {all_missing}")
 
+    # get the corresponding rows in zns
+    nan_zns_rows = df_adj_zns_wide.isna().all(axis="columns")
+    all_zero_zns_rows = (df_adj_zns_wide.fillna(0) == 0).all(axis="columns")
+    missing_zns_dates = df_adj_zns_wide.index[nan_zns_rows | all_zero_zns_rows]
+
+    nan_weights_rows = df_weights_wide.isna().all(axis="columns")
+    all_zero_weights_rows = (df_weights_wide.fillna(0) == 0).all(axis="columns")
+    missing_weights_dates = df_weights_wide.index[
+        nan_weights_rows | all_zero_weights_rows
+    ]
+
+    # if zn is missing, but weight is not missing, fill zn with 1
+    missing_zns_dates = sorted(set(missing_zns_dates) - set(missing_weights_dates))
+    if len(missing_zns_dates) > 0:
+        estr = "Missing ZNs data (will be filled with 1 to preserve weights):"
+        warnings.warn(f"{estr} {missing_zns_dates}")
+
+        # replace missing zns data with standard weights
+        df_adj_zns_wide.loc[missing_zns_dates] = 1
+
     return df_weights_wide, df_adj_zns_wide
 
 
-def normalize_weights(df_weights_wide: pd.DataFrame) -> pd.DataFrame:
+def normalize_weights(out_weights: pd.DataFrame) -> pd.DataFrame:
     """
-    Weights are normalized by dividing each row by the sum of the row. Function exists to
+    Output weights are normalized by dividing each row by the sum of the row. Function exists to
     allow easy modification of normalization method.
 
     Parameters
     ----------
-    df_weights_wide : pd.DataFrame
+    out_weights : pd.DataFrame
         DataFrame with weights in wide format. (one column per cid)
 
     Returns
@@ -162,18 +182,16 @@ def normalize_weights(df_weights_wide: pd.DataFrame) -> pd.DataFrame:
     pd.DataFrame
         DataFrame with normalized weights (sum of each row is 1).
     """
-    df_weights_wide = df_weights_wide.div(
-        df_weights_wide.sum(axis="columns"), axis="index"
-    )
+    out_weights = out_weights.div(out_weights.sum(axis="columns"), axis="index")
 
-    norm_rows = df_weights_wide.sum(axis="columns").apply(lambda x: np.isclose(x, 1))
-    all_nan_rows = df_weights_wide.index[df_weights_wide.isnull().all(axis="columns")]
+    norm_rows = out_weights.sum(axis="columns").apply(lambda x: np.isclose(x, 1))
+    all_nan_rows = out_weights.index[out_weights.isnull().all(axis="columns")]
 
     # assert that all rows sum to 1 or are all NaN
     if not norm_rows.all() and all_nan_rows.size == 0:
         raise Exception("Normalization failed; weights do not sum to 1")
 
-    return df_weights_wide
+    return out_weights
 
 
 def adjust_weights(
@@ -269,6 +287,9 @@ def adjust_weights(
 if __name__ == "__main__":
     df = make_test_df(xcats=["weights", "adj_zns"], cids=["cid1", "cid2", "cid3"])
     dfb = make_test_df(xcats=["some_xcat", "other_xcat"], cids=["cid1", "cid2", "cid4"])
+
+    nan_mask = np.random.rand(len(df)) < 0.25
+    df.loc[nan_mask, "value"] = np.nan
 
     df = pd.concat([df, dfb], axis=0)
 
