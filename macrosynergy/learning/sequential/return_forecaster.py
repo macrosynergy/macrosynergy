@@ -74,15 +74,28 @@ class ReturnForecaster(BasePanelLearner):
         xcat_aggs=["last", "sum"],
         generate_labels=None,
     ):
-        # Checks not covered by
-
-        # First check that all factors are available on the real date
-        # and that the date is in the dataframe
+        # Additional checks to those carried in the parent class
+        if not isinstance(real_date, str):
+            raise TypeError("The real_date argument must be a string.")
+        try:
+            pd.to_datetime(real_date)
+        except ValueError:
+            raise ValueError("'real_date' must be in ISO 8601 format.")
+        
         self.real_date = pd.to_datetime(real_date)
         self._check_factor_availability(df, xcats, self.real_date)
 
+        if not isinstance(lag, int):
+            raise TypeError("The lag argument must be an integer.")
+        if lag < 1:
+            raise ValueError("The lag argument must be at least 1.")
+
         # Separate in-sample and out-of-sample data
-        df_train = df[df.real_date <= self.real_date]  # COME BACK AND JUSTIFY THIS
+        # NOTE: We include real_date in the training set due to the required
+        # lag on the macro factors. In addition, the last available return will always
+        # be that from the previous day. This means that no leakage is introduced.
+        # This was included for the sake of a unit test.  
+        df_train = df[df.real_date <= self.real_date]
         df_test = df[df.real_date == self.real_date]
 
         # Set up supervised learning training set
@@ -277,7 +290,6 @@ class ReturnForecaster(BasePanelLearner):
 
         # Collect results from the worker
         # quantamental_data, model_data, other_data
-        prediction_data = []
         model_choice_data = []
         ftr_coef_data = []
         intercept_data = []
@@ -838,7 +850,7 @@ if __name__ == "__main__":
     rf = ReturnForecaster(
         df=dfd,
         xcats=["CRY", "GROWTH", "INFL", "XR"],
-        real_date="2020-02-28",
+        real_date="2020-12-31",
         freq="M",
         lag=1,
         xcat_aggs=["last", "sum"],
