@@ -22,7 +22,7 @@ from .naive_predictors import (
 
 from .neighbors.nearest_neighbors import KNNClassifier
 
-from .meta_estimators import ProbabilityEstimator
+from .meta_estimators import ProbabilityEstimator, FIExtractor
 
 from .ensemble import (
     VotingClassifier,
@@ -47,4 +47,5 @@ __all__ = [
     "ProbabilityEstimator",
     "VotingClassifier",
     "VotingRegressor",
+    "FIExtractor",
 ]

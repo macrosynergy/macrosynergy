@@ -49,6 +49,7 @@ from .forecasting import (
     ProbabilityEstimator,
     VotingRegressor,
     VotingClassifier,
+    FIExtractor,
 )
 
 from .random_effects import RandomEffects
@@ -111,4 +112,5 @@ __all__ = [
     "RandomEffects",
     # Meta estimators
     "ProbabilityEstimator",
+    "FIExtractor",
 ]
