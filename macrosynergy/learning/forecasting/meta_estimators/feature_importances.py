@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, MetaEstimatorMixin, RegressorMixin
+from sklearn.base import BaseEstimator, MetaEstimatorMixin, RegressorMixin, ClassifierMixin
 
 class FIExtractor(BaseEstimator, MetaEstimatorMixin, RegressorMixin):
     def __init__(self, estimator):
@@ -21,6 +21,8 @@ class FIExtractor(BaseEstimator, MetaEstimatorMixin, RegressorMixin):
         learning pipeline to gauge the importance of each feature. This, however, takes
         time. This class is useful for a quick indication of feature importance.
         """
+        if not isinstance(estimator, (ClassifierMixin, RegressorMixin)):
+            raise TypeError("estimator must be a scikit-learn predictor.")
         self.estimator = estimator
 
     def fit(self, X, y):
