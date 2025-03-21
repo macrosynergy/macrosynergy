@@ -240,6 +240,7 @@ class ScoreVisualisers:
         title_fontsize: int = 20,
         annot: bool = True,
         xticks=None,
+        yticks_rotation: Optional[int] = None,
         figsize=(20, 10),
         round_decimals: int = 2,
         cmap: str = None,
@@ -278,6 +279,8 @@ class ScoreVisualisers:
             ax.vlines([divider_position], *ax.get_ylim(), linewidth=2, color="black")
 
         plt.xticks(**(xticks or {"rotation": 45, "ha": "right"}))
+        if yticks_rotation is not None:
+            plt.yticks(rotation=yticks_rotation)
         plt.tight_layout()
         plt.show()
 
@@ -305,6 +308,7 @@ class ScoreVisualisers:
         figsize: tuple = (20, 10),
         xcat_labels: Dict[str, str] = None,
         xticks: dict = None,
+        yticks_rotation: Optional[int] = None,
         round_decimals: int = 2,
         cmap: str = None,
         cmap_range: Tuple[float, float] = None,
@@ -341,6 +345,8 @@ class ScoreVisualisers:
             A dictionary mapping category tickers to their labels.
         xticks : dict
             A dictionary of arguments to label the x axis.
+        yticks_rotation : int
+            The rotation of the y-axis labels.
         round_decimals : int
             The number of decimals to round the scores to.
         cmap : str
@@ -395,14 +401,13 @@ class ScoreVisualisers:
             dfw = dfw[xcats]
 
         if xcat_labels:
-            if set(self._apply_postfix(list(xcat_labels.keys()))) >= set(dfw.columns):
-                dfw.columns = [
-                    xcat_labels.get(
-                        self._strip_postfix([xcat])[0],
-                        xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
-                    )
-                    for xcat in dfw.columns
-                ]
+            dfw.columns = [
+                xcat_labels.get(
+                    self._strip_postfix([xcat])[0],
+                    xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
+                )
+                for xcat in dfw.columns
+            ]
 
         if transpose:
             dfw = dfw.transpose()
@@ -411,6 +416,7 @@ class ScoreVisualisers:
 
         horizontal_divider = transpose and composite_zscore in xcats
         vertical_divider = not transpose and composite_zscore in xcats
+        divider_position = None
         if composite_zscore in xcats:
             if composite_to_end:
                 divider_position = len(xcats) - 1
@@ -422,6 +428,7 @@ class ScoreVisualisers:
             title=title,
             annot=annot,
             xticks=xticks,
+            yticks_rotation=yticks_rotation,
             figsize=figsize,
             title_fontsize=title_fontsize,
             round_decimals=round_decimals,
@@ -521,7 +528,7 @@ class ScoreVisualisers:
             ):
                 dfw_resampled.loc[
                     self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
-                ] = dfw.ffill().loc[
+                ] = dfw.loc[
                     self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
                 ]
                 print(
@@ -529,11 +536,11 @@ class ScoreVisualisers:
                     self.df["real_date"].max() - pd.tseries.offsets.BDay(1),
                 )
             else:
-                dfw_resampled.loc[self.df["real_date"].max()] = dfw.ffill().loc[
+                dfw_resampled.loc[self.df["real_date"].max()] = dfw.loc[
                     self.df["real_date"].max()
                 ]
                 print("Latest day: ", self.df["real_date"].max())
-            if freq == "BQE":
+            if freq in ["Q", "BQ", "BQE"]:
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
                 ) + ["Latest"]
@@ -542,7 +549,7 @@ class ScoreVisualisers:
                     "Latest"
                 ]
         else:
-            if freq == "BQE":
+            if freq in ["Q", "BQ", "BQE"]:
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")
                 )
@@ -587,6 +594,7 @@ class ScoreVisualisers:
         cmap: str = None,
         cmap_range: Tuple[float, float] = None,
         round_decimals: int = 2,
+        composite_to_end: bool = False,
     ):
         """
         View the evolution of the scores for the specified cross-section and categories.
@@ -645,6 +653,12 @@ class ScoreVisualisers:
         df = self.df[self.df["cid"] == cid]
         df = df if start is None else df[df["real_date"] >= start]
         df = df[df["xcat"].isin(xcats)]
+        
+        # If there is an xcat that does not exist in the DataFrame, remove it and warn
+        for xcat in xcats:
+            if xcat not in df["xcat"].unique():
+                xcats.remove(xcat)
+                warnings.warn(f"{xcat} not in the DataFrame")
 
         dfw = df.pivot(index="real_date", columns="xcat", values="value")
         dfw.columns.name = None
@@ -661,7 +675,7 @@ class ScoreVisualisers:
             ):
                 dfw_resampled.loc[
                     self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
-                ] = dfw.ffill().loc[
+                ] = dfw.loc[
                     self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
                 ]
                 print(
@@ -669,11 +683,11 @@ class ScoreVisualisers:
                     self.df["real_date"].max() - pd.tseries.offsets.BDay(1),
                 )
             else:
-                dfw_resampled.loc[self.df["real_date"].max()] = dfw.ffill().loc[
+                dfw_resampled.loc[self.df["real_date"].max()] = dfw.loc[
                     self.df["real_date"].max()
                 ]
                 print("Latest day: ", self.df["real_date"].max())
-            if freq == "BQE":
+            if freq in ["Q", "BQ", "BQE"]:
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
                 ) + ["Latest"]
@@ -682,7 +696,7 @@ class ScoreVisualisers:
                     "Latest"
                 ]
         else:
-            if freq == "BQE":
+            if freq in ["Q", "BQ", "BQE"]:
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")
                 )
@@ -699,16 +713,13 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled[xcats]
 
         if xcat_labels:
-            if set(self._apply_postfix(list(xcat_labels.keys()))) >= set(
-                dfw_resampled.columns
-            ):
-                dfw_resampled.columns = [
-                    xcat_labels.get(
-                        self._strip_postfix([xcat])[0],
-                        xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
-                    )
-                    for xcat in dfw_resampled.columns
-                ]
+            dfw_resampled.columns = [
+                xcat_labels.get(
+                    self._strip_postfix([xcat])[0],
+                    xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
+                )
+                for xcat in dfw_resampled.columns
+            ]
 
         dfw_resampled = dfw_resampled.transpose()
 
@@ -719,6 +730,12 @@ class ScoreVisualisers:
 
         horizontal_divider = not transpose and self.xcat_comp in xcats
         vertical_divider = transpose and self.xcat_comp in xcats
+        divider_position = None
+        if composite_zscore in xcats:
+            if composite_to_end:
+                divider_position = len(xcats) - 1
+            else:
+                divider_position = 1
 
         self._plot_heatmap(
             dfw_resampled,
@@ -732,6 +749,7 @@ class ScoreVisualisers:
             cmap_range=cmap_range,
             horizontal_divider=horizontal_divider,
             vertical_divider=vertical_divider,
+            divider_position=divider_position,
         )
 
 
@@ -806,6 +824,16 @@ if __name__ == "__main__":
             show_progress=True,
         )
 
+    # Remove data for 24th Feb 2025 for "GGIEDGDP_NSA"
+
+    df = df[
+        ~(
+            (df["cid"] == "USD")
+            & (df["xcat"] == "GGIEDGDP_NSA")
+            & (df["real_date"] == "2025-02-24")
+        )
+    ]
+
     sv = ScoreVisualisers(
         df,
         cids=cids,
@@ -816,23 +844,22 @@ if __name__ == "__main__":
         rescore_composite=True,
     )
 
-    # sv.view_snapshot(
-    #     cids=["USD", "EUR", "JPY", "GBP", "CHF"],
-    #     xcats=xcats + ["Composite"],
-    #     figsize=(14, 12),
-    #     sort_by_composite=True,
-    #     composite_to_end=True,
-    #     transpose=False,
-    # )
-    sv.view_cid_evolution(
-        cid="USD", xcats=xcats + ["Composite"], freq="Q", transpose=False
+    sv.view_snapshot(
+        cids=["USD", "EUR", "JPY", "GBP", "CHF"],
+        xcats=xcats + ["Composite"],
+        figsize=(14, 12),
+        sort_by_composite=True,
+        composite_to_end=True,
+        transpose=False,
+        yticks_rotation=45,
     )
-    # sv.view_score_evolution(
-    #     xcat="GGIEDGDP_NSA",
-    #     cids=cids,
-    #     freq="BA",
-    #     transpose=False,
-    #     start="2010-01-01",
-    #     title="AHKSJDA",
-    #     include_latest_day=True,
-    # )
+    sv.view_cid_evolution(cid="USD", xcats=xcats + ["Composite", "BEEP"] , freq="A", transpose=False)
+    sv.view_score_evolution(
+        xcat="GGIEDGDP_NSA",
+        cids=cids,
+        freq="BA",
+        transpose=False,
+        start="2010-01-01",
+        title="AHKSJDA",
+        include_latest_day=True,
+    )

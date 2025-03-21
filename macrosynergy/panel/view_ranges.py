@@ -56,7 +56,7 @@ def view_ranges(
         y label. Default is no label.
     size : Tuple[float]
         Tuple of width and height of graph. Default is (16, 8).
-    xcat_labels : List[str]
+    xcat_labels : Union[List[str], Dict[str, str]]
         custom labels to be used for the ranges.
     legend_loc : str
         location of legend; passed to matplotlib.pyplot.legend(). Default is 'upper
