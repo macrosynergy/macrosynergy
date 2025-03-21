@@ -953,8 +953,9 @@ class JPMaQSDownload(DataQueryInterface):
         catalogue_expressions: List[str] = construct_expressions(
             tickers=catalogue_tickers, metrics=self.valid_metrics
         )
+        upper_exprs = [ex.upper() for ex in catalogue_expressions]
         r: List[str] = sorted(
-            list(set(expressions).intersection(set(catalogue_expressions)))
+            set(ex for ex in expressions if ex.upper() in upper_exprs)
         )
         if verbose:
             filtered: int = len(expressions) - len(r)

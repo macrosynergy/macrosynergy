@@ -240,6 +240,7 @@ class ScoreVisualisers:
         title_fontsize: int = 20,
         annot: bool = True,
         xticks=None,
+        yticks_rotation: Optional[int] = None,
         figsize=(20, 10),
         round_decimals: int = 2,
         cmap: str = None,
@@ -278,6 +279,8 @@ class ScoreVisualisers:
             ax.vlines([divider_position], *ax.get_ylim(), linewidth=2, color="black")
 
         plt.xticks(**(xticks or {"rotation": 45, "ha": "right"}))
+        if yticks_rotation is not None:
+            plt.yticks(rotation=yticks_rotation)
         plt.tight_layout()
         plt.show()
 
@@ -305,6 +308,7 @@ class ScoreVisualisers:
         figsize: tuple = (20, 10),
         xcat_labels: Dict[str, str] = None,
         xticks: dict = None,
+        yticks_rotation: Optional[int] = None,
         round_decimals: int = 2,
         cmap: str = None,
         cmap_range: Tuple[float, float] = None,
@@ -341,6 +345,8 @@ class ScoreVisualisers:
             A dictionary mapping category tickers to their labels.
         xticks : dict
             A dictionary of arguments to label the x axis.
+        yticks_rotation : int
+            The rotation of the y-axis labels.
         round_decimals : int
             The number of decimals to round the scores to.
         cmap : str
@@ -395,14 +401,13 @@ class ScoreVisualisers:
             dfw = dfw[xcats]
 
         if xcat_labels:
-            if set(self._apply_postfix(list(xcat_labels.keys()))) >= set(dfw.columns):
-                dfw.columns = [
-                    xcat_labels.get(
-                        self._strip_postfix([xcat])[0],
-                        xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
-                    )
-                    for xcat in dfw.columns
-                ]
+            dfw.columns = [
+                xcat_labels.get(
+                    self._strip_postfix([xcat])[0],
+                    xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
+                )
+                for xcat in dfw.columns
+            ]
 
         if transpose:
             dfw = dfw.transpose()
@@ -423,6 +428,7 @@ class ScoreVisualisers:
             title=title,
             annot=annot,
             xticks=xticks,
+            yticks_rotation=yticks_rotation,
             figsize=figsize,
             title_fontsize=title_fontsize,
             round_decimals=round_decimals,
@@ -647,6 +653,12 @@ class ScoreVisualisers:
         df = self.df[self.df["cid"] == cid]
         df = df if start is None else df[df["real_date"] >= start]
         df = df[df["xcat"].isin(xcats)]
+        
+        # If there is an xcat that does not exist in the DataFrame, remove it and warn
+        for xcat in xcats:
+            if xcat not in df["xcat"].unique():
+                xcats.remove(xcat)
+                warnings.warn(f"{xcat} not in the DataFrame")
 
         dfw = df.pivot(index="real_date", columns="xcat", values="value")
         dfw.columns.name = None
@@ -701,16 +713,13 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled[xcats]
 
         if xcat_labels:
-            if set(self._apply_postfix(list(xcat_labels.keys()))) >= set(
-                dfw_resampled.columns
-            ):
-                dfw_resampled.columns = [
-                    xcat_labels.get(
-                        self._strip_postfix([xcat])[0],
-                        xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
-                    )
-                    for xcat in dfw_resampled.columns
-                ]
+            dfw_resampled.columns = [
+                xcat_labels.get(
+                    self._strip_postfix([xcat])[0],
+                    xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
+                )
+                for xcat in dfw_resampled.columns
+            ]
 
         dfw_resampled = dfw_resampled.transpose()
 
@@ -740,7 +749,7 @@ class ScoreVisualisers:
             cmap_range=cmap_range,
             horizontal_divider=horizontal_divider,
             vertical_divider=vertical_divider,
-            divider_position=divider_position
+            divider_position=divider_position,
         )
 
 
@@ -817,7 +826,13 @@ if __name__ == "__main__":
 
     # Remove data for 24th Feb 2025 for "GGIEDGDP_NSA"
 
-    df = df[~((df["cid"] == "USD") & (df["xcat"] == "GGIEDGDP_NSA") & (df["real_date"] == "2025-02-24"))]
+    df = df[
+        ~(
+            (df["cid"] == "USD")
+            & (df["xcat"] == "GGIEDGDP_NSA")
+            & (df["real_date"] == "2025-02-24")
+        )
+    ]
 
     sv = ScoreVisualisers(
         df,
@@ -836,10 +851,9 @@ if __name__ == "__main__":
         sort_by_composite=True,
         composite_to_end=True,
         transpose=False,
+        yticks_rotation=45,
     )
-    sv.view_cid_evolution(
-        cid="USD", xcats=xcats, freq="Q", transpose=False
-    )
+    sv.view_cid_evolution(cid="USD", xcats=xcats + ["Composite", "BEEP"] , freq="A", transpose=False)
     sv.view_score_evolution(
         xcat="GGIEDGDP_NSA",
         cids=cids,
