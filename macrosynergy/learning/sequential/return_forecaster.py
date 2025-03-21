@@ -280,7 +280,7 @@ class ReturnForecaster(BasePanelLearner):
         self.store_correlations = store_correlations
 
         # Get training and test indices
-        train_idx = [i for i in range(len(self.X))]
+        train_idx = list(range(len(self.X)))
         base_splits = self._get_base_splits(inner_splitters)
 
         optim_results = self._worker(
@@ -627,14 +627,14 @@ class ReturnForecaster(BasePanelLearner):
                     "The process name must be a string or a list of strings."
                 )
 
-            for n in name:
-                if n not in self.preds.xcat.unique():
-                    raise ValueError(
-                        f"""The process name '{n}' is not in the list of already-run
-                        pipelines. Please check the name carefully. If correct, please run 
-                        calculate_predictions() first.
-                        """
-                    )
+            invalid_names = [n for n in name if n not in self.preds.xcat.unique()]
+            if invalid_names:
+                raise ValueError(
+                    f"""The following process name(s) are not in the list of already-run
+                    pipelines: {invalid_names}. Please check the names carefully. If
+                    correct, please run calculate_predictions() first.
+                    """
+                )
             preds = self.preds[self.preds.xcat.isin(name)]
 
         signals_df = QuantamentalDataFrame(
@@ -661,23 +661,23 @@ class ReturnForecaster(BasePanelLearner):
         """
         if name is None:
             return self.selected_ftrs
-        else:
-            if isinstance(name, str):
-                name = [name]
-            elif not isinstance(name, list):
-                raise TypeError(
-                    "The process name must be a string or a list of strings."
-                )
+        
+        if isinstance(name, str):
+            name = [name]
+        elif not isinstance(name, list):
+            raise TypeError(
+                "The process name must be a string or a list of strings."
+            )
 
-            for n in name:
-                if n not in self.selected_ftrs.name.unique():
-                    raise ValueError(
-                        f"""The process name '{n}' is not in the list of already-run
-                        pipelines. Please check the name carefully. If correct, please run 
-                        calculate_predictions() first.
-                        """
-                    )
-            return self.selected_ftrs[self.selected_ftrs.name.isin(name)]
+        invalid_names = [n for n in name if n not in self.selected_ftrs.name.unique()]
+        if invalid_names:
+            raise ValueError(
+                f"""The following process name(s) are not in the list of already-run
+                pipelines: {invalid_names}. Please check the names carefully. If
+                correct, please run calculate_predictions() first.
+                """
+            )
+        return self.selected_ftrs[self.selected_ftrs.name.isin(name)]
 
     def get_feature_importances(self, name=None):
         """
@@ -702,25 +702,26 @@ class ReturnForecaster(BasePanelLearner):
         """
         if name is None:
             return self.feature_importances
-        else:
-            if isinstance(name, str):
-                name = [name]
-            elif not isinstance(name, list):
-                raise TypeError(
-                    "The process name must be a string or a list of strings."
-                )
 
-            for n in name:
-                if n not in self.feature_importances.name.unique():
-                    raise ValueError(
-                        f"""The process name '{n}' is not in the list of already-run
-                        pipelines. Please check the name carefully. If correct, please run 
-                        calculate_predictions() first.
-                        """
-                    )
-            return self.feature_importances[
-                self.feature_importances.name.isin(name)
-            ].sort_values(by="real_date")
+        if isinstance(name, str):
+            name = [name]
+        elif not isinstance(name, list):
+            raise TypeError(
+                "The process name must be a string or a list of strings."
+            )
+
+        invalid_names = [n for n in name if n not in self.feature_importances.name.unique()]
+        if invalid_names:
+            raise ValueError(
+                f"""The following process name(s) are not in the list of already-run
+                pipelines: {invalid_names}. Please check the names carefully. If
+                correct, please run calculate_predictions() first.
+                """
+            )
+
+        return self.feature_importances[
+            self.feature_importances.name.isin(name)
+        ].sort_values(by="real_date")
 
     def get_intercepts(self, name=None):
         """
@@ -740,25 +741,26 @@ class ReturnForecaster(BasePanelLearner):
         """
         if name is None:
             return self.intercepts
-        else:
-            if isinstance(name, str):
-                name = [name]
-            elif not isinstance(name, list):
-                raise TypeError(
-                    "The process name must be a string or a list of strings."
-                )
 
-            for n in name:
-                if n not in self.intercepts.name.unique():
-                    raise ValueError(
-                        f"""The process name '{n}' is not in the list of already-run
-                        pipelines. Please check the name carefully. If correct, please run 
-                        calculate_predictions() first.
-                        """
-                    )
-            return self.intercepts[self.intercepts.name.isin(name)].sort_values(
-                by="real_date"
+        if isinstance(name, str):
+            name = [name]
+        elif not isinstance(name, list):
+            raise TypeError(
+                "The process name must be a string or a list of strings."
             )
+        
+        invalid_names = [n for n in name if n not in self.intercepts.name.unique()]
+        if invalid_names:
+            raise ValueError(
+                f"""The following process name(s) are not in the list of already-run
+                pipelines: {invalid_names}. Please check the names carefully. If
+                correct, please run calculate_predictions() first.
+                """
+            )
+
+        return self.intercepts[self.intercepts.name.isin(name)].sort_values(
+            by="real_date"
+        )
 
     def get_feature_correlations(
         self,
@@ -781,24 +783,24 @@ class ReturnForecaster(BasePanelLearner):
         """
         if name is None:
             return self.ftr_corr
-        else:
-            if isinstance(name, str):
-                name = [name]
-            elif not isinstance(name, list):
-                raise TypeError(
-                    "The process name must be a string or a list of strings."
-                )
 
-            for n in name:
-                if n not in self.ftr_corr.name.unique():
-                    raise ValueError(
-                        f"""Either the process name '{n}' is not in the list of already-run
-                        pipelines, or no correlations were stored for this pipeline.
-                        Please check the name carefully. If correct, please run 
-                        calculate_predictions() first.
-                        """
-                    )
-            return self.ftr_corr[self.ftr_corr.name.isin(name)]
+        if isinstance(name, str):
+            name = [name]
+        elif not isinstance(name, list):
+            raise TypeError(
+                "The process name must be a string or a list of strings."
+            )
+        
+        invalid_names = [n for n in name if n not in self.ftr_corr.name.unique()]
+        if invalid_names:
+            raise ValueError(
+                f"""The following process name(s) are not in the list of already-run
+                pipelines: {invalid_names}. Please check the names carefully. If
+                correct, please run calculate_predictions() first.
+                """
+            )
+
+        return self.ftr_corr[self.ftr_corr.name.isin(name)]
 
     def _check_factor_availability(self, df, xcats, real_date):
         """
