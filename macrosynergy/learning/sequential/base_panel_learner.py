@@ -40,6 +40,7 @@ class BasePanelLearner(ABC):
         lag=1,
         xcat_aggs=["last", "sum"],
         generate_labels=None,
+        skip_checks=False,
     ):
         """
         Initialize a sequential learning process over a panel.
@@ -77,6 +78,8 @@ class BasePanelLearner(ABC):
         generate_labels : callable, optional
             Function to transform the dependent variable, usually into
             classification labels. Default is None.
+        skip_checks : bool, optional
+            Whether to skip the initialization checks. Default is False.
 
         Notes
         -----
@@ -106,18 +109,19 @@ class BasePanelLearner(ABC):
             https://arxiv.org/abs/1807.02811
         """
         # Checks
-        self._check_init(
-            df,
-            xcats,
-            cids,
-            start,
-            end,
-            blacklist,
-            freq,
-            lag,
-            xcat_aggs,
-            generate_labels,
-        )
+        if not skip_checks:
+            self._check_init(
+                df,
+                xcats,
+                cids,
+                start,
+                end,
+                blacklist,
+                freq,
+                lag,
+                xcat_aggs,
+                generate_labels,
+            )
         # Attributes
         self.df = QuantamentalDataFrame(df)
         self.xcats = xcats
@@ -310,6 +314,7 @@ class BasePanelLearner(ABC):
         n_splits_add,
         n_jobs_inner,
         base_splits,
+        timestamp=None,
     ):
         """
         Worker function for parallel processing of the learning process.
@@ -347,6 +352,9 @@ class BasePanelLearner(ABC):
             Number of jobs to run in parallel for the inner loop. Default is 1.
         base_splits : dict
             Dictionary of initial number of splits for each inner splitter.
+        timestamp : pd.Timestamp, optional
+            Date to record predictions and model diagnostics. Default is None. If None,
+            the earliest date in the test set is used (which is then adjusted for lag).
 
         Returns
         -------
@@ -421,7 +429,7 @@ class BasePanelLearner(ABC):
             y_train=y_train,
             X_test=X_test,
             y_test=y_test,
-            timestamp=adj_test_date_levels.min(),
+            timestamp=adj_test_date_levels.min() if timestamp is None else timestamp,
             adjusted_test_index=test_index,
         )
 
@@ -1165,12 +1173,13 @@ class BasePanelLearner(ABC):
 
         # outer splitter
         # TODO: come back and change to WalkForwardPanelSplit
-        if not isinstance(
-            outer_splitter, (ExpandingFrequencyPanelSplit, ExpandingIncrementPanelSplit)
-        ):
-            raise TypeError(
-                "outer_splitter must be an instance of ExpandingFrequencyPanelSplit or ExpandingIncrementPanelSplit."
-            )
+        if outer_splitter:
+            if not isinstance(
+                outer_splitter, (ExpandingFrequencyPanelSplit, ExpandingIncrementPanelSplit)
+            ):
+                raise TypeError(
+                    "outer_splitter must be an instance of ExpandingFrequencyPanelSplit or ExpandingIncrementPanelSplit."
+                )
 
         # inner splitters
         if not isinstance(inner_splitters, dict):
