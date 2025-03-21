@@ -181,7 +181,9 @@ def split_weights_adj_zns(
     return df_weights_wide, df_adj_zns_wide
 
 
-def normalize_weights(out_weights: pd.DataFrame) -> pd.DataFrame:
+def normalize_weights(
+    out_weights: pd.DataFrame, normalize_to_pct: bool = False
+) -> pd.DataFrame:
     """
     Output weights are normalized by dividing each row by the sum of the row. Function exists to
     allow easy modification of normalization method.
@@ -190,6 +192,9 @@ def normalize_weights(out_weights: pd.DataFrame) -> pd.DataFrame:
     ----------
     out_weights : pd.DataFrame
         DataFrame with weights in wide format. (one column per cid)
+
+    normalize_to_pct : bool, optional
+        If True, the resulting weights will be scaled to 100%. Default is False.
 
     Returns
     -------
@@ -204,6 +209,9 @@ def normalize_weights(out_weights: pd.DataFrame) -> pd.DataFrame:
     # assert that all rows sum to 1 or are all NaN
     if not norm_rows.all() and all_nan_rows.size == 0:
         raise Exception("Normalization failed; weights do not sum to 1")
+
+    if normalize_to_pct:
+        out_weights = out_weights * 100
 
     return out_weights
 
@@ -291,9 +299,7 @@ def adjust_weights(
         dfw_result = dfw_result.dropna(how="all", axis="rows")
     if normalize:
         # normalize and scale to 100%
-        dfw_result = normalize_weights(dfw_result)
-        if normalize_to_pct:
-            dfw_result *= 100
+        dfw_result = normalize_weights(dfw_result, normalize_to_pct)
 
     if dfw_result.isna().all().all():
         raise ValueError(
