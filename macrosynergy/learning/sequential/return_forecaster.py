@@ -96,7 +96,8 @@ class ReturnForecaster(BasePanelLearner):
             raise ValueError("'real_date' must be in ISO 8601 format.")
         
         self.real_date = pd.to_datetime(real_date)
-        self._check_factor_availability(df, xcats, self.real_date)
+        df_adj = reduce_df(df=df, xcats=xcats)
+        self._check_factor_availability(df_adj, xcats, self.real_date)
 
         if not isinstance(lag, int):
             raise TypeError("The lag argument must be an integer.")
