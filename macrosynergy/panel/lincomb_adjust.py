@@ -4,7 +4,7 @@ from macrosynergy.management import reduce_df
 from macrosynergy.management.types import QuantamentalDataFrame
 
 
-def lincomb(
+def _lincomb_backend(
     df_zns: pd.DataFrame,
     min_score: Optional[float] = None,
     coeff_new: Optional[float] = 0.5,
@@ -91,7 +91,7 @@ def lincomb_adjust(
 
     dfw = df.to_wide()
 
-    dfw = lincomb(dfw, min_score=min_score, coeff_new=coeff_new)
+    dfw = _lincomb_backend(dfw, min_score=min_score, coeff_new=coeff_new)
 
     return QuantamentalDataFrame.from_wide(dfw, categorical=result_as_categorical)
 
