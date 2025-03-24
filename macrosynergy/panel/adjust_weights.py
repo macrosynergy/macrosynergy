@@ -181,7 +181,9 @@ def split_weights_adj_zns(
     return df_weights_wide, df_adj_zns_wide
 
 
-def normalize_weights(out_weights: pd.DataFrame) -> pd.DataFrame:
+def normalize_weights(
+    out_weights: pd.DataFrame, normalize_to_pct: bool = False
+) -> pd.DataFrame:
     """
     Output weights are normalized by dividing each row by the sum of the row. Function exists to
     allow easy modification of normalization method.
@@ -190,6 +192,9 @@ def normalize_weights(out_weights: pd.DataFrame) -> pd.DataFrame:
     ----------
     out_weights : pd.DataFrame
         DataFrame with weights in wide format. (one column per cid)
+
+    normalize_to_pct : bool, optional
+        If True, the resulting weights will be scaled to 100%. Default is False.
 
     Returns
     -------
@@ -205,6 +210,9 @@ def normalize_weights(out_weights: pd.DataFrame) -> pd.DataFrame:
     if not norm_rows.all() and all_nan_rows.size == 0:
         raise Exception("Normalization failed; weights do not sum to 1")
 
+    if normalize_to_pct:
+        out_weights = out_weights * 100
+
     return out_weights
 
 
@@ -218,6 +226,7 @@ def adjust_weights(
     start: Optional[str] = None,
     end: Optional[str] = None,
     normalize: bool = True,
+    normalize_to_pct: bool = False,
     adj_name: str = "ADJWGT",
 ):
     """
@@ -239,9 +248,16 @@ def adjust_weights(
         Parameters to be passed to the method function. Default is {}.
     cids : List[str], optional
         List of cross-sections to adjust. If None, all cross-sections will be adjusted. Default is None.
+    start : str, optional
+        Start date for the adjustment as YYYY-MM-DD. Default is None.
+    end : str, optional
+        End date for the adjustment as YYYY-MM-DD. Default is None.
     normalize : bool, optional
         If True, the resulting weights will be normalized to sum to one for each date for
         the entire list of cross-sections. Default is True.
+    normalize_to_pct : bool, optional
+        If True, the resulting weights will be scaled to 100%. Default is False.
+        This only applies if `normalize` is True.
     adj_name : str, optional
         Name of the resulting xcat. Default is "ADJWGT".
     """
@@ -283,8 +299,7 @@ def adjust_weights(
         dfw_result = dfw_result.dropna(how="all", axis="rows")
     if normalize:
         # normalize and scale to 100%
-        dfw_result = normalize_weights(dfw_result)
-        dfw_result = dfw_result * 100
+        dfw_result = normalize_weights(dfw_result, normalize_to_pct)
 
     if dfw_result.isna().all().all():
         raise ValueError(

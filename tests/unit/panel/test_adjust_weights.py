@@ -187,6 +187,11 @@ class TestNormalizeWeights(unittest.TestCase):
         with self.assertRaises(Exception):
             normalize_weights(self.df_valid)
 
+    def test_norm_to_pct(self):
+        df = self.df_valid.copy()
+        df = normalize_weights(df, normalize_to_pct=True)
+        self.assertTrue(np.allclose(df.sum(axis=1), 100))
+
 
 class TestSplitWeightsAdjZns(unittest.TestCase):
     def setUp(self):
@@ -377,6 +382,7 @@ def expected_adjusted_weights(
     params: dict,
     adj_name: str,
     normalize: bool = True,
+    normalize_to_pct: bool = False,
 ) -> pd.DataFrame:
     cids = list(set(df["cid"]))
     check_types(weights, adj_zns, method, params, cids)
@@ -393,7 +399,7 @@ def expected_adjusted_weights(
     )
     dfw_result = dfw_result.dropna(how="all", axis="rows")
     if normalize:
-        dfw_result = normalize_weights(dfw_result) * 100
+        dfw_result = normalize_weights(dfw_result) * (100 if normalize_to_pct else 1)
     dfw_result.columns = list(map(lambda x: f"{x}_{adj_name}", dfw_result.columns))
     return ticker_df_to_qdf(dfw_result).dropna(how="any", axis=0).reset_index(drop=True)
 
@@ -474,7 +480,7 @@ class TestAdjustWeightsMain(unittest.TestCase):
             self.assertIn(err_str, last_warn)
 
         self.assertFalse(adjusted.isna().any().any())
-        self.assertTrue(np.allclose(adjusted.groupby("real_date")["value"].sum(), 100))
+        self.assertTrue(np.allclose(adjusted.groupby("real_date")["value"].sum(), 1))
 
         if PD_2_0_OR_LATER:
             self.assertTrue(adjusted.equals(expc_result))
