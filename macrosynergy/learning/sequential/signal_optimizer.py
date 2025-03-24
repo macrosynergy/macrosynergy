@@ -1712,12 +1712,9 @@ if __name__ == "__main__":
     from sklearn.metrics import make_scorer, r2_score, mean_absolute_error
     from macrosynergy.learning import (
         ExpandingKFoldPanelSplit,
-        SignWeightedLinearRegression,
         TimeWeightedLinearRegression,
     )
-    import scipy.stats as stats
     from macrosynergy.management.simulate import make_qdf
-    from macrosynergy.learning.model_evaluation.scorers.scorers import neg_mean_abs_corr
     from macrosynergy.management.types import QuantamentalDataFrame
 
     cids = ["AUD", "CAD", "GBP", "USD"]
