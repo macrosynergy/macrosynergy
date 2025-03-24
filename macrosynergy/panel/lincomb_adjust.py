@@ -5,7 +5,7 @@ from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def _lincomb_backend(
-    dfw_zns: pd.DataFrame,
+    dfw_orig: pd.DataFrame,
     min_score: Optional[float] = None,
     coeff_new: Optional[float] = 0.5,
 ) -> pd.DataFrame:
@@ -16,13 +16,13 @@ def _lincomb_backend(
     assert coeff_new >= 0 and coeff_new <= 1, "`coeff_new` must be between 0 and 1"
 
     # new_weight_basis[i, t] = max(adj_zns[i, t] - min_score, 0)
-    nwb = dfw_zns.apply(lambda s: s.apply(lambda x: max(x - min_score, 0)))
+    nwb = dfw_orig.apply(lambda s: s.apply(lambda x: max(x - min_score, 0)))
 
     # new_weight[i, t] = new_weight_basis[i, t] / sum(new_weight_basis[t])
     nw = nwb.div(nwb.sum(axis="columns"), axis="index")
 
     # output_raw_weight[i, t] = (1 - coeff_new) * old_weight[i, t] + coeff_new * new_weight[i, t]
-    orw = (1 - coeff_new) * dfw_zns + coeff_new * nw
+    orw = (1 - coeff_new) * dfw_orig + coeff_new * nw
 
     # output_weight[i, t] = output_raw_weight[i, t] / sum(output_raw_weight[i, t]))
     ow = orw.div(orw.sum(axis="columns"), axis="index")
