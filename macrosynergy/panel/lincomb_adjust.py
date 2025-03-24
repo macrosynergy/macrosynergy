@@ -12,7 +12,7 @@ def _lincomb_backend(
     """
     Linear combination of the parameters.
     """
-    min_score = -3 if min_score is None else min_score
+    assert min_score is not None, "`min_score` must be provided"
     assert coeff_new >= 0 and coeff_new <= 1, "`coeff_new` must be between 0 and 1"
 
     # new_weight_basis[i, t] = max(adj_zns[i, t] - min_score, 0)
