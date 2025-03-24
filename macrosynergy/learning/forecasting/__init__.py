@@ -22,6 +22,13 @@ from .naive_predictors import (
 
 from .neighbors.nearest_neighbors import KNNClassifier
 
+from .meta_estimators import ProbabilityEstimator, FIExtractor
+
+from .ensemble import (
+    VotingClassifier,
+    VotingRegressor,
+)
+
 __all__ = [
     "LADRegressor",
     "KNNClassifier",
@@ -37,4 +44,8 @@ __all__ = [
     "ModifiedLinearRegression",
     "ModifiedSignWeightedLinearRegression",
     "ModifiedTimeWeightedLinearRegression",
+    "ProbabilityEstimator",
+    "VotingClassifier",
+    "VotingRegressor",
+    "FIExtractor",
 ]
