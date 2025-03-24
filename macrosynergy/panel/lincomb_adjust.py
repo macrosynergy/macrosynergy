@@ -16,7 +16,7 @@ def _lincomb_backend(
     assert coeff_new >= 0 and coeff_new <= 1, "`coeff_new` must be between 0 and 1"
 
     # new_weight_basis[i, t] = max(adj_zns[i, t] - min_score, 0)
-    nwb = df_zns.apply(lambda x: max(x - min_score, 0))
+    nwb = df_zns.apply(lambda s: s.apply(lambda x: max(x - min_score, 0)))
 
     # new_weight[i, t] = new_weight_basis[i, t] / sum(new_weight_basis[t])
     nw = nwb.div(nwb.sum(axis="columns"), axis="index")
@@ -77,7 +77,7 @@ def lincomb_adjust(
     if not 0 <= coeff_new <= 1:
         raise ValueError("`coeff_new` must be between 0 and 1")
 
-    df, r_xcats, r_cids = reduce_df(df, xcats=[zns_xcat], cids=cids)
+    df, r_xcats, r_cids = reduce_df(df, xcats=[zns_xcat], cids=cids, out_all=True)
 
     if cids is not None:
         if set(r_cids).issubset(set(cids)):
@@ -91,7 +91,7 @@ def lincomb_adjust(
 
     dfw = df.to_wide()
 
-    dfw = _lincomb_backend(dfw, min_score=min_score, coeff_new=coeff_new)
+    dfw = _lincomb_backend(df_zns=dfw, min_score=min_score, coeff_new=coeff_new)
 
     return QuantamentalDataFrame.from_wide(dfw, categorical=result_as_categorical)
 
@@ -102,6 +102,7 @@ if __name__ == "__main__":
     df = make_test_df(xcats=["weights", "adj_zns"], cids=["cid1", "cid2", "cid3"])
     dfb = make_test_df(xcats=["some_xcat", "other_xcat"], cids=["cid1", "cid2", "cid4"])
     df = pd.concat([df, dfb], axis=0)
+    import macrosynergy.panel as msp
 
     df_res = lincomb_adjust(df, zns_xcat="adj_zns", min_score=-3, coeff_new=0.5)
     print(df_res)
