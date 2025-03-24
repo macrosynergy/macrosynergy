@@ -25,4 +25,4 @@ PD_2_0_OR_LATER: bool = version.parse(pd.__version__) >= version.parse("2.0.0")
 
 # Availability of pd.DataFrame.applymap/map
 # https://pandas.pydata.org/pandas-docs/version/2.1/reference/api/pandas.DataFrame.map.html
-PD_APPLY_MAP: bool = version.parse(pd.__version__) >= version.parse("2.1.0")
+PD_NEW_MAP: bool = version.parse(pd.__version__) >= version.parse("2.1.0")
