@@ -401,14 +401,13 @@ class ScoreVisualisers:
             dfw = dfw[xcats]
 
         if xcat_labels:
-            if set(self._apply_postfix(list(xcat_labels.keys()))) >= set(dfw.columns):
-                dfw.columns = [
-                    xcat_labels.get(
-                        self._strip_postfix([xcat])[0],
-                        xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
-                    )
-                    for xcat in dfw.columns
-                ]
+            dfw.columns = [
+                xcat_labels.get(
+                    self._strip_postfix([xcat])[0],
+                    xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
+                )
+                for xcat in dfw.columns
+            ]
 
         if transpose:
             dfw = dfw.transpose()
@@ -654,6 +653,12 @@ class ScoreVisualisers:
         df = self.df[self.df["cid"] == cid]
         df = df if start is None else df[df["real_date"] >= start]
         df = df[df["xcat"].isin(xcats)]
+        
+        # If there is an xcat that does not exist in the DataFrame, remove it and warn
+        for xcat in xcats:
+            if xcat not in df["xcat"].unique():
+                xcats.remove(xcat)
+                warnings.warn(f"{xcat} not in the DataFrame")
 
         dfw = df.pivot(index="real_date", columns="xcat", values="value")
         dfw.columns.name = None
@@ -708,16 +713,13 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled[xcats]
 
         if xcat_labels:
-            if set(self._apply_postfix(list(xcat_labels.keys()))) >= set(
-                dfw_resampled.columns
-            ):
-                dfw_resampled.columns = [
-                    xcat_labels.get(
-                        self._strip_postfix([xcat])[0],
-                        xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
-                    )
-                    for xcat in dfw_resampled.columns
-                ]
+            dfw_resampled.columns = [
+                xcat_labels.get(
+                    self._strip_postfix([xcat])[0],
+                    xcat_labels.get(self._apply_postfix([xcat])[0], xcat),
+                )
+                for xcat in dfw_resampled.columns
+            ]
 
         dfw_resampled = dfw_resampled.transpose()
 
@@ -851,7 +853,7 @@ if __name__ == "__main__":
         transpose=False,
         yticks_rotation=45,
     )
-    sv.view_cid_evolution(cid="USD", xcats=xcats, freq="Q", transpose=False)
+    sv.view_cid_evolution(cid="USD", xcats=xcats + ["Composite", "BEEP"] , freq="A", transpose=False)
     sv.view_score_evolution(
         xcat="GGIEDGDP_NSA",
         cids=cids,
