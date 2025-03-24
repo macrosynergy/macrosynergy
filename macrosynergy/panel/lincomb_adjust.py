@@ -102,7 +102,11 @@ if __name__ == "__main__":
     df = make_test_df(xcats=["weights", "adj_zns"], cids=["cid1", "cid2", "cid3"])
     dfb = make_test_df(xcats=["some_xcat", "other_xcat"], cids=["cid1", "cid2", "cid4"])
     df = pd.concat([df, dfb], axis=0)
-    import macrosynergy.panel as msp
 
-    df_res = linear_combination_adjustment(df, zns_xcat="adj_zns", min_score=-3, coeff_new=0.5)
+    df_res = linear_combination_adjustment(
+        df,
+        zns_xcat="adj_zns",
+        min_score=-3,
+        coeff_new=0.5,
+    )
     print(df_res)
