@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from typing import Optional, List
 from macrosynergy.management import reduce_df
 from macrosynergy.management.types import QuantamentalDataFrame
@@ -27,6 +28,7 @@ def _lincomb_backend(
     # output_weight[i, t] = output_raw_weight[i, t] / sum(output_raw_weight[i, t]))
     ow = orw.div(orw.sum(axis="columns"), axis="index")
 
+    assert np.allclose(ow[~ow.isna().any(axis="columns")].sum(axis=1), 1)
     return ow
 
 
@@ -95,7 +97,7 @@ def linear_combination_adjustment(
 
     dfw = df.to_wide()
 
-    dfw = _lincomb_backend(dfw_zns=dfw, min_score=min_score, coeff_new=coeff_new)
+    dfw = _lincomb_backend(dfw_orig=dfw, min_score=min_score, coeff_new=coeff_new)
 
     qdf = QuantamentalDataFrame.from_wide(dfw)
     qdf = qdf.rename_xcats({zns_xcat: adj_name})
