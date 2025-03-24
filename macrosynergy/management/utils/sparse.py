@@ -172,6 +172,9 @@ class InformationStateChanges(object):
             If True, calculate the score for the information state changes.
         score_by : str
             The method to use for scoring. If "diff" (default), the score is calculated
+            based on the difference between the information state changes. If "level", the
+            score is calculated based on the value ('level') of the information state
+            change.
         **kwargs : Any
             Additional keyword arguments to pass to the `calculate_score` Please refer
             to `InformationStateChanges.calculate_score()` for more information.
@@ -182,8 +185,10 @@ class InformationStateChanges(object):
             An InformationStateChanges object.
         """
         if score_by not in SCORE_BY_OPTIONS.keys():
-            raise ValueError(f"`score_by` must be one of {list(SCORE_BY_OPTIONS.keys())}")
-        
+            raise ValueError(
+                f"`score_by` must be one of {list(SCORE_BY_OPTIONS.keys())}"
+            )
+
         isc: InformationStateChanges = cls(
             min_period=df["real_date"].min(),
             max_period=df["real_date"].max(),
@@ -192,7 +197,9 @@ class InformationStateChanges(object):
         df = QuantamentalDataFrame(df)
         isc._qdf_as_categorical = df.InitializedAsCategorical
 
-        isc_dict, density_stats_df = create_delta_data(df, return_density_stats=True, score_by=score_by)
+        isc_dict, density_stats_df = create_delta_data(
+            df, return_density_stats=True, score_by=score_by
+        )
 
         isc.isc_dict = isc_dict
         isc.density_stats_df = density_stats_df
@@ -736,7 +743,9 @@ def _get_diff_density_stats(
 
 
 def create_delta_data(
-    df: QuantamentalDataFrame, return_density_stats: bool = False, score_by: str = "diff"
+    df: QuantamentalDataFrame,
+    return_density_stats: bool = False,
+    score_by: str = "diff",
 ) -> Union[Dict[str, pd.DataFrame], pd.DataFrame]:
     """
     Creates a dictionary of dataframes with the changes in the information state for
@@ -777,28 +786,31 @@ def create_delta_data(
     assert set(values_df.columns) == set(eop_df.columns) == set(grading_df.columns)
     all_tickers: List[str] = values_df.columns.tolist()
 
-
-    
-
     # create dicts to store the dataframes and density stats
     isc_dict: Dict[str, Any] = {}
     # density_stats: Dict[str, Dict[str, Any]] = {}
 
     if score_by == "diff":
         diff_mask = values_df.diff(axis=0).abs() > 1e-12
-        
+
         # get the first valid index for each column
-        fvi_series: pd.Series = values_df.apply(lambda x: x.first_valid_index())       
-    else:
+        fvi_series: pd.Series = values_df.apply(lambda x: x.first_valid_index())
+    elif score_by == "level":
         diff_mask = values_df.abs() > 1e-12
 
         # get the first valid index for each column
-        labels, values = zip(*[(col, values_df.loc[diff_mask[col], col].first_valid_index()) for col in values_df])
+        labels, values = zip(
+            *[
+                (col, values_df.loc[diff_mask[col], col].first_valid_index())
+                for col in values_df
+            ]
+        )
         fvi_series: pd.Series = pd.Series(values, index=labels)
+    else:
+        raise ValueError(f"Invalid value for `score_by`: {score_by}")
 
     lvi_series: pd.Series = values_df.apply(lambda x: x.last_valid_index())
     density_stats: Dict[str, Dict[str, Union[float, str]]] = {}
-
 
     for ticker in all_tickers:
         isc_dict[ticker] = _get_diff_data(
