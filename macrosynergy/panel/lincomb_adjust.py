@@ -30,7 +30,7 @@ def _lincomb_backend(
     return ow
 
 
-def lincomb_adjust(
+def linear_combination_adjustment(
     df: QuantamentalDataFrame,
     zns_xcat: str,
     cids: Optional[List[str]] = None,
@@ -104,5 +104,5 @@ if __name__ == "__main__":
     df = pd.concat([df, dfb], axis=0)
     import macrosynergy.panel as msp
 
-    df_res = lincomb_adjust(df, zns_xcat="adj_zns", min_score=-3, coeff_new=0.5)
+    df_res = linear_combination_adjustment(df, zns_xcat="adj_zns", min_score=-3, coeff_new=0.5)
     print(df_res)
