@@ -29,7 +29,7 @@ from .model_evaluation import (
     create_panel_metric,
     regression_mcc,
 )
-from .sequential import SignalOptimizer, BetaEstimator
+from .sequential import SignalOptimizer, BetaEstimator, ReturnForecaster
 
 from .forecasting import (
     LADRegressor,
@@ -46,6 +46,10 @@ from .forecasting import (
     RidgeRegressionSystem,
     CorrelationVolatilitySystem,
     KNNClassifier,
+    ProbabilityEstimator,
+    VotingRegressor,
+    VotingClassifier,
+    FIExtractor,
 )
 
 from .random_effects import RandomEffects
@@ -81,8 +85,9 @@ __all__ = [
     "create_panel_metric",
     "correlation_coefficient",
     "regression_mcc",
-    # signal_optimizer
+    # Sequential forecasting
     "SignalOptimizer",
+    "ReturnForecaster",
     # forecasting
     "NaiveRegressor",
     "LADRegressor",
@@ -94,6 +99,8 @@ __all__ = [
     "ModifiedLinearRegression",
     "ModifiedSignWeightedLinearRegression",
     "ModifiedTimeWeightedLinearRegression",
+    "VotingRegressor",
+    "VotingClassifier",
     # market beta estimation
     "BetaEstimator",
     # regression system
@@ -103,4 +110,7 @@ __all__ = [
     "CorrelationVolatilitySystem",
     # random effects
     "RandomEffects",
+    # Meta estimators
+    "ProbabilityEstimator",
+    "FIExtractor",
 ]
