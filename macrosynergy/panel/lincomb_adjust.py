@@ -36,6 +36,7 @@ def linear_combination_adjustment(
     cids: Optional[List[str]] = None,
     min_score: Optional[float] = None,
     coeff_new: Optional[float] = 0.5,
+    adj_name: str = "lincomb",
 ) -> QuantamentalDataFrame:
     """
     Adjust the weights of the zns scores based on the linear combination of the cross-sectional values.
@@ -54,6 +55,9 @@ def linear_combination_adjustment(
 
     coeff_new : float, optional
         The coefficient to use for the new weights. Default is 0.5.
+
+    adj_name : str, optional
+        The name of the new category. Default is "lincomb".
 
     Returns
     -------
@@ -93,7 +97,11 @@ def linear_combination_adjustment(
 
     dfw = _lincomb_backend(dfw_zns=dfw, min_score=min_score, coeff_new=coeff_new)
 
-    return QuantamentalDataFrame.from_wide(dfw, categorical=result_as_categorical)
+    qdf = QuantamentalDataFrame.from_wide(dfw)
+    qdf = qdf.rename_xcats({zns_xcat: adj_name})
+    qdf = QuantamentalDataFrame(qdf, _initialized_as_categorical=result_as_categorical)
+
+    return qdf.to_original_dtypes()
 
 
 if __name__ == "__main__":
@@ -108,5 +116,6 @@ if __name__ == "__main__":
         zns_xcat="adj_zns",
         min_score=-3,
         coeff_new=0.5,
+        adj_name="lincomb",
     )
     print(df_res)
