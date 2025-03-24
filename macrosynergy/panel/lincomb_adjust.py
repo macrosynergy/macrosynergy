@@ -4,9 +4,16 @@ from typing import Optional, List
 from macrosynergy.management import reduce_df
 from macrosynergy.management.types import QuantamentalDataFrame
 
+from macrosynergy.panel.adjust_weights import (
+    split_weights_adj_zns,
+    check_missing_cids_xcats,
+    normalize_weights,
+)
+
 
 def _lincomb_backend(
-    dfw_orig: pd.DataFrame,
+    dfw_adj_zns: pd.DataFrame,
+    dfw_weights: pd.DataFrame,
     min_score: Optional[float] = None,
     coeff_new: Optional[float] = 0.5,
 ) -> pd.DataFrame:
@@ -17,13 +24,13 @@ def _lincomb_backend(
     assert coeff_new >= 0 and coeff_new <= 1, "`coeff_new` must be between 0 and 1"
 
     # new_weight_basis[i, t] = max(adj_zns[i, t] - min_score, 0)
-    nwb = dfw_orig.apply(lambda s: s.apply(lambda x: max(x - min_score, 0)))
+    nwb = dfw_adj_zns.apply(lambda s: s.apply(lambda x: max(x - min_score, 0)))
 
     # new_weight[i, t] = new_weight_basis[i, t] / sum(new_weight_basis[t])
     nw = nwb.div(nwb.sum(axis="columns"), axis="index")
 
     # output_raw_weight[i, t] = (1 - coeff_new) * old_weight[i, t] + coeff_new * new_weight[i, t]
-    orw = (1 - coeff_new) * dfw_orig + coeff_new * nw
+    orw = (1 - coeff_new) * dfw_weights + coeff_new * nw
 
     # output_weight[i, t] = output_raw_weight[i, t] / sum(output_raw_weight[i, t]))
     ow = orw.div(orw.sum(axis="columns"), axis="index")
@@ -34,10 +41,13 @@ def _lincomb_backend(
 
 def linear_combination_adjustment(
     df: QuantamentalDataFrame,
-    zns_xcat: str,
+    adj_zns_xcat: str,
+    weights_xcat: str,
     cids: Optional[List[str]] = None,
     min_score: Optional[float] = None,
     coeff_new: Optional[float] = 0.5,
+    normalize: bool = True,
+    normalize_to_pct: bool = False,
     adj_name: str = "lincomb",
 ) -> QuantamentalDataFrame:
     """
@@ -58,6 +68,12 @@ def linear_combination_adjustment(
     coeff_new : float, optional
         The coefficient to use for the new weights. Default is 0.5.
 
+    normalize : bool, optional
+        Whether to normalize the weights. Default is True.
+
+    normalize_to_pct : bool, optional
+        Whether to normalize the weights to percentages. Default is False.
+
     adj_name : str, optional
         The name of the new category. Default is "lincomb".
 
@@ -72,7 +88,7 @@ def linear_combination_adjustment(
     df = QuantamentalDataFrame(df)
     result_as_categorical: bool = df.InitializedAsCategorical
 
-    if not isinstance(zns_xcat, str):
+    if not isinstance(adj_zns_xcat, str):
         raise TypeError("`zns_xcat` must be a string")
 
     if not isinstance(min_score, (int, float, type(None))):
@@ -83,27 +99,40 @@ def linear_combination_adjustment(
     if not 0 <= coeff_new <= 1:
         raise ValueError("`coeff_new` must be between 0 and 1")
 
-    df, r_xcats, r_cids = reduce_df(df, xcats=[zns_xcat], cids=cids, out_all=True)
+    df, r_xcats, r_cids = reduce_df(
+        df, xcats=[adj_zns_xcat, weights_xcat], cids=cids, out_all=True
+    )
 
     if cids is not None:
         if set(r_cids).issubset(set(cids)):
             raise ValueError("The `cids` provided are not present in the dataframe")
 
-    if set(r_xcats) != set([zns_xcat]):
+    if set(r_xcats) != set([adj_zns_xcat, weights_xcat]):
         raise ValueError(f"The `zns_xcat` provided is not present in the dataframe")
 
     if min_score is None:
         min_score = df["value"].min()
 
-    dfw = df.to_wide()
+    # dfw = df.to_wide()
+    dfw_weights, dfw_adj_zns = split_weights_adj_zns(
+        df=df, weights=weights_xcat, adj_zns=adj_zns_xcat
+    )
 
-    dfw = _lincomb_backend(dfw_orig=dfw, min_score=min_score, coeff_new=coeff_new)
+    dfw = _lincomb_backend(
+        dfw_adj_zns=dfw_adj_zns,
+        dfw_weights=dfw_weights,
+        min_score=min_score,
+        coeff_new=coeff_new,
+    )
 
-    qdf = QuantamentalDataFrame.from_wide(dfw)
-    qdf = qdf.rename_xcats({zns_xcat: adj_name})
-    qdf = QuantamentalDataFrame(qdf, _initialized_as_categorical=result_as_categorical)
+    if normalize:
+        dfw = normalize_weights(dfw, normalize_to_pct=normalize_to_pct)
 
-    return qdf.to_original_dtypes()
+    dfw.columns = dfw.columns + "_" + adj_name
+
+    return QuantamentalDataFrame.from_wide(
+        dfw, categorical=result_as_categorical
+    ).to_original_dtypes()
 
 
 if __name__ == "__main__":
@@ -115,7 +144,8 @@ if __name__ == "__main__":
 
     df_res = linear_combination_adjustment(
         df,
-        zns_xcat="adj_zns",
+        adj_zns_xcat="adj_zns",
+        weights_xcat="weights",
         min_score=-3,
         coeff_new=0.5,
         adj_name="lincomb",
