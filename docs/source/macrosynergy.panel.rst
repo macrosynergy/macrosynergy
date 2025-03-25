@@ -11,7 +11,7 @@ Submodules
 
 .. toctree::
    :maxdepth: 2
-
+   macrosynergy.panel.adjust_weights
    macrosynergy.panel.basket
    macrosynergy.panel.category_relations
    macrosynergy.panel.converge_row
