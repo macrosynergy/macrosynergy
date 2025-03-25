@@ -1251,7 +1251,7 @@ class NaivePnL:
                     "label_dict must have the same number of keys as columns in the "
                     "DataFrame."
                 )
-            df.rename(index=label_dict, inplace=True)
+            df.rename(columns=label_dict, inplace=True)
             df = df[label_dict.values()]
 
         return df
