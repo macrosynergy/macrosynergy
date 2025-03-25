@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
+from numbers import Number
+import warnings
 from typing import Optional, List
+
 from macrosynergy.management import reduce_df
 from macrosynergy.management.types import QuantamentalDataFrame
 
@@ -91,10 +94,10 @@ def linear_combination_adjustment(
     if not isinstance(adj_zns_xcat, str):
         raise TypeError("`zns_xcat` must be a string")
 
-    if not isinstance(min_score, (int, float, type(None))):
+    if not isinstance(min_score, (Number, type(None))):
         raise TypeError("`min_score` must be a number or None")
 
-    if not isinstance(coeff_new, (int, float)):
+    if not isinstance(coeff_new, Number):
         raise TypeError("`coeff_new` must be a number")
     if not 0 <= coeff_new <= 1:
         raise ValueError("`coeff_new` must be between 0 and 1")
@@ -110,13 +113,15 @@ def linear_combination_adjustment(
     if set(r_xcats) != set([adj_zns_xcat, weights_xcat]):
         raise ValueError(f"The `zns_xcat` provided is not present in the dataframe")
 
-    if min_score is None:
-        min_score = df["value"].min()
-
-    # dfw = df.to_wide()
     dfw_weights, dfw_adj_zns = split_weights_adj_zns(
         df=df, weights=weights_xcat, adj_zns=adj_zns_xcat
     )
+
+    if min_score is None:
+        warnings.warn(
+            "`min_score` is not provided. Setting it to the minimum score in the panel."
+        )
+        min_score = dfw_adj_zns.min().min()
 
     dfw = _lincomb_backend(
         dfw_adj_zns=dfw_adj_zns,
