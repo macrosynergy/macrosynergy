@@ -574,11 +574,17 @@ class NaivePnL:
             )["real_date"].min()
         elif rebal_freq == "weekly":
             dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
-            rebal_dates = dfw.groupby(["cid", "year", "week"], observed=True)["real_date"].min()
+            rebal_dates = dfw.groupby(["cid", "year", "week"], observed=True)[
+                "real_date"
+            ].min()
         elif rebal_freq == "daily":
-            rebal_dates = dfw.groupby(["cid", "year", "real_date"], observed=True)["real_date"].min()
+            rebal_dates = dfw.groupby(["cid", "year", "real_date"], observed=True)[
+                "real_date"
+            ].min()
         else:
-            raise ValueError("Re-balancing frequency must be one of: daily, weekly, monthly.")
+            raise ValueError(
+                "Re-balancing frequency must be one of: daily, weekly, monthly."
+            )
 
         # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
         r_dates_df = rebal_dates.reset_index(level=0)
@@ -602,7 +608,9 @@ class NaivePnL:
         rebal_merge = dfw[["real_date", "cid"]].merge(
             rebal_merge, how="left", on=["real_date", "cid"]
         )
-        rebal_merge["psig"] = rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
+        rebal_merge["psig"] = (
+            rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
+        )
         rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 
         rebal_merge = rebal_merge.set_index("real_date")
@@ -832,7 +840,9 @@ class NaivePnL:
         df_grouped = dfx.groupby(plot_by, observed=True)
 
         if compounding:
-            dfx["cum_value"] = df_grouped["value"].cumprod(numeric_only=True)
+            dfx["cum_value"] = (1 + df_grouped["value"] / 100).cumprod(
+                numeric_only=True
+            ) - 1
         else:
             dfx["cum_value"] = df_grouped["value"].cumsum(numeric_only=True)
 
@@ -897,7 +907,7 @@ class NaivePnL:
                 labels=labels,
                 title=legend_title,
                 title_fontsize=legend_fontsize,
-                fontsize=legend_fontsize
+                fontsize=legend_fontsize,
             )
             plt.xlabel(xlab, fontsize=label_fontsize)
             plt.ylabel(ylab, fontsize=label_fontsize)
@@ -908,7 +918,7 @@ class NaivePnL:
         else:
             labels = labels[::-1]
 
-        fg.tick_params(axis='both', labelsize=tick_fontsize)
+        fg.tick_params(axis="both", labelsize=tick_fontsize)
         plt.axhline(y=0, color="black", linestyle="--", lw=1)
         plt.show()
 
@@ -1008,7 +1018,7 @@ class NaivePnL:
         ax.set(xlabel=x_label, ylabel=y_label)
         ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
         ax.set_title(title, fontsize=14)
-        
+
         ax.tick_params(axis="x", labelsize=tick_fontsize)
         ax.tick_params(axis="y", labelsize=tick_fontsize)
 
