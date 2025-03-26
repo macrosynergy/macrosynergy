@@ -409,6 +409,10 @@ class ScoreVisualisers:
                 for xcat in dfw.columns
             ]
 
+        # Drop columns and rows with all NaNs
+        dfw = dfw.dropna(axis=1, how="all")
+        dfw = dfw.dropna(axis=0, how="all")
+
         if transpose:
             dfw = dfw.transpose()
 
@@ -558,6 +562,10 @@ class ScoreVisualisers:
 
         dfw_resampled = dfw_resampled.transpose()
         dfw_resampled = dfw_resampled.reindex(cids)
+
+        # Drop columns and rows with all NaNs
+        dfw_resampled = dfw_resampled.dropna(axis=1, how="all")
+        dfw_resampled = dfw_resampled.dropna(axis=0, how="all")
 
         if transpose:
             dfw_resampled = dfw_resampled.transpose()
@@ -723,6 +731,10 @@ class ScoreVisualisers:
 
         dfw_resampled = dfw_resampled.transpose()
 
+        # Drop columns and rows with all NaNs
+        dfw_resampled = dfw_resampled.dropna(axis=1, how="all")
+        dfw_resampled = dfw_resampled.dropna(axis=0, how="all")
+
         if transpose:
             dfw_resampled = dfw_resampled.transpose()
 
@@ -849,15 +861,15 @@ if __name__ == "__main__":
         blacklist=blacklist,
     )
 
-    # sv.view_snapshot(
-    #     cids=["USD", "EUR", "JPY", "GBP", "CHF"],
-    #     xcats=xcats + ["Composite"],
-    #     figsize=(14, 12),
-    #     sort_by_composite=True,
-    #     composite_to_end=True,
-    #     transpose=False,
-    #     yticks_rotation=45,
-    # )
+    sv.view_snapshot(
+        cids=["USD", "EUR", "JPY", "GBP", "CHF"],
+        xcats=xcats + ["Composite"],
+        figsize=(14, 12),
+        sort_by_composite=True,
+        composite_to_end=True,
+        transpose=False,
+        yticks_rotation=45,
+    )
     sv.view_cid_evolution(cid="USD", xcats=xcats + ["Composite"] , freq="A", transpose=False)
     sv.view_score_evolution(
         xcat="GGIEDGDP_NSA",
