@@ -12,6 +12,8 @@ from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.compat import PD_NEW_MAP
 
+AVAILABLE_METHODS: List[str] = ["generic", "lincomb"]
+
 
 def check_missing_cids_xcats(weights, adj_zns, cids, r_xcats, r_cids):
     """
@@ -29,7 +31,8 @@ def check_missing_cids_xcats(weights, adj_zns, cids, r_xcats, r_cids):
 def check_types(
     weights: str,
     adj_zns: str,
-    method: Callable,
+    method: str,
+    adj_func: Callable,
     params: Dict[str, Any],
     cids: List[str],
     start: Optional[str] = None,
@@ -41,7 +44,8 @@ def check_types(
     for _var, _name, _type in [
         (weights, "weights", str),
         (adj_zns, "adj_zns", str),
-        (method, "method", Callable),
+        (method, "method", str),
+        (adj_func, "adj_func", (Callable, type(None))),
         (params, "param", dict),
         (cids, "cids", (list, type(None))),
         (start, "start", (str, type(None))),
@@ -55,11 +59,55 @@ def check_types(
     ):
         raise TypeError("`cids` must be a None(default) or a non-empty list of strings")
 
+    if method not in AVAILABLE_METHODS:
+        raise ValueError(
+            f"Method {method} not available. Available methods: {AVAILABLE_METHODS}"
+        )
+    if method == "generic":
+        if adj_func is None:
+            raise ValueError("`adj_func` must be provided when method='generic'")
 
-def adjust_weights_backend(
+
+def lincomb_backend(
+    dfw_adj_zns: pd.DataFrame,
+    dfw_weights: pd.DataFrame,
+    min_score: Optional[float] = None,
+    coeff_new: Optional[float] = None,
+) -> pd.DataFrame:
+    """
+    Linear combination of the parameters.
+    """
+    if min_score is None:
+        warnings.warn(
+            "`min_score` not provided. Defaulting to minimum value from `dfw_adj_zns`"
+        )
+        min_score = dfw_adj_zns.min().min()
+
+    err_str = "Parameter `coeff_new` must be provided as a floating point number between 0 and 1."
+    if not isinstance(coeff_new, Number) or (
+        isinstance(coeff_new, Number) and not 0 <= coeff_new <= 1
+    ):
+        raise ValueError(err_str)
+
+    # Algorithm:
+    # new_weight_basis[i, t] = max(adj_zns[i, t] - min_score, 0)
+    # new_weight[i, t] = new_weight_basis[i, t] / sum(new_weight_basis[t])
+    # output_raw_weight[i, t] = (1 - coeff_new) * old_weight[i, t] + coeff_new * new_weight[i, t]
+    # output_weight[i, t] = output_raw_weight[i, t] / sum(output_raw_weight[i, t]))
+    # where `i` is the cross-section and `t` is the date
+
+    nwb = dfw_adj_zns.apply(lambda s: s.apply(lambda x: max(x - min_score, 0)))
+    nw = nwb.div(nwb.sum(axis="columns"), axis="index")
+    orw = (1 - coeff_new) * dfw_weights + coeff_new * nw
+    ow = orw.div(orw.sum(axis="columns"), axis="index")
+
+    return ow
+
+
+def generic_weights_backend(
     df_weights_wide: pd.DataFrame,
     df_adj_zns_wide: pd.DataFrame,
-    method: Callable,
+    adj_func: Callable,
     params: Dict[str, Any] = {},
 ) -> pd.DataFrame:
     """
@@ -92,9 +140,9 @@ def adjust_weights_backend(
     assert set(df_weights_wide.index) == set(df_adj_zns_wide.index)
 
     if PD_NEW_MAP:
-        dfw_result = df_weights_wide * df_adj_zns_wide.map(method, **params)
+        dfw_result = df_weights_wide * df_adj_zns_wide.map(adj_func, **params)
     else:
-        dfw_result = df_weights_wide * df_adj_zns_wide.applymap(method, **params)
+        dfw_result = df_weights_wide * df_adj_zns_wide.applymap(adj_func, **params)
 
     return dfw_result
 
@@ -220,7 +268,8 @@ def adjust_weights(
     df: QuantamentalDataFrame,
     weights: str,
     adj_zns: str,
-    method: Callable[[Number], Number],
+    method: str = "generic",
+    adj_func: Callable = None,
     params: Dict[str, Any] = {},
     cids: List[str] = None,
     start: Optional[str] = None,
@@ -242,8 +291,11 @@ def adjust_weights(
     adj_zns : str
         Name of the category containing the adjustment factors.
     method : Callable
-        Function that will be applied to the weights to adjust them. This function must
-        conform to `f(x: Number, **params) -> Number`.
+        One of the available methods for adjusting weights. Default is "generic".
+        See notes for available methods.
+    adj_func : Callable, optional
+        Function to be used for the adjustment when method is "generic". This function will
+        be applied to the weights and multiplied by the adjustment factors. Default is None.
     params : Dict[str, Any], optional
         Parameters to be passed to the method function. Default is {}.
     cids : List[str], optional
@@ -260,6 +312,33 @@ def adjust_weights(
         This only applies if `normalize` is True.
     adj_name : str, optional
         Name of the resulting xcat. Default is "ADJWGT".
+
+
+    Returns
+    -------
+    QuantamentalDataFrame
+        DataFrame with the adjusted weights.
+
+    Notes
+    -----
+    Available methods:
+    - "generic": Applies the method function to the weights and multiplies the result by the
+        adjustment factors. The method function must accept a single argument (the weight) and
+        return a single value (the adjusted weight).
+
+    - "lincomb": Linear combination of the parameters. The method function must accept a single
+        argument (the weight) and return a single value (the adjusted weight). The parameters
+        `min_score` (minimum score for the adjustment factors) and `coeff_new` (coefficient for
+        the new weights) must be provided in the `params` dictionary. See
+        macrosynergy.panel.adjust_weights.lincomb_backend for more details.
+
+    Examples
+    --------
+
+    >>> df = make_test_df(xcats=["weights", "adj_zns"], cids=["cid1", "cid2", "cid3"])
+
+    >>>
+
     """
 
     if not isinstance(df, QuantamentalDataFrame):
@@ -268,7 +347,16 @@ def adjust_weights(
     df: QuantamentalDataFrame = QuantamentalDataFrame(df)
     result_as_categorical: bool = df.InitializedAsCategorical
 
-    check_types(weights, adj_zns, method, params, cids, start, end)
+    check_types(
+        weights=weights,
+        adj_zns=adj_zns,
+        method=method,
+        adj_func=adj_func,
+        params=params,
+        cids=cids,
+        start=start,
+        end=end,
+    )
 
     df, r_xcats, r_cids = reduce_df(
         df,
@@ -288,9 +376,23 @@ def adjust_weights(
 
     # no need to normalize weights before applying the adjustment
 
-    dfw_result = adjust_weights_backend(
-        df_weights_wide, df_adj_zns_wide, method, params
-    )
+    if method == "lincomb":
+        dfw_result = lincomb_backend(
+            dfw_adj_zns=df_adj_zns_wide,
+            dfw_weights=df_weights_wide,
+            **params,
+        )
+
+    elif method == "generic":
+        dfw_result = generic_weights_backend(
+            df_weights_wide=df_weights_wide,
+            df_adj_zns_wide=df_adj_zns_wide,
+            adj_func=adj_func,
+            params=params,
+        )
+    else:
+        # this condition is covered in a check above
+        raise ValueError(f"Method {method} not available.")  # pragma: no cover
 
     all_nan_rows = dfw_result.index[dfw_result.isnull().all(axis="columns")]
     if all_nan_rows.size > 0:
@@ -321,7 +423,22 @@ if __name__ == "__main__":
     # df.loc[nan_mask, "value"] = np.nan
     # nan_mask = np.random.rand(len(df)) < 0.1
     # df.loc[nan_mask, "value"] *= -1
+
     df = pd.concat([df, dfb], axis=0)
+
+    # Using the lincomb method
+
+    df_res = adjust_weights(
+        df=df,
+        weights="weights",
+        adj_zns="adj_zns",
+        method="lincomb",
+        params={"min_score": None, "coeff_new": 0.5},
+    )
+
+    assert np.allclose(df_res.groupby("real_date")["value"].sum(), 1)
+
+    # Using the generic method
 
     def sigmoid(x, amplitude=1.0, steepness=1.0, midpoint=0.0):
         """Sigmoid function with parameters for amplitude, steepness, and midpoint."""
@@ -329,8 +446,15 @@ if __name__ == "__main__":
 
     params = {"amplitude": 1, "steepness": 4, "midpoint": 1}
 
-    df_res = adjust_weights(df, "weights", "adj_zns", sigmoid, params)
+    df_res = adjust_weights(
+        df=df,
+        weights="weights",
+        adj_zns="adj_zns",
+        method="generic",
+        adj_func=sigmoid,
+        params=params,
+    )
 
-    assert np.allclose(df_res.groupby("real_date")["value"].sum(), 100)
+    assert np.allclose(df_res.groupby("real_date")["value"].sum(), 1)
 
     print(df_res)
