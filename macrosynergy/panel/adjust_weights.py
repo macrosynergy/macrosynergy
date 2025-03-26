@@ -89,19 +89,18 @@ def lincomb_backend(
     ):
         raise ValueError(err_str)
 
+    # Algorithm:
     # new_weight_basis[i, t] = max(adj_zns[i, t] - min_score, 0)
-    nwb = dfw_adj_zns.apply(lambda s: s.apply(lambda x: max(x - min_score, 0)))
-
     # new_weight[i, t] = new_weight_basis[i, t] / sum(new_weight_basis[t])
-    nw = nwb.div(nwb.sum(axis="columns"), axis="index")
-
     # output_raw_weight[i, t] = (1 - coeff_new) * old_weight[i, t] + coeff_new * new_weight[i, t]
-    orw = (1 - coeff_new) * dfw_weights + coeff_new * nw
-
     # output_weight[i, t] = output_raw_weight[i, t] / sum(output_raw_weight[i, t]))
+    # where `i` is the cross-section and `t` is the date
+
+    nwb = dfw_adj_zns.apply(lambda s: s.apply(lambda x: max(x - min_score, 0)))
+    nw = nwb.div(nwb.sum(axis="columns"), axis="index")
+    orw = (1 - coeff_new) * dfw_weights + coeff_new * nw
     ow = orw.div(orw.sum(axis="columns"), axis="index")
 
-    assert np.allclose(ow[~ow.isna().any(axis="columns")].sum(axis=1), 1)
     return ow
 
 
