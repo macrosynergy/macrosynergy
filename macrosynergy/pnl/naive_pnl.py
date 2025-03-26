@@ -668,6 +668,7 @@ class NaivePnL:
         pnl_cids: List[str] = ["ALL"],
         start: str = None,
         end: str = None,
+        compounding: bool = False,
         facet: bool = False,
         ncol: int = 3,
         same_y: bool = True,
@@ -676,7 +677,7 @@ class NaivePnL:
         tick_fontsize: int = 12,
         xcat_labels: Union[List[str], dict] = None,
         xlab: str = "",
-        ylab: str = "% of risk capital, no compounding",
+        ylab: str = "% of risk capital",
         label_fontsize: int = 12,
         share_axis_labels: bool = True,
         figsize: Tuple = (12, 7),
@@ -703,6 +704,8 @@ class NaivePnL:
             used.
         end : str
             latest date in ISO format. Default is None and latest date in df is used.
+        compounding : bool
+            parameter to control whether the PnLs are compounded daily. Default is False.
         facet : bool
             parameter to control whether each PnL series is plotted on its own
             respective grid using Seaborn's FacetGrid. Default is False and all series will
@@ -723,7 +726,7 @@ class NaivePnL:
             (empty string)..
         ylab : str
             label for y-axis of the plot (or subplots if faceted), default is '% of risk
-            capital, no compounding'.
+            capital' with a note on compounding.
         share_axis_labels : bool
             if True (default) the axis labels are shared by all subplots in the facet
             grid.
@@ -740,6 +743,7 @@ class NaivePnL:
         y_label_adj : float
             parameter that sets left of figure to fit the y-label.
         """
+        default_ylab: str = "% of risk capital"
 
         if pnl_cats is None:
             pnl_cats = self.pnl_names
@@ -825,7 +829,15 @@ class NaivePnL:
                 labels = pnl_cids.copy()
             legend_title = "Cross Section(s)"
 
-        dfx["cum_value"] = dfx.groupby(plot_by, observed=True).cumsum(numeric_only=True)
+        df_grouped = dfx.groupby(plot_by, observed=True)
+
+        if compounding:
+            dfx["cum_value"] = df_grouped["value"].cumprod(numeric_only=True)
+        else:
+            dfx["cum_value"] = df_grouped["value"].cumsum(numeric_only=True)
+
+        if ylab == default_ylab:
+            ylab += ", with daily compounding" if compounding else ", no compounding"
 
         if facet:
             fg = sns.FacetGrid(
@@ -1617,10 +1629,7 @@ if __name__ == "__main__":
         title=None,
     )
     pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "Long"],
-        title_fontsize=60,
-        xlab="date",
-        ylab="%"
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], title_fontsize=60, xlab="date", ylab="%"
     )
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"],
