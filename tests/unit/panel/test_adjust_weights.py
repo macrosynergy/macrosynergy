@@ -10,7 +10,8 @@ from macrosynergy.panel.adjust_weights import (
     check_missing_cids_xcats,
     split_weights_adj_zns,
     normalize_weights,
-    adjust_weights_backend,
+    generic_weights_backend,
+    lincomb_backend,
 )
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import (
@@ -21,7 +22,7 @@ from macrosynergy.management.utils import (
 )
 
 
-class TestAdjustReturnsTypeChecks(unittest.TestCase):
+class TestAdjustWeightsTypeChecks(unittest.TestCase):
     def setUp(self):
         def _sigmoid(x, a=1, b=1, c=0):
             return a / (1 + np.exp(-b * (x - c)))
@@ -30,7 +31,8 @@ class TestAdjustReturnsTypeChecks(unittest.TestCase):
         self.valid_args = {
             "weights": "weights",
             "adj_zns": "adj_zns",
-            "method": _sigmoid,
+            "method": "generic",
+            "adj_func": _sigmoid,
             "params": _params,
             "cids": ["USD", "GBP", "JPY"],
         }
@@ -47,7 +49,8 @@ class TestAdjustReturnsTypeChecks(unittest.TestCase):
         invalids = {
             "weights": [123, None, []],
             "adj_zns": [456, None, {}],
-            "method": [42, "not callable", None],
+            "method": [123, None, []],
+            "adj_func": [42, "not callable", []],
             "params": ["string", None, [{"a": 1}]],
         }
         for param, bad_values in invalids.items():
@@ -78,6 +81,34 @@ class TestAdjustReturnsTypeChecks(unittest.TestCase):
         # this tests uses adjust_returns directly
         with self.assertRaises(TypeError):
             adjust_weights(df=pd.DataFrame(), **self.valid_args)
+
+    def test_method_provided(self):
+        # test that the method is 'generic' it should except adj_func to be non-None
+        args = self.valid_args.copy()
+        args["method"] = "generic"
+        args["adj_func"] = None
+
+        with self.assertRaises(ValueError):
+            check_types(**args)
+
+    def test_method_lincomb(self):
+        # test that the method is 'lincomb' it should except adj_func to be None
+        args = self.valid_args.copy()
+        args["method"] = "lincomb"
+        args["adj_func"] = None
+
+        try:
+            check_types(**args)
+        except Exception as e:
+            self.fail(f"Unexpected exception raised: {e}")
+
+    def test_method_invalid(self):
+        # test that the method is 'lincomb' it should except adj_func to be None
+        args = self.valid_args.copy()
+        args["method"] = "invalid"
+
+        with self.assertRaises(ValueError):
+            check_types(**args)
 
 
 class TestAdjustReturnsMissingLogic(unittest.TestCase):
@@ -323,7 +354,7 @@ class TestAdjustWeightsBackend(unittest.TestCase):
         )
 
     def test_adjust_weights_backend(self):
-        adjusted = adjust_weights_backend(
+        adjusted = generic_weights_backend(
             self.df_weights_wide,
             self.df_adj_zns_wide,
             lambda x: x,
@@ -347,10 +378,10 @@ class TestAdjustWeightsBackend(unittest.TestCase):
         def _method(x):
             return x
 
-        adjusted = adjust_weights_backend(
+        adjusted = generic_weights_backend(
             df_adj_zns_wide=self.df_adj_zns_wide,
             df_weights_wide=self.df_weights_wide,
-            method=_method,
+            adj_func=_method,
         )
 
         expc_res = self.df_weights_wide * self.df_adj_zns_wide.apply(_method) * 1
@@ -362,10 +393,10 @@ class TestAdjustWeightsBackend(unittest.TestCase):
 
         _params = {"a": 0}
 
-        adjusted = adjust_weights_backend(
+        adjusted = generic_weights_backend(
             df_adj_zns_wide=self.df_adj_zns_wide,
             df_weights_wide=self.df_weights_wide,
-            method=_method,
+            adj_func=_method,
             params=_params,
         )
 
@@ -374,18 +405,81 @@ class TestAdjustWeightsBackend(unittest.TestCase):
         self.assertTrue((adjusted == 0).all().all())
 
 
+class TestLinCombBackend(unittest.TestCase):
+    def setUp(self):
+        self.cids = ["USD", "EUR", "JPY", "GBP", "AUD", "CAD", "CHF", "CNY"]
+        self.xcats = ["WG", "AZ"]
+        tickers = [f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats]
+        self.tickers = list(np.random.permutation(tickers))
+
+        # prime numbers have been chosen so the weights can be easily tested
+        self.ticker_weights = dict(zip(self.tickers, get_primes(len(self.tickers))))
+
+        self.expected_results = {
+            _cid: np.prod(
+                [
+                    self.ticker_weights[ticker]
+                    for ticker in self.tickers
+                    if get_cid(ticker) == _cid
+                ]
+            )
+            for _cid in self.cids
+        }
+
+        start, end = "2020-01-01", "2021-02-01"
+        temp_df = make_test_df(tickers=self.tickers, start=start, end=end)
+        wdf = qdf_to_ticker_df(temp_df)
+        for ticker, weight in self.ticker_weights.items():
+            wdf[ticker] = weight
+        self.wdf = wdf
+        self.qdf = ticker_df_to_qdf(wdf)
+
+        self.df_weights_wide, self.df_adj_zns_wide = split_weights_adj_zns(
+            self.qdf, weights="WG", adj_zns="AZ"
+        )
+
+    def test_lincomb_backend_full_new(self):
+        min_score = self.df_adj_zns_wide.min().min()
+        res1 = lincomb_backend(
+            dfw_adj_zns=self.df_adj_zns_wide,
+            dfw_weights=self.df_weights_wide,
+            min_score=min_score,
+            coeff_new=1,
+        )
+
+        expc_result = self.df_adj_zns_wide - min_score
+        expc_result = normalize_weights(expc_result)
+        diff = np.allclose((res1) - (expc_result), 0, atol=1e-12)
+        # due to multiple floating point operations, there is *some* floating point error
+        self.assertTrue(diff)
+
+    def test_lincomb_backend_full_new_no_min_score(self):
+
+        with warnings.catch_warnings(record=True) as w:
+            res1 = lincomb_backend(
+                dfw_adj_zns=self.df_adj_zns_wide,
+                dfw_weights=self.df_weights_wide,
+                coeff_new=0,
+            )
+
+        expc_result = normalize_weights(self.df_weights_wide)
+        diff = np.allclose((res1) - (expc_result), 0, atol=1e-12)
+        self.assertTrue(diff)
+
+
 def expected_adjusted_weights(
     df: pd.DataFrame,
     weights: str,
     adj_zns: str,
-    method: Callable,
+    method: str,
+    adj_func: Callable,
     params: dict,
     adj_name: str,
     normalize: bool = True,
     normalize_to_pct: bool = False,
 ) -> pd.DataFrame:
     cids = list(set(df["cid"]))
-    check_types(weights, adj_zns, method, params, cids)
+    check_types(weights, adj_zns, method, adj_func, params, cids)
     df, r_xcats, r_cids = reduce_df(
         df, cids=cids, xcats=[weights, adj_zns], intersect=True, out_all=True
     )
@@ -394,9 +488,14 @@ def expected_adjusted_weights(
     nan_rows = df_adj_zns_wide.isna().all(axis="columns")
     df_adj_zns_wide.loc[nan_rows] = 1
 
-    dfw_result = adjust_weights_backend(
-        df_weights_wide, df_adj_zns_wide, method, params
-    )
+    if method == "generic":
+        dfw_result = generic_weights_backend(
+            df_weights_wide, df_adj_zns_wide, adj_func, params
+        )
+    elif method == "lincomb":
+        dfw_result = lincomb_backend(
+            dfw_adj_zns=df_weights_wide, dfw_weights=df_adj_zns_wide, **params
+        )
     dfw_result = dfw_result.dropna(how="all", axis="rows")
     if normalize:
         dfw_result = normalize_weights(dfw_result) * (100 if normalize_to_pct else 1)
@@ -440,7 +539,8 @@ class TestAdjustWeightsMain(unittest.TestCase):
         args = {
             "weights": "WG",
             "adj_zns": "AZ",
-            "method": lambda x: x,
+            "method": "generic",
+            "adj_func": lambda x: x,
             "params": {},
             "adj_name": "ADJWGT",
         }
@@ -462,7 +562,8 @@ class TestAdjustWeightsMain(unittest.TestCase):
         args = {
             "weights": "WG",
             "adj_zns": "AZ",
-            "method": lambda x: x,
+            "method": "generic",
+            "adj_func": lambda x: x,
             "params": {},
             "adj_name": "ADJWGT",
         }
@@ -502,7 +603,8 @@ class TestAdjustWeightsMain(unittest.TestCase):
         args = {
             "weights": "WG",
             "adj_zns": "AZ",
-            "method": _method,
+            "method": "generic",
+            "adj_func": _method,
             "params": {"a": 0},
             "adj_name": "ADJWGT",
         }
@@ -526,7 +628,8 @@ class TestAdjustWeightsMain(unittest.TestCase):
         args = {
             "weights": "WG",
             "adj_zns": "AZ",
-            "method": lambda x: x,
+            "adj_func": lambda x: x,
+            "method": "generic",
             "params": {},
             "adj_name": "ADJWGT",
             "normalize": False,
@@ -559,26 +662,48 @@ class TestAdjustWeightsMain(unittest.TestCase):
         else:
             self.assertTrue(adjusted.eq(expc_result).all().all())
 
+    def test_adjust_weights_lincomb_failure(self):
+        args = {
+            "weights": "WG",
+            "adj_zns": "AZ",
+            "method": "lincomb",
+            "params": {"min_score": 0},
+            "adj_name": "ADJWGT",
+        }
+
+        with self.assertRaises(ValueError) as context:
+            adjust_weights(df=self.qdf, **args)
+
     def test_adjust_weights_missing_cids(self):
         args = {
             "weights": "WG",
             "adj_zns": "AZ",
-            "method": lambda x: x,
+            "method": "lincomb",
             "params": {},
             "adj_name": "ADJWGT",
         }
 
         df = self.qdf.copy()
+
+        with warnings.catch_warnings(record=True) as w:
+            with self.assertRaises(ValueError) as context:
+                adjust_weights(df=df, cids=self.cids, **args)
+            self.assertTrue(len(w) > 0)
+            last_warn = w[-1].message.args[0]
+            self.assertIn("`min_score` not provided.", last_warn)
+
         df = df[df["cid"] != "USD"]
 
         with self.assertRaises(ValueError) as context:
+            args["params"] = {"coeff_new": -1}
             adjust_weights(df=df, cids=self.cids, **args)
 
     def test_adjust_weights_cids_not_specified(self):
         args = {
             "weights": "WG",
             "adj_zns": "AZ",
-            "method": lambda x: x,
+            "method": "generic",
+            "adj_func": lambda x: x,
             "params": {},
             "adj_name": "ADJWGT",
         }
