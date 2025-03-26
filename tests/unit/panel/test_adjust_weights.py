@@ -671,32 +671,31 @@ class TestAdjustWeightsMain(unittest.TestCase):
             "adj_name": "ADJWGT",
         }
 
-        with self.assertRaises(TypeError) as context:
+        with self.assertRaises(ValueError) as context:
             adjust_weights(df=self.qdf, **args)
 
     def test_adjust_weights_missing_cids(self):
         args = {
             "weights": "WG",
             "adj_zns": "AZ",
-            "method": "generic",
-            "adj_func": lambda x: x,
+            "method": "lincomb",
             "params": {},
             "adj_name": "ADJWGT",
         }
 
         df = self.qdf.copy()
+
+        with warnings.catch_warnings(record=True) as w:
+            with self.assertRaises(ValueError) as context:
+                adjust_weights(df=df, cids=self.cids, **args)
+            self.assertTrue(len(w) > 0)
+            last_warn = w[-1].message.args[0]
+            self.assertIn("`min_score` not provided.", last_warn)
+
         df = df[df["cid"] != "USD"]
 
-        with self.assertRaises(TypeError) as context:
-            with warnings.catch_warnings(record=True) as w:
-                adjust_weights(df=df, cids=self.cids, **args)
-                # check that there is one warning
-                self.assertTrue(len(w) > 0)
-                last_warn = w[-1].message.args[0]
-                self.assertIn("`min_score` not provided.", last_warn)
-
         with self.assertRaises(ValueError) as context:
-            args['params'] = {"coeff_new": -1}
+            args["params"] = {"coeff_new": -1}
             adjust_weights(df=df, cids=self.cids, **args)
 
     def test_adjust_weights_cids_not_specified(self):

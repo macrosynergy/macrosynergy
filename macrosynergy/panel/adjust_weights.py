@@ -82,11 +82,11 @@ def lincomb_backend(
             "`min_score` not provided. Defaulting to minimum value from `dfw_adj_zns`"
         )
         min_score = dfw_adj_zns.min().min()
-    # assert coeff_new >= 0 and coeff_new <= 1, "`coeff_new` must be between 0 and 1"
-    err_str = "`coeff_new` must be a floating point number between 0 and 1"
-    if not isinstance(coeff_new, Number):
-        raise TypeError(err_str)
-    elif isinstance(coeff_new, Number) and not 0 <= coeff_new <= 1:
+
+    err_str = "Parameter `coeff_new` must be provided as a floating point number between 0 and 1."
+    if not isinstance(coeff_new, Number) or (
+        isinstance(coeff_new, Number) and not 0 <= coeff_new <= 1
+    ):
         raise ValueError(err_str)
 
     # new_weight_basis[i, t] = max(adj_zns[i, t] - min_score, 0)
