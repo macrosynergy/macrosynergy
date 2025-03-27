@@ -1125,7 +1125,7 @@ class NaivePnL:
 
     def evaluate_pnls(
         self,
-        pnl_cats: List[str],
+        pnl_cats: Optional[List[str]] = None,
         pnl_cids: List[str] = ["ALL"],
         start: Optional[str] = None,
         end: Optional[str] = None,
@@ -1145,8 +1145,9 @@ class NaivePnL:
 
         Parameters
         ----------
-        pnl_cats : List[str]
-            list of PnL categories that should be plotted.
+        pnl_cats : List[str], optional
+            list of PnL categories that should be plotted. Default is None and all
+            available PnL categories are used.
         pnl_cids : List[str]
             list of cross-sections to be plotted; default is 'ALL' (global PnL). Note:
             one can only have multiple PnL categories or multiple cross-sections, not both.
@@ -1166,10 +1167,15 @@ class NaivePnL:
 
         error_cids = "List of cross-sections expected."
         error_xcats = "List of PnL categories expected."
-        assert isinstance(pnl_cids, list), error_cids
-        assert isinstance(pnl_cats, list), error_xcats
-        assert all([isinstance(elem, str) for elem in pnl_cids]), error_cids
-        assert all([isinstance(elem, str) for elem in pnl_cats]), error_xcats
+        if not isinstance(pnl_cids, list):
+            raise TypeError(error_cids)
+        if not isinstance(pnl_cats, (list, type(None))):
+            raise TypeError(error_xcats)
+        if pnl_cats is not None:
+            if not all([isinstance(elem, str) for elem in pnl_cats]):
+                raise TypeError(error_xcats)
+        if not all([isinstance(elem, str) for elem in pnl_cids]):
+            raise TypeError(error_cids)
 
         if pnl_cats is None:
             # The field, self.pnl_names, is a data structure that stores the name of the
@@ -1178,15 +1184,15 @@ class NaivePnL:
             # logical method: ('PNL_' + sig) if pnl_name is None else pnl_name. Each
             # category will be held in the data structure.
             pnl_cats = self.pnl_names
-        else:
-            if not set(pnl_cats) <= set(self.pnl_names):
-                missing = [pnl for pnl in pnl_cats if pnl not in self.pnl_names]
-                pnl_error = (
-                    f"Received PnL categories have not been defined. The PnL "
-                    f"category(s) which has not been defined is: {missing}. "
-                    f"The produced PnL category(s) are {self.pnl_names}."
-                )
-                raise ValueError(pnl_error)
+
+        if not set(pnl_cats) <= set(self.pnl_names):
+            missing = [pnl for pnl in pnl_cats if pnl not in self.pnl_names]
+            pnl_error = (
+                f"Received PnL categories have not been defined. The PnL "
+                f"category(s) which has not been defined is: {missing}. "
+                f"The produced PnL category(s) are {self.pnl_names}."
+            )
+            raise ValueError(pnl_error)
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
 
