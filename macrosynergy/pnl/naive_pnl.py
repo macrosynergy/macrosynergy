@@ -840,9 +840,9 @@ class NaivePnL:
         df_grouped = dfx.groupby(plot_by, observed=True)
 
         if compounding:
-            dfx["cum_value"] = (1 + df_grouped["value"] / 100).cumprod(
-                numeric_only=True
-            ) - 1
+            dfx["cum_value"] = (
+                df_grouped["value"].transform(lambda x: (x / 100 + 1).cumprod()) - 1
+            ) * 100
         else:
             dfx["cum_value"] = df_grouped["value"].cumsum(numeric_only=True)
 
