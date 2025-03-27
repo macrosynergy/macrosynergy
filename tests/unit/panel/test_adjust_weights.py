@@ -183,7 +183,7 @@ class TestNormalizeWeights(unittest.TestCase):
     def test_normalization_with_nans(self):
         df_with_nans = self.df_valid.copy()
         nan_mask = np.random.random(df_with_nans.shape) < 0.2
-        df_with_nans = df_with_nans.mask(nan_mask < 0.2)
+        df_with_nans = df_with_nans.mask(nan_mask)
         normalized_df = normalize_weights(df_with_nans)
 
         for idx, row in normalized_df.iterrows():
