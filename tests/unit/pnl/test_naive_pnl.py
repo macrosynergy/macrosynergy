@@ -595,6 +595,11 @@ class TestAll(unittest.TestCase):
                 with self.assertRaises(TypeError):
                     pnl.evaluate_pnls(**{arg: argval})
 
+        # pass a random pnl_cat
+        with self.assertRaises(ValueError):
+            pnl.evaluate_pnls(pnl_cats=["banana"])
+
+
     def test_plotting_methods(self):
         plt.close("all")
         mock_plt = patch("matplotlib.pyplot.show").start()
