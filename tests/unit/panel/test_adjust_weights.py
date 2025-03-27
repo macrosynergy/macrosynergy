@@ -466,6 +466,20 @@ class TestLinCombBackend(unittest.TestCase):
         diff = np.allclose((res1) - (expc_result), 0, atol=1e-12)
         self.assertTrue(diff)
 
+    def test_different_min_score(self):
+        min_score = -1
+        res1 = lincomb_backend(
+            df_adj_zns_wide=self.df_adj_zns_wide,
+            df_weights_wide=self.df_weights_wide,
+            min_score=min_score,
+            coeff_new=1,
+        )
+
+        expc_result = self.df_adj_zns_wide - min_score
+        expc_result = normalize_weights(expc_result)
+        diff = np.allclose((res1) - (expc_result), 0, atol=1e-12)
+        self.assertTrue(diff)
+
 
 def expected_adjusted_weights(
     df: pd.DataFrame,
