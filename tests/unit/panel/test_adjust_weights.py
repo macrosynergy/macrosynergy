@@ -438,11 +438,11 @@ class TestLinCombBackend(unittest.TestCase):
             self.qdf, weights="WG", adj_zns="AZ"
         )
 
-    def test_lincomb_backend_full_new(self):
+    def test_lincomb_backend_full(self):
         min_score = self.df_adj_zns_wide.min().min()
         res1 = lincomb_backend(
-            dfw_adj_zns=self.df_adj_zns_wide,
-            dfw_weights=self.df_weights_wide,
+            df_adj_zns_wide=self.df_adj_zns_wide,
+            df_weights_wide=self.df_weights_wide,
             min_score=min_score,
             coeff_new=1,
         )
@@ -453,14 +453,17 @@ class TestLinCombBackend(unittest.TestCase):
         # due to multiple floating point operations, there is *some* floating point error
         self.assertTrue(diff)
 
-    def test_lincomb_backend_full_new_no_min_score(self):
+    def test_lincomb_backend_no_min_score(self):
 
         with warnings.catch_warnings(record=True) as w:
             res1 = lincomb_backend(
-                dfw_adj_zns=self.df_adj_zns_wide,
-                dfw_weights=self.df_weights_wide,
+                df_adj_zns_wide=self.df_adj_zns_wide,
+                df_weights_wide=self.df_weights_wide,
                 coeff_new=0,
             )
+            self.assertTrue(len(w) > 0)
+            last_warn = w[-1].message.args[0]
+            self.assertIn("`min_score` not provided", last_warn)
 
         expc_result = normalize_weights(self.df_weights_wide)
         diff = np.allclose((res1) - (expc_result), 0, atol=1e-12)
