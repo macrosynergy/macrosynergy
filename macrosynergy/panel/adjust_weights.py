@@ -282,8 +282,8 @@ def normalize_weights(
 
 def adjust_weights(
     df: QuantamentalDataFrame,
-    weights: str,
-    adj_zns: str,
+    weights_xcat: str,
+    adj_zns_xcat: str,
     method: str = "generic",
     adj_func: Callable = None,
     params: Dict[str, Any] = {},
@@ -302,9 +302,9 @@ def adjust_weights(
     ----------
     df : QuantamentalDataFrame
         QuantamentalDataFrame with weights and adjustment categories for all cross-sections.
-    weights : str
+    weights_xcat : str
         Name of the category containing the weights.
-    adj_zns : str
+    adj_zns_xcat : str
         Name of the category containing the adjustment factors.
     method : Callable
         One of the available methods for adjusting weights. Default is "generic".
@@ -339,8 +339,8 @@ def adjust_weights(
     -----
     Available methods:
     - "generic": Applies the method function to the weights and multiplies the result by the
-        adjustment factors. The method function must accept a single argument (the weight) and
-        return a single value (the adjusted weight).
+        adjustment factors. The `method` function's signature must match:
+        `method(weight: float, **params) -> float`.
 
     - "lincomb": Linear combination of the parameters. The method function must accept a single
         argument (the weight) and return a single value (the adjusted weight). The parameters
@@ -364,8 +364,8 @@ def adjust_weights(
     result_as_categorical: bool = df.InitializedAsCategorical
 
     check_types(
-        weights=weights,
-        adj_zns=adj_zns,
+        weights=weights_xcat,
+        adj_zns=adj_zns_xcat,
         method=method,
         adj_func=adj_func,
         params=params,
@@ -377,7 +377,7 @@ def adjust_weights(
     df, r_xcats, r_cids = reduce_df(
         df,
         cids=cids,
-        xcats=[weights, adj_zns],
+        xcats=[weights_xcat, adj_zns_xcat],
         start=start,
         end=end,
         intersect=True,
@@ -386,9 +386,11 @@ def adjust_weights(
     if cids is None:
         cids = df["cid"].unique().tolist()
 
-    check_missing_cids_xcats(weights, adj_zns, cids, r_xcats, r_cids)
+    check_missing_cids_xcats(weights_xcat, adj_zns_xcat, cids, r_xcats, r_cids)
 
-    df_weights_wide, df_adj_zns_wide = split_weights_adj_zns(df, weights, adj_zns)
+    df_weights_wide, df_adj_zns_wide = split_weights_adj_zns(
+        df, weights_xcat, adj_zns_xcat
+    )
 
     # no need to normalize weights before applying the adjustment
 
@@ -447,8 +449,8 @@ if __name__ == "__main__":
 
     df_res = adjust_weights(
         df=df,
-        weights="weights",
-        adj_zns="adj_zns",
+        weights_xcat="weights",
+        adj_zns_xcat="adj_zns",
         method="lincomb",
         params={"min_score": None, "coeff_new": 0.5},
     )
@@ -465,8 +467,8 @@ if __name__ == "__main__":
 
     df_res = adjust_weights(
         df=df,
-        weights="weights",
-        adj_zns="adj_zns",
+        weights_xcat="weights",
+        adj_zns_xcat="adj_zns",
         method="generic",
         adj_func=sigmoid,
         params=params,
