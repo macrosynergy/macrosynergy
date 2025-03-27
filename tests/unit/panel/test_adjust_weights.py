@@ -671,7 +671,7 @@ class TestAdjustWeightsMain(unittest.TestCase):
             "adj_name": "ADJWGT",
         }
 
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(ValueError):
             adjust_weights(df=self.qdf, **args)
 
     def test_adjust_weights_missing_cids(self):
@@ -686,7 +686,7 @@ class TestAdjustWeightsMain(unittest.TestCase):
         df = self.qdf.copy()
 
         with warnings.catch_warnings(record=True) as w:
-            with self.assertRaises(ValueError) as context:
+            with self.assertRaises(ValueError):
                 adjust_weights(df=df, cids=self.cids, **args)
             self.assertTrue(len(w) > 0)
             last_warn = w[-1].message.args[0]
@@ -694,7 +694,7 @@ class TestAdjustWeightsMain(unittest.TestCase):
 
         df = df[df["cid"] != "USD"]
 
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(ValueError):
             args["params"] = {"coeff_new": -1}
             adjust_weights(df=df, cids=self.cids, **args)
 
