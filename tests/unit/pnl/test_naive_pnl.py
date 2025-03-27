@@ -622,6 +622,11 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"plot_pnl raised {e} unexpectedly")
 
+        try:
+            pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"], compounding=True)
+        except Exception as e:
+            self.fail(f"plot_pnl raised {e} unexpectedly")
+
         with self.assertRaises(TypeError):
             pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"], xcat_labels=1)
 

@@ -212,7 +212,7 @@ class ScoreVisualisers:
         Helper function to create the DataFrame with z-scores.
         """
         if no_zn_scores:
-            return reduce_df(df, xcats=xcats, cids=self.cids)
+            return reduce_df(df, xcats=xcats, cids=self.cids, blacklist=blacklist)
 
         result_df = None
         for xcat in xcats:
@@ -409,6 +409,10 @@ class ScoreVisualisers:
                 for xcat in dfw.columns
             ]
 
+        # Drop columns and rows with all NaNs
+        dfw = dfw.dropna(axis=1, how="all")
+        dfw = dfw.dropna(axis=0, how="all")
+
         if transpose:
             dfw = dfw.transpose()
 
@@ -523,23 +527,23 @@ class ScoreVisualisers:
 
         if include_latest_day:
             if (
-                self.df["real_date"].max().normalize()
+                df["real_date"].max().normalize()
                 == pd.Timestamp.today().normalize()
             ):
                 dfw_resampled.loc[
-                    self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
+                    df["real_date"].max() - pd.tseries.offsets.BDay(1)
                 ] = dfw.loc[
-                    self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
+                    df["real_date"].max() - pd.tseries.offsets.BDay(1)
                 ]
                 print(
                     "Latest day: ",
-                    self.df["real_date"].max() - pd.tseries.offsets.BDay(1),
+                    df["real_date"].max() - pd.tseries.offsets.BDay(1),
                 )
             else:
-                dfw_resampled.loc[self.df["real_date"].max()] = dfw.loc[
-                    self.df["real_date"].max()
+                dfw_resampled.loc[df["real_date"].max()] = dfw.loc[
+                    df["real_date"].max()
                 ]
-                print("Latest day: ", self.df["real_date"].max())
+                print("Latest day: ", df["real_date"].max())
             if freq in ["Q", "BQ", "BQE"]:
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
@@ -558,6 +562,10 @@ class ScoreVisualisers:
 
         dfw_resampled = dfw_resampled.transpose()
         dfw_resampled = dfw_resampled.reindex(cids)
+
+        # Drop columns and rows with all NaNs
+        dfw_resampled = dfw_resampled.dropna(axis=1, how="all")
+        dfw_resampled = dfw_resampled.dropna(axis=0, how="all")
 
         if transpose:
             dfw_resampled = dfw_resampled.transpose()
@@ -670,23 +678,23 @@ class ScoreVisualisers:
 
         if include_latest_day:
             if (
-                self.df["real_date"].max().normalize()
+                df["real_date"].max().normalize()
                 == pd.Timestamp.today().normalize()
             ):
                 dfw_resampled.loc[
-                    self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
+                    df["real_date"].max() - pd.tseries.offsets.BDay(1)
                 ] = dfw.loc[
-                    self.df["real_date"].max() - pd.tseries.offsets.BDay(1)
+                    df["real_date"].max() - pd.tseries.offsets.BDay(1)
                 ]
                 print(
                     "Latest day: ",
-                    self.df["real_date"].max() - pd.tseries.offsets.BDay(1),
+                    df["real_date"].max() - pd.tseries.offsets.BDay(1),
                 )
             else:
-                dfw_resampled.loc[self.df["real_date"].max()] = dfw.loc[
-                    self.df["real_date"].max()
+                dfw_resampled.loc[df["real_date"].max()] = dfw.loc[
+                    df["real_date"].max()
                 ]
-                print("Latest day: ", self.df["real_date"].max())
+                print("Latest day: ", df["real_date"].max())
             if freq in ["Q", "BQ", "BQE"]:
                 dfw_resampled.index = list(
                     dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
@@ -722,6 +730,10 @@ class ScoreVisualisers:
             ]
 
         dfw_resampled = dfw_resampled.transpose()
+
+        # Drop columns and rows with all NaNs
+        dfw_resampled = dfw_resampled.dropna(axis=1, how="all")
+        dfw_resampled = dfw_resampled.dropna(axis=0, how="all")
 
         if transpose:
             dfw_resampled = dfw_resampled.transpose()
@@ -834,6 +846,10 @@ if __name__ == "__main__":
         )
     ]
 
+    blacklist = {
+        "USD": [pd.Timestamp("2020-06-06"), pd.Timestamp("2030-07-23")]
+    }
+
     sv = ScoreVisualisers(
         df,
         cids=cids,
@@ -842,6 +858,7 @@ if __name__ == "__main__":
         no_zn_scores=True,
         complete_xcats=False,
         rescore_composite=True,
+        blacklist=blacklist,
     )
 
     sv.view_snapshot(
@@ -853,7 +870,7 @@ if __name__ == "__main__":
         transpose=False,
         yticks_rotation=45,
     )
-    sv.view_cid_evolution(cid="USD", xcats=xcats + ["Composite", "BEEP"] , freq="A", transpose=False)
+    sv.view_cid_evolution(cid="USD", xcats=xcats + ["Composite"] , freq="A", transpose=False)
     sv.view_score_evolution(
         xcat="GGIEDGDP_NSA",
         cids=cids,
