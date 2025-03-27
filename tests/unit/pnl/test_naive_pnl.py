@@ -460,12 +460,16 @@ class TestAll(unittest.TestCase):
         # Confirm the direct negative correlation across the two PnLs. By adding the
         # correlation coefficients with the benchmarks, the value should equate to
         # zero.
-        df_eval = pnl.evaluate_pnls(
-            pnl_cats=["PNL_INFL", "PNL_INFL_NEG"],
-        )
+        df_eval = pnl.evaluate_pnls(pnl_cats=["PNL_INFL", "PNL_INFL_NEG"])
 
         bm_correl = df_eval.loc[[b + " correl" for b in bms], :]
         self.assertTrue(np.all(bm_correl.sum(axis=1).to_numpy()) == 0)
+
+        # test it works with no pnl_cats input
+        try:
+            pnl.evaluate_pnls()
+        except Exception as e:
+            self.fail(f"evaluate_pnls raised {e} unexpectedly")
 
     def test_make_long_pnl(self):
         ret = "EQXR"
