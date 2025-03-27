@@ -290,6 +290,7 @@ def adjust_weights(
     cids: List[str] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
+    blacklist: Dict[str, Any] = None,
     normalize: bool = True,
     normalize_to_pct: bool = False,
     adj_name: str = "ADJWGT",
@@ -320,6 +321,9 @@ def adjust_weights(
         Start date for the adjustment as YYYY-MM-DD. Default is None.
     end : str, optional
         End date for the adjustment as YYYY-MM-DD. Default is None.
+    blacklist : Dict[str, Any], optional
+        Blacklist dictionary passed to the reduce_df function. Default is None.
+        See :meth:`macrosynergy.management.utils.df_utils.reduce_df` for more details.
     normalize : bool, optional
         If True, the resulting weights will be normalized to sum to one for each date for
         the entire list of cross-sections. Default is True.
@@ -380,6 +384,7 @@ def adjust_weights(
         xcats=[weights_xcat, adj_zns_xcat],
         start=start,
         end=end,
+        blacklist=blacklist,
         intersect=True,
         out_all=True,
     )
