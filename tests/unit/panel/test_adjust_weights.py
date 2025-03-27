@@ -13,6 +13,8 @@ from macrosynergy.panel.adjust_weights import (
     generic_weights_backend,
     lincomb_backend,
 )
+
+from macrosynergy.panel.lincomb_adjust import linear_combination_adjustment
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import (
     ticker_df_to_qdf,
@@ -486,8 +488,8 @@ class TestLinCombBackend(unittest.TestCase):
 
 def expected_adjusted_weights(
     df: pd.DataFrame,
-    weights: str,
-    adj_zns: str,
+    weights_xcat: str,
+    adj_zns_xcat: str,
     method: str,
     adj_func: Callable,
     params: dict,
@@ -496,12 +498,14 @@ def expected_adjusted_weights(
     normalize_to_pct: bool = False,
 ) -> pd.DataFrame:
     cids = list(set(df["cid"]))
-    check_types(weights, adj_zns, method, adj_func, params, cids)
+    check_types(weights_xcat, adj_zns_xcat, method, adj_func, params, cids)
     df, r_xcats, r_cids = reduce_df(
-        df, cids=cids, xcats=[weights, adj_zns], intersect=True, out_all=True
+        df, cids=cids, xcats=[weights_xcat, adj_zns_xcat], intersect=True, out_all=True
     )
-    check_missing_cids_xcats(weights, adj_zns, cids, r_xcats, r_cids)
-    df_weights_wide, df_adj_zns_wide = split_weights_adj_zns(df, weights, adj_zns)
+    check_missing_cids_xcats(weights_xcat, adj_zns_xcat, cids, r_xcats, r_cids)
+    df_weights_wide, df_adj_zns_wide = split_weights_adj_zns(
+        df, weights_xcat, adj_zns_xcat
+    )
     nan_rows = df_adj_zns_wide.isna().all(axis="columns")
     df_adj_zns_wide.loc[nan_rows] = 1
 
@@ -554,8 +558,8 @@ class TestAdjustWeightsMain(unittest.TestCase):
 
     def test_adjust_weights(self):
         args = {
-            "weights": "WG",
-            "adj_zns": "AZ",
+            "weights_xcat": "WG",
+            "adj_zns_xcat": "AZ",
             "method": "generic",
             "adj_func": lambda x: x,
             "params": {},
@@ -577,8 +581,8 @@ class TestAdjustWeightsMain(unittest.TestCase):
         ] = np.nan
 
         args = {
-            "weights": "WG",
-            "adj_zns": "AZ",
+            "weights_xcat": "WG",
+            "adj_zns_xcat": "AZ",
             "method": "generic",
             "adj_func": lambda x: x,
             "params": {},
@@ -618,8 +622,8 @@ class TestAdjustWeightsMain(unittest.TestCase):
             return x * a
 
         args = {
-            "weights": "WG",
-            "adj_zns": "AZ",
+            "weights_xcat": "WG",
+            "adj_zns_xcat": "AZ",
             "method": "generic",
             "adj_func": _method,
             "params": {"a": 0},
@@ -643,8 +647,8 @@ class TestAdjustWeightsMain(unittest.TestCase):
         ] = np.nan
 
         args = {
-            "weights": "WG",
-            "adj_zns": "AZ",
+            "weights_xcat": "WG",
+            "adj_zns_xcat": "AZ",
             "adj_func": lambda x: x,
             "method": "generic",
             "params": {},
@@ -681,8 +685,8 @@ class TestAdjustWeightsMain(unittest.TestCase):
 
     def test_adjust_weights_lincomb_failure(self):
         args = {
-            "weights": "WG",
-            "adj_zns": "AZ",
+            "weights_xcat": "WG",
+            "adj_zns_xcat": "AZ",
             "method": "lincomb",
             "params": {"min_score": 0},
             "adj_name": "ADJWGT",
@@ -693,8 +697,8 @@ class TestAdjustWeightsMain(unittest.TestCase):
 
     def test_adjust_weights_missing_cids(self):
         args = {
-            "weights": "WG",
-            "adj_zns": "AZ",
+            "weights_xcat": "WG",
+            "adj_zns_xcat": "AZ",
             "method": "lincomb",
             "params": {},
             "adj_name": "ADJWGT",
@@ -717,8 +721,8 @@ class TestAdjustWeightsMain(unittest.TestCase):
 
     def test_adjust_weights_cids_not_specified(self):
         args = {
-            "weights": "WG",
-            "adj_zns": "AZ",
+            "weights_xcat": "WG",
+            "adj_zns_xcat": "AZ",
             "method": "generic",
             "adj_func": lambda x: x,
             "params": {},
@@ -732,6 +736,61 @@ class TestAdjustWeightsMain(unittest.TestCase):
             adjust_weights(df=df, **args)
         except Exception as e:
             self.fail(f"Unexpected exception raised: {e}")
+
+
+class TestLinearCombinationAdjustmentMapping(unittest.TestCase):
+    def setUp(self):
+        self.cids = ["USD", "EUR", "JPY", "GBP", "AUD", "CAD", "CHF", "CNY"]
+        self.xcats = ["WG", "AZ"]
+        tickers = [f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats]
+        self.tickers = list(np.random.permutation(tickers))
+
+        # prime numbers have been chosen so the weights can be easily tested
+        self.ticker_weights = dict(zip(self.tickers, get_primes(len(self.tickers))))
+
+        self.expected_results = {
+            _cid: np.prod(
+                [
+                    self.ticker_weights[ticker]
+                    for ticker in self.tickers
+                    if get_cid(ticker) == _cid
+                ]
+            )
+            for _cid in self.cids
+        }
+
+        start, end = "2020-01-01", "2021-02-01"
+        self.qdf = make_test_df(tickers=self.tickers, start=start, end=end)
+
+        self.df_weights_wide, self.df_adj_zns_wide = split_weights_adj_zns(
+            self.qdf, weights="WG", adj_zns="AZ"
+        )
+
+    def test_mapping(self):
+        common_args = {
+            "weights_xcat": "WG",
+            "adj_zns_xcat": "AZ",
+            "adj_name": "ADJWGT",
+            "cids": self.cids,
+            "normalize": True,
+        }
+        coeff_new = 0.5
+
+        with warnings.catch_warnings(record=True):
+            res1 = adjust_weights(
+                df=self.qdf,
+                method="lincomb",
+                params=dict(coeff_new=coeff_new),
+                **common_args,
+            )
+
+            res2 = linear_combination_adjustment(
+                df=self.qdf,
+                coeff_new=coeff_new,
+                **common_args,
+            )
+
+        self.assertTrue(res1.equals(res2))
 
 
 if __name__ == "__main__":
