@@ -580,6 +580,17 @@ class TestAll(unittest.TestCase):
         )
         pnl.make_long_pnl(vol_scale=None, label=None)
 
+    def test_evaluate_pnls_type_checks(self):
+        ret = "EQXR"
+        sigs = ["CRY", "GROWTH", "INFL"]
+
+        pnl = NaivePnL(self.dfd, ret=ret, sigs=sigs)
+
+        for arg in ["pnl_cids", "pnl_cats"]:
+            for argval in [1, "A", [1]]:
+                with self.assertRaises(TypeError):
+                    pnl.evaluate_pnls(**{arg: argval})
+
     def test_plotting_methods(self):
         plt.close("all")
         mock_plt = patch("matplotlib.pyplot.show").start()
