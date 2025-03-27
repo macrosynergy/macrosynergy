@@ -69,19 +69,37 @@ def check_types(
 
 
 def lincomb_backend(
-    dfw_adj_zns: pd.DataFrame,
-    dfw_weights: pd.DataFrame,
+    df_adj_zns_wide: pd.DataFrame,
+    df_weights_wide: pd.DataFrame,
+    coeff_new: float,
     min_score: Optional[float] = None,
-    coeff_new: Optional[float] = None,
 ) -> pd.DataFrame:
     """
     Linear combination of the parameters.
+
+    Parameters
+    ----------
+    df_adj_zns_wide : pd.DataFrame
+        DataFrame with adjustment factors in wide format.
+    df_weights_wide : pd.DataFrame
+        DataFrame with weights in wide format.
+    coeff_new : float
+        Coefficient (between 0 and 1) for the new weights. 1 means the result consists
+        entirely of the new weights, 0 means the result consists entirely of the old
+        weights.
+    min_score : float, optional
+        Minimum score for the adjustment factors. Default is None, where it is set to the
+        minimum score discovered in the panel of `df_adj_zns_wide`.
     """
+
+    assert set(df_weights_wide.columns) == set(df_adj_zns_wide.columns)
+    assert set(df_weights_wide.index) == set(df_adj_zns_wide.index)
+
     if min_score is None:
         warnings.warn(
-            "`min_score` not provided. Defaulting to minimum value from `dfw_adj_zns`"
+            "`min_score` not provided. Defaulting to minimum value from `df_adj_zns_wide`."
         )
-        min_score = dfw_adj_zns.min().min()
+        min_score = df_adj_zns_wide.min().min()
 
     err_str = "Parameter `coeff_new` must be provided as a floating point number between 0 and 1."
     if not isinstance(coeff_new, Number) or (
@@ -96,9 +114,10 @@ def lincomb_backend(
     # output_weight[i, t] = output_raw_weight[i, t] / sum(output_raw_weight[i, t]))
     # where `i` is the cross-section and `t` is the date
 
-    nwb = dfw_adj_zns.apply(lambda s: s.apply(lambda x: max(x - min_score, 0)))
+    nwb = df_adj_zns_wide - min_score
+    nwb[nwb < 0] = 0
     nw = nwb.div(nwb.sum(axis="columns"), axis="index")
-    orw = (1 - coeff_new) * dfw_weights + coeff_new * nw
+    orw = (1 - coeff_new) * df_weights_wide + coeff_new * nw
     ow = orw.div(orw.sum(axis="columns"), axis="index")
 
     return ow
@@ -172,11 +191,8 @@ def split_weights_adj_zns(
         factors), with one column per cid.
     """
 
-    df_weights = df.loc[df["xcat"] == weights]
-    df_adj_zns = df.loc[df["xcat"] == adj_zns]
-
-    df_weights_wide = QuantamentalDataFrame(df_weights).to_wide()
-    df_adj_zns_wide = QuantamentalDataFrame(df_adj_zns).to_wide()
+    df_weights_wide = QuantamentalDataFrame(df.loc[df["xcat"] == weights]).to_wide()
+    df_adj_zns_wide = QuantamentalDataFrame(df.loc[df["xcat"] == adj_zns]).to_wide()
 
     # cannot tolerate negative weights
     if any(df_weights_wide[~df_weights_wide.isna()].lt(0).any()):
@@ -378,9 +394,10 @@ def adjust_weights(
 
     if method == "lincomb":
         dfw_result = lincomb_backend(
-            dfw_adj_zns=df_adj_zns_wide,
-            dfw_weights=df_weights_wide,
-            **params,
+            df_adj_zns_wide=df_adj_zns_wide,
+            df_weights_wide=df_weights_wide,
+            coeff_new=params.get("coeff_new", None),
+            min_score=params.get("min_score", None),
         )
 
     elif method == "generic":
