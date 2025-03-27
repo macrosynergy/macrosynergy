@@ -50,10 +50,10 @@ def linear_combination_adjustment(
     """
     return adjust_weights(
         df=df,
-        weights=weights_xcat,
-        adj_zns=adj_zns_xcat,
+        weights_xcat=weights_xcat,
+        adj_zns_xcat=adj_zns_xcat,
         cids=cids,
-        method="generic",
+        method="lincomb",
         params=dict(min_score=min_score, coeff_new=coeff_new),
         normalize=normalize,
         normalize_to_pct=normalize_to_pct,
