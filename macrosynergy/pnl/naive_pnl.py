@@ -97,9 +97,7 @@ class NaivePnL:
         self.bm_bool = isinstance(bms, (str, list))
         if self.bm_bool:
             bms = [bms] if isinstance(bms, str) else bms
-            self.dfd = reduce_df(
-                self.dfd, xcats=bms, start=start, end=end, blacklist=blacklist
-            )
+            self.dfd = reduce_df(self.dfd, start=start, end=end, blacklist=blacklist)
 
             # Pass in the original DataFrame; negative signal will not have been applied
             # which will corrupt the use of the benchmark categories.
