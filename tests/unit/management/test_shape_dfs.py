@@ -46,9 +46,7 @@ class TestAll(unittest.TestCase):
         df_xcats.loc["INFL", :] = ["2011-01-01", "2020-12-31", 0, 3, 0, 0.6]
         df_xcats.loc["GDP", :] = ["2011-01-01", "2020-12-31", 0, 1, 0, 0.7]
 
-        random.seed(1)
-        np.random.seed(0)
-        self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75, seed=0)
 
     def tearDown(self) -> None:
         return super().tearDown()
