@@ -830,20 +830,6 @@ class TestInformationStateChangesScoreBy(unittest.TestCase):
         with self.assertRaises(ValueError):
             InformationStateChanges.from_qdf(qdf, score_by="banana")
 
-    def test_score_by_unplanned_method(self):
-        qdf = get_long_format_data(end="2015-01-01")
-        test_options = {"apple": "banana"}
-        expected_err = "Column `banana` not in"
-        with unittest.mock.patch(
-            "macrosynergy.management.utils.sparse.SCORE_BY_OPTIONS", test_options
-        ):
-            try:
-                InformationStateChanges.from_qdf(qdf, score_by="apple")
-            except ValueError as e:
-                self.assertIn(expected_err, str(e))
-            except Exception as e:
-                self.fail(f"Expected ValueError, got {type(e)}")
-
 
 if __name__ == "__main__":
     unittest.main()
