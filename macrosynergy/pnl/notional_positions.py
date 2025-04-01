@@ -236,7 +236,7 @@ def notional_positions(
     rebal_freq: str = "m",
     lback_meth: str = "ma",
     est_freqs: Union[str, List[str]] = ["D", "W", "M"],
-    est_weights: Union[Number, List[Number]] = [1, 2, 3],
+    est_weights: Union[Number, List[Number]] = [1, 1, 1],
     lback_periods: Union[int, List[int]] = [-1, -1, -1],
     half_life: Union[int, List[int]] = [11, 5, 6],
     rstring: str = "XR",
@@ -285,8 +285,9 @@ def notional_positions(
         means 10%). This is the main parameter for volatility-targeted positioning. That
         method estimates the annualized standard deviation of the signal-based portfolio for
         a 1 USD per signal portfolio based on past variances and covariances of the contract
-        returns. The estimation is managed by the function `historic_portfolio_vol()`.
-        Default is None, i.e. the volatility-targeting is not applied.
+        returns. The estimation is managed by the function 
+        :func:`macrosynergy.pnl.historic_portfolio_vol`. Default is None, i.e. the
+        volatility-targeting is not applied.
     rebal_freq : str
         the rebalancing frequency. Default is 'm' for monthly. Alternatives are 'w' for
         business weekly, 'd' for daily, and 'q' for quarterly. Contract signals are taken
@@ -296,18 +297,30 @@ def notional_positions(
         the number of days to wait before applying the signal. Default is 1. This means
         that new positions are taken at the very end of the first trading day of the holding
         period and are the basis of PnL calculation from the second Trading day onward.
-    lback_periods : int
-        the number of periods to use for the lookback period of the volatility-targeting
-        method. Default is 21. This passed through to the function
-        `historic_portfolio_vol()`.
     lback_meth : str
         the method to use for the lookback period of the volatility-targeting method.
         Default is 'ma' for moving average. Alternative is "xma", for exponential moving
-        average. Again this is passed through to the function `historic_portfolio_vol()`.
-    half_life : int
-        the half-life of the exponential moving average for volatility-targeting if the
-        exponential moving average "xma" method has been chosen Default is 11. This is
-        passed through to the function `historic_portfolio_vol()`.
+        average. Again this is passed through to the function 
+        :func:`macrosynergy.pnl.historic_portfolio_vol`.
+    est_freqs : str or list of str
+        the frequencies to use for the estimation of the variance-covariance matrix.
+        Default is to use ["D", "W", "M"]. This is passed through to the function
+        :func:`macrosynergy.pnl.historic_portfolio_vol`.
+    est_weights : float or list of float
+        the weights to use for the estimation of the variance-covariance matrix. The
+        weights are normalized and are used to calculate the weighted average of the
+        estimated variances and covariances. Default is [1, 1, 1]. This is passed
+        through to the function :func:`macrosynergy.pnl.historic_portfolio_vol`.
+    lback_periods : int or List[int]
+        the number of periods to use for the lookback period of the volatility-targeting
+        method. Each element corresponds to the the same index in `est_freqs`. Passing a
+        single element will apply the same value to all frequencies. Default is [-1], which
+        means that the lookback period is the full available data for all specified
+    half_life : List[int]
+        number of periods in the half-life of the exponential moving average. Each
+        element corresponds to the same index in `est_freqs`. Default is [11, 5, 6] (for
+        daily, weekly and monthly frequencies respectively). This is passed through to the
+        function :func:`macrosynergy.pnl.historic_portfolio_vol`.
     rstring : str
         a general string of the return category. This identifies the contract returns
         that are required for the volatility-targeting method, based on the category
