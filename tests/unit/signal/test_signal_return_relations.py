@@ -642,7 +642,25 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(set(sr.dfd["xcat"]) == set(["XR", "CRY"]))
 
-        self.assertTrue(sr.dfd["value"][0] != sr.df["value"][0])
+        # check that the return (XR) has not been shifted
+        self.assertTrue(
+            (
+                sr.dfd[sr.dfd["xcat"] == "XR"]["value"]
+                == sr.df[sr.df["xcat"] == "XR"]["value"]
+            ).all()
+        )
+        shifted_cry = sr.dfd[sr.dfd["xcat"] == "CRY"]["value"]
+        expected_shifted_cry = sr.df[sr.df["xcat"] == "CRY"]["value"].shift(1)
+        expected_isna = expected_shifted_cry.isna()
+        additional_isna = shifted_cry.isna()
+
+        # check all true for (shifted_cry == expected_shifted_cry) XOR expected_isna
+        self.assertTrue(
+            (
+                (shifted_cry == expected_shifted_cry)
+                ^ (expected_isna | additional_isna)
+            ).all()
+        )
 
         self.assertTrue(sr_no_slip.dfd["value"][0] == sr_no_slip.df["value"][0])
 
@@ -650,7 +668,26 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(set(sr.dfd["xcat"]) == set(["XR", "CRY"]))
 
-        self.assertTrue(sr.dfd["value"][0] != sr.df["value"][0])
+        # check that the return (XR) has not been shifted
+        self.assertTrue(
+            (
+                sr.dfd[sr.dfd["xcat"] == "XR"]["value"]
+                == sr.df[sr.df["xcat"] == "XR"]["value"]
+            ).all()
+        )
+
+        shifted_cry = sr.dfd[sr.dfd["xcat"] == "CRY"]["value"]
+        expected_shifted_cry = sr.df[sr.df["xcat"] == "CRY"]["value"].shift(1)
+        expected_isna = expected_shifted_cry.isna()
+        additional_isna = shifted_cry.isna()
+
+        # check all true for (shifted_cry == expected_shifted_cry) XOR expected_isna
+        self.assertTrue(
+            (
+                (shifted_cry == expected_shifted_cry)
+                ^ (expected_isna | additional_isna)
+            ).all()
+        )
 
         # Test Negative signs are correctly handled
 
