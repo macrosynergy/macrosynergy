@@ -405,7 +405,7 @@ class SignalReturnRelations:
             ret = self.rets[0]
 
         self.df = self.original_df.copy()
-        self.manipulate_df(xcat=sigs + [ret], freq=freq, agg_sig=agg_sig)
+        self.manipulate_df(xcats=sigs + [ret], freq=freq, agg_sig=agg_sig)
 
         for i in range(len(sigs)):
             if not sigs[i] in self.sigs:
@@ -539,7 +539,7 @@ class SignalReturnRelations:
             sigs = [sigs]
 
         self.manipulate_df(
-            xcat=sigs + [ret],
+            xcats=sigs + [ret],
             freq=freq,
             agg_sig=self.agg_sigs[0],
         )
@@ -692,7 +692,7 @@ class SignalReturnRelations:
             isinstance(item, str) for item in variable
         )
 
-    def manipulate_df(self, xcat: str, freq: str, agg_sig: str):
+    def manipulate_df(self, xcats: List[str], freq: str, agg_sig: str):
         """
         Used to manipulate the DataFrame to the desired format for the analysis. Firstly
         reduces the dataframe to only include data outside of the blacklist and data
@@ -702,8 +702,8 @@ class SignalReturnRelations:
 
         Parameters
         ----------
-        xcat : str
-            xcat to be analysed.
+        xcats : List[str]
+            list of xcats in df to apply slip.
         freq : str
             frequency to be used in analysis.
         agg_sig : str
@@ -715,7 +715,7 @@ class SignalReturnRelations:
         cids = None if self.cids is None else self.cids
         dfd = reduce_df(
             self.df,
-            xcats=xcat,
+            xcats=xcats,
             cids=cids,
             start=self.start,
             end=self.end,
@@ -729,18 +729,18 @@ class SignalReturnRelations:
             df=dfd,
             slip=self.slip,
             cids=cids,
-            xcats=[xcat[0]],
+            xcats=[xcats[0]],
             metrics=metric_cols,
         )
 
         if self.cosp and len(self.sigs) > 1:
-            dfd = self.__communal_sample__(df=dfd, signal=xcat[:-1], ret=xcat[-1])
+            dfd = self.__communal_sample__(df=dfd, signal=xcats[:-1], ret=xcats[-1])
 
         self.dfd = dfd
 
         df = categories_df(
             dfd,
-            xcats=xcat,
+            xcats=xcats,
             cids=cids,
             val="value",
             start=None,
@@ -1281,7 +1281,7 @@ class SignalReturnRelations:
         if not isinstance(agg_sigs, str):
             raise TypeError("agg_sigs must be a string")
 
-        self.manipulate_df(xcat=xcat, freq=freq, agg_sig=agg_sigs)
+        self.manipulate_df(xcats=xcat, freq=freq, agg_sig=agg_sigs)
 
         if not sig in self.sigs:
             sig = sig + "_NEG"
@@ -1425,7 +1425,7 @@ class SignalReturnRelations:
         for freq in freqs:
             for agg_sig in agg_sigs:
                 for ret in rets:
-                    self.manipulate_df(xcat=xcats + [ret], freq=freq, agg_sig=agg_sig)
+                    self.manipulate_df(xcats=xcats + [ret], freq=freq, agg_sig=agg_sig)
                     for xcat in xcats:
                         df_rows.append(
                             self.__output_table__(
@@ -1583,7 +1583,7 @@ class SignalReturnRelations:
         for ret, sig, freq, agg_sig in loop_tuples:
             # Prepare xcat and manipulate DataFrame
             xcat = [sig, ret]
-            self.manipulate_df(xcat=xcat, freq=freq, agg_sig=agg_sig)
+            self.manipulate_df(xcats=xcat, freq=freq, agg_sig=agg_sig)
             hash = f"{ret}/{sig}/{freq}/{agg_sig}"
 
             row = self.get_rowcol(hash, rows)
