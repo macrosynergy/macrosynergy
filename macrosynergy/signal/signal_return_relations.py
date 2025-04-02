@@ -88,11 +88,9 @@ class SignalReturnRelations:
         conceptually corresponds to the holding period of a position in accordance with the
         signal.
     slip : int
-        implied slippage of feature availability for relationship with the target
-        category. This mimics the relationship between trading signals and returns, which is
-        often characterized by a delay due to the setup of positions. Technically, this is a
-        negative lag (early arrival) of the target category in working days prior to any
-        frequency conversion. Default is 0.
+        Default is 0, implied slippage of feature availability for relationship with the 
+        target category. See :func:`macrosynergy.management.df_utils.apply_slip` for more
+        information. 
     ms_panel_test : bool
         if True the Macrosynergy Panel test is calculated. Please note that this is a
         very time-consuming operation and should be used only if you require the result.
@@ -726,11 +724,12 @@ class SignalReturnRelations:
         metric_cols: List[str] = list(
             set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid", "ticker"])
         )
+        # here, the slip is applied to the the first xcat (explanatory variable)
         dfd: pd.DataFrame = self.apply_slip(
             df=dfd,
             slip=self.slip,
             cids=cids,
-            xcats=[xcat[-1]],
+            xcats=[xcat[0]],
             metrics=metric_cols,
         )
 
