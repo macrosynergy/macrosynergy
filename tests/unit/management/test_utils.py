@@ -976,7 +976,7 @@ class TestFunctions(unittest.TestCase):
         )
 
         # NOTE: casting df.vx to int as pandas casts it to float64
-        self.assertEqual(int(min(df["vx"])) + test_slip, int(min(out_df["vx"])))
+        self.assertEqual(int(df["vx"].max()) - test_slip, int(out_df["vx"].max()))
 
         for cid in sel_cids:
             for xcat in sel_xcats:
@@ -1054,7 +1054,7 @@ class TestFunctions(unittest.TestCase):
                     ]["value"] == df[(df["cid"] == cid) & (df["xcat"] == xcat)][
                         "value"
                     ].shift(
-                        -2
+                        2
                     )
                     self.assertTrue(
                         (
