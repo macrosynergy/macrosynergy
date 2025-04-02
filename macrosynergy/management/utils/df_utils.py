@@ -363,9 +363,10 @@ def apply_slip(
     raise_error: bool = True,
 ) -> QuantamentalDataFrame:
     """
-    Applies a "slip" to the DataFrame for the given cross-sections
-    and categories, on the given metrics. A slip is identical to a lag, but is measured in
-    days, and must always be applied before any resampling.
+    Applies a "slip" to the DataFrame for the given cross-sections and categories, on the 
+    given metrics. A slip shifts the specified category n-days fowards in time, where n
+    is the slip value. This is identical to a lag, but is measured in days, and must 
+    always be applied before any resampling.
 
     Parameters
     ----------
