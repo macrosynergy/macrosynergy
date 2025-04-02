@@ -988,7 +988,7 @@ class TestFunctions(unittest.TestCase):
                     .isna()
                     .sum()
                 )
-                assert inan_count == onan_count - test_slip
+                self.assertEqual(inan_count, onan_count - test_slip)
 
         # Test Case 2 - slip is greater than the number of unique dates for a cid, xcat pair
 
