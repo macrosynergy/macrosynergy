@@ -363,8 +363,9 @@ def apply_slip(
     raise_error: bool = True,
 ) -> QuantamentalDataFrame:
     """
-    Applies a slip, i.e. a negative lag, to the DataFrame for the given cross-sections
-    and categories, on the given metrics.
+    Applies a "slip" to the DataFrame for the given cross-sections
+    and categories, on the given metrics. A slip is identical to a lag, but is measured in
+    days, and must always be applied before any resampling.
 
     Parameters
     ----------
@@ -433,8 +434,6 @@ def apply_slip(
             raise ValueError(_err_str)
         else:
             warnings.warn(_err_str)
-
-    slip: int = slip.__neg__()
 
     for col in metrics:
         tks_isin = df["ticker"].isin(sel_tickers)
