@@ -204,7 +204,7 @@ class TestAll(unittest.TestCase):
         srr = SignalReturnRelations(
             self.dfd, sigs=signal, rets="XR", freqs="D", blacklist=self.blacklist
         )
-        srr.manipulate_df(xcat=[signal, "XR"], freq="D", agg_sig="last")
+        srr.manipulate_df(xcats=[signal, "XR"], freq="D", agg_sig="last")
         df = srr.df.dropna(how="any").copy()
 
         # First, test cross-sectional basis.
@@ -245,7 +245,7 @@ class TestAll(unittest.TestCase):
         srr = SignalReturnRelations(
             self.dfd, sigs=signal, rets=return_, freqs="D", blacklist=self.blacklist
         )
-        srr.manipulate_df(xcat=[signal, return_], freq="D", agg_sig="last")
+        srr.manipulate_df(xcats=[signal, return_], freq="D", agg_sig="last")
         df_cs = srr.__output_table__(cs_type="cids")
 
         # The lagged signal & returns have been reduced to[-1, 1] which are interpreted
@@ -347,7 +347,7 @@ class TestAll(unittest.TestCase):
             blacklist=self.blacklist,
         )
         srr.manipulate_df(
-            xcat=[primary_signal] + rival_signals + ["XR"], freq="D", agg_sig="last"
+            xcats=[primary_signal] + rival_signals + ["XR"], freq="D", agg_sig="last"
         )
 
         df_sigs = srr.__rival_sigs__(ret="XR")
@@ -371,7 +371,7 @@ class TestAll(unittest.TestCase):
         srr = SignalReturnRelations(
             self.dfd, sigs=signal, rets=return_, freqs="D", blacklist=self.blacklist
         )
-        srr.manipulate_df(xcat=[signal, return_], freq="D", agg_sig="last")
+        srr.manipulate_df(xcats=[signal, return_], freq="D", agg_sig="last")
         df_cs = srr.__output_table__(cs_type="cids")
         dfx = df_cs[~df_cs.index.isin(["PosRatio"])]
         dfx_acc = dfx.loc[:, ["accuracy", "bal_accuracy"]]
