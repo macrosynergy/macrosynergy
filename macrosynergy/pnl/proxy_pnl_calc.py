@@ -38,11 +38,12 @@ def _split_returns_positions_tickers(
     positions_wo_returns = set_positions - set_returns
     returns_wo_positions = set_returns - set_positions
     if (len(positions_wo_returns) + len(returns_wo_positions)) > 0:
-        err_msg = (
-            "The following tickers are missing in the dataframe: \n"
-            f"Positions without returns: {positions_wo_returns} \n"
-            f"Returns without positions: {returns_wo_positions}"
-        )
+        err_msg = "The following tickers are missing in the dataframe: \n"
+        if positions_wo_returns:
+            err_msg += f"Positions without returns: {sorted(positions_wo_returns)} \n"
+        if returns_wo_positions:
+            err_msg += f"Returns without positions: {sorted(returns_wo_positions)} \n"
+        err_msg += "Please check the tickers in the dataframe."
         raise ValueError(err_msg)
 
     returns_tickers: List[str] = [
