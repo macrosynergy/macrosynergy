@@ -466,7 +466,6 @@ def apply_slip(
             dct = {**dct, **{metric: np.nan for metric in found_metrics}}
             new_dfs.append(pd.DataFrame(dct))
 
-        # new_df = pd.concat(new_dfs, axis=0, ignore_index=True)
         if is_categorical_qdf(df):
             new_df = QuantamentalDataFrame.from_qdf_list(new_dfs)
         else:
