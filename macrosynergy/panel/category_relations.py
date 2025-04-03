@@ -76,11 +76,9 @@ class CategoryRelations(object):
         winsorized!). Default is None for both. Trimming is applied after all other
         transformations.
     slip : int
-        implied slippage of feature availability for relationship with the target
-        category. This mimics the relationship between trading signals and returns, which is
-        often characterized by a delay due to the setup of positions. Technically, this is a
-        negative lag (early arrival) of the target category in working days prior to any
-        frequency conversion. Default is 0.
+        number of periods to 'slip' the explanatory variable, i.e. the first category.
+        Here, slip mimics the late arrival of the data, or the time it takes
+        to act on the data. Default is 0. 
     """
 
     def __init__(
@@ -150,11 +148,12 @@ class CategoryRelations(object):
             metrics_found: List[str] = list(
                 set(df.columns) - set(["cid", "xcat", "real_date"])
             )
+            # here, the slip is applied to the the first xcat (explanatory variable)
             df = self.apply_slip(
                 df=df,
                 slip=self.slip,
                 cids=self.cids,
-                xcats=[self.xcats[1]],
+                xcats=[self.xcats[0]],
                 metrics=metrics_found,
             )
 
@@ -886,7 +885,7 @@ class CategoryRelations(object):
 
             if remove_zero_predictor:
                 dfx = dfx[dfx.loc[:, self.xcats[0]] != 0]
-                
+
             sns.regplot(
                 data=dfx,
                 x=self.xcats[0],
@@ -1013,7 +1012,7 @@ if __name__ == "__main__":
     dfdx = dfd[~(filt1 | filt2)].copy()
     dfdx["ERA"] = "before 2007"
     dfdx.loc[dfdx["real_date"].dt.year > 2007, "ERA"] = "from 2010"
-    
+
     def modify_cry_values(group):
         if group.name[1] == "CRY":  # Check if xcat is "cry"
             mask = np.ones(len(group), dtype=bool)
@@ -1022,7 +1021,6 @@ if __name__ == "__main__":
         return group
 
     dfdx = dfdx.groupby(["cid", "xcat"], group_keys=False).apply(modify_cry_values)
-
 
     cidx = ["AUD", "CAD", "GBP", "USD", "PRY"]
 
