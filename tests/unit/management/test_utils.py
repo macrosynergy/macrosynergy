@@ -976,7 +976,7 @@ class TestFunctions(unittest.TestCase):
         )
 
         # NOTE: casting df.vx to int as pandas casts it to float64
-        self.assertEqual(int(min(df["vx"])) + test_slip, int(min(out_df["vx"])))
+        self.assertEqual(int(df["vx"].max()) - test_slip, int(out_df["vx"].max()))
 
         for cid in sel_cids:
             for xcat in sel_xcats:
@@ -988,7 +988,7 @@ class TestFunctions(unittest.TestCase):
                     .isna()
                     .sum()
                 )
-                assert inan_count == onan_count - test_slip
+                self.assertEqual(inan_count, onan_count - test_slip)
 
         # Test Case 2 - slip is greater than the number of unique dates for a cid, xcat pair
 
@@ -1054,7 +1054,7 @@ class TestFunctions(unittest.TestCase):
                     ]["value"] == df[(df["cid"] == cid) & (df["xcat"] == xcat)][
                         "value"
                     ].shift(
-                        -2
+                        2
                     )
                     self.assertTrue(
                         (
@@ -1073,6 +1073,51 @@ class TestFunctions(unittest.TestCase):
                             == df[(df["cid"] == cid) & (df["xcat"] == xcat)]["value"]
                         ).all()
                     )
+
+        # case 5 - check effect of extend_dates flag on the output
+        df: pd.DataFrame = test_df.copy()
+
+        test_slip = 1
+        # get the last date in the dataframe
+        last_date = df["real_date"].max()
+        new_last_date = df["real_date"].max() + pd.offsets.BDay(test_slip)
+        out_df = apply_slip(
+            df=df,
+            slip=test_slip,
+            xcats=df["xcat"].unique().tolist(),
+            cids=df["cid"].unique().tolist(),
+            metrics=["value"],
+            extend_dates=True,
+        )
+
+        valid_cid_xcat_pairs = df[["cid", "xcat"]].drop_duplicates()
+        for cid, xcat in df[["cid", "xcat"]].drop_duplicates().values.tolist():
+            ld_in = df[
+                (df["cid"] == cid)
+                & (df["xcat"] == xcat)
+                & (df["real_date"] == last_date)
+            ]
+
+            ld_out = out_df[
+                (out_df["cid"] == cid)
+                & (out_df["xcat"] == xcat)
+                & (out_df["real_date"] == new_last_date)
+            ]
+            self.assertTrue(
+                (
+                    ld_in[["cid", "xcat", "value"]].values
+                    == ld_out[["cid", "xcat", "value"]].values
+                ).all()
+            )
+            self.assertEqual(
+                len(
+                    pd.bdate_range(
+                        ld_in["real_date"].tolist()[0],
+                        ld_out["real_date"].tolist()[0],
+                    )
+                ),
+                test_slip + 1,
+            )
 
         # check that a value error is raised when cids and xcats are not in the dataframe
         with warnings.catch_warnings(record=True) as w:
@@ -1132,6 +1177,24 @@ class TestFunctions(unittest.TestCase):
                 cids=sel_cids,
                 metrics=["value"],
             )
+
+        with self.assertRaises(ValueError):
+            apply_slip(
+                df=df,
+                slip=2,
+                xcats=sel_xcats,
+                cids=sel_cids,
+                metrics=["random_metric"],
+            )
+        with self.assertRaises(TypeError):
+            apply_slip(
+                df=df,
+                slip=2,
+                xcats=sel_xcats,
+                cids=sel_cids,
+                metrics=[1],
+            )
+
 
     def test_merge_categories(self):
         cids: List[str] = ["AUD", "CAD", "GBP", "NZD", "JPY", "CHF"]
