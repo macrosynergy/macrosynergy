@@ -141,7 +141,7 @@ class TestHelperFunctions(unittest.TestCase):
             rx = random.randint(0, len(ret_tickers) - 1)
             test_list = ret_tickers.copy()
             test_list.pop(rx)
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(ValueError):
                 _split_returns_positions_tickers(
                     tickers=test_list, rstring=self.rstring, spos=self.spos
                 )
@@ -174,7 +174,7 @@ class TestHelperFunctions(unittest.TestCase):
             rx = random.randint(0, len(ret_df.columns) - 1)
             test_df = df.copy()
             test_df.drop(columns=[test_df.columns[rx]], inplace=True)
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(ValueError):
                 _split_returns_positions_df(df_wide=test_df, rstring=rstring, spos=spos)
 
     def test_get_rebal_dates(self):
