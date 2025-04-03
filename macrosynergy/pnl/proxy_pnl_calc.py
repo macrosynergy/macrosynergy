@@ -34,7 +34,17 @@ def _split_returns_positions_tickers(
 
     set_returns = set(_replace_strs(returns_tickers, rstring))
     set_positions = set(_replace_strs(positions_tickers, f"_{spos}"))
-    assert len(set_positions - set_returns) == len(set_returns - set_positions) == 0
+    # assert len(set_positions - set_returns) == len(set_returns - set_positions) == 0
+    positions_wo_returns = set_positions - set_returns
+    returns_wo_positions = set_returns - set_positions
+    if (len(positions_wo_returns) + len(returns_wo_positions)) > 0:
+        err_msg = (
+            "The following tickers are missing in the dataframe: \n"
+            f"Positions without returns: {positions_wo_returns} \n"
+            f"Returns without positions: {returns_wo_positions}"
+        )
+        raise ValueError(err_msg)
+
     returns_tickers: List[str] = [
         ticker.replace(f"_{spos}", rstring) for ticker in positions_tickers
     ]
