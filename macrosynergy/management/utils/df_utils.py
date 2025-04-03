@@ -1169,15 +1169,28 @@ def estimate_release_frequency(
     Estimates the release frequency of a timeseries, by inferring the frequency of the
     timeseries index. Before calling `pd.infer_freq`, the function drops NaNs, and rounds
     values as specified by the tolerance parameters to allow dropping of "duplicate" values.
+    
+    Parameters
+    ----------
+    timeseries : pd.Series, optional
+        The timeseries to be used to estimate the release frequency. Only one of
+        `timeseries` or `df_wide` must be passed.
+    df_wide : pd.DataFrame, optional
+        The wide DataFrame to be used to estimate the release frequency. This mode
+        processes each column of the DataFrame as a timeseries. Only one of `timeseries`
+        or `df_wide` must be passed.
+    atol : float, optional
+        The absolute tolerance for the difference between two values. If `None`, no
+        rounding is applied.
+    rtol : float, optional
+        The relative tolerance for the difference between two values. If `None`, no
+        rounding is applied.
 
-    :param <pd.Series> timeseries: The timeseries to be used to estimate the release
-        frequency. Only one of `timeseries` or `df_wide` must be passed.
-    :param <pd.DataFrame> df_wide: The wide DataFrame to be used to estimate the release
-        frequency. This mode processes each column of the DataFrame as a timeseries. Only
-        one of `timeseries` or `df_wide` must be passed.
-    :param <float> diff_atol: The absolute tolerance for the difference between two
-    :param <float> diff_rtol: The relative tolerance for the difference between two
-    :return <str>: The estimated release frequency.
+    Returns
+    -------
+    str or dict
+        The estimated release frequency. If `df_wide` is passed, a dictionary with the
+        column names as keys and the estimated frequencies as values is returned.
     """
 
     if df_wide is not None:
