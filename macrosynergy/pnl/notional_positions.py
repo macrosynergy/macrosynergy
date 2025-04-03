@@ -61,6 +61,7 @@ def _apply_slip(
             slip=slip,
             raise_error=False,
             metrics=["value"],
+            extend_dates=True,
         )
 
 
