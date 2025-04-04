@@ -788,7 +788,7 @@ class SignalReturnRelations:
                 columns=cid_df.columns,
                 index=cid_df.index,
             )
-            final_df.loc[:, :] = np.NaN
+            final_df.loc[:, :] = np.nan
 
             # Return category is preserved.
             final_df.loc[:, ret] = cid_df[ret]
@@ -875,13 +875,13 @@ class SignalReturnRelations:
             ret_vals, sig_vals
         )
         if len(ret_sign) <= 1:
-            corr, corr_pval = np.NaN, np.NaN
+            corr, corr_pval = np.nan, np.nan
         else:
             corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
         df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
 
         if (ret_sign == -1.0).all() or (ret_sign == 1.0).all():
-            df_out.loc[segment, "auc"] = np.NaN
+            df_out.loc[segment, "auc"] = np.nan
             warnings.warn(
                 "AUC could not be calculated, since the return category has a lack of "
                 "class diversity."
@@ -921,7 +921,7 @@ class SignalReturnRelations:
             warnings.warn(
                 "P-value could not be calculated, since there wasn't enough datapoints."
             )
-            return np.NaN
+            return np.nan
         X = sm.add_constant(ret_vals)
         y = sig_vals.copy()
         groups = ret_vals.index.get_level_values("real_date")
@@ -932,12 +932,12 @@ class SignalReturnRelations:
             warnings.warn(
                 "Singular matrix encountered, so p-value could not be calculated."
             )
-            return np.NaN
+            return np.nan
         if re.summary().tables[1].iloc[1, 3] == "":
             warnings.warn(
                 "P-value could not be calculated, since there wasn't enough datapoints."
             )
-            return np.NaN
+            return np.nan
         pval_string = re.summary().tables[1].iloc[1, 3]
         return float(pval_string)
 
@@ -1123,7 +1123,7 @@ class SignalReturnRelations:
                 list_of_results.append(stats.pearsonr(ret_vals, sig_vals)[1])
             elif stat == "auc":
                 if (ret_sign == -1.0).all() or (ret_sign == 1.0).all():
-                    list_of_results.append(np.NaN)
+                    list_of_results.append(np.nan)
                     warnings.warn(
                         "AUC could not be calculated, since the return category has a "
                         "lack of class diversity."
