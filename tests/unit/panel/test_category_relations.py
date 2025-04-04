@@ -1,10 +1,13 @@
 import unittest
 import io
 import sys
+import matplotlib.pyplot
 import numpy as np
 import pandas as pd
+import matplotlib
 from random import randint
 from tests.simulate import make_qdf
+from macrosynergy.management.simulate import make_test_df
 from macrosynergy.panel.category_relations import CategoryRelations
 from macrosynergy.management.utils import categories_df
 from typing import List, Tuple, Dict, Union, Optional
@@ -69,7 +72,13 @@ class TestAll(unittest.TestCase):
         # functionality.
         self.cidx: List[str] = ["AUD", "CAD", "GBP"]
 
+        matplotlib.pyplot.close("all")
+        self.curr_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
     def tearDown(self) -> None:
+        matplotlib.pyplot.close("all")
+        matplotlib.use(self.curr_backend)
         return super().tearDown()
 
     def test_constructor(self):
@@ -571,7 +580,7 @@ class TestAll(unittest.TestCase):
         )
 
         # NOTE: casting df.vx to int as pandas casts it to float64
-        self.assertEqual(int(min(df["vx"])) + test_slip, int(min(out_df["vx"])))
+        self.assertEqual(int(df["vx"].max()) - test_slip, int(out_df["vx"].max()))
 
         for cid in sel_cids:
             for xcat in sel_xcats:
@@ -583,7 +592,7 @@ class TestAll(unittest.TestCase):
                     .isna()
                     .sum()
                 )
-                assert inan_count == onan_count - test_slip
+                self.assertEqual(inan_count, onan_count - test_slip)
 
         # Test Case 2 - slip is greater than the number of unique dates for a cid, xcat pair
 
@@ -769,6 +778,83 @@ class TestAll(unittest.TestCase):
                 ncol=5,
                 size=(1, 7, 33),
             )
+
+    def test_xcat_chg1(self):
+        # Test the first-differencing and percentage change methods
+        try:
+            cids_test = ["USD", "GBP", "JPY", "EUR"]
+            xcats_test = ["XCAT1", "XCAT2"]
+
+            dfx = make_test_df(cids=cids_test, xcats=xcats_test, start="2010-01-01")
+
+            cr = CategoryRelations(
+                df=dfx,
+                xcats=xcats_test,
+                cids=cids_test,
+                freq="M",
+                lag=1,
+                xcat_aggs=["last", "sum"],
+                slip=1,
+                xcat1_chg="diff",
+            )
+
+            cr.reg_scatter(coef_box="lower right", prob_est="kendall", separator=2012)
+        except:
+            self.fail(
+                "CategoryRelations failed when using seperator=2012, xcat1_chg=diff"
+            )
+
+    def test_reg_scatter_no_label(self):
+        try:
+            cids_test = ["USD", "GBP", "JPY", "EUR"]
+            xcats_test = ["XCAT1", "XCAT2"]
+
+            dfx = make_test_df(cids=cids_test, xcats=xcats_test, start="2010-01-01")
+
+            cr = CategoryRelations(
+                df=dfx,
+                xcats=xcats_test,
+                cids=cids_test,
+                freq="M",  # TODO in principle select monthly to get more accurate picture...
+                lag=0,
+                xcat_aggs=["last", "last"],
+                start="2000-01-01",
+                xcat_trims=[None, None],
+            )
+
+            cr.reg_scatter(
+                labels=False,
+                coef_box="upper left",
+                title="FX consistent core CPI excess inflation",
+                xlab="ZN-scored signal",
+                ylab="signal",
+                separator="cids",
+            )
+        except:
+            self.fail(
+                "CategoryRelations failed when using seperator=cids, labels=False"
+            )
+
+    def test_int_seperator(self):
+        try:
+            cids_test = ["USD", "GBP", "JPY", "EUR"]
+            xcats_test = ["XCAT1", "XCAT2"]
+
+            dfx = make_test_df(cids=cids_test, xcats=xcats_test, start="2010-01-01")
+
+            cr = CategoryRelations(
+                df=dfx,
+                xcats=xcats_test,
+                cids=cids_test,
+                freq="M",
+                lag=1,
+                xcat_aggs=["last", "sum"],
+                slip=1,
+            )
+
+            cr.reg_scatter(coef_box="lower right", prob_est="kendall", separator=2012)
+        except:
+            self.fail("CategoryRelations failed when using seperator=2012")
 
 
 if __name__ == "__main__":

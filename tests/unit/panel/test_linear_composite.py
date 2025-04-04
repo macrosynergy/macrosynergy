@@ -1,7 +1,8 @@
 import unittest
 import numpy as np
 import pandas as pd
-from typing import List, Tuple, Union, Dict, Any
+import warnings
+from typing import List, Union, Dict, Any
 
 from macrosynergy.panel.linear_composite import (
     linear_composite,
@@ -726,16 +727,31 @@ class TestAll(unittest.TestCase):
 
         cids = ["GBP", "CAD", "AUD"]
 
-        # If complete_cids is True, then error should be thrown since not all cids are in 
+        # If complete_cids is True, then error should be thrown since not all cids are in
         # the df
         with self.assertRaises(ValueError):
             lc_df = linear_composite(df=df, cids=cids, xcats=xcats, complete_cids=True)
 
-        lc_df = linear_composite(df=df, cids=cids, xcats="XR", weights=[1, 7, 9], signs=[1, -1, 1], complete_cids=False)
+        lc_df = linear_composite(
+            df=df,
+            cids=cids,
+            xcats="XR",
+            weights=[1, 7, 9],
+            signs=[1, -1, 1],
+            complete_cids=False,
+        )
         lc_values = lc_df["value"].values
 
-        aud_values = df[(df["xcat"] == "XR") & (df["cid"] == "AUD")]["value"].reset_index(drop=True).values
-        cad_values = df[(df["xcat"] == "XR") & (df["cid"] == "CAD")]["value"].reset_index(drop=True).values
+        aud_values = (
+            df[(df["xcat"] == "XR") & (df["cid"] == "AUD")]["value"]
+            .reset_index(drop=True)
+            .values
+        )
+        cad_values = (
+            df[(df["xcat"] == "XR") & (df["cid"] == "CAD")]["value"]
+            .reset_index(drop=True)
+            .values
+        )
         expected_values = (9 * aud_values - 7 * cad_values) / 16
 
         self.assertTrue(np.allclose(lc_values, expected_values))
@@ -743,23 +759,49 @@ class TestAll(unittest.TestCase):
         # Test when weight is a category
 
         # Initially ensure that an error is thrown if a cid doesn't exist for the weight category
-        df_1 = df[~((df["xcat"] == "INFL") & (df["cid"] == "AUD"))].reset_index(drop=True)
+        df_1 = df[~((df["xcat"] == "INFL") & (df["cid"] == "AUD"))].reset_index(
+            drop=True
+        )
 
         with self.assertRaises(ValueError):
             lc_df = linear_composite(df=df_1, cids=cids, xcats=xcats, weights="INFL")
 
-        lc_df = linear_composite(df=df, cids=cids, xcats="XR", weights="INFL", signs=[1, -1, 1], complete_cids=False)
+        lc_df = linear_composite(
+            df=df,
+            cids=cids,
+            xcats="XR",
+            weights="INFL",
+            signs=[1, -1, 1],
+            complete_cids=False,
+        )
         lc_values = lc_df["value"].values
 
-        aud_values = df[(df["xcat"] == "XR") & (df["cid"] == "AUD")]["value"].reset_index(drop=True).values
-        cad_values = df[(df["xcat"] == "XR") & (df["cid"] == "CAD")]["value"].reset_index(drop=True).values
-        aud_infl_values = df[(df["xcat"] == "INFL") & (df["cid"] == "AUD")]["value"].reset_index(drop=True).values
-        cad_infl_values = df[(df["xcat"] == "INFL") & (df["cid"] == "CAD")]["value"].reset_index(drop=True).values
-        
-        expected_values = (aud_values * aud_infl_values - cad_values * cad_infl_values) 
+        aud_values = (
+            df[(df["xcat"] == "XR") & (df["cid"] == "AUD")]["value"]
+            .reset_index(drop=True)
+            .values
+        )
+        cad_values = (
+            df[(df["xcat"] == "XR") & (df["cid"] == "CAD")]["value"]
+            .reset_index(drop=True)
+            .values
+        )
+        aud_infl_values = (
+            df[(df["xcat"] == "INFL") & (df["cid"] == "AUD")]["value"]
+            .reset_index(drop=True)
+            .values
+        )
+        cad_infl_values = (
+            df[(df["xcat"] == "INFL") & (df["cid"] == "CAD")]["value"]
+            .reset_index(drop=True)
+            .values
+        )
+
+        expected_values = aud_values * aud_infl_values - cad_values * cad_infl_values
 
         weight_magnitude = np.abs(aud_infl_values) + np.abs(cad_infl_values)
-        weight_magnitude[weight_magnitude == 0] = 1 # Avoid division by zero, since the weights are both zero the magnitude does not matter in this case
+        # Avoid division by zero, since the weights are both zero the magnitude does not matter in this case
+        weight_magnitude[weight_magnitude == 0] = 1
 
         expected_values = expected_values / weight_magnitude
 
@@ -773,13 +815,20 @@ class TestAll(unittest.TestCase):
 
         xcats = ["XR", "CRY", "INFL"]
 
-        # If complete_xcats is True, then error should be thrown since not all xcats are 
+        # If complete_xcats is True, then error should be thrown since not all xcats are
         # in the df
 
         with self.assertRaises(ValueError):
             lc_df = linear_composite(df=df, cids=cids, xcats=xcats, complete_xcats=True)
 
-        lc_df = linear_composite(df=df, cids=cids, xcats=xcats, weights=[4, 3, 9], signs=[1, -1, 1], complete_xcats=False)
+        lc_df = linear_composite(
+            df=df,
+            cids=cids,
+            xcats=xcats,
+            weights=[4, 3, 9],
+            signs=[1, -1, 1],
+            complete_xcats=False,
+        )
         lc_values = lc_df["value"].values
 
         xr_values = df[(df["xcat"] == "XR")]["value"].reset_index(drop=True).values
@@ -787,6 +836,59 @@ class TestAll(unittest.TestCase):
         expected_values = (4 * xr_values - 3 * cry_values) / 7
 
         self.assertTrue(np.allclose(lc_values, expected_values))
+
+    def test_args(self):
+        cids = ["GBP", "AUD", "CAD"]
+        xcats = ["XR", "CRY"]
+
+        df = make_test_df(cids=cids, xcats=xcats)
+
+        with self.assertRaises(ValueError) as e_handler:
+            # contains non-existent xcat
+            bad_xcats = ["XR", "CRY", "INFL", "GDP"]
+            _ = linear_composite(df=df, cids=cids, xcats=bad_xcats, complete_xcats=True)
+            self.assertTrue(
+                "Not all `xcats` are available in `df`." in str(e_handler.exception)
+            )
+
+        with self.assertRaises(ValueError) as e_handler:
+            # contains non-existent weight category
+            _ = linear_composite(df=df, cids=cids, xcats=xcats[0], weights="INFL")
+            # 'When using a category-string as `weights` it must be present in `df`'
+            # check the error message
+            self.assertTrue(
+                "When using a category-string as `weights` it must be present in `df`"
+                in str(e_handler.exception)
+            )
+
+        with warnings.catch_warnings(record=True) as w:
+            # extra xcat in xcat agg mode should raise a warning
+            bad_xcats = ["XR", "CRY", "INFL", "GDP"]
+            _ = linear_composite(
+                df=df, cids=cids, xcats=bad_xcats, complete_xcats=False
+            )
+            self.assertTrue(len(w) == 1)
+
+        with self.assertRaises(ValueError) as e_handler:
+            bad_cids = ["GBP", "AUD", "CAD", "GDP"]
+            _ = linear_composite(
+                df=df, cids=bad_cids, xcats=xcats[0], complete_cids=True
+            )
+            err_str = "ValueError: Not all `cids` are available in `df`"
+            self.assertTrue(err_str in str(e_handler.exception))
+
+        with warnings.catch_warnings(record=True) as w:
+            bad_cids = ["GBP", "AUD", "CAD", "USD"]
+            _ = linear_composite(
+                df=df,
+                cids=bad_cids,
+                xcats=xcats[0],
+                complete_cids=False,
+            )
+            err_str = "Not all `cids` are available in `df`: ['USD'] The calculation will be performed with the available cids"
+            self.assertTrue(len(w) == 1)
+            self.assertTrue(err_str in str(w[0].message))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -360,11 +360,14 @@ def apply_slip(
     xcats: Optional[List[str]] = None,
     tickers: Optional[List[str]] = None,
     metrics: List[str] = ["value"],
+    extend_dates: bool = False,
     raise_error: bool = True,
 ) -> QuantamentalDataFrame:
     """
-    Applies a slip, i.e. a negative lag, to the DataFrame for the given cross-sections
-    and categories, on the given metrics.
+    Applies a "slip" to the DataFrame for the given cross-sections and categories, on the
+    given metrics. A slip shifts the specified category n-days fowards in time, where n
+    is the slip value. This is identical to a lag, but is measured in days, and must
+    always be applied before any resampling.
 
     Parameters
     ----------
@@ -378,6 +381,9 @@ def apply_slip(
         List of target categories.
     metrics : List[str]
         List of metrics to which the slip is applied.
+    extend_dates : bool
+        If True, includes the dates added by the slip in the DataFrame. If False, only the
+        input dates are included. Default is False.
     raise_error : bool
         If True, raises an error if the slip cannot be applied to all xcats in the target
         DataFrame. If False, raises a warning instead.
@@ -407,6 +413,18 @@ def apply_slip(
     if tickers is not None:
         if cids is not None or xcats is not None:
             raise ValueError("Cannot specify both `tickers` and `cids`/`xcats`.")
+    if not isinstance(extend_dates, bool):
+        raise TypeError("`extend_dates` must be a boolean.")
+
+    if not isinstance(metrics, list) or (
+        isinstance(metrics, list) and not all(isinstance(m, str) for m in metrics)
+    ):
+        raise TypeError("`metrics` must be a list of strings.")
+
+    missing_metrics = sorted(set(metrics) - set(df.columns))
+    if missing_metrics:
+        raise ValueError(f"Metrics {missing_metrics} are not present in the DataFrame.")
+
     if cids is None:
         cids = df["cid"].unique()
     if xcats is None:
@@ -434,7 +452,30 @@ def apply_slip(
         else:
             warnings.warn(_err_str)
 
-    slip: int = slip.__neg__()
+    if extend_dates:
+        found_metrics = set(df.columns) - set(QuantamentalDataFrame.IndexCols)
+        found_metrics = list(found_metrics - {"ticker"})
+        new_dfs: List[QuantamentalDataFrame] = []
+        for (ticker, cid, xcat), idx in df.groupby(
+            ["ticker", "cid", "xcat"], observed=True
+        ).groups.items():
+            last_date = df.loc[idx, "real_date"].max()
+            new_dts = pd.bdate_range(start=last_date, periods=slip + 1)[1:]
+            assert set(new_dts).isdisjoint(set(df.loc[idx, "real_date"].unique()))
+            dct = {"real_date": new_dts, "cid": cid, "xcat": xcat, "ticker": ticker}
+            dct = {**dct, **{metric: np.nan for metric in found_metrics}}
+            new_dfs.append(pd.DataFrame(dct))
+
+        if is_categorical_qdf(df):
+            new_df = QuantamentalDataFrame.from_qdf_list(new_dfs)
+        else:
+            new_df = pd.concat(new_dfs, axis=0, ignore_index=True)
+        if is_categorical_qdf(df):
+            df = QuantamentalDataFrame(df).update_df(df_add=new_df)
+        else:
+            df = pd.concat([df, new_df], axis=0, ignore_index=True)
+
+        df = df.sort_values(by=["cid", "xcat", "real_date"])
 
     for col in metrics:
         tks_isin = df["ticker"].isin(sel_tickers)
@@ -501,7 +542,7 @@ def downsample_df_on_real_date(
         .groupby(groupby_columns, observed=True)[non_groupby_columns]
         .resample(freq)
     )
-    if PD_OLD_RESAMPLE: # pragma: no cover
+    if PD_OLD_RESAMPLE:  # pragma: no cover
         # resample only if the column is numeric
         res = res.agg(
             {
@@ -566,11 +607,11 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
 
     error_message = (
         "The two Quantamental DataFrames must share at least "
-        "four columns including than 'real_date', 'cid', and 'xcat'."
+        "four columns including 'real_date', 'cid', and 'xcat'."
     )
 
-    all_cols = df_cols.union(df_add_cols)
-    if all_cols != df_cols and all_cols != df_add_cols:
+    all_cols_set = df_cols.union(df_add_cols)
+    if not len(all_cols_set - set(QuantamentalDataFrame.IndexCols)):
         raise ValueError(error_message)
 
     if not xcat_replace:
@@ -1128,15 +1169,28 @@ def estimate_release_frequency(
     Estimates the release frequency of a timeseries, by inferring the frequency of the
     timeseries index. Before calling `pd.infer_freq`, the function drops NaNs, and rounds
     values as specified by the tolerance parameters to allow dropping of "duplicate" values.
+    
+    Parameters
+    ----------
+    timeseries : pd.Series, optional
+        The timeseries to be used to estimate the release frequency. Only one of
+        `timeseries` or `df_wide` must be passed.
+    df_wide : pd.DataFrame, optional
+        The wide DataFrame to be used to estimate the release frequency. This mode
+        processes each column of the DataFrame as a timeseries. Only one of `timeseries`
+        or `df_wide` must be passed.
+    atol : float, optional
+        The absolute tolerance for the difference between two values. If `None`, no
+        rounding is applied.
+    rtol : float, optional
+        The relative tolerance for the difference between two values. If `None`, no
+        rounding is applied.
 
-    :param <pd.Series> timeseries: The timeseries to be used to estimate the release
-        frequency. Only one of `timeseries` or `df_wide` must be passed.
-    :param <pd.DataFrame> df_wide: The wide DataFrame to be used to estimate the release
-        frequency. This mode processes each column of the DataFrame as a timeseries. Only
-        one of `timeseries` or `df_wide` must be passed.
-    :param <float> diff_atol: The absolute tolerance for the difference between two
-    :param <float> diff_rtol: The relative tolerance for the difference between two
-    :return <str>: The estimated release frequency.
+    Returns
+    -------
+    str or dict
+        The estimated release frequency. If `df_wide` is passed, a dictionary with the
+        column names as keys and the estimated frequencies as values is returned.
     """
 
     if df_wide is not None:
@@ -1190,8 +1244,6 @@ def estimate_release_frequency(
             "a datetime index `'real_date'`."
         )
 
-    # infer the frequency of the timeseries
-
     return _determine_freq(timeseries.index.tolist())
 
 
@@ -1223,7 +1275,6 @@ def _determine_freq(dates: List[str]) -> str:
         lambda x: min(frequencies, key=lambda freq: abs(x - frequencies[freq]))
     )
     return closest_freq.value_counts().idxmax()
-
 
 def years_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
     """Returns the number of years between two dates."""

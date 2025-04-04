@@ -19,6 +19,7 @@ PD_FUTURE_STACK = (
     else dict(dropna=False)
 )
 
+
 def linear_composite(
     df: pd.DataFrame,
     xcats: Union[str, List[str]],
@@ -59,7 +60,7 @@ def linear_composite(
         available categories of cross sections. Per default the coefficients are normalized
         so that they add up to one for each period. This can be changed with the argument
         `normalize_weights`. The third case is the assignment of a weighting category. This
-        only applies to combinations of cross sections. In this care the weighting category
+        only applies to combinations of cross sections. In this case the weighting category
         is multiplied for each period with the corresponding value of main category of the
         same cross section. Per default the weight category values are normalized so that
         they add up to one for each period. This can be changed with the argument
@@ -157,7 +158,12 @@ def linear_composite(
         out_all=True,
     )
 
-    if len(remaining_cids) < len(cids) and not _xcat_agg and complete_cids or len(remaining_cids) == 0:
+    if (
+        len(remaining_cids) < len(cids)
+        and not _xcat_agg
+        and complete_cids
+        or len(remaining_cids) == 0
+    ):
         missing_cids_xcats_str = _missing_cids_xcats_str(df=df, cids=cids, xcats=xcats)
         raise ValueError(
             "Not all `cids` have complete `xcat` data required for the calculation.\n"
@@ -167,7 +173,7 @@ def linear_composite(
     if _xcat_agg:
         df = _populate_missing_xcat_series(df)
 
-        result_df: QuantamentalDataFrame =  linear_composite_xcat_agg(
+        result_df: QuantamentalDataFrame = linear_composite_xcat_agg(
             df=df,
             xcats=xcats,
             weights=weights,
@@ -182,7 +188,7 @@ def linear_composite(
             df=df, cids=cids, weights=weights, signs=signs
         )
 
-        result_df: QuantamentalDataFrame =  linear_composite_cid_agg(
+        result_df: QuantamentalDataFrame = linear_composite_cid_agg(
             df=df,
             xcat=_xcat,
             cids=cids,
@@ -470,12 +476,16 @@ def _check_df_for_missing_cid_data(
         " These will be dropped from the calculation."
     )
     if isinstance(weights, str):
-        if not (
-            (weights in found_xcats) and (len((set(found_xcats) - {weights})) == 1)
-        ):
+        if weights not in found_xcats:
             raise ValueError(
-                f"Weight category {weights} not found in `df`."
-                f" Available categories are {found_xcats}."
+                f"Weight category {weights} not found in `df`. "
+                f"Available categories are {found_xcats}."
+            )
+
+        if len(found_xcats_set - {weights}) == 0:
+            raise ValueError(
+                "None of the `xcats` are present in `df` other than the `weights`. "
+                f"Available categories are {found_xcats}."
             )
 
     if set(cids) - set(found_cids) != set():
@@ -485,7 +495,6 @@ def _check_df_for_missing_cid_data(
             signs.pop(cids.index(cid))
             if isinstance(weights, list):
                 weights.pop(cids.index(cid))
-
 
     ctr = 0
     for cidx in found_cids.copy():  # copy to allow modification of `cids`
@@ -576,7 +585,8 @@ def _check_args(
                 f"Not all `xcats` are available in `df`: {missing_xcats} "
                 "The calculation will be performed with the available xcats."
             )
-            signs = [signs[i] for i, xc in enumerate(xcats) if xc not in missing_xcats]
+            if signs is not None:
+                signs = [signs[i] for i, xc in enumerate(xcats) if xc not in missing_xcats]
             if isinstance(weights, list):
                 weights = [weights[i] for i, xc in enumerate(xcats) if xc not in missing_xcats]
             xcats = [xc for xc in xcats if xc not in missing_xcats]

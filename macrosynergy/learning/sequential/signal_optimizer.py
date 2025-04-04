@@ -826,6 +826,7 @@ class SignalOptimizer(BasePanelLearner):
         cap=None,
         ftrs_renamed=None,
         figsize=(12, 8),
+        tick_fontsize=None,
     ):
         """
         Visualise the features chosen by the final selector in a scikit-learn pipeline
@@ -849,6 +850,8 @@ class SignalOptimizer(BasePanelLearner):
             Default is None, which uses the original feature names.
         figsize : tuple of floats or ints, optional
             Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        tick_fontsize : int, optional
+            Font size of the ticks on the heatmap. Default is None.
 
         Notes
         -----
@@ -859,7 +862,11 @@ class SignalOptimizer(BasePanelLearner):
         """
         # Checks
         self._checks_feature_selection_heatmap(
-            name=name, title=title, ftrs_renamed=ftrs_renamed, figsize=figsize
+            name=name,
+            title=title,
+            ftrs_renamed=ftrs_renamed,
+            figsize=figsize,
+            tick_fontsize=tick_fontsize,
         )
 
         # Get the selected features for the specified pipeline to visualise selection.
@@ -890,6 +897,8 @@ class SignalOptimizer(BasePanelLearner):
         else:
             sns.heatmap(selected_ftrs.T, cmap="binary", cbar=False)
         plt.title(title)
+        plt.xticks(fontsize=tick_fontsize)  # X-axis tick font size
+        plt.yticks(fontsize=tick_fontsize)
         plt.show()
 
     def _checks_feature_selection_heatmap(
@@ -898,6 +907,7 @@ class SignalOptimizer(BasePanelLearner):
         title=None,
         ftrs_renamed=None,
         figsize=(12, 8),
+        tick_fontsize=None,
     ):
         """
         Checks for the feature_selection_heatmap method.
@@ -914,6 +924,8 @@ class SignalOptimizer(BasePanelLearner):
             Default is None, which uses the original feature names.
         figsize : tuple of floats or ints, optional
             Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        tick_fontsize : int, optional
+            Font size of the ticks on the heatmap. Default is None.
         """
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
@@ -955,6 +967,10 @@ class SignalOptimizer(BasePanelLearner):
                         in the pipeline {name}.
                         """
                     )
+
+        if tick_fontsize is not None:
+            if not isinstance(tick_fontsize, int):
+                raise TypeError("The tick_fontsize argument must be an integer.")
 
     def correlations_heatmap(
         self,
@@ -1153,6 +1169,9 @@ class SignalOptimizer(BasePanelLearner):
         title=None,
         ftrs_renamed=None,
         figsize=(10, 6),
+        title_fontsize=None,
+        label_fontsize=None,
+        tick_fontsize=None,
     ):
         """
         Visualise time series of feature importances for the final predictor in a
@@ -1172,6 +1191,12 @@ class SignalOptimizer(BasePanelLearner):
             Default is None, which uses the original feature names.
         figsize : tuple of floats or ints, optional
             Tuple of floats or ints denoting the figure size. Default is (10, 6).
+        title_fontsize : int, optional
+            Font size for the title. Default is None.
+        label_fontsize : int, optional
+            Font size for the axis labels. Default is None.
+        tick_fontsize : int, optional
+            Font size for the axis ticks. Default is None.
 
         Notes
         -----
@@ -1253,6 +1278,15 @@ class SignalOptimizer(BasePanelLearner):
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
+        if title_fontsize is not None:
+            if not isinstance(title_fontsize, int):
+                raise TypeError("The title_fontsize argument must be an integer.")
+        if label_fontsize is not None:
+            if not isinstance(label_fontsize, int):
+                raise TypeError("The label_fontsize argument must be an integer.")
+        if tick_fontsize is not None:
+            if not isinstance(tick_fontsize, int):
+                raise TypeError("The tick_fontsize argument must be an integer.")
 
         # Set the style
         sns.set_style("darkgrid")
@@ -1283,10 +1317,17 @@ class SignalOptimizer(BasePanelLearner):
             ftrcoef_df.plot(ax=ax, figsize=figsize)
 
         if title is not None:
-            plt.title(title)
+            plt.title(title, fontsize=title_fontsize)
         else:
-            plt.title(f"Feature importances for pipeline: {name}")
+            plt.title(
+                f"Feature importances for pipeline: {name}", fontsize=title_fontsize
+            )
 
+        ax.set_xlabel(ax.get_xlabel(), fontsize=label_fontsize)
+        ax.set_ylabel(ax.get_ylabel(), fontsize=label_fontsize)
+
+        ax.tick_params(axis="x", labelsize=tick_fontsize)
+        ax.tick_params(axis="y", labelsize=tick_fontsize)
         plt.show()
 
     def intercepts_timeplot(self, name, title=None, figsize=(10, 6)):
@@ -1365,6 +1406,9 @@ class SignalOptimizer(BasePanelLearner):
         cap=None,
         ftrs_renamed=None,
         figsize=(10, 6),
+        title_fontsize=None,
+        label_fontsize=None,
+        tick_fontsize=None,
     ):
         """
         Visualise feature coefficients for a given pipeline in a stacked bar plot.
@@ -1387,6 +1431,12 @@ class SignalOptimizer(BasePanelLearner):
             Default is None, which uses the original feature names.
         figsize : tuple of floats or ints, optional
             Tuple of floats or ints denoting the figure size. Default is (10, 6).
+        title_fontsize : int, optional
+            Font size for the title. Default is None.
+        label_fontsize : int, optional
+            Font size for the axis labels. Default is None.
+        tick_fontsize : int, optional
+            Font size for the axis ticks. Default is None.
 
         Notes
         -----
@@ -1469,6 +1519,16 @@ class SignalOptimizer(BasePanelLearner):
             if cap > 10:
                 raise ValueError("The cap argument must be no greater than 10.")
 
+        if title_fontsize is not None:
+            if not isinstance(title_fontsize, int):
+                raise TypeError("The title_fontsize argument must be an int.")
+        if label_fontsize is not None:
+            if not isinstance(label_fontsize, int):
+                raise TypeError("The label_fontsize argument must be an int.")
+        if tick_fontsize is not None:
+            if not isinstance(tick_fontsize, int):
+                raise TypeError("The tick_fontsize argument must be an int.")
+
         # Set the style
         sns.set_style("darkgrid")
 
@@ -1527,12 +1587,15 @@ class SignalOptimizer(BasePanelLearner):
 
         # Display, title, axis labels
         if title is None:
-            plt.title(f"Stacked bar plot of model coefficients: {name}")
+            plt.title(
+                f"Stacked bar plot of model coefficients: {name}",
+                fontsize=title_fontsize,
+            )
         else:
-            plt.title(title)
+            plt.title(title, fontsize=title_fontsize)
 
-        plt.xlabel("Year")
-        plt.ylabel("Average Coefficient Value")
+        plt.xlabel("Year", fontsize=label_fontsize)
+        plt.ylabel("Average Coefficient Value", fontsize=label_fontsize)
         plt.axhline(0, color="black", linewidth=0.8)  # Adds a line at zero
 
         # Configure legend
@@ -1544,13 +1607,26 @@ class SignalOptimizer(BasePanelLearner):
             title="Coefficients",
             bbox_to_anchor=(1.05, 1),
             loc="upper left",
+            fontsize=tick_fontsize,
+            title_fontsize=label_fontsize,
         )
+
+        plt.xticks(fontsize=tick_fontsize)
+        plt.yticks(fontsize=tick_fontsize)
 
         # Display plot
         plt.tight_layout()
         plt.show()
 
-    def nsplits_timeplot(self, name, title=None, figsize=(10, 6)):
+    def nsplits_timeplot(
+        self,
+        name,
+        title=None,
+        figsize=(10, 6),
+        title_fontsize=None,
+        label_fontsize=None,
+        tick_fontsize=None,
+    ):
         """
         Method to plot the time series for the number of cross-validation splits used
         by the signal optimizer.
@@ -1564,6 +1640,12 @@ class SignalOptimizer(BasePanelLearner):
             "Stacked bar plot of model coefficients: {name}".
         figsize : tuple of floats or ints, optional
             Tuple of floats or ints denoting the figure size. Default is (10, 6).
+        title_fontsize : int, optional
+            Font size for the title. Default is None.
+        label_fontsize : int, optional
+            Font size for the x and y axis labels. Default is None.
+        tick_fontsize : int, optional
+            Font size for the x and y axis ticks. Default is None.
         """
         # Checks
         if not isinstance(name, str):
@@ -1588,6 +1670,12 @@ class SignalOptimizer(BasePanelLearner):
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
+        if title_fontsize is not None and not isinstance(title_fontsize, int):
+            raise TypeError("The title_fontsize argument must be an int.")
+        if label_fontsize is not None and not isinstance(label_fontsize, int):
+            raise TypeError("The label_fontsize argument must be an int.")
+        if tick_fontsize is not None and not isinstance(tick_fontsize, int):
+            raise TypeError("The tick_fontsize argument must be an int.")
 
         # Set the style
         sns.set_style("darkgrid")
@@ -1603,9 +1691,18 @@ class SignalOptimizer(BasePanelLearner):
         fig, ax = plt.subplots()
         models_df_expanded.plot(ax=ax, figsize=figsize)
         if title is not None:
-            plt.title(title)
+            plt.title(title, fontsize=title_fontsize)
         else:
-            plt.title(f"Number of CV splits for pipeline: {name}")
+            plt.title(
+                f"Number of CV splits for pipeline: {name}", fontsize=title_fontsize
+            )
+
+        ax.set_xlabel(ax.get_xlabel(), fontsize=label_fontsize)
+        ax.set_ylabel(ax.get_ylabel(), fontsize=label_fontsize)
+
+        # Customize tick label font sizes
+        ax.tick_params(axis="x", labelsize=tick_fontsize)
+        ax.tick_params(axis="y", labelsize=tick_fontsize)
 
         plt.show()
 
@@ -1615,12 +1712,9 @@ if __name__ == "__main__":
     from sklearn.metrics import make_scorer, r2_score, mean_absolute_error
     from macrosynergy.learning import (
         ExpandingKFoldPanelSplit,
-        SignWeightedLinearRegression,
         TimeWeightedLinearRegression,
     )
-    import scipy.stats as stats
     from macrosynergy.management.simulate import make_qdf
-    from macrosynergy.learning.model_evaluation.scorers.scorers import neg_mean_abs_corr
     from macrosynergy.management.types import QuantamentalDataFrame
 
     cids = ["AUD", "CAD", "GBP", "USD"]
@@ -1706,6 +1800,7 @@ if __name__ == "__main__":
     so.feature_importance_timeplot("LR")
     so.coefs_stackedbarplot("LR")
     so.nsplits_timeplot("LR")
+    so.feature_selection_heatmap("LR", tick_fontsize=20)
 
     # Test a random forest
     from sklearn.ensemble import RandomForestRegressor

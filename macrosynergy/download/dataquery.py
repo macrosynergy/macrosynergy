@@ -93,18 +93,9 @@ def validate_response(
         an exception.
     """
 
-    error_str: str = (
-        f"Response: {response}\n"
-        f"User ID: {user_id}\n"
-        f"Requested URL: {response.request.url}\n"
-        f"Response status code: {response.status_code}\n"
-        f"Response headers: {response.headers}\n"
-        f"Response text: {response.text}\n"
-        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}; \n"
-    )
-    # TODO : Use response.raise_for_status() as a better way to check for errors
     if not response.ok:
         logger.info("Response status is NOT OK : %s", response.status_code)
+        error_str = format_invalid_response_msg(response, user_id)
         if response.status_code == 401:
             raise AuthenticationError(error_str)
 
@@ -118,13 +109,36 @@ def validate_response(
     try:
         response_dict = response.json()
         if response_dict is None:
+            error_str = format_invalid_response_msg(response, user_id)
             raise InvalidResponseError(f"Response is empty.\n{error_str}")
         return response_dict
     except Exception as exc:
         if isinstance(exc, KeyboardInterrupt):
             raise exc
 
+        error_str = format_invalid_response_msg(response, user_id)
         raise InvalidResponseError(error_str + f"Error parsing response as JSON: {exc}")
+
+
+def format_invalid_response_msg(response: requests.Response, user_id: str) -> str:
+    """
+    This function formats an error message for an invalid response from the API.
+    Should only be called if there is an error in the response (as the functions adds the
+    response text to the error message).
+    """
+    error_str: str = (
+        f"Response: {response}\n"
+        f"User ID: {user_id}\n"
+        f"Requested URL: {response.request.url}\n"
+        f"Response status code: {response.status_code}\n"
+        f"Response headers: {response.headers}\n"
+        f"Response text: {response.text}\n"
+        f"DataQuery Interaction ID: {response.headers.get('x-dataquery-interaction-id', 'N/A')}\n"
+        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}; \n"
+    )
+
+    return error_str
+
 
 def request_wrapper(
     url: str,
@@ -215,6 +229,7 @@ def request_wrapper(
                 prepared_request,
                 proxies=proxy,
                 cert=cert,
+                timeout=300
             ) as response:
                 if isinstance(response, requests.Response):
                     return validate_response(response=response, user_id=user_id)
@@ -1099,10 +1114,11 @@ class DataQueryInterface(object):
             print("Retrying failed downloads. Retry count:", retry_counter)
 
         if retry_counter > HL_RETRY_COUNT:
-            raise DownloadError(
-                f"Failed {retry_counter} times to download data all requested data.\n"
-                f"No longer retrying."
-            )
+            error_str = (f"Failed {retry_counter} times to download data all requested data.\n"
+                f"No longer retrying.")
+            if len(self.msg_errors) > 0:
+                error_str += "\n".join(self.msg_errors)
+            raise DownloadError(error_str)
 
         expr_batches: List[List[str]] = [
             expressions[i : i + self.batch_size]
@@ -1324,12 +1340,7 @@ if __name__ == "__main__":
     client_id: str = os.getenv("DQ_CLIENT_ID")
     client_secret: str = os.getenv("DQ_CLIENT_SECRET")
 
-    expressions = [
-        "DB(FXO,IV,USD,CAD,7D,25P,VOL)",
-        "DB(GFI,CAD,HR,CAN_GOVT,05Y,-1,,PVBP)",
-        "DB(MTE,usd/sofr/daily/1D/am_duration)",
-        "DB(EDG,D:DJESMI$$,PI)"
-    ]
+    expressions = ["DB(CFX,GBP,)"]
 
     with DataQueryInterface(
         client_id=client_id,
