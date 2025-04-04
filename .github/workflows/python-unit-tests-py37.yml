@@ -7,7 +7,7 @@ on:
 
 jobs:
   prepare-matrix:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -21,17 +21,17 @@ jobs:
 
   run-unit-tests:
     needs: prepare-matrix
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         folder: ${{fromJson(needs.prepare-matrix.outputs.matrix)}}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore caches - Python 3.7.9
+      - name: Restore caches - Python 3.7.13
         uses: ./.github/actions/restore-pip-cache
         with:
-          python-version: 3.7.9
+          python-version: 3.7.13
 
       - name: Check for sys.path.append
         run: |
