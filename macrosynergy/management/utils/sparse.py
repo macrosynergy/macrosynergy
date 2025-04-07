@@ -168,6 +168,11 @@ class InformationStateChanges(object):
         ----------
         qdf : QuantamentalDataFrame
             The QuantamentalDataFrame to create the InformationStateChanges object from.
+            This dataframe must contain a `value` column. Additionally, the `eop_lag`
+            column is required to calculate the correct `eop` and `version` information.
+            If not provided, the information state is assumed to be based on the value
+            only. The `grading` column is optional and will be preserved in the output if
+            provided.
         norm : bool
             If True, calculate the score for the information state changes.
         score_by : str
@@ -1522,5 +1527,6 @@ if __name__ == "__main__":
     with JPMaQSDownload() as jpmaqs:
         df = jpmaqs.download(tickers=tickers, metrics="all")
 
-    isc = InformationStateChanges.from_qdf(df)
-    usd_gpdppc_isc = isc["USD_GDPPC_SA"]
+    isc = InformationStateChanges.from_qdf(df[["cid", "xcat", "real_date", "value"]])
+
+    print(list(isc.keys()))
