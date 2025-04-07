@@ -775,6 +775,10 @@ def create_delta_data(
     if "value" not in df.columns:
         raise ValueError("`df` must contain a `value` column")
     if "eop_lag" not in df.columns:
+        warnings.warn(
+            "`df` does not contain an `eop_lag` column. Differences calculated will not be "
+            " based on end-of-period adjustments."
+        )
         df["eop_lag"] = np.nan
     if "grading" not in df.columns:
         df["grading"] = np.nan
