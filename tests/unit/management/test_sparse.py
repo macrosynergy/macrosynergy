@@ -160,7 +160,14 @@ class TestFunctions(unittest.TestCase):
             create_delta_data(df=qdf.drop(columns="value"))
 
         # test with missing eop_lag
-        create_delta_data(qdf.drop(columns="eop_lag"))
+        # should warn saying 'eop_lag' not found
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            create_delta_data(df=qdf.drop(columns="eop_lag"))
+            self.assertTrue(len(w) == 1)
+            self.assertTrue(
+                "`df` does not contain an `eop_lag` column" in str(w[-1].message)
+            )
 
     def test_calculate_score_on_sparse_indicator(self) -> None:
         qdf = self.qdf_small.copy()
