@@ -1286,7 +1286,7 @@ def sparse_to_dense(
     tdf = _remove_insignificant_values(tdf, threshold=1e-12)
 
     wins_lower, wins_upper = None, None
-    if winsorise:
+    if winsorise is not None:
         if isinstance(winsorise, tuple):
             if len(winsorise) != 2 and not all(
                 isinstance(x, (int, float)) for x in winsorise
