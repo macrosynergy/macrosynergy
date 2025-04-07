@@ -1288,8 +1288,8 @@ def sparse_to_dense(
     wins_lower, wins_upper = None, None
     if winsorise is not None:
         if isinstance(winsorise, tuple):
-            if len(winsorise) != 2 and not all(
-                isinstance(x, (int, float)) for x in winsorise
+            if (len(winsorise) != 2) or not all(
+                isinstance(x, Number) for x in winsorise
             ):
                 raise ValueError(
                     "If `winsorise` is a tuple, it must contain two numeric values."
