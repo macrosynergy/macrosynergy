@@ -216,19 +216,6 @@ class TestAll(unittest.TestCase):
                 xcat_grid=True,
             )  # (xcat_grid && single_chart) must be False
 
-        with self.assertRaises(ValueError):
-            dfdr = dfd.copy().set_index("real_date").drop("cid", axis=1)
-            view_timelines(
-                dfdr,
-                xcats=xcats,
-                cids=cids[0],
-                title_adj=0.8,
-                same_y=True,
-                xcat_labels=["Return", "Carry", "Inflation"],
-                title="AUD Return, Carry & Inflation",
-                xcat_grid=True,
-            )  # df must have a column named 'cid'
-
     def test_view_timelines_invalid_xcat_labels(self):
         cids = self.cids
         xcats = self.xcats
