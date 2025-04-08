@@ -282,7 +282,7 @@ class InformationStateChanges(object):
         value_column: str = "value",
         postfix: str = None,
         metrics: List[str] = ["eop", "grading"],
-        winsorise: Union[Tuple[float, float], float] = None,
+        thresh: Union[Tuple[float, float], float] = None,
     ) -> pd.DataFrame:
         """
         Convert the InformationStateChanges object to a QuantamentalDataFrame.
@@ -296,11 +296,11 @@ class InformationStateChanges(object):
         metrics : List[str]
             A list of metrics to include in the DataFrame. Default is ["eop", "grading"].
             Use `metrics=None` to disregard any non-value columns.
-        winsorise : Union[Tuple[float, float], float]
+        thresh : Union[Tuple[float, float], float]
             A float or a tuple of two floats to winsorise the data to. Default is None.
             If a single float is provided, it is used for both lower and upper bounds,
-            as `(-winsorise, winsorise)`. If a tuple is provided, it is used as
-            `(winsorise[0], winsorise[1])`.
+            as `(-thresh, thresh)`. If a tuple is provided, it is used as
+            `(thresh[0], thresh[1])`.
         Returns
         -------
         pd.DataFrame
@@ -314,7 +314,7 @@ class InformationStateChanges(object):
             max_period=self._max_period,
             postfix=postfix,
             metrics=metrics,
-            winsorise=winsorise,
+            thresh=thresh,
         )
 
         return QuantamentalDataFrame(
@@ -1241,7 +1241,7 @@ def sparse_to_dense(
     max_period: pd.Timestamp,
     postfix: str = None,
     metrics: List[str] = ["eop", "grading"],
-    winsorise: Union[Tuple[float, float], float] = None,
+    thresh: Union[Tuple[float, float], float] = None,
 ) -> pd.DataFrame:
     """
     Convert a dictionary of DataFrames with changes in the information state to a dense
@@ -1263,11 +1263,11 @@ def sparse_to_dense(
     metrics : Optional[List[str]]
         A list of metrics to include in the DataFrame. Default is ["eop", "grading"].
         Use `metrics=None` to disregard any non-value columns.
-    winsorise : Union[Tuple[float, float], float]
+    thresh : Union[Tuple[float, float], float]
         A float or a tuple of two floats to winsorise the data to. Default is None.
         If a single float is provided, it is used for both lower and upper bounds,
-        as `(-winsorise, winsorise)`. If a tuple is provided, it is used as
-        `(winsorise[0], winsorise[1])`.
+        as `(-thresh, thresh)`. If a tuple is provided, it is used as
+        `(thresh[0], thresh[1])`.
     Returns
     -------
     pd.DataFrame
@@ -1286,19 +1286,17 @@ def sparse_to_dense(
     tdf = _remove_insignificant_values(tdf, threshold=1e-12)
 
     wins_lower, wins_upper = None, None
-    if winsorise is not None:
-        if isinstance(winsorise, tuple):
-            if (len(winsorise) != 2) or not all(
-                isinstance(x, Number) for x in winsorise
-            ):
+    if thresh is not None:
+        if isinstance(thresh, tuple):
+            if (len(thresh) != 2) or not all(isinstance(x, Number) for x in thresh):
                 raise ValueError(
-                    "If `winsorise` is a tuple, it must contain two numeric values."
+                    "If `thresh` is a tuple, it must contain two numeric values."
                 )
-            wins_lower, wins_upper = winsorise
-        elif isinstance(winsorise, Number):
-            wins_lower, wins_upper = -winsorise, winsorise
+            wins_lower, wins_upper = thresh
+        elif isinstance(thresh, Number):
+            wins_lower, wins_upper = -thresh, thresh
         else:
-            raise ValueError("`winsorise` must be a number or a tuple of two numbers.")
+            raise ValueError("`thresh` must be a number or a tuple of two numbers.")
 
         tdf = tdf.clip(lower=wins_lower, upper=wins_upper)
 
