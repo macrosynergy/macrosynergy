@@ -19,6 +19,7 @@ PD_FUTURE_STACK = (
     else dict(dropna=False)
 )
 
+@profile
 def linear_composite(
     df: pd.DataFrame,
     xcats: Union[str, List[str]],
@@ -523,7 +524,6 @@ def _check_df_for_missing_cid_data(
     rcids = [c for c in cids if c in found_cids]  # to preserve order
     return QuantamentalDataFrame(df), rcids, _xcat, weights, signs
 
-@profile
 def _check_args(
     df: QuantamentalDataFrame,
     xcats: Union[str, List[str]],
@@ -717,9 +717,9 @@ def _check_args(
 
 
 if __name__ == "__main__":
-    df = pd.read_csv(r'./macrosynergy/panel/dfx.csv')
+    df = pd.read_csv(r'./dev/dfx.csv')
     df["real_date"] = pd.to_datetime(df["real_date"])
-    df = QuantamentalDataFrame(df, categorical=True)
+    df = QuantamentalDataFrame(df, categorical=False)
     cids = ['AUD', 'BRL', 'CAD', 'CHF', 'CLP', 'CNY', 'COP', 'CZK', 'DEM', 'ESP', 'EUR', 'FRF', 'GBP', 'HKD', 'HUF', 'IDR', 'ILS', 'INR', 'ITL', 'JPY', 'KRW', 'MXN', 'MYR', 'NLG', 'NOK', 'NZD', 'PEN', 'PHP', 'PLN', 'RON', 'RUB', 'SEK', 'SGD', 'THB', 'TRY', 'TWD', 'USD', 'ZAR']
 
 
