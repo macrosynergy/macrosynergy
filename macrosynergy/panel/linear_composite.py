@@ -20,6 +20,117 @@ PD_FUTURE_STACK = (
 )
 
 
+def linear_composite_new(
+    df: pd.DataFrame,
+    xcats: Union[str, List[str]],
+    cids: Optional[List[str]] = None,
+    weights: Optional[Union[List[float], str]] = None,
+    normalize_weights: bool = True,
+    signs: Optional[List[float]] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    blacklist: Dict[str, List[str]] = None,
+    complete_xcats: bool = False,
+    complete_cids: bool = False,
+    new_xcat="NEW",
+    new_cid="GLB",
+):
+    """
+    Weighted linear combinations of cross sections or categories
+
+    Parameters
+    ----------
+    df : ~pandas.DataFrame
+        standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
+        'real_date' and 'value'.
+    xcats : Union[str, List[str]]
+        One or more categories to be combined. If a single category is given the linear
+        combination is calculated across cross-sections. This results in a single series
+        to which a new cross-sectional identifier is assigned. If more than one category
+        string is given the output will be a new category, i.e. a panel that is a linear
+        combination of the categories specified.
+    cids : List[str]
+        cross-sections for which the linear combinations are calculated. Default is all
+        cross-section available.
+    weights : Union[List[float], str]
+        This specifies how categories or cross sections are combined. There are three
+        principal options. The first (default) is None, in which case equal weights are
+        given to all categories or cross sections that are available. The second case is a
+        set of fixed coefficients, in which case these very coefficients are applied to all
+        available categories of cross sections. Per default the coefficients are normalized
+        so that they add up to one for each period. This can be changed with the argument
+        `normalize_weights`. The third case is the assignment of a weighting category. This
+        only applies to combinations of cross sections. In this case the weighting category
+        is multiplied for each period with the corresponding value of main category of the
+        same cross section. Per default the weight category values are normalized so that
+        they add up to one for each period. This can be changed with the argument
+        `normalize_weights`.
+    normalize_weights : bool
+        If True (default) the weights are normalized to sum to 1. If False the weights
+        are used as specified.
+    signs : List[float]
+        An array of consisting of +1s or -1s, of the same length as the number of
+        categories in `xcats` to indicate whether the respective category should be added or
+        subtracted from the linear combination. Not relevant when aggregating over cross-
+        sections, i.e. when a single category is given in `xcats`. Default is None and all
+        signs are set to +1.
+    start : str
+        earliest date in ISO format. Default is None and earliest date for which the
+        respective category is available is used.
+    end : str
+        latest date in ISO format. Default is None and latest date for which the
+        respective category is available is used.
+    complete_xcats : bool
+        If True (default) combinations are only calculated for observation dates on
+        which all categories are available. If False a combination of the available
+        categories is used. Not relevant when aggregating over cross-sections, i.e.
+        when a single category is given in `xcats`.
+    complete_cids : bool
+        If True (default) combinations are only calculated for observation dates on
+        which all cross-sections are available. If False a combination of the available
+        cross-sections is used. Not relevant when aggregating over categories, i.e. when
+        multiple categories are given in `xcats`.
+    new_xcat : str
+        Name of new composite category when aggregating over categories for a given
+        cross-section. Default is "NEW".
+    new_cid : str
+        Name of new composite cross-section when aggregating over cross-sections for a 
+        given category. Default is "GLB".
+
+    Returns
+    -------
+    ~pandas.DataFrame
+        standardized DataFrame with the composite values, with the columns:
+        'cid', 'xcat', 'real_date' and 'value'.
+    """
+    df = QuantamentalDataFrame(df)
+    
+    if isinstance(xcats, str):
+        xcats = [xcats]
+    if len(xcats) == 0:
+        raise ValueError("`xcats` must be a non-empty list of strings.")
+    cid_agg = len(xcats) == 1 
+    if weights is None:
+        weights = np.full(len(xcats), 1.0 / len(xcats))
+    else:
+        print("VERIFY WEIGHTS")
+
+    df = reduce_df(df, xcats, cids, start, end, blacklist)
+    pivot = df.pivot_table(
+        index=["real_date", "cid"],
+        columns=["xcat"],
+        values="value",
+        observed=True
+    )
+
+    pivot[new_xcat] = pivot[xcats].dot(weights)
+
+    result_df = pivot[new_xcat].reset_index()
+    result_df["xcat"] = new_xcat
+    result_df.rename(columns={new_xcat: "value"}, inplace=True)
+
+    return QuantamentalDataFrame(result_df)
+
 def linear_composite(
     df: pd.DataFrame,
     xcats: Union[str, List[str]],
@@ -713,8 +824,8 @@ def _check_args(
 
 
 if __name__ == "__main__":
-    cids = ["AUD", "CAD", "GBP"]
-    xcats = ["XR", "CRY", "INFL"]
+    cids = ["AUD", "CAD", "GBP", "USD", "JPY", "CHF", "NZD", "SEK", "NOK", "DKK", "HKD"]
+    xcats = ["XR", "CRY", "IR", "IR2", "IR3", "IR4", "IR5", "IR6", "XSAD", "INFL"]
 
     df: pd.DataFrame = pd.concat(
         [
@@ -722,14 +833,14 @@ if __name__ == "__main__":
                 cids=cids,
                 xcats=xcats[:-1],
                 start="2000-01-01",
-                end="2000-02-01",
+                end="2024-02-01",
                 style="linear",
             ),
             make_test_df(
                 cids=cids,
                 xcats=["INFL"],
                 start="2000-01-01",
-                end="2000-02-01",
+                end="2024-02-01",
                 style="decreasing-linear",
             ),
         ]
@@ -737,31 +848,38 @@ if __name__ == "__main__":
 
     # all infls are now decreasing-linear, while everything else is increasing-linear
 
-    df.loc[
-        (df["cid"] == "GBP")
-        & (df["xcat"] == "INFL")
-        & (df["real_date"] == "2000-01-17"),
-        "value",
-    ] = np.nan
+    # df.loc[
+    #     (df["cid"] == "GBP")
+    #     & (df["xcat"] == "INFL")
+    #     & (df["real_date"] == "2000-01-17"),
+    #     "value",
+    # ] = np.nan
 
-    df.loc[
-        (df["cid"] == "AUD")
-        & (df["xcat"] == "CRY")
-        & (df["real_date"] == "2000-01-17"),
-        "value",
-    ] = np.nan
+    # df.loc[
+    #     (df["cid"] == "AUD")
+    #     & (df["xcat"] == "CRY")
+    #     & (df["real_date"] == "2000-01-17"),
+    #     "value",
+    # ] = np.nan
 
     # there are now missing values for AUD-CRY and GBP-INFL on 2000-01-17
+    import time
+    start_time = time.time()
 
-    lc_cid = linear_composite(
-        df=df, xcats="XR", weights="INFL", normalize_weights=False
+    lc = linear_composite(
+        df=df, xcats=xcats, normalize_weights=False
     )
-    df = QuantamentalDataFrame(df)
-    lc_xcat = linear_composite(
-        df=df,
-        cids=["GBP", "AUD", "CAD"],
-        xcats=["XR"],
-        weights=[1, 2, 1],
-        signs=[1, -1, 1],
-        complete_xcats=True,
+
+    end_time = time.time()
+
+    print(f"Time taken: {end_time - start_time:.2f} seconds")
+
+    start_time = time.time()
+
+    lc_new = linear_composite_new(
+        df=df, xcats=xcats, normalize_weights=False
     )
+
+    end_time = time.time()
+
+    print(f"Time taken: {end_time - start_time:.2f} seconds")
