@@ -160,7 +160,14 @@ class TestFunctions(unittest.TestCase):
             create_delta_data(df=qdf.drop(columns="value"))
 
         # test with missing eop_lag
-        create_delta_data(qdf.drop(columns="eop_lag"))
+        # should warn saying 'eop_lag' not found
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            create_delta_data(df=qdf.drop(columns="eop_lag"))
+            self.assertTrue(len(w) == 1)
+            self.assertTrue(
+                "`df` does not contain an `eop_lag` column" in str(w[-1].message)
+            )
 
     def test_calculate_score_on_sparse_indicator(self) -> None:
         qdf = self.qdf_small.copy()
@@ -484,6 +491,31 @@ class TestInformationStateChanges(unittest.TestCase):
         self.assertTrue("grading" not in tdf.columns)
 
         self.assertTrue([str(u).endswith("$%A") for u in list(tdf["xcat"])])
+
+    def test_isc_to_qdf_metrics(self) -> None:
+        df = get_long_format_data(end="2012-01-01")
+        ## Test that the grading is not output when not asked for
+        tdf = InformationStateChanges.from_qdf(df).to_qdf(metrics=None, postfix="$%A")
+        self.assertTrue("value" in tdf.columns)
+        self.assertTrue("eop" not in tdf.columns)
+        self.assertTrue("eop_lag" not in tdf.columns)
+        self.assertTrue("grading" not in tdf.columns)
+
+    def test_isc_to_qdf_winsorise(self) -> None:
+        df = get_long_format_data(end="2012-01-01")
+        ## Test that the grading is not output when not asked for
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(df)
+        win_df = isc.to_qdf(metrics=None, winsorise=0)
+        self.assertTrue(np.allclose(win_df["value"], 0))
+        win_df = isc.to_qdf(metrics=None, winsorise=(-0.01, 0.1))
+        self.assertFalse((win_df["value"] > 0.1).any())
+        self.assertFalse((win_df["value"] < -0.01).any())
+
+        with self.assertRaises(ValueError):
+            isc.to_qdf(metrics=None, winsorise="banana")
+
+        with self.assertRaises(ValueError):
+            isc.to_qdf(metrics=None, winsorise=(-0.01, "banana"))
 
     def test_temporal_aggregator_period(self) -> None:
         df = get_long_format_data(end="2012-01-01")
