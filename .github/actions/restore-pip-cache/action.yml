@@ -23,6 +23,12 @@ runs:
       activate-environment: macrosynergy-env
       auto-activate-base: false
 
+  - name: Set pythonLocation for Miniconda
+    if: startsWith(inputs.python-version, '3.7')
+    shell: bash -l {0}
+    run: |
+      echo "pythonLocation=$(which python)" >> $GITHUB_ENV
+
   - name: Get Week Number
     shell: bash
     id: week
