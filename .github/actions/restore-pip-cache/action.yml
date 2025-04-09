@@ -9,10 +9,19 @@ inputs:
 runs:
   using: "composite"
   steps:
-  - name: Setup Python
+  - name: Setup Python (Python >= 3.8)
+    if: '!startsWith(inputs.python-version, "3.7")'
     uses: actions/setup-python@v5
     with:
       python-version: ${{ inputs.python-version }}
+
+  - name: Setup Miniconda (Python 3.7)
+    if: startsWith(inputs.python-version, "3.7")
+    uses: conda-incubator/setup-miniconda@v3
+    with:
+      python-version: ${{ inputs.python-version }}
+      activate-environment: macrosynergy-env
+      auto-activate-base: false
 
   - name: Get Week Number
     shell: bash
@@ -23,20 +32,18 @@ runs:
     id: cache
     uses: actions/cache@v4
     with:
-      # using OS-name + "pip" + hash of TOML + week number as key
       path: ${{ env.pythonLocation }}
       key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}-${{ env.week }}
       restore-keys: |
         ${{ runner.os }}-pip-
 
   - name: Install dependencies if cache was not found (Python 3.7)
-    shell: bash
+    shell: bash -l {0}
     if: steps.cache.outputs.cache-hit != 'true' && startsWith(inputs.python-version, '3.7')
     run: |
       pip install . --no-deps
       pip install -r tests/requirements-py37.txt
       pip uninstall -y macrosynergy
-      # No explicit caching step is needed as the cache action takes care of this 
 
   - name: Install dependencies if cache was not found (Python >= 3.8)
     shell: bash
@@ -44,4 +51,3 @@ runs:
     run: |
       pip install .[all,test]
       pip uninstall -y macrosynergy
-      # No explicit caching step is needed as the cache action takes care of this
