@@ -18,7 +18,6 @@ PD_FUTURE_STACK = (
     if version.parse(pd.__version__) > version.parse("2.1.0")
     else dict(dropna=False)
 )
-
 @profile
 def linear_composite(
     df: pd.DataFrame,
@@ -140,7 +139,7 @@ def linear_composite(
 
     _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
 
-    df = QuantamentalDataFrame(df)
+    df = QuantamentalDataFrame(df, df.is_categorical())
     result_as_categorical = df.InitializedAsCategorical
     remaining_xcats: List[str]
     remaining_cids: List[str]
@@ -562,9 +561,16 @@ def _check_args(
             if not (isinstance(varx, str) and is_valid_iso_date(varx)):
                 raise ValueError(f"`{namex}` must be a valid ISO date string.")
 
+    if df.is_categorical():
+        xcats_in_df = set(df["xcat"].cat.categories)
+        cids_in_df = set(df["cid"].cat.categories)
+    else:
+        xcats_in_df = set(df["xcat"].values)
+        cids_in_df = set(df["cid"].values)
+
     # check xcats
     if xcats is None:
-        xcats: List[str] = list(set(df["xcat"].values))
+        xcats: List[str] = list(xcats_in_df)
     elif isinstance(xcats, str):
         xcats: List[str] = [xcats]
     elif isinstance(xcats, listtypes):
@@ -572,13 +578,6 @@ def _check_args(
     else:
         raise TypeError("`xcats` must be a string or list of strings.")
 
-    # check xcats in df
-    if df.is_categorical():
-        xcats_in_df = set(df["xcat"].cat.categories)
-        cids_in_df = set(df["cid"].cat.categories)
-    else:
-        xcats_in_df = set(df["xcat"].values)
-        cids_in_df = set(df["cid"].values)
     if not all(x in xcats_in_df for x in xcats):
         if complete_xcats:
             raise ValueError("Not all `xcats` are available in `df`.")
@@ -597,7 +596,7 @@ def _check_args(
     # check cids
     
     if cids is None:
-        cids: List[str] = list(set(df["cid"].values))
+        cids: List[str] = list(cids_in_df)
     elif isinstance(cids, str):
         cids: List[str] = [cids]
     elif isinstance(cids, listtypes):
@@ -721,7 +720,6 @@ if __name__ == "__main__":
     df["real_date"] = pd.to_datetime(df["real_date"])
     df = QuantamentalDataFrame(df, categorical=False)
     cids = ['AUD', 'BRL', 'CAD', 'CHF', 'CLP', 'CNY', 'COP', 'CZK', 'DEM', 'ESP', 'EUR', 'FRF', 'GBP', 'HKD', 'HUF', 'IDR', 'ILS', 'INR', 'ITL', 'JPY', 'KRW', 'MXN', 'MYR', 'NLG', 'NOK', 'NZD', 'PEN', 'PHP', 'PLN', 'RON', 'RUB', 'SEK', 'SGD', 'THB', 'TRY', 'TWD', 'USD', 'ZAR']
-
 
     dfa = linear_composite(
         df=df,
