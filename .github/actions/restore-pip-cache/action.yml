@@ -49,6 +49,7 @@ runs:
     run: |
       pip install . --no-deps
       pip install -r tests/requirements-py37.txt
+      pip install flake8
       pip uninstall -y macrosynergy
 
   - name: Install dependencies if cache was not found (Python >= 3.8)
@@ -57,3 +58,4 @@ runs:
     run: |
       pip install .[all,test]
       pip uninstall -y macrosynergy
+      # No explicit caching step is needed as the cache action takes care of this
