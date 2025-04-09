@@ -20,8 +20,8 @@ runs:
     uses: conda-incubator/setup-miniconda@v3
     with:
       python-version: ${{ inputs.python-version }}
-      activate-environment: macrosynergy-env
-      auto-activate-base: false
+      # activate-environment: macrosynergy-env
+      auto-activate-base: true
 
   - name: Set pythonLocation for Miniconda
     if: startsWith(inputs.python-version, '3.7')
