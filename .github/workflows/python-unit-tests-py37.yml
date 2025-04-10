@@ -51,6 +51,9 @@ jobs:
       - name: Check for sys.path.append
         run: |
           bash .github/scripts/check_sys_path.sh
+      - name: Check Python installation
+        run: |
+          python -c "import sys; assert(int(sys.version_info[:3] == (3,7,9)))"
 
       - name: Lint with flake8
         shell: bash -l {0}
