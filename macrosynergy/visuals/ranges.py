@@ -61,7 +61,7 @@ def view_ranges(
         y label. Default is no label.
     size : Tuple[float]
         Tuple of width and height of graph. Default is (16, 8).
-    xcat_labels : List[str]
+    xcat_labels : Union[List[str], Dict[str, str]]
         custom labels to be used for the ranges.
     legend_loc : str
         location of legend; passed to matplotlib.pyplot.legend() as `loc`. Default is
@@ -101,6 +101,8 @@ def view_ranges(
         "categories in pnl_cats."
     )
     if xcat_labels is not None:
+        if isinstance(xcat_labels, dict):
+            xcat_labels = [xcat_labels[xcat] for xcat in xcats]
         if len(xcat_labels) != len(xcats):
             raise ValueError(error_message)
 

@@ -60,7 +60,7 @@ def linear_composite(
         available categories of cross sections. Per default the coefficients are normalized
         so that they add up to one for each period. This can be changed with the argument
         `normalize_weights`. The third case is the assignment of a weighting category. This
-        only applies to combinations of cross sections. In this care the weighting category
+        only applies to combinations of cross sections. In this case the weighting category
         is multiplied for each period with the corresponding value of main category of the
         same cross section. Per default the weight category values are normalized so that
         they add up to one for each period. This can be changed with the argument
@@ -263,7 +263,7 @@ def _linear_composite_basic(
         adj_weights_wide = weights_df[~nan_mask].div(
             weights_df[~nan_mask].abs().sum(axis=1), axis=0
         )
-        adj_weights_wide[nan_mask] = np.NaN
+        adj_weights_wide[nan_mask] = np.nan
 
         assert np.allclose(
             adj_weights_wide[~adj_weights_wide.isna().all(axis=1)].abs().sum(axis=1), 1
@@ -280,10 +280,10 @@ def _linear_composite_basic(
     # NOTE: Using `axis` with strings, to make it more readable
     # Remove periods with missing data (if requested) (rows with any NaNs)
     if complete:
-        out_df[nan_mask.any(axis="columns")] = np.NaN
+        out_df[nan_mask.any(axis="columns")] = np.nan
 
     # put NaNs back in, as sum() removes them
-    out_df[nan_mask.all(axis="columns")] = np.NaN
+    out_df[nan_mask.all(axis="columns")] = np.nan
 
     # Reset index, rename columns and return
     out_df = out_df.reset_index().rename(columns={0: "value"})
@@ -447,7 +447,7 @@ def _populate_missing_xcat_series(
                         "cid": cidx,
                         "xcat": xc,
                         "real_date": dt_range,
-                        "value": np.NaN,
+                        "value": np.nan,
                     }
                     df = pd.concat([df, pd.DataFrame(data=dct)])
 
@@ -742,14 +742,14 @@ if __name__ == "__main__":
         & (df["xcat"] == "INFL")
         & (df["real_date"] == "2000-01-17"),
         "value",
-    ] = np.NaN
+    ] = np.nan
 
     df.loc[
         (df["cid"] == "AUD")
         & (df["xcat"] == "CRY")
         & (df["real_date"] == "2000-01-17"),
         "value",
-    ] = np.NaN
+    ] = np.nan
 
     # there are now missing values for AUD-CRY and GBP-INFL on 2000-01-17
 

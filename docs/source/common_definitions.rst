@@ -109,3 +109,22 @@ For example, if the series reports monthly data, and the middle day of
 the month would be the median of the period, and for a value published
 on the first of the next month - the MOP lag would be approximated to 11
 or 12.
+
+Lags
+----
+
+Used as ``lag`` or ``lags`` in the package, a "lag" refers to a time delay 
+or the use of past values of a variable to explain its current or future 
+value. Lags are applied in the native frequency of the data (i.e. monthly
+data is lagged by months, daily data is lagged by days). In simple terms, 
+a lag represents the late arrival of a piece of information.
+
+Slippage
+--------
+
+Used as ``slip`` in the package (see :func:`macrosynergy.management.utils.df_utils.apply_slip`),
+slippage is a term used to the delay in acting on a signal or a piece of
+information. It can also be seen as the time taken to take a position.
+In the package, slippage is always measured in business days, and is always
+applied before any resampling or lags.
+

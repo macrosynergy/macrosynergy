@@ -97,6 +97,7 @@ class NaivePnL:
         self.bm_bool = isinstance(bms, (str, list))
         if self.bm_bool:
             bms = [bms] if isinstance(bms, str) else bms
+            self.dfd = reduce_df(self.dfd, start=start, end=end, blacklist=blacklist)
 
             # Pass in the original DataFrame; negative signal will not have been applied
             # which will corrupt the use of the benchmark categories.
@@ -574,11 +575,17 @@ class NaivePnL:
             )["real_date"].min()
         elif rebal_freq == "weekly":
             dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
-            rebal_dates = dfw.groupby(["cid", "year", "week"], observed=True)["real_date"].min()
+            rebal_dates = dfw.groupby(["cid", "year", "week"], observed=True)[
+                "real_date"
+            ].min()
         elif rebal_freq == "daily":
-            rebal_dates = dfw.groupby(["cid", "year", "real_date"], observed=True)["real_date"].min()
+            rebal_dates = dfw.groupby(["cid", "year", "real_date"], observed=True)[
+                "real_date"
+            ].min()
         else:
-            raise ValueError("Re-balancing frequency must be one of: daily, weekly, monthly.")
+            raise ValueError(
+                "Re-balancing frequency must be one of: daily, weekly, monthly."
+            )
 
         # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
         r_dates_df = rebal_dates.reset_index(level=0)
@@ -602,7 +609,9 @@ class NaivePnL:
         rebal_merge = dfw[["real_date", "cid"]].merge(
             rebal_merge, how="left", on=["real_date", "cid"]
         )
-        rebal_merge["psig"] = rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
+        rebal_merge["psig"] = (
+            rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
+        )
         rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 
         rebal_merge = rebal_merge.set_index("real_date")
@@ -668,6 +677,7 @@ class NaivePnL:
         pnl_cids: List[str] = ["ALL"],
         start: str = None,
         end: str = None,
+        compounding: bool = False,
         facet: bool = False,
         ncol: int = 3,
         same_y: bool = True,
@@ -676,7 +686,7 @@ class NaivePnL:
         tick_fontsize: int = 12,
         xcat_labels: Union[List[str], dict] = None,
         xlab: str = "",
-        ylab: str = "% of risk capital, no compounding",
+        ylab: str = "% of risk capital",
         label_fontsize: int = 12,
         share_axis_labels: bool = True,
         figsize: Tuple = (12, 7),
@@ -703,6 +713,8 @@ class NaivePnL:
             used.
         end : str
             latest date in ISO format. Default is None and latest date in df is used.
+        compounding : bool
+            parameter to control whether the PnLs are compounded daily. Default is False.
         facet : bool
             parameter to control whether each PnL series is plotted on its own
             respective grid using Seaborn's FacetGrid. Default is False and all series will
@@ -723,7 +735,7 @@ class NaivePnL:
             (empty string)..
         ylab : str
             label for y-axis of the plot (or subplots if faceted), default is '% of risk
-            capital, no compounding'.
+            capital' with a note on compounding.
         share_axis_labels : bool
             if True (default) the axis labels are shared by all subplots in the facet
             grid.
@@ -740,6 +752,7 @@ class NaivePnL:
         y_label_adj : float
             parameter that sets left of figure to fit the y-label.
         """
+        default_ylab: str = "% of risk capital"
 
         if pnl_cats is None:
             pnl_cats = self.pnl_names
@@ -825,7 +838,17 @@ class NaivePnL:
                 labels = pnl_cids.copy()
             legend_title = "Cross Section(s)"
 
-        dfx["cum_value"] = dfx.groupby(plot_by, observed=True).cumsum(numeric_only=True)
+        df_grouped = dfx.groupby(plot_by, observed=True)
+
+        if compounding:
+            dfx["cum_value"] = (
+                df_grouped["value"].transform(lambda x: (x / 100 + 1).cumprod()) - 1
+            ) * 100
+        else:
+            dfx["cum_value"] = df_grouped["value"].cumsum(numeric_only=True)
+
+        if ylab == default_ylab:
+            ylab += ", with daily compounding" if compounding else ", no compounding"
 
         if facet:
             fg = sns.FacetGrid(
@@ -885,7 +908,7 @@ class NaivePnL:
                 labels=labels,
                 title=legend_title,
                 title_fontsize=legend_fontsize,
-                fontsize=legend_fontsize
+                fontsize=legend_fontsize,
             )
             plt.xlabel(xlab, fontsize=label_fontsize)
             plt.ylabel(ylab, fontsize=label_fontsize)
@@ -896,7 +919,7 @@ class NaivePnL:
         else:
             labels = labels[::-1]
 
-        fg.tick_params(axis='both', labelsize=tick_fontsize)
+        fg.tick_params(axis="both", labelsize=tick_fontsize)
         plt.axhline(y=0, color="black", linestyle="--", lw=1)
         plt.show()
 
@@ -996,7 +1019,7 @@ class NaivePnL:
         ax.set(xlabel=x_label, ylabel=y_label)
         ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
         ax.set_title(title, fontsize=14)
-        
+
         ax.tick_params(axis="x", labelsize=tick_fontsize)
         ax.tick_params(axis="y", labelsize=tick_fontsize)
 
@@ -1103,19 +1126,29 @@ class NaivePnL:
 
     def evaluate_pnls(
         self,
-        pnl_cats: List[str],
+        pnl_cats: Optional[List[str]] = None,
         pnl_cids: List[str] = ["ALL"],
         start: Optional[str] = None,
         end: Optional[str] = None,
         label_dict: Optional[Dict[str, str]] = None,
     ):
         """
-        Table of key PnL statistics.
+        Returns a table of PnL statistics containing the following metrics:
+            - Return - percentage, annualized
+            - Standard Deviation - percentage, annualized
+            - Sharpe Ratio
+            - Sortino Ratio
+            - Max 21-Day Draw - percentage
+            - Max 6-Month Draw - percentage
+            - Peak to Trough Draw - percentage
+            - Top 5% Monthly PnL Share
+            - Traded Months
 
         Parameters
         ----------
-        pnl_cats : List[str]
-            list of PnL categories that should be plotted.
+        pnl_cats : List[str], optional
+            list of PnL categories that should be plotted. Default is None and all
+            available PnL categories are used.
         pnl_cids : List[str]
             list of cross-sections to be plotted; default is 'ALL' (global PnL). Note:
             one can only have multiple PnL categories or multiple cross-sections, not both.
@@ -1135,10 +1168,15 @@ class NaivePnL:
 
         error_cids = "List of cross-sections expected."
         error_xcats = "List of PnL categories expected."
-        assert isinstance(pnl_cids, list), error_cids
-        assert isinstance(pnl_cats, list), error_xcats
-        assert all([isinstance(elem, str) for elem in pnl_cids]), error_cids
-        assert all([isinstance(elem, str) for elem in pnl_cats]), error_xcats
+        if not isinstance(pnl_cids, list):
+            raise TypeError(error_cids)
+        if not isinstance(pnl_cats, (list, type(None))):
+            raise TypeError(error_xcats)
+        if pnl_cats is not None:
+            if not all([isinstance(elem, str) for elem in pnl_cats]):
+                raise TypeError(error_xcats)
+        if not all([isinstance(elem, str) for elem in pnl_cids]):
+            raise TypeError(error_cids)
 
         if pnl_cats is None:
             # The field, self.pnl_names, is a data structure that stores the name of the
@@ -1147,15 +1185,15 @@ class NaivePnL:
             # logical method: ('PNL_' + sig) if pnl_name is None else pnl_name. Each
             # category will be held in the data structure.
             pnl_cats = self.pnl_names
-        else:
-            if not set(pnl_cats) <= set(self.pnl_names):
-                missing = [pnl for pnl in pnl_cats if pnl not in self.pnl_names]
-                pnl_error = (
-                    f"Received PnL categories have not been defined. The PnL "
-                    f"category(s) which has not been defined is: {missing}. "
-                    f"The produced PnL category(s) are {self.pnl_names}."
-                )
-                raise ValueError(pnl_error)
+
+        if not set(pnl_cats) <= set(self.pnl_names):
+            missing = [pnl for pnl in pnl_cats if pnl not in self.pnl_names]
+            pnl_error = (
+                f"Received PnL categories have not been defined. The PnL "
+                f"category(s) which has not been defined is: {missing}. "
+                f"The produced PnL category(s) are {self.pnl_names}."
+            )
+            raise ValueError(pnl_error)
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
 
@@ -1242,7 +1280,7 @@ class NaivePnL:
                     "label_dict must have the same number of keys as columns in the "
                     "DataFrame."
                 )
-            df.rename(index=label_dict, inplace=True)
+            df.rename(columns=label_dict, inplace=True)
             df = df[label_dict.values()]
 
         return df
@@ -1608,10 +1646,7 @@ if __name__ == "__main__":
         title=None,
     )
     pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "Long"],
-        title_fontsize=60,
-        xlab="date",
-        ylab="%"
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], title_fontsize=60, xlab="date", ylab="%"
     )
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"],

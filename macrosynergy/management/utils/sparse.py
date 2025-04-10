@@ -16,6 +16,9 @@ from macrosynergy.management.utils import (
 from macrosynergy.management.types import QuantamentalDataFrame
 
 
+SCORE_BY_OPTIONS = {"diff": "diff", "level": "value"}
+
+
 class InformationStateChanges(object):
     """
     Class to hold information state changes for a set of tickers.
@@ -155,6 +158,7 @@ class InformationStateChanges(object):
         cls: "InformationStateChanges",
         df: QuantamentalDataFrame,
         norm: bool = True,
+        score_by: str = "diff",
         **kwargs,
     ) -> "InformationStateChanges":
         """
@@ -164,17 +168,31 @@ class InformationStateChanges(object):
         ----------
         qdf : QuantamentalDataFrame
             The QuantamentalDataFrame to create the InformationStateChanges object from.
+            This dataframe must contain a `value` column. Additionally, the `eop_lag`
+            column is required to calculate the correct `eop` and `version` information.
+            If not provided, the information state is assumed to be based on the value
+            only. The `grading` column is optional and will be preserved in the output if
+            provided.
         norm : bool
             If True, calculate the score for the information state changes.
+        score_by : str
+            The method to use for scoring. If "diff" (default), the score is calculated
+            based on the difference between the information state changes. If "level", the
+            score is calculated based on the value ('level') of the information state
+            change.
         **kwargs : Any
             Additional keyword arguments to pass to the `calculate_score` Please refer
-            to `InformationStateChanges.calculate_score()` for more information.
+            to :func:`InformationStateChanges.calculate_score()` for more information.
 
         Returns
         -------
         InformationStateChanges
             An InformationStateChanges object.
         """
+        if score_by not in SCORE_BY_OPTIONS.keys():
+            raise ValueError(
+                f"`score_by` must be one of {list(SCORE_BY_OPTIONS.keys())}"
+            )
 
         isc: InformationStateChanges = cls(
             min_period=df["real_date"].min(),
@@ -184,13 +202,15 @@ class InformationStateChanges(object):
         df = QuantamentalDataFrame(df)
         isc._qdf_as_categorical = df.InitializedAsCategorical
 
-        isc_dict, density_stats_df = create_delta_data(df, return_density_stats=True)
+        isc_dict, density_stats_df = create_delta_data(
+            df, return_density_stats=True, score_by=score_by
+        )
 
         isc.isc_dict = isc_dict
         isc.density_stats_df = density_stats_df
 
         if norm:
-            isc.calculate_score(**kwargs)
+            isc.calculate_score(score_by=score_by, **kwargs)
         return isc
 
     @classmethod
@@ -262,6 +282,7 @@ class InformationStateChanges(object):
         value_column: str = "value",
         postfix: str = None,
         metrics: List[str] = ["eop", "grading"],
+        thresh: Union[Tuple[float, float], float] = None,
     ) -> pd.DataFrame:
         """
         Convert the InformationStateChanges object to a QuantamentalDataFrame.
@@ -273,9 +294,13 @@ class InformationStateChanges(object):
         postfix : str
             A postfix to append to the xcat column. Default is None.
         metrics : List[str]
-            A list of metrics to include in the DataFrame. Default is ["eop",
-            "grading"].
-
+            A list of metrics to include in the DataFrame. Default is ["eop", "grading"].
+            Use `metrics=None` to disregard any non-value columns.
+        thresh : Union[Tuple[float, float], float]
+            A float or a tuple of two floats to winsorise the data to. Default is None.
+            If a single float is provided, it is used for both lower and upper bounds,
+            as `(-thresh, thresh)`. If a tuple is provided, it is used as
+            `(thresh[0], thresh[1])`.
         Returns
         -------
         pd.DataFrame
@@ -289,6 +314,7 @@ class InformationStateChanges(object):
             max_period=self._max_period,
             postfix=postfix,
             metrics=metrics,
+            thresh=thresh,
         )
 
         return QuantamentalDataFrame(
@@ -445,6 +471,7 @@ class InformationStateChanges(object):
         custom_method: Optional[Callable] = None,
         custom_method_kwargs: Dict = {},
         volatility_forecast: bool = True,
+        score_by: str = "diff",
     ):
         """
         Calculate score on sparse indicator for the InformationStateChanges object.
@@ -475,6 +502,11 @@ class InformationStateChanges(object):
         volatility_forecast : bool
             If True (default), the volatility forecast is shifted one period forward to
             align with the information state changes.
+        score_by : str
+            The method to use for scoring. If "diff" (default), the score is calculated
+            based on the difference between the information state changes. If "level", the
+            score is calculated based on the value ('level') of the information state
+            change.
 
         Returns
         -------
@@ -492,6 +524,7 @@ class InformationStateChanges(object):
             custom_method=custom_method,
             custom_method_kwargs=custom_method_kwargs,
             volatility_forecast=volatility_forecast,
+            score_by=score_by,
         )
         return self
 
@@ -721,7 +754,9 @@ def _get_diff_density_stats(
 
 
 def create_delta_data(
-    df: QuantamentalDataFrame, return_density_stats: bool = False
+    df: QuantamentalDataFrame,
+    return_density_stats: bool = False,
+    score_by: str = "diff",
 ) -> Union[Dict[str, pd.DataFrame], pd.DataFrame]:
     """
     Creates a dictionary of dataframes with the changes in the information state for
@@ -734,6 +769,8 @@ def create_delta_data(
         The QuantamentalDataFrame to calculate the changes for.
     return_density_stats : bool
         If True, returns a DataFrame with the density stats for each ticker.
+    score_by : str
+        The method to use for scoring. If "diff" (default), the score is calculated based
 
     Returns
     -------
@@ -749,6 +786,10 @@ def create_delta_data(
     if "value" not in df.columns:
         raise ValueError("`df` must contain a `value` column")
     if "eop_lag" not in df.columns:
+        warnings.warn(
+            "`df` does not contain an `eop_lag` column. Differences calculated will not be "
+            " based on end-of-period adjustments."
+        )
         df["eop_lag"] = np.nan
     if "grading" not in df.columns:
         df["grading"] = np.nan
@@ -760,15 +801,30 @@ def create_delta_data(
     assert set(values_df.columns) == set(eop_df.columns) == set(grading_df.columns)
     all_tickers: List[str] = values_df.columns.tolist()
 
-    # get the first valid index for each column
-    fvi_series: pd.Series = values_df.apply(lambda x: x.first_valid_index())
-    lvi_series: pd.Series = values_df.apply(lambda x: x.last_valid_index())
-
     # create dicts to store the dataframes and density stats
     isc_dict: Dict[str, Any] = {}
     # density_stats: Dict[str, Dict[str, Any]] = {}
 
-    diff_mask = values_df.diff(axis=0).abs() > 1e-12
+    if score_by == "diff":
+        diff_mask = values_df.diff(axis=0).abs() > 1e-12
+
+        # get the first valid index for each column
+        fvi_series: pd.Series = values_df.apply(lambda x: x.first_valid_index())
+    elif score_by == "level":
+        diff_mask = values_df.abs() > 1e-12
+
+        # get the first valid index for each column
+        labels, values = zip(
+            *[
+                (col, values_df.loc[diff_mask[col], col].first_valid_index())
+                for col in values_df
+            ]
+        )
+        fvi_series: pd.Series = pd.Series(values, index=labels)
+    else:
+        raise ValueError(f"Invalid value for `score_by`: {score_by}")
+
+    lvi_series: pd.Series = values_df.apply(lambda x: x.last_valid_index())
     density_stats: Dict[str, Dict[str, Union[float, str]]] = {}
 
     for ticker in all_tickers:
@@ -1185,6 +1241,7 @@ def sparse_to_dense(
     max_period: pd.Timestamp,
     postfix: str = None,
     metrics: List[str] = ["eop", "grading"],
+    thresh: Union[Tuple[float, float], float] = None,
 ) -> pd.DataFrame:
     """
     Convert a dictionary of DataFrames with changes in the information state to a dense
@@ -1203,9 +1260,14 @@ def sparse_to_dense(
         The maximum period to include in the DataFrame.
     postfix : str
         A postfix to append to the xcat column. Default is None.
-    metrics : List[str]
+    metrics : Optional[List[str]]
         A list of metrics to include in the DataFrame. Default is ["eop", "grading"].
-
+        Use `metrics=None` to disregard any non-value columns.
+    thresh : Union[Tuple[float, float], float]
+        A float or a tuple of two floats to winsorise the data to. Default is None.
+        If a single float is provided, it is used for both lower and upper bounds,
+        as `(-thresh, thresh)`. If a tuple is provided, it is used as
+        `(thresh[0], thresh[1])`.
     Returns
     -------
     pd.DataFrame
@@ -1223,7 +1285,24 @@ def sparse_to_dense(
     tdf = _get_metric_df_from_isc(isc=isc, metric=value_column, date_range=dtrange)
     tdf = _remove_insignificant_values(tdf, threshold=1e-12)
 
+    wins_lower, wins_upper = None, None
+    if thresh is not None:
+        if isinstance(thresh, tuple):
+            if (len(thresh) != 2) or not all(isinstance(x, Number) for x in thresh):
+                raise ValueError(
+                    "If `thresh` is a tuple, it must contain two numeric values."
+                )
+            wins_lower, wins_upper = thresh
+        elif isinstance(thresh, Number):
+            wins_lower, wins_upper = -thresh, thresh
+        else:
+            raise ValueError("`thresh` must be a number or a tuple of two numbers.")
+
+        tdf = tdf.clip(lower=wins_lower, upper=wins_upper)
+
     sm_qdfs: List[QuantamentalDataFrame] = [ticker_df_to_qdf(tdf)]
+    if metrics is None:
+        metrics = []
     for metric_name in metrics:
         wdf = _get_metric_df_from_isc(
             isc=isc, metric=metric_name, date_range=dtrange, fill="ffill"
@@ -1400,6 +1479,8 @@ def _calculate_score_on_sparse_indicator_for_class(
     custom_method: Optional[Callable] = None,
     custom_method_kwargs: Dict = {},
     volatility_forecast: bool = True,
+    score_by: str = "diff",
+    threshold: float = 1e-12,
 ):
     """
     Calculate score on sparse indicator for a class. Effectively a re-implementation of
@@ -1413,6 +1494,15 @@ def _calculate_score_on_sparse_indicator_for_class(
     assert hasattr(cls, "isc_dict") and isinstance(
         cls.isc_dict, dict
     ), "`InformationStateChanges` object not initialized"
+
+    if score_by not in SCORE_BY_OPTIONS.keys():
+        raise ValueError(f"`score_by` must be one of {list(SCORE_BY_OPTIONS.keys())}")
+
+    score_by_column = SCORE_BY_OPTIONS[score_by]
+
+    for key, v in cls.isc_dict.items():
+        if not score_by_column in v.columns:
+            raise ValueError(f"Column `{score_by_column}` not in for ticker {key}")
 
     curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
     if custom_method is not None:
@@ -1431,7 +1521,7 @@ def _calculate_score_on_sparse_indicator_for_class(
     )
     for key, v in cls.isc_dict.items():
         mask_rel = (v["version"] == 0) if isc_version == 0 else (v["version"] >= 0)
-        s = v.loc[mask_rel, "diff"]
+        s = v.loc[mask_rel, score_by_column]
         result: pd.Series = curr_method(s, **method_kwargs)
         columns = [kk for kk in v.columns if kk != "std"]
         v = pd.merge(
@@ -1444,7 +1534,7 @@ def _calculate_score_on_sparse_indicator_for_class(
         v["std"] = v["std"].ffill()
         if iis:
             v["std"] = v["std"].bfill()
-        v["zscore"] = v["diff"] / v["std"]
+        v["zscore"] = v[score_by_column] / v["std"]
 
         cls.isc_dict[key] = v
 
@@ -1467,5 +1557,6 @@ if __name__ == "__main__":
     with JPMaQSDownload() as jpmaqs:
         df = jpmaqs.download(tickers=tickers, metrics="all")
 
-    isc = InformationStateChanges.from_qdf(df)
-    usd_gpdppc_isc = isc["USD_GDPPC_SA"]
+    isc = InformationStateChanges.from_qdf(df[["cid", "xcat", "real_date", "value"]])
+    iqdf = isc.to_qdf()
+    print(list(isc.keys()))

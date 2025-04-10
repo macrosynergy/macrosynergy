@@ -16,6 +16,8 @@ from macrosynergy.management.utils import (
     get_cid,
     get_xcat,
 )
+import contextlib
+import random
 
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
@@ -91,7 +93,34 @@ def dataframe_generator(
     return df_add, work_days
 
 
-def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
+@contextlib.contextmanager
+def temporary_seed(seed: Optional[int]):
+    """
+    A context manager that temporarily sets the seed for both NumPy and Python's random.
+    """
+    if seed is None or not isinstance(seed, int):
+        yield
+        return  # no seed - do nothing.
+
+    np_state = np.random.get_state()
+    random_state = random.getstate()
+
+    np.random.seed(seed)
+    random.seed(seed)
+
+    try:
+        yield
+    finally:
+        np.random.set_state(np_state)
+        random.setstate(random_state)
+
+
+def make_qdf(
+    df_cids: pd.DataFrame,
+    df_xcats: pd.DataFrame,
+    back_ar: float = 0,
+    seed: Optional[int] = None,
+) -> QuantamentalDataFrame:
     """
     Make quantamental DataFrame with basic columns: 'cid', 'xcat', 'real_date', 'value'.
 
@@ -114,12 +143,20 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     back_ar : float
         float between 0 and 1 denoting set auto-correlation of the background factor.
         Default is zero.
+    seed : int
+        seed for random number generation. Default is None.
 
     Returns
     -------
     pd.DataFrame
         basic quantamental DataFrame according to specifications.
     """
+    with temporary_seed(seed):
+        qdf = _make_qdf(df_cids, df_xcats, back_ar)
+    return qdf
+
+
+def _make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
 
     df_list = []
 
@@ -495,8 +532,8 @@ def simulate_returns_and_signals(
         sigma = np.empty(shape=(periods + 1))
         sigma[0] = sigma_0  # Daily volatility (10 percent ASD)
         eta_sigma = np.random.normal(0, sigma_eta, periods)
-        for ii, ee in enumerate(eta_sigma):
-            sigma[ii + 1] = np.exp(np.log(sigma[ii]) + ee)
+        for i, e in enumerate(eta_sigma):
+            sigma[i + 1] = np.exp(np.log(sigma[i]) + e)
         return sigma[1:]
 
     dates = pd.bdate_range(
@@ -515,10 +552,10 @@ def simulate_returns_and_signals(
     mean_signal = 0
     signals = np.empty(shape=(periods + 1, n_cids))
     signals[0, :] = mean_signal
-    for tt in range(periods):
-        signals[tt + 1, :] = (
+    for t in range(periods):
+        signals[t + 1, :] = (
             (1 - rho_signal) * mean_signal
-            + rho_signal * signals[tt, :]
+            + rho_signal * signals[t, :]
             + np.random.normal(0, 0.01, n_cids)
         )
     # signals = np.random.randn(periods, n_cids)  # Unit variance, zero mean
@@ -528,8 +565,8 @@ def simulate_returns_and_signals(
     # TODO alpha needs to be a function of lagged signal and not necessarily continous?
     # TODO signal and alpha can't be concurrent!
     # TODO signal proxy/captures a slow moving trend in the alpha (risk-premium)
-    for ii in range(int(periods / years)):
-        signals[ii * years : ii * years + years, :] = signals[ii * years, :]
+    for i in range(int(periods / years)):
+        signals[i * years : i * years + years, :] = signals[i * years, :]
     alpha = signals + np.random.randn(periods, n_cids)  # Unit variance, zero mean
 
     # Generate benchmark return
@@ -539,8 +576,8 @@ def simulate_returns_and_signals(
     beta = np.empty(shape=(1, n_cids, periods + 1))
     beta[:, :, 0] = 0.6  # Initial beta value
 
-    for ii in range(periods):
-        beta[:, :, ii + 1] = beta[:, :, ii] + 0.005 * np.random.randn(1, n_cids)
+    for i in range(periods):
+        beta[:, :, i + 1] = beta[:, :, i] + 0.005 * np.random.randn(1, n_cids)
     beta = beta[:, :, 1:]
     # print("Final values of beta")
     # print(pd.Series(beta[0, :, -1]).describe())
@@ -553,7 +590,9 @@ def simulate_returns_and_signals(
 
     # TODO test simulated returns matches random walk hypothesis on the face of it
 
-    assert bool(start) ^ bool(end), "Only one of `start` or `end` is allowed."
+    if not ((bool(start) or bool(end)) and not (bool(start) and bool(end))):
+        raise ValueError("Either `start` or `end` must be provided, but not both.")
+
     dtx = pd.Timestamp(start) if start else pd.Timestamp(end)
     dtx = pd.Timestamp(start) if start else pd.Timestamp(end) + pd.offsets.BDay(0)
     if start:

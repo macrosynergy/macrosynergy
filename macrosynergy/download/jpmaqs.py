@@ -953,8 +953,9 @@ class JPMaQSDownload(DataQueryInterface):
         catalogue_expressions: List[str] = construct_expressions(
             tickers=catalogue_tickers, metrics=self.valid_metrics
         )
+        upper_exprs = [ex.upper() for ex in catalogue_expressions]
         r: List[str] = sorted(
-            list(set(expressions).intersection(set(catalogue_expressions)))
+            set(ex for ex in expressions if ex.upper() in upper_exprs)
         )
         if verbose:
             filtered: int = len(expressions) - len(r)
@@ -1410,13 +1411,8 @@ class JPMaQSDownload(DataQueryInterface):
                 metrics = self.valid_metrics
 
         if end_date is None:
-            end_date = (datetime.datetime.today() + pd.offsets.BusinessDay(2)).strftime(
-                "%Y-%m-%d"
-            )
-            # NOTE : due to timezone conflicts, we choose to request data for 2 days in
-            # the future.
-            # NOTE : DataQuery specifies YYYYMMDD as the date format, but we use
-            # YYYY-MM-DD for consistency.
+            _today = datetime.datetime.today()
+            end_date = pd.bdate_range(end=_today, periods=2)[0].strftime("%Y-%m-%d")
             # This is date is cast to YYYYMMDD in macrosynergy.download.dataquery.py.
 
         # Validate arguments.

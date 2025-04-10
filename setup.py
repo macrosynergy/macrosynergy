@@ -10,9 +10,9 @@ if sys.version_info[:2] < (3, 7):
     raise RuntimeError("Python version >= 3.8 required.")
 
 MAJOR = 1
-MINOR = 1
-MICRO = 0
-ISRELEASED = True
+MINOR = 2
+MICRO = 1
+ISRELEASED = False
 VERSION = "%d.%d.%d" % (MAJOR, MINOR, MICRO)
 
 if sys.version_info >= (3, 13):

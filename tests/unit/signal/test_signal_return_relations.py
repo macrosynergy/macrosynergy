@@ -204,7 +204,7 @@ class TestAll(unittest.TestCase):
         srr = SignalReturnRelations(
             self.dfd, sigs=signal, rets="XR", freqs="D", blacklist=self.blacklist
         )
-        srr.manipulate_df(xcat=[signal, "XR"], freq="D", agg_sig="last")
+        srr.manipulate_df(xcats=[signal, "XR"], freq="D", agg_sig="last")
         df = srr.df.dropna(how="any").copy()
 
         # First, test cross-sectional basis.
@@ -245,7 +245,7 @@ class TestAll(unittest.TestCase):
         srr = SignalReturnRelations(
             self.dfd, sigs=signal, rets=return_, freqs="D", blacklist=self.blacklist
         )
-        srr.manipulate_df(xcat=[signal, return_], freq="D", agg_sig="last")
+        srr.manipulate_df(xcats=[signal, return_], freq="D", agg_sig="last")
         df_cs = srr.__output_table__(cs_type="cids")
 
         # The lagged signal & returns have been reduced to[-1, 1] which are interpreted
@@ -347,7 +347,7 @@ class TestAll(unittest.TestCase):
             blacklist=self.blacklist,
         )
         srr.manipulate_df(
-            xcat=[primary_signal] + rival_signals + ["XR"], freq="D", agg_sig="last"
+            xcats=[primary_signal] + rival_signals + ["XR"], freq="D", agg_sig="last"
         )
 
         df_sigs = srr.__rival_sigs__(ret="XR")
@@ -371,7 +371,7 @@ class TestAll(unittest.TestCase):
         srr = SignalReturnRelations(
             self.dfd, sigs=signal, rets=return_, freqs="D", blacklist=self.blacklist
         )
-        srr.manipulate_df(xcat=[signal, return_], freq="D", agg_sig="last")
+        srr.manipulate_df(xcats=[signal, return_], freq="D", agg_sig="last")
         df_cs = srr.__output_table__(cs_type="cids")
         dfx = df_cs[~df_cs.index.isin(["PosRatio"])]
         dfx_acc = dfx.loc[:, ["accuracy", "bal_accuracy"]]
@@ -426,7 +426,7 @@ class TestAll(unittest.TestCase):
         )
 
         # NOTE: casting df.vx to int as pandas casts it to float64
-        self.assertEqual(int(min(df["vx"])) + test_slip, int(min(out_df["vx"])))
+        self.assertEqual(int(df["vx"].max()) - test_slip, int(out_df["vx"].max()))
 
         for cid in sel_cids:
             for xcat in sel_xcats:
@@ -438,7 +438,7 @@ class TestAll(unittest.TestCase):
                     .isna()
                     .sum()
                 )
-                assert inan_count == onan_count - test_slip
+                self.assertEqual(inan_count, onan_count - test_slip)
 
         # Test Case 2 - slip is greater than the number of unique dates for a cid, xcat pair
 
@@ -642,7 +642,25 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(set(sr.dfd["xcat"]) == set(["XR", "CRY"]))
 
-        self.assertTrue(sr.dfd["value"][0] != sr.df["value"][0])
+        # check that the return (XR) has not been shifted
+        self.assertTrue(
+            (
+                sr.dfd[sr.dfd["xcat"] == "XR"]["value"]
+                == sr.df[sr.df["xcat"] == "XR"]["value"]
+            ).all()
+        )
+        shifted_cry = sr.dfd[sr.dfd["xcat"] == "CRY"]["value"]
+        expected_shifted_cry = sr.df[sr.df["xcat"] == "CRY"]["value"].shift(1)
+        expected_isna = expected_shifted_cry.isna()
+        additional_isna = shifted_cry.isna()
+
+        # check all true for (shifted_cry == expected_shifted_cry) XOR expected_isna
+        self.assertTrue(
+            (
+                (shifted_cry == expected_shifted_cry)
+                ^ (expected_isna | additional_isna)
+            ).all()
+        )
 
         self.assertTrue(sr_no_slip.dfd["value"][0] == sr_no_slip.df["value"][0])
 
@@ -650,7 +668,26 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(set(sr.dfd["xcat"]) == set(["XR", "CRY"]))
 
-        self.assertTrue(sr.dfd["value"][0] != sr.df["value"][0])
+        # check that the return (XR) has not been shifted
+        self.assertTrue(
+            (
+                sr.dfd[sr.dfd["xcat"] == "XR"]["value"]
+                == sr.df[sr.df["xcat"] == "XR"]["value"]
+            ).all()
+        )
+
+        shifted_cry = sr.dfd[sr.dfd["xcat"] == "CRY"]["value"]
+        expected_shifted_cry = sr.df[sr.df["xcat"] == "CRY"]["value"].shift(1)
+        expected_isna = expected_shifted_cry.isna()
+        additional_isna = shifted_cry.isna()
+
+        # check all true for (shifted_cry == expected_shifted_cry) XOR expected_isna
+        self.assertTrue(
+            (
+                (shifted_cry == expected_shifted_cry)
+                ^ (expected_isna | additional_isna)
+            ).all()
+        )
 
         # Test Negative signs are correctly handled
 

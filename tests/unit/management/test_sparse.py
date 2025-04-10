@@ -160,7 +160,14 @@ class TestFunctions(unittest.TestCase):
             create_delta_data(df=qdf.drop(columns="value"))
 
         # test with missing eop_lag
-        create_delta_data(qdf.drop(columns="eop_lag"))
+        # should warn saying 'eop_lag' not found
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            create_delta_data(df=qdf.drop(columns="eop_lag"))
+            self.assertTrue(len(w) == 1)
+            self.assertTrue(
+                "`df` does not contain an `eop_lag` column" in str(w[-1].message)
+            )
 
     def test_calculate_score_on_sparse_indicator(self) -> None:
         qdf = self.qdf_small.copy()
@@ -485,6 +492,31 @@ class TestInformationStateChanges(unittest.TestCase):
 
         self.assertTrue([str(u).endswith("$%A") for u in list(tdf["xcat"])])
 
+    def test_isc_to_qdf_metrics(self) -> None:
+        df = get_long_format_data(end="2012-01-01")
+        ## Test that the grading is not output when not asked for
+        tdf = InformationStateChanges.from_qdf(df).to_qdf(metrics=None, postfix="$%A")
+        self.assertTrue("value" in tdf.columns)
+        self.assertTrue("eop" not in tdf.columns)
+        self.assertTrue("eop_lag" not in tdf.columns)
+        self.assertTrue("grading" not in tdf.columns)
+
+    def test_isc_to_qdf_winsorise(self) -> None:
+        df = get_long_format_data(end="2012-01-01")
+        ## Test that the grading is not output when not asked for
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(df)
+        win_df = isc.to_qdf(metrics=None, thresh=0)
+        self.assertTrue(np.allclose(win_df["value"], 0))
+        win_df = isc.to_qdf(metrics=None, thresh=(-0.01, 0.1))
+        self.assertFalse((win_df["value"] > 0.1).any())
+        self.assertFalse((win_df["value"] < -0.01).any())
+
+        with self.assertRaises(ValueError):
+            isc.to_qdf(metrics=None, thresh="banana")
+
+        with self.assertRaises(ValueError):
+            isc.to_qdf(metrics=None, thresh=(-0.01, "banana"))
+
     def test_temporal_aggregator_period(self) -> None:
         df = get_long_format_data(end="2012-01-01")
         iscobj = InformationStateChanges.from_qdf(df)
@@ -783,6 +815,52 @@ class TestInformationStateChanges(unittest.TestCase):
 
         self.assertTrue(outdf["cid"].dtype.name == "object")
         self.assertTrue(outdf["xcat"].dtype.name == "object")
+
+
+class TestInformationStateChangesScoreBy(unittest.TestCase):
+    def test_score_by_diff(self):
+        qdf = get_long_format_data(end="2015-01-01")
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(qdf)
+
+        isc_score_by_diff = InformationStateChanges.from_qdf(qdf, score_by="diff")
+
+        for ticker in isc.keys():
+            self.assertTrue(isc[ticker].equals(isc_score_by_diff[ticker]))
+
+    def test_score_by_level(self):
+        qdf = get_long_format_data(end="2015-01-01")
+
+        isc_score_by_level = InformationStateChanges.from_qdf(qdf, score_by="level")
+        isc_score_by_diff = InformationStateChanges.from_qdf(qdf, score_by="diff")
+
+        all_isna = []
+        for ticker in isc_score_by_diff.keys():
+            if isc_score_by_level[ticker]["zscore"].isna().all():
+                all_isna.append(ticker)
+                continue
+            self.assertFalse(
+                isc_score_by_diff[ticker].equals(isc_score_by_level[ticker])
+            )
+
+        if len(all_isna) == len(isc_score_by_diff.keys()):
+            self.fail("All tickers have NaNs in zscore when using score_by='level'")
+
+    def test_score_by_patch(self):
+        qdf = get_long_format_data(end="2015-01-01")
+
+        for sc_by in ["level", "diff"]:
+            with unittest.mock.patch(
+                "macrosynergy.management.utils.sparse._calculate_score_on_sparse_indicator_for_class"
+            ) as mock:
+                isc = InformationStateChanges.from_qdf(qdf, norm=True, score_by=sc_by)
+                mock.assert_called_once()
+                self.assertEqual(mock.call_args[1]["score_by"], sc_by)
+
+    def test_score_by_invalid_method(self):
+        qdf = get_long_format_data(end="2015-01-01")
+
+        with self.assertRaises(ValueError):
+            InformationStateChanges.from_qdf(qdf, score_by="banana")
 
 
 if __name__ == "__main__":

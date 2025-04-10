@@ -76,11 +76,9 @@ class CategoryRelations(object):
         winsorized!). Default is None for both. Trimming is applied after all other
         transformations.
     slip : int
-        implied slippage of feature availability for relationship with the target
-        category. This mimics the relationship between trading signals and returns, which is
-        often characterized by a delay due to the setup of positions. Technically, this is a
-        negative lag (early arrival) of the target category in working days prior to any
-        frequency conversion. Default is 0.
+        number of periods to 'slip' the explanatory variable, i.e. the first category.
+        Here, slip mimics the late arrival of the data, or the time it takes
+        to act on the data. Default is 0. 
     """
 
     def __init__(
@@ -150,11 +148,12 @@ class CategoryRelations(object):
             metrics_found: List[str] = list(
                 set(df.columns) - set(["cid", "xcat", "real_date"])
             )
+            # here, the slip is applied to the the first xcat (explanatory variable)
             df = self.apply_slip(
                 df=df,
                 slip=self.slip,
                 cids=self.cids,
-                xcats=[self.xcats[1]],
+                xcats=[self.xcats[0]],
                 metrics=metrics_found,
             )
 
@@ -533,6 +532,7 @@ class CategoryRelations(object):
         single_scatter: bool = False,
         ncol: int = None,
         ax: plt.Axes = None,
+        remove_zero_predictor: bool = False,
     ):
         """
         Display scatter-plot and regression line.
@@ -602,6 +602,8 @@ class CategoryRelations(object):
             Matplotlib Axes object. If None (default), new figure and axes objects will
             be created. If an Axes object is passed, the plot will be drawn on the Axes, and
             plt.show() will not be called.
+        remove_zero_predictor : bool, default=False
+            Remove zeros from the input series.
         """
 
         coef_box_loc_error = (
@@ -881,6 +883,9 @@ class CategoryRelations(object):
             else:
                 show_plot = False
 
+            if remove_zero_predictor:
+                dfx = dfx[dfx.loc[:, self.xcats[0]] != 0]
+
             sns.regplot(
                 data=dfx,
                 x=self.xcats[0],
@@ -896,7 +901,7 @@ class CategoryRelations(object):
 
             if coef_box is not None:
                 data_table = self.corr_probability(
-                    df_probability=self.df,
+                    df_probability=dfx,
                     prob_est=prob_est,
                     coef_box_loc=coef_box,
                     ax=ax,
@@ -911,7 +916,7 @@ class CategoryRelations(object):
                 error_freq = "Labels only available for monthly or lower frequencies."
                 assert self.freq in ["A", "Q", "M"], error_freq
 
-                df_labs = self.df.dropna().index.to_frame(index=False)
+                df_labs = dfx.dropna().index.to_frame(index=False)
                 if "cid" not in df_labs.columns:
                     df_labs = df_labs.rename(columns={0: "cid"})
                 if self.years is not None:
@@ -929,10 +934,10 @@ class CategoryRelations(object):
                     elif self.freq == "M":
                         ser_labs += "-" + df_labs["real_date"].dt.month.astype("string")
 
-                for i in range(self.df.shape[0]):
+                for i in range(dfx.shape[0]):
                     ax.text(
-                        x=self.df[self.xcats[0]][i] + 0,
-                        y=self.df[self.xcats[1]][i] + 0,
+                        x=dfx[self.xcats[0]][i] + 0,
+                        y=dfx[self.xcats[1]][i] + 0,
                         s=ser_labs[i],
                         fontdict=dict(color="black", size=8),
                     )
@@ -1008,12 +1013,21 @@ if __name__ == "__main__":
     dfdx["ERA"] = "before 2007"
     dfdx.loc[dfdx["real_date"].dt.year > 2007, "ERA"] = "from 2010"
 
+    def modify_cry_values(group):
+        if group.name[1] == "CRY":  # Check if xcat is "cry"
+            mask = np.ones(len(group), dtype=bool)
+            mask[np.arange(len(group)) % 20 != 0] = False  # Keep only every 20th row
+            group.loc[~mask, "value"] = 0  # Set all other rows to zero
+        return group
+
+    dfdx = dfdx.groupby(["cid", "xcat"], group_keys=False).apply(modify_cry_values)
+
     cidx = ["AUD", "CAD", "GBP", "USD", "PRY"]
 
     cr = CategoryRelations(
         dfdx,
         xcats=["CRY", "XR"],
-        freq="M",
+        freq="D",
         lag=1,
         cids=cidx,
         xcat_aggs=["mean", "sum"],
@@ -1030,6 +1044,7 @@ if __name__ == "__main__":
         ylab="Return",
         coef_box="lower left",
         prob_est="map",
+        remove_zero_predictor=True,
     )
 
     # years parameter

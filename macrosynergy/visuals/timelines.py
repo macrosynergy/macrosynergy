@@ -181,10 +181,11 @@ def timelines(
     if cids is None:
         cids: List[str] = df["cid"].unique().tolist()
 
+    df = reduce_df(
+        df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
+    )
+
     if cumsum:
-        df = reduce_df(
-            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
-        )
         df[val] = (
             df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
             .groupby(["cid", "xcat"])
@@ -193,9 +194,6 @@ def timelines(
 
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
-        df = reduce_df(
-            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
-        )
         if len(xcats) > 1:
             raise ValueError("`cs_mean` cannot be True for multiple categories.")
 

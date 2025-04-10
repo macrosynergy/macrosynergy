@@ -17,6 +17,8 @@ from .view_grades import heatmap_grades
 from .view_ranges import view_ranges
 from .view_timelines import view_timelines
 from .view_metrics import view_metrics
+from .adjust_weights import adjust_weights
+from .lincomb_adjust import linear_combination_adjustment
 
 __all__ = [
     "Basket",
@@ -41,4 +43,6 @@ __all__ = [
     "view_ranges",
     "view_timelines",
     "view_metrics",
+    "adjust_weights",
+    "linear_combination_adjustment",
 ]
