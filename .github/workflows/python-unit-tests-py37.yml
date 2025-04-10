@@ -53,11 +53,13 @@ jobs:
           bash .github/scripts/check_sys_path.sh
 
       - name: Lint with flake8
+        shell: bash -l {0}
         run: |
           flake8 --count --select=E9,F63,F7,F82 --show-source --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
           flake8 --count --exit-zero --max-complexity=10 --max-line-length=127 --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
 
       - name: Test with pytest for ${{ matrix.folder }}
+        shell: bash -l {0}
         run: |
           python -m pytest ./tests/unit/${{ matrix.folder }}
 
