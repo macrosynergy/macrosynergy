@@ -39,6 +39,7 @@ jobs:
       
       - name: Install dependencies
         run: |
+          conda activate py379
           uv pip install . --no-deps --system
           uv pip install -r tests/requirements-py37.txt --system
           uv pip uninstall -y macrosynergy --system
