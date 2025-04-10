@@ -39,10 +39,11 @@ jobs:
       
       - name: Install dependencies
         run: |
+          conda init
           conda activate py379
-          uv pip install . --no-deps --system
-          uv pip install -r tests/requirements-py37.txt --system
-          uv pip uninstall -y macrosynergy --system
+          uv pip install . --no-deps
+          uv pip install -r tests/requirements-py37.txt
+          uv pip uninstall -y macrosynergy
       - name: Check for sys.path.append
         run: |
           bash .github/scripts/check_sys_path.sh
