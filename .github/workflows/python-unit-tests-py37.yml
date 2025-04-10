@@ -47,7 +47,7 @@ jobs:
           conda activate py379
           uv pip install . --no-deps
           uv pip install -r tests/requirements-py37.txt
-          uv pip uninstall -y macrosynergy
+          uv pip uninstall macrosynergy
       - name: Check for sys.path.append
         run: |
           bash .github/scripts/check_sys_path.sh
