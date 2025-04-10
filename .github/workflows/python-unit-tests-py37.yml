@@ -28,10 +28,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore caches - Python 3.7.9
-        uses: ./.github/actions/restore-pip-cache
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: 3.7.9
+          activate-environment: py379
+      
+      - name: Install dependencies
+        run: |
+          uv pip install . --no-deps
+          uv pip install -r tests/requirements-py37.txt
+          uv pip uninstall -y macrosynergy
 
       - name: Check for sys.path.append
         run: |
@@ -58,5 +68,3 @@ jobs:
           else
             echo "Unit tests passed"
           fi
-
-          
