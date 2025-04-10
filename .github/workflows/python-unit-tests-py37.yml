@@ -49,10 +49,10 @@ jobs:
           uv pip install -r tests/requirements-py37.txt
           uv pip uninstall macrosynergy
       - name: Check for sys.path.append
-        shell: bash -l {0}
         run: |
           bash .github/scripts/check_sys_path.sh
       - name: Check Python installation
+        shell: bash -l {0}
         run: |
           python -c "import sys; assert(int(sys.version_info[:3] == (3,7,9)))"
 
