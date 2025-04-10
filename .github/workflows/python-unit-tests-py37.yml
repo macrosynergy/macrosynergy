@@ -36,8 +36,12 @@ jobs:
         with:
           python-version: 3.7.9
           activate-environment: py379
-      
+      - name: Test conda installation
+        shell: bash -l {0}
+        run: conda info
+
       - name: Install dependencies
+        shell: bash -l {0}
         run: |
           conda init
           conda activate py379
