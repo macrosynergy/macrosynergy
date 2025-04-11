@@ -30,6 +30,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
     Type extension of `pd.DataFrame` for Quantamental DataFrames.  Usage: >>> df:
     pd.DataFrame = load_data() >>> qdf = QuantamentalDataFrame(df)
     """
+    init = False
     def __init__(
         self,
         df: Optional[pd.DataFrame] = None,
@@ -74,15 +75,15 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         else:
             self.to_string_type()
 
-        self._protected_columns = self._StrIndexCols
-        self._enforce_initial_types()
+        # self._enforce_initial_types()
+        self.init = True
 
     def _enforce_initial_types(self):
-        for col in self._protected_columns:
+        for col in self._StrIndexCols:
             self[col] = self[col].astype('category')
 
     def _check_dtypes(self):
-        for col in self._protected_columns:
+        for col in self._StrIndexCols:
             if col in self.columns:
                 if self[col].dtype.name != "category":
                     raise TypeError(f"Column '{col}' must remain categorical")
@@ -92,32 +93,27 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
 
     def __setitem__(self, key, value):
         super().__setitem__(key, value)
-        self._check_dtypes()
-
-    @property
-    def loc(self):
-        return _ProtectedLocIndexer(self)
-
-    @property
-    def iloc(self):
-        return _ProtectediLocIndexer(self)
+        if self.init:
+            self._check_dtypes()
 
     def update(self, *args, **kwargs):
         super().update(*args, **kwargs)
-        self._check_dtypes()
+        if self.init:
+            self._check_dtypes()
 
     def assign(self, **kwargs):
         temp_df = super().assign(**kwargs)
-        for col in self._protected_columns:
-            if col in kwargs and not pd.api.types.is_categorical_dtype(temp_df[col]):
-                raise TypeError(f"Column '{col}' must remain categorical")
+        if self.init:
+            for col in self._StrIndexCols:
+                if col in kwargs and not pd.api.types.is_categorical_dtype(temp_df[col]):
+                    raise TypeError(f"Column '{col}' must remain categorical")
         self = temp_df
         return self
 
     def apply(self, func, axis=0, raw=False, result_type=None, args=(), **kwds):
         result = super().apply(func, axis=axis, raw=raw, result_type=result_type, args=args, **kwds)
         if isinstance(result, pd.DataFrame):
-            for col in self._protected_columns:
+            for col in self._StrIndexCols:
                 if col in result.columns and not pd.api.types.is_categorical_dtype(result[col]):
                     raise TypeError(f"Apply operation changed '{col}' from categorical.")
             self = result
@@ -772,25 +768,25 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         return QuantamentalDataFrame(qdf, categorical=categorical)
 
 
-class _ProtectedLocIndexer:
-    def __init__(self, qdf):
-        self.qdf = qdf
+# class _ProtectedLocIndexer:
+#     def __init__(self, qdf):
+#         self.qdf = qdf
 
-    def __getitem__(self, key):
-        return self.qdf.super().loc[key]
+#     def __getitem__(self, key):
+#         return self.qdf._dataframe.loc[key]
 
-    def __setitem__(self, key, value):
-        self.qdf.super().loc[key] = value
-        self.qdf._check_dtypes()
+#     def __setitem__(self, key, value):
+#         self.qdf._dataframe.loc[key] = value
+#         self.qdf._check_dtypes()
 
 
-class _ProtectediLocIndexer:
-    def __init__(self, qdf):
-        self.qdf = qdf
+# class _ProtectediLocIndexer:
+#     def __init__(self, qdf):
+#         self.qdf = qdf
 
-    def __getitem__(self, key):
-        return self.qdf.iloc[key]
+#     def __getitem__(self, key):
+#         return self.qdf._dataframe.iloc[key]
 
-    def __setitem__(self, key, value):
-        self.qdf.iloc[key] = value
-        self.qdf._check_dtypes()
+#     def __setitem__(self, key, value):
+#         self.qdf._dataframe.iloc[key] = value
+#         self.qdf._check_dtypes()
