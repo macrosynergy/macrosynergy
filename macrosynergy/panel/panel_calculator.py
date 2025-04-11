@@ -25,6 +25,7 @@ def panel_calculator(
     end: str = None,
     blacklist: dict = None,
     external_func: dict = None,
+    opt: bool = False,
 ) -> pd.DataFrame:
     """
     Calculates new data panels through a given input formula which is performed on
@@ -160,6 +161,7 @@ def panel_calculator(
         intersect=False,
     )
 
+    new_variables_existances = []
     # E. Create all required wide dataframes with category names.
     df = df.add_ticker_column()
     for xcat in old_xcats_used:
@@ -167,6 +169,7 @@ def panel_calculator(
         dfw = dfxx.pivot(index="real_date", columns="cid", values="value")
         dfw = _replace_zeros(df=dfw)
         exec(f"{xcat} = dfw")
+        new_variables_existances[xcat] = dfw.empty
 
     for single in singles_used:
         ticker = single[1:]
@@ -181,8 +184,12 @@ def panel_calculator(
             dfw.columns = cids
             dfw = _replace_zeros(df=dfw)
             exec(f"{single} = dfw")
+            new_variables_existances[single] = dfw.empty
 
-    sorted_ops_tuples = sort_execution_order(ops)
+    if opt:
+        sorted_ops_tuples = sort_execution_order(ops)
+    else:
+        sorted_ops_tuples = list(ops.items())
 
     # F. Calculate the panels and collect.
     df_out: pd.DataFrame
@@ -306,7 +313,9 @@ def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
     return all_xcats_used, singles_used, single_cids
 
 
-def sort_execution_order(ops: Dict[str, Set]) -> List[Dict[str, List[str]]]:
+def sort_execution_order(
+    ops: Dict[str, Set],
+) -> List[Dict[str, List[str]]]:
     xc_map: Dict[int, List[str]] = {}
     ops_map: Dict[int, Dict[str, Any]] = {}
     new_ops_order: List[int] = []
