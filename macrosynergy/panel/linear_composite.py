@@ -140,8 +140,6 @@ def linear_composite(
 
     _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
 
-    df = QuantamentalDataFrame(df)
-    result_as_categorical = df.InitializedAsCategorical
     remaining_xcats: List[str]
     remaining_cids: List[str]
     # NOTE: the "remaining_*" variables will not be in the same order as the input
@@ -157,6 +155,9 @@ def linear_composite(
         intersect=False,
         out_all=True,
     )
+
+    df = QuantamentalDataFrame(df)
+    result_as_categorical = df.InitializedAsCategorical
 
     if (
         len(remaining_cids) < len(cids)
@@ -524,7 +525,6 @@ def _check_df_for_missing_cid_data(
     rcids = [c for c in cids if c in found_cids]  # to preserve order
     return QuantamentalDataFrame(df), rcids, _xcat, weights, signs
 
-
 def _check_args(
     df: QuantamentalDataFrame,
     xcats: Union[str, List[str]],
@@ -551,13 +551,11 @@ def _check_args(
         or (df["value"].isna().all())
     ):
         raise TypeError("`df` must be a standardized Quantamental DataFrame.")
-    # copy df to avoid side effects
-    df: pd.DataFrame = df.copy()
 
     if start is None:
-        start: str = pd.to_datetime(df["real_date"]).min().strftime("%Y-%m-%d")
+        start: str = df["real_date"].min().strftime("%Y-%m-%d")
     if end is None:
-        end: str = pd.to_datetime(df["real_date"]).max().strftime("%Y-%m-%d")
+        end: str = df["real_date"].max().strftime("%Y-%m-%d")
 
     # dates check
     for varx, namex in zip([start, end], ["start", "end"]):
@@ -565,9 +563,16 @@ def _check_args(
             if not (isinstance(varx, str) and is_valid_iso_date(varx)):
                 raise ValueError(f"`{namex}` must be a valid ISO date string.")
 
+    # if type(df) is QuantamentalDataFrame and df.is_categorical():
+    #     xcats_in_df = set(df["xcat"].cat.categories)
+    #     cids_in_df = set(df["cid"].cat.categories)
+    # else:
+    xcats_in_df = set(df["xcat"].values)
+    cids_in_df = set(df["cid"].values)
+
     # check xcats
     if xcats is None:
-        xcats: List[str] = df["xcat"].unique().tolist()
+        xcats: List[str] = list(xcats_in_df)
     elif isinstance(xcats, str):
         xcats: List[str] = [xcats]
     elif isinstance(xcats, listtypes):
@@ -575,12 +580,11 @@ def _check_args(
     else:
         raise TypeError("`xcats` must be a string or list of strings.")
 
-    # check xcats in df
-    if not set(xcats).issubset(set(df["xcat"].unique().tolist())):
+    if not all(x in xcats_in_df for x in xcats):
         if complete_xcats:
             raise ValueError("Not all `xcats` are available in `df`.")
         else:
-            missing_xcats = list(set(xcats) - set(df["xcat"].unique().tolist()))
+            missing_xcats = list(set(xcats) - xcats_in_df)
             warnings.warn(
                 f"Not all `xcats` are available in `df`: {missing_xcats} "
                 "The calculation will be performed with the available xcats."
@@ -592,8 +596,9 @@ def _check_args(
             xcats = [xc for xc in xcats if xc not in missing_xcats]
 
     # check cids
+    
     if cids is None:
-        cids: List[str] = df["cid"].unique().tolist()
+        cids: List[str] = list(cids_in_df)
     elif isinstance(cids, str):
         cids: List[str] = [cids]
     elif isinstance(cids, listtypes):
@@ -602,11 +607,11 @@ def _check_args(
         raise TypeError("`cids` must be a string or list of strings.")
 
     # check cids in df
-    if not set(cids).issubset(set(df["cid"].unique().tolist())):
+    if not all(c in cids_in_df for c in cids):
         if complete_cids:
             raise ValueError("Not all `cids` are available in `df`.")
         else:
-            missing_cids = list(set(cids) - set(df["cid"].unique().tolist()))
+            missing_cids = list(set(cids) - cids_in_df)
             warnings.warn(
                 f"Not all `cids` are available in `df`: {missing_cids} "
                 "The calculation will be performed with the available cids."
@@ -643,7 +648,7 @@ def _check_args(
             raise ValueError("`weights` must not contain any 0s.")
 
     elif isinstance(weights, str):
-        if weights not in df["xcat"].unique().tolist():
+        if weights not in xcats_in_df:
             raise ValueError(
                 "When using a category-string as `weights`"
                 " it must be present in `df`."
