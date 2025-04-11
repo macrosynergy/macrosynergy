@@ -563,12 +563,12 @@ def _check_args(
             if not (isinstance(varx, str) and is_valid_iso_date(varx)):
                 raise ValueError(f"`{namex}` must be a valid ISO date string.")
 
-    if type(df) is QuantamentalDataFrame and df.is_categorical():
-        xcats_in_df = set(df["xcat"].cat.categories)
-        cids_in_df = set(df["cid"].cat.categories)
-    else:
-        xcats_in_df = set(df["xcat"].values)
-        cids_in_df = set(df["cid"].values)
+    # if type(df) is QuantamentalDataFrame and df.is_categorical():
+    #     xcats_in_df = set(df["xcat"].cat.categories)
+    #     cids_in_df = set(df["cid"].cat.categories)
+    # else:
+    xcats_in_df = set(df["xcat"].values)
+    cids_in_df = set(df["cid"].values)
 
     # check xcats
     if xcats is None:
