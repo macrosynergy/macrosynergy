@@ -18,7 +18,8 @@ PD_FUTURE_STACK = (
     if version.parse(pd.__version__) > version.parse("2.1.0")
     else dict(dropna=False)
 )
-@profile
+
+
 def linear_composite(
     df: pd.DataFrame,
     xcats: Union[str, List[str]],
@@ -717,16 +718,55 @@ def _check_args(
 
 
 if __name__ == "__main__":
-    df = pd.read_csv(r'./dev/dfx.csv')
-    df["real_date"] = pd.to_datetime(df["real_date"])
-    df = QuantamentalDataFrame(df, categorical=True)
-    cids = ['AUD', 'BRL', 'CAD', 'CHF', 'CLP', 'CNY', 'COP', 'CZK', 'DEM', 'ESP', 'EUR', 'FRF', 'GBP', 'HKD', 'HUF', 'IDR', 'ILS', 'INR', 'ITL', 'JPY', 'KRW', 'MXN', 'MYR', 'NLG', 'NOK', 'NZD', 'PEN', 'PHP', 'PLN', 'RON', 'RUB', 'SEK', 'SGD', 'THB', 'TRY', 'TWD', 'USD', 'ZAR']
+    cids = ["AUD", "CAD", "GBP"]
+    xcats = ["XR", "CRY", "INFL"]
 
-    dfa = linear_composite(
+    df: pd.DataFrame = pd.concat(
+        [
+            make_test_df(
+                cids=cids,
+                xcats=xcats[:-1],
+                start="2000-01-01",
+                end="2000-02-01",
+                style="linear",
+            ),
+            make_test_df(
+                cids=cids,
+                xcats=["INFL"],
+                start="2000-01-01",
+                end="2000-02-01",
+                style="decreasing-linear",
+            ),
+        ]
+    )
+
+    # all infls are now decreasing-linear, while everything else is increasing-linear
+
+    df.loc[
+        (df["cid"] == "GBP")
+        & (df["xcat"] == "INFL")
+        & (df["real_date"] == "2000-01-17"),
+        "value",
+    ] = np.nan
+
+    df.loc[
+        (df["cid"] == "AUD")
+        & (df["xcat"] == "CRY")
+        & (df["real_date"] == "2000-01-17"),
+        "value",
+    ] = np.nan
+
+    # there are now missing values for AUD-CRY and GBP-INFL on 2000-01-17
+
+    lc_cid = linear_composite(
+        df=df, xcats="XR", weights="INFL", normalize_weights=False
+    )
+    df = QuantamentalDataFrame(df)
+    lc_xcat = linear_composite(
         df=df,
-        xcats='IP_SA_P3M3ML3AR_ARMASNAW',
-        cids=cids,
-        weights="IVAWGT_SA_1YMA",
-        new_cid="GLB",
-        complete_cids=False,
+        cids=["GBP", "AUD", "CAD"],
+        xcats=["XR"],
+        weights=[1, 2, 1],
+        signs=[1, -1, 1],
+        complete_xcats=True,
     )
