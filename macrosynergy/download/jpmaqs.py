@@ -1328,7 +1328,7 @@ class JPMaQSDownload(DataQueryInterface):
         as_dataframe: bool = True,
         dataframe_format: str = "qdf",
         report_time_taken: bool = False,
-        categorical_dataframe: bool = True,
+        categorical_dataframe: bool = False,
         *args,
         **kwargs,
     ) -> Union[pd.DataFrame, List[Dict]]:
@@ -1379,7 +1379,7 @@ class JPMaQSDownload(DataQueryInterface):
             reported.
         categorical_dataframe : bool
             If True, the dataframe returned will use the pandas Categorical data type
-            for the `cid` and `xcat` columns. Default is True.
+            for the `cid` and `xcat` columns. Default is False.
         kwargs : dict
             any other keyword arguments.
 
