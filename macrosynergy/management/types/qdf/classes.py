@@ -34,8 +34,8 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
     def __init__(
         self,
         df: Optional[pd.DataFrame] = None,
-        categorical: bool = True,
-        _initialized_as_categorical: Optional[bool] = None,
+        # categorical: bool = True,
+        # _initialized_as_categorical: Optional[bool] = None,
     ):
         if df is not None:
             df_err = "Input must be a standardised Quantamental DataFrame."
@@ -49,10 +49,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
                 if not isinstance(df, QuantamentalDataFrame):
                     raise ValueError(df_err)
 
-        if type(df) is QuantamentalDataFrame:
-            if _initialized_as_categorical is None:
-                _initialized_as_categorical = df.InitializedAsCategorical
-        else:
+        if not type(df) is QuantamentalDataFrame:
             if df.columns.tolist() != get_col_sort_order(df):
                 df = df[get_col_sort_order(df)]
 
@@ -60,22 +57,8 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             super().__init__(df)
         else:
             super().__init__(df.copy()) # pragma: no cover
-
-        _check_cat = check_is_categorical(self)
-        if _initialized_as_categorical is None:
-            self.InitializedAsCategorical = _check_cat
-        else:
-            if not isinstance(_initialized_as_categorical, bool):
-                raise TypeError("`_initialized_as_categorical` must be a boolean.")
-            self.InitializedAsCategorical = _initialized_as_categorical
-
-        if categorical:
-            if not _check_cat:
-                self.to_categorical()
-        else:
-            self.to_string_type()
-
-        # self._enforce_initial_types()
+        if not self.init:
+            self._enforce_initial_types()
         self.init = True
 
     def _enforce_initial_types(self):
@@ -86,6 +69,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
         for col in self._StrIndexCols:
             if col in self.columns:
                 if self[col].dtype.name != "category":
+                    self[col] = self[col].astype("category")
                     raise TypeError(f"Column '{col}' must remain categorical")
 
     def __getitem__(self, key):
@@ -118,6 +102,15 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
                     raise TypeError(f"Apply operation changed '{col}' from categorical.")
             self = result
         return self
+
+    @property
+    def _constructor(self):
+        def _wrap(df):
+            expected_cols = {"real_date", "cid", "xcat"}
+            if set(df.columns) >= expected_cols and len(df.columns) > 3:
+                return QuantamentalDataFrame(df)
+            return pd.DataFrame(df)
+        return _wrap
 
     def is_categorical(self) -> bool:
         """
@@ -269,9 +262,7 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
             result, _xcats, _cids = result
 
         result = QuantamentalDataFrame(
-            result,
-            categorical=self.is_categorical(),
-            _initialized_as_categorical=self.InitializedAsCategorical,
+            result
         )
 
         if out_all:

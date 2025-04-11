@@ -140,7 +140,6 @@ def linear_composite(
     _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
 
     df = QuantamentalDataFrame(df)
-    result_as_categorical = df.InitializedAsCategorical
     remaining_xcats: List[str]
     remaining_cids: List[str]
     # NOTE: the "remaining_*" variables will not be in the same order as the input
@@ -199,7 +198,7 @@ def linear_composite(
         )
     
     # return result_df
-    return QuantamentalDataFrame(result_df, categorical=result_as_categorical)
+    return QuantamentalDataFrame(result_df)
 
 def _missing_cids_xcats_str(
     df: QuantamentalDataFrame,
@@ -721,7 +720,7 @@ if __name__ == "__main__":
     df = pd.read_csv(r'./dev/dfx.csv')
     # df = pd.read_csv(r'./dev/test.csv')
     df["real_date"] = pd.to_datetime(df["real_date"])
-    df = QuantamentalDataFrame(df, categorical=False)
+    df = QuantamentalDataFrame(df)
     cids = ['AUD', 'BRL', 'CAD', 'CHF', 'CLP', 'CNY', 'COP', 'CZK', 'DEM', 'ESP', 'EUR', 'FRF', 'GBP', 'HKD', 'HUF', 'IDR', 'ILS', 'INR', 'ITL', 'JPY', 'KRW', 'MXN', 'MYR', 'NLG', 'NOK', 'NZD', 'PEN', 'PHP', 'PLN', 'RON', 'RUB', 'SEK', 'SGD', 'THB', 'TRY', 'TWD', 'USD', 'ZAR']
 
     dfa = linear_composite(
@@ -732,4 +731,4 @@ if __name__ == "__main__":
         new_cid="GLB",
         complete_cids=False,
     )
-    df = update_df(df, dfa)
+    # df = update_df(df, dfa)
