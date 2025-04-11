@@ -320,15 +320,6 @@ def sort_execution_order(ops: Dict[str, Set]) -> List[Dict[str, List[str]]]:
     assert len(set([list(ops_map[k].keys())[0] for k in ops_map])) == len(ops_map)
     assert len(xc_map) == len(ops_map) == len(ops) and len(ops_map) > 0
 
-    # xc_map = [
-    #     {0: ["EQXR_NSA", "EQXR_NSA_MEAN_2"]},
-    #     {1: ["EQXR_NSA", "EQXR_NSA_STD_2"]},
-    #     {2: ["EQXR_NSA_MEAN_2", "EQXR_NSA_STD_2", "EQXR_NSA_TSTAT_2"]},
-    #     {3: ["EQXR_NSA_PROB_2", "EQXR_NSA_TSTAT_2"]},
-    #     {4: ["EQXR_NSA_PROB_2", "EQXR_NSA_SIGNAL_2"]},
-    #       ...
-    # ]
-
     def can_insert_after(
         new_ops_order: List[int],
         j: int,
