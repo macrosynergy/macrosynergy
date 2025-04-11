@@ -5,12 +5,14 @@ allows applying mathematical operations on time-series data.
 
 import numpy as np
 import pandas as pd
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Set, Any
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.utils import drop_nan_series
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy import PYTHON_3_8_OR_LATER
+import itertools
+import collections
 import re
 import random
 
@@ -180,9 +182,11 @@ def panel_calculator(
             dfw = _replace_zeros(df=dfw)
             exec(f"{single} = dfw")
 
+    sorted_ops_tuples = sort_execution_order(ops)
+
     # F. Calculate the panels and collect.
     df_out: pd.DataFrame
-    for new_xcat, formula in ops.items():
+    for new_xcat, formula in sorted_ops_tuples:
         dfw_add = eval(formula)
         df_add = pd.melt(dfw_add.reset_index(), id_vars=["real_date"]).rename(
             {"variable": "cid"}, axis=1
@@ -302,6 +306,61 @@ def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
     return all_xcats_used, singles_used, single_cids
 
 
+def sort_execution_order(ops: Dict[str, Set]) -> List[Dict[str, List[str]]]:
+    xc_map: Dict[int, List[str]] = {}
+    ops_map: Dict[int, Dict[str, Any]] = {}
+    new_ops_order: List[int] = []
+
+    for i, (op, deps) in enumerate(ops.items()):
+        xc_map[i] = sorted(
+            set([op] + list(itertools.chain.from_iterable(_get_xcats_used({op: deps}))))
+        )
+        ops_map[i] = {op: deps}
+
+    assert len(set([list(ops_map[k].keys())[0] for k in ops_map])) == len(ops_map)
+    assert len(xc_map) == len(ops_map) == len(ops) and len(ops_map) > 0
+
+    # xc_map = [
+    #     {0: ["EQXR_NSA", "EQXR_NSA_MEAN_2"]},
+    #     {1: ["EQXR_NSA", "EQXR_NSA_STD_2"]},
+    #     {2: ["EQXR_NSA_MEAN_2", "EQXR_NSA_STD_2", "EQXR_NSA_TSTAT_2"]},
+    #     {3: ["EQXR_NSA_PROB_2", "EQXR_NSA_TSTAT_2"]},
+    #     {4: ["EQXR_NSA_PROB_2", "EQXR_NSA_SIGNAL_2"]},
+    #       ...
+    # ]
+
+    def can_insert_after(
+        new_ops_order: List[int],
+        j: int,
+        ops_map: Dict[int, Dict[str, Any]],
+        xc_map: Dict[int, List[str]],
+        elem_id: int,
+    ) -> bool:
+        if j == len(new_ops_order):
+            return True
+        lhs = list(ops_map[elem_id].keys())[0]
+        rhs_next = xc_map[new_ops_order[j]]
+        return lhs in rhs_next
+
+    for i in range(len(ops_map)):
+        elem_id, j = i, 0
+        while not can_insert_after(new_ops_order, j, ops_map, xc_map, elem_id):
+            j += 1
+        if j == len(new_ops_order):
+            new_ops_order.append(j)
+        else:
+            new_ops_order = new_ops_order[:j] + [elem_id] + new_ops_order[j:]
+
+    # new_ops_order - is now a list of ints
+    output_list = []
+    for i in new_ops_order:
+        lst = list(ops_map[i].items())
+        assert len(lst) == 1
+        output_list.append(lst[0])
+
+    return output_list
+
+
 def _check_calcs(formulas: List[str]):
     """
     Check formulas for invalid characters in xcats.
@@ -344,7 +403,7 @@ def _replace_zeros(df: pd.DataFrame):
         cleaned dataframe.
     """
 
-    if not PYTHON_3_8_OR_LATER: # pragma: no cover
+    if not PYTHON_3_8_OR_LATER:  # pragma: no cover
         for col in df.columns:
             df[col] = df[col].replace(pd.NA, np.nan)
             df[col] = df[col].astype("float64")
