@@ -14,6 +14,7 @@ from macrosynergy import PYTHON_3_8_OR_LATER
 import itertools
 import re
 import random
+import collections
 
 
 def panel_calculator(
@@ -407,87 +408,170 @@ class SingleCalc:
 
 class CalcList:
     """
-    A list of SingleCalc objects automatically sorted so that all dependencies exist
-    before each calculation is executed.
+    Manages a collection of SingleCalc formulas, identifies which are feasible
+    from the existing variables, and groups them into truly independent subgraphs.
+    Also provides a topologically-sorted list (self.calcs) of all feasible calculations.
     """
 
     def __init__(self, calcs: List[str], already_existing_vars: List[str]):
-        self.unsorted_calcs = [SingleCalc(c) for c in calcs]
+        self.all_calcs = [SingleCalc(c) for c in calcs]
         self.already_existing_vars = set(already_existing_vars)
-        # do the sorting on initialization
+
+        # Identify which calculations are feasible from the existing variables
+        self.feasible_calcs = self._find_feasible_calcs()
+
+        # Build an undirected graph over only the feasible calculations
+        self.graph = self._build_graph(self.feasible_calcs)
+
+        # For convenience, also store a topologically-sorted list of all feasible calculations in self.calcs
         self.calcs = self._sort_calculations()
+
+    def _find_feasible_calcs(self) -> List[SingleCalc]:
+        """
+        Returns only those SingleCalc objects whose dependencies
+        can eventually be satisfied starting from self.already_existing_vars.
+        """
+        known_vars = set(self.already_existing_vars)
+        feasible = []
+        calcs_remaining = set(self.all_calcs)  # Make a copy
+
+        # We'll keep picking off feasible calculations until no more can be found
+        progress = True
+        while progress:
+            progress = False
+            for calc in list(calcs_remaining):  # copy to iterate
+                deps = calc.dependencies()
+                # If all dependencies are known, this calc is feasible
+                if all(d in known_vars for d in deps):
+                    feasible.append(calc)
+                    known_vars.add(calc.creates())
+                    calcs_remaining.remove(calc)
+                    progress = True
+
+        # At the end, anything left in calcs_remaining has dependencies
+        # that can't be satisfied from the known_vars, so it is not feasible.
+        return feasible
 
     def _sort_calculations(self) -> List[SingleCalc]:
         """
-        Sorts self.unsorted_calcs so that dependencies are resolved in order.
-        If a circular dependency is detected, raises a ValueError.
+        Topologically sort the feasible calculations so that
+        each calculation's dependencies are created prior to it.
         """
         sorted_calcs = []
         known_vars = set(self.already_existing_vars)
-        unsorted = self.unsorted_calcs.copy()
-
-        while unsorted:
-            # find any calc whose dependencies are all in known_vars
-            to_place = None
-            for calc in unsorted:
-                deps = calc.dependencies()
-                if all(dep in known_vars for dep in deps):
-                    to_place = calc
-                    break
-
-            if to_place is None:
-                # no valid calc found --> circular or unknown dependencies
-                raise ValueError(
-                    "Could not resolve dependencies. Possibly a circular dependency."
-                )
-
-            # mark calc in to_place as resolved
-            sorted_calcs.append(to_place)
-            known_vars.add(to_place.creates())
-            unsorted.remove(to_place)
-
-        return sorted_calcs
-
-    def get_parallel_blocks(self) -> List[List[SingleCalc]]:
-        """
-        Returns a list of lists (blocks). Each block contains all SingleCalc
-        objects that can be executed simultaneously, i.e. none of the calculations
-        in the block depend on each other. Once a block is executed, its newly
-        created variables can be used by subsequent blocks.
-        """
-        # Make a copy so we don't destroy the original.
-        remaining = self.unsorted_calcs.copy()
-        known_vars = set(self.already_existing_vars)
-        blocks = []
-
+        remaining = self.feasible_calcs[:]
+        cyc_err = "Cyclic or unresolvable dependencies in calculations."
         while remaining:
-            # Find all calcs whose dependencies are currently satisfied
-            block = [
+            # find all calcs whose dependencies are satisfied
+            placeable: List[SingleCalc] = [
                 calc
                 for calc in remaining
                 if all(dep in known_vars for dep in calc.dependencies())
             ]
+            if not placeable:
+                raise ValueError(cyc_err)
 
-            if not block:
-                # If we cannot find any calcs whose dependencies are satisfied,
-                # there must be a circular dependency or unknown var.
-                raise ValueError(
-                    "Could not form another parallel block. Possibly a circular dependency."
-                )
-
-            # Add this block to the list of blocks
-            blocks.append(block)
-
-            # Remove them from 'remaining'
-            for calc in block:
-                remaining.remove(calc)
-                # Their newly created variables are now considered known
+            # We add them in the order we encounter them
+            # sort is only done to make it strictly deterministic
+            for calc in sorted(placeable, key=lambda x: x.creates()):
+                sorted_calcs.append(calc)
                 known_vars.add(calc.creates())
+                remaining.remove(calc)
+
+        return sorted_calcs
+
+    def _build_graph(self, calcs: List[SingleCalc]) -> Dict[int, Set[int]]:
+        """
+        Build an undirected graph of feasible calculations for finding
+        connected components (truly independent subgraphs).
+        We'll store a mapping: calc_index -> set_of_calc_indices_that_are_connected
+        """
+        idx_map = {calc: i for i, calc in enumerate(calcs)}
+        graph = collections.defaultdict(set)
+
+        for i, cA in enumerate(calcs):
+            outA = cA.creates()
+            for j, cB in enumerate(calcs):
+                if i == j:
+                    continue
+                # if cB depends on cA's output, or cA depends on cB's output,
+                # they are in the same connected component
+                if outA in cB.dependencies():
+                    graph[i].add(j)
+                    graph[j].add(i)
+
+        return dict(graph)
+
+    def get_independent_subgraphs(self) -> List[List[SingleCalc]]:
+        """
+        Returns a list of subgraphs (each subgraph is a list of SingleCalc),
+        where each subgraph is truly independent from the others.
+        These are just the connected components of the feasible graph.
+        """
+        visited = set()
+        subgraphs = []
+        calcs = self.feasible_calcs
+        idx_map = {i: calcs[i] for i in range(len(calcs))}
+
+        for i in range(len(calcs)):
+            if i not in visited:
+                # BFS/DFS to get all connected nodes
+                component = []
+                queue = collections.deque([i])
+                visited.add(i)
+                while queue:
+                    node = queue.popleft()
+                    component.append(idx_map[node])
+                    # For each neighbor in the undirected graph:
+                    for neighbor in self.graph.get(node, []):
+                        if neighbor not in visited:
+                            visited.add(neighbor)
+                            queue.append(neighbor)
+                subgraphs.append(component)
+
+        return subgraphs
+
+    def get_subgraph_parallel_blocks(
+        self, subgraph: List[SingleCalc]
+    ) -> List[List[SingleCalc]]:
+        """
+        For a single subgraph (list of SingleCalc), return parallel "layers"
+        by topological level, i.e. each layer can be executed in parallel.
+        """
+        remaining = subgraph[:]
+        known_vars = set(self.already_existing_vars)
+        blocks = []
+
+        placed = True
+        while placed and remaining:
+            placed = False
+            this_block = []
+            for calc in list(remaining):
+                deps = calc.dependencies()
+                if all(d in known_vars for d in deps):
+                    this_block.append(calc)
+            if this_block:
+                for calc in this_block:
+                    remaining.remove(calc)
+                    known_vars.add(calc.creates())
+                blocks.append(this_block)
+                placed = True
+
+        if remaining:
+            # Something is unplaced => cyclical or incomplete dependencies
+            raise ValueError(
+                "Cannot form parallel layers. Possibly a cycle in subgraph."
+            )
 
         return blocks
 
     def __repr__(self):
-        return "\n".join(str(c) for c in self.calcs)
+        feasible_formulas = "\n".join(str(c) for c in self.feasible_calcs)
+        sorted_formulas = "\n".join(str(c) for c in self.calcs)
+        return (
+            f"Feasible calculations:\n{feasible_formulas}\n\n"
+            f"Topologically-sorted feasible calculations (CalcList.calcs):\n{sorted_formulas}\n"
+        )
 
 
 if __name__ == "__main__":
