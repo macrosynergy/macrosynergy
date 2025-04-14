@@ -161,7 +161,7 @@ def panel_calculator(
         intersect=False,
     )
 
-    new_variables_existances = []
+    new_variables_existances: Dict[str, bool] = {}
     # E. Create all required wide dataframes with category names.
     df = df.add_ticker_column()
     for xcat in old_xcats_used:
@@ -187,7 +187,7 @@ def panel_calculator(
             new_variables_existances[single] = dfw.empty
 
     if opt:
-        sorted_ops_tuples = sort_execution_order(ops)
+        sorted_ops_tuples = sort_execution_order(ops, new_variables_existances)
     else:
         sorted_ops_tuples = list(ops.items())
 
