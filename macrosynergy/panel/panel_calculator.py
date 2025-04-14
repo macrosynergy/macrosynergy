@@ -15,6 +15,7 @@ import itertools
 import re
 import random
 import collections
+import joblib
 
 
 def panel_calculator(
@@ -26,6 +27,7 @@ def panel_calculator(
     blacklist: dict = None,
     external_func: dict = None,
     opt: bool = False,
+    pll: bool = False,
 ) -> pd.DataFrame:
     """
     Calculates new data panels through a given input formula which is performed on
@@ -107,7 +109,16 @@ def panel_calculator(
 
         df = panel_calculator(df=df, calcs=calcs, ...)
     """
-
+    if pll:
+        return panel_calc_pll(
+            df=df,
+            calcs=calcs,
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            external_func=external_func,
+        )
     # A. Asserts
 
     cols = ["cid", "xcat", "real_date", "value"]
@@ -213,6 +224,41 @@ def panel_calculator(
 
     df_out = QuantamentalDataFrame(df_out, categorical=_as_categorical)
     return df_out
+
+
+def panel_calc_pll(
+    df: pd.DataFrame,
+    calcs: List[str] = None,
+    cids: List[str] = None,
+    start: str = None,
+    end: str = None,
+    blacklist: dict = None,
+    external_func: dict = None,
+):
+    ops = {}
+    for calc in calcs:
+        calc_parts = calc.split("=", maxsplit=1)
+        ops[calc_parts[0].strip()] = calc_parts[1].strip()
+
+    # C. Check if all required categories are in the dataframe.
+
+    old_xcats_used, singles_used, single_cids = _get_xcats_used(ops)
+    avail = set(df["xcat"]) & set(old_xcats_used)
+    results = joblib.Parallel(n_jobs=4)(
+        joblib.delayed(panel_calculator)(
+            df,
+            list(map(lambda x: x.formula, _cl)),
+            cids=cids,
+            external_func=external_func,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            opt=True,
+            pll=False,
+        )
+        for _cl in CalcList(calcs, avail).get_independent_subgraphs()
+    )
+    return QuantamentalDataFrame.from_qdf_list(results)
 
 
 def time_series_check(formula: str, index: int):
