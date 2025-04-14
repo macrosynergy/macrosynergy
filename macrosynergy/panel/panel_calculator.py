@@ -12,7 +12,6 @@ from macrosynergy.management.utils import drop_nan_series
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy import PYTHON_3_8_OR_LATER
 import itertools
-import collections
 import re
 import random
 
@@ -315,54 +314,6 @@ def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
     return all_xcats_used, singles_used, single_cids
 
 
-def sort_execution_order(
-    ops: Dict[str, Set],
-) -> List[Dict[str, List[str]]]:
-    xc_map: Dict[int, List[str]] = {}
-    ops_map: Dict[int, Dict[str, Any]] = {}
-    new_ops_order: List[int] = []
-
-    for i, (op, deps) in enumerate(ops.items()):
-        xc_map[i] = sorted(
-            set([op] + list(itertools.chain.from_iterable(_get_xcats_used({op: deps}))))
-        )
-        ops_map[i] = {op: deps}
-
-    assert len(set([list(ops_map[k].keys())[0] for k in ops_map])) == len(ops_map)
-    assert len(xc_map) == len(ops_map) == len(ops) and len(ops_map) > 0
-
-    def can_insert_after(
-        new_ops_order: List[int],
-        j: int,
-        ops_map: Dict[int, Dict[str, Any]],
-        xc_map: Dict[int, List[str]],
-        elem_id: int,
-    ) -> bool:
-        if j == len(new_ops_order):
-            return True
-        lhs = list(ops_map[elem_id].keys())[0]
-        rhs_next = xc_map[new_ops_order[j]]
-        return lhs in rhs_next
-
-    for i in range(len(ops_map)):
-        elem_id, j = i, 0
-        while not can_insert_after(new_ops_order, j, ops_map, xc_map, elem_id):
-            j += 1
-        if j == len(new_ops_order):
-            new_ops_order.append(j)
-        else:
-            new_ops_order = new_ops_order[:j] + [elem_id] + new_ops_order[j:]
-
-    # new_ops_order - is now a list of ints
-    output_list = []
-    for i in new_ops_order:
-        lst = list(ops_map[i].items())
-        assert len(lst) == 1
-        output_list.append(lst[0])
-
-    return output_list
-
-
 def _check_calcs(formulas: List[str]):
     """
     Check formulas for invalid characters in xcats.
@@ -414,6 +365,129 @@ def _replace_zeros(df: pd.DataFrame):
         return df
 
     return df
+
+
+def sort_execution_order(
+    ops: Dict[str, Set],
+    new_variables_existances: Dict[str, bool],
+) -> List[Tuple[str, str]]:
+    formulas = [f"{k} = {v}" for k, v in ops.items()]
+
+    existing_vars = [k for k, v in new_variables_existances.items() if v]
+
+    sorted_calcs = CalcList(calcs=formulas, already_existing_vars=existing_vars).calcs
+
+    ops = {calc.lhs: calc.rhs for calc in sorted_calcs}
+
+    return list(ops.items())
+
+
+class SingleCalc:
+    """
+    Class to represent a single calculation.
+    """
+
+    def __init__(self, formula: str):
+        self.formula = formula
+        self.lhs, self.rhs = [_.strip() for _ in formula.split(" = ", maxsplit=1)]
+        self.dct = {self.lhs: self.rhs}
+
+    def dependencies(self) -> List[str]:
+        return sorted(set(itertools.chain.from_iterable(_get_xcats_used(self.dct))))
+
+    def creates(self) -> str:
+        return self.lhs
+
+    def __repr__(self) -> str:
+        return f"{self.lhs} = {self.rhs}"
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
+
+class CalcList:
+    """
+    A list of SingleCalc objects automatically sorted so that all dependencies exist
+    before each calculation is executed.
+    """
+
+    def __init__(self, calcs: List[str], already_existing_vars: List[str]):
+        self.unsorted_calcs = [SingleCalc(c) for c in calcs]
+        self.already_existing_vars = set(already_existing_vars)
+        # do the sorting on initialization
+        self.calcs = self._sort_calculations()
+
+    def _sort_calculations(self) -> List[SingleCalc]:
+        """
+        Sorts self.unsorted_calcs so that dependencies are resolved in order.
+        If a circular dependency is detected, raises a ValueError.
+        """
+        sorted_calcs = []
+        known_vars = set(self.already_existing_vars)
+        unsorted = self.unsorted_calcs.copy()
+
+        while unsorted:
+            # find any calc whose dependencies are all in known_vars
+            to_place = None
+            for calc in unsorted:
+                deps = calc.dependencies()
+                if all(dep in known_vars for dep in deps):
+                    to_place = calc
+                    break
+
+            if to_place is None:
+                # no valid calc found --> circular or unknown dependencies
+                raise ValueError(
+                    "Could not resolve dependencies. Possibly a circular dependency."
+                )
+
+            # mark calc in to_place as resolved
+            sorted_calcs.append(to_place)
+            known_vars.add(to_place.creates())
+            unsorted.remove(to_place)
+
+        return sorted_calcs
+
+    def get_parallel_blocks(self) -> List[List[SingleCalc]]:
+        """
+        Returns a list of lists (blocks). Each block contains all SingleCalc
+        objects that can be executed simultaneously, i.e. none of the calculations
+        in the block depend on each other. Once a block is executed, its newly
+        created variables can be used by subsequent blocks.
+        """
+        # Make a copy so we don't destroy the original.
+        remaining = self.unsorted_calcs.copy()
+        known_vars = set(self.already_existing_vars)
+        blocks = []
+
+        while remaining:
+            # Find all calcs whose dependencies are currently satisfied
+            block = [
+                calc
+                for calc in remaining
+                if all(dep in known_vars for dep in calc.dependencies())
+            ]
+
+            if not block:
+                # If we cannot find any calcs whose dependencies are satisfied,
+                # there must be a circular dependency or unknown var.
+                raise ValueError(
+                    "Could not form another parallel block. Possibly a circular dependency."
+                )
+
+            # Add this block to the list of blocks
+            blocks.append(block)
+
+            # Remove them from 'remaining'
+            for calc in block:
+                remaining.remove(calc)
+                # Their newly created variables are now considered known
+                known_vars.add(calc.creates())
+
+        return blocks
+
+    def __repr__(self):
+        return "\n".join(str(c) for c in self.calcs)
 
 
 if __name__ == "__main__":
