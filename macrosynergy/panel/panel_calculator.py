@@ -161,15 +161,15 @@ def panel_calculator(
         intersect=False,
     )
 
-    new_variables_existances: Dict[str, bool] = {}
     # E. Create all required wide dataframes with category names.
+    new_variables_existances: Dict[str, bool] = {}  # True where the variable exists
     df = df.add_ticker_column()
     for xcat in old_xcats_used:
         dfxx = dfx[dfx["xcat"] == xcat]
         dfw = dfxx.pivot(index="real_date", columns="cid", values="value")
         dfw = _replace_zeros(df=dfw)
         exec(f"{xcat} = dfw")
-        new_variables_existances[xcat] = dfw.empty
+        new_variables_existances[xcat] = not dfw.empty
 
     for single in singles_used:
         ticker = single[1:]
@@ -184,22 +184,24 @@ def panel_calculator(
             dfw.columns = cids
             dfw = _replace_zeros(df=dfw)
             exec(f"{single} = dfw")
-            new_variables_existances[single] = dfw.empty
+            new_variables_existances[single] = not dfw.empty
 
     if opt:
-        sorted_ops_tuples = sort_execution_order(ops, new_variables_existances)
+        ops_tuples = sort_execution_order(ops, new_variables_existances)
+        first_op_lhs = ops_tuples[0][0]
     else:
-        sorted_ops_tuples = list(ops.items())
+        ops_tuples = list(ops.items())
+        first_op_lhs = ops_tuples[0][0]
 
     # F. Calculate the panels and collect.
     df_out: pd.DataFrame
-    for new_xcat, formula in sorted_ops_tuples:
+    for new_xcat, formula in ops_tuples:
         dfw_add = eval(formula)
         df_add = pd.melt(dfw_add.reset_index(), id_vars=["real_date"]).rename(
             {"variable": "cid"}, axis=1
         )
         df_add = QuantamentalDataFrame.from_long_df(df_add, xcat=new_xcat)
-        if new_xcat == list(ops.keys())[0]:
+        if new_xcat == first_op_lhs:
             df_out = df_add[cols]
         else:
             df_out = pd.concat([df_out, df_add[cols]], axis=0, ignore_index=True)
