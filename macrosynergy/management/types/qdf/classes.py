@@ -24,7 +24,6 @@ from .methods import (
 )
 from .base import QuantamentalDataFrameBase
 
-
 class QuantamentalDataFrame(QuantamentalDataFrameBase):
     """
     Type extension of `pd.DataFrame` for Quantamental DataFrames.  Usage: >>> df:
@@ -49,17 +48,16 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
                 if not isinstance(df, QuantamentalDataFrame):
                     raise ValueError(df_err)
 
-        if not type(df) is QuantamentalDataFrame:
-            if df.columns.tolist() != get_col_sort_order(df):
-                df = df[get_col_sort_order(df)]
-
         if PD_2_0_OR_LATER:
             super().__init__(df)
         else:
             super().__init__(df.copy()) # pragma: no cover
-        if not self.init:
+
+        if not type(df) is QuantamentalDataFrame:
             self._enforce_initial_types()
-        self.init = True
+            if df.columns.tolist() != get_col_sort_order(df):
+                df = df[get_col_sort_order(df)]
+            self.init = True
 
     def _enforce_initial_types(self):
         for col in self._StrIndexCols:

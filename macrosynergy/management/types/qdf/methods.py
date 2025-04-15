@@ -300,12 +300,12 @@ def _sync_df_categories(
     if not check_is_categorical(df):
         return df
 
-    df["cid"] = df["cid"].cat.remove_unused_categories().astype("category")
-    df["xcat"] = df["xcat"].cat.remove_unused_categories().astype("category")
+    df["cid"] = df["cid"].cat.remove_unused_categories()
+    df["xcat"] = df["xcat"].cat.remove_unused_categories()
 
     return df
 
-
+# @profile
 def reduce_df(
     df: QuantamentalDataFrameBase,
     cids: Optional[List[str]] = None,
@@ -352,19 +352,19 @@ def reduce_df(
         if not isinstance(xcats, list):
             xcats = [xcats]
 
-    if start:
-        df = df[df["real_date"] >= pd.to_datetime(start)]
-
-    if end:
-        df = df[df["real_date"] <= pd.to_datetime(end)]
+    if start or end:
+        df = df.set_index("real_date")
+        filter = (df.index >= start) & (df.index <= end)
+        df = df[filter]
+        df.reset_index(drop=False, inplace=True)
 
     if blacklist is not None:
         df = apply_blacklist(df, blacklist)
 
     if xcats is None:
-        xcats = sorted(df["xcat"].unique())
+        xcats = sorted(list(df.xcat.cat.categories))
     else:
-        xcats_in_df = df["xcat"].unique()
+        xcats_in_df = set(df.xcat.cat.categories)
         xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
 
     df = df[df["xcat"].isin(xcats)]
@@ -374,7 +374,7 @@ def reduce_df(
             *(set(df[df["xcat"] == xcat]["cid"].unique()) for xcat in xcats)
         )
     else:
-        cids_in_df = df["cid"].unique()
+        cids_in_df = list(df.cid.cat.categories)
 
     if cids is None:
         cids = sorted(cids_in_df)
@@ -387,6 +387,7 @@ def reduce_df(
     df = _sync_df_categories(df)
 
     df = df.drop_duplicates().reset_index(drop=True)
+
 
     if out_all:
         return df, xcats, sorted(cids)

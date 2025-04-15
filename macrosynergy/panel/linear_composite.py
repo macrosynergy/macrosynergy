@@ -19,7 +19,7 @@ PD_FUTURE_STACK = (
     else dict(dropna=False)
 )
 
-@profile
+# @profile
 def linear_composite(
     df: pd.DataFrame,
     xcats: Union[str, List[str]],
