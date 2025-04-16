@@ -248,8 +248,6 @@ def panel_calc_pll(
         calc_parts = calc.split("=", maxsplit=1)
         ops[calc_parts[0].strip()] = calc_parts[1].strip()
 
-    # C. Check if all required categories are in the dataframe.
-
     old_xcats_used, singles_used, single_cids = _get_xcats_used(ops)
     avail = set(df["xcat"]) & set(old_xcats_used)
     results = joblib.Parallel(n_jobs=4)(
@@ -261,8 +259,8 @@ def panel_calc_pll(
             start=start,
             end=end,
             blacklist=blacklist,
-            opt=True,
-            pll=False,
+            sort_execution_order=True,
+            use_parallel=False,
         )
         for _cl in CalcList(calcs, avail).get_independent_subgraphs()
     )
