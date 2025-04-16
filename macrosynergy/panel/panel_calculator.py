@@ -26,8 +26,8 @@ def panel_calculator(
     end: str = None,
     blacklist: dict = None,
     external_func: dict = None,
-    opt: bool = False,
-    pll: bool = False,
+    opt: bool = True,
+    pll: bool = True,
 ) -> pd.DataFrame:
     """
     Calculates new data panels through a given input formula which is performed on
