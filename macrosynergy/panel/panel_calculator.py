@@ -26,8 +26,8 @@ def panel_calculator(
     end: str = None,
     blacklist: dict = None,
     external_func: dict = None,
-    opt: bool = True,
-    pll: bool = True,
+    sort_execution_order: bool = True,
+    use_parallel: bool = True,
 ) -> pd.DataFrame:
     """
     Calculates new data panels through a given input formula which is performed on
@@ -56,6 +56,14 @@ def panel_calculator(
         dictionary of external functions to be used in the panel calculation. The key is
         the name of the function and the value is the function object itself. e.g.
         {"my_func": my_func}.
+    sort_execution_order : bool
+        if True, the function will sort the execution order of the calculations to
+        minimize dependencies to ensure dependency resolution. If False, the function will
+        use the order of the calculations as provided in the input. Default is True.
+    use_parallel : bool
+        if True, the function will create disjoint subgraphs of the calculations and
+        distribute them across multiple processes for parallel execution. If False,
+        the function will execute the calculations sequentially. Default is True.
 
     Returns
     -------
@@ -109,7 +117,7 @@ def panel_calculator(
 
         df = panel_calculator(df=df, calcs=calcs, ...)
     """
-    if pll:
+    if use_parallel:
         return panel_calc_pll(
             df=df,
             calcs=calcs,
@@ -197,7 +205,7 @@ def panel_calculator(
             exec(f"{single} = dfw")
             new_variables_existances[single] = not dfw.empty
 
-    if opt:
+    if sort_execution_order:
         ops_tuples = sort_execution_order_func(ops, new_variables_existances)
         first_op_lhs = ops_tuples[0][0]
     else:
