@@ -198,7 +198,7 @@ def panel_calculator(
             new_variables_existances[single] = not dfw.empty
 
     if opt:
-        ops_tuples = sort_execution_order(ops, new_variables_existances)
+        ops_tuples = sort_execution_order_func(ops, new_variables_existances)
         first_op_lhs = ops_tuples[0][0]
     else:
         ops_tuples = list(ops.items())
@@ -414,18 +414,14 @@ def _replace_zeros(df: pd.DataFrame):
     return df
 
 
-def sort_execution_order(
+def sort_execution_order_func(
     ops: Dict[str, Set],
     new_variables_existances: Dict[str, bool],
 ) -> List[Tuple[str, str]]:
     formulas = [f"{k} = {v}" for k, v in ops.items()]
-
     existing_vars = [k for k, v in new_variables_existances.items() if v]
-
     sorted_calcs = CalcList(calcs=formulas, already_existing_vars=existing_vars).calcs
-
     ops = {calc.lhs: calc.rhs for calc in sorted_calcs}
-
     return list(ops.items())
 
 
