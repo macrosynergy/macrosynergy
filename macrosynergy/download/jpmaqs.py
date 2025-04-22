@@ -24,7 +24,7 @@ from macrosynergy.download.dataquery import (
     DataQueryInterface,
     API_DELAY_PARAM,
 )
-from macrosynergy.download.exceptions import InvalidDataframeError
+from macrosynergy.download.exceptions import InvalidDataframeError, DataOutOfSyncError
 from macrosynergy.management.utils import (
     is_valid_iso_date,
     concat_single_metric_qdfs,
@@ -95,12 +95,70 @@ def deconstruct_expression(
             return ticker.split("_", 1) + [metric]
         except Exception as e:
             warnings.warn(
-                f"Failed to deconstruct expression `{expression}`: {e}",
+                f"Failed to deconstruct expression `{expression}`: assuming it is a non-JPMaQS expression.",
                 UserWarning,
             )
             # fail safely, return list where cid = xcat = expression,
             #  and metric = 'value'
             return [expression, expression, "value"]
+
+
+def check_attributes_in_sync(ts_list) -> bool:
+    """
+    Checks if the attributes in the response are in sync with the time-series data. This
+    is performed since on occasion the ticker will have just been calculated for a new
+    date but on certain pods the data won't have updated yet but on some it will have
+    updated. This can lead to the attributes on a specific time-series being out of
+    sync.
+
+    Parameters
+    ----------
+    response_dict : list
+        List containing the response from the API.
+
+    Returns
+    -------
+    bool
+        True if the attributes are in sync, False otherwise.
+    """
+
+    expressions_last_value_dict = {}
+
+    for instrument in ts_list:
+        attributes = instrument.get("attributes")
+        if not attributes:
+            continue
+
+        time_series = attributes[0].get("time-series")
+        if not time_series:
+            continue
+
+        last_valid_item = None
+        for i in range(len(time_series) - 1, -1, -1):
+            if time_series[i][1] is not None:
+                last_valid_item = time_series[i]
+                break
+
+        if not last_valid_item:
+            last_valid_item = time_series[0]
+
+        expression = attributes[0].get("expression")
+        if not "JPMAQS" in expression:
+            continue
+        if not expression:
+            last_valid_item = ["No data", 0]
+        else:
+            cid, xcat, _ = deconstruct_expression(expression)
+            ticker = cid + "_" + xcat
+
+        last_value_date = last_valid_item[0]
+        if ticker not in expressions_last_value_dict:
+            expressions_last_value_dict[ticker] = last_value_date
+        else:
+            if last_value_date != expressions_last_value_dict[ticker]:
+                return False
+
+    return True
 
 
 def construct_expressions(
@@ -895,8 +953,9 @@ class JPMaQSDownload(DataQueryInterface):
         catalogue_expressions: List[str] = construct_expressions(
             tickers=catalogue_tickers, metrics=self.valid_metrics
         )
+        upper_exprs = [ex.upper() for ex in catalogue_expressions]
         r: List[str] = sorted(
-            list(set(expressions).intersection(set(catalogue_expressions)))
+            set(ex for ex in expressions if ex.upper() in upper_exprs)
         )
         if verbose:
             filtered: int = len(expressions) - len(r)
@@ -982,6 +1041,11 @@ class JPMaQSDownload(DataQueryInterface):
         ts_list: List[dict] = self._fetch(
             url=url, params=params, tracking_id=tracking_id
         )
+        if not check_attributes_in_sync(ts_list):
+            expressions = [ts["attributes"][0]["expression"] for ts in ts_list]
+            error_str = f"Attributes for {expressions} are not in sync."
+            raise DataOutOfSyncError(error_str)
+
         for its, ts in enumerate(ts_list):
             if _get_ts(ts) is None:
                 self.unavailable_expressions.append(_get_expr(ts))
@@ -1000,7 +1064,7 @@ class JPMaQSDownload(DataQueryInterface):
 
         ts_list: List[dict] = list(filter(None, ts_list))
         logger.debug(f"Downloaded data for {len(ts_list)} expressions.")
-        logger.debug(f"Unavailble expressions: {self.unavailable_expressions}")
+        logger.debug(f"Unavailable expressions: {self.unavailable_expressions}")
         if save_path is not None:
             try:
                 ts_list = [
@@ -1347,13 +1411,8 @@ class JPMaQSDownload(DataQueryInterface):
                 metrics = self.valid_metrics
 
         if end_date is None:
-            end_date = (datetime.datetime.today() + pd.offsets.BusinessDay(2)).strftime(
-                "%Y-%m-%d"
-            )
-            # NOTE : due to timezone conflicts, we choose to request data for 2 days in
-            # the future.
-            # NOTE : DataQuery specifies YYYYMMDD as the date format, but we use
-            # YYYY-MM-DD for consistency.
+            _today = datetime.datetime.today()
+            end_date = pd.bdate_range(end=_today, periods=2)[0].strftime("%Y-%m-%d")
             # This is date is cast to YYYYMMDD in macrosynergy.download.dataquery.py.
 
         # Validate arguments.
@@ -1529,9 +1588,9 @@ if __name__ == "__main__":
         client_secret=os.getenv("DQ_CLIENT_SECRET"),
     ) as jpmaqs:
         data = jpmaqs.download(
-            cids=cids,
             xcats=xcats,
-            metrics="all",
+            cids=cids,
+            metrics="value",
             start_date=start_date,
             end_date=end_date,
             show_progress=True,

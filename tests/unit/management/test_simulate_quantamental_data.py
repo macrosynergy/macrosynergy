@@ -447,6 +447,19 @@ class TestMakeQDF(unittest.TestCase):
             np.allclose(result_with_back["value"], result_without_back["value"])
         )
 
+    def test_make_qdf_seed(self):
+
+        dfa = make_qdf(self.df_cids, self.df_xcats, seed=1)
+        dfb = make_qdf(self.df_cids, self.df_xcats, seed=1)
+
+        self.assertTrue(dfa.equals(dfb))
+
+        dfc = make_qdf(self.df_cids, self.df_xcats, seed=128)
+        dfd = make_qdf(self.df_cids, self.df_xcats, seed=128)
+
+        self.assertTrue(dfd.equals(dfc))
+        self.assertFalse(dfa.equals(dfc))
+
 
 if __name__ == "__main__":
     unittest.main()

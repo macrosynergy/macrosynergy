@@ -19,6 +19,7 @@ PD_FUTURE_STACK = (
     else dict(dropna=False)
 )
 
+
 def linear_composite(
     df: pd.DataFrame,
     xcats: Union[str, List[str]],
@@ -59,7 +60,7 @@ def linear_composite(
         available categories of cross sections. Per default the coefficients are normalized
         so that they add up to one for each period. This can be changed with the argument
         `normalize_weights`. The third case is the assignment of a weighting category. This
-        only applies to combinations of cross sections. In this care the weighting category
+        only applies to combinations of cross sections. In this case the weighting category
         is multiplied for each period with the corresponding value of main category of the
         same cross section. Per default the weight category values are normalized so that
         they add up to one for each period. This can be changed with the argument
@@ -139,8 +140,6 @@ def linear_composite(
 
     _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
 
-    df = QuantamentalDataFrame(df)
-    result_as_categorical = df.InitializedAsCategorical
     remaining_xcats: List[str]
     remaining_cids: List[str]
     # NOTE: the "remaining_*" variables will not be in the same order as the input
@@ -157,7 +156,15 @@ def linear_composite(
         out_all=True,
     )
 
-    if len(remaining_cids) < len(cids) and not _xcat_agg and complete_cids or len(remaining_cids) == 0:
+    df = QuantamentalDataFrame(df)
+    result_as_categorical = df.InitializedAsCategorical
+
+    if (
+        len(remaining_cids) < len(cids)
+        and not _xcat_agg
+        and complete_cids
+        or len(remaining_cids) == 0
+    ):
         missing_cids_xcats_str = _missing_cids_xcats_str(df=df, cids=cids, xcats=xcats)
         raise ValueError(
             "Not all `cids` have complete `xcat` data required for the calculation.\n"
@@ -167,7 +174,7 @@ def linear_composite(
     if _xcat_agg:
         df = _populate_missing_xcat_series(df)
 
-        result_df: QuantamentalDataFrame =  linear_composite_xcat_agg(
+        result_df: QuantamentalDataFrame = linear_composite_xcat_agg(
             df=df,
             xcats=xcats,
             weights=weights,
@@ -182,7 +189,7 @@ def linear_composite(
             df=df, cids=cids, weights=weights, signs=signs
         )
 
-        result_df: QuantamentalDataFrame =  linear_composite_cid_agg(
+        result_df: QuantamentalDataFrame = linear_composite_cid_agg(
             df=df,
             xcat=_xcat,
             cids=cids,
@@ -257,7 +264,7 @@ def _linear_composite_basic(
         adj_weights_wide = weights_df[~nan_mask].div(
             weights_df[~nan_mask].abs().sum(axis=1), axis=0
         )
-        adj_weights_wide[nan_mask] = np.NaN
+        adj_weights_wide[nan_mask] = np.nan
 
         assert np.allclose(
             adj_weights_wide[~adj_weights_wide.isna().all(axis=1)].abs().sum(axis=1), 1
@@ -274,10 +281,10 @@ def _linear_composite_basic(
     # NOTE: Using `axis` with strings, to make it more readable
     # Remove periods with missing data (if requested) (rows with any NaNs)
     if complete:
-        out_df[nan_mask.any(axis="columns")] = np.NaN
+        out_df[nan_mask.any(axis="columns")] = np.nan
 
     # put NaNs back in, as sum() removes them
-    out_df[nan_mask.all(axis="columns")] = np.NaN
+    out_df[nan_mask.all(axis="columns")] = np.nan
 
     # Reset index, rename columns and return
     out_df = out_df.reset_index().rename(columns={0: "value"})
@@ -441,7 +448,7 @@ def _populate_missing_xcat_series(
                         "cid": cidx,
                         "xcat": xc,
                         "real_date": dt_range,
-                        "value": np.NaN,
+                        "value": np.nan,
                     }
                     df = pd.concat([df, pd.DataFrame(data=dct)])
 
@@ -470,12 +477,16 @@ def _check_df_for_missing_cid_data(
         " These will be dropped from the calculation."
     )
     if isinstance(weights, str):
-        if not (
-            (weights in found_xcats) and (len((set(found_xcats) - {weights})) == 1)
-        ):
+        if weights not in found_xcats:
             raise ValueError(
-                f"Weight category {weights} not found in `df`."
-                f" Available categories are {found_xcats}."
+                f"Weight category {weights} not found in `df`. "
+                f"Available categories are {found_xcats}."
+            )
+
+        if len(found_xcats_set - {weights}) == 0:
+            raise ValueError(
+                "None of the `xcats` are present in `df` other than the `weights`. "
+                f"Available categories are {found_xcats}."
             )
 
     if set(cids) - set(found_cids) != set():
@@ -485,7 +496,6 @@ def _check_df_for_missing_cid_data(
             signs.pop(cids.index(cid))
             if isinstance(weights, list):
                 weights.pop(cids.index(cid))
-
 
     ctr = 0
     for cidx in found_cids.copy():  # copy to allow modification of `cids`
@@ -515,7 +525,6 @@ def _check_df_for_missing_cid_data(
     rcids = [c for c in cids if c in found_cids]  # to preserve order
     return QuantamentalDataFrame(df), rcids, _xcat, weights, signs
 
-
 def _check_args(
     df: QuantamentalDataFrame,
     xcats: Union[str, List[str]],
@@ -542,13 +551,11 @@ def _check_args(
         or (df["value"].isna().all())
     ):
         raise TypeError("`df` must be a standardized Quantamental DataFrame.")
-    # copy df to avoid side effects
-    df: pd.DataFrame = df.copy()
 
     if start is None:
-        start: str = pd.to_datetime(df["real_date"]).min().strftime("%Y-%m-%d")
+        start: str = df["real_date"].min().strftime("%Y-%m-%d")
     if end is None:
-        end: str = pd.to_datetime(df["real_date"]).max().strftime("%Y-%m-%d")
+        end: str = df["real_date"].max().strftime("%Y-%m-%d")
 
     # dates check
     for varx, namex in zip([start, end], ["start", "end"]):
@@ -556,9 +563,16 @@ def _check_args(
             if not (isinstance(varx, str) and is_valid_iso_date(varx)):
                 raise ValueError(f"`{namex}` must be a valid ISO date string.")
 
+    # if type(df) is QuantamentalDataFrame and df.is_categorical():
+    #     xcats_in_df = set(df["xcat"].cat.categories)
+    #     cids_in_df = set(df["cid"].cat.categories)
+    # else:
+    xcats_in_df = set(df["xcat"].values)
+    cids_in_df = set(df["cid"].values)
+
     # check xcats
     if xcats is None:
-        xcats: List[str] = df["xcat"].unique().tolist()
+        xcats: List[str] = list(xcats_in_df)
     elif isinstance(xcats, str):
         xcats: List[str] = [xcats]
     elif isinstance(xcats, listtypes):
@@ -566,24 +580,25 @@ def _check_args(
     else:
         raise TypeError("`xcats` must be a string or list of strings.")
 
-    # check xcats in df
-    if not set(xcats).issubset(set(df["xcat"].unique().tolist())):
+    if not all(x in xcats_in_df for x in xcats):
         if complete_xcats:
             raise ValueError("Not all `xcats` are available in `df`.")
         else:
-            missing_xcats = list(set(xcats) - set(df["xcat"].unique().tolist()))
+            missing_xcats = list(set(xcats) - xcats_in_df)
             warnings.warn(
                 f"Not all `xcats` are available in `df`: {missing_xcats} "
                 "The calculation will be performed with the available xcats."
             )
-            signs = [signs[i] for i, xc in enumerate(xcats) if xc not in missing_xcats]
+            if signs is not None:
+                signs = [signs[i] for i, xc in enumerate(xcats) if xc not in missing_xcats]
             if isinstance(weights, list):
                 weights = [weights[i] for i, xc in enumerate(xcats) if xc not in missing_xcats]
             xcats = [xc for xc in xcats if xc not in missing_xcats]
 
     # check cids
+    
     if cids is None:
-        cids: List[str] = df["cid"].unique().tolist()
+        cids: List[str] = list(cids_in_df)
     elif isinstance(cids, str):
         cids: List[str] = [cids]
     elif isinstance(cids, listtypes):
@@ -592,11 +607,11 @@ def _check_args(
         raise TypeError("`cids` must be a string or list of strings.")
 
     # check cids in df
-    if not set(cids).issubset(set(df["cid"].unique().tolist())):
+    if not all(c in cids_in_df for c in cids):
         if complete_cids:
             raise ValueError("Not all `cids` are available in `df`.")
         else:
-            missing_cids = list(set(cids) - set(df["cid"].unique().tolist()))
+            missing_cids = list(set(cids) - cids_in_df)
             warnings.warn(
                 f"Not all `cids` are available in `df`: {missing_cids} "
                 "The calculation will be performed with the available cids."
@@ -633,7 +648,7 @@ def _check_args(
             raise ValueError("`weights` must not contain any 0s.")
 
     elif isinstance(weights, str):
-        if weights not in df["xcat"].unique().tolist():
+        if weights not in xcats_in_df:
             raise ValueError(
                 "When using a category-string as `weights`"
                 " it must be present in `df`."
@@ -732,14 +747,14 @@ if __name__ == "__main__":
         & (df["xcat"] == "INFL")
         & (df["real_date"] == "2000-01-17"),
         "value",
-    ] = np.NaN
+    ] = np.nan
 
     df.loc[
         (df["cid"] == "AUD")
         & (df["xcat"] == "CRY")
         & (df["real_date"] == "2000-01-17"),
         "value",
-    ] = np.NaN
+    ] = np.nan
 
     # there are now missing values for AUD-CRY and GBP-INFL on 2000-01-17
 

@@ -10,7 +10,14 @@ from collections import defaultdict
 import datetime
 import warnings
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.utils import is_valid_iso_date, get_cid, get_xcat
+from macrosynergy.management.utils import (
+    ticker_df_to_qdf,
+    is_valid_iso_date,
+    get_cid,
+    get_xcat,
+)
+import contextlib
+import random
 
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
@@ -86,7 +93,34 @@ def dataframe_generator(
     return df_add, work_days
 
 
-def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
+@contextlib.contextmanager
+def temporary_seed(seed: Optional[int]):
+    """
+    A context manager that temporarily sets the seed for both NumPy and Python's random.
+    """
+    if seed is None or not isinstance(seed, int):
+        yield
+        return  # no seed - do nothing.
+
+    np_state = np.random.get_state()
+    random_state = random.getstate()
+
+    np.random.seed(seed)
+    random.seed(seed)
+
+    try:
+        yield
+    finally:
+        np.random.set_state(np_state)
+        random.setstate(random_state)
+
+
+def make_qdf(
+    df_cids: pd.DataFrame,
+    df_xcats: pd.DataFrame,
+    back_ar: float = 0,
+    seed: Optional[int] = None,
+) -> QuantamentalDataFrame:
     """
     Make quantamental DataFrame with basic columns: 'cid', 'xcat', 'real_date', 'value'.
 
@@ -109,12 +143,20 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     back_ar : float
         float between 0 and 1 denoting set auto-correlation of the background factor.
         Default is zero.
+    seed : int
+        seed for random number generation. Default is None.
 
     Returns
     -------
     pd.DataFrame
         basic quantamental DataFrame according to specifications.
     """
+    with temporary_seed(seed):
+        qdf = _make_qdf(df_cids, df_xcats, back_ar)
+    return qdf
+
+
+def _make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
 
     df_list = []
 
@@ -447,6 +489,129 @@ def make_test_df(
         df_list.append(df_add)
 
     return pd.concat(df_list).reset_index(drop=True)
+
+
+def simulate_returns_and_signals(
+    # n_cids: int = 4,
+    cids=["AUD", "CAD", "GBP", "USD"],
+    xcat="EQ",
+    return_suffix: str = "XR",
+    signal_suffix: str = "_CSIG_STRAT",
+    years: int = 20,
+    sigma_eta: float = 0.01,
+    sigma_0: float = 0.1,
+    start: str = None,
+    end: str = None,
+):
+    """Simulate returns and signals
+
+    Equations for return and signal generation:
+    1. r(t+1,i) = sigma(t+1,i)*(alpha(t+1,i) + beta(t+1,i)*rb(t+1) + epsilon(t+1,i))
+
+    epsilon(t+1,i) ~ N(0, 1)
+
+    2. ln(sigma(t+1,i)) = ln(sigma(t,i)) + eta(t+1,i), eta(t+1,i) ~ N(0, sigma_eta^2)
+
+    3. alpha(t+1,i) = signal(t,i) + eta_alpha(t+1,i), eta_alpha(t+1,i) ~ N(0, sigma_alpha^2)
+
+    4. beta(t+1,i) = beta(t,i) + eta_beta(t+1,i), eta_beta(t+1,i) ~ N(0, sigma_beta^2)
+
+    5. rb(t+1) = mu + eta_rb(t+1), eta_rb(t+1) ~ N(0, sigma_rb^2)
+
+    6. signal(t, i) =  ...  mean zero, but persistence....
+
+    """
+
+    n_cids = len(cids)
+    periods = 252 * years
+    assert (periods > 0) and (n_cids > 0)
+
+    def simulate_volatility(
+        periods: int = 252 * 20, sigma_eta: float = 0.01, sigma_0: float = 0.1
+    ):
+        sigma = np.empty(shape=(periods + 1))
+        sigma[0] = sigma_0  # Daily volatility (10 percent ASD)
+        eta_sigma = np.random.normal(0, sigma_eta, periods)
+        for i, e in enumerate(eta_sigma):
+            sigma[i + 1] = np.exp(np.log(sigma[i]) + e)
+        return sigma[1:]
+
+    dates = pd.bdate_range(
+        end=pd.Timestamp.today() + pd.offsets.BDay(n=0), periods=periods
+    )
+    # Generate volatility
+    # print("Generate volatility (shared???)")
+    volatility = np.empty(shape=(periods, n_cids))
+    for nn in range(n_cids):
+        volatility[:, nn] = simulate_volatility(
+            periods=periods, sigma_eta=sigma_eta, sigma_0=sigma_0
+        )
+
+    # Generate signals: persistent?
+    rho_signal = 0.9
+    mean_signal = 0
+    signals = np.empty(shape=(periods + 1, n_cids))
+    signals[0, :] = mean_signal
+    for t in range(periods):
+        signals[t + 1, :] = (
+            (1 - rho_signal) * mean_signal
+            + rho_signal * signals[t, :]
+            + np.random.normal(0, 0.01, n_cids)
+        )
+    # signals = np.random.randn(periods, n_cids)  # Unit variance, zero mean
+    signals = signals[1:, :]
+
+    # Generate alpha
+    # TODO alpha needs to be a function of lagged signal and not necessarily continous?
+    # TODO signal and alpha can't be concurrent!
+    # TODO signal proxy/captures a slow moving trend in the alpha (risk-premium)
+    for i in range(int(periods / years)):
+        signals[i * years : i * years + years, :] = signals[i * years, :]
+    alpha = signals + np.random.randn(periods, n_cids)  # Unit variance, zero mean
+
+    # Generate benchmark return
+    rb = 0.4 / 252 + np.random.randn(periods, 1)  # 4% annual returns, unit variance
+
+    # Generate beta
+    beta = np.empty(shape=(1, n_cids, periods + 1))
+    beta[:, :, 0] = 0.6  # Initial beta value
+
+    for i in range(periods):
+        beta[:, :, i + 1] = beta[:, :, i] + 0.005 * np.random.randn(1, n_cids)
+    beta = beta[:, :, 1:]
+    # print("Final values of beta")
+    # print(pd.Series(beta[0, :, -1]).describe())
+
+    # TODO get with kron-product?
+    rb_factor = np.array([rb[tt] * beta[0, :, tt] for tt in range(periods)])
+
+    # Calculate returns
+    rtn = volatility * (alpha + rb_factor + np.random.randn(periods, 1))
+
+    # TODO test simulated returns matches random walk hypothesis on the face of it
+
+    if not ((bool(start) or bool(end)) and not (bool(start) and bool(end))):
+        raise ValueError("Either `start` or `end` must be provided, but not both.")
+
+    dtx = pd.Timestamp(start) if start else pd.Timestamp(end)
+    dtx = pd.Timestamp(start) if start else pd.Timestamp(end) + pd.offsets.BDay(0)
+    if start:
+        dates = pd.bdate_range(start=dtx, periods=periods)
+    else:
+        dates = pd.bdate_range(end=dtx, periods=periods)
+
+    df_rtn = pd.DataFrame(index=dates, data=rtn)
+    df_signals = pd.DataFrame(index=dates, data=signals)
+    # TODO change dates to be previous month...
+
+    # TODO stack into quantamental dataframe
+    # return df_rtn, df_signals
+    xr_tickers = [f"{cid}_{xcat}{return_suffix}" for cid in cids]
+    csig_tickers = [f"{cid}_{xcat}_{signal_suffix}" for cid in cids]
+    dfR = pd.concat([df_rtn, df_signals], axis=1)
+    dfR.columns = xr_tickers + csig_tickers
+    dfR.index.name = "real_date"
+    return ticker_df_to_qdf(dfR)
 
 
 if __name__ == "__main__":

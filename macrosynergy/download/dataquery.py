@@ -93,18 +93,9 @@ def validate_response(
         an exception.
     """
 
-    error_str: str = (
-        f"Response: {response}\n"
-        f"User ID: {user_id}\n"
-        f"Requested URL: {response.request.url}\n"
-        f"Response status code: {response.status_code}\n"
-        f"Response headers: {response.headers}\n"
-        f"Response text: {response.text}\n"
-        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}; \n"
-    )
-    # TODO : Use response.raise_for_status() as a better way to check for errors
     if not response.ok:
         logger.info("Response status is NOT OK : %s", response.status_code)
+        error_str = format_invalid_response_msg(response, user_id)
         if response.status_code == 401:
             raise AuthenticationError(error_str)
 
@@ -118,74 +109,35 @@ def validate_response(
     try:
         response_dict = response.json()
         if response_dict is None:
+            error_str = format_invalid_response_msg(response, user_id)
             raise InvalidResponseError(f"Response is empty.\n{error_str}")
-        if "links" in response_dict:
-            if not check_attributes_in_sync(response_dict):
-                raise InvalidResponseError(f"Attributes are not in sync.\n{error_str}")
         return response_dict
     except Exception as exc:
         if isinstance(exc, KeyboardInterrupt):
             raise exc
 
+        error_str = format_invalid_response_msg(response, user_id)
         raise InvalidResponseError(error_str + f"Error parsing response as JSON: {exc}")
 
 
-def check_attributes_in_sync(response_dict: dict) -> bool:
+def format_invalid_response_msg(response: requests.Response, user_id: str) -> str:
     """
-    Checks if the attributes in the response are in sync with the time-series data. This
-    is performed since on occasion the ticker will have just been calculated for a new
-    date but on certain pods the data won't have updated yet but on some it will have
-    updated. This can lead to the attributes on a specific time-series being out of
-    sync.
-
-    Parameters
-    ----------
-    response_dict : dict
-        dictionary containing the response from the API.
-
-    Returns
-    -------
-    bool
-        True if the attributes are in sync, False otherwise.
+    This function formats an error message for an invalid response from the API.
+    Should only be called if there is an error in the response (as the functions adds the
+    response text to the error message).
     """
+    error_str: str = (
+        f"Response: {response}\n"
+        f"User ID: {user_id}\n"
+        f"Requested URL: {response.request.url}\n"
+        f"Response status code: {response.status_code}\n"
+        f"Response headers: {response.headers}\n"
+        f"Response text: {response.text}\n"
+        f"DataQuery Interaction ID: {response.headers.get('x-dataquery-interaction-id', 'N/A')}\n"
+        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}; \n"
+    )
 
-    if "instruments" not in response_dict:
-        return True
-
-    expressions_last_value_dict = {}
-
-    for instrument in response_dict["instruments"]:
-        attributes = instrument.get("attributes")
-        if not attributes:
-            continue
-
-        time_series = attributes[0].get("time-series")
-        if not time_series:
-            continue
-
-        last_valid_item = None
-        for i in range(len(time_series) - 1, -1, -1):
-            if time_series[i][1] is not None:
-                last_valid_item = time_series[i]
-                break
-
-        if not last_valid_item:
-            last_valid_item = time_series[0]
-
-        expression = attributes[0].get("expression")
-        if not expression:
-            last_valid_item = ["No data", 0]
-        else:
-            _, ticker, metric = expression.replace(")", "").split(",")
-
-        last_value_date = last_valid_item[0]
-        if ticker not in expressions_last_value_dict:
-            expressions_last_value_dict[ticker] = last_value_date
-        else:
-            if last_value_date != expressions_last_value_dict[ticker]:
-                return False
-
-    return True
+    return error_str
 
 
 def request_wrapper(
@@ -277,6 +229,7 @@ def request_wrapper(
                 prepared_request,
                 proxies=proxy,
                 cert=cert,
+                timeout=300
             ) as response:
                 if isinstance(response, requests.Response):
                     return validate_response(response=response, user_id=user_id)
@@ -1161,10 +1114,11 @@ class DataQueryInterface(object):
             print("Retrying failed downloads. Retry count:", retry_counter)
 
         if retry_counter > HL_RETRY_COUNT:
-            raise DownloadError(
-                f"Failed {retry_counter} times to download data all requested data.\n"
-                f"No longer retrying."
-            )
+            error_str = (f"Failed {retry_counter} times to download data all requested data.\n"
+                f"No longer retrying.")
+            if len(self.msg_errors) > 0:
+                error_str += "\n".join(self.msg_errors)
+            raise DownloadError(error_str)
 
         expr_batches: List[List[str]] = [
             expressions[i : i + self.batch_size]
@@ -1291,6 +1245,8 @@ class DataQueryInterface(object):
         # this is because the args can be modified by the retry mechanism
         # (eg. date format)
 
+        expressions = sorted(expressions)
+
         validate_download_args(
             expressions=expressions,
             start_date=start_date,
@@ -1384,12 +1340,7 @@ if __name__ == "__main__":
     client_id: str = os.getenv("DQ_CLIENT_ID")
     client_secret: str = os.getenv("DQ_CLIENT_SECRET")
 
-    expressions = [
-        "DB(JPMAQS,USD_EQXR_VT10,value)",
-        "DB(JPMAQS,USD_EQXR_VT10,eop_lag)",
-        "DB(JPMAQS,USD_EQXR_VT10,mop_lag)",
-        "DB(JPMAQS,USD_EQXR_VT10,grading)",
-    ]
+    expressions = ["DB(CFX,GBP,)"]
 
     with DataQueryInterface(
         client_id=client_id,
