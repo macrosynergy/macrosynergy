@@ -1349,6 +1349,11 @@ class BasePanelLearner(ABC):
                     "cv_summary is set appropriately.",
                     UserWarning,
                 )
+        if cv_summary == "mean-std-ge":
+            if not include_train_folds:
+                raise ValueError(
+                    "include_train_folds must be True if cv_summary is 'mean-std-ge'."
+                )
 
         # n_iter
         if search_type == "prior":
