@@ -1625,6 +1625,7 @@ class TestAll(unittest.TestCase):
             "normalize_fold_results": True,
             "search_type": "prior",
             "cv_summary": "median",
+            "include_train_folds": False,
             "n_iter": 5,
             "split_functions": None,
             "n_jobs_outer": 1,
@@ -1699,6 +1700,7 @@ class TestAll(unittest.TestCase):
                     normalize_fold_results=False,
                     n_splits_add=None,
                     cv_summary="median",
+                    include_train_folds=False,
                     base_splits=None,
                 )
 
@@ -1793,6 +1795,7 @@ class TestAll(unittest.TestCase):
                     normalize_fold_results=False,
                     n_splits_add=None,
                     cv_summary="median",
+                    include_train_folds=False,
                     base_splits=None,
                 )
 
