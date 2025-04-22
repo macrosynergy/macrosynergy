@@ -205,6 +205,7 @@ class ReturnForecaster(BasePanelLearner):
         search_type="grid",
         normalize_fold_results=False,
         cv_summary="mean",
+        include_train_folds=False,
         n_iter=None,
         n_jobs_cv=1,
         n_jobs_model=1,
@@ -240,7 +241,13 @@ class ReturnForecaster(BasePanelLearner):
             False.
         cv_summary : str or callable, optional
             Summary function to use to combine scores across cross-validation folds.
-            Default is "mean". Options are "mean", "median" or a callable function.
+            Default is "mean". Options are "mean", "median", "mean-std", "mean/std",
+            "mean-std-ge" or a callable function.
+        include_train_folds : bool, optional
+            Whether to calculate cross-validation statistics on the training folds in 
+            additional to the test folds. If True, the cross-validation estimator will be
+            a function of both training data and test data. It is recommended to set 
+            `cv_summary` appropriately. Default is False.
         n_iter : int, optional
             Number of iterations to run in random hyperparameter search. Default is None.
         n_jobs_cv : int, optional
@@ -263,6 +270,7 @@ class ReturnForecaster(BasePanelLearner):
             search_type=search_type,
             normalize_fold_results=normalize_fold_results,
             cv_summary=cv_summary,
+            include_train_folds=include_train_folds,
             n_iter=n_iter,
             split_functions=None,
             n_jobs_outer=n_jobs_cv,
@@ -292,6 +300,7 @@ class ReturnForecaster(BasePanelLearner):
             hyperparameters=hyperparameters,
             scorers=scorers,
             cv_summary=cv_summary,
+            include_train_folds=include_train_folds,
             search_type=search_type,
             normalize_fold_results=normalize_fold_results,
             n_iter=n_iter,
