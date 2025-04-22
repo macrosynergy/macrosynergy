@@ -1282,7 +1282,7 @@ class SignalOptimizer(BasePanelLearner):
         if len(figsize) != 2:
             raise ValueError("The figsize argument must be a tuple of length 2.")
         for element in figsize:
-            if not isinstance(element, (int, float, np.int_, np.float_)):
+            if not isinstance(element, numbers.Real):
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
@@ -1515,7 +1515,7 @@ class SignalOptimizer(BasePanelLearner):
         if len(figsize) != 2:
             raise ValueError("The figsize argument must be a tuple of length 2.")
         for element in figsize:
-            if not isinstance(element, (int, float, np.int_, np.float_)):
+            if not isinstance(element, numbers.Real):
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
@@ -1792,16 +1792,17 @@ if __name__ == "__main__":
             "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
             "SecondSplit": ExpandingKFoldPanelSplit(n_splits=10),
         },
-        search_type="prior",
-        n_iter=6,
-        cv_summary="special",
-        n_jobs_outer=-1,
+        #search_type="prior",
+        #n_iter=6,
+        cv_summary="mean-std-ge",
+        include_train_folds=True,
+        n_jobs_outer=1,
         n_jobs_inner=1,
         normalize_fold_results=True,
-        split_functions={
-            "ExpandingKFold": lambda n: n // 12,
-            "SecondSplit": None,
-        },
+        # split_functions={
+        #     "ExpandingKFold": lambda n: n // 12,
+        #     "SecondSplit": None,
+        # },
     )
 
     so.models_heatmap("LR")
