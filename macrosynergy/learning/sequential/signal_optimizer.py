@@ -191,9 +191,9 @@ class SignalOptimizer(BasePanelLearner):
         self,
         name,
         models,
-        hyperparameters,
-        scorers,
-        inner_splitters,
+        hyperparameters = None,
+        scorers = None,
+        inner_splitters = None,
         search_type="grid",
         normalize_fold_results=False,
         cv_summary="mean",
@@ -218,15 +218,19 @@ class SignalOptimizer(BasePanelLearner):
         models : dict
             Dictionary of models to choose from. The keys are model names and the values
             are scikit-learn compatible models.
-        hyperparameters : dict
-            Dictionary of hyperparameters to choose from. The keys are model names and
+        hyperparameters : dict, optional
+            Dictionary of hyperparameters to choose from, if multiple models are entered 
+            and/or hyperparameters are required to be tuned. The keys are model names and
             the values are hyperparameter dictionaries for the corresponding model. The
-            keys must match with those provided in `models`.
-        scorers : dict
+            keys must match with those provided in `models`. If only one model is specified,
+            the hyperparameters can be None if no hyperparameter tuning is required.
+        scorers : dict, optional
             Dictionary of scoring functions to use in the hyperparameter optimization
-            process. The keys are scorer names and the values are scikit-learn compatible
-            scoring functions.
-        inner_splitters : dict
+            process, if multiple models are entered and/or hyperparameters are required
+            to be tuned. The keys are scorer names and the values are scikit-learn compatible
+            scoring functions. If only one model is specified, the scorers can be None
+            if no hyperparameter tuning is required.
+        inner_splitters : dict, optional
             Dictionary of inner splitters to use in the hyperparameter optimization
             process. The keys are splitter names and the values are scikit-learn compatible
             cross-validator objects.
