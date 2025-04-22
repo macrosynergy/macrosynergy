@@ -24,6 +24,8 @@ def check_availability(
     start_years: bool = True,
     missing_recent: bool = True,
     use_last_businessday: bool = True,
+    title: str = None,
+    xcat_labels: dict = None,
 ):
     """
     Wrapper for visualizing start and end dates of a filtered DataFrame.
@@ -55,6 +57,8 @@ def check_availability(
     use_last_businessday : bool
         boolean indicating whether or not to use the last business day before today as
         the end date. Default is True.
+    xcat_labels : dict
+        dictionary with xcat labels. Default is None (no labels).
     """
 
     if not isinstance(start_years, bool):
@@ -65,6 +69,10 @@ def check_availability(
     df = QuantamentalDataFrame(df)
 
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
+    
+    if xcat_labels is not None:
+        dfx = dfx.rename_xcats(xcat_labels)
+
     if dfx.empty:
         raise ValueError(
             "No data available for the selected cross-sections and categories."
@@ -72,11 +80,11 @@ def check_availability(
     if start_years:
         dfs = check_startyears(dfx)
         visual_paneldates(
-            dfs, size=start_size, use_last_businessday=use_last_businessday
+            dfs, size=start_size, use_last_businessday=use_last_businessday, title=title
         )
     if missing_recent:
         dfe = check_enddates(dfx)
-        visual_paneldates(dfe, size=end_size, use_last_businessday=use_last_businessday)
+        visual_paneldates(dfe, size=end_size, use_last_businessday=use_last_businessday, title=title)
 
 
 def missing_in_df(
@@ -215,7 +223,10 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp) -> pd.DataFrame:
 
 
 def visual_paneldates(
-    df: pd.DataFrame, size: Tuple[float] = None, use_last_businessday: bool = True
+    df: pd.DataFrame,
+    size: Tuple[float] = None,
+    use_last_businessday: bool = True,
+    title: str = None,
 ):
     """
     Visualize panel dates with color codes.
@@ -231,7 +242,9 @@ def visual_paneldates(
         the end date. Default is True.
     """
 
-    msv.view_panel_dates(df=df, size=size, use_last_businessday=use_last_businessday)
+    msv.view_panel_dates(
+        df=df, size=size, use_last_businessday=use_last_businessday, header=title
+    )
 
 
 if __name__ == "__main__":
@@ -258,5 +271,5 @@ if __name__ == "__main__":
     xxcids = cids + ["USD"]
 
     check_availability(
-        df=dfd, xcats=xcats, cids=cids, start_size=(10, 5), end_size=(10, 8)
+        df=dfd, xcats=xcats, cids=cids, start_size=(10, 5), end_size=(10, 8), xcat_labels={"XR": "Exchange Rate", "CRY": "Commodity"}
     )

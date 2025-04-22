@@ -88,11 +88,9 @@ class SignalReturnRelations:
         conceptually corresponds to the holding period of a position in accordance with the
         signal.
     slip : int
-        implied slippage of feature availability for relationship with the target
-        category. This mimics the relationship between trading signals and returns, which is
-        often characterized by a delay due to the setup of positions. Technically, this is a
-        negative lag (early arrival) of the target category in working days prior to any
-        frequency conversion. Default is 0.
+        Default is 0, implied slippage of feature availability for relationship with the 
+        target category. See :func:`macrosynergy.management.df_utils.apply_slip` for more
+        information. 
     ms_panel_test : bool
         if True the Macrosynergy Panel test is calculated. Please note that this is a
         very time-consuming operation and should be used only if you require the result.
@@ -337,6 +335,8 @@ class SignalReturnRelations:
         title_fontsize: int = 16,
         size: Tuple[float, float] = None,
         legend_pos: str = "best",
+        x_labels: Dict = None,
+        x_labels_rotate: int = 0,
     ):
         """
         Plot bar chart for the overall and balanced accuracy metrics. For types:
@@ -368,6 +368,10 @@ class SignalReturnRelations:
         legend_pos : str
             position of legend box. Default is 'best'. See the documentation of
             matplotlib.pyplot.legend.
+        x_labels : Dict[str]
+            dictionary of x-axis labels. Default is None.
+        x_labels_rotate : int
+            rotation of x-axis labels. Default is 0.
         """
 
         assert type in ["cross_section", "years", "signals"]
@@ -401,7 +405,7 @@ class SignalReturnRelations:
             ret = self.rets[0]
 
         self.df = self.original_df.copy()
-        self.manipulate_df(xcat=sigs + [ret], freq=freq, agg_sig=agg_sig)
+        self.manipulate_df(xcats=sigs + [ret], freq=freq, agg_sig=agg_sig)
 
         for i in range(len(sigs)):
             if not sigs[i] in self.sigs:
@@ -445,7 +449,18 @@ class SignalReturnRelations:
             color="steelblue",
         )
 
-        plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=0)
+        if x_labels:
+            validated_labels = {}
+            for key, value in x_labels.items():
+                if key in self.sigs:
+                    validated_labels[key] = value
+                elif key + "_NEG" in self.sigs:
+                    validated_labels[key + "_NEG"] = value
+            labels = [validated_labels.get(xcat, xcat) for xcat in dfx.index]
+        else:
+            labels = dfx.index
+
+        plt.xticks(ticks=x_indexes, labels=labels, rotation=x_labels_rotate)
         plt.axhline(y=0.5, color="black", linestyle="-", linewidth=0.5)
 
         y_input = self.__yaxis_lim__(
@@ -468,6 +483,8 @@ class SignalReturnRelations:
         title_fontsize: int = 16,
         size: Tuple[float, float] = None,
         legend_pos: str = "best",
+        x_labels: Dict = None,
+        x_labels_rotate: int = 0,
     ):
         """
         Plot correlation coefficients and significance. For types: cross_section and 
@@ -490,6 +507,10 @@ class SignalReturnRelations:
             2-tuple of width and height of plot. If None, the default size will be applied.
         legend_pos : str
             position of legend box. Default is 'best'. See matplotlib.pyplot.legend.
+        x_labels : Dict[str]
+            dictionary of x-axis labels. Default is None.
+        x_labels_rotate : int
+            rotation of x-axis labels. Default is 0.
         """
 
         assert type in ["cross_section", "years", "signals"]
@@ -518,7 +539,7 @@ class SignalReturnRelations:
             sigs = [sigs]
 
         self.manipulate_df(
-            xcat=sigs + [ret],
+            xcats=sigs + [ret],
             freq=freq,
             agg_sig=self.agg_sigs[0],
         )
@@ -566,7 +587,19 @@ class SignalReturnRelations:
         w = 0.4
         plt.bar(x_indexes - w / 2, pprobs, label="Pearson", width=w, color="lightblue")
         plt.bar(x_indexes + w / 2, kprobs, label="Kendall", width=w, color="steelblue")
-        plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=0)
+
+        if x_labels:
+            validated_labels = {}
+            for key, value in x_labels.items():
+                if key in self.sigs:
+                    validated_labels[key] = value
+                elif key + "_NEG" in self.sigs:
+                    validated_labels[key + "_NEG"] = value
+            labels = [validated_labels.get(xcat, xcat) for xcat in dfx.index]
+        else:
+            labels = dfx.index
+
+        plt.xticks(ticks=x_indexes, labels=labels, rotation=x_labels_rotate)
 
         plt.axhline(
             y=0.95,
@@ -659,7 +692,7 @@ class SignalReturnRelations:
             isinstance(item, str) for item in variable
         )
 
-    def manipulate_df(self, xcat: str, freq: str, agg_sig: str):
+    def manipulate_df(self, xcats: List[str], freq: str, agg_sig: str):
         """
         Used to manipulate the DataFrame to the desired format for the analysis. Firstly
         reduces the dataframe to only include data outside of the blacklist and data
@@ -669,8 +702,8 @@ class SignalReturnRelations:
 
         Parameters
         ----------
-        xcat : str
-            xcat to be analysed.
+        xcats : List[str]
+            list of xcats in df to apply slip.
         freq : str
             frequency to be used in analysis.
         agg_sig : str
@@ -682,7 +715,7 @@ class SignalReturnRelations:
         cids = None if self.cids is None else self.cids
         dfd = reduce_df(
             self.df,
-            xcats=xcat,
+            xcats=xcats,
             cids=cids,
             start=self.start,
             end=self.end,
@@ -691,22 +724,23 @@ class SignalReturnRelations:
         metric_cols: List[str] = list(
             set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid", "ticker"])
         )
+        # here, the slip is applied to the the first xcat (explanatory variable)
         dfd: pd.DataFrame = self.apply_slip(
             df=dfd,
             slip=self.slip,
             cids=cids,
-            xcats=[xcat[-1]],
+            xcats=[xcats[0]],
             metrics=metric_cols,
         )
 
         if self.cosp and len(self.sigs) > 1:
-            dfd = self.__communal_sample__(df=dfd, signal=xcat[:-1], ret=xcat[-1])
+            dfd = self.__communal_sample__(df=dfd, signal=xcats[:-1], ret=xcats[-1])
 
         self.dfd = dfd
 
         df = categories_df(
             dfd,
-            xcats=xcat,
+            xcats=xcats,
             cids=cids,
             val="value",
             start=None,
@@ -754,7 +788,7 @@ class SignalReturnRelations:
                 columns=cid_df.columns,
                 index=cid_df.index,
             )
-            final_df.loc[:, :] = np.NaN
+            final_df.loc[:, :] = np.nan
 
             # Return category is preserved.
             final_df.loc[:, ret] = cid_df[ret]
@@ -841,13 +875,13 @@ class SignalReturnRelations:
             ret_vals, sig_vals
         )
         if len(ret_sign) <= 1:
-            corr, corr_pval = np.NaN, np.NaN
+            corr, corr_pval = np.nan, np.nan
         else:
             corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
         df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
 
         if (ret_sign == -1.0).all() or (ret_sign == 1.0).all():
-            df_out.loc[segment, "auc"] = np.NaN
+            df_out.loc[segment, "auc"] = np.nan
             warnings.warn(
                 "AUC could not be calculated, since the return category has a lack of "
                 "class diversity."
@@ -887,7 +921,7 @@ class SignalReturnRelations:
             warnings.warn(
                 "P-value could not be calculated, since there wasn't enough datapoints."
             )
-            return np.NaN
+            return np.nan
         X = sm.add_constant(ret_vals)
         y = sig_vals.copy()
         groups = ret_vals.index.get_level_values("real_date")
@@ -898,12 +932,12 @@ class SignalReturnRelations:
             warnings.warn(
                 "Singular matrix encountered, so p-value could not be calculated."
             )
-            return np.NaN
+            return np.nan
         if re.summary().tables[1].iloc[1, 3] == "":
             warnings.warn(
                 "P-value could not be calculated, since there wasn't enough datapoints."
             )
-            return np.NaN
+            return np.nan
         pval_string = re.summary().tables[1].iloc[1, 3]
         return float(pval_string)
 
@@ -1089,7 +1123,7 @@ class SignalReturnRelations:
                 list_of_results.append(stats.pearsonr(ret_vals, sig_vals)[1])
             elif stat == "auc":
                 if (ret_sign == -1.0).all() or (ret_sign == 1.0).all():
-                    list_of_results.append(np.NaN)
+                    list_of_results.append(np.nan)
                     warnings.warn(
                         "AUC could not be calculated, since the return category has a "
                         "lack of class diversity."
@@ -1247,7 +1281,7 @@ class SignalReturnRelations:
         if not isinstance(agg_sigs, str):
             raise TypeError("agg_sigs must be a string")
 
-        self.manipulate_df(xcat=xcat, freq=freq, agg_sig=agg_sigs)
+        self.manipulate_df(xcats=xcat, freq=freq, agg_sig=agg_sigs)
 
         if not sig in self.sigs:
             sig = sig + "_NEG"
@@ -1391,7 +1425,7 @@ class SignalReturnRelations:
         for freq in freqs:
             for agg_sig in agg_sigs:
                 for ret in rets:
-                    self.manipulate_df(xcat=xcats + [ret], freq=freq, agg_sig=agg_sig)
+                    self.manipulate_df(xcats=xcats + [ret], freq=freq, agg_sig=agg_sig)
                     for xcat in xcats:
                         df_rows.append(
                             self.__output_table__(
@@ -1549,7 +1583,7 @@ class SignalReturnRelations:
         for ret, sig, freq, agg_sig in loop_tuples:
             # Prepare xcat and manipulate DataFrame
             xcat = [sig, ret]
-            self.manipulate_df(xcat=xcat, freq=freq, agg_sig=agg_sig)
+            self.manipulate_df(xcats=xcat, freq=freq, agg_sig=agg_sig)
             hash = f"{ret}/{sig}/{freq}/{agg_sig}"
 
             row = self.get_rowcol(hash, rows)
@@ -1756,25 +1790,25 @@ if __name__ == "__main__":
 
     sigs = ["CRY"]
     # Additional signals.
-    srn = SignalReturnRelations(
-        dfd,
-        rets="XR",
-        sigs=sigs,
-        sig_neg=True,
-        cosp=True,
-        freqs="Q",
-        start="2002-01-01",
-        ms_panel_test=True,
-        additional_metrics=[spearman, granger, granger_pval],
-    )
+    # srn = SignalReturnRelations(
+    #     dfd,
+    #     rets="XR",
+    #     sigs=sigs,
+    #     sig_neg=True,
+    #     cosp=True,
+    #     freqs="Q",
+    #     start="2002-01-01",
+    #     ms_panel_test=True,
+    #     additional_metrics=[spearman, granger, granger_pval],
+    # )
 
-    print(sigs)
+    # print(sigs)
 
-    df_dep = srn.summary_table()
-    print(df_dep)
+    # df_dep = srn.summary_table()
+    # print(df_dep)
 
-    dfsum = srn.single_relation_table(table_type="summary")
-    print(dfsum)
+    # dfsum = srn.single_relation_table(table_type="summary")
+    # print(dfsum)
 
     srn = SignalReturnRelations(
         dfd,
@@ -1796,6 +1830,8 @@ if __name__ == "__main__":
     srn.accuracy_bars(
         type="signals",
         title="Accuracy",
+        x_labels={"CRY": "Cry", "INFL": "Inflation", "GROWTH": "Growth"},
+        x_labels_rotate=45
     )
 
     sst = srn.single_statistic_table(stat="granger_pval")

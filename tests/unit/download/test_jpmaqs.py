@@ -16,6 +16,7 @@ from macrosynergy.download.jpmaqs import (
     timeseries_to_column,
     concat_single_metric_qdfs,
     validate_downloaded_df,
+    check_attributes_in_sync,
     DEFAULT_CLIENT_ID_ENV_VAR,
     DEFAULT_CLIENT_SECRET_ENV_VAR,
 )
@@ -788,6 +789,24 @@ class TestFunctions(unittest.TestCase):
                 start_date=start_date,
                 end_date=end_date,
             )
+
+    def test_check_attributes_in_sync(self):
+        ts_list = [{"attributes": [{"expression": "DB(JPMAQS,CID_TEST,value)", "time-series": [["20240125", 0.1], ["20240126", -0.1], ["20240127", None], ["20240128", None], ["20240129", 0.8], ["20240130", -0.01], ["20240131", 1.5], ["20240201", 1.0], ["20240202", 1.0], ["20240203", None], ["20240204", None], ["20240205", 1.0]]}]}, 
+                   {"attributes": [{"expression": "DB(JPMAQS,CID_TEST,grading)", "time-series": [["20240125", 1.0], ["20240126", 1.0], ["20240127", None], ["20240128", None], ["20240129", 1.0], ["20240130", 1.0], ["20240131", 1.0], ["20240201", 1.0], ["20240202", 1.0], ["20240203", None], ["20240204", None], ["20240205", 1.0]]}]}, 
+                   {"attributes": [{"expression": "DB(JPMAQS,CID_TEST,mop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", None], ["20240128", None], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0], ["20240203", None], ["20240204", None], ["20240205", 0.0]]}]}, 
+                   {"attributes": [{"expression": "DB(JPMAQS,CID_TEST,eop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", None], ["20240128", None], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0], ["20240203", None], ["20240204", None], ["20240205", 0.0]]}]},
+                   {"attributes": [{"expression": "DB(JPMAQS,CID1_TEST,value)", "time-series": [["20240125", 0.1], ["20240126", -0.1], ["20240127", None], ["20240128", None], ["20240129", 0.8], ["20240130", -0.01], ["20240131", 1.5], ["20240201", 1.0], ["20240202", 1.0]]}]}, 
+                   {"attributes": [{"expression": "DB(JPMAQS,CID1_TEST,grading)", "time-series": [["20240125", 1.0], ["20240126", 1.0], ["20240127", None], ["20240128", None], ["20240129", 1.0], ["20240130", 1.0], ["20240131", 1.0], ["20240201", 1.0], ["20240202", 1.0]]}]}, 
+                   {"attributes": [{"expression": "DB(JPMAQS,CID1_TEST,mop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", None], ["20240128", None], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0]]}]}, 
+                   {"attributes": [{"expression": "DB(JPMAQS,CID1_TEST,eop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", None], ["20240128", None], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0]]}]},
+                   {"attributes": [{"expression": "DB(CFX,BGB,123,,FRW)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", None], ["20240128", None], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0]]}]}]
+        self.assertTrue(check_attributes_in_sync(ts_list))
+
+        out_of_sync_ts_list = [{"attributes": [{"expression": "DB(JPMAQS,CID_TEST,value)", "time-series": [["20240125", 0.1], ["20240126", -0.1], ["20240127", None], ["20240128", None], ["20240129", 0.8], ["20240130", -0.01], ["20240131", 1.5], ["20240201", 1.0], ["20240202", 1.0], ["20240203", None], ["20240204", None], ["20240205", None]]}]}, 
+                                {"attributes": [{"expression": "DB(JPMAQS,CID_TEST,grading)", "time-series": [["20240125", 1.0], ["20240126", 1.0], ["20240127", None], ["20240128", None], ["20240129", 1.0], ["20240130", 1.0], ["20240131", 1.0], ["20240201", 1.0], ["20240202", 1.0], ["20240203", None], ["20240204", None], ["20240205", 1.0]]}]}, 
+                                {"attributes": [{"expression": "DB(JPMAQS,CID_TEST,mop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", None], ["20240128", None], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0], ["20240203", None], ["20240204", None], ["20240205", 0.0]]}]}, 
+                                {"attributes": [{"expression": "DB(JPMAQS,CID_TEST,eop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", None], ["20240128", None], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0], ["20240203", None], ["20240204", None], ["20240205", 0.0]]}]}]
+        self.assertFalse(check_attributes_in_sync(out_of_sync_ts_list))
 
 
 if __name__ == "__main__":

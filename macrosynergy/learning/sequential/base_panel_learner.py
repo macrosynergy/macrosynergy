@@ -40,6 +40,7 @@ class BasePanelLearner(ABC):
         lag=1,
         xcat_aggs=["last", "sum"],
         generate_labels=None,
+        skip_checks=False,
     ):
         """
         Initialize a sequential learning process over a panel.
@@ -77,6 +78,8 @@ class BasePanelLearner(ABC):
         generate_labels : callable, optional
             Function to transform the dependent variable, usually into
             classification labels. Default is None.
+        skip_checks : bool, optional
+            Whether to skip the initialization checks. Default is False.
 
         Notes
         -----
@@ -106,18 +109,19 @@ class BasePanelLearner(ABC):
             https://arxiv.org/abs/1807.02811
         """
         # Checks
-        self._check_init(
-            df,
-            xcats,
-            cids,
-            start,
-            end,
-            blacklist,
-            freq,
-            lag,
-            xcat_aggs,
-            generate_labels,
-        )
+        if not skip_checks:
+            self._check_init(
+                df,
+                xcats,
+                cids,
+                start,
+                end,
+                blacklist,
+                freq,
+                lag,
+                xcat_aggs,
+                generate_labels,
+            )
         # Attributes
         self.df = QuantamentalDataFrame(df)
         self.xcats = xcats
@@ -310,6 +314,7 @@ class BasePanelLearner(ABC):
         n_splits_add,
         n_jobs_inner,
         base_splits,
+        timestamp=None,
     ):
         """
         Worker function for parallel processing of the learning process.
@@ -347,6 +352,9 @@ class BasePanelLearner(ABC):
             Number of jobs to run in parallel for the inner loop. Default is 1.
         base_splits : dict
             Dictionary of initial number of splits for each inner splitter.
+        timestamp : pd.Timestamp, optional
+            Date to record predictions and model diagnostics. Default is None. If None,
+            the earliest date in the test set is used (which is then adjusted for lag).
 
         Returns
         -------
@@ -368,11 +376,13 @@ class BasePanelLearner(ABC):
         # by the lag applied.
         if self.lag != 0:
             locs: np.ndarray = (
-                np.searchsorted(self.date_levels, sorted_test_date_levels, side="left")
-                - self.lag
+                np.searchsorted(
+                    self.unique_date_levels, sorted_test_date_levels, side="left"
+                )
+                - 1
             )
             adj_test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
-                [self.date_levels[i] if i >= 0 else pd.NaT for i in locs]
+                [self.unique_date_levels[i] if i >= 0 else pd.NaT for i in locs]
             )
             # Now formulate correct index
             date_map = dict(zip(sorted_test_date_levels, adj_test_date_levels))
@@ -419,7 +429,7 @@ class BasePanelLearner(ABC):
             y_train=y_train,
             X_test=X_test,
             y_test=y_test,
-            timestamp=adj_test_date_levels.min(),
+            timestamp=adj_test_date_levels.min() if timestamp is None else timestamp,
             adjusted_test_index=test_index,
         )
 
@@ -901,6 +911,8 @@ class BasePanelLearner(ABC):
         title=None,
         cap=5,
         figsize=(12, 8),
+        title_fontsize=None,
+        tick_fontsize=None,
     ):
         """
         Visualized optimal models used for signal calculation.
@@ -917,6 +929,10 @@ class BasePanelLearner(ABC):
             models are the 'cap' most frequently occurring in the pipeline.
         figsize : tuple, optional
             Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        title_fontsize : int, optional
+            Font size for the title. Default is None.
+        tick_fontsize : int, optional
+            Font size for the ticks. Default is None.
 
         Notes
         -----
@@ -925,7 +941,14 @@ class BasePanelLearner(ABC):
         the model selection process.
         """
         # Checks
-        self._checks_models_heatmap(name=name, title=title, cap=cap, figsize=figsize)
+        self._checks_models_heatmap(
+            name=name,
+            title=title,
+            cap=cap,
+            figsize=figsize,
+            title_fontsize=title_fontsize,
+            tick_fontsize=tick_fontsize,
+        )
 
         # Get the chosen models for the specified pipeline to visualise selection.
         chosen_models = self.get_optimal_models(name=name).sort_values(by="real_date")
@@ -961,7 +984,10 @@ class BasePanelLearner(ABC):
             sns.heatmap(binary_matrix, cmap="binary_r", cbar=False)
         else:
             sns.heatmap(binary_matrix, cmap="binary", cbar=False)
-        plt.title(title)
+        plt.title(title, fontsize=title_fontsize)
+
+        plt.xticks(fontsize=tick_fontsize)  # X-axis tick font size
+        plt.yticks(fontsize=tick_fontsize)
         plt.show()
 
     def _check_init(
@@ -1024,7 +1050,7 @@ class BasePanelLearner(ABC):
             raise TypeError("All elements in xcats must be strings.")
         difference_xcats = set(xcats) - set(df["xcat"].unique())
         if difference_xcats != set():
-                raise ValueError(f"{str(difference_xcats)} not in the dataframe.")
+            raise ValueError(f"{str(difference_xcats)} not in the dataframe.")
 
         # cids checks
         if cids is not None:
@@ -1171,12 +1197,13 @@ class BasePanelLearner(ABC):
 
         # outer splitter
         # TODO: come back and change to WalkForwardPanelSplit
-        if not isinstance(
-            outer_splitter, (ExpandingFrequencyPanelSplit, ExpandingIncrementPanelSplit)
-        ):
-            raise TypeError(
-                "outer_splitter must be an instance of ExpandingFrequencyPanelSplit or ExpandingIncrementPanelSplit."
-            )
+        if outer_splitter:
+            if not isinstance(
+                outer_splitter, (ExpandingFrequencyPanelSplit, ExpandingIncrementPanelSplit)
+            ):
+                raise TypeError(
+                    "outer_splitter must be an instance of ExpandingFrequencyPanelSplit or ExpandingIncrementPanelSplit."
+                )
 
         # inner splitters
         if not isinstance(inner_splitters, dict):
@@ -1415,6 +1442,8 @@ class BasePanelLearner(ABC):
         title=None,
         cap=5,
         figsize=(12, 8),
+        title_fontsize=None,
+        tick_fontsize=None,
     ):
         """
         Checks for the models_heatmap method.
@@ -1430,6 +1459,10 @@ class BasePanelLearner(ABC):
             The chosen models are the 'cap' most frequently occurring in the process.
         figsize : tuple, optional
             Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        title_fontsize : int, optional
+            Font size for the title. Default is None.
+        tick_fontsize : int, optional
+            Font size for the ticks. Default is None.
         """
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
@@ -1462,6 +1495,18 @@ class BasePanelLearner(ABC):
                     "The elements of the figsize tuple must be floats or ints."
                 )
 
+        if title_fontsize is not None:
+            if not isinstance(title_fontsize, int):
+                raise TypeError("The title_fontsize argument must be an integer.")
+            if title_fontsize < 0:
+                raise ValueError("The title_fontsize argument must be non-negative.")
+
+        if tick_fontsize is not None:
+            if not isinstance(tick_fontsize, int):
+                raise TypeError("The tick_fontsize argument must be an integer.")
+            if tick_fontsize < 0:
+                raise ValueError("The tick_fontsize argument must be non-negative.")
+
     def _get_base_splits(self, inner_splitters):
         """Get the initial number of splits for each splitter."""
         base_splits = {}
@@ -1487,7 +1532,7 @@ class BasePanelLearner(ABC):
     def _remove_results(self, conditions):
         """
         Remove rows from results DataFrames based on conditions.
-        
+
         Parameters
         ----------
         conditions : list of tuples

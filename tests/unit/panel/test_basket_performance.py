@@ -611,6 +611,32 @@ class TestAll(unittest.TestCase):
         basket_value = round(basket_cry.iloc[index_cry], 5)
         self.assertTrue(manual_value == basket_value)
 
+    def test_basket_method_value(self):
+        with self.assertRaises(ValueError):
+            basket_1 = Basket(
+                df=self.dfd,
+                contracts=self.contracts,
+                ret="XR_NSA",
+                cry="CRR_NSA",
+                ewgts="EWT",
+            )
+
+        dfd_bad = self.dfd.copy()
+        # drop AUD_FX from the dataframe
+        dfd_bad = dfd_bad[
+            ~((dfd_bad["cid"] == "AUD") & (dfd_bad["xcat"] == "FXWBASE_NSA"))
+        ].reset_index(drop=True)
+
+        with self.assertRaises(ValueError):
+            basket_1 = Basket(
+                df=dfd_bad,
+                contracts=self.contracts,
+                ret="XR_NSA",
+                cry=["CRY_NSA", "CRR_NSA"],
+                blacklist=self.black,
+                ewgts="WBASE_NSA",
+            )
+
     def test_weight_visualiser(self):
         # Will exclusively test the assert statements in the method. The various
         # visualisation tools require certain parameters to be defined (dependency
