@@ -219,39 +219,42 @@ class SignalOptimizer(BasePanelLearner):
             Dictionary of models to choose from. The keys are model names and the values
             are scikit-learn compatible models.
         hyperparameters : dict, optional
-            Dictionary of hyperparameters to choose from, if multiple models are entered 
-            and/or hyperparameters are required to be tuned. The keys are model names and
+            Dictionary of hyperparameters to choose from. The keys are model names and
             the values are hyperparameter dictionaries for the corresponding model. The
-            keys must match with those provided in `models`. If only one model is specified,
-            the hyperparameters can be None if no hyperparameter tuning is required.
+            keys must match with those provided in `models`. If no hyperparameters are 
+            required to be tuned, this parameter can be None. Default is None.
         scorers : dict, optional
-            Dictionary of scoring functions to use in the hyperparameter optimization
-            process, if multiple models are entered and/or hyperparameters are required
-            to be tuned. The keys are scorer names and the values are scikit-learn compatible
-            scoring functions. If only one model is specified, the scorers can be None
-            if no hyperparameter tuning is required.
+            Dictionary of scoring functions to use in cross-validation if hyperparameters
+            or models are needed to be selected. The keys are scorer names and the values
+            are scikit-learn compatible scoring functions. If no cross-validation is 
+            required, this parameter can be None. Default is None.
         inner_splitters : dict, optional
-            Dictionary of inner splitters to use in the hyperparameter optimization
-            process. The keys are splitter names and the values are scikit-learn compatible
-            cross-validator objects.
+            Dictionary of inner splitters to use in cross-validation. The keys are
+            splitter names and the values are scikit-learn compatible cross-validator
+            objects. If no cross-validation is required, this parameter can be None.
+            Default is None.
         search_type : str, optional
             Type of hyperparameter optimization to perform. Default is "grid". Options are
-            "grid" and "prior".
+            "grid" and "prior". If no hyperparameter tuning is required, this parameter
+            can be disregarded.
         normalize_fold_results : bool, optional
             Whether to normalize the scores across folds before combining them. Default is
-            False.
+            False. If no hyperparameter tuning is required, this parameter
+            can be disregarded.
         cv_summary : str or callable, optional
             Summary function to use to combine scores across cross-validation folds.
             Default is "mean". Options are "mean", "median", "mean-std", "mean/std",
-            "mean-std-ge" or a callable function.
+            "mean-std-ge" or a callable function. If no hyperparameter tuning is required,
+            this parameter can be disregarded.
         include_train_folds : bool, optional
             Whether to calculate cross-validation statistics on the training folds in 
             additional to the test folds. If True, the cross-validation estimator will be
             a function of both training data and test data. It is recommended to set 
-            `cv_summary` appropriately. Default is False.
+            `cv_summary` appropriately. Default is False. If no hyperparameter tuning is
+            required, this parameter can be disregarded.
         min_cids : int, optional
-            Minimum number of cross-sections required for the initial
-            training set. Default is 4.
+            Minimum number of cross-sections required for the initial training set.
+            Default is 4.
         min_periods : int, optional
             Minimum number of periods required for the initial training set, in units of
             the frequency `freq` specified in the constructor. Default is 36.
@@ -264,11 +267,13 @@ class SignalOptimizer(BasePanelLearner):
         split_functions : dict, optional
             Dict of callables for determining the number of cross-validation
             splits to add to the initial number as a function of the number of iterations
-            passed in the sequential learning process. Default is None. The keys must
+            passed in the sequential learning process. The keys must
             correspond to the keys in `inner_splitters` and should be set to None for any
-            splitters that do not require splitter adjustment.
+            splitters that do not require splitter adjustment. Default is None. If no
+            hyperparameter tuning is required, this parameter can be disregarded.
         n_iter : int, optional
             Number of iterations to run in random hyperparameter search. Default is None.
+            If no hyperparameter tuning is required, this parameter can be disregarded.
         n_jobs_outer : int, optional
             Number of jobs to run in parallel for the outer sequential loop. Default is -1.
             It is advised for n_jobs_inner * n_jobs_outer (replacing -1 with the number of
@@ -278,7 +283,8 @@ class SignalOptimizer(BasePanelLearner):
             Number of jobs to run in parallel for the inner loop. Default is 1.
             It is advised for n_jobs_inner * n_jobs_outer (replacing -1 with the number of
             available cores) to be less than or equal to the number of available cores on
-            the machine.
+            the machine. If no hyperparameter tuning is required, this parameter
+            can be disregarded.
         store_correlations : bool
             Whether to store the correlations between input pipeline features and input
             predictor features. Default is False.
