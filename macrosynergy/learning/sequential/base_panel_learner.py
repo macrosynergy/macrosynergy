@@ -1264,6 +1264,8 @@ class BasePanelLearner(ABC):
             
         # First check that either all of inner_splitters, hyperparameters and scorers are None
         # or none of them are None.
+        # TODO: correct this logic to account for multiple models in the dict, in which case
+        # inner_splitters and scorers can be specified when hyperparameters is None.
         none_condition = all(
             inner_splitters is None,
             hyperparameters is None,
