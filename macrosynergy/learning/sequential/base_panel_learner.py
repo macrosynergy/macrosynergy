@@ -445,7 +445,8 @@ class BasePanelLearner(ABC):
                 n_jobs_inner=n_jobs_inner,
             )
         else:
-            optim_name, optim_model = next(iter(models.items())) # Only one model was entered
+            optim_name = list(models.keys())[0] 
+            optim_model = models[optim_name].fit(X_train, y_train)
             optim_score = np.float32("-inf")
             optim_params = {}
             inner_splitters_adj = None
