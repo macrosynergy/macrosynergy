@@ -447,7 +447,7 @@ class BasePanelLearner(ABC):
         else:
             optim_name = list(models.keys())[0] 
             optim_model = models[optim_name].fit(X_train, y_train)
-            optim_score = np.float32("-inf")
+            optim_score = np.ubyte(0) # For memory efficiency
             optim_params = {}
             inner_splitters_adj = None
 
@@ -853,7 +853,7 @@ class BasePanelLearner(ABC):
             }
             data.append(n_splits)
         else:
-            data.append(0)
+            data.append(0) # No splits were used because CV wasn't used
 
         return {"model_choice": data}
 
@@ -1263,25 +1263,41 @@ class BasePanelLearner(ABC):
                     "outer_splitter must inherit from msl.splitters.WalkForwardPanelSplit"
                 )
             
-        # First check that either all of inner_splitters, hyperparameters and scorers are None
+        # First check that both inner_splitters and scorers are None
         # or none of them are None.
-        # TODO: correct this logic to account for multiple models in the dict, in which case
-        # inner_splitters and scorers can be specified when hyperparameters is None.
         none_condition = all(
-            inner_splitters is None,
-            hyperparameters is None,
-            scorers is None,
+            (
+                inner_splitters is None,
+                scorers is None,
+            ),
         )
         not_none_condition = all(
-            inner_splitters is not None,
-            hyperparameters is not None,
-            scorers is not None,
+            (
+                inner_splitters is not None,
+                scorers is not None,
+            ),
         )
         if not (none_condition or not_none_condition):
             raise ValueError(
-                "Either all of inner_splitters, hyperparameters and scorers must be None "
+                "Either both inner_splitters and scorers must be None "
                 "or none of them can be None."
             )
+        
+        # Now check that if they are None, then only one model can be specified 
+        # and no hyperparameters can be specified.
+        if none_condition:
+            if hyperparameters is not None or len(models) > 1:
+                raise ValueError(
+                    "If inner_splitters and scorers are None, then only one model can be "
+                    "specified and no hyperparameters can be specified."
+                )
+        else:
+            if hyperparameters is None:
+                raise ValueError(
+                    "If inner_splitters and scorers are not None, then hyperparameters "
+                    "must be specified. This can be a dictionary that specifies "
+                    "no hyperparameters if necessary."
+                )
         
         # inner splitters
         if inner_splitters is not None:
