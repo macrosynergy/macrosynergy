@@ -1003,6 +1003,33 @@ class TestAll(unittest.TestCase):
                 inner_splitters=self.single_inner_splitter,
                 cv_summary="invalid",
             )
+        # include_train_folds should be a boolean
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                include_train_folds="hello",
+            )
+        # If cv_summary is "mean-std-ge", then include_train_folds should be True
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                cv_summary="mean-std-ge",
+                include_train_folds=False,
+            )
         # min_cids should be an int
         with self.assertRaises(TypeError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1553,6 +1580,96 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df7.real_date.min() == first_date)
         self.assertTrue(df7.real_date.max() == last_date)
 
+        # Test that include_train_folds works as expected. When cv_summary = "mean-std-ge"
+        # an error should be thrown if include_train_folds is False and when cv_summary is
+        # something else, a warning should be thrown
+        so8 = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+            blacklist=self.black_valid,
+        )
+        with self.assertRaises(ValueError):
+            so8.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "linreg": {
+                        "fit_intercept": [True, False],
+                        "positive": [True, False],
+                    },
+                    "ridge": {
+                        "alpha": stats.expon(),
+                    },
+                },
+                search_type="prior",
+                n_iter=4,
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.inner_splitters,
+                normalize_fold_results=True,
+                cv_summary="mean-std-ge",
+                include_train_folds=False,
+            )
+
+        with self.assertWarns(UserWarning):
+            so8.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "linreg": {
+                        "fit_intercept": [True, False],
+                        "positive": [True, False],
+                    },
+                    "ridge": {
+                        "alpha": stats.expon(),
+                    },
+                },
+                search_type="prior",
+                n_iter=4,
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.inner_splitters,
+                normalize_fold_results=True,
+                cv_summary="mean",
+                include_train_folds=True,
+            )
+        try:
+            so8.calculate_predictions(
+                name="test2",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "linreg": {
+                        "fit_intercept": [True, False],
+                        "positive": [True, False],
+                    },
+                    "ridge": {
+                        "alpha": stats.expon(),
+                    },
+                },
+                search_type="prior",
+                n_iter=4,
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.inner_splitters,
+                cv_summary="mean-std-ge",
+                include_train_folds=True,
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+
+        df8 = so8.preds.copy()
+        self.assertIsInstance(df8, pd.DataFrame)
+        if len(df8.xcat.unique()) != 2:
+            self.fail("The signal dataframe should only contain two xcats")
+        self.assertEqual(df8.xcat.unique()[0], "test")
+        self.assertEqual(df8.xcat.unique()[1], "test2")
+        self.assertTrue(len(df7.cid.unique()) == 4)
+        self.assertTrue(df8.real_date.min() == first_date)
+        self.assertTrue(df8.real_date.max() == last_date)
         # Test generate_labels works with a logistic regression
         so8 = SignalOptimizer(
             df=self.df,
@@ -1625,6 +1742,7 @@ class TestAll(unittest.TestCase):
             "normalize_fold_results": True,
             "search_type": "prior",
             "cv_summary": "median",
+            "include_train_folds": False,
             "n_iter": 5,
             "split_functions": None,
             "n_jobs_outer": 1,
@@ -1645,6 +1763,7 @@ class TestAll(unittest.TestCase):
             "normalize_fold_results": "invalid_boolean",  # Invalid: should be a boolean
             "search_type": 123,  # Invalid: should be a string
             "cv_summary": 123,  # Invalid: should be a string
+            "include_train_folds": "invalid_boolean",  # Invalid: should be a boolean
             "n_iter": "invalid_integer",  # Invalid: should be an integer
             "split_functions": "invalid_split_functions",  # Invalid: should be a function or None
             "n_jobs_outer": "invalid_jobs",  # Invalid: should be an integer
@@ -1699,6 +1818,7 @@ class TestAll(unittest.TestCase):
                     normalize_fold_results=False,
                     n_splits_add=None,
                     cv_summary="median",
+                    include_train_folds=False,
                     base_splits=None,
                 )
 
@@ -1793,6 +1913,7 @@ class TestAll(unittest.TestCase):
                     normalize_fold_results=False,
                     n_splits_add=None,
                     cv_summary="median",
+                    include_train_folds=False,
                     base_splits=None,
                 )
 

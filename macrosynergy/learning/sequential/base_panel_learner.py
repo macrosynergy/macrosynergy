@@ -199,6 +199,7 @@ class BasePanelLearner(ABC):
         search_type="grid",
         normalize_fold_results=False,
         cv_summary="mean",
+        include_train_folds=False,
         n_iter=100,
         split_functions=None,
         n_jobs_outer=-1,
@@ -228,9 +229,14 @@ class BasePanelLearner(ABC):
             Whether to normalize the scores across folds before combining them. Default is
             False.
         cv_summary : str or callable
-            Summary function for determining cross-validation scores given scores for
-            each validation fold. Default is "mean". Can also be "median" or a function
-            that takes a list of scores and returns a single value.
+            Summary function to use to combine scores across cross-validation folds.
+            Default is "mean". Options are "mean", "median", "mean-std", "mean/std",
+            "mean-std-ge" or a callable function.
+        include_train_folds : bool, optional
+            Whether to calculate cross-validation statistics on the training folds in 
+            additional to the test folds. If True, the cross-validation estimator will be
+            a function of both training data and test data. It is recommended to set 
+            `cv_summary` appropriately. Default is False.
         n_iter : int
             Number of iterations for random or bayesian hyperparameter optimization.
         split_functions : dict, optional
@@ -259,6 +265,7 @@ class BasePanelLearner(ABC):
             search_type=search_type,
             normalize_fold_results=normalize_fold_results,
             cv_summary=cv_summary,
+            include_train_folds=include_train_folds,
             n_iter=n_iter,
             split_functions=split_functions,
             n_jobs_outer=n_jobs_outer,
@@ -282,6 +289,7 @@ class BasePanelLearner(ABC):
                     hyperparameters=hyperparameters,
                     scorers=scorers,
                     cv_summary=cv_summary,
+                    include_train_folds=include_train_folds,
                     search_type=search_type,
                     normalize_fold_results=normalize_fold_results,
                     n_iter=n_iter,
@@ -308,6 +316,7 @@ class BasePanelLearner(ABC):
         hyperparameters,
         scorers,
         cv_summary,
+        include_train_folds,
         search_type,
         normalize_fold_results,
         n_iter,
@@ -338,6 +347,9 @@ class BasePanelLearner(ABC):
         cv_summary : str or callable
             Summary function to condense cross-validation scores in each fold to a single
             value, against which different hyperparameter choices can be compared.
+        include_train_folds : bool, optional
+            Whether to calculate cross-validation statistics on the training folds in 
+            additional to the test folds.
         search_type : str
             Search type for hyperparameter optimization. Default is "grid".
             Options are "grid", "prior" and "bayes".
@@ -415,6 +427,7 @@ class BasePanelLearner(ABC):
             normalize_fold_results=normalize_fold_results,
             n_iter=n_iter,
             cv_summary=cv_summary,
+            include_train_folds=include_train_folds,
             n_jobs_inner=n_jobs_inner,
         )
 
@@ -447,6 +460,7 @@ class BasePanelLearner(ABC):
         normalize_fold_results,
         n_iter,
         cv_summary,
+        include_train_folds,
         n_jobs_inner,
     ):
         """
@@ -475,6 +489,9 @@ class BasePanelLearner(ABC):
         cv_summary : str or callable
             Summary function to condense cross-validation scores in each fold to a single
             value, against which different hyperparameter choices can be compared.
+        include_train_folds : bool, optional
+            Whether to calculate cross-validation statistics on the training folds in 
+            the cross-validation process.
         n_jobs_inner : int
             Number of jobs to run in parallel for the inner loop.
 
@@ -511,6 +528,7 @@ class BasePanelLearner(ABC):
                         normalize_fold_results=normalize_fold_results,
                     ),
                     cv=cv_splits,
+                    return_train_score = include_train_folds,
                 )
             elif search_type == "prior":
                 search_object = RandomizedSearchCV(
@@ -526,6 +544,7 @@ class BasePanelLearner(ABC):
                         normalize_fold_results=normalize_fold_results,
                     ),
                     cv=cv_splits,
+                    return_train_score = include_train_folds,
                 )
 
             try:
@@ -582,7 +601,7 @@ class BasePanelLearner(ABC):
         metric_columns = [
             col
             for col in cv_results.columns
-            if col.startswith("split") and "test" in col
+            if col.startswith("split") and ("test" in col or "train" in col)
         ]
         if normalize_fold_results:
             cv_results[metric_columns] = StandardScaler().fit_transform(
@@ -610,6 +629,28 @@ class BasePanelLearner(ABC):
                 cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].mean(
                     axis=1
                 ) / cv_results[scorer_columns].std(axis=1)
+            elif cv_summary == "mean-std-ge":
+                # Separate training and columns
+                train_columns = [col for col in scorer_columns if "train" in col]
+                test_columns = [col for col in scorer_columns if "test" in col]
+
+                # obtain mean and std of test metrics
+                mean_test = np.nanmean(cv_results[test_columns], axis=1)
+                std_test = np.nanstd(cv_results[test_columns], axis=1)
+
+                # Determine generalization gap.
+                # We define this to be the average absolute deviation of the test metrics
+                # from their corresponding training metrics.
+                generalization_gap = np.nanmean(
+                    np.abs(
+                        cv_results[train_columns].values - cv_results[test_columns].values
+                    ),
+                    axis=1
+                )
+
+                # Store mean test metric - std test metric - generalization gap
+                cv_results[f"{scorer}_summary"] = mean_test - std_test - generalization_gap
+            
             else:
                 # TODO: handle NAs?
                 cv_results[f"{scorer}_summary"] = cv_results[scorer_columns].apply(
@@ -1128,6 +1169,7 @@ class BasePanelLearner(ABC):
         normalize_fold_results,
         search_type,
         cv_summary,
+        include_train_folds,
         n_iter,
         split_functions,
         n_jobs_outer,
@@ -1157,6 +1199,10 @@ class BasePanelLearner(ABC):
         cv_summary : str or callable
             Summary function to condense cross-validation scores in each fold to a single
             value, against which different hyperparameter choices can be compared.
+        include_train_folds : bool
+            Whether to calculate cross-validation statistics on the training folds in 
+            additional to the test folds. If True, the cross-validation estimator will be
+            a function of both training data and test data.
         n_iter : int
             Number of iterations for random or bayesian hyperparameter optimization.
         split_functions : dict
@@ -1271,9 +1317,11 @@ class BasePanelLearner(ABC):
                 "median",
                 "mean-std",
                 "mean/std",
+                "mean-std-ge",
             ]:
                 raise ValueError(
-                    "cv_summary must be one of 'mean', 'median', 'mean-std' or 'mean/std'"
+                    "cv_summary must be one of 'mean', 'median', 'mean-std', 'mean-std-ge' or ",
+                    "'mean/std'"
                 )
         else:
             try:
@@ -1288,6 +1336,23 @@ class BasePanelLearner(ABC):
                 raise TypeError(
                     "cv_summary must be a function that takes a list of scores and returns "
                     "a single value. Check whether the output of cv_summary is a number."
+                )
+            
+        # include_train_folds
+        if not isinstance(include_train_folds, bool):
+            raise TypeError("include_train_folds must be a boolean.")
+        if include_train_folds:
+            if cv_summary in ["mean", "median", "mean-std", "mean/std"]:
+                warnings.warn(
+                    "include_train_folds is True, which means that evaluation on training "
+                    "folds is included in the cross-validation estimator. Check that "
+                    "cv_summary is set appropriately.",
+                    UserWarning,
+                )
+        if cv_summary == "mean-std-ge":
+            if not include_train_folds:
+                raise ValueError(
+                    "include_train_folds must be True if cv_summary is 'mean-std-ge'."
                 )
 
         # n_iter

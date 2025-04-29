@@ -197,6 +197,7 @@ class SignalOptimizer(BasePanelLearner):
         search_type="grid",
         normalize_fold_results=False,
         cv_summary="mean",
+        include_train_folds=False,
         min_cids=4,
         min_periods=12 * 3,
         test_size=1,
@@ -237,7 +238,13 @@ class SignalOptimizer(BasePanelLearner):
             False.
         cv_summary : str or callable, optional
             Summary function to use to combine scores across cross-validation folds.
-            Default is "mean". Options are "mean", "median" or a callable function.
+            Default is "mean". Options are "mean", "median", "mean-std", "mean/std",
+            "mean-std-ge" or a callable function.
+        include_train_folds : bool, optional
+            Whether to calculate cross-validation statistics on the training folds in 
+            additional to the test folds. If True, the cross-validation estimator will be
+            a function of both training data and test data. It is recommended to set 
+            `cv_summary` appropriately. Default is False.
         min_cids : int, optional
             Minimum number of cross-sections required for the initial
             training set. Default is 4.
@@ -302,6 +309,7 @@ class SignalOptimizer(BasePanelLearner):
             search_type=search_type,
             normalize_fold_results=normalize_fold_results,
             cv_summary=cv_summary,
+            include_train_folds=include_train_folds,
             split_functions=split_functions,
             n_iter=n_iter,
             n_jobs_outer=n_jobs_outer,
@@ -1274,7 +1282,7 @@ class SignalOptimizer(BasePanelLearner):
         if len(figsize) != 2:
             raise ValueError("The figsize argument must be a tuple of length 2.")
         for element in figsize:
-            if not isinstance(element, (int, float, np.int_, np.float_)):
+            if not isinstance(element, numbers.Real):
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
@@ -1507,7 +1515,7 @@ class SignalOptimizer(BasePanelLearner):
         if len(figsize) != 2:
             raise ValueError("The figsize argument must be a tuple of length 2.")
         for element in figsize:
-            if not isinstance(element, (int, float, np.int_, np.float_)):
+            if not isinstance(element, numbers.Real):
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
@@ -1784,16 +1792,17 @@ if __name__ == "__main__":
             "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
             "SecondSplit": ExpandingKFoldPanelSplit(n_splits=10),
         },
-        search_type="prior",
-        n_iter=6,
-        cv_summary="mean-std",
-        n_jobs_outer=-1,
+        #search_type="prior",
+        #n_iter=6,
+        cv_summary="mean-std-ge",
+        include_train_folds=True,
+        n_jobs_outer=1,
         n_jobs_inner=1,
         normalize_fold_results=True,
-        split_functions={
-            "ExpandingKFold": lambda n: n // 12,
-            "SecondSplit": None,
-        },
+        # split_functions={
+        #     "ExpandingKFold": lambda n: n // 12,
+        #     "SecondSplit": None,
+        # },
     )
 
     so.models_heatmap("LR")
