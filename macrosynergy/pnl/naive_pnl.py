@@ -265,6 +265,23 @@ class NaivePnL:
         if vol_scale is not None and (vol_scale <= 0):
             raise ValueError(err_vol)
 
+        if entry_barrier is not None and exit_barrier is not None:
+            if not isinstance(entry_barrier, (float, int)) or not isinstance(
+                exit_barrier, (float, int)
+            ):
+                raise TypeError(
+                    "Entry and exit barriers must be numerical values >= 0."
+                )
+            if sig_op != "binary":
+                raise ValueError(
+                    "Entry and exit barriers are only applicable when the signal "
+                    "operation is binary."
+                )
+            if entry_barrier <= 0 or exit_barrier < 0 or entry_barrier < exit_barrier:
+                raise ValueError(
+                    "Please ensure that: 0 <= exit_barrier < entry_barrier"
+                )
+
         # B. Extract DataFrame of exclusively return and signal categories in time series
         # format.
         dfx = self.df[self.df["xcat"].isin([self.ret, sig])]
@@ -306,14 +323,18 @@ class NaivePnL:
         dfw["sig"] = np.squeeze(sig_series.to_numpy())
 
         # Code to do history dependent binary pnl
-        if entry_barrier is not None and exit_barrier is not None and sig_op == "binary":
+        if (
+            entry_barrier is not None
+            and exit_barrier is not None
+            and sig_op == "binary"
+        ):
             dfw.rename({"sig": "prev_sig"}, axis=1, inplace=True)
             dfw["psig"] = dfw.apply(
-                self._apply_barriers, 
-                axis=1, 
-                sig=sig, 
-                entry_barrier=entry_barrier, 
-                exit_barrier=exit_barrier
+                self._apply_barriers,
+                axis=1,
+                sig=sig,
+                entry_barrier=entry_barrier,
+                exit_barrier=exit_barrier,
             )
             dfw["psig"] = dfw.groupby("cid", observed=True)["psig"].shift(1)
 
@@ -482,7 +503,7 @@ class NaivePnL:
                     self.df = update_df(self.df, dfa)
 
         return bm_dict
-    
+
     @staticmethod
     def _apply_barriers(row, sig, entry_barrier, exit_barrier):
         if row["prev_sig"] is None or np.isnan(row["prev_sig"]) or row["prev_sig"] == 0:
@@ -494,7 +515,6 @@ class NaivePnL:
             return np.sign(row[sig])
         else:
             return 0
-        
 
     @staticmethod
     def _make_signal(
@@ -505,9 +525,7 @@ class NaivePnL:
         iis: bool = True,
         sequential: bool = True,
         neutral: str = "zero",
-        thresh: float = None,
-        entry_barrier: float = None,
-        exit_barrier: float = None,
+        thresh: float = None
     ):
         """
         Helper function used to produce the raw signal that forms the basis for
@@ -1646,8 +1664,8 @@ if __name__ == "__main__":
     pnl.make_pnl(
         sig="GROWTH",
         sig_op="binary",
-        entry_barrier=0.0000001,
-        exit_barrier=0.0,
+        entry_barrier=1,
+        exit_barrier=0.3,
         # sig_neg=True,
         # sig_add=0.5,
         rebal_freq="monthly",
