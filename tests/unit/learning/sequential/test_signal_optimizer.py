@@ -1719,6 +1719,57 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df8.real_date.max() == last_date)
         self.assertTrue(len(df8.value.value_counts()) == 2)
 
+    def test_optional_hparam_validity(self):
+        """
+        I test that the pipelines run as expected when no hyperparameters are 
+        entered. 
+        """
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+        )
+        so.calculate_predictions(
+            name="test",
+            models={"LR": LinearRegression()},
+        )
+        dfa = so.get_optimized_signals("test")
+        self.assertIsInstance(dfa, pd.DataFrame)
+        if len(dfa.xcat.unique()) != 1:
+            self.fail("The signal dataframe should only contain one xcat")
+        self.assertEqual(dfa.xcat.unique()[0], "test")
+        self.assertTrue(len(dfa) != 0)
+        self.assertTrue(dfa.value.notnull().all())
+
+        # Check the first and last date is as expected
+        outer_splitter = list(
+            ExpandingIncrementPanelSplit(
+                train_intervals=1,
+                test_size=1,
+                min_cids=4,
+                min_periods=36,
+            ).split(self.X, self.y)
+        )
+        first_date = (
+            self.X.iloc[outer_splitter[0][0], :].index.get_level_values(1).max()
+        )
+        last_date = (
+            self.X.iloc[outer_splitter[-1][1], :].index.get_level_values(1).max()
+        )
+        self.assertTrue(dfa.real_date.min() == first_date)
+        self.assertTrue(dfa.real_date.max() == last_date)
+
+        # (2) Check that the model diagnostics are stored as expected in this instance
+        dfa = so.get_optimal_models("test")
+        self.assertIsInstance(dfa, pd.DataFrame)
+        self.assertTrue(len(dfa) != 0)
+        self.assertTrue(dfa.name.notnull().all())
+        self.assertTrue(dfa.model_type.notnull().all())
+        self.assertTrue(dfa.model_type.unique()[0] == "LR")
+        self.assertTrue(dfa.name.unique()[0] == "test")
+        self.assertTrue(all(dfa.score==0))
+        self.assertTrue(all(dfa.hparams=={}))
+        self.assertTrue(all(dfa.n_splits_used==0))
 
     def test_types_run(self):
         # Training set only
