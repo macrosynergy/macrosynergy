@@ -199,6 +199,8 @@ def request_wrapper(
 
     user_id: str = kwargs.pop("user_id", "unknown")
 
+    verify: bool = kwargs.pop("verify", True)
+
     # insert tracking info in headers
     if headers is None:
         headers: Dict = {}
@@ -229,7 +231,8 @@ def request_wrapper(
                 prepared_request,
                 proxies=proxy,
                 cert=cert,
-                timeout=300
+                timeout=300,
+                verify=verify,
             ) as response:
                 if isinstance(response, requests.Response):
                     return validate_response(response=response, user_id=user_id)
@@ -327,6 +330,7 @@ class OAuth(object):
         proxy: Optional[dict] = None,
         token_url: str = OAUTH_TOKEN_URL,
         dq_resource_id: str = OAUTH_DQ_RESOURCE_ID,
+        **kwargs,
     ):
         logger.debug("Instantiate OAuth pathway to DataQuery")
         vars_types_zip: zip = zip(
@@ -356,6 +360,8 @@ class OAuth(object):
             "client_secret": client_secret,
             "aud": dq_resource_id,
         }
+
+        self.kwargs = kwargs
 
     def _valid_token(self) -> bool:
         """
@@ -408,6 +414,7 @@ class OAuth(object):
                 proxy=self.proxy,
                 tracking_id=OAUTH_TRACKING_ID,
                 user_id=self._get_user_id(),
+                **self.kwargs
             )
             # on failure, exception will be raised by request_wrapper
 
@@ -682,6 +689,7 @@ class DataQueryInterface(object):
         token_url: str = OAUTH_TOKEN_URL,
         suppress_warning: bool = True,
         custom_auth=None,
+        verify: bool = True,
     ):
         self._check_connection: bool = check_connection
         self.msg_errors: List[str] = []
@@ -718,12 +726,15 @@ class DataQueryInterface(object):
             else:
                 oauth: bool = False
 
+        self.verify: bool = verify
+
         if oauth:
             self.auth: OAuth = OAuth(
                 client_id=client_id,
                 client_secret=client_secret,
                 token_url=token_url,
                 proxy=proxy,
+                verify=self.verify
             )
         elif custom_auth is not None:
             self.auth = custom_auth
@@ -813,7 +824,8 @@ class DataQueryInterface(object):
             params={"data": "NO_REFERENCE_DATA"},
             proxy=self.proxy,
             tracking_id=HEARTBEAT_TRACKING_ID,
-            **self.auth.get_auth(),
+            verify=self.verify,
+            **self.auth.get_auth()
         )
 
         result: bool = True
@@ -873,6 +885,7 @@ class DataQueryInterface(object):
             params=params,
             proxy=self.proxy,
             tracking_id=tracking_id,
+            verify=self.verify,
             **self.auth.get_auth(),
         )
 

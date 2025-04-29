@@ -1585,7 +1585,7 @@ if __name__ == "__main__":
 
     with JPMaQSDownload(
         client_id=os.getenv("DQ_CLIENT_ID"),
-        client_secret=os.getenv("DQ_CLIENT_SECRET"),
+        client_secret=os.getenv("DQ_CLIENT_SECRET")
     ) as jpmaqs:
         data = jpmaqs.download(
             xcats=xcats,
