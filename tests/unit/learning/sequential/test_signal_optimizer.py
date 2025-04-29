@@ -1980,6 +1980,93 @@ class TestAll(unittest.TestCase):
             self.assertIsInstance(ftr_correlation[0][2], str)
             self.assertIsInstance(ftr_correlation[0][3], str)
 
+    def test_optional_hparam_types(self):
+        """
+        Hyperparameter tuning is optional. This test checks that various Type/Value errors
+        are called should optional tuning be abused.
+        """
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+        )
+        # Raise ValueError if scorers is None but inner_splitters is not None
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models={"LR":LinearRegression()},
+                scorers=None,
+                hyperparameters={"LR": {"fit_intercept": [True, False]}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models={"LR":LinearRegression()},
+                scorers=None,
+                hyperparameters=None,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # Raise ValueError if inner_splitters is None but scorers is not None
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models={"LR":LinearRegression()},
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={"LR": {"fit_intercept": [True, False]}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=None,
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models={"LR":LinearRegression()},
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=None,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=None,
+            )
+        # Raise ValueError if no cross-validation is performed but multiple models specified
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models={"LR":LinearRegression(), "RIDGE":Ridge()},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+            )
+        # Raise ValueError if no cross-validation is performed but hyperparameters specified
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models={"LR":LinearRegression()},
+                hyperparameters={"LR": {"fit_intercept": [True, False]}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+            )
+        # Raise ValueError if no cross-validation is performed but
+        # hyperparameters specified and multiple models specified
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models={"LR":LinearRegression(), "Ridge":Ridge()},
+                hyperparameters={"LR": {"fit_intercept": [True, False]}, "Ridge": {"fit_intercept": [True, False]}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+            )
+
     def test_get_ftr_corr_data_no_model(self):
 
         so = SignalOptimizer(
