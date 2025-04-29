@@ -1759,7 +1759,7 @@ class TestAll(unittest.TestCase):
             "inner_splitters": "invalid_splitter",  # Invalid: should be a list or splitter object
             "models": None,  # Invalid: should be a model list
             "hyperparameters": "invalid_hyperparameters",  # Invalid: should be a dict or iterable
-            "scorers": None,  # Invalid: should be a scorer or list of scorers
+            "scorers": "scorers",  # Invalid: should be a scorer or list of scorers
             "normalize_fold_results": "invalid_boolean",  # Invalid: should be a boolean
             "search_type": 123,  # Invalid: should be a string
             "cv_summary": 123,  # Invalid: should be a string
