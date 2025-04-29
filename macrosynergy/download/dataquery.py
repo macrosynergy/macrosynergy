@@ -93,18 +93,9 @@ def validate_response(
         an exception.
     """
 
-    error_str: str = (
-        f"Response: {response}\n"
-        f"User ID: {user_id}\n"
-        f"Requested URL: {response.request.url}\n"
-        f"Response status code: {response.status_code}\n"
-        f"Response headers: {response.headers}\n"
-        f"Response text: {response.text}\n"
-        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}; \n"
-    )
-    # TODO : Use response.raise_for_status() as a better way to check for errors
     if not response.ok:
         logger.info("Response status is NOT OK : %s", response.status_code)
+        error_str = format_invalid_response_msg(response, user_id)
         if response.status_code == 401:
             raise AuthenticationError(error_str)
 
@@ -118,13 +109,35 @@ def validate_response(
     try:
         response_dict = response.json()
         if response_dict is None:
+            error_str = format_invalid_response_msg(response, user_id)
             raise InvalidResponseError(f"Response is empty.\n{error_str}")
         return response_dict
     except Exception as exc:
         if isinstance(exc, KeyboardInterrupt):
             raise exc
 
+        error_str = format_invalid_response_msg(response, user_id)
         raise InvalidResponseError(error_str + f"Error parsing response as JSON: {exc}")
+
+
+def format_invalid_response_msg(response: requests.Response, user_id: str) -> str:
+    """
+    This function formats an error message for an invalid response from the API.
+    Should only be called if there is an error in the response (as the functions adds the
+    response text to the error message).
+    """
+    error_str: str = (
+        f"Response: {response}\n"
+        f"User ID: {user_id}\n"
+        f"Requested URL: {response.request.url}\n"
+        f"Response status code: {response.status_code}\n"
+        f"Response headers: {response.headers}\n"
+        f"Response text: {response.text}\n"
+        f"DataQuery Interaction ID: {response.headers.get('x-dataquery-interaction-id', 'N/A')}\n"
+        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}; \n"
+    )
+
+    return error_str
 
 
 def request_wrapper(
@@ -186,6 +199,8 @@ def request_wrapper(
 
     user_id: str = kwargs.pop("user_id", "unknown")
 
+    verify: bool = kwargs.pop("verify", True)
+
     # insert tracking info in headers
     if headers is None:
         headers: Dict = {}
@@ -216,6 +231,8 @@ def request_wrapper(
                 prepared_request,
                 proxies=proxy,
                 cert=cert,
+                timeout=300,
+                verify=verify,
             ) as response:
                 if isinstance(response, requests.Response):
                     return validate_response(response=response, user_id=user_id)
@@ -313,6 +330,7 @@ class OAuth(object):
         proxy: Optional[dict] = None,
         token_url: str = OAUTH_TOKEN_URL,
         dq_resource_id: str = OAUTH_DQ_RESOURCE_ID,
+        **kwargs,
     ):
         logger.debug("Instantiate OAuth pathway to DataQuery")
         vars_types_zip: zip = zip(
@@ -342,6 +360,8 @@ class OAuth(object):
             "client_secret": client_secret,
             "aud": dq_resource_id,
         }
+
+        self.kwargs = kwargs
 
     def _valid_token(self) -> bool:
         """
@@ -394,6 +414,7 @@ class OAuth(object):
                 proxy=self.proxy,
                 tracking_id=OAUTH_TRACKING_ID,
                 user_id=self._get_user_id(),
+                **self.kwargs
             )
             # on failure, exception will be raised by request_wrapper
 
@@ -668,6 +689,7 @@ class DataQueryInterface(object):
         token_url: str = OAUTH_TOKEN_URL,
         suppress_warning: bool = True,
         custom_auth=None,
+        verify: bool = True,
     ):
         self._check_connection: bool = check_connection
         self.msg_errors: List[str] = []
@@ -704,12 +726,15 @@ class DataQueryInterface(object):
             else:
                 oauth: bool = False
 
+        self.verify: bool = verify
+
         if oauth:
             self.auth: OAuth = OAuth(
                 client_id=client_id,
                 client_secret=client_secret,
                 token_url=token_url,
                 proxy=proxy,
+                verify=self.verify
             )
         elif custom_auth is not None:
             self.auth = custom_auth
@@ -799,7 +824,8 @@ class DataQueryInterface(object):
             params={"data": "NO_REFERENCE_DATA"},
             proxy=self.proxy,
             tracking_id=HEARTBEAT_TRACKING_ID,
-            **self.auth.get_auth(),
+            verify=self.verify,
+            **self.auth.get_auth()
         )
 
         result: bool = True
@@ -859,6 +885,7 @@ class DataQueryInterface(object):
             params=params,
             proxy=self.proxy,
             tracking_id=tracking_id,
+            verify=self.verify,
             **self.auth.get_auth(),
         )
 
