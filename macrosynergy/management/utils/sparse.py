@@ -168,6 +168,11 @@ class InformationStateChanges(object):
         ----------
         qdf : QuantamentalDataFrame
             The QuantamentalDataFrame to create the InformationStateChanges object from.
+            This dataframe must contain a `value` column. Additionally, the `eop_lag`
+            column is required to calculate the correct `eop` and `version` information.
+            If not provided, the information state is assumed to be based on the value
+            only. The `grading` column is optional and will be preserved in the output if
+            provided.
         norm : bool
             If True, calculate the score for the information state changes.
         score_by : str
@@ -177,7 +182,7 @@ class InformationStateChanges(object):
             change.
         **kwargs : Any
             Additional keyword arguments to pass to the `calculate_score` Please refer
-            to `InformationStateChanges.calculate_score()` for more information.
+            to :func:`InformationStateChanges.calculate_score()` for more information.
 
         Returns
         -------
@@ -277,6 +282,7 @@ class InformationStateChanges(object):
         value_column: str = "value",
         postfix: str = None,
         metrics: List[str] = ["eop", "grading"],
+        thresh: Union[Tuple[float, float], float] = None,
     ) -> pd.DataFrame:
         """
         Convert the InformationStateChanges object to a QuantamentalDataFrame.
@@ -288,9 +294,13 @@ class InformationStateChanges(object):
         postfix : str
             A postfix to append to the xcat column. Default is None.
         metrics : List[str]
-            A list of metrics to include in the DataFrame. Default is ["eop",
-            "grading"].
-
+            A list of metrics to include in the DataFrame. Default is ["eop", "grading"].
+            Use `metrics=None` to disregard any non-value columns.
+        thresh : Union[Tuple[float, float], float]
+            A float or a tuple of two floats to winsorise the data to. Default is None.
+            If a single float is provided, it is used for both lower and upper bounds,
+            as `(-thresh, thresh)`. If a tuple is provided, it is used as
+            `(thresh[0], thresh[1])`.
         Returns
         -------
         pd.DataFrame
@@ -304,6 +314,7 @@ class InformationStateChanges(object):
             max_period=self._max_period,
             postfix=postfix,
             metrics=metrics,
+            thresh=thresh,
         )
 
         return QuantamentalDataFrame(
@@ -775,6 +786,10 @@ def create_delta_data(
     if "value" not in df.columns:
         raise ValueError("`df` must contain a `value` column")
     if "eop_lag" not in df.columns:
+        warnings.warn(
+            "`df` does not contain an `eop_lag` column. Differences calculated will not be "
+            " based on end-of-period adjustments."
+        )
         df["eop_lag"] = np.nan
     if "grading" not in df.columns:
         df["grading"] = np.nan
@@ -1226,6 +1241,7 @@ def sparse_to_dense(
     max_period: pd.Timestamp,
     postfix: str = None,
     metrics: List[str] = ["eop", "grading"],
+    thresh: Union[Tuple[float, float], float] = None,
 ) -> pd.DataFrame:
     """
     Convert a dictionary of DataFrames with changes in the information state to a dense
@@ -1244,9 +1260,14 @@ def sparse_to_dense(
         The maximum period to include in the DataFrame.
     postfix : str
         A postfix to append to the xcat column. Default is None.
-    metrics : List[str]
+    metrics : Optional[List[str]]
         A list of metrics to include in the DataFrame. Default is ["eop", "grading"].
-
+        Use `metrics=None` to disregard any non-value columns.
+    thresh : Union[Tuple[float, float], float]
+        A float or a tuple of two floats to winsorise the data to. Default is None.
+        If a single float is provided, it is used for both lower and upper bounds,
+        as `(-thresh, thresh)`. If a tuple is provided, it is used as
+        `(thresh[0], thresh[1])`.
     Returns
     -------
     pd.DataFrame
@@ -1264,7 +1285,24 @@ def sparse_to_dense(
     tdf = _get_metric_df_from_isc(isc=isc, metric=value_column, date_range=dtrange)
     tdf = _remove_insignificant_values(tdf, threshold=1e-12)
 
+    wins_lower, wins_upper = None, None
+    if thresh is not None:
+        if isinstance(thresh, tuple):
+            if (len(thresh) != 2) or not all(isinstance(x, Number) for x in thresh):
+                raise ValueError(
+                    "If `thresh` is a tuple, it must contain two numeric values."
+                )
+            wins_lower, wins_upper = thresh
+        elif isinstance(thresh, Number):
+            wins_lower, wins_upper = -thresh, thresh
+        else:
+            raise ValueError("`thresh` must be a number or a tuple of two numbers.")
+
+        tdf = tdf.clip(lower=wins_lower, upper=wins_upper)
+
     sm_qdfs: List[QuantamentalDataFrame] = [ticker_df_to_qdf(tdf)]
+    if metrics is None:
+        metrics = []
     for metric_name in metrics:
         wdf = _get_metric_df_from_isc(
             isc=isc, metric=metric_name, date_range=dtrange, fill="ffill"
@@ -1442,6 +1480,7 @@ def _calculate_score_on_sparse_indicator_for_class(
     custom_method_kwargs: Dict = {},
     volatility_forecast: bool = True,
     score_by: str = "diff",
+    threshold: float = 1e-12,
 ):
     """
     Calculate score on sparse indicator for a class. Effectively a re-implementation of
@@ -1518,5 +1557,6 @@ if __name__ == "__main__":
     with JPMaQSDownload() as jpmaqs:
         df = jpmaqs.download(tickers=tickers, metrics="all")
 
-    isc = InformationStateChanges.from_qdf(df)
-    usd_gpdppc_isc = isc["USD_GDPPC_SA"]
+    isc = InformationStateChanges.from_qdf(df[["cid", "xcat", "real_date", "value"]])
+    iqdf = isc.to_qdf()
+    print(list(isc.keys()))

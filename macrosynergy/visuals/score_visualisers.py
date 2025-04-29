@@ -314,6 +314,7 @@ class ScoreVisualisers:
         cmap_range: Tuple[float, float] = None,
         sort_by_composite: bool = False,
         composite_to_end: bool = False,
+        return_as_df: bool = False,
     ):
         """
         View heatmap of the scores at the specified or latest available date.
@@ -353,6 +354,8 @@ class ScoreVisualisers:
             The colormap of the heatmap.
         cmap_range : tuple
             The range of the colormap.
+        return_as_df : bool
+            If True, return the DataFrame instead of plotting it.
         """
 
         cids = cids or self.cids
@@ -416,6 +419,9 @@ class ScoreVisualisers:
         if transpose:
             dfw = dfw.transpose()
 
+        if return_as_df:
+            return dfw
+
         title = title or f"Snapshot for {date}"
 
         horizontal_divider = transpose and composite_zscore in xcats
@@ -460,6 +466,7 @@ class ScoreVisualisers:
         cmap: str = None,
         cmap_range: Tuple[float, float] = None,
         round_decimals: int = 2,
+        return_as_df: bool = False,
     ):
         """
         View the evolution of the scores for the specified category and cross-sections.
@@ -503,6 +510,8 @@ class ScoreVisualisers:
             The colormap of the heatmap.
         cmap_range : tuple
             The range of the colormap.
+        return_as_df : bool
+            If True, return the DataFrame instead of plotting it.
         """
 
         cids = cids or self.cids
@@ -570,6 +579,9 @@ class ScoreVisualisers:
         if transpose:
             dfw_resampled = dfw_resampled.transpose()
 
+        if return_as_df:
+            return dfw_resampled
+
         title = title or f"Evolution for {xcat}"
 
         self._plot_heatmap(
@@ -603,6 +615,7 @@ class ScoreVisualisers:
         cmap_range: Tuple[float, float] = None,
         round_decimals: int = 2,
         composite_to_end: bool = False,
+        return_as_df: bool = False,
     ):
         """
         View the evolution of the scores for the specified cross-section and categories.
@@ -645,6 +658,8 @@ class ScoreVisualisers:
             The colormap of the heatmap.
         cmap_range : tuple
             The range of the colormap.
+        return_as_df : bool
+            If True, return the DataFrame instead of plotting it.
         """
 
         if not isinstance(cid, str):
@@ -737,6 +752,9 @@ class ScoreVisualisers:
 
         if transpose:
             dfw_resampled = dfw_resampled.transpose()
+
+        if return_as_df:
+            return dfw_resampled
 
         title = title or f"Evolution for {cid}"
 
