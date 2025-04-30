@@ -124,6 +124,8 @@ class NaivePnL:
         sequential: bool = True,
         neutral: str = "zero",
         thresh: float = None,
+        entry_barrier: float = None,
+        exit_barrier: float = None,
     ):
         """
         Calculate daily PnL and add to class instance.
@@ -185,6 +187,10 @@ class NaivePnL:
             threshold. Therefore, the threshold is the maximum absolute score value that the
             function is allowed to produce. The minimum threshold is one standard deviation.
             Default is no threshold.
+        entry_barrier : float
+            threshold value for the signal to enter a position. Default is None.
+        exit_barrier : float
+            threshold value for the signal to exit a position. Default is None.
 
 
         Notes
@@ -259,6 +265,23 @@ class NaivePnL:
         if vol_scale is not None and (vol_scale <= 0):
             raise ValueError(err_vol)
 
+        if entry_barrier is not None and exit_barrier is not None:
+            if not isinstance(entry_barrier, (float, int)) or not isinstance(
+                exit_barrier, (float, int)
+            ):
+                raise TypeError(
+                    "Entry and exit barriers must be numerical values >= 0."
+                )
+            if sig_op != "binary":
+                raise ValueError(
+                    "Entry and exit barriers are only applicable when the signal "
+                    "operation is binary."
+                )
+            if entry_barrier <= 0 or exit_barrier < 0 or entry_barrier < exit_barrier:
+                raise ValueError(
+                    "Please ensure that: 0 <= exit_barrier < entry_barrier"
+                )
+
         # B. Extract DataFrame of exclusively return and signal categories in time series
         # format.
         dfx = self.df[self.df["xcat"].isin([self.ret, sig])]
@@ -296,7 +319,30 @@ class NaivePnL:
         sig_series = self.rebalancing(
             dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
         )
+
         dfw["sig"] = np.squeeze(sig_series.to_numpy())
+
+        # Code to do history dependent binary pnl
+        if (
+            entry_barrier is not None
+            and exit_barrier is not None
+            and sig_op == "binary"
+        ):
+            dfw.rename({"sig": "prev_sig"}, axis=1, inplace=True)
+            dfw["psig"] = dfw.apply(
+                self._apply_barriers,
+                axis=1,
+                sig=sig,
+                entry_barrier=entry_barrier,
+                exit_barrier=exit_barrier,
+            )
+            dfw["psig"] = dfw.groupby("cid", observed=True)["psig"].shift(1)
+
+            dfw = dfw.sort_values(["cid", "real_date"])
+            sig_series = self.rebalancing(
+                dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
+            )
+            dfw["sig"] = np.squeeze(sig_series.to_numpy())
         # else:
         #     dfw = dfw.rename({"psig": "sig"}, axis=1)
 
@@ -457,6 +503,24 @@ class NaivePnL:
                     self.df = update_df(self.df, dfa)
 
         return bm_dict
+
+    @staticmethod
+    def _apply_barriers(row, sig, entry_barrier, exit_barrier):
+        if abs(row[sig]) >= entry_barrier:
+            return np.sign(row[sig])
+        elif (
+            row["prev_sig"] is None or np.isnan(row["prev_sig"]) or row["prev_sig"] == 0
+        ):
+            # No position taken last rebalancing period
+            return 0
+        elif abs(row[sig]) > exit_barrier and np.sign(row[sig]) == np.sign(
+            row["prev_sig"]
+        ):
+            # Position taken and current signal is same as previous rebalanced signal
+            return np.sign(row[sig])
+        else:
+            # Position taken and current signal is different sign from previous rebalanced signal
+            return 0
 
     @staticmethod
     def _make_signal(
@@ -1605,10 +1669,24 @@ if __name__ == "__main__":
 
     pnl.make_pnl(
         sig="GROWTH",
-        sig_op="zn_score_pan",
-        sig_neg=True,
-        sig_add=0.5,
-        rebal_freq="daily",
+        sig_op="binary",
+        entry_barrier=1,
+        exit_barrier=0.3,
+        # sig_neg=True,
+        # sig_add=0.5,
+        rebal_freq="monthly",
+        vol_scale=5,
+        rebal_slip=1,
+        min_obs=250,
+        thresh=2,
+    )
+
+    pnl.make_pnl(
+        sig="GROWTH",
+        sig_op="binary",
+        # sig_neg=True,
+        # sig_add=0.5,
+        rebal_freq="monthly",
         vol_scale=5,
         rebal_slip=1,
         min_obs=250,
