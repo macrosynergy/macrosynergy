@@ -506,14 +506,20 @@ class NaivePnL:
 
     @staticmethod
     def _apply_barriers(row, sig, entry_barrier, exit_barrier):
-        if row["prev_sig"] is None or np.isnan(row["prev_sig"]) or row["prev_sig"] == 0:
-            if abs(row[sig]) >= entry_barrier:
-                return np.sign(row[sig])
-            else:
-                return 0
-        if abs(row[sig]) > exit_barrier:
+        if abs(row[sig]) >= entry_barrier:
+            return np.sign(row[sig])
+        elif (
+            row["prev_sig"] is None or np.isnan(row["prev_sig"]) or row["prev_sig"] == 0
+        ):
+            # No position taken last rebalancing period
+            return 0
+        elif abs(row[sig]) > exit_barrier and np.sign(row[sig]) == np.sign(
+            row["prev_sig"]
+        ):
+            # Position taken and current signal is same as previous rebalanced signal
             return np.sign(row[sig])
         else:
+            # Position taken and current signal is different sign from previous rebalanced signal
             return 0
 
     @staticmethod
@@ -525,7 +531,7 @@ class NaivePnL:
         iis: bool = True,
         sequential: bool = True,
         neutral: str = "zero",
-        thresh: float = None
+        thresh: float = None,
     ):
         """
         Helper function used to produce the raw signal that forms the basis for
