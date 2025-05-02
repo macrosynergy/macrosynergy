@@ -5,14 +5,17 @@ allows applying mathematical operations on time-series data.
 
 import numpy as np
 import pandas as pd
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Set, Any
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.utils import drop_nan_series
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy import PYTHON_3_8_OR_LATER
+import itertools
 import re
 import random
+import collections
+import joblib
 
 
 def panel_calculator(
@@ -23,6 +26,8 @@ def panel_calculator(
     end: str = None,
     blacklist: dict = None,
     external_func: dict = None,
+    sort_execution_order: bool = True,
+    use_parallel: bool = True,
 ) -> pd.DataFrame:
     """
     Calculates new data panels through a given input formula which is performed on
@@ -51,6 +56,14 @@ def panel_calculator(
         dictionary of external functions to be used in the panel calculation. The key is
         the name of the function and the value is the function object itself. e.g.
         {"my_func": my_func}.
+    sort_execution_order : bool
+        if True, the function will sort the execution order of the calculations to
+        minimize dependencies to ensure dependency resolution. If False, the function will
+        use the order of the calculations as provided in the input. Default is True.
+    use_parallel : bool
+        if True, the function will create disjoint subgraphs of the calculations and
+        distribute them across multiple processes for parallel execution. If False,
+        the function will execute the calculations sequentially. Default is True.
 
     Returns
     -------
@@ -104,7 +117,16 @@ def panel_calculator(
 
         df = panel_calculator(df=df, calcs=calcs, ...)
     """
-
+    if use_parallel:
+        return panel_calc_pll(
+            df=df,
+            calcs=calcs,
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            external_func=external_func,
+        )
     # A. Asserts
 
     cols = ["cid", "xcat", "real_date", "value"]
@@ -159,12 +181,14 @@ def panel_calculator(
     )
 
     # E. Create all required wide dataframes with category names.
+    new_variables_existances: Dict[str, bool] = {}  # True where the variable exists
     df = df.add_ticker_column()
     for xcat in old_xcats_used:
         dfxx = dfx[dfx["xcat"] == xcat]
         dfw = dfxx.pivot(index="real_date", columns="cid", values="value")
         dfw = _replace_zeros(df=dfw)
         exec(f"{xcat} = dfw")
+        new_variables_existances[xcat] = not dfw.empty
 
     for single in singles_used:
         ticker = single[1:]
@@ -179,16 +203,24 @@ def panel_calculator(
             dfw.columns = cids
             dfw = _replace_zeros(df=dfw)
             exec(f"{single} = dfw")
+            new_variables_existances[single] = not dfw.empty
+
+    if sort_execution_order:
+        ops_tuples = sort_execution_order_func(ops, new_variables_existances)
+        first_op_lhs = ops_tuples[0][0]
+    else:
+        ops_tuples = list(ops.items())
+        first_op_lhs = ops_tuples[0][0]
 
     # F. Calculate the panels and collect.
     df_out: pd.DataFrame
-    for new_xcat, formula in ops.items():
+    for new_xcat, formula in ops_tuples:
         dfw_add = eval(formula)
         df_add = pd.melt(dfw_add.reset_index(), id_vars=["real_date"]).rename(
             {"variable": "cid"}, axis=1
         )
         df_add = QuantamentalDataFrame.from_long_df(df_add, xcat=new_xcat)
-        if new_xcat == list(ops.keys())[0]:
+        if new_xcat == first_op_lhs:
             df_out = df_add[cols]
         else:
             df_out = pd.concat([df_out, df_add[cols]], axis=0, ignore_index=True)
@@ -200,6 +232,39 @@ def panel_calculator(
 
     df_out = QuantamentalDataFrame(df_out, categorical=_as_categorical)
     return df_out
+
+
+def panel_calc_pll(
+    df: pd.DataFrame,
+    calcs: List[str] = None,
+    cids: List[str] = None,
+    start: str = None,
+    end: str = None,
+    blacklist: dict = None,
+    external_func: dict = None,
+):
+    ops = {}
+    for calc in calcs:
+        calc_parts = calc.split("=", maxsplit=1)
+        ops[calc_parts[0].strip()] = calc_parts[1].strip()
+
+    old_xcats_used, singles_used, single_cids = _get_xcats_used(ops)
+    avail = set(df["xcat"]) & set(old_xcats_used)
+    results = joblib.Parallel(n_jobs=4)(
+        joblib.delayed(panel_calculator)(
+            df,
+            list(map(lambda x: x.formula, _cl)),
+            cids=cids,
+            external_func=external_func,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            sort_execution_order=True,
+            use_parallel=False,
+        )
+        for _cl in CalcList(calcs, avail).get_independent_subgraphs()
+    )
+    return QuantamentalDataFrame.from_qdf_list(results)
 
 
 def time_series_check(formula: str, index: int):
@@ -344,7 +409,7 @@ def _replace_zeros(df: pd.DataFrame):
         cleaned dataframe.
     """
 
-    if not PYTHON_3_8_OR_LATER: # pragma: no cover
+    if not PYTHON_3_8_OR_LATER:  # pragma: no cover
         for col in df.columns:
             df[col] = df[col].replace(pd.NA, np.nan)
             df[col] = df[col].astype("float64")
@@ -353,6 +418,208 @@ def _replace_zeros(df: pd.DataFrame):
         return df
 
     return df
+
+
+def sort_execution_order_func(
+    ops: Dict[str, Set],
+    new_variables_existances: Dict[str, bool],
+) -> List[Tuple[str, str]]:
+    formulas = [f"{k} = {v}" for k, v in ops.items()]
+    existing_vars = [k for k, v in new_variables_existances.items() if v]
+    sorted_calcs = CalcList(calcs=formulas, already_existing_vars=existing_vars).calcs
+    ops = {calc.lhs: calc.rhs for calc in sorted_calcs}
+    return list(ops.items())
+
+
+class SingleCalc:
+    """
+    Class to represent a single calculation.
+    """
+
+    def __init__(self, formula: str):
+        self.formula = formula
+        self.lhs, self.rhs = [_.strip() for _ in formula.split(" = ", maxsplit=1)]
+        self.dct = {self.lhs: self.rhs}
+
+    def dependencies(self) -> List[str]:
+        return sorted(set(itertools.chain.from_iterable(_get_xcats_used(self.dct))))
+
+    def creates(self) -> str:
+        return self.lhs
+
+    def __repr__(self) -> str:
+        return f"{self.lhs} = {self.rhs}"
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
+
+class CalcList:
+    """
+    Manages a collection of SingleCalc formulas, identifies which are feasible
+    from the existing variables, and groups them into truly independent subgraphs.
+    Also provides a topologically-sorted list (self.calcs) of all feasible calculations.
+    """
+
+    def __init__(self, calcs: List[str], already_existing_vars: List[str]):
+        self.all_calcs = [SingleCalc(c) for c in calcs]
+        self.already_existing_vars = set(already_existing_vars)
+
+        # Identify which calculations are feasible from the existing variables
+        self.feasible_calcs = self._find_feasible_calcs()
+
+        # Build an undirected graph over only the feasible calculations
+        self.graph = self._build_graph(self.feasible_calcs)
+
+        # For convenience, also store a topologically-sorted list of all feasible calculations in self.calcs
+        self.calcs = self._sort_calculations()
+
+    def _find_feasible_calcs(self) -> List[SingleCalc]:
+        """
+        Returns only those SingleCalc objects whose dependencies
+        can eventually be satisfied starting from self.already_existing_vars.
+        """
+        known_vars = set(self.already_existing_vars)
+        feasible = []
+        calcs_remaining = set(self.all_calcs)  # Make a copy
+
+        # We'll keep picking off feasible calculations until no more can be found
+        progress = True
+        while progress:
+            progress = False
+            for calc in list(calcs_remaining):  # copy to iterate
+                deps = calc.dependencies()
+                # If all dependencies are known, this calc is feasible
+                if all(d in known_vars for d in deps):
+                    feasible.append(calc)
+                    known_vars.add(calc.creates())
+                    calcs_remaining.remove(calc)
+                    progress = True
+
+        # At the end, anything left in calcs_remaining has dependencies
+        # that can't be satisfied from the known_vars, so it is not feasible.
+        return feasible
+
+    def _sort_calculations(self) -> List[SingleCalc]:
+        """
+        Topologically sort the feasible calculations so that
+        each calculation's dependencies are created prior to it.
+        """
+        sorted_calcs = []
+        known_vars = set(self.already_existing_vars)
+        remaining = self.feasible_calcs[:]
+        cyc_err = "Cyclic or unresolvable dependencies in calculations."
+        while remaining:
+            # find all calcs whose dependencies are satisfied
+            placeable: List[SingleCalc] = [
+                calc
+                for calc in remaining
+                if all(dep in known_vars for dep in calc.dependencies())
+            ]
+            if not placeable:
+                raise ValueError(cyc_err)
+
+            # We add them in the order we encounter them
+            # sort is only done to make it strictly deterministic
+            for calc in sorted(placeable, key=lambda x: x.creates()):
+                sorted_calcs.append(calc)
+                known_vars.add(calc.creates())
+                remaining.remove(calc)
+
+        return sorted_calcs
+
+    def _build_graph(self, calcs: List[SingleCalc]) -> Dict[int, Set[int]]:
+        """
+        Build an undirected graph of feasible calculations for finding
+        connected components (truly independent subgraphs).
+        We'll store a mapping: calc_index -> set_of_calc_indices_that_are_connected
+        """
+        idx_map = {calc: i for i, calc in enumerate(calcs)}
+        graph = collections.defaultdict(set)
+
+        for i, cA in enumerate(calcs):
+            outA = cA.creates()
+            for j, cB in enumerate(calcs):
+                if i == j:
+                    continue
+                # if cB depends on cA's output, or cA depends on cB's output,
+                # they are in the same connected component
+                if outA in cB.dependencies():
+                    graph[i].add(j)
+                    graph[j].add(i)
+
+        return dict(graph)
+
+    def get_independent_subgraphs(self) -> List[List[SingleCalc]]:
+        """
+        Returns a list of subgraphs (each subgraph is a list of SingleCalc),
+        where each subgraph is truly independent from the others.
+        These are just the connected components of the feasible graph.
+        """
+        visited = set()
+        subgraphs = []
+        calcs = self.feasible_calcs
+        idx_map = {i: calcs[i] for i in range(len(calcs))}
+
+        for i in range(len(calcs)):
+            if i not in visited:
+                # BFS/DFS to get all connected nodes
+                component = []
+                queue = collections.deque([i])
+                visited.add(i)
+                while queue:
+                    node = queue.popleft()
+                    component.append(idx_map[node])
+                    # For each neighbor in the undirected graph:
+                    for neighbor in self.graph.get(node, []):
+                        if neighbor not in visited:
+                            visited.add(neighbor)
+                            queue.append(neighbor)
+                subgraphs.append(component)
+
+        return subgraphs
+
+    def get_subgraph_parallel_blocks(
+        self, subgraph: List[SingleCalc]
+    ) -> List[List[SingleCalc]]:
+        """
+        For a single subgraph (list of SingleCalc), return parallel "layers"
+        by topological level, i.e. each layer can be executed in parallel.
+        """
+        remaining = subgraph[:]
+        known_vars = set(self.already_existing_vars)
+        blocks = []
+
+        placed = True
+        while placed and remaining:
+            placed = False
+            this_block = []
+            for calc in list(remaining):
+                deps = calc.dependencies()
+                if all(d in known_vars for d in deps):
+                    this_block.append(calc)
+            if this_block:
+                for calc in this_block:
+                    remaining.remove(calc)
+                    known_vars.add(calc.creates())
+                blocks.append(this_block)
+                placed = True
+
+        if remaining:
+            # Something is unplaced => cyclical or incomplete dependencies
+            raise ValueError(
+                "Cannot form parallel layers. Possibly a cycle in subgraph."
+            )
+
+        return blocks
+
+    def __repr__(self):
+        feasible_formulas = "\n".join(str(c) for c in self.feasible_calcs)
+        sorted_formulas = "\n".join(str(c) for c in self.calcs)
+        return (
+            f"Feasible calculations:\n{feasible_formulas}\n\n"
+            f"Topologically-sorted feasible calculations (CalcList.calcs):\n{sorted_formulas}\n"
+        )
 
 
 if __name__ == "__main__":
