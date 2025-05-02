@@ -188,9 +188,17 @@ class NaivePnL:
             function is allowed to produce. The minimum threshold is one standard deviation.
             Default is no threshold.
         entry_barrier : float
-            threshold value for the signal to enter a position. Default is None.
+            Threshold in terms of absolute signal value to enter a position in a binary 
+            strategy. This prevents binary strategies from excessive position flipping. 
+            Default is None, i.e., the binary strategy always takes its full position, no 
+            matter how small the signal value.
         exit_barrier : float
-            threshold value for the signal to exit a position. Default is None.
+            Threshold in terms of absolute signal value to exit a position in a binary 
+            strategy. In conjunction with an entry barrier, this determines the 
+            probability of position liquidations when the sign of the signal does not 
+            change. The value must be below the entry barrier. Without an entry barrier 
+            there can be no exit barrier. Default is None, which means that a position is 
+            only liquidated of the sign of the signal flips.
 
 
         Notes
@@ -201,10 +209,12 @@ class NaivePnL:
         When `sig_op = "zn_score_cs"`, raw signals are transformed into zn-scores
         around a neutral value where statistics are calculated by cross section alone.
 
-        When `sig_op = "binary"`, transforms signals into uniform long/shorts (1/-1) across
-        all cross sections.
+        When `sig_op = "binary"`, transforms signals into uniform long/shorts (1/-1) 
+        across all cross sections.
 
         When `sig_op = "raw"`, no transformation is applied to the signal.
+
+        Entry and exit barriers are only applicable when the signal operation is binary.
 
         See Also
         --------
