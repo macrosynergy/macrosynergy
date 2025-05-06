@@ -51,6 +51,7 @@ def timelines(
     height: Number = 3.0,
     legend_fontsize: int = 12,
     blacklist: Dict = None,
+    ax_hline: Union[float, Dict] = None,
 ):
     """
     Displays a facet grid of time line charts of one or more categories.
@@ -286,6 +287,7 @@ def timelines(
                 legend_ncol=legend_ncol,
                 legend_fontsize=legend_fontsize,
                 interpolate=cumsum,
+                ax_hline=ax_hline,
             )
 
     elif single_chart or (len(cids) == 1):
@@ -312,6 +314,7 @@ def timelines(
                 legend_ncol=legend_ncol,
                 legend_fontsize=legend_fontsize,
                 legend_labels=xcat_labels or None,
+                ax_hline=ax_hline,
             )
 
     else:
@@ -352,6 +355,7 @@ def timelines(
                 legend_labels=xcat_labels,
                 legend_fontsize=legend_fontsize,
                 interpolate=cumsum,
+                ax_hline=ax_hline,
             )
 
 

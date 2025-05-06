@@ -211,6 +211,7 @@ class BetaEstimator(BasePanelLearner):
         search_type="grid",
         normalize_fold_results=False,
         cv_summary="mean",
+        include_train_folds=False,
         min_cids=4,
         min_periods=12 * 3,
         est_freq="D",
@@ -250,9 +251,15 @@ class BetaEstimator(BasePanelLearner):
         normalize_fold_results : bool
             Whether to normalize the scores across folds before combining them. Default is
             False.
-        cv_summary : str or callable
+        cv_summary : str or callable, optional
             Summary function to use to combine scores across cross-validation folds.
-            Default is "mean". Options are "mean", "median" or a callable function.
+            Default is "mean". Options are "mean", "median", "mean-std", "mean/std",
+            "mean-std-ge" or a callable function.
+        include_train_folds : bool, optional
+            Whether to calculate cross-validation statistics on the training folds in 
+            additional to the test folds. If True, the cross-validation estimator will be
+            a function of both training data and test data. It is recommended to set 
+            `cv_summary` appropriately. Default is False.
         min_cids : int
             Minimum number of cross-sections required for the initial
             training set. Default is 4.
@@ -312,6 +319,7 @@ class BetaEstimator(BasePanelLearner):
             search_type=search_type,
             normalize_fold_results=normalize_fold_results,
             cv_summary=cv_summary,
+            include_train_folds=include_train_folds,
             split_functions=split_functions,
             n_iter=n_iter,
             n_jobs_outer=n_jobs_outer,

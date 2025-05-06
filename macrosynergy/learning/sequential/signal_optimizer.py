@@ -191,12 +191,13 @@ class SignalOptimizer(BasePanelLearner):
         self,
         name,
         models,
-        hyperparameters,
-        scorers,
-        inner_splitters,
+        hyperparameters = None,
+        scorers = None,
+        inner_splitters = None,
         search_type="grid",
         normalize_fold_results=False,
         cv_summary="mean",
+        include_train_folds=False,
         min_cids=4,
         min_periods=12 * 3,
         test_size=1,
@@ -217,30 +218,43 @@ class SignalOptimizer(BasePanelLearner):
         models : dict
             Dictionary of models to choose from. The keys are model names and the values
             are scikit-learn compatible models.
-        hyperparameters : dict
+        hyperparameters : dict, optional
             Dictionary of hyperparameters to choose from. The keys are model names and
             the values are hyperparameter dictionaries for the corresponding model. The
-            keys must match with those provided in `models`.
-        scorers : dict
-            Dictionary of scoring functions to use in the hyperparameter optimization
-            process. The keys are scorer names and the values are scikit-learn compatible
-            scoring functions.
-        inner_splitters : dict
-            Dictionary of inner splitters to use in the hyperparameter optimization
-            process. The keys are splitter names and the values are scikit-learn compatible
-            cross-validator objects.
+            keys must match with those provided in `models`. If no hyperparameters are 
+            required to be tuned, this parameter can be None. Default is None.
+        scorers : dict, optional
+            Dictionary of scoring functions to use in cross-validation if hyperparameters
+            or models are needed to be selected. The keys are scorer names and the values
+            are scikit-learn compatible scoring functions. If no cross-validation is 
+            required, this parameter can be None. Default is None.
+        inner_splitters : dict, optional
+            Dictionary of inner splitters to use in cross-validation. The keys are
+            splitter names and the values are scikit-learn compatible cross-validator
+            objects. If no cross-validation is required, this parameter can be None.
+            Default is None.
         search_type : str, optional
             Type of hyperparameter optimization to perform. Default is "grid". Options are
-            "grid" and "prior".
+            "grid" and "prior". If no hyperparameter tuning is required, this parameter
+            can be disregarded.
         normalize_fold_results : bool, optional
             Whether to normalize the scores across folds before combining them. Default is
-            False.
+            False. If no hyperparameter tuning is required, this parameter
+            can be disregarded.
         cv_summary : str or callable, optional
             Summary function to use to combine scores across cross-validation folds.
-            Default is "mean". Options are "mean", "median" or a callable function.
+            Default is "mean". Options are "mean", "median", "mean-std", "mean/std",
+            "mean-std-ge" or a callable function. If no hyperparameter tuning is required,
+            this parameter can be disregarded.
+        include_train_folds : bool, optional
+            Whether to calculate cross-validation statistics on the training folds in 
+            additional to the test folds. If True, the cross-validation estimator will be
+            a function of both training data and test data. It is recommended to set 
+            `cv_summary` appropriately. Default is False. If no hyperparameter tuning is
+            required, this parameter can be disregarded.
         min_cids : int, optional
-            Minimum number of cross-sections required for the initial
-            training set. Default is 4.
+            Minimum number of cross-sections required for the initial training set.
+            Default is 4.
         min_periods : int, optional
             Minimum number of periods required for the initial training set, in units of
             the frequency `freq` specified in the constructor. Default is 36.
@@ -253,11 +267,13 @@ class SignalOptimizer(BasePanelLearner):
         split_functions : dict, optional
             Dict of callables for determining the number of cross-validation
             splits to add to the initial number as a function of the number of iterations
-            passed in the sequential learning process. Default is None. The keys must
+            passed in the sequential learning process. The keys must
             correspond to the keys in `inner_splitters` and should be set to None for any
-            splitters that do not require splitter adjustment.
+            splitters that do not require splitter adjustment. Default is None. If no
+            hyperparameter tuning is required, this parameter can be disregarded.
         n_iter : int, optional
             Number of iterations to run in random hyperparameter search. Default is None.
+            If no hyperparameter tuning is required, this parameter can be disregarded.
         n_jobs_outer : int, optional
             Number of jobs to run in parallel for the outer sequential loop. Default is -1.
             It is advised for n_jobs_inner * n_jobs_outer (replacing -1 with the number of
@@ -267,7 +283,8 @@ class SignalOptimizer(BasePanelLearner):
             Number of jobs to run in parallel for the inner loop. Default is 1.
             It is advised for n_jobs_inner * n_jobs_outer (replacing -1 with the number of
             available cores) to be less than or equal to the number of available cores on
-            the machine.
+            the machine. If no hyperparameter tuning is required, this parameter
+            can be disregarded.
         store_correlations : bool
             Whether to store the correlations between input pipeline features and input
             predictor features. Default is False.
@@ -302,6 +319,7 @@ class SignalOptimizer(BasePanelLearner):
             search_type=search_type,
             normalize_fold_results=normalize_fold_results,
             cv_summary=cv_summary,
+            include_train_folds=include_train_folds,
             split_functions=split_functions,
             n_iter=n_iter,
             n_jobs_outer=n_jobs_outer,
@@ -1274,7 +1292,7 @@ class SignalOptimizer(BasePanelLearner):
         if len(figsize) != 2:
             raise ValueError("The figsize argument must be a tuple of length 2.")
         for element in figsize:
-            if not isinstance(element, (int, float, np.int_, np.float_)):
+            if not isinstance(element, numbers.Real):
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
@@ -1507,7 +1525,7 @@ class SignalOptimizer(BasePanelLearner):
         if len(figsize) != 2:
             raise ValueError("The figsize argument must be a tuple of length 2.")
         for element in figsize:
-            if not isinstance(element, (int, float, np.int_, np.float_)):
+            if not isinstance(element, numbers.Real):
                 raise TypeError(
                     "The elements of the figsize tuple must be floats or ints."
                 )
@@ -1784,16 +1802,17 @@ if __name__ == "__main__":
             "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
             "SecondSplit": ExpandingKFoldPanelSplit(n_splits=10),
         },
-        search_type="prior",
-        n_iter=6,
-        cv_summary="mean-std",
-        n_jobs_outer=-1,
+        #search_type="prior",
+        #n_iter=6,
+        cv_summary="mean-std-ge",
+        include_train_folds=True,
+        n_jobs_outer=1,
         n_jobs_inner=1,
         normalize_fold_results=True,
-        split_functions={
-            "ExpandingKFold": lambda n: n // 12,
-            "SecondSplit": None,
-        },
+        # split_functions={
+        #     "ExpandingKFold": lambda n: n // 12,
+        #     "SecondSplit": None,
+        # },
     )
 
     so.models_heatmap("LR")
