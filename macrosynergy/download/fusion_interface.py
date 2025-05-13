@@ -490,6 +490,7 @@ class JPMaQSFusionClient:
         dataset: str,
         distribution: str = "parquet",
         qdf: bool = True,
+        categorical: bool = True,
         **kwargs,
     ) -> pd.DataFrame:
         series_members = self.get_dataset_available_series(dataset=dataset, **kwargs)
@@ -503,7 +504,10 @@ class JPMaQSFusionClient:
         )
 
         if qdf:
-            dist_df = convert_ticker_based_parquet_to_qdf(dist_df)
+            dist_df = convert_ticker_based_parquet_to_qdf(
+                df=dist_df,
+                categorical=categorical,
+            )
 
         return dist_df
 
