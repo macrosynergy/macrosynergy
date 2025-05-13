@@ -17,14 +17,9 @@ FUSION_AUTH_URL: str = "https://authe.jpmorgan.com/as/token.oauth2"
 FUSION_ROOT_URL: str = "https://fusion.jpmorgan.com/api/v1"
 FUSION_RESOURCE_ID: str = "JPMC:URI:RS-93742-Fusion-PROD"
 FUSION_API_DELAY = 1.0  # seconds
-FUSION_API_DELAY = 0  # seconds
 CACHE_TTL = 60  # seconds
 LAST_API_CALL: Optional[datetime.datetime] = None
 
-# logging.basicConfig(level=logging.INFO, and outptu to screen)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 
