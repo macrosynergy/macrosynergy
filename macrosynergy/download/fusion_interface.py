@@ -3,6 +3,7 @@ import json
 import datetime
 import time
 import logging
+import os
 import io
 import warnings
 import functools
@@ -511,6 +512,34 @@ class JPMaQSFusionClient:
 
         return dist_df
 
+    def download_latest_full_snapshot(
+        self,
+        folder: str = None,
+        qdf: bool = True,
+        **kwargs,
+    ) -> pd.DataFrame:
+        if folder is None:
+            _date = datetime.datetime.now().strftime("%Y-%m-%d")
+            folder = "./jpmaqs-full-snapshot-" + _date
+        os.makedirs(folder, exist_ok=True)
+
+        catalog_df = jpmaqs_client.get_metadata_catalog()
+        catalog_df.to_csv(
+            os.path.join(folder, "jpmaqs-metadata-catalog.csv"),
+            index=False,
+        )
+
+        datasets = jpmaqs_client.list_datasets()["identifier"].tolist()
+        for ds in datasets:
+            dist_df = jpmaqs_client.download_latest_distribution(
+                ds, qdf=qdf, categorical=False, **kwargs
+            )
+            dist_df.to_csv(
+                os.path.join(folder, f"{ds}.csv"),
+                index=False,
+            )
+            print(f"Downloaded {ds} to {folder}/{ds}.csv")
+
 
 if __name__ == "__main__":
     oauth_handler = FusionOAuth.from_credentials_json(
@@ -518,25 +547,30 @@ if __name__ == "__main__":
     )
     jpmaqs_client = JPMaQSFusionClient(oauth_handler=oauth_handler)
 
-    catalog_df = jpmaqs_client.get_metadata_catalog()
-    print("JPMaQS Catalog:")
-    print(catalog_df.head(5))
+    jpmaqs_client.download_latest_full_snapshot()
 
-    min_dates, max_dates = [], []
+    # catalog_df = jpmaqs_client.get_metadata_catalog()
+    # print("JPMaQS Catalog:")
+    # print(catalog_df.head(5))
 
-    tickers_count = []
+    # min_dates, max_dates = [], []
 
-    for ds in jpmaqs_client.list_datasets()["identifier"].tolist():
-        dist_df = jpmaqs_client.download_latest_distribution(ds)
-        print(f"Dataset: {ds}")
-        # tickers_count.append(len(dist_df[["cid", "xcat"]].drop_duplicates()))
-        tickers_count.append(len(dist_df["ticker"].drop_duplicates()))
-        print(f"Unique tickers: {tickers_count[-1]}")
-        _min, _max = dist_df["real_date"].min(), dist_df["real_date"].max()
-        min_dates.append(_min)
-        max_dates.append(_max)
-        print(f"Min, Max dates: {_min}, {_max}")
-        print("\n---")
+    # tickers_count = []
 
-    print("Unique tickers count:", sum(tickers_count))
-    print("Min. date: ", min(min_dates), "\t\tMax. date: ", max(max_dates))
+    # for ds in jpmaqs_client.list_datasets()["identifier"].tolist():
+    #     dist_df = jpmaqs_client.download_latest_distribution(ds)
+    #     print(f"Dataset: {ds}")
+    #     if "ticker" in dist_df.columns:
+    #         tickers_count.append(len(dist_df["ticker"].drop_duplicates()))
+    #     else:
+    #         tickers_count.append(len(dist_df[["cid", "xcat"]].drop_duplicates()))
+
+    #     print(f"Unique tickers: {tickers_count[-1]}")
+    #     _min, _max = dist_df["real_date"].min(), dist_df["real_date"].max()
+    #     min_dates.append(_min)
+    #     max_dates.append(_max)
+    #     print(f"Min, Max dates: {_min}, {_max}")
+    #     print("\n---")
+
+    # print("Unique tickers count:", sum(tickers_count))
+    # print("Min. date: ", min(min_dates), "\t\tMax. date: ", max(max_dates))
