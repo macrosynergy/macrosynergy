@@ -332,7 +332,6 @@ class SimpleFusionAPIClient:
         )
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
-    @cached(CACHE_TTL)
     def get_seriesmember_distribution_details(
         self, catalog: str, dataset: str, seriesmember: str, distribution: str, **kwargs
     ) -> Optional[Dict[str, Any]]:
@@ -440,6 +439,7 @@ class JPMaQSFusionClient:
         resources_df.index = resources_df.index + 1
         return resources_df
 
+    @cached(CACHE_TTL)
     def get_metadata_catalog(self, **kwargs) -> pd.DataFrame:
         r_bytes = self.simple_fusion_client.get_seriesmember_distribution_details(
             catalog=self._catalog,
