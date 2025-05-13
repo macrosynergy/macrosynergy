@@ -494,6 +494,7 @@ class JPMaQSFusionClient:
         self,
         dataset: str,
         distribution: str = "parquet",
+        qdf: bool = True,
         **kwargs,
     ) -> pd.DataFrame:
         series_members = self.get_dataset_available_series(dataset=dataset, **kwargs)
@@ -506,7 +507,9 @@ class JPMaQSFusionClient:
             **kwargs,
         )
 
-        # dist_df = convert_ticker_based_parquet_to_qdf(dist_df)
+        if qdf:
+            dist_df = convert_ticker_based_parquet_to_qdf(dist_df)
+
         return dist_df
 
 
@@ -520,23 +523,21 @@ if __name__ == "__main__":
     print("JPMaQS Catalog:")
     print(catalog_df.head(5))
 
-    min_max_dates = []
+    min_dates, max_dates = [], []
+
     tickers_count = []
 
     for ds in jpmaqs_client.list_datasets()["identifier"].tolist():
         dist_df = jpmaqs_client.download_latest_distribution(ds)
         print(f"Dataset: {ds}")
         # tickers_count.append(len(dist_df[["cid", "xcat"]].drop_duplicates()))
-        tickers_count.append(len(dist_df['ticker'].drop_duplicates()))
+        tickers_count.append(len(dist_df["ticker"].drop_duplicates()))
         print(f"Unique tickers: {tickers_count[-1]}")
-        minx, maxx = dist_df["real_date"].min(), dist_df["real_date"].max()
-        min_max_dates.append([minx, maxx])
-        print(f"Min, Max dates: {minx}, {maxx}")
+        _min, _max = dist_df["real_date"].min(), dist_df["real_date"].max()
+        min_dates.append(_min)
+        max_dates.append(_max)
+        print(f"Min, Max dates: {_min}, {_max}")
         print("\n---")
 
     print("Unique tickers count:", sum(tickers_count))
-    print(
-        "Min, Max dates:",
-        min([x[0] for x in min_max_dates]),
-        max([x[1] for x in min_max_dates]),
-    )
+    print("Min. date: ", min(min_dates), "\t\tMax. date: ", max(max_dates))
