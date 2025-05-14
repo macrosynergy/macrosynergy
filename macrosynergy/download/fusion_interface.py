@@ -241,14 +241,13 @@ class SimpleFusionAPIClient:
             raise TypeError("oauth_handler must be an instance of FusionOAuth.")
         self.oauth_handler: FusionOAuth = oauth_handler
         self.base_url: str = base_url.rstrip("/")
-        if not proxies:
-            # default should be None, not {}
-            proxies = None
         if proxies is not None:
             if proxies != self.oauth_handler.proxies:
                 proxy_warning = "Proxies defined for OAuth handler are different from the ones defined for the downloader."
                 warnings.warn(proxy_warning)
             self.proxies: Optional[Dict[str, str]] = proxies
+        else:
+            self.proxies: Optional[Dict[str, str]] = None
 
     def _request(
         self,
