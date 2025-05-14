@@ -51,7 +51,7 @@ class FusionOAuth(object):
         self.application_name = application_name
         self.root_url = root_url
         self.auth_url = auth_url
-        self.proxies = proxies
+        self.proxies = proxies or None
 
         self.token_data = {
             "grant_type": "client_credentials",
@@ -241,12 +241,19 @@ class SimpleFusionAPIClient:
             raise TypeError("oauth_handler must be an instance of FusionOAuth.")
         self.oauth_handler: FusionOAuth = oauth_handler
         self.base_url: str = base_url.rstrip("/")
-        self.proxies: Optional[Dict[str, str]] = proxies
+        if not proxies:
+            # default should be None, not {}
+            proxies = None
+        if proxies is not None:
+            if proxies != self.oauth_handler.proxies:
+                proxy_warning = "Proxies defined for OAuth handler are different from the ones defined for the downloader."
+                warnings.warn(proxy_warning)
+            self.proxies: Optional[Dict[str, str]] = proxies
 
     def _request(
         self,
-        method: str,
         endpoint: str,
+        method: str = "GET",
         params: Optional[Dict[str, Any]] = None,
         data: Optional[Any] = None,
         json_payload: Optional[Dict[str, Any]] = None,
@@ -274,23 +281,22 @@ class SimpleFusionAPIClient:
     @cached(CACHE_TTL)
     def get_common_catalog(self, **kwargs) -> Optional[Dict[str, Any]]:
         # /v1/catalogs/common
-        return self._request(method="GET", endpoint="catalogs/common", **kwargs)
+        endpoint: str = "catalogs/common"
+        return self._request(method="GET", endpoint=endpoint, **kwargs)
 
     @cached(CACHE_TTL)
     def get_products(self, **kwargs) -> Optional[Dict[str, Any]]:
         # /v1/catalogs/common/products
-        return self._request(
-            method="GET", endpoint="catalogs/common/products", **kwargs
-        )
+        endpoint: str = "catalogs/common/products"
+        return self._request(method="GET", endpoint=endpoint, **kwargs)
 
     @cached(CACHE_TTL)
     def get_product_details(
         self, product_id: str = "JPMAQS", **kwargs
     ) -> Optional[Dict[str, Any]]:
         # /v1/catalogs/common/products/{product_id}
-        return self._request(
-            method="GET", endpoint=f"catalogs/common/products/{product_id}", **kwargs
-        )
+        endpoint: str = f"catalogs/common/products/{product_id}"
+        return self._request(method="GET", endpoint=endpoint, **kwargs)
 
     @cached(CACHE_TTL)
     def get_dataset(
