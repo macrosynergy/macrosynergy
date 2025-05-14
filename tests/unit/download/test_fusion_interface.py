@@ -1,0 +1,107 @@
+import unittest
+from unittest.mock import patch, MagicMock
+import json, requests
+
+from macrosynergy.download import fusion_interface
+
+
+class RequestWrapperTestCase(unittest.TestCase):
+    URL = "https://example.com/api"
+    HDRS = {"Authorization": "Bearer test"}
+
+    def _make_response(
+        self,
+        *,
+        status=200,
+        content=b"",
+        text="",
+        json_data=None,
+        raise_exc=None,
+    ):
+        """Return a MagicMock imitating `requests.Response`."""
+        r = MagicMock()
+        r.status_code = status
+        r.content = content
+        r.text = text or content.decode(errors="ignore")
+        r.url = self.URL
+        r.request = MagicMock(method="GET")
+
+        # raise_for_status
+        if raise_exc:
+            r.raise_for_status.side_effect = raise_exc
+        else:
+            r.raise_for_status.return_value = None
+
+        # json()
+        if json_data is not None:
+            r.json.return_value = json_data
+        else:
+            r.json.side_effect = json.JSONDecodeError("Expecting value", r.text, 0)
+
+        return r
+
+    def _call(self, response, **kwargs):
+        with patch(
+            "macrosynergy.download.fusion_interface.wait_for_api_call",
+            return_value=True,
+        ), patch("requests.request", return_value=response):
+            return fusion_interface.request_wrapper(
+                "GET", self.URL, headers=self.HDRS, **kwargs
+            )
+
+    def assertRaisesMessage(self, exc_type, msg, func, *args, **kwargs):
+        with self.assertRaises(exc_type) as cm:
+            func(*args, **kwargs)
+        self.assertIn(msg, str(cm.exception))
+
+    def test_http_error(self):
+        resp = self._make_response(
+            status=400,
+            text="Bad Request",
+            raise_exc=requests.exceptions.HTTPError("HTTP Error"),
+        )
+        self.assertRaisesMessage(Exception, "API HTTP error", self._call, resp)
+
+    def test_request_exception(self):
+        resp = self._make_response(status=500, text="Server Error")
+        with patch(
+            "macrosynergy.download.fusion_interface.wait_for_api_call",
+            return_value=True,
+        ), patch(
+            "requests.request",
+            side_effect=requests.exceptions.RequestException(
+                "Request failed", response=resp
+            ),
+        ):
+            self.assertRaisesMessage(
+                Exception,
+                "API request failed",
+                fusion_interface.request_wrapper,
+                "GET",
+                self.URL,
+                headers=self.HDRS,
+            )
+
+    def test_json_decode_error(self):
+        resp = self._make_response(content=b"notjson")
+        self.assertRaisesMessage(Exception, "decode JSON", self._call, resp)
+
+    def test_status_204_returns_none(self):
+        resp = self._make_response(status=204, content=b"")
+        self.assertIsNone(self._call(resp))
+
+    def test_as_bytes(self):
+        resp = self._make_response(content=b"bytesdata")
+        self.assertEqual(self._call(resp, as_bytes=True), b"bytesdata")
+
+    def test_as_text(self):
+        resp = self._make_response(content=b"sometext")
+        self.assertEqual(self._call(resp, as_text=True), "sometext")
+
+    def test_as_json(self):
+        resp = self._make_response(content=b'{"foo": "bar"}', json_data={"foo": "bar"})
+        self.assertEqual(self._call(resp, as_json=True), {"foo": "bar"})
+
+
+if __name__ == "__main__":
+    unittest.main()
