@@ -2,13 +2,21 @@ import unittest
 from unittest.mock import patch, MagicMock
 import json, requests
 import datetime
+import io
 import pandas as pd
+
+from macrosynergy.management.simulate import make_test_df
+from macrosynergy.management.utils.df_utils import is_categorical_qdf
+from macrosynergy.management.types import QuantamentalDataFrame
 
 from macrosynergy.download.fusion_interface import (
     request_wrapper as fusion_request_wrapper,
+    convert_ticker_based_parquet_to_qdf,
+    get_resources_df,
     FusionOAuth,
     SimpleFusionAPIClient,
     JPMaQSFusionClient,
+    read_parquet_from_bytes,
 )
 
 
@@ -359,6 +367,36 @@ class TestJPMaQSFusionClient(unittest.TestCase):
             result = self.client.download_latest_distribution("ds")
             mock_convert.assert_called_once()
             self.assertEqual(result, "QDF")
+
+
+class TestUtilityFunctions(unittest.TestCase):
+    def setUp(self):
+        qdf = make_test_df(start="2010-01-01", end="2011-02-01")
+        self.expected_qdf = qdf.copy()
+
+        qdf["ticker"] = qdf["cid"] + "_" + qdf["xcat"]
+        qdf = qdf.drop(columns=["cid", "xcat"])
+        self.qdf = qdf
+
+    def test_convert_ticker_based_parquet_to_qdf_empty(self):
+        result = convert_ticker_based_parquet_to_qdf(self.qdf, categorical=False)
+        pd.testing.assert_frame_equal(result, self.expected_qdf)
+        self.assertFalse(is_categorical_qdf(result))
+
+    def test_convert_ticker_based_parquet_to_qdf_categorical(self):
+        result = convert_ticker_based_parquet_to_qdf(self.qdf, categorical=True)
+        self.expected_qdf = QuantamentalDataFrame(self.expected_qdf, categorical=True)
+        pd.testing.assert_frame_equal(result, self.expected_qdf)
+        self.assertTrue(is_categorical_qdf(result))
+
+    def test_read_parquet_from_bytes(self):
+        df = self.qdf.copy()
+        buf = io.BytesIO()
+        df.to_parquet(buf, index=False)
+        buf.seek(0)
+        bytes_data = buf.read()
+        result = read_parquet_from_bytes(bytes_data)
+        pd.testing.assert_frame_equal(result, df)
 
 
 if __name__ == "__main__":
