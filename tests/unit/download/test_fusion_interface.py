@@ -283,7 +283,7 @@ class TestJPMaQSFusionClient(unittest.TestCase):
         self.mock_simple_client_ctor = patcher.start()
         self.client = JPMaQSFusionClient(self.oauth)
 
-    def test_list_datasets_smoke(self):
+    def test_list_datasets(self):
         self.simple_client.get_product_details.return_value = {
             "resources": [
                 {
@@ -307,7 +307,7 @@ class TestJPMaQSFusionClient(unittest.TestCase):
         self.assertIn("identifier", df.columns)
         self.assertTrue((df["identifier"] != "JPMAQS_METADATA_CATALOG").all())
 
-    def test_get_metadata_catalog_smoke(self):
+    def test_get_metadata_catalog(self):
         fake_bytes = b"parquetbytes"
         self.simple_client.get_seriesmember_distribution_details.return_value = (
             fake_bytes
@@ -317,7 +317,7 @@ class TestJPMaQSFusionClient(unittest.TestCase):
             mock_read_parquet.assert_called_once()
             self.assertEqual(result, "DF")
 
-    def test_get_dataset_available_series_smoke(self):
+    def test_get_dataset_available_series(self):
         self.simple_client.get_dataset_series.return_value = {
             "resources": [
                 {
@@ -333,7 +333,7 @@ class TestJPMaQSFusionClient(unittest.TestCase):
         self.assertIn("identifier", df.columns)
         self.assertIn("@id", df.columns)
 
-    def test_get_seriesmember_distributions_smoke(self):
+    def test_get_seriesmember_distributions(self):
         self.simple_client.get_seriesmember_distributions.return_value = {
             "resources": [
                 {"@id": "id1", "identifier": "dist1", "title": "Distribution 1"}
@@ -343,7 +343,7 @@ class TestJPMaQSFusionClient(unittest.TestCase):
         self.assertIn("identifier", df.columns)
         self.assertIn("@id", df.columns)
 
-    def test_download_series_member_distribution_smoke(self):
+    def test_download_series_member_distribution(self):
         fake_bytes = b"parquetbytes"
         self.simple_client.get_seriesmember_distribution_details.return_value = (
             fake_bytes
@@ -353,7 +353,7 @@ class TestJPMaQSFusionClient(unittest.TestCase):
             mock_read_parquet.assert_called_once()
             self.assertEqual(result, "DF")
 
-    def test_download_latest_distribution_smoke(self):
+    def test_download_latest_distribution(self):
         self.client.get_dataset_available_series = MagicMock(
             return_value=pd.DataFrame({"identifier": ["20230101", "20230102"]})
         )
