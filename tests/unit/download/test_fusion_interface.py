@@ -2,7 +2,11 @@ import unittest
 from unittest.mock import patch, MagicMock
 import json, requests
 
-from macrosynergy.download import fusion_interface
+from macrosynergy.download.fusion_interface import (
+    request_wrapper as fusion_request_wrapper,
+    FusionOAuth,
+    SimpleFusionAPIClient,
+)
 
 
 class RequestWrapperTestCase(unittest.TestCase):
@@ -45,9 +49,7 @@ class RequestWrapperTestCase(unittest.TestCase):
             "macrosynergy.download.fusion_interface.wait_for_api_call",
             return_value=True,
         ), patch("requests.request", return_value=response):
-            return fusion_interface.request_wrapper(
-                "GET", self.URL, headers=self.HDRS, **kwargs
-            )
+            return fusion_request_wrapper("GET", self.URL, headers=self.HDRS, **kwargs)
 
     def assertRaisesMessage(self, exc_type, msg, func, *args, **kwargs):
         with self.assertRaises(exc_type) as cm:
@@ -76,7 +78,7 @@ class RequestWrapperTestCase(unittest.TestCase):
             self.assertRaisesMessage(
                 Exception,
                 "API request failed",
-                fusion_interface.request_wrapper,
+                fusion_request_wrapper,
                 "GET",
                 self.URL,
                 headers=self.HDRS,
