@@ -105,5 +105,74 @@ class RequestWrapperTestCase(unittest.TestCase):
         self.assertEqual(self._call(resp, as_json=True), {"foo": "bar"})
 
 
+class SimpleFusionAPIClientTestCase(unittest.TestCase):
+    ENDPOINTS = [
+        ("get_common_catalog", {}),
+        ("get_products", {}),
+        ("get_product_details", {"product_id": "JPMAQS"}),
+        (
+            "get_dataset",
+            {
+                "catalog": "common",
+                "dataset": "JPMAQS_METADATA_CATALOG",
+            },
+        ),
+        (
+            "get_dataset_series",
+            {
+                "catalog": "common",
+                "dataset": "JPMAQS_METADATA_CATALOG",
+            },
+        ),
+        (
+            "get_dataset_seriesmember",
+            {
+                "catalog": "common",
+                "dataset": "JPMAQS_METADATA_CATALOG",
+                "seriesmember": "latest",
+            },
+        ),
+        (
+            "get_seriesmember_distributions",
+            {
+                "catalog": "common",
+                "dataset": "JPMAQS_METADATA_CATALOG",
+                "seriesmember": "latest",
+            },
+        ),
+        (
+            "get_seriesmember_distribution_details",
+            {
+                "catalog": "common",
+                "dataset": "JPMAQS_METADATA_CATALOG",
+                "seriesmember": "latest",
+                "distribution": "parquet",
+            },
+        ),
+    ]
+
+    def setUp(self):
+        self.oauth = MagicMock(spec=FusionOAuth)
+        self.oauth.get_auth.return_value = {"Authorization": "Bearer test"}
+        self.client = SimpleFusionAPIClient(
+            self.oauth, base_url="https://example.com/api"
+        )
+
+    @patch("macrosynergy.download.fusion_interface.request_wrapper")
+    def test_endpoints_return_expected_payload(self, mock_request):
+        """
+        Smoke-test every high-level helper delegates to request_wrapper
+        and returns its payload unchanged.
+        """
+        mock_request.return_value = {"resources": []}
+
+        for method_name, kwargs in self.ENDPOINTS:
+            with self.subTest(endpoint=method_name):
+                result = getattr(self.client, method_name)(**kwargs)
+                mock_request.assert_called_once()
+                self.assertEqual(result, {"resources": []})
+                mock_request.reset_mock()
+
+
 if __name__ == "__main__":
     unittest.main()
