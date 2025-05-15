@@ -12,7 +12,7 @@ from macrosynergy.download.fusion_interface import (
 )
 
 
-class RequestWrapperTestCase(unittest.TestCase):
+class TestRequestWrapper(unittest.TestCase):
     URL = "https://example.com/api"
     HDRS = {"Authorization": "Bearer test"}
 
@@ -108,7 +108,7 @@ class RequestWrapperTestCase(unittest.TestCase):
         self.assertEqual(self._call(resp, as_json=True), {"foo": "bar"})
 
 
-class FusionOAuthTestCase(unittest.TestCase):
+class TestFusionOAuth(unittest.TestCase):
     def setUp(self):
         self.creds = {
             "client_id": "abc",
@@ -194,7 +194,7 @@ class FusionOAuthTestCase(unittest.TestCase):
         self.assertIn("User-Agent", headers)
 
 
-class SimpleFusionAPIClientTestCase(unittest.TestCase):
+class TestSimpleFusionAPIClient(unittest.TestCase):
     ENDPOINTS = [
         ("get_common_catalog", {}),
         ("get_products", {}),
@@ -263,7 +263,7 @@ class SimpleFusionAPIClientTestCase(unittest.TestCase):
                 mock_request.reset_mock()
 
 
-class JPMaQSFusionClientTestCase(unittest.TestCase):
+class TestJPMaQSFusionClient(unittest.TestCase):
     def setUp(self):
         self.oauth = MagicMock(spec=FusionOAuth)
         self.simple_client = MagicMock(spec=SimpleFusionAPIClient)
