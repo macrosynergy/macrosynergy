@@ -157,6 +157,9 @@ def linear_composite(
         out_all=True,
     )
 
+    df = QuantamentalDataFrame(df)
+    result_as_categorical = df.InitializedAsCategorical
+
     if (
         len(remaining_cids) < len(cids)
         and not _xcat_agg
@@ -562,12 +565,12 @@ def _check_args(
             if not (isinstance(varx, str) and is_valid_iso_date(varx)):
                 raise ValueError(f"`{namex}` must be a valid ISO date string.")
 
-    if df.is_categorical():
-        xcats_in_df = set(df["xcat"].cat.categories)
-        cids_in_df = set(df["cid"].cat.categories)
-    else:
-        xcats_in_df = set(df["xcat"].values)
-        cids_in_df = set(df["cid"].values)
+    # if type(df) is QuantamentalDataFrame and df.is_categorical():
+    #     xcats_in_df = set(df["xcat"].cat.categories)
+    #     cids_in_df = set(df["cid"].cat.categories)
+    # else:
+    xcats_in_df = set(df["xcat"].values)
+    cids_in_df = set(df["cid"].values)
 
     # check xcats
     if xcats is None:
@@ -724,7 +727,48 @@ if __name__ == "__main__":
     df = QuantamentalDataFrame(df)
     cids = ['AUD', 'BRL', 'CAD', 'CHF', 'CLP', 'CNY', 'COP', 'CZK', 'DEM', 'ESP', 'EUR', 'FRF', 'GBP', 'HKD', 'HUF', 'IDR', 'ILS', 'INR', 'ITL', 'JPY', 'KRW', 'MXN', 'MYR', 'NLG', 'NOK', 'NZD', 'PEN', 'PHP', 'PLN', 'RON', 'RUB', 'SEK', 'SGD', 'THB', 'TRY', 'TWD', 'USD', 'ZAR']
 
-    dfa = linear_composite(
+    df: pd.DataFrame = pd.concat(
+        [
+            make_test_df(
+                cids=cids,
+                xcats=xcats[:-1],
+                start="2000-01-01",
+                end="2000-02-01",
+                style="linear",
+            ),
+            make_test_df(
+                cids=cids,
+                xcats=["INFL"],
+                start="2000-01-01",
+                end="2000-02-01",
+                style="decreasing-linear",
+            ),
+        ]
+    )
+
+    # all infls are now decreasing-linear, while everything else is increasing-linear
+
+    df.loc[
+        (df["cid"] == "GBP")
+        & (df["xcat"] == "INFL")
+        & (df["real_date"] == "2000-01-17"),
+        "value",
+    ] = np.nan
+
+    df.loc[
+        (df["cid"] == "AUD")
+        & (df["xcat"] == "CRY")
+        & (df["real_date"] == "2000-01-17"),
+        "value",
+    ] = np.nan
+
+    # there are now missing values for AUD-CRY and GBP-INFL on 2000-01-17
+
+    lc_cid = linear_composite(
+        df=df, xcats="XR", weights="INFL", normalize_weights=False
+    )
+    df = QuantamentalDataFrame(df)
+    lc_xcat = linear_composite(
         df=df,
         xcats='IP_SA_P3M3ML3AR_ARMASNAW',
         cids=cids,

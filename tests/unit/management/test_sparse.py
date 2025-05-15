@@ -505,17 +505,17 @@ class TestInformationStateChanges(unittest.TestCase):
         df = get_long_format_data(end="2012-01-01")
         ## Test that the grading is not output when not asked for
         isc: InformationStateChanges = InformationStateChanges.from_qdf(df)
-        win_df = isc.to_qdf(metrics=None, winsorise=0)
+        win_df = isc.to_qdf(metrics=None, thresh=0)
         self.assertTrue(np.allclose(win_df["value"], 0))
-        win_df = isc.to_qdf(metrics=None, winsorise=(-0.01, 0.1))
+        win_df = isc.to_qdf(metrics=None, thresh=(-0.01, 0.1))
         self.assertFalse((win_df["value"] > 0.1).any())
         self.assertFalse((win_df["value"] < -0.01).any())
 
         with self.assertRaises(ValueError):
-            isc.to_qdf(metrics=None, winsorise="banana")
+            isc.to_qdf(metrics=None, thresh="banana")
 
         with self.assertRaises(ValueError):
-            isc.to_qdf(metrics=None, winsorise=(-0.01, "banana"))
+            isc.to_qdf(metrics=None, thresh=(-0.01, "banana"))
 
     def test_temporal_aggregator_period(self) -> None:
         df = get_long_format_data(end="2012-01-01")
