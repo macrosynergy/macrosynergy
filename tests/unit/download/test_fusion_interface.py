@@ -2,11 +2,13 @@ import unittest
 from unittest.mock import patch, MagicMock
 import json, requests
 import datetime
+import pandas as pd
 
 from macrosynergy.download.fusion_interface import (
     request_wrapper as fusion_request_wrapper,
     FusionOAuth,
     SimpleFusionAPIClient,
+    JPMaQSFusionClient,
 )
 
 
@@ -259,6 +261,104 @@ class SimpleFusionAPIClientTestCase(unittest.TestCase):
                 mock_request.assert_called_once()
                 self.assertEqual(result, {"resources": []})
                 mock_request.reset_mock()
+
+
+class JPMaQSFusionClientTestCase(unittest.TestCase):
+    def setUp(self):
+        self.oauth = MagicMock(spec=FusionOAuth)
+        self.simple_client = MagicMock(spec=SimpleFusionAPIClient)
+        patcher = patch(
+            "macrosynergy.download.fusion_interface.SimpleFusionAPIClient",
+            return_value=self.simple_client,
+        )
+        self.addCleanup(patcher.stop)
+        self.mock_simple_client_ctor = patcher.start()
+        self.client = JPMaQSFusionClient(self.oauth)
+
+    def test_list_datasets_smoke(self):
+        self.simple_client.get_product_details.return_value = {
+            "resources": [
+                {
+                    "@id": "id1",
+                    "identifier": "ds1",
+                    "title": "t1",
+                    "description": "desc",
+                    "isRestricted": False,
+                },
+                {
+                    "@id": "id2",
+                    "identifier": "JPMAQS_METADATA_CATALOG",
+                    "title": "t2",
+                    "description": "desc2",
+                    "isRestricted": True,
+                },
+            ]
+        }
+        # should filter out JPMAQS_METADATA_CATALOG -- not really a dataset
+        df = self.client.list_datasets()
+        self.assertIn("identifier", df.columns)
+        self.assertTrue((df["identifier"] != "JPMAQS_METADATA_CATALOG").all())
+
+    def test_get_metadata_catalog_smoke(self):
+        fake_bytes = b"parquetbytes"
+        self.simple_client.get_seriesmember_distribution_details.return_value = (
+            fake_bytes
+        )
+        with patch("pandas.read_parquet", return_value="DF") as mock_read_parquet:
+            result = self.client.get_metadata_catalog()
+            mock_read_parquet.assert_called_once()
+            self.assertEqual(result, "DF")
+
+    def test_get_dataset_available_series_smoke(self):
+        self.simple_client.get_dataset_series.return_value = {
+            "resources": [
+                {
+                    "@id": "id1",
+                    "identifier": "ser1",
+                    "createdDate": "2020-01-01",
+                    "fromDate": "2020-01-01",
+                    "toDate": "2020-12-31",
+                }
+            ]
+        }
+        df = self.client.get_dataset_available_series("SOME_DATASET")
+        self.assertIn("identifier", df.columns)
+        self.assertIn("@id", df.columns)
+
+    def test_get_seriesmember_distributions_smoke(self):
+        self.simple_client.get_seriesmember_distributions.return_value = {
+            "resources": [
+                {"@id": "id1", "identifier": "dist1", "title": "Distribution 1"}
+            ]
+        }
+        df = self.client.get_seriesmember_distributions("ds", "sm")
+        self.assertIn("identifier", df.columns)
+        self.assertIn("@id", df.columns)
+
+    def test_download_series_member_distribution_smoke(self):
+        fake_bytes = b"parquetbytes"
+        self.simple_client.get_seriesmember_distribution_details.return_value = (
+            fake_bytes
+        )
+        with patch("pandas.read_parquet", return_value="DF") as mock_read_parquet:
+            result = self.client.download_series_member_distribution("ds", "sm")
+            mock_read_parquet.assert_called_once()
+            self.assertEqual(result, "DF")
+
+    def test_download_latest_distribution_smoke(self):
+        self.client.get_dataset_available_series = MagicMock(
+            return_value=pd.DataFrame({"identifier": ["20230101", "20230102"]})
+        )
+        self.client.download_series_member_distribution = MagicMock(
+            return_value=pd.DataFrame({"ticker": ["A_B"]})
+        )
+        with patch(
+            "macrosynergy.download.fusion_interface.convert_ticker_based_parquet_to_qdf",
+            return_value="QDF",
+        ) as mock_convert:
+            result = self.client.download_latest_distribution("ds")
+            mock_convert.assert_called_once()
+            self.assertEqual(result, "QDF")
 
 
 if __name__ == "__main__":
