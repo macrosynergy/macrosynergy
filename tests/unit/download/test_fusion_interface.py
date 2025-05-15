@@ -369,6 +369,52 @@ class TestJPMaQSFusionClient(unittest.TestCase):
             self.assertEqual(result, "QDF")
 
 
+class TestGetResourcesDf(unittest.TestCase):
+    def setUp(self):
+        self.resources = [
+            {"@id": "id1", "identifier": "foo", "title": "Foo", "extra": 1},
+            {"@id": "id2", "identifier": "bar", "title": "Bar", "extra": 2},
+        ]
+        self.response_dict = {"resources": self.resources}
+
+    def test_missing_resources_key_raises(self):
+        with self.assertRaises(ValueError) as cm:
+            get_resources_df({}, resources_key="resources")
+        self.assertIn("Field 'resources' not found", str(cm.exception))
+
+    def test_missing_at_id_raises(self):
+        bad = {"resources": [{"identifier": "foo"}]}
+        with self.assertRaises(ValueError) as cm:
+            get_resources_df(bad)
+        self.assertIn("Column '@id' not found", str(cm.exception))
+
+    def test_keep_fields(self):
+        df = get_resources_df(self.response_dict, keep_fields=["@id", "identifier"])
+        self.assertListEqual(list(df.columns), ["@id", "identifier"])
+
+    def test_custom_sort_columns_true(self):
+        df = get_resources_df(self.response_dict, custom_sort_columns=True)
+        # Should start with @id, identifier, title
+        self.assertEqual(list(df.columns)[:3], ["@id", "identifier", "title"])
+
+    def test_custom_sort_columns_false(self):
+        df = get_resources_df(self.response_dict, custom_sort_columns=False)
+        # Should preserve original order
+        self.assertListEqual(list(df.columns), list(self.resources[0].keys()))
+
+    def test_missing_title_column(self):
+        # Remove 'title' from one row, should still work
+        resources = [
+            {"@id": "id1", "identifier": "foo", "extra": 1},
+            {"@id": "id2", "identifier": "bar", "extra": 2},
+        ]
+        response_dict = {"resources": resources}
+        df = get_resources_df(response_dict, custom_sort_columns=True)
+        self.assertIn("@id", df.columns)
+        self.assertIn("identifier", df.columns)
+        self.assertNotIn("title", df.columns)
+
+
 class TestUtilityFunctions(unittest.TestCase):
     def setUp(self):
         qdf = make_test_df(start="2010-01-01", end="2011-02-01")
