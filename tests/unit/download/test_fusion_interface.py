@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
 import json, requests
+import datetime
 
 from macrosynergy.download.fusion_interface import (
     request_wrapper as fusion_request_wrapper,
@@ -103,6 +104,92 @@ class RequestWrapperTestCase(unittest.TestCase):
     def test_as_json(self):
         resp = self._make_response(content=b'{"foo": "bar"}', json_data={"foo": "bar"})
         self.assertEqual(self._call(resp, as_json=True), {"foo": "bar"})
+
+
+class FusionOAuthTestCase(unittest.TestCase):
+    def setUp(self):
+        self.creds = {
+            "client_id": "abc",
+            "client_secret": "def",
+            "resource": "resource",
+            "application_name": "fusion",
+            "root_url": "https://root",
+            "auth_url": "https://auth",
+            "proxies": None,
+        }
+        self.token_response = {
+            "access_token": "tok123",
+            "expires_in": 3600,
+        }
+
+    @patch("requests.post")
+    def test_retrieve_token_success(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = self.token_response
+        mock_resp.raise_for_status.return_value = None
+        mock_post.return_value = mock_resp
+
+        oauth = FusionOAuth(**self.creds)
+        oauth._retrieve_token()
+        self.assertIsNotNone(oauth._stored_token)
+        self.assertEqual(oauth._stored_token["access_token"], "tok123")
+        self.assertEqual(oauth._stored_token["expires_in"], 3600)
+
+    @patch("requests.post")
+    def test_retrieve_token_failure(self, mock_post):
+        mock_post.side_effect = requests.exceptions.RequestException("fail")
+        oauth = FusionOAuth(**self.creds)
+        with self.assertRaises(Exception) as cm:
+            oauth._retrieve_token()
+        self.assertIn("Error retrieving token", str(cm.exception))
+
+    def test_is_valid_token_false_when_none(self):
+        oauth = FusionOAuth(**self.creds)
+        oauth._stored_token = None
+        self.assertFalse(oauth._is_valid_token())
+
+    def test_is_valid_token_true_when_not_expired(self):
+        oauth = FusionOAuth(**self.creds)
+        oauth._stored_token = {
+            "created_at": datetime.datetime.now() - datetime.timedelta(seconds=10),
+            "expires_in": 100,
+            "access_token": "tok",
+        }
+        self.assertTrue(oauth._is_valid_token())
+
+    def test_is_valid_token_false_when_expired(self):
+        oauth = FusionOAuth(**self.creds)
+        oauth._stored_token = {
+            "created_at": datetime.datetime.now() - datetime.timedelta(seconds=200),
+            "expires_in": 100,
+            "access_token": "tok",
+        }
+        self.assertFalse(oauth._is_valid_token())
+
+    @patch.object(FusionOAuth, "_retrieve_token")
+    def test_get_token_calls_retrieve_if_invalid(self, mock_retrieve):
+        oauth = FusionOAuth(**self.creds)
+        oauth._stored_token = None
+        mock_retrieve.side_effect = lambda: setattr(
+            oauth,
+            "_stored_token",
+            {
+                "created_at": datetime.datetime.now(),
+                "expires_in": 100,
+                "access_token": "tok",
+            },
+        )
+        token = oauth._get_token()
+        self.assertEqual(token, "tok")
+        self.assertTrue(mock_retrieve.called)
+
+    @patch.object(FusionOAuth, "_get_token", return_value="tok")
+    def test_get_auth_returns_headers(self, mock_get_token):
+        oauth = FusionOAuth(**self.creds)
+        headers = oauth.get_auth()
+        self.assertIn("Authorization", headers)
+        self.assertTrue(headers["Authorization"].startswith("Bearer "))
+        self.assertIn("User-Agent", headers)
 
 
 class SimpleFusionAPIClientTestCase(unittest.TestCase):
