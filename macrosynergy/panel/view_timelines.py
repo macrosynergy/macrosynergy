@@ -39,6 +39,7 @@ def view_timelines(
     height: float = 2.85,
     legend_fontsize: int = 12,
     blacklist: Dict = None,
+    ax_hline: Optional[Dict] = 0.0,
 ):
     """
     Displays a grid with subplots of time line charts of one or more categories.
@@ -108,6 +109,11 @@ def view_timelines(
         font size of legend. Default is 12.
     blacklist : dict
         cross-sections with date ranges that should be excluded from the dataframe.
+    ax_hline : Union[float, Dict]
+        if float, this value is used for all cross-sections to draw a horizontal line.
+        horizontal line to be drawn at this value. Default is 0.0. This can be a dict
+        with keys as cross-sections and values as the value of the horizontal line. 
+        If none is provided, no horizontal line is drawn.
     """
 
     msv.timelines(
@@ -139,6 +145,7 @@ def view_timelines(
         label_adj=label_adj,
         title_xadj=title_xadj,
         blacklist=blacklist,
+        ax_hline=ax_hline,
     )
 
 
@@ -187,6 +194,7 @@ if __name__ == "__main__":
         size=(10, 5),
         title="AUD Return and Carry",
         aspect=3,
+        ax_hline=0
     )
 
     view_timelines(
