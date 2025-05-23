@@ -32,7 +32,7 @@ class VotingRegressor(skl.VotingRegressor):
         self.estimators_ = None
         self.named_estimators_ = None
         
-    def fit(self, X, y, sample_weight=None, **fit_params):
+    def fit(self, X, y, **fit_params):
         """
         Fit the estimators.
 
@@ -54,7 +54,7 @@ class VotingRegressor(skl.VotingRegressor):
         importances = []
         for _, estimator in self.estimators:
             # Fit the estimator
-            self.estimators_.append(estimator.fit(X, y, sample_weight, **fit_params))
+            self.estimators_.append(estimator.fit(X, y, **fit_params))
             # Store feature importances if available
             if hasattr(estimator, "coef_") or hasattr(estimator, "feature_importances_"):
                 # Normalize feature importances to sum to 1
@@ -65,7 +65,7 @@ class VotingRegressor(skl.VotingRegressor):
                     / np.sum(estimator.feature_importances_)
                 )
                 importances.append(imp)
-                
+
         if len(importances) > 0:
             if self.weights:
                 self.feature_importances_ = np.average(
