@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
+
 import sklearn.ensemble as skl
+from sklearn.utils import Bunch
 
 class VotingRegressor(skl.VotingRegressor):
     """
@@ -13,10 +15,6 @@ class VotingRegressor(skl.VotingRegressor):
     weights : array-like of shape (n_estimators,), default=None
         Sequence of weights to assign to models. If None, models are weighted
         equally.
-    n_jobs : int, default=None
-        The number of jobs to run in parallel for `fit`. `None` means 1 unless
-        in a `joblib.parallel_backend` context. `-1` means using all
-        processors.
     verbose : bool, default=False
         If True, the time elapsed while fitting will be printed as model
         trains.
@@ -26,9 +24,13 @@ class VotingRegressor(skl.VotingRegressor):
     This class calculates feature importances as the average of the feature
     importances of the base estimators.
     """
-    def __init__(self, estimators, weights=None, n_jobs=None, verbose=False):
-        super().__init__(estimators=estimators, weights=weights, n_jobs=n_jobs, verbose=verbose)
+    def __init__(self, estimators, weights=None, verbose=False):
+        super().__init__(estimators=estimators, weights=weights, n_jobs=1, verbose=verbose)
+
+        # Attributes
         self.feature_importances_ = None
+        self.estimators_ = None
+        self.named_estimators_ = None
         
     def fit(self, X, y, sample_weight=None, **fit_params):
         """
@@ -45,11 +47,15 @@ class VotingRegressor(skl.VotingRegressor):
         # Checks 
         self._check_fit_params(X, y)
 
-        super().fit(X, y, sample_weight, **fit_params)
-        
-        # Calculate feature importances
+        # Fit regressors
+        self.estimators_ = []
+        self.named_estimators_ = Bunch()
+
         importances = []
-        for estimator in self.estimators_:
+        for _, estimator in self.estimators:
+            # Fit the estimator
+            self.estimators_.append(estimator.fit(X, y, sample_weight, **fit_params))
+            # Store feature importances if available
             if hasattr(estimator, "coef_") or hasattr(estimator, "feature_importances_"):
                 # Normalize feature importances to sum to 1
                 imp = (
@@ -59,14 +65,26 @@ class VotingRegressor(skl.VotingRegressor):
                     / np.sum(estimator.feature_importances_)
                 )
                 importances.append(imp)
+                
         if len(importances) > 0:
-            self.feature_importances_ = np.mean(importances, axis=0)
-        
+            if self.weights:
+                self.feature_importances_ = np.average(
+                    importances, weights=self.weights, axis=0
+                )
+            else:
+                self.feature_importances_ = np.mean(importances, axis=0)
+
         # Renormalize feature importances to sum to 1
         if self.feature_importances_ is not None:
             self.feature_importances_ /= np.sum(self.feature_importances_)
 
+        # Store named estimators
+        self.named_estimators_ = Bunch(
+            **{name: estimator for name, estimator in self.estimators}
+        )
+
         return self
+
     
     def _check_fit_params(self, X, y):
         """
@@ -282,10 +300,11 @@ if __name__ == "__main__":
     vr = VotingRegressor(
         estimators = [
             ("lr", LinearRegression()),
-            ("rf", RandomForestRegressor())
-        ]
+            ("rf", RandomForestRegressor(random_state = 42))
+        ],
+        weights = [0.3, 0.7],
     ).fit(X_train, y_train)
-
+    print(vr.weights)
     print(f"Voting regressor feature importances: {vr.feature_importances_}")
 
     # Classifier
