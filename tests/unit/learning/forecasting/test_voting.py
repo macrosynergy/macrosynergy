@@ -6,6 +6,8 @@ import pandas as pd
 from macrosynergy.learning import (
     VotingRegressor,
     VotingClassifier,
+    SignWeightedLinearRegression,
+    TimeWeightedLinearRegression,
 )
 
 import sklearn.ensemble as skl
@@ -70,10 +72,25 @@ class TestVotingRegressor(unittest.TestCase):
         self.rf = skl.RandomForestRegressor(random_state=1, n_estimators = 5).fit(self.X, self.y)
         self.gb = skl.GradientBoostingRegressor(random_state=2, n_estimators = 5).fit(self.X, self.y)
 
+        # Weighted voting regressor
+
+        self.vr_weights = VotingRegressor(
+            estimators = [
+                ("ols", LinearRegression()),
+                ("swls", SignWeightedLinearRegression()),
+                ("twls", TimeWeightedLinearRegression()),
+            ],
+            weights = [0.25, 0.25, 0.5],
+        ).fit(self.X, self.y)
+
     def test_valid_init(self):
         """Just test that a feature importance attribute is added"""
         model = VotingRegressor(estimators=[("rf", skl.RandomForestRegressor())])
         self.assertEqual(model.feature_importances_, None)
+
+        """Test that the other attributes are set correctly"""
+        self.assertEqual(model.estimators_, None)
+        self.assertEqual(model.named_estimators_, None)
 
     def test_types_fit(self):
         model = VotingRegressor(estimators=[("lr", LinearRegression())])
@@ -120,6 +137,48 @@ class TestVotingRegressor(unittest.TestCase):
         rf_fis = self.rf.feature_importances_
         gb_fis = self.gb.feature_importances_
         self.assertTrue(np.allclose(fis, (rf_fis + gb_fis) / 2))
+
+        """ Check that feature importances are right when custom weights are used """
+        vr_weights_fis = self.vr_weights.feature_importances_
+        ols_coefs = LinearRegression().fit(self.X, self.y).coef_
+        swls_coefs = SignWeightedLinearRegression().fit(self.X, self.y).coef_
+        twls_coefs = TimeWeightedLinearRegression().fit(self.X, self.y).coef_
+        ols_fis = np.abs(ols_coefs) / np.sum(np.abs(ols_coefs))
+        swls_fis = np.abs(swls_coefs) / np.sum(np.abs(swls_coefs))
+        twls_fis = np.abs(twls_coefs) / np.sum(np.abs(twls_coefs))
+
+        self.assertTrue(np.allclose(vr_weights_fis, (0.25 * ols_fis + 0.25 * swls_fis + 0.5 * twls_fis)))
+
+    def test_valid_predict(self):
+        """
+        Check that the predictions of the voting regressor are the same as the average of the rf and gb
+        as determined by the class instance
+        """
+        both_preds = self.my_vr._predict(self.X)
+        vr_preds = self.my_vr.predict(self.X)
+        self.assertTrue(np.allclose(np.mean(both_preds, axis=1), vr_preds))
+
+        """ Check that the predictions of the voting regressor are the same as the average of the rf and gb"""
+        rf_preds = self.rf.predict(self.X)
+        gb_preds = self.gb.predict(self.X)
+        self.assertTrue(np.allclose(vr_preds, (rf_preds + gb_preds) / 2))
+
+        """
+        Check that the predictions of the voting regressor with custom weights are the same as the weighted average of the rf and gb
+        as determined by the class instance
+        """
+        both_preds = self.vr_weights._predict(self.X)
+        vr_preds = self.vr_weights.predict(self.X)
+        self.assertTrue(np.allclose(np.average(both_preds, weights = [0.25, 0.25, 0.5], axis=1), vr_preds))
+
+        """
+        Check that the predictions of the voting regressor with custom weights are the same as the weighted average of the rf and gb
+        """
+        ols_preds = LinearRegression().fit(self.X, self.y).predict(self.X)
+        swls_preds = SignWeightedLinearRegression().fit(self.X, self.y).predict(self.X)
+        twls_preds = TimeWeightedLinearRegression().fit(self.X, self.y).predict(self.X)
+        self.assertTrue(np.allclose(vr_preds, (0.25 * ols_preds + 0.25 * swls_preds + 0.5 * twls_preds)))
+        """
 
 class TestVotingClassifier(unittest.TestCase):
     @classmethod
@@ -181,7 +240,6 @@ class TestVotingClassifier(unittest.TestCase):
         self.gb = skl.GradientBoostingClassifier(random_state=2, n_estimators = 5).fit(self.X, self.y)
 
     def test_valid_init(self):
-        """Just test that a feature importance attribute is added"""
         model = VotingClassifier(estimators=[("rf", skl.RandomForestClassifier())])
         self.assertEqual(model.feature_importances_, None)
 
@@ -222,11 +280,10 @@ class TestVotingClassifier(unittest.TestCase):
         self.assertRaises(ValueError, model.fit, X=self.X, y=self.y[:-1])
 
     def test_valid_fit(self):
-        """  Check that the underlying regressors are the same as the ones fitted """
         self.assertTrue(np.allclose(self.my_vc.predict(self.X), self.skl_vc.predict(self.X)))
 
-        """ Check that feature importances are calculated correctly """
         fis = self.my_vc.feature_importances_
         rf_fis = self.rf.feature_importances_
         gb_fis = self.gb.feature_importances_
         self.assertTrue(np.allclose(fis, (rf_fis + gb_fis) / 2))
+"""
