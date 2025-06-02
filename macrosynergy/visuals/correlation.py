@@ -250,7 +250,7 @@ def view_correlation(
         e_date: str = df["real_date"].max().strftime("%Y-%m-%d")
 
         if len(xcats) == 1:
-            df_w, xcat_labels = _transform_df_for_cross_sectional_corr(
+            df_w = _transform_df_for_cross_sectional_corr(
                 df=df, val=val, freq=freq
             )
 
