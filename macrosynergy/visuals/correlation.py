@@ -186,10 +186,10 @@ def view_correlation(
 
         # If only one xcat, we will compute cross sectional correlation.
         if len(xcats) == 1 and len(xcats_secondary) == 1:
-            df_w1: pd.DataFrame = _transform_df_for_cross_sectional_corr(
+            df_w1 = _transform_df_for_cross_sectional_corr(
                 df=df1, val=val, freq=freq
             )
-            df_w2: pd.DataFrame = _transform_df_for_cross_sectional_corr(
+            df_w2 = _transform_df_for_cross_sectional_corr(
                 df=df2, val=val, freq=freq
             )
 
@@ -205,11 +205,21 @@ def view_correlation(
         # If more than one xcat in at least one set, we will compute cross category
         # correlation.
         else:
-            df_w1: pd.DataFrame = _transform_df_for_cross_category_corr(
-                df=df1, xcats=xcats, val=val, freq=freq, lags=lags
+            df_w1, xcat_labels = _transform_df_for_cross_category_corr(
+                df=df1,
+                xcats=xcats,
+                val=val,
+                freq=freq,
+                lags=lags,
+                labels_dict=xcat_labels,
             )
-            df_w2: pd.DataFrame = _transform_df_for_cross_category_corr(
-                df=df2, xcats=xcats_secondary, val=val, freq=freq, lags=lags_secondary
+            df_w2, xcat_secondary_labels = _transform_df_for_cross_category_corr(
+                df=df2,
+                xcats=xcats_secondary,
+                val=val,
+                freq=freq,
+                lags=lags_secondary,
+                labels_dict=xcat_secondary_labels,
             )
             df_w1 = df_w1.rename(columns=xcat_labels)
             df_w2 = df_w2.rename(columns=xcat_secondary_labels)
@@ -240,7 +250,9 @@ def view_correlation(
         e_date: str = df["real_date"].max().strftime("%Y-%m-%d")
 
         if len(xcats) == 1:
-            df_w = _transform_df_for_cross_sectional_corr(df=df, val=val, freq=freq)
+            df_w = _transform_df_for_cross_sectional_corr(
+                df=df, val=val, freq=freq
+            )
 
             if title is None:
                 title = (
@@ -249,8 +261,13 @@ def view_correlation(
                 )
 
         else:
-            df_w = _transform_df_for_cross_category_corr(
-                df=df, xcats=xcats, val=val, freq=freq, lags=lags
+            df_w, xcat_labels = _transform_df_for_cross_category_corr(
+                df=df,
+                xcats=xcats,
+                val=val,
+                freq=freq,
+                lags=lags,
+                labels_dict=xcat_labels,
             )
 
             if title is None:
@@ -363,8 +380,13 @@ def _transform_df_for_cross_sectional_corr(
 
 
 def _transform_df_for_cross_category_corr(
-    df: pd.DataFrame, xcats: List[str], val: str, freq: str = None, lags: dict = None
-) -> pd.DataFrame:
+    df: pd.DataFrame,
+    xcats: List[str],
+    val: str,
+    freq: str = None,
+    lags: dict = None,
+    labels_dict: Optional[Dict[str, str]] = None,
+):
     """
     Pivots dataframe and down-samples according to the specified frequency so that
     correlation can be calculated between extended categories.
@@ -407,11 +429,21 @@ def _transform_df_for_cross_category_corr(
             [x] if x not in xcat_tracker.keys() else xcat_tracker[x] for x in xcats
         ]
         order = list(itertools.chain(*order))
+        if labels_dict is not None:
+            # If labels_dict is provided, rename each key of labels_dict to be the valu.
+            for old_name, new_names in xcat_tracker.items():
+                if len(new_names) == 1:
+                    labels_dict[new_names[0]] = labels_dict[old_name]
+                else:
+                    for new_name in new_names:
+                        labels_dict[new_name] = (
+                            labels_dict[old_name] + f" {new_name.split('_')[-1]}"
+                        )
     else:
         order = xcats
 
     df_w = df_w[order]
-    return df_w
+    return df_w, labels_dict
 
 
 def lag_series(
@@ -531,7 +563,7 @@ if __name__ == "__main__":
     cids_dmec = ["DEM", "ESP", "FRF", "ITL", "NLG"]
     cids += cids_dmec
     cids += cids_dmsc
-    xcats = ["XR", "CRY"]
+    xcats = ["XR", "CRY", "XR2", "CRY2"]
 
     df_cids = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
@@ -558,6 +590,8 @@ if __name__ == "__main__":
     )
     df_xcats.loc["XR",] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
     df_xcats.loc["CRY",] = ["2010-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
+    df_xcats.loc["XR2",] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY2",] = ["2010-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
@@ -569,22 +603,27 @@ if __name__ == "__main__":
     # Clustered correlation matrices. Test hierarchical clustering.
     view_correlation(
         df=dfd,
-        xcats=["XR", "CRY"],
-        # xcats_secondary=["CRY", "XR"],
+        xcats=["XR", "CRY", "XR2", "CRY2"],
+        xcats_secondary=["CRY", "XR", "CRY2", "XR2"],
         cids=cids,
         cids_secondary=None,
         start=start,
         end=end,
         val="value",
         freq=None,
-        cluster=True,
+        cluster=False,
         title="Correlation Matrix",
         size=(14, 8),
         max_color=None,
-        lags=None,
+        lags={"XR": [0, 2, 5], "CRY": 2, "XR2": 0, "CRY2": 1},
         lags_secondary=None,
         annot=True,
         fmt=".2f",
-        xcat_labels=["Returns", "Carry"],
-        # xcat_secondary_labels={"XR": "Excess returns", "CRY": "Carry"},
+        xcat_labels=["Excess returns", "Carry", "Excess returns 2", "Carry 2"],
+        xcat_secondary_labels=[
+            "Carry",
+            "Excess returns",
+            "Carry 2",
+            "Excess returns 2",
+        ],
     )
