@@ -2,12 +2,12 @@ name: Test Python package on Ubuntu (Python 3.7.9)
 
 on:
   pull_request:
-    branches: [test, develop, v1.0.0dev]
+    branches: [test, develop]
   workflow_dispatch:
 
 jobs:
   prepare-matrix:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -21,7 +21,7 @@ jobs:
 
   run-unit-tests:
     needs: prepare-matrix
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         folder: ${{fromJson(needs.prepare-matrix.outputs.matrix)}}
@@ -48,7 +48,7 @@ jobs:
 
   run-unit-tests-success:
     needs: run-unit-tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Notify on Failure
         run: |
