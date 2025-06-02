@@ -43,7 +43,7 @@ jobs:
       - name: Install dependencies
         shell: bash -l {0}
         run: |
-          conda init
+          source /usr/share/miniconda/etc/profile.d/conda.sh
           conda activate py379
           uv pip install . --no-deps
           uv pip install -r tests/requirements-py37.txt
