@@ -414,7 +414,7 @@ def _transform_df_for_cross_category_corr(
                     labels_dict[new_names[0]] = labels_dict[old_name]
                 else:
                     for new_name in new_names:
-                        labels_dict[new_name] = labels_dict[old_name] + f" {new_name.split("_")[-1]}"
+                        labels_dict[new_name] = labels_dict[old_name] + f" {new_name.split('_')[-1]}"
     else:
         order = xcats
 
