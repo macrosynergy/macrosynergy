@@ -186,10 +186,10 @@ def view_correlation(
 
         # If only one xcat, we will compute cross sectional correlation.
         if len(xcats) == 1 and len(xcats_secondary) == 1:
-            df_w1, xcat_labels  = _transform_df_for_cross_sectional_corr(
+            df_w1 = _transform_df_for_cross_sectional_corr(
                 df=df1, val=val, freq=freq
             )
-            df_w2, xcat_labels  = _transform_df_for_cross_sectional_corr(
+            df_w2 = _transform_df_for_cross_sectional_corr(
                 df=df2, val=val, freq=freq
             )
 
