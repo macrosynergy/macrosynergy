@@ -202,10 +202,13 @@ def view_correlation(
             xlabel = f"{xcat_labels[xcats[0]]} cross-sections"
             ylabel = f"{xcat_secondary_labels[xcats_secondary[0]]} cross-sections"
 
+            new_xcat_labels = xcat_labels
+            new_xcat_labels = xcat_labels
+
         # If more than one xcat in at least one set, we will compute cross category
         # correlation.
         else:
-            df_w1, xcat_labels = _transform_df_for_cross_category_corr(
+            df_w1, new_xcat_labels = _transform_df_for_cross_category_corr(
                 df=df1,
                 xcats=xcats,
                 val=val,
@@ -213,7 +216,7 @@ def view_correlation(
                 lags=lags,
                 labels_dict=xcat_labels,
             )
-            df_w2, xcat_secondary_labels = _transform_df_for_cross_category_corr(
+            df_w2, new_xcat_secondary_labels = _transform_df_for_cross_category_corr(
                 df=df2,
                 xcats=xcats_secondary,
                 val=val,
@@ -221,8 +224,8 @@ def view_correlation(
                 lags=lags_secondary,
                 labels_dict=xcat_secondary_labels,
             )
-            df_w1 = df_w1.rename(columns=xcat_labels)
-            df_w2 = df_w2.rename(columns=xcat_secondary_labels)
+            df_w1 = df_w1.rename(columns=new_xcat_labels)
+            df_w2 = df_w2.rename(columns=new_xcat_secondary_labels)
             if title is None:
                 title = f"Cross-category correlation from {s_date} to " f"{e_date}"
         corr = (
@@ -259,9 +262,10 @@ def view_correlation(
                     f"Cross-sectional correlation of {xcats[0]} from {s_date} to "
                     f"{e_date}"
                 )
+            new_xcat_labels = xcat_labels
 
         else:
-            df_w, xcat_labels = _transform_df_for_cross_category_corr(
+            df_w, new_xcat_labels = _transform_df_for_cross_category_corr(
                 df=df,
                 xcats=xcats,
                 val=val,
@@ -273,7 +277,7 @@ def view_correlation(
             if title is None:
                 title = f"Cross-category correlation from {s_date} to {e_date}"
 
-        df_w = df_w.rename(columns=xcat_labels)
+        df_w = df_w.rename(columns=new_xcat_labels)
         corr = df_w.corr(method="pearson")
 
         if cluster:
@@ -409,7 +413,8 @@ def _transform_df_for_cross_category_corr(
     pd.Dataframe
         The transformed dataframe.
     """
-
+    if labels_dict is not None:
+        labels_dict = labels_dict.copy()
     df_w: pd.DataFrame = df.pivot(
         index=("cid", "real_date"), columns="xcat", values=val
     )
@@ -599,7 +604,7 @@ if __name__ == "__main__":
     end = "2020-09-30"
 
     lag_dict = {"XR": [0, 2, 5]}
-
+    xcat_labels = {"XR":"Excess returns", "CRY":"Carry", "XR2":"Excess returns 2", "CRY2":"Carry 2"}
     # Clustered correlation matrices. Test hierarchical clustering.
     view_correlation(
         df=dfd,
@@ -611,19 +616,15 @@ if __name__ == "__main__":
         end=end,
         val="value",
         freq=None,
-        cluster=False,
+        cluster=True,
         title="Correlation Matrix",
         size=(14, 8),
         max_color=None,
-        lags={"XR": [0, 2, 5], "CRY": 2, "XR2": 0, "CRY2": 1},
+        lags=None,
         lags_secondary=None,
         annot=True,
         fmt=".2f",
-        xcat_labels=["Excess returns", "Carry", "Excess returns 2", "Carry 2"],
-        xcat_secondary_labels=[
-            "Carry",
-            "Excess returns",
-            "Carry 2",
-            "Excess returns 2",
-        ],
+        xcat_labels=xcat_labels,
+        xcat_secondary_labels={"XR":"Excess returns", "CRY":"Carry", "XR2":"Excess returns 2", "CRY2":"Carry 2"}
     )
+    print(xcat_labels)
