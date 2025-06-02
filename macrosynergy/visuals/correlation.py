@@ -186,10 +186,10 @@ def view_correlation(
 
         # If only one xcat, we will compute cross sectional correlation.
         if len(xcats) == 1 and len(xcats_secondary) == 1:
-            df_w1: pd.DataFrame = _transform_df_for_cross_sectional_corr(
+            df_w1, xcat_labels  = _transform_df_for_cross_sectional_corr(
                 df=df1, val=val, freq=freq
             )
-            df_w2: pd.DataFrame = _transform_df_for_cross_sectional_corr(
+            df_w2, xcat_labels  = _transform_df_for_cross_sectional_corr(
                 df=df2, val=val, freq=freq
             )
 
@@ -206,10 +206,20 @@ def view_correlation(
         # correlation.
         else:
             df_w1, xcat_labels = _transform_df_for_cross_category_corr(
-                df=df1, xcats=xcats, val=val, freq=freq, lags=lags, labels_dict=xcat_labels
+                df=df1,
+                xcats=xcats,
+                val=val,
+                freq=freq,
+                lags=lags,
+                labels_dict=xcat_labels,
             )
             df_w2, xcat_secondary_labels = _transform_df_for_cross_category_corr(
-                df=df2, xcats=xcats_secondary, val=val, freq=freq, lags=lags_secondary, labels_dict=xcat_secondary_labels
+                df=df2,
+                xcats=xcats_secondary,
+                val=val,
+                freq=freq,
+                lags=lags_secondary,
+                labels_dict=xcat_secondary_labels,
             )
             df_w1 = df_w1.rename(columns=xcat_labels)
             df_w2 = df_w2.rename(columns=xcat_secondary_labels)
@@ -240,7 +250,9 @@ def view_correlation(
         e_date: str = df["real_date"].max().strftime("%Y-%m-%d")
 
         if len(xcats) == 1:
-            df_w, xcat_labels = _transform_df_for_cross_sectional_corr(df=df, val=val, freq=freq)
+            df_w, xcat_labels = _transform_df_for_cross_sectional_corr(
+                df=df, val=val, freq=freq
+            )
 
             if title is None:
                 title = (
@@ -250,7 +262,12 @@ def view_correlation(
 
         else:
             df_w, xcat_labels = _transform_df_for_cross_category_corr(
-                df=df, xcats=xcats, val=val, freq=freq, lags=lags, labels_dict=xcat_labels
+                df=df,
+                xcats=xcats,
+                val=val,
+                freq=freq,
+                lags=lags,
+                labels_dict=xcat_labels,
             )
 
             if title is None:
@@ -363,8 +380,13 @@ def _transform_df_for_cross_sectional_corr(
 
 
 def _transform_df_for_cross_category_corr(
-    df: pd.DataFrame, xcats: List[str], val: str, freq: str = None, lags: dict = None, labels_dict: Optional[Dict[str, str]] = None
-) -> Tuple[pd.DataFrame, Dict[str, List[str]]]:
+    df: pd.DataFrame,
+    xcats: List[str],
+    val: str,
+    freq: str = None,
+    lags: dict = None,
+    labels_dict: Optional[Dict[str, str]] = None,
+):
     """
     Pivots dataframe and down-samples according to the specified frequency so that
     correlation can be calculated between extended categories.
@@ -414,7 +436,9 @@ def _transform_df_for_cross_category_corr(
                     labels_dict[new_names[0]] = labels_dict[old_name]
                 else:
                     for new_name in new_names:
-                        labels_dict[new_name] = labels_dict[old_name] + f" {new_name.split('_')[-1]}"
+                        labels_dict[new_name] = (
+                            labels_dict[old_name] + f" {new_name.split('_')[-1]}"
+                        )
     else:
         order = xcats
 
@@ -595,8 +619,11 @@ if __name__ == "__main__":
         lags_secondary=None,
         annot=True,
         fmt=".2f",
-        xcat_labels=[
-            "Excess returns", "Carry", "Excess returns 2", "Carry 2"
+        xcat_labels=["Excess returns", "Carry", "Excess returns 2", "Carry 2"],
+        xcat_secondary_labels=[
+            "Carry",
+            "Excess returns",
+            "Carry 2",
+            "Excess returns 2",
         ],
-        xcat_secondary_labels=["Carry", "Excess returns", "Carry 2", "Excess returns 2"],
     )
