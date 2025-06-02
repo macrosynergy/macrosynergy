@@ -46,7 +46,7 @@ jobs:
           conda activate py379
           pip install . --no-deps
           pip install -r tests/requirements-py37.txt
-          pip uninstall macrosynergy
+          pip uninstall macrosynergy -y
       - name: Check for sys.path.append
         run: |
           bash .github/scripts/check_sys_path.sh
