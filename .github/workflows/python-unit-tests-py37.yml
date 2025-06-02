@@ -53,6 +53,7 @@ jobs:
       - name: Check Python installation
         shell: bash -l {0}
         run: |
+          conda activate py379
           python -c "import sys; assert(int(sys.version_info[:3] == (3,7,9)))"
 
       - name: Lint with flake8
@@ -64,6 +65,7 @@ jobs:
       - name: Test with pytest for ${{ matrix.folder }}
         shell: bash -l {0}
         run: |
+          conda activate py379
           python -c "import sys; assert(int(sys.version_info[:3] == (3,7,9)))"
           python -m pytest ./tests/unit/${{ matrix.folder }}
 
