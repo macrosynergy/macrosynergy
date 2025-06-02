@@ -30,9 +30,6 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-        with:
-          version: 0.2.0
-          python-version: 3.7.9
 
       - name: Setup Miniconda
         uses: conda-incubator/setup-miniconda@v3
