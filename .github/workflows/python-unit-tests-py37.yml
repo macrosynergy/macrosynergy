@@ -2,12 +2,12 @@ name: Test Python package on Ubuntu (Python 3.7.9)
 
 on:
   pull_request:
-    branches: [test, develop]
+    branches: [test, develop, v1.0.0dev]
   workflow_dispatch:
 
 jobs:
   prepare-matrix:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-20.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -21,59 +21,34 @@ jobs:
 
   run-unit-tests:
     needs: prepare-matrix
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         folder: ${{fromJson(needs.prepare-matrix.outputs.matrix)}}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          version: 0.1
-          python-version: 3.7.9
-
-      - name: Setup Miniconda
-        uses: conda-incubator/setup-miniconda@v3
+      - name: Restore caches - Python 3.7.9
+        uses: ./.github/actions/restore-pip-cache
         with:
           python-version: 3.7.9
-          activate-environment: py379
-      - name: Test conda installation
-        shell: bash -l {0}
-        run: conda info
 
-      - name: Install dependencies
-        shell: bash -l {0}
-        run: |
-          conda init
-          conda activate py379
-          uv pip install . --no-deps
-          uv pip install -r tests/requirements-py37.txt
-          uv pip uninstall macrosynergy
       - name: Check for sys.path.append
         run: |
           bash .github/scripts/check_sys_path.sh
-      - name: Check Python installation
-        shell: bash -l {0}
-        run: |
-          python -c "import sys; assert(int(sys.version_info[:3] == (3,7,9)))"
 
       - name: Lint with flake8
-        shell: bash -l {0}
         run: |
           flake8 --count --select=E9,F63,F7,F82 --show-source --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
           flake8 --count --exit-zero --max-complexity=10 --max-line-length=127 --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
 
       - name: Test with pytest for ${{ matrix.folder }}
-        shell: bash -l {0}
         run: |
-          python -c "import sys; assert(int(sys.version_info[:3] == (3,7,9)))"
           python -m pytest ./tests/unit/${{ matrix.folder }}
 
   run-unit-tests-success:
     needs: run-unit-tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - name: Notify on Failure
         run: |
