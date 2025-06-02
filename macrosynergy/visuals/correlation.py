@@ -202,6 +202,9 @@ def view_correlation(
             xlabel = f"{xcat_labels[xcats[0]]} cross-sections"
             ylabel = f"{xcat_secondary_labels[xcats_secondary[0]]} cross-sections"
 
+            new_xcat_labels = xcat_labels
+            new_xcat_labels = xcat_labels
+
         # If more than one xcat in at least one set, we will compute cross category
         # correlation.
         else:
@@ -259,6 +262,7 @@ def view_correlation(
                     f"Cross-sectional correlation of {xcats[0]} from {s_date} to "
                     f"{e_date}"
                 )
+            new_xcat_labels = xcat_labels
 
         else:
             df_w, new_xcat_labels = _transform_df_for_cross_category_corr(
@@ -409,7 +413,8 @@ def _transform_df_for_cross_category_corr(
     pd.Dataframe
         The transformed dataframe.
     """
-    labels_dict = labels_dict.copy()
+    if labels_dict is not None:
+        labels_dict = labels_dict.copy()
     df_w: pd.DataFrame = df.pivot(
         index=("cid", "real_date"), columns="xcat", values=val
     )
