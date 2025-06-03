@@ -25,14 +25,69 @@ logger = logging.getLogger(__name__)
 
 
 class FusionOAuth(object):
+    """
+    A class to handle OAuth authentication for the JPMorgan Fusion API.
+    This class retrieves and manages access tokens for API requests.
+    It supports loading credentials from a JSON file or a dictionary.
+
+    Parameters
+    ----------
+    client_id : str
+        The client ID for the OAuth application.
+    client_secret : str
+        The client secret for the OAuth application.
+    resource : str
+        The resource ID for the Fusion API. Default is the global constant
+        FUSION_RESOURCE_ID.
+    application_name : str
+        The name of the application using the Fusion API. Default is "fusion".
+    root_url : str
+        The root URL for the Fusion API. Default is the global constant
+        FUSION_ROOT_URL.
+    auth_url : str
+        The URL for the OAuth authentication endpoint. Default is the global constant
+        FUSION_AUTH_URL.
+    proxies : Optional[Dict[str, str]]
+        Optional proxies to use for the HTTP requests. Default is None.
+    """
+
     @staticmethod
     def from_credentials_json(credentials_json: str):
+        """
+        Load OAuth credentials from a JSON file and return an instance of FusionOAuth.
+
+        Parameters
+        ----------
+        credentials_json : str
+            Path to the JSON file containing the OAuth credentials. This file must
+            contain the keys 'client_id' and 'client_secret'.
+
+        Returns
+        -------
+        FusionOAuth
+            An instance of the FusionOAuth class initialized with the credentials from the
+            JSON file.
+        """
         with open(credentials_json, "r") as f:
             credentials = json.load(f)
         return FusionOAuth.from_credentials(credentials)
 
     @staticmethod
     def from_credentials(credentials: dict):
+        """
+        Create an instance of FusionOAuth from a dictionary of credentials.
+
+        Parameters
+        ----------
+        credentials : dict
+            A dictionary containing the OAuth credentials. It must include the keys
+            'client_id' and 'client_secret'.
+
+        Returns
+        -------
+        FusionOAuth
+            An instance of the FusionOAuth class initialized with the provided credentials.
+        """
         return FusionOAuth(**credentials)
 
     def __init__(
@@ -94,6 +149,14 @@ class FusionOAuth(object):
         return self._stored_token["access_token"]
 
     def get_auth(self) -> dict:
+        """
+        Get the authorization headers for API requests.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the authorization headers with the access token.
+        """
         headers = {
             "Authorization": f"Bearer {self._get_token()}",
             "User-Agent": f"MacrosynergyPackage/{ms_version_info}",
@@ -112,8 +175,13 @@ def cached(
     Once any call happens at least `ttl` seconds after the last clear, the ENTIRE
     cache is flushed before proceeding.
 
-    :param ttl: time-to-live for the whole cache, in seconds
-    :param maxsize: maximum number of entries to hold in the LRU cache
+    Parameters
+    ----------
+    ttl : int
+        Time-to-live for the cache in seconds. After this time, the cache will be cleared.
+        Default is 60 seconds.
+    maxsize : Optional[int]
+        Maximum size of the cache. If None, the default size is used.
     """
 
     def decorator(func: CachedType) -> CachedType:
@@ -140,6 +208,12 @@ def cached(
 
 
 def wait_for_api_call() -> bool:
+    """
+    Wait for the appropriate time before making an API call to avoid hitting the rate
+    limit. This function checks the time since the last API call and sleeps if necessary
+    to ensure that the next call is made after the defined delay (FUSION_API_DELAY).
+    Uses a global variable `LAST_API_CALL` to track the last call time.
+    """
     global LAST_API_CALL
     if LAST_API_CALL is None:
         LAST_API_CALL = datetime.datetime.now()
@@ -165,7 +239,13 @@ def request_wrapper(
     as_bytes: Optional[bool] = None,
     as_text: Optional[bool] = None,
 ) -> Optional[Union[Dict[str, Any], str, bytes]]:
-    assert method in ["GET", "POST", "PUT", "DELETE"], f"Invalid method: {method}"
+
+    if not isinstance(method, str):
+        raise TypeError("Method must be a string.")
+    if method not in ["GET", "POST", "PUT", "DELETE"]:
+        raise ValueError(
+            f"Invalid method: {method}. Must be one of 'GET', 'POST', 'PUT', 'DELETE'."
+        )
 
     if sum(map(bool, [as_bytes, as_text, as_json])):
         as_json = True
@@ -349,6 +429,28 @@ def get_resources_df(
     keep_fields: Optional[List[str]] = None,
     custom_sort_columns: bool = True,
 ) -> pd.DataFrame:
+    """
+    Extracts the 'resources' field from a response dictionary and returns it as a
+    DataFrame.
+
+    Parameters
+    ----------
+    response_dict : Dict[str, Any]
+        The response dictionary containing the 'resources' field.
+    resources_key : str
+        The key in the response dictionary that contains the resources data.
+        Default is 'resources'.
+    keep_fields : Optional[List[str]]
+        A list of fields to keep in the DataFrame. If None, all fields are kept.
+    custom_sort_columns : bool
+        If True, the DataFrame will be sorted with specific columns first.
+        Default is True.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing the resources data.
+    """
     if resources_key not in response_dict:
         raise ValueError(
             f"Field '{resources_key}' not found in the response dictionary."
@@ -377,6 +479,13 @@ def convert_ticker_based_parquet_to_qdf(
 ) -> pd.DataFrame:
     """
     Convert Parquet DataFrame with ticker entries to a QDF with cid & xcat columns.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to convert, which should contain a 'ticker' column.
+    categorical : bool
+        If True, converts the DataFrame to a QuantamentalDataFrame with categorical data.
     """
     df[["cid", "xcat"]] = df["ticker"].str.split("_", n=1, expand=True)
     df = df.drop(columns=["ticker"])
@@ -384,9 +493,24 @@ def convert_ticker_based_parquet_to_qdf(
     return df
 
 
-def read_parquet_from_bytes(r_bytes: bytes) -> pd.DataFrame:
+def read_parquet_from_bytes(response_bytes: bytes) -> pd.DataFrame:
+    """
+    Read a Parquet file from bytes and return a DataFrame.
+    This function is used to read Parquet files downloaded from the JPMaQS Fusion API.
+
+    Parameters
+    ----------
+    response_bytes : bytes
+        The bytes of the Parquet file to read.
+
+    Returns
+    --------
+    pd.DataFrame
+        A DataFrame containing the data from the Parquet file.
+    """
+
     try:
-        return pd.read_parquet(io.BytesIO(r_bytes))
+        return pd.read_parquet(io.BytesIO(response_bytes))
     except Exception as e:
         if isinstance(e, KeyboardInterrupt):
             raise e
@@ -410,11 +534,32 @@ class JPMaQSFusionClient:
     def list_datasets(
         self,
         product_id: str = "JPMAQS",
-        fields=["@id", "identifier", "title", "description"],
+        fields: List[str] = ["@id", "identifier", "title", "description"],
         include_catalog: bool = False,
         include_explorer_datasets: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
+        """
+        List datasets available in the JPMaQS product. Returns a DataFrame with the
+        specified fields. This excludes the metadata catalog and the Explorer datasets
+        by default.
+
+        Parameters
+        ----------
+        product_id : str
+            The product ID to filter datasets by. Default is "JPMAQS".
+        fields : List[str]
+            List of fields to include in the returned DataFrame.
+        include_catalog : bool
+            If True, includes the metadata catalog dataset in the results.
+        include_explorer_datasets : bool
+            If True, includes the Explorer datasets in the results.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the datasets with the specified fields.
+        """
         r = self.simple_fusion_client.get_product_details(
             product_id=product_id, **kwargs
         )
@@ -442,6 +587,21 @@ class JPMaQSFusionClient:
 
     @cached(CACHE_TTL)
     def get_metadata_catalog(self, **kwargs) -> pd.DataFrame:
+        """
+        Get the metadata catalog for JPMaQS. This is a special dataset that contains
+        metadata (e.g., dataset identifiers, ticker names and descriptions, etc.)
+        Returns a DataFrame with the metadata catalog.
+
+        Parameters
+        ----------
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the metadata catalog.
+        """
         r_bytes = self.simple_fusion_client.get_seriesmember_distribution_details(
             catalog=self._catalog,
             dataset=self._catalog_dataset,
@@ -453,6 +613,23 @@ class JPMaQSFusionClient:
         return read_parquet_from_bytes(r_bytes)
 
     def get_dataset_available_series(self, dataset: str, **kwargs) -> pd.DataFrame:
+        """
+        Get the available series for a given dataset in the JPMaQS product. Typically,
+        each JPMaQS dataset will have one series for all business days (the JPMaQS release
+        for that dataset for that day).
+
+        Parameters
+        ----------
+        dataset : str
+            The dataset identifier for which to retrieve series.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the available series for the specified dataset.
+        """
         result = self.simple_fusion_client.get_dataset_series(
             catalog=self._catalog, dataset=dataset, **kwargs
         )
@@ -466,6 +643,24 @@ class JPMaQSFusionClient:
     def get_seriesmember_distributions(
         self, dataset: str, seriesmember: str, **kwargs
     ) -> pd.DataFrame:
+        """
+        Get the available distributions for a given series member in a dataset.
+
+        Parameters
+        ----------
+        dataset : str
+            The dataset identifier for which to retrieve series member distributions.
+        seriesmember : str
+            The series member identifier for which to retrieve distributions.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the available distributions for the specified series
+            member.
+        """
         result = self.simple_fusion_client.get_seriesmember_distributions(
             catalog=self._catalog, dataset=dataset, seriesmember=seriesmember, **kwargs
         )
@@ -479,6 +674,26 @@ class JPMaQSFusionClient:
         distribution: str = "parquet",
         **kwargs,
     ) -> pd.DataFrame:
+        """
+        Download the distribution for a given series member in a dataset.
+
+        Parameters
+        ----------
+        dataset : str
+            The dataset identifier for which to download the series member distribution.
+        seriesmember : str
+            The series member identifier for which to download the distribution.
+        distribution : str
+            The distribution format to download. Default is "parquet".
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the distribution data for the specified series member.
+        """
+
         result = self.simple_fusion_client.get_seriesmember_distribution_details(
             catalog=self._catalog,
             dataset=dataset,
@@ -499,6 +714,28 @@ class JPMaQSFusionClient:
         categorical: bool = True,
         **kwargs,
     ) -> pd.DataFrame:
+        """
+        Download the latest distribution for a given dataset in the JPMaQS product.
+
+        Parameters
+        ----------
+        dataset : str
+            The dataset identifier for which to download the latest distribution.
+        distribution : str
+            The distribution format to download. Default is "parquet".
+        qdf : bool
+            If True, converts the DataFrame to a QuantamentalDataFrame.
+        categorical : bool
+            If True, converts the DataFrame to a QuantamentalDataFrame with categorical
+            data.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the latest distribution for the specified dataset.
+        """
         series_members = self.get_dataset_available_series(dataset=dataset, **kwargs)
 
         latest_series_member = sorted(series_members["identifier"].tolist())[-1]
@@ -523,6 +760,26 @@ class JPMaQSFusionClient:
         qdf: bool = True,
         **kwargs,
     ) -> pd.DataFrame:
+        """
+        Download the latest full snapshot of all datasets in the JPMaQS product.
+
+        Parameters
+        ----------
+
+        folder : str
+            The folder where the snapshot will be saved. If None, a folder with the current
+            date will be created in the current directory.
+        qdf : bool
+            If True, converts the DataFrame to a QuantamentalDataFrame.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the metadata catalog.
+        """
+
         if folder is None:
             _date = datetime.datetime.now().strftime("%Y-%m-%d")
             folder = "./jpmaqs-full-snapshot-" + _date
@@ -551,6 +808,10 @@ if __name__ == "__main__":
         "data/fusion_client_credentials.json"
     )
     jpmaqs_client = JPMaQSFusionClient(oauth_handler=oauth_handler)
+
+    ds = jpmaqs_client.list_datasets()
+
+    print(ds.head(10))
 
     jpmaqs_client.download_latest_full_snapshot()
 
