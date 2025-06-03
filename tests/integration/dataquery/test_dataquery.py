@@ -74,13 +74,34 @@ class TestDataQueryOAuth(unittest.TestCase):
                 start_date=(
                     datetime.date.today() - datetime.timedelta(days=30)
                 ).isoformat(),
+                metrics=["all"],
             )
 
         self.assertIsInstance(data, pd.DataFrame)
 
         self.assertFalse(data.empty)
 
+        expected_column_dtypes = {
+            "real_date": "datetime64[ns]",
+            "cid": "object",
+            "xcat": "object",
+            "value": "float64",
+            "grading": "float64",
+            "eop_lag": "float64",
+            "mop_lag": "float64",
+            "last_updated": "datetime64[ns]",
+        }
+
+        self.assertEqual(set(data.columns), set(expected_column_dtypes.keys()))
+        for col_name, col_dtype in data.dtypes.to_dict().items():
+            self.assertEqual(
+                expected_column_dtypes[col_name],
+                str(col_dtype),
+                msg=f"Column {col_name} has unexpected dtype: {col_dtype} (expected: {expected_column_dtypes[col_name]})",
+            )
+
         self.assertGreater(data.shape[0], 0)
+        self.assertLess(data.shape[0], 25)
 
         test_expr: str = "DB(JPMAQS,EUR_FXXR_NSA,value)"
         with DataQueryInterface(
