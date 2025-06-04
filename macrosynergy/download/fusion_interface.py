@@ -13,6 +13,7 @@ import pandas as pd
 from macrosynergy import __version__ as ms_version_info
 
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.download.exceptions import NoContentError
 
 FUSION_AUTH_URL: str = "https://authe.jpmorgan.com/as/token.oauth2"
 FUSION_ROOT_URL: str = "https://fusion.jpmorgan.com/api/v1"
@@ -248,7 +249,7 @@ def request_wrapper(
     as_json: Optional[bool] = None,
     as_bytes: Optional[bool] = None,
     as_text: Optional[bool] = None,
-) -> Optional[Union[Dict[str, Any], str, bytes]]:
+) -> Union[Dict[str, Any], str, bytes]:
     """
     A wrapper function for making API requests to the JPMorgan Fusion API.
     """
@@ -278,10 +279,10 @@ def request_wrapper(
         raw_response = response
         response.raise_for_status()
 
-        if response.status_code == 204:
-            return None
-        if not response.content:
-            return None
+        if response.status_code == 204 or not response.content:
+            raise NoContentError(
+                f"No content returned for {method} {url}. Response status code: {response.status_code}"
+            )
 
         if as_bytes:
             return response.content
@@ -370,7 +371,7 @@ class SimpleFusionAPIClient:
         )
 
     @cache_decorator(CACHE_TTL)
-    def get_common_catalog(self, **kwargs) -> Optional[Dict[str, Any]]:
+    def get_common_catalog(self, **kwargs) -> Dict[str, Any]:
         """
         Get the common catalog from the JPMorgan Fusion API.
 
@@ -383,7 +384,7 @@ class SimpleFusionAPIClient:
                 
         Returns
         -------
-        Optional[Dict[str, Any]]
+        Dict[str, Any]
             API response containing the common catalog.
         """
         # /v1/catalogs/common
@@ -391,7 +392,7 @@ class SimpleFusionAPIClient:
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
     @cache_decorator(CACHE_TTL)
-    def get_products(self, **kwargs) -> Optional[Dict[str, Any]]:
+    def get_products(self, **kwargs) -> Dict[str, Any]:
         """
         Get the list of products available in the JPMorgan Fusion API.
         
@@ -404,7 +405,7 @@ class SimpleFusionAPIClient:
                 
         Returns
         -------
-        Optional[Dict[str, Any]]
+        Dict[str, Any]
             API response containing the list of products.
         """
         # /v1/catalogs/common/products
@@ -414,7 +415,7 @@ class SimpleFusionAPIClient:
     @cache_decorator(CACHE_TTL)
     def get_product_details(
         self, product_id: str = "JPMAQS", **kwargs
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         Get the details of a specific product by its ID.
         
@@ -435,7 +436,7 @@ class SimpleFusionAPIClient:
 
         Returns
         -------
-        Optional[Dict[str, Any]]
+        Dict[str, Any]
             API response containing the product details.
         """
         # /v1/catalogs/common/products/{product_id}
@@ -443,9 +444,7 @@ class SimpleFusionAPIClient:
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
     @cache_decorator(CACHE_TTL)
-    def get_dataset(
-        self, catalog: str, dataset: str, **kwargs
-    ) -> Optional[Dict[str, Any]]:
+    def get_dataset(self, catalog: str, dataset: str, **kwargs) -> Dict[str, Any]:
         """
         Get the details of a specific dataset from a specified catalog.
         
@@ -467,7 +466,7 @@ class SimpleFusionAPIClient:
             
         Returns
         -------
-        Optional[Dict[str, Any]]
+        Dict[str, Any]
             API response containing the dataset details.       
         """
         # /v1/catalogs/{catalog}/datasets/{dataset}
@@ -477,7 +476,7 @@ class SimpleFusionAPIClient:
     @cache_decorator(CACHE_TTL)
     def get_dataset_series(
         self, catalog: str, dataset: str, **kwargs
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         Get the series available for a specific dataset in a specified catalog.
         
@@ -499,7 +498,7 @@ class SimpleFusionAPIClient:
         
         Returns
         -------
-        Optional[Dict[str, Any]]
+        Dict[str, Any]
             API response containing the dataset series details.
         
         """
@@ -510,7 +509,7 @@ class SimpleFusionAPIClient:
     @cache_decorator(CACHE_TTL)
     def get_dataset_seriesmember(
         self, catalog: str, dataset: str, seriesmember: str, **kwargs
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         Get the details of a specific series member in a dataset from a specified catalog.
         
@@ -534,7 +533,7 @@ class SimpleFusionAPIClient:
             
         Returns
         -------
-        Optional[Dict[str, Any]]
+        Dict[str, Any]
             API response containing the details of the specified series member.
         """
         # /v1/catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}
@@ -546,7 +545,7 @@ class SimpleFusionAPIClient:
     @cache_decorator(CACHE_TTL)
     def get_seriesmember_distributions(
         self, catalog: str, dataset: str, seriesmember: str, **kwargs
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         Get the distributions available for a specific series member in a dataset from a
         specified catalog.
@@ -571,7 +570,7 @@ class SimpleFusionAPIClient:
             
         Returns
         -------
-        Optional[Dict[str, Any]]
+        Dict[str, Any]
             API response containing the available distributions for the specified series
             member.
         """
@@ -583,7 +582,7 @@ class SimpleFusionAPIClient:
 
     def get_seriesmember_distribution_details(
         self, catalog: str, dataset: str, seriesmember: str, distribution: str, **kwargs
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Union[Dict[str, Any], bytes, str]:
         """
         Get the details of a specific distribution for a series member in a dataset from
         a specified catalog.
@@ -610,7 +609,7 @@ class SimpleFusionAPIClient:
         
         Returns
         -------
-        Optional[Dict[str, Any]]
+        Union[Dict[str, Any], bytes, str]
             API response containing the distribution details (the actual data) for the
             specified series member.
         """
