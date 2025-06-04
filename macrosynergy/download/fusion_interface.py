@@ -117,7 +117,7 @@ class FusionOAuth(object):
 
         self._stored_token = None
 
-    def _retrieve_token(self):
+    def retrieve_token(self):
         """
         Retrieve an access token from the OAuth server and store it in the instance.
 
@@ -155,7 +155,7 @@ class FusionOAuth(object):
 
     def _get_token(self):
         if not self._is_valid_token():
-            self._retrieve_token()
+            self.retrieve_token()
         return self._stored_token["access_token"]
 
     def get_auth(self) -> dict:
@@ -177,7 +177,7 @@ class FusionOAuth(object):
 CachedType = TypeVar("CachedType", bound=Callable[..., Any])
 
 
-def cached(
+def cache_decorator(
     ttl: int = 60, *, maxsize: Optional[int] = None
 ) -> Callable[[CachedType], CachedType]:
     """
@@ -366,7 +366,7 @@ class SimpleFusionAPIClient:
             **kwargs,
         )
 
-    @cached(CACHE_TTL)
+    @cache_decorator(CACHE_TTL)
     def get_common_catalog(self, **kwargs) -> Optional[Dict[str, Any]]:
         """
         Get the common catalog from the JPMorgan Fusion API.
@@ -387,7 +387,7 @@ class SimpleFusionAPIClient:
         endpoint: str = "catalogs/common"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
-    @cached(CACHE_TTL)
+    @cache_decorator(CACHE_TTL)
     def get_products(self, **kwargs) -> Optional[Dict[str, Any]]:
         """
         Get the list of products available in the JPMorgan Fusion API.
@@ -408,7 +408,7 @@ class SimpleFusionAPIClient:
         endpoint: str = "catalogs/common/products"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
-    @cached(CACHE_TTL)
+    @cache_decorator(CACHE_TTL)
     def get_product_details(
         self, product_id: str = "JPMAQS", **kwargs
     ) -> Optional[Dict[str, Any]]:
@@ -439,7 +439,7 @@ class SimpleFusionAPIClient:
         endpoint: str = f"catalogs/common/products/{product_id}"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
-    @cached(CACHE_TTL)
+    @cache_decorator(CACHE_TTL)
     def get_dataset(
         self, catalog: str, dataset: str, **kwargs
     ) -> Optional[Dict[str, Any]]:
@@ -471,7 +471,7 @@ class SimpleFusionAPIClient:
         endpoint: str = f"catalogs/{catalog}/datasets/{dataset}"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
-    @cached(CACHE_TTL)
+    @cache_decorator(CACHE_TTL)
     def get_dataset_series(
         self, catalog: str, dataset: str, **kwargs
     ) -> Optional[Dict[str, Any]]:
@@ -504,7 +504,7 @@ class SimpleFusionAPIClient:
         endpoint: str = f"catalogs/{catalog}/datasets/{dataset}/datasetseries"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
-    @cached(CACHE_TTL)
+    @cache_decorator(CACHE_TTL)
     def get_dataset_seriesmember(
         self, catalog: str, dataset: str, seriesmember: str, **kwargs
     ) -> Optional[Dict[str, Any]]:
@@ -540,7 +540,7 @@ class SimpleFusionAPIClient:
         )
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
-    @cached(CACHE_TTL)
+    @cache_decorator(CACHE_TTL)
     def get_seriesmember_distributions(
         self, catalog: str, dataset: str, seriesmember: str, **kwargs
     ) -> Optional[Dict[str, Any]]:
@@ -796,7 +796,7 @@ class JPMaQSFusionClient:
         resources_df.index = resources_df.index + 1
         return resources_df
 
-    @cached(CACHE_TTL)
+    @cache_decorator(CACHE_TTL)
     def get_metadata_catalog(self, **kwargs) -> pd.DataFrame:
         """
         Get the metadata catalog for JPMaQS. This is a special dataset that contains

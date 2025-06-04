@@ -141,7 +141,7 @@ class TestFusionOAuth(unittest.TestCase):
         mock_post.return_value = mock_resp
 
         oauth = FusionOAuth(**self.creds)
-        oauth._retrieve_token()
+        oauth.retrieve_token()
         self.assertIsNotNone(oauth._stored_token)
         self.assertEqual(oauth._stored_token["access_token"], "tok123")
         self.assertEqual(oauth._stored_token["expires_in"], 3600)
@@ -151,7 +151,7 @@ class TestFusionOAuth(unittest.TestCase):
         mock_post.side_effect = requests.exceptions.RequestException("fail")
         oauth = FusionOAuth(**self.creds)
         with self.assertRaises(Exception) as cm:
-            oauth._retrieve_token()
+            oauth.retrieve_token()
         self.assertIn("Error retrieving token", str(cm.exception))
 
     def test_is_valid_token_false_when_none(self):
