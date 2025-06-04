@@ -249,6 +249,9 @@ def request_wrapper(
     as_bytes: Optional[bool] = None,
     as_text: Optional[bool] = None,
 ) -> Optional[Union[Dict[str, Any], str, bytes]]:
+    """
+    A wrapper function for making API requests to the JPMorgan Fusion API.
+    """
     if not isinstance(method, str):
         raise TypeError("Method must be a string.")
     if method not in ["GET", "POST", "PUT", "DELETE"]:
