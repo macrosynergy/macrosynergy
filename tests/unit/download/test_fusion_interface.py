@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
-import json, requests
+import json
+import requests
 import datetime
 import io
 import pandas as pd
