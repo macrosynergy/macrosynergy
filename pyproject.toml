@@ -84,7 +84,7 @@ docs = [
   "requests>=2.32.2",
   "packaging>=21.0",
   "zipp>=3.19.1",
-  "urllib3>=1.26.19",
+  "urllib3>=2.2.2",
 ]
 
 all = [
@@ -112,7 +112,7 @@ all = [
   "requests>=2.32.2",
   "packaging>=21.0",
   "zipp>=3.19.1",
-  "urllib3>=1.26.19",
+  "urllib3>=2.2.2",
 ]
 
 [tool.setuptools]
