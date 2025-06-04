@@ -81,8 +81,10 @@ docs = [
   "myst_parser==2.0.0",
   "sphinx-copybutton==0.5.0",
   "sphinxcontrib-mermaid>=0.8.0",
-  "requests>=2.27.1",
+  "requests>=2.32.2",
   "packaging>=21.0",
+  "zipp>=3.19.1",
+  "urllib3>=1.26.19",
 ]
 
 all = [
@@ -107,8 +109,10 @@ all = [
   "sphinx_design==0.5.0",
   "myst_parser==2.0.0",
   "sphinx-copybutton==0.5.0",
-  "requests>=2.27.1",
+  "requests>=2.32.2",
   "packaging>=21.0",
+  "zipp>=3.19.1",
+  "urllib3>=1.26.19",
 ]
 
 [tool.setuptools]
