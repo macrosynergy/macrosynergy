@@ -217,7 +217,7 @@ def cache_decorator(
     return decorator
 
 
-def wait_for_api_call() -> bool:
+def _wait_for_api_call() -> bool:
     """
     Wait for the appropriate time before making an API call to avoid hitting the rate
     limit. This function checks the time since the last API call and sleeps if necessary
@@ -262,7 +262,7 @@ def request_wrapper(
         raise ValueError("Only one of `as_json`, `as_bytes`, or `as_text` can be True.")
     raw_response: Optional[requests.Response] = None
     try:
-        wait_for_api_call()
+        _wait_for_api_call()
         response = requests.request(
             method=method.upper(),
             url=url,
