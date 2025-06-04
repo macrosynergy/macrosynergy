@@ -1,2 +1,3 @@
-ignore:
-  - "docs/**"
+exclude:
+  global:
+    - 'docs/**'
