@@ -118,6 +118,16 @@ class FusionOAuth(object):
         self._stored_token = None
 
     def _retrieve_token(self):
+        """
+        Retrieve an access token from the OAuth server and store it in the instance.
+
+        Equivalent cURL request:
+
+        .. code-block:: bash
+
+            curl -X POST "https://authe.jpmorgan.com/as/token.oauth2" \\
+                -d "grant_type=<FUSION_RESOURCE_ID>&client_id=<CLIENT_ID>&client_secret=<CLIENT_SECRET>"
+        """
         try:
             response = requests.post(
                 self.auth_url,
@@ -239,7 +249,6 @@ def request_wrapper(
     as_bytes: Optional[bool] = None,
     as_text: Optional[bool] = None,
 ) -> Optional[Union[Dict[str, Any], str, bytes]]:
-
     if not isinstance(method, str):
         raise TypeError("Method must be a string.")
     if method not in ["GET", "POST", "PUT", "DELETE"]:
@@ -359,12 +368,42 @@ class SimpleFusionAPIClient:
 
     @cached(CACHE_TTL)
     def get_common_catalog(self, **kwargs) -> Optional[Dict[str, Any]]:
+        """
+        Get the common catalog from the JPMorgan Fusion API.
+
+        Equivalent cURL request:
+
+        .. code-block:: bash
+
+            curl -X GET "https://fusion.jpmorgan.com/api/v1/catalogs/common" \\
+                -H "Authorization: Bearer <ACCESS_TOKEN>"
+                
+        Returns
+        -------
+        Optional[Dict[str, Any]]
+            API response containing the common catalog.
+        """
         # /v1/catalogs/common
         endpoint: str = "catalogs/common"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
     @cached(CACHE_TTL)
     def get_products(self, **kwargs) -> Optional[Dict[str, Any]]:
+        """
+        Get the list of products available in the JPMorgan Fusion API.
+        
+        Equivalent cURL request:
+
+        .. code-block:: bash
+
+            curl -X GET "https://fusion.jpmorgan.com/api/v1/catalogs/common/products \\
+                -H "Authorization: Bearer <ACCESS_TOKEN>"
+                
+        Returns
+        -------
+        Optional[Dict[str, Any]]
+            API response containing the list of products.
+        """
         # /v1/catalogs/common/products
         endpoint: str = "catalogs/common/products"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
@@ -373,6 +412,29 @@ class SimpleFusionAPIClient:
     def get_product_details(
         self, product_id: str = "JPMAQS", **kwargs
     ) -> Optional[Dict[str, Any]]:
+        """
+        Get the details of a specific product by its ID.
+        
+        Equivalent cURL request:
+        
+        .. code-block:: bash
+        
+            curl -X GET "https://fusion.jpmorgan.com/api/v1/catalogs/common/products/{product_id}" \\
+                -H "Authorization: Bearer <ACCESS_TOKEN>"
+                
+        Parameters
+        ----------
+        product_id : str
+            The ID of the product to retrieve details for. Default is "JPMAQS".
+            
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        Optional[Dict[str, Any]]
+            API response containing the product details.
+        """
         # /v1/catalogs/common/products/{product_id}
         endpoint: str = f"catalogs/common/products/{product_id}"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
@@ -381,6 +443,30 @@ class SimpleFusionAPIClient:
     def get_dataset(
         self, catalog: str, dataset: str, **kwargs
     ) -> Optional[Dict[str, Any]]:
+        """
+        Get the details of a specific dataset from a specified catalog.
+        
+        Equivalent cURL request:
+        
+        .. code-block:: bash
+        
+            curl -X GET "https://fusion.jpmorgan.com/api/v1/catalogs/{catalog}/datasets/{dataset}" \\
+                -H "Authorization: Bearer <ACCESS_TOKEN>"
+                
+        Parameters
+        ----------
+        catalog : str
+            The catalog from which to retrieve the dataset.
+        dataset : str
+            The identifier of the dataset to retrieve.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+            
+        Returns
+        -------
+        Optional[Dict[str, Any]]
+            API response containing the dataset details.       
+        """
         # /v1/catalogs/{catalog}/datasets/{dataset}
         endpoint: str = f"catalogs/{catalog}/datasets/{dataset}"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
@@ -389,6 +475,31 @@ class SimpleFusionAPIClient:
     def get_dataset_series(
         self, catalog: str, dataset: str, **kwargs
     ) -> Optional[Dict[str, Any]]:
+        """
+        Get the series available for a specific dataset in a specified catalog.
+        
+        Equivalent cURL request:
+        
+        .. code-block:: bash
+
+            curl -X GET "https://fusion.jpmorgan.com/api/v1/catalogs/{catalog}/datasets/{dataset}/datasetseries" \\
+                -H "Authorization: Bearer <ACCESS_TOKEN>"
+                
+        Parameters
+        ----------
+        catalog : str
+            The catalog from which to retrieve the dataset series.
+        dataset : str
+            The identifier of the dataset for which to retrieve series.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+        
+        Returns
+        -------
+        Optional[Dict[str, Any]]
+            API response containing the dataset series details.
+        
+        """
         # /v1/catalogs/{catalog}/datasets/{dataset}/datasetseries
         endpoint: str = f"catalogs/{catalog}/datasets/{dataset}/datasetseries"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
@@ -397,6 +508,32 @@ class SimpleFusionAPIClient:
     def get_dataset_seriesmember(
         self, catalog: str, dataset: str, seriesmember: str, **kwargs
     ) -> Optional[Dict[str, Any]]:
+        """
+        Get the details of a specific series member in a dataset from a specified catalog.
+        
+        Equivalent cURL request:
+        
+        .. code-block:: bash
+
+            curl -X GET "https://fusion.jpmorgan.com/api/v1/catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}" \\
+                -H "Authorization: Bearer <ACCESS_TOKEN>"
+                
+        Parameters
+        ----------
+        catalog : str
+            The catalog from which to retrieve the series member.
+        dataset : str
+            The identifier of the dataset containing the series member.
+        seriesmember : str
+            The identifier of the series member to retrieve.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+            
+        Returns
+        -------
+        Optional[Dict[str, Any]]
+            API response containing the details of the specified series member.
+        """
         # /v1/catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}
         endpoint: str = (
             f"catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}"
@@ -407,6 +544,34 @@ class SimpleFusionAPIClient:
     def get_seriesmember_distributions(
         self, catalog: str, dataset: str, seriesmember: str, **kwargs
     ) -> Optional[Dict[str, Any]]:
+        """
+        Get the distributions available for a specific series member in a dataset from a
+        specified catalog.
+        
+        Equivalent cURL request:
+        
+        .. code-block:: bash
+        
+            curl -X GET "https://fusion.jpmorgan.com/api/v1/catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions" \\
+                -H "Authorization: Bearer <ACCESS_TOKEN>"
+        
+        Parameters
+        ----------
+        catalog : str
+            The catalog from which to retrieve the series member distributions.
+        dataset : str
+            The identifier of the dataset containing the series member.
+        seriesmember : str
+            The identifier of the series member for which to retrieve distributions.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+            
+        Returns
+        -------
+        Optional[Dict[str, Any]]
+            API response containing the available distributions for the specified series
+            member.
+        """
         # /v1/catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions
         endpoint: str = (
             f"catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions"
@@ -416,6 +581,36 @@ class SimpleFusionAPIClient:
     def get_seriesmember_distribution_details(
         self, catalog: str, dataset: str, seriesmember: str, distribution: str, **kwargs
     ) -> Optional[Dict[str, Any]]:
+        """
+        Get the details of a specific distribution for a series member in a dataset from
+        a specified catalog.
+        
+        Equivalent cURL request:
+        
+        .. code-block:: bash
+        
+            curl -X GET "https://fusion.jpmorgan.com/api/v1/catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions/{distribution}" \\
+                -H "Authorization: Bearer <ACCESS_TOKEN>"
+        
+        Parameters
+        ----------
+        catalog : str
+            The catalog from which to retrieve the series member distribution.
+        dataset : str
+            The identifier of the dataset containing the series member.
+        seriesmember : str
+            The identifier of the series member for which to retrieve the distribution.
+        distribution : str
+            The identifier of the distribution to retrieve (e.g., "parquet").
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+        
+        Returns
+        -------
+        Optional[Dict[str, Any]]
+            API response containing the distribution details (the actual data) for the
+            specified series member.
+        """
         # /v1/catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions/{distribution}
         endpoint: str = (
             f"catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions/{distribution}"
@@ -518,6 +713,22 @@ def read_parquet_from_bytes(response_bytes: bytes) -> pd.DataFrame:
 
 
 class JPMaQSFusionClient:
+    """
+    A client for accessing the JPMaQS product on the JPMorgan Fusion API.
+    This client is specific to the JPMaQS product and provides methods to fetch the data
+    catalog, list datasets, and download distributions.
+    It uses :func:`SimpleFusionAPIClient` to handle the API requests.
+
+    Parameters
+    ----------
+    oauth_handler : FusionOAuth
+        An instance of FusionOAuth to handle OAuth authentication.
+    base_url : str
+        The base URL for the Fusion API. Default is FUSION_ROOT_URL.
+    proxies : Optional[Dict[str, str]]
+        Optional proxies to use for the HTTP requests. Default is None.
+    """
+
     def __init__(
         self,
         oauth_handler: FusionOAuth,
@@ -558,7 +769,7 @@ class JPMaQSFusionClient:
         Returns
         -------
         pd.DataFrame
-            A DataFrame containing the datasets with the specified fields.
+            A DataFrame containing information about the available datasets.
         """
         r = self.simple_fusion_client.get_product_details(
             product_id=product_id, **kwargs
