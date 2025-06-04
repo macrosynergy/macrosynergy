@@ -177,7 +177,7 @@ class TestFusionOAuth(unittest.TestCase):
         }
         self.assertFalse(oauth._is_valid_token())
 
-    @patch.object(FusionOAuth, "_retrieve_token")
+    @patch.object(FusionOAuth, "retrieve_token")
     def test_get_token_calls_retrieve_if_invalid(self, mock_retrieve):
         oauth = FusionOAuth(**self.creds)
         oauth._stored_token = None
