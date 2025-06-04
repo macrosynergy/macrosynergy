@@ -400,7 +400,7 @@ class SimpleFusionAPIClient:
 
         .. code-block:: bash
 
-            curl -X GET "https://fusion.jpmorgan.com/api/v1/catalogs/common/products \\
+            curl -X GET "https://fusion.jpmorgan.com/api/v1/catalogs/common/products" \\
                 -H "Authorization: Bearer <ACCESS_TOKEN>"
                 
         Returns
