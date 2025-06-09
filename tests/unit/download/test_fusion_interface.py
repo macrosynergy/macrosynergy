@@ -58,7 +58,7 @@ class TestRequestWrapper(unittest.TestCase):
 
     def _call(self, response, **kwargs):
         with patch(
-            "macrosynergy.download.fusion_interface.wait_for_api_call",
+            "macrosynergy.download.fusion_interface._wait_for_api_call",
             return_value=True,
         ), patch("requests.request", return_value=response):
             return fusion_request_wrapper("GET", self.URL, headers=self.HDRS, **kwargs)
@@ -79,7 +79,7 @@ class TestRequestWrapper(unittest.TestCase):
     def test_request_exception(self):
         resp = self._make_response(status=500, text="Server Error")
         with patch(
-            "macrosynergy.download.fusion_interface.wait_for_api_call",
+            "macrosynergy.download.fusion_interface._wait_for_api_call",
             return_value=True,
         ), patch(
             "requests.request",
