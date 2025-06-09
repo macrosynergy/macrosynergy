@@ -99,7 +99,7 @@ class FusionOAuth(object):
         application_name: str = "fusion",
         root_url: str = FUSION_ROOT_URL,
         auth_url: str = FUSION_AUTH_URL,
-        proxies: dict = None,
+        proxies: Optional[dict] = None,
     ):
         self.client_id = client_id
         self.client_secret = client_secret
@@ -1026,7 +1026,10 @@ if __name__ == "__main__":
 
     print(ds.head(10))
 
-    jpmaqs_client.download_latest_full_snapshot()
+    jpmaqs_client.download_latest_full_snapshot(
+        qdf=False,
+        folder="./data/jpmaqs-full-snapshot-" + pd.Timestamp.now().strftime("%Y-%m-%d"),
+    )
 
     # catalog_df = jpmaqs_client.get_metadata_catalog()
     # print("JPMaQS Catalog:")
