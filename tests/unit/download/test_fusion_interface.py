@@ -18,6 +18,7 @@ from macrosynergy.download.fusion_interface import (
     SimpleFusionAPIClient,
     JPMaQSFusionClient,
     read_parquet_from_bytes,
+    NoContentError,
 )
 
 
@@ -101,8 +102,9 @@ class TestRequestWrapper(unittest.TestCase):
         self.assertRaisesMessage(Exception, "decode JSON", self._call, resp)
 
     def test_status_204_returns_none(self):
-        resp = self._make_response(status=204, content=b"")
-        self.assertIsNone(self._call(resp))
+        with self.assertRaises(NoContentError):
+            resp = self._make_response(status=204, content=b"")
+            self._call(resp)
 
     def test_as_bytes(self):
         resp = self._make_response(content=b"bytesdata")
