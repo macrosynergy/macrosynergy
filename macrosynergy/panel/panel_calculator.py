@@ -435,13 +435,22 @@ class SingleCalc:
     Class to represent a single calculation.
     """
 
-    def __init__(self, formula: str):
+    formula: str
+    lhs: str
+    rhs: str
+    dct: dict[str, str]
+
+    def __init__(self, formula: str) -> None:
         self.formula = formula
         self.lhs, self.rhs = [_.strip() for _ in formula.split(" = ", maxsplit=1)]
         self.dct = {self.lhs: self.rhs}
 
     def dependencies(self) -> List[str]:
-        return sorted(set(itertools.chain.from_iterable(_get_xcats_used(self.dct))))
+        rhs = self.rhs
+        tokens: List[str] = re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\b", rhs)
+        exclude = set([self.lhs, "np", "pd"])
+        deps = [t for t in tokens if t.isupper() and t not in exclude]
+        return sorted(set(deps))
 
     def creates(self) -> str:
         return self.lhs
