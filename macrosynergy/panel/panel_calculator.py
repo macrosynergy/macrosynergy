@@ -3,19 +3,19 @@ Implementation of panel calculation functions for quantamental data. The functio
 allows applying mathematical operations on time-series data.
 """
 
+import collections
+import random
+import re
+from typing import Dict, List, Set, Tuple
+
+import joblib
 import numpy as np
 import pandas as pd
-from typing import List, Tuple, Dict, Set, Any
-from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df
-from macrosynergy.management.utils import drop_nan_series
-from macrosynergy.management.types import QuantamentalDataFrame
+
 from macrosynergy import PYTHON_3_8_OR_LATER
-import itertools
-import re
-import random
-import collections
-import joblib
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.utils import drop_nan_series, reduce_df
 
 
 def panel_calculator(
