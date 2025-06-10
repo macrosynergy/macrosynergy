@@ -286,9 +286,8 @@ def time_series_check(formula: str, index: int):
     Tuple[int, bool]
     """
 
-    check = lambda a, b, c: (
-        (a.isupper() or a.isnumeric()) and b == "." and c.islower()
-    )
+    def check(a: str, b: str, c: str) -> bool:
+        return (a.isupper() or a.isnumeric()) and b == "." and c.islower()
 
     f = formula
     length = len(f)
