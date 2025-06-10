@@ -329,7 +329,7 @@ def xcat_isolator(expression: str, start_index: str, index: int) -> Tuple[str, i
     return xcat, start_index + start + len(xcat)
 
 
-def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
+def _get_xcats_used(ops: dict[str, str]) -> Tuple[List[str], List[str]]:
     """
     Collect all categories used in the panel calculation.
 
