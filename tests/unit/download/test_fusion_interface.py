@@ -374,6 +374,41 @@ class TestJPMaQSFusionClient(unittest.TestCase):
             self.assertEqual(result, "QDF")
 
 
+class TestJPMaQSFusionClientTickers(unittest.TestCase):
+    def setUp(self):
+        self.oauth = MagicMock(spec=FusionOAuth)
+        self.client = JPMaQSFusionClient(self.oauth)
+
+    def test_list_tickers_returns_sorted_list(self):
+        # Mock get_metadata_catalog to return a DataFrame with 'Ticker' column
+        df = pd.DataFrame({"Ticker": ["BBB", "aaa", "CCC"]})
+        self.client.get_metadata_catalog = MagicMock(return_value=df)
+        result = self.client.list_tickers()
+        self.assertEqual(result, sorted(["BBB", "aaa", "CCC"]))
+
+    def test_list_tickers_missing_column_raises(self):
+        df = pd.DataFrame({"NotTicker": [1, 2, 3]})
+        self.client.get_metadata_catalog = MagicMock(return_value=df)
+        with self.assertRaises(ValueError) as cm:
+            self.client.list_tickers()
+        self.assertIn("'Ticker' column not found", str(cm.exception))
+
+    def test_get_ticker_metadata_found(self):
+        df = pd.DataFrame({"Ticker": ["AAA", "BBB", "CCC"], "Meta": [1, 2, 3]})
+        self.client.get_metadata_catalog = MagicMock(return_value=df)
+        result = self.client.get_ticker_metadata("bbb")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result.iloc[0]["Ticker"], "BBB")
+        self.assertEqual(result.iloc[0]["Meta"], 2)
+
+    def test_get_ticker_metadata_not_found(self):
+        df = pd.DataFrame({"Ticker": ["AAA", "BBB"], "Meta": [1, 2]})
+        self.client.get_metadata_catalog = MagicMock(return_value=df)
+        with self.assertRaises(ValueError) as cm:
+            self.client.get_ticker_metadata("ZZZ")
+        self.assertIn("No metadata found for ticker", str(cm.exception))
+
+
 class TestGetResourcesDf(unittest.TestCase):
     def setUp(self):
         self.resources = [
@@ -466,6 +501,7 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
         import tempfile
         import os
         import json as js
+
         creds = {"client_id": "a"}  # missing client_secret
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
             js.dump(creds, f)
@@ -486,10 +522,12 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
 
     def test_cache_decorator_expiry_and_manual_clear(self):
         calls = []
+
         @cache_decorator(ttl=1)
         def f(x):
             calls.append(x)
             return x
+
         f(1)
         f(1)
         self.assertEqual(len(calls), 1)
@@ -497,6 +535,7 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
         f(1)
         self.assertEqual(len(calls), 2)
         import time
+
         time.sleep(1.1)
         f(1)
         self.assertEqual(len(calls), 3)
@@ -505,6 +544,7 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
         @cache_decorator(ttl=10, maxsize=2)
         def f(x):
             return x
+
         self.assertEqual(f(1), 1)
         self.assertEqual(f(2), 2)
         self.assertEqual(f(3), 3)
@@ -519,13 +559,24 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
 
     def test_request_wrapper_multiple_as_flags(self):
         # Patch requests.request to avoid real HTTP call
-        with patch("requests.request") as mock_req, \
-             patch("macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True):
-            mock_req.return_value = MagicMock(status_code=200, content=b"{}", raise_for_status=lambda: None, json=lambda: {})
+        with patch("requests.request") as mock_req, patch(
+            "macrosynergy.download.fusion_interface._wait_for_api_call",
+            return_value=True,
+        ):
+            mock_req.return_value = MagicMock(
+                status_code=200,
+                content=b"{}",
+                raise_for_status=lambda: None,
+                json=lambda: {},
+            )
             with self.assertRaises(ValueError):
-                fusion_request_wrapper("GET", "http://example.com", as_bytes=True, as_text=True)
+                fusion_request_wrapper(
+                    "GET", "http://example.com", as_bytes=True, as_text=True
+                )
 
-    @patch("macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True)
+    @patch(
+        "macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True
+    )
     @patch("requests.request")
     def test_request_wrapper_empty_content(self, mock_req, _):
         resp = MagicMock()
@@ -536,7 +587,9 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
         with self.assertRaises(NoContentError):
             fusion_request_wrapper("GET", "url")
 
-    @patch("macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True)
+    @patch(
+        "macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True
+    )
     @patch("requests.request")
     def test_request_wrapper_json_decode_error_with_raw_response(self, mock_req, _):
         resp = MagicMock()
@@ -560,7 +613,9 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
         oauth.proxies = {"http": "foo"}
         with warnings.catch_warnings(record=True) as w:
             SimpleFusionAPIClient(oauth, proxies={"http": "bar"})
-            self.assertTrue(any("Proxies defined for OAuth handler" in str(x.message) for x in w))
+            self.assertTrue(
+                any("Proxies defined for OAuth handler" in str(x.message) for x in w)
+            )
 
     def test_get_resources_df_keep_fields_missing(self):
         d = {"resources": [{"@id": "id1", "identifier": "foo"}]}
@@ -598,22 +653,40 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
 
     def test_jpmaqsclient_list_datasets_all_explorer(self):
         # All datasets are explorer datasets
-        with patch("macrosynergy.download.fusion_interface.SimpleFusionAPIClient") as mock_client:
+        with patch(
+            "macrosynergy.download.fusion_interface.SimpleFusionAPIClient"
+        ) as mock_client:
             inst = mock_client.return_value
             inst.get_product_details.return_value = {
                 "resources": [
-                    {"@id": "id1", "identifier": "JPMAQS_EXPLORER_1", "title": "t", "description": "d", "isRestricted": False},
-                    {"@id": "id2", "identifier": "JPMAQS_EXPLORER_2", "title": "t2", "description": "d2", "isRestricted": False},
+                    {
+                        "@id": "id1",
+                        "identifier": "JPMAQS_EXPLORER_1",
+                        "title": "t",
+                        "description": "d",
+                        "isRestricted": False,
+                    },
+                    {
+                        "@id": "id2",
+                        "identifier": "JPMAQS_EXPLORER_2",
+                        "title": "t2",
+                        "description": "d2",
+                        "isRestricted": False,
+                    },
                 ]
             }
             with warnings.catch_warnings(record=True) as w:
                 client = JPMaQSFusionClient(FusionOAuth(**self.creds))
                 df = client.list_datasets(include_explorer_datasets=False)
-                self.assertTrue(any("include_explorer_datasets" in str(x.message) for x in w))
+                self.assertTrue(
+                    any("include_explorer_datasets" in str(x.message) for x in w)
+                )
                 self.assertEqual(len(df), 0)
 
     def test_jpmaqsclient_download_latest_distribution_empty_series(self):
-        with patch("macrosynergy.download.fusion_interface.SimpleFusionAPIClient") as mock_client:
+        with patch(
+            "macrosynergy.download.fusion_interface.SimpleFusionAPIClient"
+        ) as mock_client:
             inst = mock_client.return_value
             inst.get_dataset_series.return_value = {"resources": []}
             client = JPMaQSFusionClient(FusionOAuth(**self.creds))
@@ -622,12 +695,18 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
 
     def test_jpmaqsclient_download_latest_full_snapshot(self):
         # Patch os.makedirs and to_csv to avoid file I/O
-        with patch("macrosynergy.download.fusion_interface.SimpleFusionAPIClient") as _, \
-             patch("os.makedirs"), \
-             patch("pandas.DataFrame.to_csv"), \
-             patch("macrosynergy.download.fusion_interface.JPMaQSFusionClient.get_metadata_catalog", return_value=pd.DataFrame({"a": [1]})), \
-             patch("macrosynergy.download.fusion_interface.JPMaQSFusionClient.list_datasets", return_value=pd.DataFrame({"identifier": ["ds1"]})), \
-             patch("macrosynergy.download.fusion_interface.JPMaQSFusionClient.download_latest_distribution", return_value=pd.DataFrame({"b": [2]})):
+        with patch(
+            "macrosynergy.download.fusion_interface.SimpleFusionAPIClient"
+        ) as _, patch("os.makedirs"), patch("pandas.DataFrame.to_csv"), patch(
+            "macrosynergy.download.fusion_interface.JPMaQSFusionClient.get_metadata_catalog",
+            return_value=pd.DataFrame({"a": [1]}),
+        ), patch(
+            "macrosynergy.download.fusion_interface.JPMaQSFusionClient.list_datasets",
+            return_value=pd.DataFrame({"identifier": ["ds1"]}),
+        ), patch(
+            "macrosynergy.download.fusion_interface.JPMaQSFusionClient.download_latest_distribution",
+            return_value=pd.DataFrame({"b": [2]}),
+        ):
             client = JPMaQSFusionClient(FusionOAuth(**self.creds))
             # Should not raise
             client.download_latest_full_snapshot(folder=None, qdf=True)
