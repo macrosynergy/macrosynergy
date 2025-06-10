@@ -144,6 +144,9 @@ def panel_calculator(
 
     _check_calcs(calcs)
 
+    if not external_func:
+        external_func = {}
+
     safe_globals = {"np": np, "pd": pd, **external_func}
 
     # B. Collect new category names and their formulas.
@@ -578,7 +581,7 @@ class CalcList:
         while placed and remaining:
             placed = False
             this_block: List[SingleCalc] = []
-            for calc in List(remaining):
+            for calc in list(remaining):
                 deps = calc.dependencies()
                 if all(d in known_vars for d in deps):
                     this_block.append(calc)
