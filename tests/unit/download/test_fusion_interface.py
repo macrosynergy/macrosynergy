@@ -5,6 +5,8 @@ import requests
 import datetime
 import io
 import pandas as pd
+import warnings
+from macrosynergy.download.fusion_interface import cache_decorator
 
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils.df_utils import is_categorical_qdf
@@ -446,6 +448,189 @@ class TestUtilityFunctions(unittest.TestCase):
         bytes_data = buf.read()
         result = read_parquet_from_bytes(bytes_data)
         pd.testing.assert_frame_equal(result, df)
+
+
+class TestFusionInterfaceEdgeCases(unittest.TestCase):
+    def setUp(self):
+        self.creds = {
+            "client_id": "abc",
+            "client_secret": "def",
+            "resource": "resource",
+            "application_name": "fusion",
+            "root_url": "https://root",
+            "auth_url": "https://auth",
+            "proxies": {"http": "proxy"},
+        }
+
+    def test_fusionoauth_from_credentials_json_missing_keys(self):
+        import tempfile
+        import os
+        import json as js
+        creds = {"client_id": "a"}  # missing client_secret
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            js.dump(creds, f)
+            fname = f.name
+        try:
+            with self.assertRaises(TypeError):
+                FusionOAuth.from_credentials_json(fname)
+        finally:
+            os.remove(fname)
+
+    def test_fusionoauth_from_credentials_invalid_dict(self):
+        with self.assertRaises(TypeError):
+            FusionOAuth.from_credentials({"client_id": "a"})
+
+    def test_fusionoauth_init_proxies(self):
+        oauth = FusionOAuth(**self.creds)
+        self.assertEqual(oauth.proxies, {"http": "proxy"})
+
+    def test_cache_decorator_expiry_and_manual_clear(self):
+        calls = []
+        @cache_decorator(ttl=1)
+        def f(x):
+            calls.append(x)
+            return x
+        f(1)
+        f(1)
+        self.assertEqual(len(calls), 1)
+        f.cache_clear()
+        f(1)
+        self.assertEqual(len(calls), 2)
+        import time
+        time.sleep(1.1)
+        f(1)
+        self.assertEqual(len(calls), 3)
+
+    def test_cache_decorator_maxsize(self):
+        @cache_decorator(ttl=10, maxsize=2)
+        def f(x):
+            return x
+        self.assertEqual(f(1), 1)
+        self.assertEqual(f(2), 2)
+        self.assertEqual(f(3), 3)
+
+    def test_request_wrapper_invalid_method(self):
+        with self.assertRaises(ValueError):
+            fusion_request_wrapper("PATCH", "url")
+
+    def test_request_wrapper_type_error(self):
+        with self.assertRaises(TypeError):
+            fusion_request_wrapper(123, "url")
+
+    def test_request_wrapper_multiple_as_flags(self):
+        # Patch requests.request to avoid real HTTP call
+        with patch("requests.request") as mock_req, \
+             patch("macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True):
+            mock_req.return_value = MagicMock(status_code=200, content=b"{}", raise_for_status=lambda: None, json=lambda: {})
+            with self.assertRaises(ValueError):
+                fusion_request_wrapper("GET", "http://example.com", as_bytes=True, as_text=True)
+
+    @patch("macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True)
+    @patch("requests.request")
+    def test_request_wrapper_empty_content(self, mock_req, _):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b""
+        resp.raise_for_status.return_value = None
+        mock_req.return_value = resp
+        with self.assertRaises(NoContentError):
+            fusion_request_wrapper("GET", "url")
+
+    @patch("macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True)
+    @patch("requests.request")
+    def test_request_wrapper_json_decode_error_with_raw_response(self, mock_req, _):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b"notjson"
+        resp.raise_for_status.return_value = None
+        resp.json.side_effect = json.JSONDecodeError("Expecting value", "", 0)
+        resp.text = "notjson"
+        mock_req.return_value = resp
+        with self.assertRaises(Exception) as cm:
+            fusion_request_wrapper("GET", "url")
+        self.assertIn("decode JSON", str(cm.exception))
+        self.assertIn("Response text", str(cm.exception))
+
+    def test_simplefusionapiclient_type_error(self):
+        with self.assertRaises(TypeError):
+            SimpleFusionAPIClient(oauth_handler="not_oauth")
+
+    def test_simplefusionapiclient_proxy_warning(self):
+        oauth = MagicMock(spec=FusionOAuth)
+        oauth.proxies = {"http": "foo"}
+        with warnings.catch_warnings(record=True) as w:
+            SimpleFusionAPIClient(oauth, proxies={"http": "bar"})
+            self.assertTrue(any("Proxies defined for OAuth handler" in str(x.message) for x in w))
+
+    def test_get_resources_df_keep_fields_missing(self):
+        d = {"resources": [{"@id": "id1", "identifier": "foo"}]}
+        with self.assertRaises(KeyError):
+            get_resources_df(d, keep_fields=["@id", "missing"])  # missing field
+
+    def test_get_resources_df_custom_sort_columns_missing_column(self):
+        d = {"resources": [{"@id": "id1", "identifier": "foo"}]}
+        # Should not raise AssertionError, but should work (title is optional)
+        df = get_resources_df(d, custom_sort_columns=True)
+        self.assertIn("@id", df.columns)
+        self.assertIn("identifier", df.columns)
+        self.assertNotIn("title", df.columns)
+
+    def test_convert_ticker_based_parquet_to_qdf_missing_ticker(self):
+        df = pd.DataFrame({"foo": [1, 2]})
+        with self.assertRaises(KeyError):
+            convert_ticker_based_parquet_to_qdf(df)
+
+    def test_convert_ticker_based_parquet_to_qdf_malformed_ticker(self):
+        df = pd.DataFrame({"ticker": ["A"]})
+        with self.assertRaises(ValueError):
+            convert_ticker_based_parquet_to_qdf(df)
+
+    def test_read_parquet_from_bytes_keyboardinterrupt(self):
+        with patch("pandas.read_parquet", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                read_parquet_from_bytes(b"bytes")
+
+    def test_read_parquet_from_bytes_invalid(self):
+        with patch("pandas.read_parquet", side_effect=Exception("fail")):
+            with self.assertRaises(ValueError) as cm:
+                read_parquet_from_bytes(b"bytes")
+            self.assertIn("Failed to read parquet", str(cm.exception))
+
+    def test_jpmaqsclient_list_datasets_all_explorer(self):
+        # All datasets are explorer datasets
+        with patch("macrosynergy.download.fusion_interface.SimpleFusionAPIClient") as mock_client:
+            inst = mock_client.return_value
+            inst.get_product_details.return_value = {
+                "resources": [
+                    {"@id": "id1", "identifier": "JPMAQS_EXPLORER_1", "title": "t", "description": "d", "isRestricted": False},
+                    {"@id": "id2", "identifier": "JPMAQS_EXPLORER_2", "title": "t2", "description": "d2", "isRestricted": False},
+                ]
+            }
+            with warnings.catch_warnings(record=True) as w:
+                client = JPMaQSFusionClient(FusionOAuth(**self.creds))
+                df = client.list_datasets(include_explorer_datasets=False)
+                self.assertTrue(any("include_explorer_datasets" in str(x.message) for x in w))
+                self.assertEqual(len(df), 0)
+
+    def test_jpmaqsclient_download_latest_distribution_empty_series(self):
+        with patch("macrosynergy.download.fusion_interface.SimpleFusionAPIClient") as mock_client:
+            inst = mock_client.return_value
+            inst.get_dataset_series.return_value = {"resources": []}
+            client = JPMaQSFusionClient(FusionOAuth(**self.creds))
+            with self.assertRaises(KeyError):
+                client.download_latest_distribution("ds")
+
+    def test_jpmaqsclient_download_latest_full_snapshot(self):
+        # Patch os.makedirs and to_csv to avoid file I/O
+        with patch("macrosynergy.download.fusion_interface.SimpleFusionAPIClient") as _, \
+             patch("os.makedirs"), \
+             patch("pandas.DataFrame.to_csv"), \
+             patch("macrosynergy.download.fusion_interface.JPMaQSFusionClient.get_metadata_catalog", return_value=pd.DataFrame({"a": [1]})), \
+             patch("macrosynergy.download.fusion_interface.JPMaQSFusionClient.list_datasets", return_value=pd.DataFrame({"identifier": ["ds1"]})), \
+             patch("macrosynergy.download.fusion_interface.JPMaQSFusionClient.download_latest_distribution", return_value=pd.DataFrame({"b": [2]})):
+            client = JPMaQSFusionClient(FusionOAuth(**self.creds))
+            # Should not raise
+            client.download_latest_full_snapshot(folder=None, qdf=True)
 
 
 if __name__ == "__main__":
