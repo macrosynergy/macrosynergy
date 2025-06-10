@@ -1003,6 +1003,33 @@ class TestAll(unittest.TestCase):
                 inner_splitters=self.single_inner_splitter,
                 cv_summary="invalid",
             )
+        # include_train_folds should be a boolean
+        with self.assertRaises(TypeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                include_train_folds="hello",
+            )
+        # If cv_summary is "mean-std-ge", then include_train_folds should be True
+        with self.assertRaises(ValueError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+                cv_summary="mean-std-ge",
+                include_train_folds=False,
+            )
         # min_cids should be an int
         with self.assertRaises(TypeError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1553,6 +1580,96 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df7.real_date.min() == first_date)
         self.assertTrue(df7.real_date.max() == last_date)
 
+        # Test that include_train_folds works as expected. When cv_summary = "mean-std-ge"
+        # an error should be thrown if include_train_folds is False and when cv_summary is
+        # something else, a warning should be thrown
+        so8 = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+            blacklist=self.black_valid,
+        )
+        with self.assertRaises(ValueError):
+            so8.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "linreg": {
+                        "fit_intercept": [True, False],
+                        "positive": [True, False],
+                    },
+                    "ridge": {
+                        "alpha": stats.expon(),
+                    },
+                },
+                search_type="prior",
+                n_iter=4,
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.inner_splitters,
+                normalize_fold_results=True,
+                cv_summary="mean-std-ge",
+                include_train_folds=False,
+            )
+
+        with self.assertWarns(UserWarning):
+            so8.calculate_predictions(
+                name="test",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "linreg": {
+                        "fit_intercept": [True, False],
+                        "positive": [True, False],
+                    },
+                    "ridge": {
+                        "alpha": stats.expon(),
+                    },
+                },
+                search_type="prior",
+                n_iter=4,
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.inner_splitters,
+                normalize_fold_results=True,
+                cv_summary="mean",
+                include_train_folds=True,
+            )
+        try:
+            so8.calculate_predictions(
+                name="test2",
+                models=self.models,
+                scorers=self.scorers,
+                hyperparameters={
+                    "linreg": {
+                        "fit_intercept": [True, False],
+                        "positive": [True, False],
+                    },
+                    "ridge": {
+                        "alpha": stats.expon(),
+                    },
+                },
+                search_type="prior",
+                n_iter=4,
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.inner_splitters,
+                cv_summary="mean-std-ge",
+                include_train_folds=True,
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+
+        df8 = so8.preds.copy()
+        self.assertIsInstance(df8, pd.DataFrame)
+        if len(df8.xcat.unique()) != 2:
+            self.fail("The signal dataframe should only contain two xcats")
+        self.assertEqual(df8.xcat.unique()[0], "test")
+        self.assertEqual(df8.xcat.unique()[1], "test2")
+        self.assertTrue(len(df7.cid.unique()) == 4)
+        self.assertTrue(df8.real_date.min() == first_date)
+        self.assertTrue(df8.real_date.max() == last_date)
         # Test generate_labels works with a logistic regression
         so8 = SignalOptimizer(
             df=self.df,
@@ -1602,6 +1719,57 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df8.real_date.max() == last_date)
         self.assertTrue(len(df8.value.value_counts()) == 2)
 
+    def test_optional_hparam_validity(self):
+        """
+        I test that the pipelines run as expected when no hyperparameters are 
+        entered. 
+        """
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+        )
+        so.calculate_predictions(
+            name="test",
+            models={"LR": LinearRegression()},
+        )
+        dfa = so.get_optimized_signals("test")
+        self.assertIsInstance(dfa, pd.DataFrame)
+        if len(dfa.xcat.unique()) != 1:
+            self.fail("The signal dataframe should only contain one xcat")
+        self.assertEqual(dfa.xcat.unique()[0], "test")
+        self.assertTrue(len(dfa) != 0)
+        self.assertTrue(dfa.value.notnull().all())
+
+        # Check the first and last date is as expected
+        outer_splitter = list(
+            ExpandingIncrementPanelSplit(
+                train_intervals=1,
+                test_size=1,
+                min_cids=4,
+                min_periods=36,
+            ).split(self.X, self.y)
+        )
+        first_date = (
+            self.X.iloc[outer_splitter[0][0], :].index.get_level_values(1).max()
+        )
+        last_date = (
+            self.X.iloc[outer_splitter[-1][1], :].index.get_level_values(1).max()
+        )
+        self.assertTrue(dfa.real_date.min() == first_date)
+        self.assertTrue(dfa.real_date.max() == last_date)
+
+        # (2) Check that the model diagnostics are stored as expected in this instance
+        dfa = so.get_optimal_models("test")
+        self.assertIsInstance(dfa, pd.DataFrame)
+        self.assertTrue(len(dfa) != 0)
+        self.assertTrue(dfa.name.notnull().all())
+        self.assertTrue(dfa.model_type.notnull().all())
+        self.assertTrue(dfa.model_type.unique()[0] == "LR")
+        self.assertTrue(dfa.name.unique()[0] == "test")
+        self.assertTrue(all(dfa.score==0))
+        self.assertTrue(all(dfa.hparams=={}))
+        self.assertTrue(all(dfa.n_splits_used==0))
 
     def test_types_run(self):
         # Training set only
@@ -1625,6 +1793,7 @@ class TestAll(unittest.TestCase):
             "normalize_fold_results": True,
             "search_type": "prior",
             "cv_summary": "median",
+            "include_train_folds": False,
             "n_iter": 5,
             "split_functions": None,
             "n_jobs_outer": 1,
@@ -1641,10 +1810,11 @@ class TestAll(unittest.TestCase):
             "inner_splitters": "invalid_splitter",  # Invalid: should be a list or splitter object
             "models": None,  # Invalid: should be a model list
             "hyperparameters": "invalid_hyperparameters",  # Invalid: should be a dict or iterable
-            "scorers": None,  # Invalid: should be a scorer or list of scorers
+            "scorers": "scorers",  # Invalid: should be a scorer or list of scorers
             "normalize_fold_results": "invalid_boolean",  # Invalid: should be a boolean
             "search_type": 123,  # Invalid: should be a string
             "cv_summary": 123,  # Invalid: should be a string
+            "include_train_folds": "invalid_boolean",  # Invalid: should be a boolean
             "n_iter": "invalid_integer",  # Invalid: should be an integer
             "split_functions": "invalid_split_functions",  # Invalid: should be a function or None
             "n_jobs_outer": "invalid_jobs",  # Invalid: should be an integer
@@ -1699,6 +1869,7 @@ class TestAll(unittest.TestCase):
                     normalize_fold_results=False,
                     n_splits_add=None,
                     cv_summary="median",
+                    include_train_folds=False,
                     base_splits=None,
                 )
 
@@ -1793,6 +1964,7 @@ class TestAll(unittest.TestCase):
                     normalize_fold_results=False,
                     n_splits_add=None,
                     cv_summary="median",
+                    include_train_folds=False,
                     base_splits=None,
                 )
 
@@ -1858,6 +2030,93 @@ class TestAll(unittest.TestCase):
             self.assertTrue(ftr_correlation[0][1] == "test")
             self.assertIsInstance(ftr_correlation[0][2], str)
             self.assertIsInstance(ftr_correlation[0][3], str)
+
+    def test_optional_hparam_types(self):
+        """
+        Hyperparameter tuning is optional. This test checks that various Type/Value errors
+        are called should optional tuning be abused.
+        """
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+        )
+        # Raise ValueError if scorers is None but inner_splitters is not None
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models={"LR":LinearRegression()},
+                scorers=None,
+                hyperparameters={"LR": {"fit_intercept": [True, False]}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models={"LR":LinearRegression()},
+                scorers=None,
+                hyperparameters=None,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+        # Raise ValueError if inner_splitters is None but scorers is not None
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models={"LR":LinearRegression()},
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={"LR": {"fit_intercept": [True, False]}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=None,
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models={"LR":LinearRegression()},
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters=None,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=None,
+            )
+        # Raise ValueError if no cross-validation is performed but multiple models specified
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models={"LR":LinearRegression(), "RIDGE":Ridge()},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+            )
+        # Raise ValueError if no cross-validation is performed but hyperparameters specified
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models={"LR":LinearRegression()},
+                hyperparameters={"LR": {"fit_intercept": [True, False]}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+            )
+        # Raise ValueError if no cross-validation is performed but
+        # hyperparameters specified and multiple models specified
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models={"LR":LinearRegression(), "Ridge":Ridge()},
+                hyperparameters={"LR": {"fit_intercept": [True, False]}, "Ridge": {"fit_intercept": [True, False]}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+            )
 
     def test_get_ftr_corr_data_no_model(self):
 

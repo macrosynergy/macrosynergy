@@ -251,6 +251,9 @@ def timeseries_to_qdf(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
         xcat=xcat,
     )
 
+    if metric == "last_updated":
+        df["last_updated"] = pd.to_datetime(df["last_updated"])
+
     return df
 
 
@@ -1347,8 +1350,10 @@ class JPMaQSDownload(DataQueryInterface):
         xcats : list[str]
             list of xcats.
         metrics : list[str]
-            list of metrics, one of "value" (default), "grading", "eop_lag", "mop_lag".
-            "all" is also accepted.
+            list of metrics. Available metrics are "value" (default), "grading",
+            "eop_lag", "mop_lag", and "last_updated". If "all" is provided,
+            all available metrics are used. The available metrics are defined in
+            `macrosynergy.download.jpmaqs.JPMAQS_METRICS`.
         start_date : str
             start date of the data to download, in the ISO format - YYYY-MM-DD.
         end_date : str
@@ -1585,12 +1590,12 @@ if __name__ == "__main__":
 
     with JPMaQSDownload(
         client_id=os.getenv("DQ_CLIENT_ID"),
-        client_secret=os.getenv("DQ_CLIENT_SECRET"),
+        client_secret=os.getenv("DQ_CLIENT_SECRET")
     ) as jpmaqs:
         data = jpmaqs.download(
             xcats=xcats,
             cids=cids,
-            metrics="value",
+            metrics="all",
             start_date=start_date,
             end_date=end_date,
             show_progress=True,

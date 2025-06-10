@@ -25,6 +25,7 @@ def check_availability(
     missing_recent: bool = True,
     use_last_businessday: bool = True,
     title: str = None,
+    xcat_labels: dict = None,
 ):
     """
     Wrapper for visualizing start and end dates of a filtered DataFrame.
@@ -56,6 +57,8 @@ def check_availability(
     use_last_businessday : bool
         boolean indicating whether or not to use the last business day before today as
         the end date. Default is True.
+    xcat_labels : dict
+        dictionary with xcat labels. Default is None (no labels).
     """
 
     if not isinstance(start_years, bool):
@@ -66,6 +69,10 @@ def check_availability(
     df = QuantamentalDataFrame(df)
 
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
+    
+    if xcat_labels is not None:
+        dfx = dfx.rename_xcats(xcat_labels)
+
     if dfx.empty:
         raise ValueError(
             "No data available for the selected cross-sections and categories."
@@ -264,5 +271,5 @@ if __name__ == "__main__":
     xxcids = cids + ["USD"]
 
     check_availability(
-        df=dfd, xcats=xcats, cids=cids, start_size=(10, 5), end_size=(10, 8)
+        df=dfd, xcats=xcats, cids=cids, start_size=(10, 5), end_size=(10, 8), xcat_labels={"XR": "Exchange Rate", "CRY": "Commodity"}
     )

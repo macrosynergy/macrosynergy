@@ -51,6 +51,7 @@ def timelines(
     height: Number = 3.0,
     legend_fontsize: int = 12,
     blacklist: Dict = None,
+    ax_hline: Union[float, Dict] = None,
 ):
     """
     Displays a facet grid of time line charts of one or more categories.
@@ -170,7 +171,7 @@ def timelines(
         for key, value in blacklist.items():
             if not isinstance(key, str):
                 raise TypeError("Keys in `blacklist` must be strings.")
-            if not isinstance(value, list):
+            if not isinstance(value, (list, tuple)):
                 raise TypeError("Values in `blacklist` must be lists.")
 
     if xcats is None:
@@ -286,6 +287,7 @@ def timelines(
                 legend_ncol=legend_ncol,
                 legend_fontsize=legend_fontsize,
                 interpolate=cumsum,
+                ax_hline=ax_hline,
             )
 
     elif single_chart or (len(cids) == 1):
@@ -312,6 +314,7 @@ def timelines(
                 legend_ncol=legend_ncol,
                 legend_fontsize=legend_fontsize,
                 legend_labels=xcat_labels or None,
+                ax_hline=ax_hline,
             )
 
     else:
@@ -352,6 +355,7 @@ def timelines(
                 legend_labels=xcat_labels,
                 legend_fontsize=legend_fontsize,
                 interpolate=cumsum,
+                ax_hline=ax_hline,
             )
 
 
@@ -429,7 +433,7 @@ if __name__ == "__main__":
     import time
 
     black = {
-        "EUR": ["2012-01-01", "2018-01-01"],
+        "EUR": tuple(["2012-01-01", "2018-01-01"]),
         "GBP": ["2004-01-01", "2007-01-01"],
         "USD": ["2015-01-01", "2018-01-01"],
     }
