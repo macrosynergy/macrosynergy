@@ -836,6 +836,51 @@ class JPMaQSFusionClient:
         )
         return read_parquet_from_bytes(r_bytes)
 
+    def list_tickers(self, **kwargs) -> pd.DataFrame:
+        """
+        List all tickers available in the JPMaQS product. This method retrieves the
+        metadata catalog and extracts the tickers from it.
+
+        Parameters
+        ----------
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the tickers and their metadata.
+        """
+        metadata_catalog = self.get_metadata_catalog(**kwargs)
+        if "Ticker" not in metadata_catalog.columns:
+            raise ValueError("Invalid metadata catalog: 'Ticker' column not found.")
+        return sorted(metadata_catalog["Ticker"])
+
+    def get_ticker_metadata(self, ticker: str, **kwargs) -> pd.DataFrame:
+        """
+        Get metadata for a specific ticker in the JPMaQS product. This method retrieves
+        the metadata catalog and filters it for the specified ticker.
+
+        Parameters
+        ----------
+        ticker : str
+            The ticker for which to retrieve metadata.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the metadata for the specified ticker.
+        """
+        metadata_catalog = self.get_metadata_catalog(**kwargs)
+        ticker_metadata = metadata_catalog[
+            metadata_catalog["Ticker"].str.lower() == ticker.lower()
+        ]
+        if ticker_metadata.empty:
+            raise ValueError(f"No metadata found for ticker '{ticker}'.")
+        return ticker_metadata.reset_index(drop=True)
+
     def get_dataset_available_series(self, dataset: str, **kwargs) -> pd.DataFrame:
         """
         Get the available series for a given dataset in the JPMaQS product. Typically,
