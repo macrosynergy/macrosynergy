@@ -144,8 +144,7 @@ def panel_calculator(
 
     _check_calcs(calcs)
 
-    if external_func:
-        globals().update(external_func)
+    safe_globals = {"np": np, "pd": pd, **external_func}
 
     # B. Collect new category names and their formulas.
 
@@ -183,11 +182,12 @@ def panel_calculator(
     # E. Create all required wide dataframes with category names.
     new_variables_existances: Dict[str, bool] = {}  # True where the variable exists
     df = df.add_ticker_column()
+    data_map = {}
     for xcat in old_xcats_used:
         dfxx = dfx[dfx["xcat"] == xcat]
         dfw = dfxx.pivot(index="real_date", columns="cid", values="value")
         dfw = _replace_zeros(df=dfw)
-        exec(f"{xcat} = dfw")
+        data_map[xcat] = dfw
         new_variables_existances[xcat] = not dfw.empty
 
     for single in singles_used:
@@ -202,7 +202,7 @@ def panel_calculator(
             dfw = pd.concat([dfx1] * len(cids), axis=1, ignore_index=True)
             dfw.columns = cids
             dfw = _replace_zeros(df=dfw)
-            exec(f"{single} = dfw")
+            data_map[single] = dfw
             new_variables_existances[single] = not dfw.empty
 
     if sort_execution_order:
@@ -215,7 +215,7 @@ def panel_calculator(
     # F. Calculate the panels and collect.
     df_out: pd.DataFrame
     for new_xcat, formula in ops_tuples:
-        dfw_add = eval(formula)
+        dfw_add = eval(formula, safe_globals, data_map)
         df_add = pd.melt(dfw_add.reset_index(), id_vars=["real_date"]).rename(
             {"variable": "cid"}, axis=1
         )
@@ -225,7 +225,7 @@ def panel_calculator(
         else:
             df_out = pd.concat([df_out, df_add[cols]], axis=0, ignore_index=True)
         dfw_add = _replace_zeros(df=dfw_add)
-        exec(f"{new_xcat} = dfw_add")
+        data_map[new_xcat] = dfw_add
 
     if df_out.isna().any().any():
         df_out = drop_nan_series(df=df_out, raise_warning=True)
