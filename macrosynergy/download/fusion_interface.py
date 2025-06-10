@@ -260,10 +260,12 @@ def request_wrapper(
             f"Invalid method: {method}. Must be one of 'GET', 'POST', 'PUT', 'DELETE'."
         )
 
-    if sum(map(bool, [as_bytes, as_text, as_json])):
-        as_json = True
-    elif sum(map(bool, [as_bytes, as_text, as_json])) > 1:
+    as_flags = [as_bytes, as_text, as_json]
+    check_flags = sum(map(bool, as_flags))
+    if check_flags > 1:
         raise ValueError("Only one of `as_json`, `as_bytes`, or `as_text` can be True.")
+    if not check_flags:
+        as_json = True
     raw_response: Optional[requests.Response] = None
     try:
         _wait_for_api_call()
@@ -750,6 +752,7 @@ class JPMaQSFusionClient:
         fields: List[str] = ["@id", "identifier", "title", "description"],
         include_catalog: bool = False,
         include_explorer_datasets: bool = False,
+        include_delta_datasets: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -767,6 +770,8 @@ class JPMaQSFusionClient:
             If True, includes the metadata catalog dataset in the results.
         include_explorer_datasets : bool
             If True, includes the Explorer datasets in the results.
+        include_delta_datasets : bool
+            If True, includes the Delta datasets in the results.
 
         Returns
         -------
@@ -777,9 +782,7 @@ class JPMaQSFusionClient:
             product_id=product_id, **kwargs
         )
         resources_df: pd.DataFrame = get_resources_df(r, keep_fields=None)
-        resources_df = resources_df[
-            resources_df["identifier"] != "JPMAQS_METADATA_CATALOG"
-        ].sort_values(by=["isRestricted", "@id"])
+        resources_df = resources_df.sort_values(by=["isRestricted", "@id"])
 
         if not include_catalog:
             resources_df = resources_df[
@@ -791,6 +794,14 @@ class JPMaQSFusionClient:
             if all(sel_bools):
                 warnings.warn(
                     "`include_explorer_datasets` is True, but all datasets are Explorer datasets. Setting it to False."
+                )
+            resources_df = resources_df[~sel_bools]
+
+        if not include_delta_datasets:
+            sel_bools = resources_df["identifier"].str.startswith("JPMAQS_DELTA_")
+            if all(sel_bools):
+                warnings.warn(
+                    "`include_delta_datasets` is True, but all datasets are Delta datasets. Setting it to False."
                 )
             resources_df = resources_df[~sel_bools]
 
@@ -919,6 +930,32 @@ class JPMaQSFusionClient:
         result = read_parquet_from_bytes(result)
         return result
 
+    def get_latest_seriesmember_identifier(
+        self,
+        dataset: str,
+        **kwargs,
+    ) -> str:
+        """
+        Get the latest distribution identifier for a given dataset in the JPMaQS product.
+
+        Parameters
+        ----------
+        dataset : str
+            The dataset identifier for which to get the latest distribution.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        str
+            The identifier of the latest distribution for the specified dataset.
+        """
+        series_members = self.get_dataset_available_series(dataset=dataset, **kwargs)
+        if series_members.empty:
+            raise ValueError(f"No series members found for dataset '{dataset}'.")
+        latest_series_member = sorted(series_members["identifier"].tolist())[-1]
+        return latest_series_member
+
     def download_latest_distribution(
         self,
         dataset: str,
@@ -949,9 +986,11 @@ class JPMaQSFusionClient:
         pd.DataFrame
             A DataFrame containing the latest distribution for the specified dataset.
         """
-        series_members = self.get_dataset_available_series(dataset=dataset, **kwargs)
+        latest_series_member = self.get_latest_seriesmember_identifier(
+            dataset=dataset,
+            **kwargs,
+        )
 
-        latest_series_member = sorted(series_members["identifier"].tolist())[-1]
         dist_df = self.download_series_member_distribution(
             dataset=dataset,
             seriesmember=latest_series_member,
@@ -971,6 +1010,9 @@ class JPMaQSFusionClient:
         self,
         folder: str = None,
         qdf: bool = True,
+        include_catalog: bool = False,
+        include_explorer_datasets: bool = False,
+        include_delta_datasets: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -984,6 +1026,14 @@ class JPMaQSFusionClient:
             date will be created in the current directory.
         qdf : bool
             If True, converts the DataFrame to a QuantamentalDataFrame.
+        include_catalog : bool
+            If True, includes the metadata catalog dataset in the snapshot. Default is
+            False.
+        include_explorer_datasets : bool
+            If True, includes Explorer datasets in the snapshot. Default is False.
+        include_delta_datasets : bool
+            If True, includes Delta datasets in the snapshot. Default is False.
+
         **kwargs : dict
             Additional keyword arguments to pass to the API request.
 
@@ -994,26 +1044,33 @@ class JPMaQSFusionClient:
         """
 
         if folder is None:
-            _date = datetime.datetime.now().strftime("%Y-%m-%d")
+            _date = pd.Timestamp.now().strftime("%Y-%m-%d")
             folder = "./jpmaqs-full-snapshot-" + _date
         os.makedirs(folder, exist_ok=True)
 
-        catalog_df = jpmaqs_client.get_metadata_catalog()
+        catalog_df = self.get_metadata_catalog()
         catalog_df.to_csv(
             os.path.join(folder, "jpmaqs-metadata-catalog.csv"),
             index=False,
         )
 
-        datasets = jpmaqs_client.list_datasets()["identifier"].tolist()
+        datasets = self.list_datasets(
+            include_catalog=include_catalog,
+            include_explorer_datasets=include_explorer_datasets,
+            include_delta_datasets=include_delta_datasets,
+            **kwargs,
+        )["identifier"].tolist()
         for ds in datasets:
-            dist_df = jpmaqs_client.download_latest_distribution(
-                ds, qdf=qdf, categorical=False, **kwargs
-            )
+            dist_df = self.download_latest_distribution(ds, qdf=qdf)
             dist_df.to_csv(
                 os.path.join(folder, f"{ds}.csv"),
                 index=False,
             )
-            print(f"Downloaded {ds} to {folder}/{ds}.csv")
+            print(
+                f"Downloaded latest distribution for dataset '{ds}' to {folder}/{ds}-latest.csv"
+            )
+
+        return catalog_df
 
 
 if __name__ == "__main__":
