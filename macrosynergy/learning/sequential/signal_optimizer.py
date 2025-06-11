@@ -312,6 +312,7 @@ class SignalOptimizer(BasePanelLearner):
             min_cids=min_cids,
             min_periods=min_periods,
             max_periods=max_periods,
+            drop_nas=self.drop_nas,
         )
 
         results = self.run(
@@ -1756,7 +1757,7 @@ if __name__ == "__main__":
     df_xcats.loc["XR"] = ["2012-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
     df_xcats.loc["CRY"] = ["2012-01-01", "2020-12-31", 1, 2, 0.95, 1]
     df_xcats.loc["GROWTH"] = ["2012-01-01", "2020-12-31", 1, 2, 0.9, 1]
-    df_xcats.loc["INFL"] = ["2012-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
+    df_xcats.loc["INFL"] = ["2015-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfd["grading"] = np.ones(dfd.shape[0])
@@ -1779,53 +1780,53 @@ if __name__ == "__main__":
         drop_nas = False
     )
 
-    so.calculate_predictions(
-        name="LR",
-        models={
-            "Ridge": Ridge(),
-            "Lasso": Lasso(),
-            "TWLS": TimeWeightedLinearRegression(),
-        },
-        hyperparameters={
-            "Ridge": {
-                "fit_intercept": [True, False],
-                "alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000],
-            },
-            "Lasso": {
-                "fit_intercept": [True, False],
-                "alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000],
-            },
-            "TWLS": {
-                "half_life": [24, 36, 60, 120, 240],
-                "fit_intercept": [True, False],
-            },
-        },
-        scorers={
-            "r2": make_scorer(r2_score),
-            "mae": make_scorer(mean_absolute_error, greater_is_better=False),
-        },
-        inner_splitters={
-            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
-            "SecondSplit": ExpandingKFoldPanelSplit(n_splits=10),
-        },
-        #search_type="prior",
-        #n_iter=6,
-        cv_summary="mean-std-ge",
-        include_train_folds=True,
-        n_jobs_outer=1,
-        n_jobs_inner=1,
-        normalize_fold_results=True,
-        # split_functions={
-        #     "ExpandingKFold": lambda n: n // 12,
-        #     "SecondSplit": None,
-        # },
-    )
+    # so.calculate_predictions(
+    #     name="LR",
+    #     models={
+    #         "Ridge": Ridge(),
+    #         "Lasso": Lasso(),
+    #         "TWLS": TimeWeightedLinearRegression(),
+    #     },
+    #     hyperparameters={
+    #         "Ridge": {
+    #             "fit_intercept": [True, False],
+    #             "alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000],
+    #         },
+    #         "Lasso": {
+    #             "fit_intercept": [True, False],
+    #             "alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000],
+    #         },
+    #         "TWLS": {
+    #             "half_life": [24, 36, 60, 120, 240],
+    #             "fit_intercept": [True, False],
+    #         },
+    #     },
+    #     scorers={
+    #         "r2": make_scorer(r2_score),
+    #         "mae": make_scorer(mean_absolute_error, greater_is_better=False),
+    #     },
+    #     inner_splitters={
+    #         "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
+    #         "SecondSplit": ExpandingKFoldPanelSplit(n_splits=10),
+    #     },
+    #     #search_type="prior",
+    #     #n_iter=6,
+    #     cv_summary="mean-std-ge",
+    #     include_train_folds=True,
+    #     n_jobs_outer=1,
+    #     n_jobs_inner=1,
+    #     normalize_fold_results=True,
+    #     # split_functions={
+    #     #     "ExpandingKFold": lambda n: n // 12,
+    #     #     "SecondSplit": None,
+    #     # },
+    # )
 
-    so.models_heatmap("LR")
-    so.feature_importance_timeplot("LR")
-    so.coefs_stackedbarplot("LR")
-    so.nsplits_timeplot("LR")
-    so.feature_selection_heatmap("LR", tick_fontsize=20)
+    # so.models_heatmap("LR")
+    # so.feature_importance_timeplot("LR")
+    # so.coefs_stackedbarplot("LR")
+    # so.nsplits_timeplot("LR")
+    # so.feature_selection_heatmap("LR", tick_fontsize=20)
 
     # Test a random forest
     from sklearn.ensemble import RandomForestRegressor
