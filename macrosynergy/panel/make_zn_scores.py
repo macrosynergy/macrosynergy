@@ -164,6 +164,9 @@ def make_zn_scores(
     if xcat not in df["xcat"].unique():
         raise ValueError(f"The xcat {xcat} is not available in the DataFrame.")
 
+    if ffill:
+        df['value'] = df.groupby(['cid', 'xcat'], observed=True)['value'].ffill()
+        
     df = reduce_df(
         df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
     )
@@ -178,8 +181,7 @@ def make_zn_scores(
     dfw = df.pivot(index="real_date", columns="cid", values="value")
     cross_sections = dfw.columns
     
-    if ffill:
-        dfw = dfw.ffill()
+    
 
     # --- The actual scoring.
 
