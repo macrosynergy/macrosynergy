@@ -41,6 +41,9 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
         The maximum number of time periods in each training set. If the maximum is
         exceeded, the earliest periods are cut off. This effectively creates rolling
         training sets. Default is None.
+    drop_nas : bool
+        Whether to drop rows with NaN values in the dataframe. Default is True.
+        If False, only the rows with NaN values in the dependent variable are dropped.
 
     Notes
     -----
@@ -63,6 +66,7 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
         min_periods=500,
         start_date=None,
         max_periods=None,
+        drop_nas = True,
     ):
         # Checks
         super().__init__(
@@ -70,6 +74,7 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
             min_periods=min_periods,
             start_date=start_date,
             max_periods=max_periods,
+            drop_nas=drop_nas,
         )
         self._check_init_params(
             train_intervals=train_intervals,
@@ -111,7 +116,12 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
         train_indices = []
         test_indices = []
 
-        Xy = pd.concat([X, y], axis=1).dropna()
+        if self.drop_nas:
+            Xy = pd.concat([X, y], axis=1).dropna()
+        else:
+            # Drop only the rows with NaN values in the dependent variable
+            Xy = pd.concat([X, y], axis=1).dropna(subset=[y.name])
+
         real_dates = Xy.index.get_level_values(1)
         splits = self._determine_unique_training_times(Xy, real_dates)
 

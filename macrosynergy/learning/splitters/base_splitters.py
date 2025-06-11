@@ -363,6 +363,9 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
         The maximum number of time periods in each training set. If the maximum is
         exceeded, the earliest periods are cut off. This effectively creates rolling
         training sets. Default is None.
+    drop_nas : bool, optional
+        Whether to drop rows with NaN values in the dataframe. Default is True.
+        If False, only the rows with NaN values in the dependent variable are dropped.
 
     Notes
     -----
@@ -377,6 +380,7 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
         min_periods,
         start_date=None,
         max_periods=None,
+        drop_nas = True,
     ):
         # Checks
         self._check_wf_params(
@@ -384,6 +388,7 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
             min_periods=min_periods,
             start_date=start_date,
             max_periods=max_periods,
+            drop_nas=drop_nas,
         )
 
         # Attributes
@@ -391,8 +396,9 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
         self.min_periods = min_periods
         self.start_date = pd.Timestamp(start_date) if start_date else None
         self.max_periods = max_periods
+        self.drop_nas = drop_nas
 
-    def _check_wf_params(self, min_cids, min_periods, start_date, max_periods):
+    def _check_wf_params(self, min_cids, min_periods, start_date, max_periods, drop_nas):
         """
         Type and value checks for the class initialisation parameters.
 
@@ -406,6 +412,8 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
             The targeted final date in the initial training set in ISO 8601 format.
         max_periods : int
             The maximum number of time periods in each training set.
+        drop_nas : bool
+            Whether to drop rows with NaN values in the dataframe.
         """
         # min_cids
         if not isinstance(min_cids, int):
@@ -438,6 +446,9 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
             raise ValueError(
                 f"max_periods must be an integer greater than 0. Got {max_periods}."
             )
+        # drop_nas
+        if not isinstance(drop_nas, bool):
+            raise TypeError(f"drop_nas must be a boolean. Got {type(drop_nas)}.")
 
     def _check_split_params(self, X, y, groups):
         """

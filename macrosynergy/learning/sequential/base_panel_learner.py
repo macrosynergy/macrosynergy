@@ -40,6 +40,7 @@ class BasePanelLearner(ABC):
         xcat_aggs=["last", "sum"],
         generate_labels=None,
         skip_checks=False,
+        drop_nas=True
     ):
         """
         Initialize a sequential learning process over a panel.
@@ -79,6 +80,9 @@ class BasePanelLearner(ABC):
             classification labels. Default is None.
         skip_checks : bool, optional
             Whether to skip the initialization checks. Default is False.
+        drop_nas : bool, optional
+            Whether to drop rows with NaN values in the dataframe. Default is True.
+            If False, only the rows with NaN values in the dependent variable are dropped.
 
         Notes
         -----
@@ -120,6 +124,7 @@ class BasePanelLearner(ABC):
                 lag,
                 xcat_aggs,
                 generate_labels,
+                drop_nas,
             )
         # Attributes
         self.df = QuantamentalDataFrame(df)
@@ -132,6 +137,7 @@ class BasePanelLearner(ABC):
         self.lag = lag
         self.xcat_aggs = xcat_aggs
         self.generate_labels = generate_labels
+        self.drop_nas = drop_nas
 
         # Create long-format dataframe
         df_long = (
@@ -146,10 +152,14 @@ class BasePanelLearner(ABC):
                 lag=self.lag,
                 xcat_aggs=self.xcat_aggs,
             )
-            .dropna()
-            .sort_index()
         )
 
+        if self.drop_nas:
+            df_long = df_long.dropna().sort_index()
+        else:
+            # Only drop rows with NaN values in the dependent variable
+            df_long = df_long.dropna(subset=[self.xcats[-1]]).sort_index()
+            
         # Create X and y
         self.X = df_long.iloc[:, :-1]
         self.y = df_long.iloc[:, -1]
@@ -1042,6 +1052,7 @@ class BasePanelLearner(ABC):
         lag,
         xcat_aggs,
         generate_labels,
+        drop_nas,
     ):
         """
         Checks for the constructor.
@@ -1070,6 +1081,8 @@ class BasePanelLearner(ABC):
         generate_labels : callable, optional
             Function to generate labels for a supervised learning process.
             Default is None.
+        drop_nas : bool, optional
+            Whether to drop rows with NAs in the dataframe. Default is True.
         """
         # Dataframe checks
         if not isinstance(df, pd.DataFrame):
@@ -1180,6 +1193,10 @@ class BasePanelLearner(ABC):
         if generate_labels is not None:
             if not callable(generate_labels):
                 raise TypeError("generate_labels must be a callable.")
+            
+        # drop_nas checks
+        if not isinstance(drop_nas, bool):
+            raise TypeError("drop_nas must be a boolean.")
 
     def _check_run(
         self,
