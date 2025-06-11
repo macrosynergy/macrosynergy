@@ -31,6 +31,7 @@ def make_zn_scores(
     thresh: float = None,
     pan_weight: float = 1,
     postfix: str = "ZN",
+    ffill: bool = True,
     unscore: bool = False,
 ) -> pd.DataFrame:
     """
@@ -84,6 +85,9 @@ def make_zn_scores(
         parameters are all specific to cross section.
     postfix : str
         string appended to category name for output; default is "ZN".
+    ffill : bool, default True
+        If True, the function will forward-fill missing values in the DataFrame before
+        calculating zn-scores.
     unscore : bool, default False
         If True, the function will apply the specified threshold to z-scores,
         but return values on the original scale. The `thresh` parameter will
@@ -173,6 +177,9 @@ def make_zn_scores(
 
     dfw = df.pivot(index="real_date", columns="cid", values="value")
     cross_sections = dfw.columns
+    
+    if ffill:
+        dfw = dfw.ffill()
 
     # --- The actual scoring.
 
@@ -435,23 +442,17 @@ def _unscore_dfw_zns(
             df_neutral_pan["value"], axis=0
         )
     else:
-        dfw_unscored_pan = pd.DataFrame(
-            0, index=dfw_zns.index, columns=dfw_zns.columns
-        )
+        dfw_unscored_pan = pd.DataFrame(0, index=dfw_zns.index, columns=dfw_zns.columns)
 
     if pan_weight < 1:
         dfw_zns_css = (dfw_zns - (dfw_zns_pan * pan_weight)) / (1 - pan_weight)
-        dfw_unscored_css = pd.DataFrame(
-            index=dfw_zns.index, columns=dfw_zns.columns
-        )
+        dfw_unscored_css = pd.DataFrame(index=dfw_zns.index, columns=dfw_zns.columns)
         for cid in cross_sections:
-            dfw_unscored_css[cid] = (
-                dfw_zns_css[cid] * cid_mabs[cid]
-            ) + cid_neutral[cid]
+            dfw_unscored_css[cid] = (dfw_zns_css[cid] * cid_mabs[cid]) + cid_neutral[
+                cid
+            ]
     else:
-        dfw_unscored_css = pd.DataFrame(
-            0, index=dfw_zns.index, columns=dfw_zns.columns
-        )
+        dfw_unscored_css = pd.DataFrame(0, index=dfw_zns.index, columns=dfw_zns.columns)
 
     if pan_weight == 1:
         dfw_unscored = dfw_unscored_pan
@@ -462,6 +463,7 @@ def _unscore_dfw_zns(
     dfw_zns = dfw_unscored
 
     return dfw_unscored
+
 
 if __name__ == "__main__":
     np.random.seed(1)
