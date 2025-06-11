@@ -133,7 +133,7 @@ class TestAll(unittest.TestCase):
         for i, df in enumerate(df_c_wgts):
             self.assertTrue(list(df.columns) == column_names[i])
 
-    def test_modify_signals(self):
+    def test_modify_signals(self): 
         """
         Test if unit positions are correct.
         """
@@ -265,6 +265,7 @@ class TestAll(unittest.TestCase):
             scale="prop",
             min_obs=0,
             thresh=2.5,
+            blacklist={'AUD': ['2012-01-03', '2012-01-03']},
         )
 
         # Test shape of output dataframe.
@@ -285,6 +286,7 @@ class TestAll(unittest.TestCase):
             scale="prop",
             min_obs=0,
             thresh=thresh,
+            blacklist={'AUD': ['2012-01-03', '2012-01-03']},
         )
         df_unit_pos_w = df_unit_pos.pivot(
             index="real_date", columns="cid", values="value"
