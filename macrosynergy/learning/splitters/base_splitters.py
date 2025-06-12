@@ -126,6 +126,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         tick_fontsize=None,
         label_fontsize=None,
         subtitle_fontsize=None,
+        drop_nas=True,
     ):
         """
         Visualise the cross-validation splits.
@@ -149,6 +150,9 @@ class BasePanelSplit(BaseCrossValidator, ABC):
             Integer specifying the size of the y-axis labels. Default is None.
         subtitle_fontsize : int, optional
             Integer specifying the size of the subplot titles. Default is None.
+        drop_nas : bool, optional
+            Whether to drop rows with NaN values in the dataframe. Default is True.
+            If False, only the rows with NaN values in the dependent variable are dropped.
         """
         sns.set_theme(style="whitegrid", palette="colorblind")
 
@@ -175,7 +179,11 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                 raise TypeError("subtitle_size must be an integer.")
 
         # Obtain relevant data
-        Xy: pd.DataFrame = pd.concat([X, y], axis=1).dropna()
+        if drop_nas:
+            Xy: pd.DataFrame = pd.concat([X, y], axis=1).dropna()
+        else:
+            Xy = pd.concat([X, y], axis=1).dropna(subset=[y.name])
+
         cross_sections = np.array(sorted(Xy.index.get_level_values(0).unique()))
         real_dates = Xy.index.get_level_values(1).unique().sort_values()
 
