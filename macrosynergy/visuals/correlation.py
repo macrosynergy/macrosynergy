@@ -23,7 +23,7 @@ def view_correlation(
     cids: List[str] = None,
     xcats_secondary: Optional[Union[str, List[str]]] = None,
     cids_secondary: Optional[List[str]] = None,
-    start: str = "2000-01-01",
+    start: str = None,
     end: str = None,
     val: str = "value",
     freq: str = None,
