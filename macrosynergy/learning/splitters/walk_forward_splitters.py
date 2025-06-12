@@ -223,6 +223,41 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
 
         return self.n_splits
 
+    def visualise_splits(
+        self,
+        X,
+        y,
+        figsize=(20, 5),
+        show_title=True,
+        tick_fontsize=None,
+        label_fontsize=None,
+        subtitle_fontsize=None,
+    ):
+        """
+        Visualise the cross-validation splits.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Pandas dataframe of features/quantamental indicators, multi-indexed by
+            (cross-section, date). The dates must be in datetime format. The
+            dataframe must be in wide format: each feature is a column.
+        y : pd.DataFrame
+            Pandas dataframe of target variable, multi-indexed by (cross-section, date).
+            The dates must be in datetime format.
+        figsize : Tuple[int, int]
+            Tuple of integers specifying the splitter visualisation figure size.
+        show_title : bool, optional
+            Boolean specifying whether to show the title of the figure. Default is True.
+        tick_fontsize : int, optional
+            Integer specifying the size of the x-axis tick labels. Default is None.
+        label_fontsize : int, optional
+            Integer specifying the size of the y-axis labels. Default is None.
+        subtitle_fontsize : int, optional
+            Integer specifying the size of the subplot titles. Default is None.
+        """
+        super().visualise_splits(X, y, figsize, show_title, tick_fontsize, label_fontsize, subtitle_fontsize, drop_nas=False)
+
     def _check_init_params(
         self,
         train_intervals,
@@ -561,9 +596,9 @@ if __name__ == "__main__":
     y = dfd["XR"]
 
     # ExpandingIncrementPanelSplit
-    splitter = ExpandingIncrementPanelSplit(train_intervals=21 * 12, test_size=21 * 12)
+    splitter = ExpandingIncrementPanelSplit(train_intervals=21 * 12, test_size=21 * 12, drop_nas=False, min_cids = 1, min_periods = 12*12)
     splitter.visualise_splits(X, y)
 
     # ExpandingFrequencyPanelSplit
-    splitter = ExpandingFrequencyPanelSplit(expansion_freq="Y", test_freq="Y")
+    splitter = ExpandingFrequencyPanelSplit(expansion_freq="Y", test_freq="Y", drop_nas=False)
     splitter.visualise_splits(X, y)
