@@ -2342,23 +2342,39 @@ class TestAll(unittest.TestCase):
 
     def test_types_get_optimized_signals(self):
         so = self.so_with_calculated_preds
-
+        so_nas = self.so_no_na
         # Test invalid names are caught
         with self.assertRaises(TypeError):
             so.get_optimized_signals(name=1)
         with self.assertRaises(TypeError):
             so.get_optimized_signals(name={})
+        with self.assertRaises(TypeError):
+            so_nas.get_optimized_signals(name=1)
+        with self.assertRaises(TypeError):
+            so_nas.get_optimized_signals(name={})
 
         # Test an error is raised if a wrong name is passed
         with self.assertRaises(ValueError):
             so.get_optimized_signals(name=["test", "test2"])
         with self.assertRaises(ValueError):
             so.get_optimized_signals(name="test2")
+        with self.assertRaises(ValueError):
+            so_nas.get_optimized_signals(name=["test", "test2"])
+        with self.assertRaises(ValueError):
+            so_nas.get_optimized_signals(name="test2")
 
         # Test that if no signals have been calculated, an error is raised
         so = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
+        )
+        with self.assertRaises(ValueError):
+            so.get_optimized_signals(name="test2")
+
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            drop_nas = False,
         )
         with self.assertRaises(ValueError):
             so.get_optimized_signals(name="test2")
