@@ -1884,23 +1884,36 @@ class TestAll(unittest.TestCase):
         self.assertTrue(all(dfa.hparams=={}))
         self.assertTrue(all(dfa.n_splits_used==0))
 
-    def test_types_run(self):
+    @parameterized.expand([True, False])
+    def test_types_run(self, drop_nas: bool):
         # Training set only
         so = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
+            drop_nas=drop_nas
         )
-        outer_splitter = ExpandingIncrementPanelSplit()
+        outer_splitter = ExpandingIncrementPanelSplit(drop_nas=drop_nas)
 
         # Valid parameters
         valid_params = {
             "name": "test",
             "outer_splitter": outer_splitter,
             "inner_splitters": self.single_inner_splitter,
-            "models": self.models,
+            "models": {
+                "linreg": Pipeline([
+                    ("imputer", SimpleImputer(strategy="mean")),
+                    ("scaler", StandardScaler()),
+                    ("model", LinearRegression()),
+                ]),
+                "ridge": Pipeline([
+                    ("imputer", SimpleImputer(strategy="mean")),
+                    ("scaler", StandardScaler()),
+                    ("model", Ridge()),
+                ]),
+            },
             "hyperparameters": {
-                "linreg": {"fit_intercept": [True, False], "positive": [True, False]},
-                "ridge": {"alpha": [0.1, 1, 10], "fit_intercept": [True, False]},
+                "linreg": {"model__fit_intercept": [True, False], "model__positive": [True, False]},
+                "ridge": {"model__alpha": [0.1, 1, 10], "model__fit_intercept": [True, False]},
             },
             "scorers": self.scorers,
             "normalize_fold_results": True,
