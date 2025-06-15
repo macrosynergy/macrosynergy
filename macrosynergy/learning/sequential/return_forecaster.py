@@ -50,6 +50,9 @@ class ReturnForecaster(BasePanelLearner):
     generate_labels : callable, optional
         Function to transform the response variable into either alternative regression
         targets or classification labels. Default is None.
+    drop_nas : bool, optional
+        Whether to drop rows with NaN values in the dataframe. Default is True.
+        If False, only the rows with NaN values in the dependent variable are dropped.
 
     Notes
     -----
@@ -73,6 +76,7 @@ class ReturnForecaster(BasePanelLearner):
         lag=1,
         xcat_aggs=["last", "sum"],
         generate_labels=None,
+        drop_nas=True,
     ):
         # Parent checks
         self._check_init(
@@ -86,6 +90,7 @@ class ReturnForecaster(BasePanelLearner):
             lag=lag,
             xcat_aggs=xcat_aggs,
             generate_labels=generate_labels,
+            drop_nas=drop_nas,
         )
         # Additional checks to those carried in the parent class
         if not isinstance(real_date, str):
@@ -124,17 +129,29 @@ class ReturnForecaster(BasePanelLearner):
             lag=lag,
             xcat_aggs=xcat_aggs,
             generate_labels=generate_labels,
+            drop_nas=drop_nas,
             skip_checks=True # So that the checks aren't run twice
         )
 
         # Set up out-of-sample dataset for forecasting
-        self.X_test = (
-            reduce_df(df=df_test, blacklist=blacklist)
-            .pivot(index=["cid", "real_date"], columns="xcat", values="value")[
-                self.X.columns
-            ]
-            .dropna()
-        )
+        if drop_nas:
+            self.X_test = (
+                reduce_df(df=df_test, blacklist=blacklist)
+                .pivot(index=["cid", "real_date"], columns="xcat", values="value")[
+                    self.X.columns
+                ]
+                .dropna()
+                .sort_index()
+            )
+        else:
+            self.X_test = (
+                reduce_df(df=df_test, blacklist=blacklist)
+                .pivot(index=["cid", "real_date"], columns="xcat", values="value")[
+                    self.X.columns
+                ]
+                .dropna(subset=[xcats[-1]])
+                .sort_index()
+            )
         self.unique_test_levels = self.X_test.index.get_level_values(0).unique()
 
         # Set up data structures for analytics
