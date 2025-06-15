@@ -180,7 +180,7 @@ class TestAll(unittest.TestCase):
             drop_nas= False,
         )
 
-        if sys.version_info > (3, 7):
+        if sys.version_info >= (3, 8):
             self.so_no_na.calculate_predictions(
                 name = "RF",
                 models = {
