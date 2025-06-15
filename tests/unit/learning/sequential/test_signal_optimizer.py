@@ -13,7 +13,7 @@ from sklearn.decomposition import PCA
 from sklearn.linear_model import (Lasso, LinearRegression, LogisticRegression,
                                   Ridge)
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.impute import SimpleImputer
+from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
                              make_scorer, r2_score)
 from sklearn.model_selection import KFold
@@ -179,22 +179,43 @@ class TestAll(unittest.TestCase):
             drop_nas= False,
         )
 
-        self.so_no_na.calculate_predictions(
-            name = "RF",
-            models = {
-                "RF": RandomForestRegressor(n_estimators = 10, max_depth = 1)
-            },
-            hyperparameters = {
-                "RF": {
-                    "min_samples_leaf": [36, 60]
-                }
-            },
-            scorers = self.scorers,
-            n_jobs_outer = 1,
-            inner_splitters = self.inner_splitters,
-            min_cids = 1,
-            min_periods = 12
-        )
+        if sys.version_info > (3, 7):
+            self.so_no_na.calculate_predictions(
+                name = "RF",
+                models = {
+                    "RF": RandomForestRegressor(n_estimators = 10, max_depth = 1)
+                },
+                hyperparameters = {
+                    "RF": {
+                        "min_samples_leaf": [36, 60]
+                    }
+                },
+                scorers = self.scorers,
+                n_jobs_outer = 1,
+                inner_splitters = self.inner_splitters,
+                min_cids = 1,
+                min_periods = 12
+            )
+        else:
+            self.so_no_na.calculate_predictions(
+                name = "RF",
+                models = {
+                    "RF": Pipeline([
+                        ("imputer", KNNImputer(n_neighbors=12, weights="distance")),
+                        ("RF", RandomForestRegressor(n_estimators = 10, max_depth = 1))
+                    ])
+                },
+                hyperparameters = {
+                    "RF": {
+                        "RF__min_samples_leaf": [36, 60]
+                    }
+                },
+                scorers = self.scorers,
+                n_jobs_outer = 1,
+                inner_splitters = self.inner_splitters,
+                min_cids = 1,
+                min_periods = 12
+            )
 
         self.so_no_na.calculate_predictions(
             name = "RIDGE",
