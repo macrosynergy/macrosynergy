@@ -2981,67 +2981,149 @@ class TestAll(unittest.TestCase):
 
     def test_types_coefs_stackedbarplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test2")
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="test2")
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name=1)
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name=1)
         # title
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", title=1)
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", title=1)
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", title=1)
         # figsize
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", figsize="figsize")
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RF", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RIDGE", figsize=(0, 1, 2))
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", figsize=(10, "hello"))
         with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", figsize=("hello", 6))
         with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", figsize=("hello", "hello"))
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", figsize=("hello", "hello"))
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", figsize=("hello", "hello"))
         # ftrs_renamed
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs_renamed=1)
         with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", ftrs_renamed=1)
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed=1)
+        with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs_renamed={1: "ftr1"})
         with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", ftrs_renamed={1: "ftr1"})
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed={1: "ftr1"})
+        with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs_renamed={"ftr1": 1})
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", ftrs_renamed={"ftr1": 1})
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed={"ftr1": 1})
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RF", ftrs_renamed={"ftr1": "ftr2"})
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed={"ftr1": "ftr2"})
         # ftrs
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs=1)
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", ftrs=1)
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs=1)
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(
                 name="test", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
             )
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(
+                name="RF", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+            )
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(
+                name="RIDGE", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+            )
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs=[1])
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", ftrs=[1])
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs=[1])
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", ftrs=["invalid"])
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RF", ftrs=["invalid"])
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs=["invalid"])
         # cap
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", cap="invalid")
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", cap="invalid")
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", cap="invalid")
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", cap=-1)
         with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RF", cap=-1)
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RIDGE", cap=-1)
+        with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", cap=11)
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RF", cap=11)
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RIDGE", cap=11)
 
     def test_valid_coefs_stackedbarplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that running coefs_stackedbarplot on pipeline "test" works
         try:
             so.coefs_stackedbarplot(name="test")
+            so2.coefs_stackedbarplot(name="RF")
+            so2.coefs_stackedbarplot(name="RIDGE")
         except Exception as e:
             self.fail(f"coefs_stackedbarplot raised an exception: {e}")
         # Check that the title is correct
         ax = plt.gca()
         title = ax.get_title()
-        self.assertTrue(title == "Stacked bar plot of model coefficients: test")
+        self.assertTrue(title == "Stacked bar plot of model coefficients: RIDGE")
         # Change the title
         try:
             so.coefs_stackedbarplot(name="test", title="hello")
+            so2.coefs_stackedbarplot(name="RF", title="hello")
+            so2.coefs_stackedbarplot(name="RIDGE", title="hello")
         except Exception as e:
             self.fail(f"coefs_stackedbarplot raised an exception: {e}")
         ax = plt.gca()
@@ -3051,12 +3133,46 @@ class TestAll(unittest.TestCase):
         ftr_dict = {"CPI": "inflation"}
         try:
             so.coefs_stackedbarplot(name="test", ftrs_renamed=ftr_dict)
+            so2.coefs_stackedbarplot(name="RF", ftrs_renamed=ftr_dict)
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed=ftr_dict)
         except Exception as e:
             self.fail(f"coefs_stackedbarplot raised an exception: {e}")
         ax = plt.gca()
         legend = ax.get_legend()
         labels = sorted([text.get_text() for text in legend.get_texts()])
-        # Check that the legend is correct
+        # Check that the legend is correct for the pipeline with dropped NAs
+        ftrcoef_df = so.get_feature_importances(name="test")
+        ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
+        ftrcoef_df = ftrcoef_df.drop(columns=["real_date", "name"])
+        ftrcoef_df = ftrcoef_df.rename(columns=ftr_dict)
+        avg_coefs = ftrcoef_df.groupby("year").mean()
+        pos_coefs = avg_coefs.clip(lower=0)
+        neg_coefs = avg_coefs.clip(upper=0)
+        correct_labels = [
+            col for col in list(pos_coefs.sum().index[pos_coefs.sum() > 0])
+        ]
+        correct_labels += [
+            col for col in list(neg_coefs.sum().index[neg_coefs.sum() < 0])
+        ]
+        correct_labels = sorted(list(set(correct_labels)))
+        self.assertTrue(np.all(labels == correct_labels))
+        # Check that the legend is correct for the RF pipeline with NAs
+        ftrcoef_df = so2.get_feature_importances(name="RF")
+        ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
+        ftrcoef_df = ftrcoef_df.drop(columns=["real_date", "name"])
+        ftrcoef_df = ftrcoef_df.rename(columns=ftr_dict)
+        avg_coefs = ftrcoef_df.groupby("year").mean()
+        pos_coefs = avg_coefs.clip(lower=0)
+        neg_coefs = avg_coefs.clip(upper=0)
+        correct_labels = [
+            col for col in list(pos_coefs.sum().index[pos_coefs.sum() > 0])
+        ]
+        correct_labels += [
+            col for col in list(neg_coefs.sum().index[neg_coefs.sum() < 0])
+        ]
+        correct_labels = sorted(list(set(correct_labels)))
+        self.assertTrue(np.all(labels == correct_labels))
+        # Check that the legend is correct for the RIDGE pipeline with NAs
         ftrcoef_df = so.get_feature_importances(name="test")
         ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
         ftrcoef_df = ftrcoef_df.drop(columns=["real_date", "name"])
