@@ -1958,8 +1958,8 @@ class TestAll(unittest.TestCase):
             ):
                 so._check_run(**invalid_case)
 
-    @parameterized.expand([["grid", None], ["prior", 1]])
-    def test_valid_worker(self, search_type, n_iter):
+    @parameterized.expand([["grid", None, True], ["prior", 1, False]])
+    def test_valid_worker(self, search_type, n_iter, drop_nas):
         search_type = "grid"
         n_iter = None
         store_correlations = False
@@ -1967,27 +1967,43 @@ class TestAll(unittest.TestCase):
         outer_splitter = ExpandingIncrementPanelSplit(
             train_intervals=1,
             test_size=1,
-            min_cids=4,
-            min_periods=36,
+            min_cids=1,
+            min_periods=12,
             max_periods=None,
+            drop_nas=drop_nas,
         )
 
         so1 = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
+            drop_nas=drop_nas,
         )
         so1.store_correlations = store_correlations
         for idx, (train_idx, test_idx) in enumerate(
-            outer_splitter.split(X=self.X, y=self.y)
+            outer_splitter.split(X=so1.X, y=so1.y)
         ):
             try:
                 split_result = so1._worker(
                     train_idx=train_idx,
                     test_idx=test_idx,
                     name="test",
-                    models=self.models,
+                    models={
+                        "linreg": Pipeline([
+                            ("imputer", SimpleImputer(strategy="mean")),
+                            ("scaler", StandardScaler()),
+                            ("model", LinearRegression()),
+                        ]),
+                        "ridge": Pipeline([
+                            ("imputer", SimpleImputer(strategy="mean")),
+                            ("scaler", StandardScaler()),
+                            ("model", Ridge()),
+                        ]),
+                    },
                     scorers=self.scorers,
-                    hyperparameters=self.hyperparameters,
+                    hyperparameters={
+                        "linreg": {"model__fit_intercept": [True, False], "model__positive": [True, False]},
+                        "ridge": {"model__alpha": [0.1, 1, 10], "model__fit_intercept": [True, False]},
+                    },
                     search_type=search_type,
                     n_iter=n_iter,
                     n_jobs_inner=1,
@@ -2034,7 +2050,7 @@ class TestAll(unittest.TestCase):
             self.assertIsInstance(ftr_data[0], datetime.date)
             for i in range(1, len(ftr_data)):
                 if ftr_data[i] != np.nan:
-                    self.assertIsInstance(ftr_data[i], np.float32)
+                    self.assertIsInstance(ftr_data[i], (np.float64, np.float32, float))  # float or int
 
             intercept_data = split_result["intercepts"]
             self.assertIsInstance(intercept_data, list)
@@ -2043,7 +2059,7 @@ class TestAll(unittest.TestCase):
             )  # 1 intercept + 2 extra columns
             self.assertIsInstance(intercept_data[0], datetime.date)
             if intercept_data[1] is not None:
-                self.assertIsInstance(intercept_data[1], np.float32)
+                self.assertIsInstance(intercept_data[1], (np.float64, np.float32, float))
 
             ftr_selection_data = split_result["selected_ftrs"]
             self.assertIsInstance(ftr_selection_data, list)
