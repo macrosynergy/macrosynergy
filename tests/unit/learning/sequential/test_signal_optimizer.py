@@ -2572,46 +2572,76 @@ class TestAll(unittest.TestCase):
 
     def test_types_get_intercepts(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
             so.get_intercepts(name="test2")
+            so2.get_intercepts(name="test2")
         with self.assertRaises(ValueError):
             so.get_intercepts(name=["test", "test2"])
+            so2.get_intercepts(name=["test", "test2"])
         # Test that the wrong dtype of a signal name raises an error
         with self.assertRaises(TypeError):
             so.get_intercepts(name=1)
+            so2.get_intercepts(name=1)
         with self.assertRaises(TypeError):
             so.get_intercepts(name={})
+            so2.get_intercepts(name={})
 
     def test_valid_get_intercepts(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that running get_intercepts on pipeline "test" works
         try:
             intercepts = so.get_intercepts(name="test")
+            intercepts2 = so2.get_intercepts(name="RF")
+            intercepts3 = so2.get_intercepts(name="RIDGE")
         except Exception as e:
             self.fail(f"get_intercepts raised an exception: {e}")
         # Test that the output is as expected
         self.assertIsInstance(intercepts, pd.DataFrame)
+        self.assertIsInstance(intercepts2, pd.DataFrame)
+        self.assertIsInstance(intercepts3, pd.DataFrame)
         self.assertEqual(intercepts.shape[1], 3)
+        self.assertEqual(intercepts2.shape[1], 3)
+        self.assertEqual(intercepts3.shape[1], 3)
         self.assertEqual(intercepts.columns[0], "real_date")
+        self.assertEqual(intercepts2.columns[0], "real_date")
+        self.assertEqual(intercepts3.columns[0], "real_date")
         self.assertEqual(intercepts.columns[1], "name")
+        self.assertEqual(intercepts2.columns[1], "name")
+        self.assertEqual(intercepts3.columns[1], "name")
         self.assertEqual(intercepts.columns[2], "intercepts")
+        self.assertEqual(intercepts2.columns[2], "intercepts")
+        self.assertEqual(intercepts3.columns[2], "intercepts")
         self.assertTrue(intercepts.name.unique()[0] == "test")
+        self.assertTrue(intercepts2.name.unique()[0] == "RF")
+        self.assertTrue(intercepts3.name.unique()[0] == "RIDGE")
         self.assertTrue(intercepts.isna().sum().sum() == 0)
+        self.assertTrue(intercepts2.isna().sum().sum() == len(intercepts2)) # RF has no intercepts
+        self.assertTrue(intercepts3.isna().sum().sum() == 0)
 
         # Test that running get_intercepts without a name works
         try:
             intercepts = so.get_intercepts()
+            intercepts2 = so2.get_intercepts()
         except Exception as e:
             self.fail(f"get_intercepts raised an exception: {e}")
         # Test that the output is as expected
         self.assertIsInstance(intercepts, pd.DataFrame)
+        self.assertIsInstance(intercepts2, pd.DataFrame)
         self.assertEqual(intercepts.shape[1], 3)
+        self.assertEqual(intercepts2.shape[1], 3)
         self.assertEqual(intercepts.columns[0], "real_date")
+        self.assertEqual(intercepts2.columns[0], "real_date")
         self.assertEqual(intercepts.columns[1], "name")
+        self.assertEqual(intercepts2.columns[1], "name")
         self.assertEqual(intercepts.columns[2], "intercepts")
+        self.assertEqual(intercepts2.columns[2], "intercepts")
         self.assertTrue(intercepts.name.unique()[0] == "test")
+        self.assertTrue(intercepts2.name.unique()[0] == "RF")
         self.assertTrue(intercepts.isna().sum().sum() == 0)
+        self.assertTrue(intercepts2.isna().sum().sum() == len(intercepts2)/2) # RF has no intercepts
 
     def test_types_feature_selection_heatmap(self):
         so = self.so_with_calculated_preds
@@ -2760,49 +2790,83 @@ class TestAll(unittest.TestCase):
 
     def test_types_feature_importance_timeplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test2")
+            so2.feature_importance_timeplot(name="test2")
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name=1)
+            so2.feature_importance_timeplot(name=1)
         # title
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", title=1)
+            so2.feature_importance_timeplot(name="RF", title=1)
+            so2.feature_importance_timeplot(name="RIDGE", title=1)
         # figsize
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize="figsize")
+            so2.feature_importance_timeplot(name="RF", figsize="figsize")
+            so2.feature_importance_timeplot(name="RIDGE", figsize="figsize")
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", figsize=(0, 1, 2))
+            so2.feature_importance_timeplot(name="RF", figsize=(0, 1, 2))
+            so2.feature_importance_timeplot(name="RIDGE", figsize=(0, 1, 2))
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize=(10, "hello"))
+            so2.feature_importance_timeplot(name="RF", figsize=(10, "hello"))
+            so2.feature_importance_timeplot(name="RIDGE", figsize=(10, "hello"))
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize=("hello", 6))
+            so2.feature_importance_timeplot(name="RF", figsize=("hello", 6))
+            so2.feature_importance_timeplot(name="RIDGE", figsize=("hello", 6))
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize=("hello", "hello"))
+            so2.feature_importance_timeplot(name="RF", figsize=("hello", "hello"))
+            so2.feature_importance_timeplot(name="RIDGE", figsize=("hello", "hello"))
         # ftrs_renamed
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs_renamed=1)
+            so2.feature_importance_timeplot(name="RF", ftrs_renamed=1)
+            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=1)
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs_renamed={1: "ftr1"})
+            so2.feature_importance_timeplot(name="RF", ftrs_renamed={1: "ftr1"})
+            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed={1: "ftr1"})
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs_renamed={"ftr1": 1})
+            so2.feature_importance_timeplot(name="RF", ftrs_renamed={"ftr1": 1})
+            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed={"ftr1": 1})
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
+            so2.feature_importance_timeplot(name="RF", ftrs_renamed={"ftr1": "ftr2"})
+            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed={"ftr1": "ftr2"})
         # ftrs
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs=1)
+            so2.feature_importance_timeplot(name="RF", ftrs=1)
+            so2.feature_importance_timeplot(name="RIDGE", ftrs=1)
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+            so2.feature_importance_timeplot(name="RF", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+            so2.feature_importance_timeplot(name="RIDGE", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs=[1])
+            so2.feature_importance_timeplot(name="RF", ftrs=[1])
+            so2.feature_importance_timeplot(name="RIDGE", ftrs=[1])
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", ftrs=["invalid"])
+            so2.feature_importance_timeplot(name="RF", ftrs=["invalid"])
+            so2.feature_importance_timeplot(name="RIDGE", ftrs=["invalid"])
 
     def test_valid_feature_importance_timeplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that running feature_importance_timeplot on pipeline "test" works
         try:
             so.feature_importance_timeplot(name="test")
+            so2.feature_importance_timeplot(name="RF")
+            so2.feature_importance_timeplot(name="RIDGE")
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         # Check that the legend is correct
@@ -2814,6 +2878,8 @@ class TestAll(unittest.TestCase):
         ftr_dict = {"CPI": "inflation"}
         try:
             so.feature_importance_timeplot(name="test", ftrs_renamed=ftr_dict)
+            so2.feature_importance_timeplot(name="RF", ftrs_renamed=ftr_dict)
+            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=ftr_dict)
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
@@ -2826,6 +2892,8 @@ class TestAll(unittest.TestCase):
         ftr_dict = {"CPI": "inflation", "GROWTH": "growth"}
         try:
             so.feature_importance_timeplot(name="test", ftrs_renamed=ftr_dict)
+            so2.feature_importance_timeplot(name="RF", ftrs_renamed=ftr_dict)
+            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=ftr_dict)
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
@@ -2838,6 +2906,8 @@ class TestAll(unittest.TestCase):
         ftr_dict = {ftr: f"ftr{i}" for i, ftr in enumerate(self.X.columns)}
         try:
             so.feature_importance_timeplot(name="test", ftrs_renamed=ftr_dict)
+            so2.feature_importance_timeplot(name="RF", ftrs_renamed=ftr_dict)
+            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=ftr_dict)
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
@@ -2848,10 +2918,12 @@ class TestAll(unittest.TestCase):
         )
         # Finally, test that the title works
         title = ax.get_title()
-        self.assertTrue(title == "Feature importances for pipeline: test")
+        self.assertTrue(title == "Feature importances for pipeline: RIDGE")
         # Try changing the title
         try:
             so.feature_importance_timeplot(name="test", title="hello")
+            so2.feature_importance_timeplot(name="RF", title="hello")
+            so2.feature_importance_timeplot(name="RIDGE", title="hello")
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
