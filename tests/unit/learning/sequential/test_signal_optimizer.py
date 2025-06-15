@@ -1815,7 +1815,8 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df8.real_date.max() == last_date)
         self.assertTrue(len(df8.value.value_counts()) == 2)
 
-    def test_optional_hparam_validity(self):
+    @parameterized.expand([True, False])
+    def test_optional_hparam_validity(self, drop_nas: bool):
         """
         I test that the pipelines run as expected when no hyperparameters are 
         entered. 
@@ -1824,11 +1825,26 @@ class TestAll(unittest.TestCase):
             df=self.df,
             xcats=self.xcats,
             cids=self.cids,
+            drop_nas=drop_nas,
         )
-        so.calculate_predictions(
-            name="test",
-            models={"LR": LinearRegression()},
-        )
+        if drop_nas:
+            so.calculate_predictions(
+                name="test",
+                models={"LR": LinearRegression()},
+                min_cids = 1, 
+                min_periods = 12,
+            )
+        else:
+            so.calculate_predictions(
+                name="test",
+                models={"LR": Pipeline([
+                    ("imputer", SimpleImputer(strategy="mean")),
+                    ("scaler", StandardScaler()),
+                    ("model", LinearRegression()),
+                ])},
+                min_cids = 1, 
+                min_periods = 12
+            )
         dfa = so.get_optimized_signals("test")
         self.assertIsInstance(dfa, pd.DataFrame)
         if len(dfa.xcat.unique()) != 1:
@@ -1842,15 +1858,16 @@ class TestAll(unittest.TestCase):
             ExpandingIncrementPanelSplit(
                 train_intervals=1,
                 test_size=1,
-                min_cids=4,
-                min_periods=36,
-            ).split(self.X, self.y)
+                min_cids=1,
+                min_periods=12,
+                drop_nas=drop_nas,
+            ).split(so.X, so.y)
         )
         first_date = (
-            self.X.iloc[outer_splitter[0][0], :].index.get_level_values(1).max()
+            so.X.iloc[outer_splitter[0][0], :].index.get_level_values(1).max()
         )
         last_date = (
-            self.X.iloc[outer_splitter[-1][1], :].index.get_level_values(1).max()
+            so.X.iloc[outer_splitter[-1][1], :].index.get_level_values(1).max()
         )
         self.assertTrue(dfa.real_date.min() == first_date)
         self.assertTrue(dfa.real_date.max() == last_date)
