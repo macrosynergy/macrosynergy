@@ -3234,65 +3234,149 @@ class TestAll(unittest.TestCase):
 
     def test_types_models_heatmap(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
 
         with self.assertRaises(TypeError):
             so.models_heatmap(name=1)
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name=1)
         with self.assertRaises(ValueError):
             so.models_heatmap(name="invalid")
+        with self.assertRaises(ValueError):
+            so2.models_heatmap(name="invalid")
         # cap
         with self.assertRaises(TypeError):
             so.models_heatmap(name="test", cap="invalid")
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RF", cap="invalid")
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RIDGE", cap="invalid")
         with self.assertRaises(ValueError):
             so.models_heatmap(name="test", cap=-1)
         with self.assertRaises(ValueError):
+            so2.models_heatmap(name="RF", cap=-1)
+        with self.assertRaises(ValueError):
+            so2.models_heatmap(name="RIDGE", cap=-1)
+        with self.assertRaises(ValueError):
             so.models_heatmap(name="test", cap=11)
+        with self.assertRaises(ValueError):
+            so2.models_heatmap(name="RF", cap=11)
+        with self.assertRaises(ValueError):
+            so2.models_heatmap(name="RIDGE", cap=11)
         # title
         with self.assertRaises(TypeError):
             so.models_heatmap(name="test", title=1)
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RF", title=1)
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RIDGE", title=1)
         # figsize
         with self.assertRaises(TypeError):
             so.models_heatmap(name="test", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RF", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RIDGE", figsize="figsize")
         with self.assertRaises(ValueError):
             so.models_heatmap(name="test", figsize=(1.5, 2, 3))
+        with self.assertRaises(ValueError):
+            so2.models_heatmap(name="RF", figsize=(1.5, 2, 3))
+        with self.assertRaises(ValueError):
+            so2.models_heatmap(name="RIDGE", figsize=(1.5, 2, 3))
         with self.assertRaises(TypeError):
             so.models_heatmap(name="test", figsize=(1.5, "e"))
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RF", figsize=(1.5, "e"))
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RIDGE", figsize=(1.5, "e"))
 
     def test_valid_models_heatmap(self):
 
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         try:
             so.models_heatmap(name="test")
+        except Exception as e:
+            self.fail(f"models_heatmap raised an exception: {e}")
+        try:
+            so2.models_heatmap(name="RF")
+        except Exception as e:
+            self.fail(f"models_heatmap raised an exception: {e}")
+        try:
+            so2.models_heatmap(name="RIDGE")
         except Exception as e:
             self.fail(f"models_heatmap raised an exception: {e}")
 
     def test_types_nsplits_timeplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
 
         with self.assertRaises(TypeError):
             so.nsplits_timeplot(name=1)
+        with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name=1)
         with self.assertRaises(ValueError):
             so.nsplits_timeplot(name="invalid")
+        with self.assertRaises(ValueError):
+            so2.nsplits_timeplot(name="invalid")
         # title
         with self.assertRaises(TypeError):
             so.nsplits_timeplot(name="test", title=1)
+        with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RF", title=1)
+        with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RIDGE", title=1)
         # figsize
         with self.assertRaises(TypeError):
             so.nsplits_timeplot(name="test", figsize="figsize")
         with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RF", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RIDGE", figsize="figsize")
+        with self.assertRaises(TypeError):
             so.nsplits_timeplot(name="test", figsize=1)
         with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RF", figsize=1)
+        with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RIDGE", figsize=1)
+        with self.assertRaises(TypeError):
             so.nsplits_timeplot(name="test", figsize=(1.5, "e"))
+        with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RF", figsize=(1.5, "e"))
+        with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RIDGE", figsize=(1.5, "e"))
         with self.assertRaises(ValueError):
             so.nsplits_timeplot(name="test", figsize=(0,))
         with self.assertRaises(ValueError):
+            so2.nsplits_timeplot(name="RF", figsize=(0,))
+        with self.assertRaises(ValueError):
+            so2.nsplits_timeplot(name="RIDGE", figsize=(0,))
+        with self.assertRaises(ValueError):
             so.nsplits_timeplot(name="test", figsize=(0, 1, 2))
         with self.assertRaises(ValueError):
+            so2.nsplits_timeplot(name="RF", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
+            so2.nsplits_timeplot(name="RIDGE", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
             so.nsplits_timeplot(name="test", figsize=(2, -1))
+        with self.assertRaises(ValueError):
+            so2.nsplits_timeplot(name="RF", figsize=(2, -1))
+        with self.assertRaises(ValueError):
+            so2.nsplits_timeplot(name="RIDGE", figsize=(2, -1))
 
     def test_valid_nsplits_timeplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         try:
             so.nsplits_timeplot(name="test")
+        except Exception as e:
+            self.fail(f"feature_selection_heatmap raised an exception: {e}")
+        try:
+            so2.nsplits_timeplot(name="RF")
+        except Exception as e:
+            self.fail(f"feature_selection_heatmap raised an exception: {e}")
+        try:
+            so2.nsplits_timeplot(name="RIDGE")
         except Exception as e:
             self.fail(f"feature_selection_heatmap raised an exception: {e}")
 
