@@ -2382,15 +2382,25 @@ class TestAll(unittest.TestCase):
     def test_valid_get_optimized_signals(self):
         # Test that the output is a dataframe
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
 
         df1 = so.get_optimized_signals(name="test")
+        df2 = so2.get_optimized_signals()
         self.assertIsInstance(df1, pd.DataFrame)
+        self.assertIsInstance(df2, pd.DataFrame)
         self.assertEqual(df1.shape[1], 4)
+        self.assertEqual(df2.shape[1], 4)
         self.assertEqual(df1.columns[0], "real_date")
+        self.assertEqual(df2.columns[0], "real_date")
         self.assertEqual(df1.columns[1], "cid")
+        self.assertEqual(df2.columns[1], "cid")
         self.assertEqual(df1.columns[2], "xcat")
+        self.assertEqual(df2.columns[2], "xcat")
         self.assertEqual(df1.columns[3], "value")
+        self.assertEqual(df2.columns[3], "value")
         self.assertEqual(df1.xcat.unique()[0], "test")
+        self.assertEqual(df2.xcat.unique()[0], "RF")
+        self.assertEqual(df2.xcat.unique()[1], "RIDGE")
 
         # Add a second signal and check that the output is a dataframe
         so.calculate_predictions(
@@ -2429,6 +2439,15 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df4.columns[2], "xcat")
         self.assertEqual(df4.columns[3], "value")
         self.assertEqual(len(df4.xcat.unique()), 2)
+
+        df5 = so2.get_optimized_signals(name=["RIDGE"])
+        self.assertIsInstance(df5, pd.DataFrame)
+        self.assertEqual(df5.shape[1], 4)
+        self.assertEqual(df5.columns[0], "real_date")
+        self.assertEqual(df5.columns[1], "cid")
+        self.assertEqual(df5.columns[2], "xcat")
+        self.assertEqual(df5.columns[3], "value")
+        self.assertEqual(len(df5.xcat.unique()), 1)
 
     def test_types_get_selected_features(self):
         so = self.so_with_calculated_preds
