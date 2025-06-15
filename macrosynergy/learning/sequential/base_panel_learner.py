@@ -1275,12 +1275,6 @@ class BasePanelLearner(ABC):
                 raise ValueError(
                     "The entered models must have 'fit' and 'predict' methods."
                 )
-            try:
-                models[key].fit(self.X, self.y)
-            except Exception as e:
-                raise ValueError(
-                    f"The model {key} is not compatible with the data, raising the error: {e}"
-                )
 
         # outer splitter
         if outer_splitter:
