@@ -169,7 +169,7 @@ class TestAll(unittest.TestCase):
         )
         self.so_with_calculated_preds = so
 
-        self.X, self.y, self.df_long = _get_X_y(so)
+        self.X, self.y, self.df_long = _get_X_y(so, drop_nas= True)
 
         # Create SignalOptimizer instances without NA drops
         self.so_no_na = SignalOptimizer(
@@ -216,8 +216,6 @@ class TestAll(unittest.TestCase):
             min_periods = 12
         )
 
-        print("Hello")
-
     @classmethod
     def tearDownClass(self) -> None:
         patch.stopall()
@@ -226,10 +224,10 @@ class TestAll(unittest.TestCase):
 
     @parameterized.expand(
         itertools.product(
-            [True, False], [True, False], [None, lambda x: -1 if x < 0 else 1]
+            [True, False], [True, False], [None, lambda x: -1 if x < 0 else 1], [True, False]
         )
     )
-    def test_valid_init(self, use_blacklist, use_cids, generate_labels):
+    def test_valid_init(self, use_blacklist, use_cids, generate_labels, drop_nas):
         try:
             blacklist = self.black_valid if use_blacklist else None
             cids = self.cids if use_cids else None
@@ -239,11 +237,12 @@ class TestAll(unittest.TestCase):
                 cids=cids,
                 blacklist=blacklist,
                 generate_labels=generate_labels,
+                drop_nas=drop_nas,
             )
         except Exception as e:
             self.fail(f"Instantiation of the SignalOptimizer raised an exception: {e}")
         self.assertIsInstance(so, SignalOptimizer)
-        X, y, df_long = _get_X_y(so)
+        X, y, df_long = _get_X_y(so, drop_nas=drop_nas)
         pd.testing.assert_frame_equal(so.X, X)
         if generate_labels:
             pd.testing.assert_series_equal(so.y, y.apply(generate_labels))
@@ -472,6 +471,13 @@ class TestAll(unittest.TestCase):
                 df=self.df,
                 xcats=self.xcats,
                 generate_labels="invalid",
+            )
+        # drop_nas should be a boolean
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                drop_nas="sdf",
             )
 
     def test_types_calculate_predictions(self):
@@ -2930,9 +2936,8 @@ class TestAll(unittest.TestCase):
             self.fail(f"feature_selection_heatmap raised an exception: {e}")
 
 
-def _get_X_y(so: SignalOptimizer):
-    df_long = (
-        categories_df(
+def _get_X_y(so: SignalOptimizer, drop_nas: bool):
+    df_long = categories_df(
             df=so.df,
             xcats=so.xcats,
             cids=so.cids,
@@ -2943,9 +2948,13 @@ def _get_X_y(so: SignalOptimizer):
             lag=so.lag,
             xcat_aggs=so.xcat_aggs,
         )
-        .dropna()
-        .sort_index()
-    )
+    if drop_nas:
+        df_long = df_long.dropna()
+    else:
+        df_long = df_long.dropna(subset=[so.xcats[-1]])
+
+    df_long = df_long.sort_index()
+
     df_long.index.names = ["cid", "real_date"]
     new_outer_level = df_long.index.levels[0].astype("object")
     df_long.index = pd.MultiIndex(
