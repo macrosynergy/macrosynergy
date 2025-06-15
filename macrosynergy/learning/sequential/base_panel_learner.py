@@ -1270,6 +1270,17 @@ class BasePanelLearner(ABC):
                     "The values of the models dictionary must be sklearn predictors or "
                     "pipelines."
                 )
+            # Check that the model is compatible with the data
+            if not hasattr(models[key], "fit") or not hasattr(models[key], "predict"):
+                raise ValueError(
+                    "The entered models must have 'fit' and 'predict' methods."
+                )
+            try:
+                models[key].fit(self.X, self.y)
+            except Exception as e:
+                raise ValueError(
+                    f"The model {key} is not compatible with the data, raising the error: {e}"
+                )
 
         # outer splitter
         if outer_splitter:
