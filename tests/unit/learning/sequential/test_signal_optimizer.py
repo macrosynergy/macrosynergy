@@ -2932,31 +2932,50 @@ class TestAll(unittest.TestCase):
 
     def test_types_intercepts_timeplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
             so.intercepts_timeplot(name="test2")
+        with self.assertRaises(ValueError):
+            so2.intercepts_timeplot(name="test2")
         with self.assertRaises(TypeError):
             so.intercepts_timeplot(name=1)
+        with self.assertRaises(TypeError):
+            so2.intercepts_timeplot(name=1)
         # title
         with self.assertRaises(TypeError):
             so.intercepts_timeplot(name="test", title=1)
+        with self.assertRaises(TypeError):
+            so2.intercepts_timeplot(name="RIDGE", title=1)
         # figsize
         with self.assertRaises(TypeError):
             so.intercepts_timeplot(name="test", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so2.intercepts_timeplot(name="RIDGE", figsize="figsize")
         with self.assertRaises(ValueError):
             so.intercepts_timeplot(name="test", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
+            so2.intercepts_timeplot(name="RIDGE", figsize=(0, 1, 2))
         with self.assertRaises(TypeError):
             so.intercepts_timeplot(name="test", figsize=(10, "hello"))
         with self.assertRaises(TypeError):
+            so2.intercepts_timeplot(name="RIDGE", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
             so.intercepts_timeplot(name="test", figsize=("hello", 6))
         with self.assertRaises(TypeError):
+            so2.intercepts_timeplot(name="RIDGE", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
             so.intercepts_timeplot(name="test", figsize=("hello", "hello"))
+        with self.assertRaises(TypeError):
+            so2.intercepts_timeplot(name="RIDGE", figsize=("hello", "hello"))
 
     def test_valid_intercepts_timeplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that running intercepts_timeplot on pipeline "test" works
         try:
             so.intercepts_timeplot(name="test")
+            so2.intercepts_timeplot(name="RIDGE")
         except Exception as e:
             self.fail(f"intercepts_timeplot raised an exception: {e}")
 
