@@ -2501,16 +2501,20 @@ class TestAll(unittest.TestCase):
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
             so.get_feature_importances(name="test2")
+        with self.assertRaises(ValueError):
             so2.get_feature_importances(name="test2")
         with self.assertRaises(ValueError):
             so.get_feature_importances(name=["test", "test2"])
+        with self.assertRaises(ValueError):
             so2.get_feature_importances(name=["test", "test2"])
         # Test that the wrong dtype of a signal name raises an error
         with self.assertRaises(TypeError):
             so.get_feature_importances(name=1)
+        with self.assertRaises(TypeError):
             so2.get_feature_importances(name=1)
         with self.assertRaises(TypeError):
             so.get_feature_importances(name={})
+        with self.assertRaises(TypeError):
             so2.get_feature_importances(name={})
 
     def test_valid_get_feature_importances(self):
@@ -2576,16 +2580,20 @@ class TestAll(unittest.TestCase):
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
             so.get_intercepts(name="test2")
+        with self.assertRaises(ValueError):
             so2.get_intercepts(name="test2")
         with self.assertRaises(ValueError):
             so.get_intercepts(name=["test", "test2"])
+        with self.assertRaises(ValueError):
             so2.get_intercepts(name=["test", "test2"])
         # Test that the wrong dtype of a signal name raises an error
         with self.assertRaises(TypeError):
             so.get_intercepts(name=1)
+        with self.assertRaises(TypeError):
             so2.get_intercepts(name=1)
         with self.assertRaises(TypeError):
             so.get_intercepts(name={})
+        with self.assertRaises(TypeError):
             so2.get_intercepts(name={})
 
     def test_valid_get_intercepts(self):
@@ -2794,69 +2802,99 @@ class TestAll(unittest.TestCase):
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test2")
+        with self.assertRaises(ValueError):
             so2.feature_importance_timeplot(name="test2")
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name=1)
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name=1)
         # title
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", title=1)
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RF", title=1)
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RIDGE", title=1)
         # figsize
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize="figsize")
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RF", figsize="figsize")
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RIDGE", figsize="figsize")
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
             so2.feature_importance_timeplot(name="RF", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
             so2.feature_importance_timeplot(name="RIDGE", figsize=(0, 1, 2))
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RF", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RIDGE", figsize=(10, "hello"))
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RF", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RIDGE", figsize=("hello", 6))
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize=("hello", "hello"))
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RF", figsize=("hello", "hello"))
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RIDGE", figsize=("hello", "hello"))
         # ftrs_renamed
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs_renamed=1)
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RF", ftrs_renamed=1)
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=1)
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs_renamed={1: "ftr1"})
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RF", ftrs_renamed={1: "ftr1"})
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed={1: "ftr1"})
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs_renamed={"ftr1": 1})
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RF", ftrs_renamed={"ftr1": 1})
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed={"ftr1": 1})
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
+        with self.assertRaises(ValueError):
             so2.feature_importance_timeplot(name="RF", ftrs_renamed={"ftr1": "ftr2"})
+        with self.assertRaises(ValueError):
             so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed={"ftr1": "ftr2"})
         # ftrs
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs=1)
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RF", ftrs=1)
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RIDGE", ftrs=1)
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+        with self.assertRaises(ValueError):
             so2.feature_importance_timeplot(name="RF", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+        with self.assertRaises(ValueError):
             so2.feature_importance_timeplot(name="RIDGE", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs=[1])
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RF", ftrs=[1])
+        with self.assertRaises(TypeError):
             so2.feature_importance_timeplot(name="RIDGE", ftrs=[1])
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", ftrs=["invalid"])
+        with self.assertRaises(ValueError):
             so2.feature_importance_timeplot(name="RF", ftrs=["invalid"])
+        with self.assertRaises(ValueError):
             so2.feature_importance_timeplot(name="RIDGE", ftrs=["invalid"])
 
     def test_valid_feature_importance_timeplot(self):
