@@ -563,6 +563,19 @@ class TestAll(unittest.TestCase):
                 inner_splitters=self.single_inner_splitter,
             )
 
+        # Models when NAs aren't dropped cannot admit models that don't support NAs
+        with self.assertRaises(ValueError):
+            self.so_no_na.calculate_predictions(
+                name="test",
+                models={"Lasso": Lasso()},
+                scorers=self.scorers,
+                hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+
         # Hyperparameters
         with self.assertRaises(TypeError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1395,6 +1408,34 @@ class TestAll(unittest.TestCase):
             )
 
     def test_valid_calculate_predictions(self):
+        # Test that the function runs without error and produces expected results when NAs aren't dropped
+        outer_splitter = list(
+            ExpandingIncrementPanelSplit(
+                train_intervals=1,
+                test_size=1,
+                min_cids=1,
+                min_periods=12,
+                drop_nas=False
+            ).split(self.so_no_na.X, self.so_no_na.y)
+        )
+        first_date = (
+            self.so_no_na.X.iloc[outer_splitter[0][0], :].index.get_level_values(1).max()
+        )
+        last_date = (
+            self.so_no_na.X.iloc[outer_splitter[-1][1], :].index.get_level_values(1).max()
+        )
+        so0 = self.so_no_na
+        df0 = so0.preds.copy()
+        self.assertIsInstance(df0, pd.DataFrame)
+        if len(df0.xcat.unique()) != 2:
+            self.fail("The signal dataframe should have two xcats")
+        self.assertEqual(df0.xcat.unique()[0], "RF")
+        self.assertEqual(df0.xcat.unique()[1], "RIDGE")
+        self.assertTrue(len(df0) != 0)
+        self.assertTrue(df0.value.notnull().all())
+        self.assertTrue(len(df0.cid.unique()) == 4)
+        self.assertTrue(df0.real_date.min() == first_date)
+        self.assertTrue(df0.real_date.max() == last_date)
         # Test that the function runs without error and prediction dataframe is as expected
         outer_splitter = list(
             ExpandingIncrementPanelSplit(
