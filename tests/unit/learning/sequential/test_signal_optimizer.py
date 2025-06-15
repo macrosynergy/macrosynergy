@@ -2497,48 +2497,78 @@ class TestAll(unittest.TestCase):
 
     def test_types_get_feature_importances(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
             so.get_feature_importances(name="test2")
+            so2.get_feature_importances(name="test2")
         with self.assertRaises(ValueError):
             so.get_feature_importances(name=["test", "test2"])
+            so2.get_feature_importances(name=["test", "test2"])
         # Test that the wrong dtype of a signal name raises an error
         with self.assertRaises(TypeError):
             so.get_feature_importances(name=1)
+            so2.get_feature_importances(name=1)
         with self.assertRaises(TypeError):
             so.get_feature_importances(name={})
+            so2.get_feature_importances(name={})
 
     def test_valid_get_feature_importances(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that running get_feature_importances on pipeline "test" works
         try:
             feature_importances = so.get_feature_importances(name="test")
+            feature_importances2 = so2.get_feature_importances(name="RF")
+            feature_importances3 = so2.get_feature_importances(name="RIDGE")
         except Exception as e:
             self.fail(f"get_feature_importances raised an exception: {e}")
         # Test that the output is as expected
         self.assertIsInstance(feature_importances, pd.DataFrame)
+        self.assertIsInstance(feature_importances2, pd.DataFrame)
+        self.assertIsInstance(feature_importances3, pd.DataFrame)
         self.assertEqual(feature_importances.shape[1], 5)
+        self.assertEqual(feature_importances2.shape[1], 5)
+        self.assertEqual(feature_importances3.shape[1], 5)
         self.assertEqual(feature_importances.columns[0], "real_date")
+        self.assertEqual(feature_importances2.columns[0], "real_date")
+        self.assertEqual(feature_importances3.columns[0], "real_date")
         self.assertEqual(feature_importances.columns[1], "name")
+        self.assertEqual(feature_importances2.columns[1], "name")
+        self.assertEqual(feature_importances3.columns[1], "name")
         for i in range(2, 5):
             self.assertEqual(feature_importances.columns[i], self.X.columns[i - 2])
+            self.assertEqual(feature_importances2.columns[i], self.X.columns[i - 2])
+            self.assertEqual(feature_importances3.columns[i], self.X.columns[i - 2])
         self.assertTrue(feature_importances.name.unique()[0] == "test")
+        self.assertTrue(feature_importances2.name.unique()[0] == "RF")
+        self.assertTrue(feature_importances3.name.unique()[0] == "RIDGE")
         self.assertTrue(feature_importances.isna().sum().sum() == 0)
+        self.assertTrue(feature_importances2.isna().sum().sum() == 0)
+        self.assertTrue(feature_importances3.isna().sum().sum() == 0)
 
         # Test that running get_feature_importances without a name works
         try:
             feature_importances = so.get_feature_importances()
+            feature_importances2 = so2.get_feature_importances()
         except Exception as e:
             self.fail(f"get_selected_features raised an exception: {e}")
         # Test that the output is as expected
         self.assertIsInstance(feature_importances, pd.DataFrame)
+        self.assertIsInstance(feature_importances2, pd.DataFrame)
         self.assertEqual(feature_importances.shape[1], 5)
+        self.assertEqual(feature_importances2.shape[1], 5)
         self.assertEqual(feature_importances.columns[0], "real_date")
+        self.assertEqual(feature_importances2.columns[0], "real_date")
         self.assertEqual(feature_importances.columns[1], "name")
+        self.assertEqual(feature_importances2.columns[1], "name")
         for i in range(2, 5):
             self.assertEqual(feature_importances.columns[i], self.X.columns[i - 2])
+            self.assertEqual(feature_importances2.columns[i], self.X.columns[i - 2])
         self.assertTrue(feature_importances.name.unique()[0] == "test")
+        self.assertTrue(feature_importances2.name.unique()[0] == "RF")
         self.assertTrue(feature_importances.isna().sum().sum() == 0)
+        self.assertTrue(feature_importances2.isna().sum().sum() == 0)
 
     def test_types_get_intercepts(self):
         so = self.so_with_calculated_preds
