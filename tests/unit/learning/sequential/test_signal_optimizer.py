@@ -3189,10 +3189,12 @@ class TestAll(unittest.TestCase):
         correct_labels = sorted(list(set(correct_labels)))
         self.assertTrue(np.all(labels == correct_labels))
 
-    def test_invalid_plots(self):
+    @parameterized.expand([True, False])
+    def test_invalid_plots(self, drop_nas: bool):
         so = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
+            drop_nas=drop_nas,
         )
         # # Test that an error is raised if calculate_predictions has not been run
         # with self.assertRaises(ValueError):
