@@ -591,7 +591,9 @@ class TestAll(unittest.TestCase):
                 name="test",
                 models={"Lasso": Lasso()},
                 scorers=self.scorers,
-                hyperparameters=self.hyperparameters,
+                hyperparameters={
+                    "Lasso": {"alpha": [0.1, 1.0]},
+                },
                 search_type="grid",
                 n_jobs_outer=1,
                 n_jobs_inner=1,

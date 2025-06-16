@@ -631,6 +631,25 @@ class TestReturnForecaster(unittest.TestCase):
                 },
             )
 
+        # Raise an error if the model doesn't support NAs but NAs aren't dropped
+        with self.assertRaises(ValueError):
+            self.rf_nas.calculate_predictions(
+                name="test",
+                models={"RF": Ridge()},
+                scorers={"R2": make_scorer(r2_score)},
+                hyperparameters={
+                    "RF": {
+                        "alpha": [1, 10, 100]
+                    }
+                },
+                search_type="grid",
+                n_jobs_cv=1,
+                n_jobs_model=1,
+                inner_splitters={
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+
         # Hyperparameters
         with self.assertRaises(TypeError):
             self.rf.calculate_predictions(
