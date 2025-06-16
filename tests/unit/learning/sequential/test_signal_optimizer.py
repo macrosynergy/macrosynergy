@@ -1,3 +1,4 @@
+import sys
 import datetime
 import itertools
 import unittest
@@ -12,6 +13,8 @@ from parameterized import parameterized
 from sklearn.decomposition import PCA
 from sklearn.linear_model import (Lasso, LinearRegression, LogisticRegression,
                                   Ridge)
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
                              make_scorer, r2_score)
 from sklearn.model_selection import KFold
@@ -167,7 +170,73 @@ class TestAll(unittest.TestCase):
         )
         self.so_with_calculated_preds = so
 
-        self.X, self.y, self.df_long = _get_X_y(so)
+        self.X, self.y, self.df_long = _get_X_y(so, drop_nas= True)
+
+        # Create SignalOptimizer instances without NA drops
+        self.so_no_na = SignalOptimizer(
+            df = self.df,
+            xcats = self.xcats,
+            cids = self.cids,
+            drop_nas= False,
+        )
+
+        if sys.version_info >= (3, 8):
+            self.so_no_na.calculate_predictions(
+                name = "RF",
+                models = {
+                    "RF": RandomForestRegressor(n_estimators = 10, max_depth = 1)
+                },
+                hyperparameters = {
+                    "RF": {
+                        "min_samples_leaf": [36, 60]
+                    }
+                },
+                scorers = self.scorers,
+                n_jobs_outer = 1,
+                inner_splitters = self.inner_splitters,
+                min_cids = 1,
+                min_periods = 12
+            )
+        else:
+            self.so_no_na.calculate_predictions(
+                name = "RF",
+                models = {
+                    "RF": Pipeline([
+                        ("imputer", KNNImputer(n_neighbors=12, weights="distance")),
+                        ("RF", RandomForestRegressor(n_estimators = 10, max_depth = 1))
+                    ])
+                },
+                hyperparameters = {
+                    "RF": {
+                        "RF__min_samples_leaf": [36, 60]
+                    }
+                },
+                scorers = self.scorers,
+                n_jobs_outer = 1,
+                inner_splitters = self.inner_splitters,
+                min_cids = 1,
+                min_periods = 12
+            )
+
+        self.so_no_na.calculate_predictions(
+            name = "RIDGE",
+            models = {
+                "RIDGE": Pipeline([
+                    ("imputer", SimpleImputer(strategy="mean")),
+                    ("ridge", Ridge())
+                ])
+            },
+            hyperparameters = {
+                "RIDGE": {
+                    "ridge__alpha": [1, 100, 10000]
+                }
+            },
+            scorers = self.scorers,
+            n_jobs_outer = 1,
+            inner_splitters = self.inner_splitters,
+            min_cids = 1,
+            min_periods = 12
+        )
 
     @classmethod
     def tearDownClass(self) -> None:
@@ -177,10 +246,10 @@ class TestAll(unittest.TestCase):
 
     @parameterized.expand(
         itertools.product(
-            [True, False], [True, False], [None, lambda x: -1 if x < 0 else 1]
+            [True, False], [True, False], [None, lambda x: -1 if x < 0 else 1], [True, False]
         )
     )
-    def test_valid_init(self, use_blacklist, use_cids, generate_labels):
+    def test_valid_init(self, use_blacklist, use_cids, generate_labels, drop_nas):
         try:
             blacklist = self.black_valid if use_blacklist else None
             cids = self.cids if use_cids else None
@@ -190,11 +259,12 @@ class TestAll(unittest.TestCase):
                 cids=cids,
                 blacklist=blacklist,
                 generate_labels=generate_labels,
+                drop_nas=drop_nas,
             )
         except Exception as e:
             self.fail(f"Instantiation of the SignalOptimizer raised an exception: {e}")
         self.assertIsInstance(so, SignalOptimizer)
-        X, y, df_long = _get_X_y(so)
+        X, y, df_long = _get_X_y(so, drop_nas=drop_nas)
         pd.testing.assert_frame_equal(so.X, X)
         if generate_labels:
             pd.testing.assert_series_equal(so.y, y.apply(generate_labels))
@@ -424,6 +494,13 @@ class TestAll(unittest.TestCase):
                 xcats=self.xcats,
                 generate_labels="invalid",
             )
+        # drop_nas should be a boolean
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                drop_nas="sdf",
+            )
 
     def test_types_calculate_predictions(self):
         # Name
@@ -502,6 +579,21 @@ class TestAll(unittest.TestCase):
                 models={"LR": RandomEffects()},
                 scorers=self.scorers,
                 hyperparameters=self.hyperparameters,
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+
+        # Models when NAs aren't dropped cannot admit models that don't support NAs
+        with self.assertRaises(ValueError):
+            self.so_no_na.calculate_predictions(
+                name="test",
+                models={"Lasso": Lasso()},
+                scorers=self.scorers,
+                hyperparameters={
+                    "Lasso": {"alpha": [0.1, 1.0]},
+                },
                 search_type="grid",
                 n_jobs_outer=1,
                 n_jobs_inner=1,
@@ -1340,6 +1432,34 @@ class TestAll(unittest.TestCase):
             )
 
     def test_valid_calculate_predictions(self):
+        # Test that the function runs without error and produces expected results when NAs aren't dropped
+        outer_splitter = list(
+            ExpandingIncrementPanelSplit(
+                train_intervals=1,
+                test_size=1,
+                min_cids=1,
+                min_periods=12,
+                drop_nas=False
+            ).split(self.so_no_na.X, self.so_no_na.y)
+        )
+        first_date = (
+            self.so_no_na.X.iloc[outer_splitter[0][0], :].index.get_level_values(1).max()
+        )
+        last_date = (
+            self.so_no_na.X.iloc[outer_splitter[-1][1], :].index.get_level_values(1).max()
+        )
+        so0 = self.so_no_na
+        df0 = so0.preds.copy()
+        self.assertIsInstance(df0, pd.DataFrame)
+        if len(df0.xcat.unique()) != 2:
+            self.fail("The signal dataframe should have two xcats")
+        self.assertEqual(df0.xcat.unique()[0], "RF")
+        self.assertEqual(df0.xcat.unique()[1], "RIDGE")
+        self.assertTrue(len(df0) != 0)
+        self.assertTrue(df0.value.notnull().all())
+        self.assertTrue(len(df0.cid.unique()) == 4)
+        self.assertTrue(df0.real_date.min() == first_date)
+        self.assertTrue(df0.real_date.max() == last_date)
         # Test that the function runs without error and prediction dataframe is as expected
         outer_splitter = list(
             ExpandingIncrementPanelSplit(
@@ -1719,7 +1839,8 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df8.real_date.max() == last_date)
         self.assertTrue(len(df8.value.value_counts()) == 2)
 
-    def test_optional_hparam_validity(self):
+    @parameterized.expand([True, False])
+    def test_optional_hparam_validity(self, drop_nas: bool):
         """
         I test that the pipelines run as expected when no hyperparameters are 
         entered. 
@@ -1728,11 +1849,26 @@ class TestAll(unittest.TestCase):
             df=self.df,
             xcats=self.xcats,
             cids=self.cids,
+            drop_nas=drop_nas,
         )
-        so.calculate_predictions(
-            name="test",
-            models={"LR": LinearRegression()},
-        )
+        if drop_nas:
+            so.calculate_predictions(
+                name="test",
+                models={"LR": LinearRegression()},
+                min_cids = 1, 
+                min_periods = 12,
+            )
+        else:
+            so.calculate_predictions(
+                name="test",
+                models={"LR": Pipeline([
+                    ("imputer", SimpleImputer(strategy="mean")),
+                    ("scaler", StandardScaler()),
+                    ("model", LinearRegression()),
+                ])},
+                min_cids = 1, 
+                min_periods = 12
+            )
         dfa = so.get_optimized_signals("test")
         self.assertIsInstance(dfa, pd.DataFrame)
         if len(dfa.xcat.unique()) != 1:
@@ -1746,15 +1882,16 @@ class TestAll(unittest.TestCase):
             ExpandingIncrementPanelSplit(
                 train_intervals=1,
                 test_size=1,
-                min_cids=4,
-                min_periods=36,
-            ).split(self.X, self.y)
+                min_cids=1,
+                min_periods=12,
+                drop_nas=drop_nas,
+            ).split(so.X, so.y)
         )
         first_date = (
-            self.X.iloc[outer_splitter[0][0], :].index.get_level_values(1).max()
+            so.X.iloc[outer_splitter[0][0], :].index.get_level_values(1).max()
         )
         last_date = (
-            self.X.iloc[outer_splitter[-1][1], :].index.get_level_values(1).max()
+            so.X.iloc[outer_splitter[-1][1], :].index.get_level_values(1).max()
         )
         self.assertTrue(dfa.real_date.min() == first_date)
         self.assertTrue(dfa.real_date.max() == last_date)
@@ -1771,23 +1908,36 @@ class TestAll(unittest.TestCase):
         self.assertTrue(all(dfa.hparams=={}))
         self.assertTrue(all(dfa.n_splits_used==0))
 
-    def test_types_run(self):
+    @parameterized.expand([True, False])
+    def test_types_run(self, drop_nas: bool):
         # Training set only
         so = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
+            drop_nas=drop_nas
         )
-        outer_splitter = ExpandingIncrementPanelSplit()
+        outer_splitter = ExpandingIncrementPanelSplit(drop_nas=drop_nas)
 
         # Valid parameters
         valid_params = {
             "name": "test",
             "outer_splitter": outer_splitter,
             "inner_splitters": self.single_inner_splitter,
-            "models": self.models,
+            "models": {
+                "linreg": Pipeline([
+                    ("imputer", SimpleImputer(strategy="mean")),
+                    ("scaler", StandardScaler()),
+                    ("model", LinearRegression()),
+                ]),
+                "ridge": Pipeline([
+                    ("imputer", SimpleImputer(strategy="mean")),
+                    ("scaler", StandardScaler()),
+                    ("model", Ridge()),
+                ]),
+            },
             "hyperparameters": {
-                "linreg": {"fit_intercept": [True, False], "positive": [True, False]},
-                "ridge": {"alpha": [0.1, 1, 10], "fit_intercept": [True, False]},
+                "linreg": {"model__fit_intercept": [True, False], "model__positive": [True, False]},
+                "ridge": {"model__alpha": [0.1, 1, 10], "model__fit_intercept": [True, False]},
             },
             "scorers": self.scorers,
             "normalize_fold_results": True,
@@ -1832,8 +1982,8 @@ class TestAll(unittest.TestCase):
             ):
                 so._check_run(**invalid_case)
 
-    @parameterized.expand([["grid", None], ["prior", 1]])
-    def test_valid_worker(self, search_type, n_iter):
+    @parameterized.expand([["grid", None, True], ["prior", 1, False]])
+    def test_valid_worker(self, search_type, n_iter, drop_nas):
         search_type = "grid"
         n_iter = None
         store_correlations = False
@@ -1841,27 +1991,43 @@ class TestAll(unittest.TestCase):
         outer_splitter = ExpandingIncrementPanelSplit(
             train_intervals=1,
             test_size=1,
-            min_cids=4,
-            min_periods=36,
+            min_cids=1,
+            min_periods=12,
             max_periods=None,
+            drop_nas=drop_nas,
         )
 
         so1 = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
+            drop_nas=drop_nas,
         )
         so1.store_correlations = store_correlations
         for idx, (train_idx, test_idx) in enumerate(
-            outer_splitter.split(X=self.X, y=self.y)
+            outer_splitter.split(X=so1.X, y=so1.y)
         ):
             try:
                 split_result = so1._worker(
                     train_idx=train_idx,
                     test_idx=test_idx,
                     name="test",
-                    models=self.models,
+                    models={
+                        "linreg": Pipeline([
+                            ("imputer", SimpleImputer(strategy="mean")),
+                            ("scaler", StandardScaler()),
+                            ("model", LinearRegression()),
+                        ]),
+                        "ridge": Pipeline([
+                            ("imputer", SimpleImputer(strategy="mean")),
+                            ("scaler", StandardScaler()),
+                            ("model", Ridge()),
+                        ]),
+                    },
                     scorers=self.scorers,
-                    hyperparameters=self.hyperparameters,
+                    hyperparameters={
+                        "linreg": {"model__fit_intercept": [True, False], "model__positive": [True, False]},
+                        "ridge": {"model__alpha": [0.1, 1, 10], "model__fit_intercept": [True, False]},
+                    },
                     search_type=search_type,
                     n_iter=n_iter,
                     n_jobs_inner=1,
@@ -1908,7 +2074,7 @@ class TestAll(unittest.TestCase):
             self.assertIsInstance(ftr_data[0], datetime.date)
             for i in range(1, len(ftr_data)):
                 if ftr_data[i] != np.nan:
-                    self.assertIsInstance(ftr_data[i], np.float32)
+                    self.assertIsInstance(ftr_data[i], (np.float64, np.float32, float))  # float or int
 
             intercept_data = split_result["intercepts"]
             self.assertIsInstance(intercept_data, list)
@@ -1917,7 +2083,7 @@ class TestAll(unittest.TestCase):
             )  # 1 intercept + 2 extra columns
             self.assertIsInstance(intercept_data[0], datetime.date)
             if intercept_data[1] is not None:
-                self.assertIsInstance(intercept_data[1], np.float32)
+                self.assertIsInstance(intercept_data[1], (np.float64, np.float32, float))
 
             ftr_selection_data = split_result["selected_ftrs"]
             self.assertIsInstance(ftr_selection_data, list)
@@ -2200,18 +2366,26 @@ class TestAll(unittest.TestCase):
 
     def test_types_get_optimized_signals(self):
         so = self.so_with_calculated_preds
-
+        so_nas = self.so_no_na
         # Test invalid names are caught
         with self.assertRaises(TypeError):
             so.get_optimized_signals(name=1)
         with self.assertRaises(TypeError):
             so.get_optimized_signals(name={})
+        with self.assertRaises(TypeError):
+            so_nas.get_optimized_signals(name=1)
+        with self.assertRaises(TypeError):
+            so_nas.get_optimized_signals(name={})
 
         # Test an error is raised if a wrong name is passed
         with self.assertRaises(ValueError):
             so.get_optimized_signals(name=["test", "test2"])
         with self.assertRaises(ValueError):
             so.get_optimized_signals(name="test2")
+        with self.assertRaises(ValueError):
+            so_nas.get_optimized_signals(name=["test", "test2"])
+        with self.assertRaises(ValueError):
+            so_nas.get_optimized_signals(name="test2")
 
         # Test that if no signals have been calculated, an error is raised
         so = SignalOptimizer(
@@ -2221,18 +2395,36 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             so.get_optimized_signals(name="test2")
 
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            drop_nas = False,
+        )
+        with self.assertRaises(ValueError):
+            so.get_optimized_signals(name="test2")
+
     def test_valid_get_optimized_signals(self):
         # Test that the output is a dataframe
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
 
         df1 = so.get_optimized_signals(name="test")
+        df2 = so2.get_optimized_signals()
         self.assertIsInstance(df1, pd.DataFrame)
+        self.assertIsInstance(df2, pd.DataFrame)
         self.assertEqual(df1.shape[1], 4)
+        self.assertEqual(df2.shape[1], 4)
         self.assertEqual(df1.columns[0], "real_date")
+        self.assertEqual(df2.columns[0], "real_date")
         self.assertEqual(df1.columns[1], "cid")
+        self.assertEqual(df2.columns[1], "cid")
         self.assertEqual(df1.columns[2], "xcat")
+        self.assertEqual(df2.columns[2], "xcat")
         self.assertEqual(df1.columns[3], "value")
+        self.assertEqual(df2.columns[3], "value")
         self.assertEqual(df1.xcat.unique()[0], "test")
+        self.assertEqual(df2.xcat.unique()[0], "RF")
+        self.assertEqual(df2.xcat.unique()[1], "RIDGE")
 
         # Add a second signal and check that the output is a dataframe
         so.calculate_predictions(
@@ -2271,6 +2463,15 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df4.columns[2], "xcat")
         self.assertEqual(df4.columns[3], "value")
         self.assertEqual(len(df4.xcat.unique()), 2)
+
+        df5 = so2.get_optimized_signals(name=["RIDGE"])
+        self.assertIsInstance(df5, pd.DataFrame)
+        self.assertEqual(df5.shape[1], 4)
+        self.assertEqual(df5.columns[0], "real_date")
+        self.assertEqual(df5.columns[1], "cid")
+        self.assertEqual(df5.columns[2], "xcat")
+        self.assertEqual(df5.columns[3], "value")
+        self.assertEqual(len(df5.xcat.unique()), 1)
 
     def test_types_get_selected_features(self):
         so = self.so_with_calculated_preds
@@ -2320,91 +2521,159 @@ class TestAll(unittest.TestCase):
 
     def test_types_get_feature_importances(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
             so.get_feature_importances(name="test2")
         with self.assertRaises(ValueError):
+            so2.get_feature_importances(name="test2")
+        with self.assertRaises(ValueError):
             so.get_feature_importances(name=["test", "test2"])
+        with self.assertRaises(ValueError):
+            so2.get_feature_importances(name=["test", "test2"])
         # Test that the wrong dtype of a signal name raises an error
         with self.assertRaises(TypeError):
             so.get_feature_importances(name=1)
         with self.assertRaises(TypeError):
+            so2.get_feature_importances(name=1)
+        with self.assertRaises(TypeError):
             so.get_feature_importances(name={})
+        with self.assertRaises(TypeError):
+            so2.get_feature_importances(name={})
 
     def test_valid_get_feature_importances(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that running get_feature_importances on pipeline "test" works
         try:
             feature_importances = so.get_feature_importances(name="test")
+            feature_importances2 = so2.get_feature_importances(name="RF")
+            feature_importances3 = so2.get_feature_importances(name="RIDGE")
         except Exception as e:
             self.fail(f"get_feature_importances raised an exception: {e}")
         # Test that the output is as expected
         self.assertIsInstance(feature_importances, pd.DataFrame)
+        self.assertIsInstance(feature_importances2, pd.DataFrame)
+        self.assertIsInstance(feature_importances3, pd.DataFrame)
         self.assertEqual(feature_importances.shape[1], 5)
+        self.assertEqual(feature_importances2.shape[1], 5)
+        self.assertEqual(feature_importances3.shape[1], 5)
         self.assertEqual(feature_importances.columns[0], "real_date")
+        self.assertEqual(feature_importances2.columns[0], "real_date")
+        self.assertEqual(feature_importances3.columns[0], "real_date")
         self.assertEqual(feature_importances.columns[1], "name")
+        self.assertEqual(feature_importances2.columns[1], "name")
+        self.assertEqual(feature_importances3.columns[1], "name")
         for i in range(2, 5):
             self.assertEqual(feature_importances.columns[i], self.X.columns[i - 2])
+            self.assertEqual(feature_importances2.columns[i], self.X.columns[i - 2])
+            self.assertEqual(feature_importances3.columns[i], self.X.columns[i - 2])
         self.assertTrue(feature_importances.name.unique()[0] == "test")
+        self.assertTrue(feature_importances2.name.unique()[0] == "RF")
+        self.assertTrue(feature_importances3.name.unique()[0] == "RIDGE")
         self.assertTrue(feature_importances.isna().sum().sum() == 0)
+        self.assertTrue(feature_importances2.isna().sum().sum() == 0)
+        self.assertTrue(feature_importances3.isna().sum().sum() == 0)
 
         # Test that running get_feature_importances without a name works
         try:
             feature_importances = so.get_feature_importances()
+            feature_importances2 = so2.get_feature_importances()
         except Exception as e:
             self.fail(f"get_selected_features raised an exception: {e}")
         # Test that the output is as expected
         self.assertIsInstance(feature_importances, pd.DataFrame)
+        self.assertIsInstance(feature_importances2, pd.DataFrame)
         self.assertEqual(feature_importances.shape[1], 5)
+        self.assertEqual(feature_importances2.shape[1], 5)
         self.assertEqual(feature_importances.columns[0], "real_date")
+        self.assertEqual(feature_importances2.columns[0], "real_date")
         self.assertEqual(feature_importances.columns[1], "name")
+        self.assertEqual(feature_importances2.columns[1], "name")
         for i in range(2, 5):
             self.assertEqual(feature_importances.columns[i], self.X.columns[i - 2])
+            self.assertEqual(feature_importances2.columns[i], self.X.columns[i - 2])
         self.assertTrue(feature_importances.name.unique()[0] == "test")
+        self.assertTrue(feature_importances2.name.unique()[0] == "RF")
         self.assertTrue(feature_importances.isna().sum().sum() == 0)
+        self.assertTrue(feature_importances2.isna().sum().sum() == 0)
 
     def test_types_get_intercepts(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
             so.get_intercepts(name="test2")
         with self.assertRaises(ValueError):
+            so2.get_intercepts(name="test2")
+        with self.assertRaises(ValueError):
             so.get_intercepts(name=["test", "test2"])
+        with self.assertRaises(ValueError):
+            so2.get_intercepts(name=["test", "test2"])
         # Test that the wrong dtype of a signal name raises an error
         with self.assertRaises(TypeError):
             so.get_intercepts(name=1)
         with self.assertRaises(TypeError):
+            so2.get_intercepts(name=1)
+        with self.assertRaises(TypeError):
             so.get_intercepts(name={})
+        with self.assertRaises(TypeError):
+            so2.get_intercepts(name={})
 
     def test_valid_get_intercepts(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that running get_intercepts on pipeline "test" works
         try:
             intercepts = so.get_intercepts(name="test")
+            intercepts2 = so2.get_intercepts(name="RF")
+            intercepts3 = so2.get_intercepts(name="RIDGE")
         except Exception as e:
             self.fail(f"get_intercepts raised an exception: {e}")
         # Test that the output is as expected
         self.assertIsInstance(intercepts, pd.DataFrame)
+        self.assertIsInstance(intercepts2, pd.DataFrame)
+        self.assertIsInstance(intercepts3, pd.DataFrame)
         self.assertEqual(intercepts.shape[1], 3)
+        self.assertEqual(intercepts2.shape[1], 3)
+        self.assertEqual(intercepts3.shape[1], 3)
         self.assertEqual(intercepts.columns[0], "real_date")
+        self.assertEqual(intercepts2.columns[0], "real_date")
+        self.assertEqual(intercepts3.columns[0], "real_date")
         self.assertEqual(intercepts.columns[1], "name")
+        self.assertEqual(intercepts2.columns[1], "name")
+        self.assertEqual(intercepts3.columns[1], "name")
         self.assertEqual(intercepts.columns[2], "intercepts")
+        self.assertEqual(intercepts2.columns[2], "intercepts")
+        self.assertEqual(intercepts3.columns[2], "intercepts")
         self.assertTrue(intercepts.name.unique()[0] == "test")
+        self.assertTrue(intercepts2.name.unique()[0] == "RF")
+        self.assertTrue(intercepts3.name.unique()[0] == "RIDGE")
         self.assertTrue(intercepts.isna().sum().sum() == 0)
+        self.assertTrue(intercepts2.isna().sum().sum() == len(intercepts2)) # RF has no intercepts
+        self.assertTrue(intercepts3.isna().sum().sum() == 0)
 
         # Test that running get_intercepts without a name works
         try:
             intercepts = so.get_intercepts()
+            intercepts2 = so2.get_intercepts()
         except Exception as e:
             self.fail(f"get_intercepts raised an exception: {e}")
         # Test that the output is as expected
         self.assertIsInstance(intercepts, pd.DataFrame)
+        self.assertIsInstance(intercepts2, pd.DataFrame)
         self.assertEqual(intercepts.shape[1], 3)
+        self.assertEqual(intercepts2.shape[1], 3)
         self.assertEqual(intercepts.columns[0], "real_date")
+        self.assertEqual(intercepts2.columns[0], "real_date")
         self.assertEqual(intercepts.columns[1], "name")
+        self.assertEqual(intercepts2.columns[1], "name")
         self.assertEqual(intercepts.columns[2], "intercepts")
+        self.assertEqual(intercepts2.columns[2], "intercepts")
         self.assertTrue(intercepts.name.unique()[0] == "test")
+        self.assertTrue(intercepts2.name.unique()[0] == "RF")
         self.assertTrue(intercepts.isna().sum().sum() == 0)
+        self.assertTrue(intercepts2.isna().sum().sum() == len(intercepts2)/2) # RF has no intercepts
 
     def test_types_feature_selection_heatmap(self):
         so = self.so_with_calculated_preds
@@ -2553,49 +2822,113 @@ class TestAll(unittest.TestCase):
 
     def test_types_feature_importance_timeplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test2")
+        with self.assertRaises(ValueError):
+            so2.feature_importance_timeplot(name="test2")
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name=1)
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name=1)
         # title
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", title=1)
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RF", title=1)
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RIDGE", title=1)
         # figsize
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RF", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RIDGE", figsize="figsize")
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
+            so2.feature_importance_timeplot(name="RF", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
+            so2.feature_importance_timeplot(name="RIDGE", figsize=(0, 1, 2))
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize=(10, "hello"))
         with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RF", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RIDGE", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize=("hello", 6))
         with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RF", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RIDGE", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize=("hello", "hello"))
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RF", figsize=("hello", "hello"))
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RIDGE", figsize=("hello", "hello"))
         # ftrs_renamed
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs_renamed=1)
         with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RF", ftrs_renamed=1)
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=1)
+        with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs_renamed={1: "ftr1"})
         with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RF", ftrs_renamed={1: "ftr1"})
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed={1: "ftr1"})
+        with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs_renamed={"ftr1": 1})
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RF", ftrs_renamed={"ftr1": 1})
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed={"ftr1": 1})
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
+        with self.assertRaises(ValueError):
+            so2.feature_importance_timeplot(name="RF", ftrs_renamed={"ftr1": "ftr2"})
+        with self.assertRaises(ValueError):
+            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed={"ftr1": "ftr2"})
         # ftrs
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs=1)
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RF", ftrs=1)
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RIDGE", ftrs=1)
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+        with self.assertRaises(ValueError):
+            so2.feature_importance_timeplot(name="RF", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+        with self.assertRaises(ValueError):
+            so2.feature_importance_timeplot(name="RIDGE", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs=[1])
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RF", ftrs=[1])
+        with self.assertRaises(TypeError):
+            so2.feature_importance_timeplot(name="RIDGE", ftrs=[1])
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", ftrs=["invalid"])
+        with self.assertRaises(ValueError):
+            so2.feature_importance_timeplot(name="RF", ftrs=["invalid"])
+        with self.assertRaises(ValueError):
+            so2.feature_importance_timeplot(name="RIDGE", ftrs=["invalid"])
 
     def test_valid_feature_importance_timeplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that running feature_importance_timeplot on pipeline "test" works
         try:
             so.feature_importance_timeplot(name="test")
+            so2.feature_importance_timeplot(name="RF")
+            so2.feature_importance_timeplot(name="RIDGE")
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         # Check that the legend is correct
@@ -2607,6 +2940,8 @@ class TestAll(unittest.TestCase):
         ftr_dict = {"CPI": "inflation"}
         try:
             so.feature_importance_timeplot(name="test", ftrs_renamed=ftr_dict)
+            so2.feature_importance_timeplot(name="RF", ftrs_renamed=ftr_dict)
+            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=ftr_dict)
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
@@ -2619,6 +2954,8 @@ class TestAll(unittest.TestCase):
         ftr_dict = {"CPI": "inflation", "GROWTH": "growth"}
         try:
             so.feature_importance_timeplot(name="test", ftrs_renamed=ftr_dict)
+            so2.feature_importance_timeplot(name="RF", ftrs_renamed=ftr_dict)
+            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=ftr_dict)
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
@@ -2631,6 +2968,8 @@ class TestAll(unittest.TestCase):
         ftr_dict = {ftr: f"ftr{i}" for i, ftr in enumerate(self.X.columns)}
         try:
             so.feature_importance_timeplot(name="test", ftrs_renamed=ftr_dict)
+            so2.feature_importance_timeplot(name="RF", ftrs_renamed=ftr_dict)
+            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=ftr_dict)
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
@@ -2641,10 +2980,12 @@ class TestAll(unittest.TestCase):
         )
         # Finally, test that the title works
         title = ax.get_title()
-        self.assertTrue(title == "Feature importances for pipeline: test")
+        self.assertTrue(title == "Feature importances for pipeline: RIDGE")
         # Try changing the title
         try:
             so.feature_importance_timeplot(name="test", title="hello")
+            so2.feature_importance_timeplot(name="RF", title="hello")
+            so2.feature_importance_timeplot(name="RIDGE", title="hello")
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
@@ -2653,97 +2994,198 @@ class TestAll(unittest.TestCase):
 
     def test_types_intercepts_timeplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
             so.intercepts_timeplot(name="test2")
+        with self.assertRaises(ValueError):
+            so2.intercepts_timeplot(name="test2")
         with self.assertRaises(TypeError):
             so.intercepts_timeplot(name=1)
+        with self.assertRaises(TypeError):
+            so2.intercepts_timeplot(name=1)
         # title
         with self.assertRaises(TypeError):
             so.intercepts_timeplot(name="test", title=1)
+        with self.assertRaises(TypeError):
+            so2.intercepts_timeplot(name="RIDGE", title=1)
         # figsize
         with self.assertRaises(TypeError):
             so.intercepts_timeplot(name="test", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so2.intercepts_timeplot(name="RIDGE", figsize="figsize")
         with self.assertRaises(ValueError):
             so.intercepts_timeplot(name="test", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
+            so2.intercepts_timeplot(name="RIDGE", figsize=(0, 1, 2))
         with self.assertRaises(TypeError):
             so.intercepts_timeplot(name="test", figsize=(10, "hello"))
         with self.assertRaises(TypeError):
+            so2.intercepts_timeplot(name="RIDGE", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
             so.intercepts_timeplot(name="test", figsize=("hello", 6))
         with self.assertRaises(TypeError):
+            so2.intercepts_timeplot(name="RIDGE", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
             so.intercepts_timeplot(name="test", figsize=("hello", "hello"))
+        with self.assertRaises(TypeError):
+            so2.intercepts_timeplot(name="RIDGE", figsize=("hello", "hello"))
 
     def test_valid_intercepts_timeplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that running intercepts_timeplot on pipeline "test" works
         try:
             so.intercepts_timeplot(name="test")
+            so2.intercepts_timeplot(name="RIDGE")
         except Exception as e:
             self.fail(f"intercepts_timeplot raised an exception: {e}")
 
     def test_types_coefs_stackedbarplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that a wrong signal name raises an error
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test2")
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="test2")
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name=1)
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name=1)
         # title
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", title=1)
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", title=1)
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", title=1)
         # figsize
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", figsize="figsize")
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RF", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RIDGE", figsize=(0, 1, 2))
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", figsize=(10, "hello"))
         with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", figsize=(10, "hello"))
+        with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", figsize=("hello", 6))
         with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", figsize=("hello", 6))
+        with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", figsize=("hello", "hello"))
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", figsize=("hello", "hello"))
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", figsize=("hello", "hello"))
         # ftrs_renamed
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs_renamed=1)
         with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", ftrs_renamed=1)
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed=1)
+        with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs_renamed={1: "ftr1"})
         with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", ftrs_renamed={1: "ftr1"})
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed={1: "ftr1"})
+        with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs_renamed={"ftr1": 1})
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", ftrs_renamed={"ftr1": 1})
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed={"ftr1": 1})
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RF", ftrs_renamed={"ftr1": "ftr2"})
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed={"ftr1": "ftr2"})
         # ftrs
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs=1)
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", ftrs=1)
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs=1)
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(
                 name="test", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
             )
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(
+                name="RF", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+            )
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(
+                name="RIDGE", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+            )
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs=[1])
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", ftrs=[1])
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs=[1])
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", ftrs=["invalid"])
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RF", ftrs=["invalid"])
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs=["invalid"])
         # cap
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", cap="invalid")
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RF", cap="invalid")
+        with self.assertRaises(TypeError):
+            so2.coefs_stackedbarplot(name="RIDGE", cap="invalid")
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", cap=-1)
         with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RF", cap=-1)
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RIDGE", cap=-1)
+        with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", cap=11)
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RF", cap=11)
+        with self.assertRaises(ValueError):
+            so2.coefs_stackedbarplot(name="RIDGE", cap=11)
 
     def test_valid_coefs_stackedbarplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         # Test that running coefs_stackedbarplot on pipeline "test" works
         try:
             so.coefs_stackedbarplot(name="test")
+            so2.coefs_stackedbarplot(name="RF")
+            so2.coefs_stackedbarplot(name="RIDGE")
         except Exception as e:
             self.fail(f"coefs_stackedbarplot raised an exception: {e}")
         # Check that the title is correct
         ax = plt.gca()
         title = ax.get_title()
-        self.assertTrue(title == "Stacked bar plot of model coefficients: test")
+        self.assertTrue(title == "Stacked bar plot of model coefficients: RIDGE")
         # Change the title
         try:
             so.coefs_stackedbarplot(name="test", title="hello")
+            so2.coefs_stackedbarplot(name="RF", title="hello")
+            so2.coefs_stackedbarplot(name="RIDGE", title="hello")
         except Exception as e:
             self.fail(f"coefs_stackedbarplot raised an exception: {e}")
         ax = plt.gca()
@@ -2753,12 +3195,46 @@ class TestAll(unittest.TestCase):
         ftr_dict = {"CPI": "inflation"}
         try:
             so.coefs_stackedbarplot(name="test", ftrs_renamed=ftr_dict)
+            so2.coefs_stackedbarplot(name="RF", ftrs_renamed=ftr_dict)
+            so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed=ftr_dict)
         except Exception as e:
             self.fail(f"coefs_stackedbarplot raised an exception: {e}")
         ax = plt.gca()
         legend = ax.get_legend()
         labels = sorted([text.get_text() for text in legend.get_texts()])
-        # Check that the legend is correct
+        # Check that the legend is correct for the pipeline with dropped NAs
+        ftrcoef_df = so.get_feature_importances(name="test")
+        ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
+        ftrcoef_df = ftrcoef_df.drop(columns=["real_date", "name"])
+        ftrcoef_df = ftrcoef_df.rename(columns=ftr_dict)
+        avg_coefs = ftrcoef_df.groupby("year").mean()
+        pos_coefs = avg_coefs.clip(lower=0)
+        neg_coefs = avg_coefs.clip(upper=0)
+        correct_labels = [
+            col for col in list(pos_coefs.sum().index[pos_coefs.sum() > 0])
+        ]
+        correct_labels += [
+            col for col in list(neg_coefs.sum().index[neg_coefs.sum() < 0])
+        ]
+        correct_labels = sorted(list(set(correct_labels)))
+        self.assertTrue(np.all(labels == correct_labels))
+        # Check that the legend is correct for the RF pipeline with NAs
+        ftrcoef_df = so2.get_feature_importances(name="RF")
+        ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
+        ftrcoef_df = ftrcoef_df.drop(columns=["real_date", "name"])
+        ftrcoef_df = ftrcoef_df.rename(columns=ftr_dict)
+        avg_coefs = ftrcoef_df.groupby("year").mean()
+        pos_coefs = avg_coefs.clip(lower=0)
+        neg_coefs = avg_coefs.clip(upper=0)
+        correct_labels = [
+            col for col in list(pos_coefs.sum().index[pos_coefs.sum() > 0])
+        ]
+        correct_labels += [
+            col for col in list(neg_coefs.sum().index[neg_coefs.sum() < 0])
+        ]
+        correct_labels = sorted(list(set(correct_labels)))
+        self.assertTrue(np.all(labels == correct_labels))
+        # Check that the legend is correct for the RIDGE pipeline with NAs
         ftrcoef_df = so.get_feature_importances(name="test")
         ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
         ftrcoef_df = ftrcoef_df.drop(columns=["real_date", "name"])
@@ -2775,10 +3251,12 @@ class TestAll(unittest.TestCase):
         correct_labels = sorted(list(set(correct_labels)))
         self.assertTrue(np.all(labels == correct_labels))
 
-    def test_invalid_plots(self):
+    @parameterized.expand([True, False])
+    def test_invalid_plots(self, drop_nas: bool):
         so = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
+            drop_nas=drop_nas,
         )
         # # Test that an error is raised if calculate_predictions has not been run
         # with self.assertRaises(ValueError):
@@ -2818,72 +3296,155 @@ class TestAll(unittest.TestCase):
 
     def test_types_models_heatmap(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
 
         with self.assertRaises(TypeError):
             so.models_heatmap(name=1)
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name=1)
         with self.assertRaises(ValueError):
             so.models_heatmap(name="invalid")
+        with self.assertRaises(ValueError):
+            so2.models_heatmap(name="invalid")
         # cap
         with self.assertRaises(TypeError):
             so.models_heatmap(name="test", cap="invalid")
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RF", cap="invalid")
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RIDGE", cap="invalid")
         with self.assertRaises(ValueError):
             so.models_heatmap(name="test", cap=-1)
         with self.assertRaises(ValueError):
+            so2.models_heatmap(name="RF", cap=-1)
+        with self.assertRaises(ValueError):
+            so2.models_heatmap(name="RIDGE", cap=-1)
+        with self.assertRaises(ValueError):
             so.models_heatmap(name="test", cap=11)
+        with self.assertRaises(ValueError):
+            so2.models_heatmap(name="RF", cap=11)
+        with self.assertRaises(ValueError):
+            so2.models_heatmap(name="RIDGE", cap=11)
         # title
         with self.assertRaises(TypeError):
             so.models_heatmap(name="test", title=1)
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RF", title=1)
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RIDGE", title=1)
         # figsize
         with self.assertRaises(TypeError):
             so.models_heatmap(name="test", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RF", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RIDGE", figsize="figsize")
         with self.assertRaises(ValueError):
             so.models_heatmap(name="test", figsize=(1.5, 2, 3))
+        with self.assertRaises(ValueError):
+            so2.models_heatmap(name="RF", figsize=(1.5, 2, 3))
+        with self.assertRaises(ValueError):
+            so2.models_heatmap(name="RIDGE", figsize=(1.5, 2, 3))
         with self.assertRaises(TypeError):
             so.models_heatmap(name="test", figsize=(1.5, "e"))
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RF", figsize=(1.5, "e"))
+        with self.assertRaises(TypeError):
+            so2.models_heatmap(name="RIDGE", figsize=(1.5, "e"))
 
     def test_valid_models_heatmap(self):
 
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         try:
             so.models_heatmap(name="test")
+        except Exception as e:
+            self.fail(f"models_heatmap raised an exception: {e}")
+        try:
+            so2.models_heatmap(name="RF")
+        except Exception as e:
+            self.fail(f"models_heatmap raised an exception: {e}")
+        try:
+            so2.models_heatmap(name="RIDGE")
         except Exception as e:
             self.fail(f"models_heatmap raised an exception: {e}")
 
     def test_types_nsplits_timeplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
 
         with self.assertRaises(TypeError):
             so.nsplits_timeplot(name=1)
+        with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name=1)
         with self.assertRaises(ValueError):
             so.nsplits_timeplot(name="invalid")
+        with self.assertRaises(ValueError):
+            so2.nsplits_timeplot(name="invalid")
         # title
         with self.assertRaises(TypeError):
             so.nsplits_timeplot(name="test", title=1)
+        with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RF", title=1)
+        with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RIDGE", title=1)
         # figsize
         with self.assertRaises(TypeError):
             so.nsplits_timeplot(name="test", figsize="figsize")
         with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RF", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RIDGE", figsize="figsize")
+        with self.assertRaises(TypeError):
             so.nsplits_timeplot(name="test", figsize=1)
         with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RF", figsize=1)
+        with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RIDGE", figsize=1)
+        with self.assertRaises(TypeError):
             so.nsplits_timeplot(name="test", figsize=(1.5, "e"))
+        with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RF", figsize=(1.5, "e"))
+        with self.assertRaises(TypeError):
+            so2.nsplits_timeplot(name="RIDGE", figsize=(1.5, "e"))
         with self.assertRaises(ValueError):
             so.nsplits_timeplot(name="test", figsize=(0,))
         with self.assertRaises(ValueError):
+            so2.nsplits_timeplot(name="RF", figsize=(0,))
+        with self.assertRaises(ValueError):
+            so2.nsplits_timeplot(name="RIDGE", figsize=(0,))
+        with self.assertRaises(ValueError):
             so.nsplits_timeplot(name="test", figsize=(0, 1, 2))
         with self.assertRaises(ValueError):
+            so2.nsplits_timeplot(name="RF", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
+            so2.nsplits_timeplot(name="RIDGE", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
             so.nsplits_timeplot(name="test", figsize=(2, -1))
+        with self.assertRaises(ValueError):
+            so2.nsplits_timeplot(name="RF", figsize=(2, -1))
+        with self.assertRaises(ValueError):
+            so2.nsplits_timeplot(name="RIDGE", figsize=(2, -1))
 
     def test_valid_nsplits_timeplot(self):
         so = self.so_with_calculated_preds
+        so2 = self.so_no_na
         try:
             so.nsplits_timeplot(name="test")
         except Exception as e:
             self.fail(f"feature_selection_heatmap raised an exception: {e}")
+        try:
+            so2.nsplits_timeplot(name="RF")
+        except Exception as e:
+            self.fail(f"feature_selection_heatmap raised an exception: {e}")
+        try:
+            so2.nsplits_timeplot(name="RIDGE")
+        except Exception as e:
+            self.fail(f"feature_selection_heatmap raised an exception: {e}")
 
 
-def _get_X_y(so: SignalOptimizer):
-    df_long = (
-        categories_df(
+def _get_X_y(so: SignalOptimizer, drop_nas: bool):
+    df_long = categories_df(
             df=so.df,
             xcats=so.xcats,
             cids=so.cids,
@@ -2894,9 +3455,13 @@ def _get_X_y(so: SignalOptimizer):
             lag=so.lag,
             xcat_aggs=so.xcat_aggs,
         )
-        .dropna()
-        .sort_index()
-    )
+    if drop_nas:
+        df_long = df_long.dropna()
+    else:
+        df_long = df_long.dropna(subset=[so.xcats[-1]])
+
+    df_long = df_long.sort_index()
+
     df_long.index.names = ["cid", "real_date"]
     new_outer_level = df_long.index.levels[0].astype("object")
     df_long.index = pd.MultiIndex(

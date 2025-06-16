@@ -18,7 +18,7 @@ def view_timelines(
     intersect: bool = False,
     val: str = "value",
     cumsum: bool = False,
-    start: str = "2000-01-01",
+    start: str = None,
     end: Optional[str] = None,
     ncol: int = 3,
     legend_ncol: int = 1,

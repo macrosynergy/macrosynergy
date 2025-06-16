@@ -40,6 +40,7 @@ class BasePanelLearner(ABC):
         xcat_aggs=["last", "sum"],
         generate_labels=None,
         skip_checks=False,
+        drop_nas=True
     ):
         """
         Initialize a sequential learning process over a panel.
@@ -53,32 +54,35 @@ class BasePanelLearner(ABC):
             List of xcats to be used in the learning process. The last category in the
             list is the dependent variable, and all preceding categories are the
             independent variables in a supervised learning framework.
-        cids : list, optional
+        cids : list, 
             Cross-sections to be included. Default is all in the dataframe.
-        start : str, optional
+        start : str, 
             Start date for considered data in subsequent analysis in ISO 8601 format.
             Default is None i.e. the earliest date in the dataframe.
-        end : str, optional
+        end : str, 
             End date for considered data in subsequent analysis in ISO 8601 format.
             Default is None i.e. the latest date in the dataframe.
-        blacklist : list, optional
+        blacklist : list, 
             Blacklisting dictionary specifying date ranges for which cross-sectional
             information should be excluded. The keys are cross-sections and the values
             are tuples of start and end dates in ISO 8601 format. Default is None.
-        freq : str, optional
+        freq : str, 
             Frequency of the data. Default is "M" for monthly.
-        lag : int, optional
+        lag : int, 
             Number of periods to lag the independent variables. Default is 1.
-        xcat_aggs : list, optional
+        xcat_aggs : list, 
             List of exactly two aggregation methods for downsampling data to the frequency
             specified in the freq parameter. The first parameter pertains to all
             independent variable downsampling, whilst the second corresponds with the
             target category. Default is ["last", "sum"].
-        generate_labels : callable, optional
+        generate_labels : callable, 
             Function to transform the dependent variable, usually into
             classification labels. Default is None.
-        skip_checks : bool, optional
+        skip_checks : bool, 
             Whether to skip the initialization checks. Default is False.
+        drop_nas : bool, 
+            Whether to drop rows with NaN values in the dataframe. Default is True.
+            If False, only the rows with NaN values in the dependent variable are dropped.
 
         Notes
         -----
@@ -120,6 +124,7 @@ class BasePanelLearner(ABC):
                 lag,
                 xcat_aggs,
                 generate_labels,
+                drop_nas,
             )
         # Attributes
         self.df = QuantamentalDataFrame(df)
@@ -132,6 +137,7 @@ class BasePanelLearner(ABC):
         self.lag = lag
         self.xcat_aggs = xcat_aggs
         self.generate_labels = generate_labels
+        self.drop_nas = drop_nas
 
         # Create long-format dataframe
         df_long = (
@@ -146,10 +152,14 @@ class BasePanelLearner(ABC):
                 lag=self.lag,
                 xcat_aggs=self.xcat_aggs,
             )
-            .dropna()
-            .sort_index()
         )
 
+        if self.drop_nas:
+            df_long = df_long.dropna().sort_index()
+        else:
+            # Only drop rows with NaN values in the dependent variable
+            df_long = df_long.dropna(subset=[self.xcats[-1]]).sort_index()
+            
         # Create X and y
         self.X = df_long.iloc[:, :-1]
         self.y = df_long.iloc[:, -1]
@@ -1042,6 +1052,7 @@ class BasePanelLearner(ABC):
         lag,
         xcat_aggs,
         generate_labels,
+        drop_nas,
     ):
         """
         Checks for the constructor.
@@ -1070,6 +1081,8 @@ class BasePanelLearner(ABC):
         generate_labels : callable, optional
             Function to generate labels for a supervised learning process.
             Default is None.
+        drop_nas : bool, optional
+            Whether to drop rows with NAs in the dataframe. Default is True.
         """
         # Dataframe checks
         if not isinstance(df, pd.DataFrame):
@@ -1180,6 +1193,10 @@ class BasePanelLearner(ABC):
         if generate_labels is not None:
             if not callable(generate_labels):
                 raise TypeError("generate_labels must be a callable.")
+            
+        # drop_nas checks
+        if not isinstance(drop_nas, bool):
+            raise TypeError("drop_nas must be a boolean.")
 
     def _check_run(
         self,
@@ -1253,6 +1270,31 @@ class BasePanelLearner(ABC):
                     "The values of the models dictionary must be sklearn predictors or "
                     "pipelines."
                 )
+            # Check that the model is compatible with the data
+            if not hasattr(models[key], "fit") or not hasattr(models[key], "predict"):
+                raise ValueError(
+                    "The entered models must have 'fit' and 'predict' methods."
+                )
+            if not self.drop_nas:
+                # Generate data with nas to check if the model can handle them
+                X = pd.DataFrame(
+                    data =  np.random.rand(20, 5),
+                    columns = [f"feature_{i}" for i in range(5)],
+                     # multi index to simulate panel data
+                    index = pd.MultiIndex.from_product(
+                        [["cid1", "cid2"], pd.date_range("2020-01-01", periods=10, freq="D")],
+                        names=["cid", "real_date"],
+                    )
+                )
+                # Add some missing values
+                X.iloc[4:8, 3] = np.nan  # Introduce NaNs in the first column
+                y = pd.Series(np.random.rand(20), index=X.index)
+                try:
+                    models[key].fit(X, y)
+                except Exception as e:
+                    raise ValueError(
+                        f"The model {key} cannot handle missing values: {str(e)}"
+                    )
 
         # outer splitter
         if outer_splitter:

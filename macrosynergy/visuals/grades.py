@@ -16,7 +16,7 @@ def view_grades(
     df: pd.DataFrame,
     xcats: List[str],
     cids: List[str] = None,
-    start: str = "2000-01-01",
+    start: str = None,
     end: str = None,
     grade: str = "grading",
     title: str = None,

@@ -33,6 +33,7 @@ def multiple_reg_scatter(
     subplot_titles: bool = None,
     subplot_title_fontsize: int = 14,
     color_cids: bool = False,
+    remove_zero_predictor: bool = False,
 ):
     """
     Displays multiple regression scatter plots across categories. The categories are 
@@ -84,6 +85,8 @@ def multiple_reg_scatter(
     color_cids : bool
         if True (default is False) each cross section is given a distinct color in the 
         scatter plot.
+    remove_zero_predictor : bool, default=False
+            Remove zeros from the input series.
     """
 
     sns.set_theme(style="whitegrid")
@@ -156,7 +159,8 @@ def multiple_reg_scatter(
             separator=separator,
             ax=ax,
             single_scatter=single_scatter,
-            title_fontsize=subplot_title_fontsize
+            title_fontsize=subplot_title_fontsize,
+            remove_zero_predictor=remove_zero_predictor,
         )
 
     plt.subplots_adjust(top=title_yadj - 0.01)
