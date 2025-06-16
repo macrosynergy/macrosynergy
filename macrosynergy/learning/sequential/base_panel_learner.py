@@ -1275,6 +1275,26 @@ class BasePanelLearner(ABC):
                 raise ValueError(
                     "The entered models must have 'fit' and 'predict' methods."
                 )
+            if not self.drop_nas:
+                # Generate data with nas to check if the model can handle them
+                X = pd.DataFrame(
+                    data =  np.random.rand(20, 5),
+                    columns = [f"feature_{i}" for i in range(5)],
+                     # multi index to simulate panel data
+                    index = pd.MultiIndex.from_product(
+                        [["cid1", "cid2"], pd.date_range("2020-01-01", periods=10, freq="D")],
+                        names=["cid", "real_date"],
+                    )
+                )
+                # Add some missing values
+                X.iloc[4:8, 3] = np.nan  # Introduce NaNs in the first column
+                y = pd.Series(np.random.rand(20), index=X.index)
+                try:
+                    models[key].fit(X, y)
+                except Exception as e:
+                    raise ValueError(
+                        f"The model {key} cannot handle missing values: {str(e)}"
+                    )
 
         # outer splitter
         if outer_splitter:
