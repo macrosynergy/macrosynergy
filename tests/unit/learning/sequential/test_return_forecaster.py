@@ -5,7 +5,7 @@ import unittest
 import matplotlib
 import matplotlib.pyplot as plt
 
-import parameterized
+from parameterized import parameterized
 import itertools
 
 from macrosynergy.management import make_qdf
@@ -201,6 +201,13 @@ class TestReturnForecaster(unittest.TestCase):
             df = self.df,
             xcats = ["CPI", "GROWTH", "RIR", "XR"],
             real_date = self.evaluation_date,
+            blacklist = self.black_valid,
+            drop_nas = False,
+        )
+
+        self.so_nas = SignalOptimizer(
+            df = self.df,
+            xcats = ["CPI", "GROWTH", "RIR", "XR"],
             blacklist = self.black_valid,
             drop_nas = False,
         )
@@ -492,19 +499,30 @@ class TestReturnForecaster(unittest.TestCase):
                 real_date = self.evaluation_date,
             )
 
-    def test_valid_init(self):
+    @parameterized.expand([True, False])
+    def test_valid_init(self, drop_nas):
         """
         Test that the initialization of ReturnForecaster results in the same dataset
         as the initialization of SignalOptimizer.
         """
         # Return forecaster training and test sets
-        X_train_rf = self.rf.X
-        y_train_rf = self.rf.y
-        X_test_rf = self.rf.X_test
+        if drop_nas:
+            X_train_rf = self.rf.X
+            y_train_rf = self.rf.y
+            X_test_rf = self.rf.X_test
+        else:
+            X_train_rf = self.rf_nas.X
+            y_train_rf = self.rf_nas.y
+            X_test_rf = self.rf_nas.X_test
 
         # Signal optimizer training and test sets
-        X = self.so.X
-        y = self.so.y
+        if drop_nas:
+            X = self.so.X
+            y = self.so.y
+        else:
+            X = self.so_nas.X
+            y = self.so_nas.y
+
         X_train_so = X[X.index.get_level_values(1) <= pd.Timestamp(year=2020, month=11, day=30)]
         y_train_so = y[y.index.get_level_values(1) <= pd.Timestamp(year=2020, month=11, day=30)]
         X_test_so = X[X.index.get_level_values(1) > pd.Timestamp(year=2020, month=11, day=30)]
