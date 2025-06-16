@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 import pandas as pd
 import unittest
@@ -14,6 +15,7 @@ import scipy.stats as stats
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import Ridge, LinearRegression
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.metrics import r2_score, make_scorer
 
 from macrosynergy.learning import PanelPCA, RandomEffects, ExpandingKFoldPanelSplit, PanelStandardScaler, LassoSelector, SignalOptimizer, RollingKFoldPanelSplit, ReturnForecaster
@@ -194,6 +196,69 @@ class TestReturnForecaster(unittest.TestCase):
                 pd.Timestamp(year=2100, month=1, day=1),
             ),
         }
+
+        self.rf_nas = ReturnForecaster(
+            df = self.df,
+            xcats = ["CPI", "GROWTH", "RIR", "XR"],
+            real_date = self.evaluation_date,
+            blacklist = self.black_valid,
+            drop_nas = False,
+        )
+
+        if sys.version_info >= (3, 8):
+            self.rf_nas.calculate_predictions(
+                name = "RF",
+                models = {
+                    "RF": RandomForestRegressor(n_estimators = 10, max_depth = 1)
+                },
+                hyperparameters = {
+                    "RF": {
+                        "min_samples_leaf": [36, 60]
+                    }
+                },
+                scorers = {"R2": make_scorer(r2_score)},
+                inner_splitters = {
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+        else:
+            self.rf_nas.calculate_predictions(
+                name = "RF",
+                models = {
+                    "RF": Pipeline([
+                        ("imputer", KNNImputer(n_neighbors=12, weights="distance")),
+                        ("RF", RandomForestRegressor(n_estimators = 10, max_depth = 1))
+                    ])
+                },
+                hyperparameters = {
+                    "RF": {
+                        "RF__min_samples_leaf": [36, 60]
+                    }
+                },
+                scorers = {"R2": make_scorer(r2_score)},
+                inner_splitters = {
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+            )
+
+        self.rf_nas.calculate_predictions(
+            name = "RIDGE",
+            models = {
+                "RIDGE": Pipeline([
+                    ("imputer", SimpleImputer(strategy="mean")),
+                    ("ridge", Ridge())
+                ])
+            },
+            hyperparameters = {
+                "RIDGE": {
+                    "ridge__alpha": [1, 100, 10000]
+                }
+            },
+            scorers = {"R2": make_scorer(r2_score)},
+            inner_splitters = {
+                    "Rolling": RollingKFoldPanelSplit(5),
+                },
+        )
 
     @classmethod
     def tearDownClass(self) -> None:
@@ -417,6 +482,14 @@ class TestReturnForecaster(unittest.TestCase):
                 df=self.df,
                 xcats=self.xcats,
                 real_date="2018-07-07", # weekend
+            )
+        # drop_nas
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                drop_nas="sdf",
+                real_date = self.evaluation_date,
             )
 
     def test_valid_init(self):

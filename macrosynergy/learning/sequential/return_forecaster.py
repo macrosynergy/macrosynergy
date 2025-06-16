@@ -149,7 +149,6 @@ class ReturnForecaster(BasePanelLearner):
                 .pivot(index=["cid", "real_date"], columns="xcat", values="value")[
                     self.X.columns
                 ]
-                .dropna(subset=[xcats[-1]])
                 .sort_index()
             )
         self.unique_test_levels = self.X_test.index.get_level_values(0).unique()
