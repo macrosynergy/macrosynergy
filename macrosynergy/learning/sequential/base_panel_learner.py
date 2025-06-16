@@ -54,33 +54,33 @@ class BasePanelLearner(ABC):
             List of xcats to be used in the learning process. The last category in the
             list is the dependent variable, and all preceding categories are the
             independent variables in a supervised learning framework.
-        cids : list, optional
+        cids : list, 
             Cross-sections to be included. Default is all in the dataframe.
-        start : str, optional
+        start : str, 
             Start date for considered data in subsequent analysis in ISO 8601 format.
             Default is None i.e. the earliest date in the dataframe.
-        end : str, optional
+        end : str, 
             End date for considered data in subsequent analysis in ISO 8601 format.
             Default is None i.e. the latest date in the dataframe.
-        blacklist : list, optional
+        blacklist : list, 
             Blacklisting dictionary specifying date ranges for which cross-sectional
             information should be excluded. The keys are cross-sections and the values
             are tuples of start and end dates in ISO 8601 format. Default is None.
-        freq : str, optional
+        freq : str, 
             Frequency of the data. Default is "M" for monthly.
-        lag : int, optional
+        lag : int, 
             Number of periods to lag the independent variables. Default is 1.
-        xcat_aggs : list, optional
+        xcat_aggs : list, 
             List of exactly two aggregation methods for downsampling data to the frequency
             specified in the freq parameter. The first parameter pertains to all
             independent variable downsampling, whilst the second corresponds with the
             target category. Default is ["last", "sum"].
-        generate_labels : callable, optional
+        generate_labels : callable, 
             Function to transform the dependent variable, usually into
             classification labels. Default is None.
-        skip_checks : bool, optional
+        skip_checks : bool, 
             Whether to skip the initialization checks. Default is False.
-        drop_nas : bool, optional
+        drop_nas : bool, 
             Whether to drop rows with NaN values in the dataframe. Default is True.
             If False, only the rows with NaN values in the dependent variable are dropped.
 

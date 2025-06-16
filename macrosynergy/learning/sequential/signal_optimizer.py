@@ -32,30 +32,30 @@ class SignalOptimizer(BasePanelLearner):
     xcats : list
         List comprising feature names, with the last element being the response variable
         name. The features and the response variable must be categories in the dataframe.
-    cids : list, optional
+    cids : list
         List of cross-section identifiers for consideration in the panel. Default is None,
         in which case all cross-sections in `df` are considered.
-    start : str, optional
+    start : str
         Start date for considered data in subsequent analysis in ISO 8601 format.
         Default is None i.e. the earliest date in the dataframe.
-    end : str, optional
+    end : str
         End date for considered data in subsequent analysis in ISO 8601 format.
         Default is None i.e. the latest date in the dataframe.
-    blacklist : list, optional
+    blacklist : list
         Blacklisting dictionary specifying date ranges for which cross-sectional
         information should be excluded. The keys are cross-sections and the values
         are tuples of start and end dates in ISO 8601 format. Default is None.
-    freq : str, optional
+    freq : str
         Frequency of the analysis. Default is "M" for monthly.
-    lag : int, optional
+    lag : int
         Number of periods to lag the response variable. Default is 1.
-    xcat_aggs : list, optional
+    xcat_aggs : list
         List of aggregation functions to apply to the features, used when `freq` is not
         `D`. Default is ["last", "sum"].
-    generate_labels : callable, optional
+    generate_labels : callable
         Function to transform the response variable into either alternative regression
         targets or classification labels. Default is None.
-    drop_nas : bool, optional
+    drop_nas : bool
         Whether to drop rows with NaN values in the dataframe. Default is True.
         If False, only the rows with NaN values in the dependent variable are dropped.
 
@@ -1777,59 +1777,67 @@ if __name__ == "__main__":
         xcats=["CRY", "GROWTH", "INFL", "XR"],
         cids=cids,
         blacklist=black,
-        drop_nas = False
+        drop_nas = True
     )
 
-    # so.calculate_predictions(
-    #     name="LR",
-    #     models={
-    #         "Ridge": Ridge(),
-    #         "Lasso": Lasso(),
-    #         "TWLS": TimeWeightedLinearRegression(),
-    #     },
-    #     hyperparameters={
-    #         "Ridge": {
-    #             "fit_intercept": [True, False],
-    #             "alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000],
-    #         },
-    #         "Lasso": {
-    #             "fit_intercept": [True, False],
-    #             "alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000],
-    #         },
-    #         "TWLS": {
-    #             "half_life": [24, 36, 60, 120, 240],
-    #             "fit_intercept": [True, False],
-    #         },
-    #     },
-    #     scorers={
-    #         "r2": make_scorer(r2_score),
-    #         "mae": make_scorer(mean_absolute_error, greater_is_better=False),
-    #     },
-    #     inner_splitters={
-    #         "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
-    #         "SecondSplit": ExpandingKFoldPanelSplit(n_splits=10),
-    #     },
-    #     #search_type="prior",
-    #     #n_iter=6,
-    #     cv_summary="mean-std-ge",
-    #     include_train_folds=True,
-    #     n_jobs_outer=1,
-    #     n_jobs_inner=1,
-    #     normalize_fold_results=True,
-    #     # split_functions={
-    #     #     "ExpandingKFold": lambda n: n // 12,
-    #     #     "SecondSplit": None,
-    #     # },
-    # )
+    so.calculate_predictions(
+        name="LR",
+        models={
+            "Ridge": Ridge(),
+            "Lasso": Lasso(),
+            "TWLS": TimeWeightedLinearRegression(),
+        },
+        hyperparameters={
+            "Ridge": {
+                "fit_intercept": [True, False],
+                "alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000],
+            },
+            "Lasso": {
+                "fit_intercept": [True, False],
+                "alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000],
+            },
+            "TWLS": {
+                "half_life": [24, 36, 60, 120, 240],
+                "fit_intercept": [True, False],
+            },
+        },
+        scorers={
+            "r2": make_scorer(r2_score),
+            "mae": make_scorer(mean_absolute_error, greater_is_better=False),
+        },
+        inner_splitters={
+            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
+            "SecondSplit": ExpandingKFoldPanelSplit(n_splits=10),
+        },
+        #search_type="prior",
+        #n_iter=6,
+        cv_summary="mean-std-ge",
+        include_train_folds=True,
+        n_jobs_outer=1,
+        n_jobs_inner=1,
+        normalize_fold_results=True,
+        split_functions={
+            "ExpandingKFold": lambda n: n // 12,
+            "SecondSplit": None,
+        },
+    )
 
-    # so.models_heatmap("LR")
-    # so.feature_importance_timeplot("LR")
-    # so.coefs_stackedbarplot("LR")
-    # so.nsplits_timeplot("LR")
-    # so.feature_selection_heatmap("LR", tick_fontsize=20)
+    so.models_heatmap("LR")
+    so.feature_importance_timeplot("LR")
+    so.coefs_stackedbarplot("LR")
+    so.nsplits_timeplot("LR")
+    so.feature_selection_heatmap("LR", tick_fontsize=20)
 
     # Test a random forest
     from sklearn.ensemble import RandomForestRegressor
+
+    so = SignalOptimizer(
+        df=dfd,
+        xcats=["CRY", "GROWTH", "INFL", "XR"],
+        cids=cids,
+        blacklist=black,
+        drop_nas = False
+    )
 
     so.calculate_predictions(
         name="RF",
