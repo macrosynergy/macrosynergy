@@ -25,7 +25,6 @@ class ProbabilityEstimator(BaseEstimator, MetaEstimatorMixin, ClassifierMixin):
         
         self.classifier = classifier
         self.classes_ = [-1,1]
-        self.feature_importances_ = None
 
     def fit(self, X, y):
         """
