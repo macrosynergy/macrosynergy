@@ -68,7 +68,7 @@ class TestJPMaQSDownload(unittest.TestCase):
             jpmaqs: JPMaQSDownload = JPMaQSDownload(**good_args)
             self.assertEqual(
                 set(jpmaqs.valid_metrics),
-                set(["value", "grading", "eop_lag", "mop_lag"]),
+                set(["value", "grading", "eop_lag", "mop_lag", "last_updated"]),
             )
             for varx in [
                 jpmaqs.msg_errors,

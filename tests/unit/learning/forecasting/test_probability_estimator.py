@@ -5,7 +5,8 @@ import pandas as pd
 
 from macrosynergy.learning import ProbabilityEstimator
 
-from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.linear_model import LinearRegression, LogisticRegression 
+from sklearn.naive_bayes import GaussianNB
 from sklearn.ensemble import RandomForestClassifier
 
 class TestProbabilityEstimator(unittest.TestCase):
@@ -56,6 +57,8 @@ class TestProbabilityEstimator(unittest.TestCase):
         self.lr = LogisticRegression().fit(self.X, self.y)
         self.pe_rf = ProbabilityEstimator(RandomForestClassifier(random_state=1)).fit(self.X, self.y)
         self.rf = RandomForestClassifier(random_state=1).fit(self.X, self.y)
+        self.pe_gnb = ProbabilityEstimator(GaussianNB()).fit(self.X, self.y)
+        self.gnb = GaussianNB().fit(self.X, self.y)
 
     def test_types_init(self):
         # classifier
@@ -67,7 +70,6 @@ class TestProbabilityEstimator(unittest.TestCase):
         pe = ProbabilityEstimator(LogisticRegression())
         self.assertIsInstance(pe.classifier, LogisticRegression)
         self.assertEqual(pe.classes_, [-1,1])
-        self.assertEqual(pe.feature_importances_, None)
 
     def test_types_fit(self):
         # X - when a dataframe
@@ -162,6 +164,7 @@ class TestProbabilityEstimator(unittest.TestCase):
         """ Check that the predictions of the probability estimator are the same as the ones from the underlying classifier """
         self.assertTrue(np.allclose(self.pe_lr.predict(self.X), self.lr.predict(self.X)))
         self.assertTrue(np.allclose(self.pe_rf.predict(self.X), self.rf.predict(self.X)))
+        self.assertTrue(np.allclose(self.pe_gnb.predict(self.X), self.gnb.predict(self.X)))
 
     def test_types_createsignal(self):
         pe = ProbabilityEstimator(LogisticRegression()).fit(self.X, self.y)
@@ -205,3 +208,4 @@ class TestProbabilityEstimator(unittest.TestCase):
         """ Check that the signals of the probability estimator are the same as the ones from the underlying classifier """
         self.assertTrue(np.allclose(self.pe_lr.create_signal(self.X), self.lr.predict_proba(self.X)[:,1] - 0.5))
         self.assertTrue(np.allclose(self.pe_rf.create_signal(self.X), self.rf.predict_proba(self.X)[:,1] - 0.5))
+        self.assertTrue(np.allclose(self.pe_gnb.create_signal(self.X), self.gnb.predict_proba(self.X)[:,1] - 0.5))
