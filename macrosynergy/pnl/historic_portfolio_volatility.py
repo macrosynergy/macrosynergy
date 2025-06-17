@@ -180,7 +180,6 @@ def _calculate_multi_frequency_vcv_for_period(
     remove_zeros: bool,
     lback_min_obs: List[int],
 ) -> pd.DataFrame:
-
     window_df = pivot_returns.loc[pivot_returns.index <= rebal_date]
     dict_vcv: Dict[str, pd.DataFrame] = {}
 
@@ -221,7 +220,6 @@ def _calc_vol_tuple(
     date: pd.Timestamp,
     available_cids: List[str],
 ) -> Tuple[pd.Timestamp, float]:
-
     s = signals.loc[date, :].copy()
 
     s = s.loc[available_cids]
@@ -239,10 +237,7 @@ def _calc_vol_tuple(
     vcv_df.loc[:, idx_mask] = 0
 
     if vcv_df.isna().any().any():
-        logger.warning(
-            "N/A values in variance-covariance matrix for %s, returning NaN", date
-        )
-        return date, np.nan
+        raise ValueError("N/A values in variance-covariance matrix")
 
     pvol: float = np.sqrt(s.T.dot(vcv_df).dot(s))
     return date, pvol
