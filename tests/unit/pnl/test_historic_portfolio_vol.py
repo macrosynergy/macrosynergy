@@ -243,10 +243,11 @@ class TestArgChecks(unittest.TestCase):
                 "est_weights": [0.2, 0.3, 0.5],
                 "lback_periods": [15, 8, 5],
                 "half_life": [10, 5, 2],
+                "lback_min_obs": [1, 1, 1],
             }
 
-        good_args_order = ["est_freqs", "est_weights", "lback_periods", "half_life"]
-        numeric_list_args = ["est_weights", "lback_periods", "half_life"]
+        good_args_order = ["est_freqs", "est_weights", "lback_periods", "half_life", "lback_min_obs"]
+        numeric_list_args = ["est_weights", "lback_periods", "half_life", "lback_min_obs"]
         # Test good args
         __check_results(
             good_args=good_args(),
@@ -289,6 +290,7 @@ class TestArgChecks(unittest.TestCase):
         # check that lback allows -1
         bad_args = good_args()
         bad_args["lback_periods"] = [-1]
+        bad_args["lback_min_obs"] = [1]
         _check_est_args(**bad_args)
 
 
