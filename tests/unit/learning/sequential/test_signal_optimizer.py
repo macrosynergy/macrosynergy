@@ -180,43 +180,25 @@ class TestAll(unittest.TestCase):
             drop_nas= False,
         )
 
-        if sys.version_info > (3, 8):
-            self.so_no_na.calculate_predictions(
-                name = "RF",
-                models = {
-                    "RF": RandomForestRegressor(n_estimators = 10, max_depth = 1)
-                },
-                hyperparameters = {
-                    "RF": {
-                        "min_samples_leaf": [36, 60]
-                    }
-                },
-                scorers = self.scorers,
-                n_jobs_outer = 1,
-                inner_splitters = self.inner_splitters,
-                min_cids = 1,
-                min_periods = 12
-            )
-        else:
-            self.so_no_na.calculate_predictions(
-                name = "RF",
-                models = {
-                    "RF": Pipeline([
-                        ("imputer", KNNImputer(n_neighbors=12, weights="distance")),
-                        ("RF", RandomForestRegressor(n_estimators = 10, max_depth = 1))
-                    ])
-                },
-                hyperparameters = {
-                    "RF": {
-                        "RF__min_samples_leaf": [36, 60]
-                    }
-                },
-                scorers = self.scorers,
-                n_jobs_outer = 1,
-                inner_splitters = self.inner_splitters,
-                min_cids = 1,
-                min_periods = 12
-            )
+        self.so_no_na.calculate_predictions(
+            name = "RF",
+            models = {
+                "RF": Pipeline([
+                    ("imputer", KNNImputer(n_neighbors=12, weights="distance")),
+                    ("RF", RandomForestRegressor(n_estimators = 10, max_depth = 1))
+                ])
+            },
+            hyperparameters = {
+                "RF": {
+                    "RF__min_samples_leaf": [36, 60]
+                }
+            },
+            scorers = self.scorers,
+            n_jobs_outer = 1,
+            inner_splitters = self.inner_splitters,
+            min_cids = 1,
+            min_periods = 12
+        )
 
         self.so_no_na.calculate_predictions(
             name = "RIDGE",
