@@ -18,7 +18,7 @@ def view_ranges(
     df: pd.DataFrame,
     xcats: List[str],
     cids: Optional[List[str]] = None,
-    start: str = "2000-01-01",
+    start: str = None,
     end: Optional[str] = None,
     val: str = "value",
     kind: str = "bar",

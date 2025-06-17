@@ -256,7 +256,7 @@ class TestAll(unittest.TestCase):
     def test_transform_df_for_cross_category_corr(self):
         xcats = ["XR", "CRY"]
         df = reduce_df(self.dfd, xcats=xcats, cids=self.cids)
-        df_w = _transform_df_for_cross_category_corr(df, xcats=xcats, val="value")
+        df_w, _ = _transform_df_for_cross_category_corr(df, xcats=xcats, val="value")
 
         # Test that columns are now the xcats.
         self.assertEqual(df_w.columns.to_list(), xcats)
