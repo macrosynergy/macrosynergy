@@ -50,6 +50,7 @@ def _weighted_covariance(
     weights_func: Callable[[int, int], np.ndarray],
     lback_periods: int,
     half_life: int,
+    min_obs: int = 1,
 ) -> float:
     """
     Estimate covariance between two series after applying weights.
@@ -67,6 +68,8 @@ def _weighted_covariance(
 
     wmask = np.isnan(x) | np.isnan(y)
     weightslen = min(sum(~wmask), lback_periods if lback_periods > 0 else len(x))
+    if weightslen < min_obs:
+        return np.nan
 
     # drop NaNs and only consider the most recent lback_periods
     x, y = x[~wmask][-weightslen:], y[~wmask][-weightslen:]
@@ -88,6 +91,7 @@ def estimate_variance_covariance(
     weights_func: Callable[[int, int], np.ndarray],
     lback_periods: int,
     half_life: int,
+    lback_min_obs: int = 1,
 ) -> pd.DataFrame:
     """
     Estimation of the variance-covariance matrix needs to have the following
@@ -115,6 +119,7 @@ def estimate_variance_covariance(
                 weights_func=weights_func,
                 lback_periods=lback_periods,
                 half_life=half_life,
+                min_obs=lback_min_obs,
             )
             cov_mat[i_a, i_b] = cov_mat[i_b, i_a] = est_vol
 
@@ -173,12 +178,15 @@ def _calculate_multi_frequency_vcv_for_period(
     half_life: List[int],
     nan_tolerance: float,
     remove_zeros: bool,
+    lback_min_obs: List[int],
 ) -> pd.DataFrame:
 
     window_df = pivot_returns.loc[pivot_returns.index <= rebal_date]
     dict_vcv: Dict[str, pd.DataFrame] = {}
 
-    for freq, lb, hl in zip(est_freqs, lback_periods, half_life):
+    for freq, lb, hl, min_obs in zip(
+        est_freqs, lback_periods, half_life, lback_min_obs
+    ):
         piv_ret = _downsample_returns(window_df, freq=freq).iloc[
             -get_max_lookback(lb=lb, nt=nan_tolerance) :
         ]
@@ -188,6 +196,7 @@ def _calculate_multi_frequency_vcv_for_period(
             remove_zeros=remove_zeros,
             weights_func=weights_func,
             half_life=hl,
+            lback_min_obs=min_obs,
         )
         # if dict_vcv[freq].isna().any().any():
         #     raise ValueError(
@@ -228,7 +237,12 @@ def _calc_vol_tuple(
     s.loc[idx_mask] = 0
     vcv_df.loc[idx_mask, :] = 0
     vcv_df.loc[:, idx_mask] = 0
-    assert not vcv_df.isna().any().any(), "N/A values in variance-covariance matrix!\n"
+
+    if vcv_df.isna().any().any():
+        logger.warning(
+            "N/A values in variance-covariance matrix for %s, returning NaN", date
+        )
+        return date, np.nan
 
     pvol: float = np.sqrt(s.T.dot(vcv_df).dot(s))
     return date, pvol
@@ -296,6 +310,7 @@ def _calculate_portfolio_volatility(
     half_life: List[int],
     nan_tolerance: float,
     remove_zeros: bool,
+    lback_min_obs: List[int],
     portfolio_return_name: str,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     logger.info(
@@ -350,6 +365,7 @@ def _calculate_portfolio_volatility(
             half_life=half_life,
             nan_tolerance=nan_tolerance,
             remove_zeros=remove_zeros,
+            lback_min_obs=lback_min_obs,
         )
 
         list_vcv.append(stack_covariances(vcv_df=vcv_df, real_date=td))
@@ -390,6 +406,7 @@ def _hist_vol(
     lback_meth: str,  # TODO allow for different method at different frequencies
     lback_periods: List[int],  # default all for all
     half_life,
+    lback_min_obs: List[int],
     est_freqs: List[str],
     est_weights: List[float],
     nan_tolerance: float,
@@ -420,6 +437,9 @@ def _hist_vol(
     half_life : int
         Refers to the half-time for "xma" and full lookback period for "ma". Default is
         11.
+    lback_min_obs : List[int]
+        minimum required observations in each lookback window. If fewer observations
+        are available the variance-covariance estimate for that period is set to NaN.
     nan_tolerance : float
         maximum ratio of NaNs to non-NaNs in a lookback window, if exceeded the
         resulting volatility is set to NaN. Default is 0.25.
@@ -452,6 +472,7 @@ def _hist_vol(
         remove_zeros=remove_zeros,
         nan_tolerance=nan_tolerance,
         half_life=half_life,
+        lback_min_obs=lback_min_obs,
         est_freqs=est_freqs,
         est_weights=est_weights,
     )
@@ -491,7 +512,7 @@ def unstack_covariances(
 
 
 def _check_input_arguments(
-    arguments: List[Tuple[Any, str, Union[type, Tuple[type, type]]]]
+    arguments: List[Tuple[Any, str, Union[type, Tuple[type, type]]]],
 ):
     # TODO move to general utils
     for varx, namex, typex in arguments:
@@ -541,9 +562,16 @@ def _check_est_args(
     est_weights: List[Number],
     lback_periods: List[int],
     half_life: List[int],
-) -> Tuple[List[str], List[float], List[int], List[int]]:
+    lback_min_obs: List[int],
+) -> Tuple[List[str], List[float], List[int], List[int], List[int]]:
     # Calculate the maximum length of the provided lists
-    max_len = max(len(est_freqs), len(est_weights), len(lback_periods), len(half_life))
+    max_len = max(
+        len(est_freqs),
+        len(est_weights),
+        len(lback_periods),
+        len(half_life),
+        len(lback_min_obs),
+    )
 
     def expand_list(lst, name):
         if len(lst) == 1:
@@ -560,13 +588,14 @@ def _check_est_args(
     est_weights = expand_list(est_weights, "est_weights")
     lback_periods = expand_list(lback_periods, "lback_periods")
     half_life = expand_list(half_life, "half_life")
+    lback_min_obs = expand_list(lback_min_obs, "lback_min_obs")
 
     inv_weights_msg = "Invalid weights in `est_weights` at index {ix:d}"
     inv_lback_msg = "Invalid lookback period in `lback_periods` at index {ix:d}: {lb:d}"
     inv_hl_msg = "Invalid half-life in `half_life` at index {ix:d}: {hl:d}"
 
-    for ix, (freq, weight, lback, hl) in enumerate(
-        zip(est_freqs, est_weights, lback_periods, half_life)
+    for ix, (freq, weight, lback, hl, min_obs) in enumerate(
+        zip(est_freqs, est_weights, lback_periods, half_life, lback_min_obs)
     ):
         _check_frequency(freq=freq, freq_type=f"est_freq[{ix:d}]")
 
@@ -579,12 +608,16 @@ def _check_est_args(
 
         if not isinstance(hl, int) or hl < 0:
             raise ValueError(inv_hl_msg.format(ix=ix, hl=hl))
+        if not isinstance(min_obs, int) or min_obs < 1:
+            raise ValueError(
+                f"Invalid minimum observations in `lback_min_obs` at index {ix:d}: {min_obs}"
+            )
 
     # normalize est_weights
     if not np.isclose(np.sum(est_weights), 1):
         est_weights = list(np.array(est_weights) / np.sum(est_weights))
 
-    return est_freqs, est_weights, lback_periods, half_life
+    return est_freqs, est_weights, lback_periods, half_life, lback_min_obs
 
 
 def add_fid_column(df: QuantamentalDataFrame, rstring: str) -> QuantamentalDataFrame:
@@ -616,6 +649,7 @@ def historic_portfolio_vol(
     est_weights: Union[Number, List[Number]] = [1, 1, 1],  # default equal weights
     lback_periods: Union[int, List[int]] = [-1, -1, -1],  # default all for all
     half_life: Union[int, List[int]] = [11, 5, 6],
+    lback_min_obs: Union[int, List[int]] = 1,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
@@ -712,6 +746,8 @@ def historic_portfolio_vol(
         est_weights = [est_weights]
     if isinstance(est_freqs, str):
         est_freqs = [est_freqs]
+    if isinstance(lback_min_obs, Number):
+        lback_min_obs = [lback_min_obs]
 
     ## Check inputs
     # TODO create function for this? Also, do we want to create the set of failures (not just first one)?
@@ -731,6 +767,7 @@ def historic_portfolio_vol(
             (blacklist, "blacklist", (dict, NoneType)),
             (nan_tolerance, "nan_tolerance", float),
             (remove_zeros, "remove_zeros", bool),
+            (lback_min_obs, "lback_min_obs", list),
             (return_variance_covariance, "return_variance_covariance", bool),
         ]
     )
@@ -742,11 +779,12 @@ def historic_portfolio_vol(
         _check_frequency(freq=freq, freq_type=f"est_freq[{ix:d}]")
 
     ## Check estimation frequency weights
-    est_freqs, est_weights, lback_periods, half_life = _check_est_args(
+    est_freqs, est_weights, lback_periods, half_life, lback_min_obs = _check_est_args(
         est_freqs=est_freqs,
         est_weights=est_weights,
         lback_periods=lback_periods,
         half_life=half_life,
+        lback_min_obs=lback_min_obs,
     )
 
     ## Standardize and copy DF
@@ -801,6 +839,7 @@ def historic_portfolio_vol(
         lback_periods=lback_periods,
         lback_meth=lback_meth,
         half_life=half_life,
+        lback_min_obs=lback_min_obs,
         nan_tolerance=nan_tolerance,
         remove_zeros=remove_zeros,
         return_variance_covariance=return_variance_covariance,

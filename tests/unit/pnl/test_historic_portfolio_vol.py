@@ -105,6 +105,7 @@ class TestEstimateVarianceCovariance(unittest.TestCase):
             "weights_func": expo_weights_arr,
             "lback_periods": 100,
             "half_life": 10,
+            "lback_min_obs": 1,
         }
 
     def tearDown(self): ...
@@ -421,6 +422,7 @@ class TestCalculatePortfolioVolatility(unittest.TestCase):
             "est_weights": [0.5, 0.5],
             "half_life": [10, 2],
             "lback_periods": [15, 5],
+            "lback_min_obs": [1, 1],
             "nan_tolerance": 0.1,
             "remove_zeros": True,
             "portfolio_return_name": "PORTFOLIO",
@@ -545,6 +547,7 @@ class TestHistVolFunc(unittest.TestCase):
             "lback_meth": "ma",
             "lback_periods": [15, 5],
             "half_life": [10, 2],
+            "lback_min_obs": [1, 1],
             "est_freqs": ["D", "W"],
             "est_weights": [0.5, 0.5],
             "nan_tolerance": 0.1,
@@ -635,6 +638,7 @@ class TestHistVolEntrypoint(unittest.TestCase):
             est_weights=[0.1, 0.2, 0.7],
             lback_periods=[30, 20, -1],
             half_life=[10, 5, 2],
+            lback_min_obs=[1, 1, 1],
             lback_meth="xma",
             rstring="XR",
             start=start,
