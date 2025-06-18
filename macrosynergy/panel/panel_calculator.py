@@ -4,6 +4,7 @@ allows applying mathematical operations on time-series data.
 """
 
 import collections
+import itertools
 import random
 import re
 from typing import Dict, List, Set, Tuple
@@ -253,10 +254,33 @@ def panel_calc_pll(
 
     old_xcats_used, singles_used, single_cids = _get_xcats_used(ops)
     avail = set(df["xcat"]) & set(old_xcats_used)
-    results = joblib.Parallel(n_jobs=4)(
+
+    subgraphs_calcs = CalcList(
+        calcs, already_existing_vars=avail
+    ).get_independent_subgraphs()
+    subgraphs = {}
+    for i, subgraph in enumerate(subgraphs_calcs):
+        xcats_used = sorted(
+            set(itertools.chain.from_iterable([x.dependencies() for x in subgraph]))
+        )
+        calcs_list = list(map(lambda x: x.formula, subgraph))
+        subgraphs[i] = {
+            "subgraph": subgraph,
+            "xcats_used": xcats_used,
+            "calcs_list": calcs_list,
+        }
+
+    results = joblib.Parallel(n_jobs=-1)(
         joblib.delayed(panel_calculator)(
-            df,
-            list(map(lambda x: x.formula, _cl)),
+            df=reduce_df(
+                df=df,
+                xcats=subgraph["xcats_used"],
+                cids=cids,
+                start=start,
+                end=end,
+                blacklist=blacklist,
+            ),
+            calcs=subgraph["calcs_list"],
             cids=cids,
             external_func=external_func,
             start=start,
@@ -265,7 +289,7 @@ def panel_calc_pll(
             sort_execution_order=True,
             use_parallel=False,
         )
-        for _cl in CalcList(calcs, avail).get_independent_subgraphs()
+        for subgraph in subgraphs.values()
     )
     return QuantamentalDataFrame.from_qdf_list(results)
 
