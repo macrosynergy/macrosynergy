@@ -69,9 +69,9 @@ latest month versus one year ago.
 
 An extended category code will contain the following parts:
 
--  Base category code (e.g. ``CPI``)
--  Adjustment (e.g. ``NSA``)
--  Transformation (e.g. ``P1M1ML12``)
+-  Base category code (e.g. ``CPI``)
+-  Adjustment (e.g. ``NSA``)
+-  Transformation (e.g. ``P1M1ML12``)
 
 Combining these parts with underscores (``_``) will give us the extended
 category code. In the example above, the extended category code would be
@@ -82,7 +82,7 @@ Grading
 
 This is an integer between 1 and 3 (inclusive) that specifies the
 quality of the data series. Grade 1 is the highest quality, and Grade 3
-is the lowest quality. Here, “quality” means estimated proximity to the
+is the lowest quality. Here, "quality" means estimated proximity to the
 actual value of an indicator to what was seen by the market at the
 related point in time.
 
