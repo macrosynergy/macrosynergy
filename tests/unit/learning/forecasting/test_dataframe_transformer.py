@@ -139,9 +139,35 @@ class TestDataFrameTransformer(unittest.TestCase):
 
         self.assertRaises(ValueError, dt.fit, X=self.X, y=self.y[:-1])
 
-    def test_fit(self):
-        # Test the fit method of DataFrameTransformer
-        pass
+    @parameterized.expand([PCA(), StandardScaler()])
+    def test_valid_fit(self, transformer):
+        """
+        Check that the underling transformer is fitted correctly
+        when valid data is provided, both when no column_names are provided
+        and when they are provided.
+        """
+        # without column names
+        dt = DataFrameTransformer(
+            transformer=transformer,
+        )
+        dt.fit(self.X, self.y)
+        if isinstance(dt.transformer, PCA):
+            self.assertIsNotNone(dt.transformer.components_)
+        elif isinstance(dt.transformer, StandardScaler):
+            self.assertIsNotNone(dt.transformer.mean_)
+            self.assertIsNotNone(dt.transformer.scale_)
+
+        # with column names
+        dt = DataFrameTransformer(
+            transformer=transformer,
+            column_names=["FACTOR1", "FACTOR2", "FACTOR3"],
+        )
+        dt.fit(self.X, self.y)
+        if isinstance(dt.transformer, PCA):
+            self.assertIsNotNone(dt.transformer.components_)
+        elif isinstance(dt.transformer, StandardScaler):
+            self.assertIsNotNone(dt.transformer.mean_)
+            self.assertIsNotNone(dt.transformer.scale_)
 
     def test_fit_transform(self):
         # Test the fit_transform method of DataFrameTransformer
