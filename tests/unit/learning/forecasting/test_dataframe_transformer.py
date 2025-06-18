@@ -139,6 +139,13 @@ class TestDataFrameTransformer(unittest.TestCase):
 
         self.assertRaises(ValueError, dt.fit, X=self.X, y=self.y[:-1])
 
+        # Raise error when column_names do not match the number of features
+        with self.assertRaises(ValueError):
+            dt = DataFrameTransformer(
+                transformer=transformer,
+                column_names=["PCA1", "PCA2", "PCA3", "PCA4"],
+            ).fit(X=self.X, y=self.y)
+
     @parameterized.expand([PCA(), StandardScaler()])
     def test_valid_fit(self, transformer):
         """
@@ -169,6 +176,17 @@ class TestDataFrameTransformer(unittest.TestCase):
             self.assertIsNotNone(dt.transformer.mean_)
             self.assertIsNotNone(dt.transformer.scale_)
 
-    def test_fit_transform(self):
-        # Test the fit_transform method of DataFrameTransformer
-        pass
+    def test_types_transform(self):
+        """
+        Test that the transform method raises TypeError or ValueError when
+        invalid types are provided for X.
+        """
+        dt = DataFrameTransformer(transformer=PCA()).fit(X=self.X, y=self.y)
+        with self.assertRaises(TypeError):
+            dt.transform(X=1)
+        with self.assertRaises(TypeError):
+            dt.transform(X="X")
+        with self.assertRaises(TypeError):
+            dt.transform(X=self.X.values)
+        with self.assertRaises(ValueError):
+            dt.transform(X=self.X.reset_index())

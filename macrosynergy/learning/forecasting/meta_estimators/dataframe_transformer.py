@@ -180,20 +180,11 @@ class DataFrameTransformer(BaseEstimator, TransformerMixin, MetaEstimatorMixin):
         """
         Checks for predict method parameters.
         """
-        if not isinstance(X, (pd.DataFrame, np.ndarray)):
+        if not isinstance(X, pd.DataFrame):
             raise TypeError(
-                "Input feature matrix for the probability estimator must be either a pandas "
-                "dataframe or numpy array. If used as part of an sklearn pipeline, ensure "
-                "that previous steps return a pandas dataframe or numpy array."
+                "Input feature matrix for the probability estimator must be a pandas "
+                "dataframe."
             )
-        if isinstance(X, np.ndarray):
-            if X.ndim != 2:
-                raise ValueError(
-                    "When the input feature matrix for the probability estimator is a "
-                    "numpy array, it must have two dimensions. If used as part of an "
-                    "sklearn pipeline, ensure that previous steps return a two-dimensional "
-                    "data structure."
-                )
 
         if X.shape[1] != self.n_features_in_:
             raise ValueError(
