@@ -27,8 +27,6 @@ class DataFrameTransformer(BaseEstimator, TransformerMixin, MetaEstimatorMixin):
         # Checks
         if not isinstance(transformer, TransformerMixin):
             raise TypeError("transformer must be a scikit-learn transformer.")
-        if not hasattr(transformer, "fit") or not hasattr(transformer, "transform"):
-            raise TypeError("transformer must have fit and transform methods.")
         if column_names is not None and not isinstance(column_names, list):
             raise TypeError("column_names must be a list of strings or None.")
         if column_names is not None and len(column_names) == 0:
@@ -126,21 +124,15 @@ class DataFrameTransformer(BaseEstimator, TransformerMixin, MetaEstimatorMixin):
         Checks for fit method parameters.
         """
         # X
-        if not isinstance(X, (pd.DataFrame, np.ndarray)):
+        if not isinstance(X, pd.DataFrame):
             raise TypeError(
-                "Input feature matrix for the probability estimator must be either a pandas "
-                "dataframe or numpy array."
+                "Input feature matrix for the dataframe transformer must be a pandas "
+                "dataframe."
             )
-        if isinstance(X, np.ndarray):
-            if X.ndim != 2:
-                raise ValueError(
-                    "When the input feature matrix for the probability estimator is a "
-                    "numpy array, it must have two dimensions."
-                )
         # y
         if not isinstance(y, (pd.Series, pd.DataFrame, np.ndarray)):
             raise TypeError(
-                "Target vector for the probability estimator must be either a pandas series, "
+                "Target vector for the dataframe transformer must be either a pandas series, "
                 "dataframe or numpy array."
             )
         if isinstance(y, pd.DataFrame):
@@ -161,6 +153,23 @@ class DataFrameTransformer(BaseEstimator, TransformerMixin, MetaEstimatorMixin):
                 "The number of samples in the input feature matrix must match the number "
                 "of samples in the target vector."
             )
+        # Check NaN values
+        if X.isnull().values.any():
+            raise ValueError(
+                "The input feature matrix contains NaN values. Please handle missing "
+                "values before fitting the transformer."
+            )
+        if isinstance(y, (pd.DataFrame, pd.Series)) and y.isnull().values.any():
+            raise ValueError(
+                "The target vector contains NaN values. Please handle missing values before "
+                "fitting the transformer."
+            )
+        elif isinstance(y, np.ndarray) and np.isnan(y).any():
+            raise ValueError(
+                "The target vector contains NaN values. Please handle missing values before "
+                "fitting the transformer."
+            )
+        
         # Check that the number of column names provided is equal to the number of features
         if self.column_names is not None and len(self.column_names) != X.shape[1]:
             raise ValueError(
