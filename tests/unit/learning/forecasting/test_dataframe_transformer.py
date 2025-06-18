@@ -190,3 +190,56 @@ class TestDataFrameTransformer(unittest.TestCase):
             dt.transform(X=self.X.values)
         with self.assertRaises(ValueError):
             dt.transform(X=self.X.reset_index())
+
+    def test_valid_transform(self):
+        """
+        Test that the transform method works correctly
+        when valid data is provided, both when no column_names are provided
+        and when they are provided.
+        """
+        # PCA without column names
+        dt = DataFrameTransformer(transformer=PCA(n_components=2)).fit(X=self.X, y=self.y)
+        transformed_data = dt.transform(X=self.X)
+        self.assertIsInstance(transformed_data, pd.DataFrame)
+        self.assertEqual(transformed_data.shape[0], self.X.shape[0])
+        self.assertEqual(transformed_data.shape[1], dt.transformer.n_components_)
+        self.assertTrue(np.all(np.isfinite(transformed_data.values)))
+        self.assertIsInstance(transformed_data.index, pd.MultiIndex)
+        self.assertEqual(transformed_data.index.names, ["cid", "real_date"])
+        self.assertEqual(transformed_data.columns.tolist(), ['Factor_0', 'Factor_1'])
+
+        # PCA with column names
+        dt = DataFrameTransformer(transformer=PCA(n_components=2), column_names=["PCA1", "PCA2", "PCA3"]).fit(X=self.X, y=self.y)
+        transformed_data = dt.transform(X=self.X)
+        self.assertIsInstance(transformed_data, pd.DataFrame)
+        self.assertEqual(transformed_data.shape[0], self.X.shape[0])
+        self.assertEqual(transformed_data.shape[1], dt.transformer.n_components_)
+        self.assertTrue(np.all(np.isfinite(transformed_data.values)))
+        self.assertIsInstance(transformed_data.index, pd.MultiIndex)
+        self.assertEqual(transformed_data.index.names, ["cid", "real_date"])
+        self.assertEqual(transformed_data.columns.tolist(), ['PCA1', 'PCA2'])
+
+        # StandardScaler without column names
+        dt = DataFrameTransformer(transformer=StandardScaler()).fit(X=self.X, y=self.y)
+        transformed_data = dt.transform(X=self.X)
+        self.assertIsInstance(transformed_data, pd.DataFrame)
+        self.assertEqual(transformed_data.shape[0], self.X.shape[0])
+        self.assertEqual(transformed_data.shape[1], self.X.shape[1])
+        self.assertTrue(np.all(np.isfinite(transformed_data.values)))
+        self.assertIsInstance(transformed_data.index, pd.MultiIndex)
+        self.assertEqual(transformed_data.index.names, ["cid", "real_date"])
+        self.assertEqual(transformed_data.columns.tolist(), ["Factor_0", "Factor_1", "Factor_2"])
+
+        # StandardScaler with column names
+        dt = DataFrameTransformer(
+            transformer=StandardScaler(),
+            column_names=["Scaled1", "Scaled2", "Scaled3"],
+        ).fit(X=self.X, y=self.y)
+        transformed_data = dt.transform(X=self.X)
+        self.assertIsInstance(transformed_data, pd.DataFrame)
+        self.assertEqual(transformed_data.shape[0], self.X.shape[0])
+        self.assertEqual(transformed_data.shape[1], self.X.shape[1])
+        self.assertTrue(np.all(np.isfinite(transformed_data.values)))
+        self.assertIsInstance(transformed_data.index, pd.MultiIndex)
+        self.assertEqual(transformed_data.index.names, ["cid", "real_date"])
+        self.assertEqual(transformed_data.columns.tolist(), ["Scaled1", "Scaled2", "Scaled3"])
