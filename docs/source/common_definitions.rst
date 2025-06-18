@@ -77,6 +77,34 @@ Combining these parts with underscores (``_``) will give us the extended
 category code. In the example above, the extended category code would be
 ``CPI_NSA_P1M1ML12``.
 
+
+JPMaQS Indicator Names
+----------------------
+
+These are strings that identify the data series in the JPMaQS dataset. These
+are unique to every time-series published in the dataset.
+These are commonly referred to as ``ticker``/``tickers`` or ``indicator``
+in the package. The ticker name is composed of the cross-section identifier
+(``cid``) and the extended category code (``xcat``) separated by an underscore
+(``_``). For example:
+
+- Cross-Section Identifier: ``USD``
+- Base Category Code: ``CPI``
+- Adjustment: ``NSA``
+- Transformation: ``P1M1ML12``
+
+Which makes:
+
+- Extended Category Code: ``CPI_NSA_P1M1ML12``
+
+and:
+
+- Ticker: ``USD_CPI_NSA_P1M1ML12``
+
+
+JPMaQS Metrics
+==============
+
 Grading
 -------
 
@@ -127,4 +155,27 @@ slippage is a term used to the delay in acting on a signal or a piece of
 information. It can also be seen as the time taken to take a position.
 In the package, slippage is always measured in business days, and is always
 applied before any resampling or lags.
+
+
+JPMaQS Expressions on DataQuery
+-------------------------------
+
+The JPMaQS dataset is served via the `JPMorgan DataQuery <https://www.jpmorgan.com/markets/dataquery/>`__
+platform. The DataQuery platform allows users to search for, discover, and analyze
+financial data. DataQuery uses a consistent notation to represent the numerous datasets
+and the many data series within them. The notation is as follows:
+
+``DB(<DATASET_NAME>,<SERIES_IDENTIFIER>,<ATTRIBUTE>``
+
+Where:
+
+- ``DATASET_NAME`` is the name of the dataset (``JPMAQS``).
+- ``SERIES_IDENTIFIER`` is the unique identifier for the data series, which is the ticker name in the case of JPMaQS (e.g. ``USD_CPI_NSA_P1M1ML12``)
+
+- ``ATTRIBUTE`` is the attribute of the data series that you want to retrieve, which is the metric name for JPMaQS (e.g. ``value``).
+
+Which makes the full expression:
+
+- ``DB(JPMAQS,USD_CPI_NSA_P1M1ML12,value)``
+
 
