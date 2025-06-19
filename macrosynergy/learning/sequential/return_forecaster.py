@@ -86,6 +86,7 @@ class ReturnForecaster(BasePanelLearner):
             lag=lag,
             xcat_aggs=xcat_aggs,
             generate_labels=generate_labels,
+            drop_nas=True,
         )
         # Additional checks to those carried in the parent class
         if not isinstance(real_date, str):
@@ -124,6 +125,7 @@ class ReturnForecaster(BasePanelLearner):
             lag=lag,
             xcat_aggs=xcat_aggs,
             generate_labels=generate_labels,
+            drop_nas=True,
             skip_checks=True # So that the checks aren't run twice
         )
 
@@ -134,6 +136,7 @@ class ReturnForecaster(BasePanelLearner):
                 self.X.columns
             ]
             .dropna()
+            .sort_index()
         )
         self.unique_test_levels = self.X_test.index.get_level_values(0).unique()
 

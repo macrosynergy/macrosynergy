@@ -29,7 +29,7 @@ def timelines(
     intersect: bool = False,
     val: str = "value",
     cumsum: bool = False,
-    start: str = "2000-01-01",
+    start: str = None,
     end: Optional[str] = None,
     ncol: int = 3,
     square_grid: bool = False,
