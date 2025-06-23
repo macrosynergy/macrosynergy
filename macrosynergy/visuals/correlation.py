@@ -415,7 +415,8 @@ def _transform_df_for_cross_category_corr(
     # Down-sample according to the passed frequency.
     if freq is not None:
         df_w = df_w.groupby(
-            [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=freq)]
+            [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=freq)],
+            observed=True,
         ).mean()
 
     # Apply the lag mechanism, to the respective categories, after the down-sampling.
