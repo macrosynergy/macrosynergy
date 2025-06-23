@@ -186,12 +186,8 @@ def view_correlation(
 
         # If only one xcat, we will compute cross sectional correlation.
         if len(xcats) == 1 and len(xcats_secondary) == 1:
-            df_w1 = _transform_df_for_cross_sectional_corr(
-                df=df1, val=val, freq=freq
-            )
-            df_w2 = _transform_df_for_cross_sectional_corr(
-                df=df2, val=val, freq=freq
-            )
+            df_w1 = _transform_df_for_cross_sectional_corr(df=df1, val=val, freq=freq)
+            df_w2 = _transform_df_for_cross_sectional_corr(df=df2, val=val, freq=freq)
 
             if title is None:
                 title = (
@@ -253,9 +249,7 @@ def view_correlation(
         e_date: str = df["real_date"].max().strftime("%Y-%m-%d")
 
         if len(xcats) == 1:
-            df_w = _transform_df_for_cross_sectional_corr(
-                df=df, val=val, freq=freq
-            )
+            df_w = _transform_df_for_cross_sectional_corr(df=df, val=val, freq=freq)
 
             if title is None:
                 title = (
@@ -604,7 +598,12 @@ if __name__ == "__main__":
     end = "2020-09-30"
 
     lag_dict = {"XR": [0, 2, 5]}
-    xcat_labels = {"XR":"Excess returns", "CRY":"Carry", "XR2":"Excess returns 2", "CRY2":"Carry 2"}
+    xcat_labels = {
+        "XR": "Excess returns",
+        "CRY": "Carry",
+        "XR2": "Excess returns 2",
+        "CRY2": "Carry 2",
+    }
     # Clustered correlation matrices. Test hierarchical clustering.
     view_correlation(
         df=dfd,
@@ -625,6 +624,11 @@ if __name__ == "__main__":
         annot=True,
         fmt=".2f",
         xcat_labels=xcat_labels,
-        xcat_secondary_labels={"XR":"Excess returns", "CRY":"Carry", "XR2":"Excess returns 2", "CRY2":"Carry 2"}
+        xcat_secondary_labels={
+            "XR": "Excess returns",
+            "CRY": "Carry",
+            "XR2": "Excess returns 2",
+            "CRY2": "Carry 2",
+        },
     )
     print(xcat_labels)
