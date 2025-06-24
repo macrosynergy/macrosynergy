@@ -42,6 +42,7 @@ from .df_utils import (
     estimate_release_frequency,
     concat_categorical,
     _insert_as_categorical,
+    forward_fill_wide_df,
 )
 
 from .sparse import (

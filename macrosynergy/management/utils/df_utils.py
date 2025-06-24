@@ -1613,6 +1613,40 @@ def _insert_as_categorical(df, column_name, category_name, column_idx):
     return df
 
 
+def ffill_trailing(df, blacklist=None, n=1):
+    if blacklist is None:
+        blacklist = {}
+    if not isinstance(blacklist, dict):
+        raise TypeError("blacklist argument must be a dictionary.")
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("df must be a pandas DataFrame.")
+    if not isinstance(n, int):
+        raise ValueError("Parameter 'n' must be an integer.")
+    
+    for col in df.columns:
+        series = df[col]
+
+        last_valid_idx = series.last_valid_index()
+        if last_valid_idx is None:
+            continue
+        last_pos = series.index.get_loc(last_valid_idx)
+
+        fill_positions = range(last_pos + 1, min(last_pos + n + 1, len(series)))
+        if not fill_positions:
+            continue
+        mask = pd.Series(False, index=series.index)
+        mask.iloc[list(fill_positions)] = True
+
+        blist = blacklist.get(col)
+        if blist:
+            start, end = pd.to_datetime(blist[0]), pd.to_datetime(blist[1])
+            blacklist_mask = series.index.to_series().between(start, end)
+            mask &= ~blacklist_mask
+        to_fill = mask & series.isna()
+        df.loc[to_fill, col] = series.iloc[last_pos]
+    return df
+
+
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
 
