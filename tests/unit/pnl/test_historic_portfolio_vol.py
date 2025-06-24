@@ -105,6 +105,7 @@ class TestEstimateVarianceCovariance(unittest.TestCase):
             "weights_func": expo_weights_arr,
             "lback_periods": 100,
             "half_life": 10,
+            "lback_min_obs": 1,
         }
 
     def tearDown(self): ...
@@ -242,10 +243,11 @@ class TestArgChecks(unittest.TestCase):
                 "est_weights": [0.2, 0.3, 0.5],
                 "lback_periods": [15, 8, 5],
                 "half_life": [10, 5, 2],
+                "lback_min_obs": [1, 1, 1],
             }
 
-        good_args_order = ["est_freqs", "est_weights", "lback_periods", "half_life"]
-        numeric_list_args = ["est_weights", "lback_periods", "half_life"]
+        good_args_order = ["est_freqs", "est_weights", "lback_periods", "half_life", "lback_min_obs"]
+        numeric_list_args = ["est_weights", "lback_periods", "half_life", "lback_min_obs"]
         # Test good args
         __check_results(
             good_args=good_args(),
@@ -288,6 +290,7 @@ class TestArgChecks(unittest.TestCase):
         # check that lback allows -1
         bad_args = good_args()
         bad_args["lback_periods"] = [-1]
+        bad_args["lback_min_obs"] = [1]
         _check_est_args(**bad_args)
 
 
@@ -421,6 +424,7 @@ class TestCalculatePortfolioVolatility(unittest.TestCase):
             "est_weights": [0.5, 0.5],
             "half_life": [10, 2],
             "lback_periods": [15, 5],
+            "lback_min_obs": [1, 1],
             "nan_tolerance": 0.1,
             "remove_zeros": True,
             "portfolio_return_name": "PORTFOLIO",
@@ -545,6 +549,7 @@ class TestHistVolFunc(unittest.TestCase):
             "lback_meth": "ma",
             "lback_periods": [15, 5],
             "half_life": [10, 2],
+            "lback_min_obs": [1, 1],
             "est_freqs": ["D", "W"],
             "est_weights": [0.5, 0.5],
             "nan_tolerance": 0.1,
@@ -635,6 +640,7 @@ class TestHistVolEntrypoint(unittest.TestCase):
             est_weights=[0.1, 0.2, 0.7],
             lback_periods=[30, 20, -1],
             half_life=[10, 5, 2],
+            lback_min_obs=[1, 1, 1],
             lback_meth="xma",
             rstring="XR",
             start=start,
