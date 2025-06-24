@@ -161,11 +161,10 @@ def make_relative_value(
         available_cids = df_xcat["cid"].unique()
 
         dfx_xcat: pd.DataFrame = df_xcat[["cid", "real_date", "value"]]
-        basket = basket_full.copy()
         dfb, basket = _prepare_basket(
             df=dfx_xcat,
             xcat=xcat,
-            basket=basket,
+            basket=basket_full,
             cids_avl=available_cids,
             complete_cross=complete_cross,
         )
