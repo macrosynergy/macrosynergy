@@ -24,6 +24,7 @@ def make_relative_value(
     rel_meth: str = "subtract",
     rel_xcats: List[str] = None,
     rel_reference: str = "mean",
+    exclude_own_cid: bool = False,
     postfix: str = "R",
 ):
     """
@@ -72,6 +73,9 @@ def make_relative_value(
     rel_reference : str
         reference point for the relative value calculation. Default is 'mean'. Alternative
         is 'median'.
+    exclude_own_cid: bool
+        if True, the cross section itself is excluded from the relative value
+        calculation. Default is False.
     postfix : str
         acronym to be appended to `xcat` string to give the name for relative value
         category. Only applies if rel_xcats is None. Default is 'R'
@@ -174,7 +178,19 @@ def make_relative_value(
             # cross sections defined in the "basket" data structure are not available for
             # a specific date, compute the rel_reference over the available subset.
             if rel_reference == "mean":
-                bm = dfb.groupby(by="real_date").mean(numeric_only=True)
+                if exclude_own_cid:
+                    count_per_date = dfb.groupby("real_date")["value"].transform("count")
+                    if count_per_date.min() <= 1:
+                        raise ValueError(
+                            "The number of cross sections for the relative value "
+                            "calculation must be greater than 1, when exclude_own_cid is "
+                            "set to True. "
+                        )
+                    sum_per_date = dfb.groupby("real_date")["value"].transform("sum")
+                    relative_values = (sum_per_date - dfb["value"]) / (count_per_date - 1)
+                    bm = pd.DataFrame({"value": relative_values}, index=dfb.index)
+                else:
+                    bm = dfb.groupby(by="real_date").mean(numeric_only=True)
             elif rel_reference == "median":
                 bm = dfb.groupby(by="real_date").median(numeric_only=True)
         elif len(basket) == 1:
