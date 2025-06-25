@@ -72,10 +72,16 @@ jobs:
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+          
+      - name: Set up AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+          aws-region: eu-west-2
 
       - name: Upload Docker base image to ECR
         run: |
-          MS_VERSION=$(python setup.py --version)
+          MS_VERSION=$(python ./setup.py --version)
           aws ecr get-login-password --region eu-west-2 | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY }}
           docker build -t ${{ secrets.ECR_REPOSITORY }}:latest -t ${{ secrets.ECR_REPOSITORY }}:${MS_VERSION} . --build-arg MS_VERSION=${MS_VERSION}
           docker push ${{ secrets.ECR_REPOSITORY }}:latest
