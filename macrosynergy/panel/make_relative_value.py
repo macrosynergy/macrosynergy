@@ -38,7 +38,7 @@ def make_relative_value(
     xcats : List[str]
         all extended categories for which relative values are to be calculated.
     cids : List[str]
-        cross sections for which relative values are calculated. Default is all cross 
+        cross sections for which relative values are calculated. Default is all cross
         section available for the respective category.
     start : str
         earliest date in ISO format. Default is None and earliest date for which the
@@ -155,16 +155,16 @@ def make_relative_value(
 
     df_list: List[pd.DataFrame] = []
     # Categories can be defined over a different set of cross sections.
+    basket_full = sorted(set(basket))
     for i, xcat in enumerate(available_xcats):
         df_xcat = dfx[dfx["xcat"] == xcat]
         available_cids = df_xcat["cid"].unique()
 
         dfx_xcat: pd.DataFrame = df_xcat[["cid", "real_date", "value"]]
-
         dfb, basket = _prepare_basket(
             df=dfx_xcat,
             xcat=xcat,
-            basket=basket,
+            basket=basket_full,
             cids_avl=available_cids,
             complete_cross=complete_cross,
         )
@@ -223,7 +223,11 @@ def make_relative_value(
             continue
 
         df_list.append(df_new.sort_values(["cid", "real_date"])[col_names])
-
+    if len(df_list) == 0:
+        raise ValueError(
+            "No relative value DataFrame could be created. "
+            "Check the input parameters and the DataFrame."
+        )
     return QuantamentalDataFrame(
         pd.concat(df_list).reset_index(drop=True),
         categorical=df.InitializedAsCategorical,
