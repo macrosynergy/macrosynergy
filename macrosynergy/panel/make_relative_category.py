@@ -146,6 +146,7 @@ def make_relative_category(
     df_list: List[pd.DataFrame] = []
 
     # Each cid could have an incomplete basket, we are allowing it to be flexible
+    basket_full = sorted(set(basket))
     for i, cid in enumerate(available_cids):
         df_cid = dfx[dfx["cid"] == cid]
         xcats_avl = df_cid["xcat"].unique()
@@ -155,7 +156,7 @@ def make_relative_category(
         dfb, basket = _prepare_category_basket(
             df=df_cid,
             cid=cid,
-            basket=basket,
+            basket=basket_full,
             xcats_avl=xcats_avl,
             complete_set=complete_set,
         )
@@ -190,6 +191,12 @@ def make_relative_category(
             continue
 
         df_list.append(df_new.sort_values(["xcat", "real_date"])[col_names])
+
+    if len(df_list) == 0:
+        raise ValueError(
+            "No relative category DataFrame could be created. "
+            "Check the input parameters and the DataFrame."
+        )
 
     return QuantamentalDataFrame(
         pd.concat(df_list).reset_index(drop=True),
