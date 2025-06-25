@@ -75,7 +75,7 @@ def make_relative_value(
         is 'median'.
     exclude_own_cid: bool
         if True, the cross section itself is excluded from the relative value
-        calculation. Default is False.
+        calculation. Only applicable if rel_reference is `mean`. Default is False.
     postfix : str
         acronym to be appended to `xcat` string to give the name for relative value
         category. Only applies if rel_xcats is None. Default is 'R'
@@ -119,6 +119,11 @@ def make_relative_value(
 
     if rel_reference not in ["mean", "median"]:
         raise ValueError("rel_reference must be 'mean' or 'median'.")
+    
+    if exclude_own_cid and rel_reference != "mean":
+        raise ValueError(
+            "exclude_own_cid can only be set to True if rel_reference is 'mean'."
+        )
 
     df = QuantamentalDataFrame(df)
     # Intersect parameter set to False. Therefore, cross sections across the categories
