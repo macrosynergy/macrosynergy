@@ -788,7 +788,7 @@ def create_delta_data(
     if "eop_lag" not in df.columns:
         warnings.warn(
             "`df` does not contain an `eop_lag` column. Differences calculated will not be "
-            " based on end-of-period adjustments."
+            "based on end-of-period adjustments."
         )
         df["eop_lag"] = np.nan
     if "grading" not in df.columns:
@@ -1323,8 +1323,10 @@ def sparse_to_dense(
         sm_qdfs.append(m_qdf)
 
     qdf: QuantamentalDataFrame = QuantamentalDataFrame.from_qdf_list(sm_qdfs)
-    if "eop" in metrics:
-        qdf["eop_lag"] = (qdf["real_date"] - qdf["eop"]).dt.days
+    if ("eop" in metrics) and ("eop" in qdf.columns):
+        qdf["eop_lag"] = (
+            qdf["real_date"] - qdf["eop"].astype("datetime64[ns]").fillna(pd.NaT)
+        ).dt.days
         qdf = QuantamentalDataFrame(qdf)
 
     if postfix:
