@@ -118,4 +118,5 @@ __all__ = [
     "calculate_cumulative_weights",
     "concat_categorical",
     "_insert_as_categorical",
+    "forward_fill_wide_df",
 ]

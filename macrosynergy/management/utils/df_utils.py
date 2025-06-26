@@ -1613,7 +1613,22 @@ def _insert_as_categorical(df, column_name, category_name, column_idx):
     return df
 
 
-def ffill_trailing(df, blacklist=None, n=1):
+def forward_fill_wide_df(df, blacklist=None, n=1):
+    """
+    Forward fills NaN values in a wide DataFrame using the last valid value in each column.
+    It will not forward fill gaps in the data, only the next `n` periods after the last valid value.
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to be forward filled in `wide` format, where each column represents a
+        cross-section and the index are dates.
+    blacklist : dict, optional
+        A dictionary where keys are column names and values are lists of two elements,
+        representing the start and end dates of periods to be excluded from filling.
+    n : int, optional
+        The number of periods to fill forward. Default is 1, meaning only the next period
+    """
     if blacklist is None:
         blacklist = {}
     if not isinstance(blacklist, dict):

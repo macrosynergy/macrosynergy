@@ -32,7 +32,7 @@ def make_zn_scores(
     thresh: float = None,
     pan_weight: float = 1,
     postfix: str = "ZN",
-    ffill: int = 1,
+    ffill: int = 0,
     unscore: bool = False,
 ) -> pd.DataFrame:
     """
@@ -86,7 +86,7 @@ def make_zn_scores(
         parameters are all specific to cross section.
     postfix : str
         string appended to category name for output; default is "ZN".
-    ffill : int, default 1
+    ffill : int, default 0
         Forward fills the trailing NaN values in the input DataFrame. The parameter
         specifies the number of periods to fill. If set to 0, no forward fill is
         performed.
