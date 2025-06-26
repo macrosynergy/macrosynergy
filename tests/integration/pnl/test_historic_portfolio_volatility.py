@@ -38,9 +38,7 @@ class TestHistoricPortfolioVol(unittest.TestCase):
             for j in range(self.n_cids):
                 if i != j:
                     cov[i, j] = (
-                        sigma[i]
-                        * sigma[j]
-                        * correlations_map[tuple(sorted((i, j)))]
+                        sigma[i] * sigma[j] * correlations_map[tuple(sorted((i, j)))]
                     )
 
         self.cov = cov
@@ -127,6 +125,7 @@ class TestHistoricPortfolioVol(unittest.TestCase):
             rstring="XR",
             est_freqs=["m"],
             lback_periods=21,
+            lback_min_obs=1,
             lback_meth="ma",
             half_life=11,
             start=None,
