@@ -325,6 +325,66 @@ def request_wrapper(
         raise Exception(error_details) from e_json
 
 
+def request_wrapper_stream_bytes_to_disk(
+    filename: str,
+    url: str,
+    method: str = "GET",
+    headers: Optional[Dict[str, str]] = None,
+    params: Optional[Dict[str, Any]] = None,
+    data: Optional[Any] = None,
+    json_payload: Optional[Dict[str, Any]] = None,
+    proxies: Optional[Dict[str, str]] = None,
+    chunk_size: int = 8192,
+) -> None:
+    """
+    Stream a request's response bytes directly to disk, chunk by chunk.
+
+    Parameters
+    ----------
+    filename : str
+        The file path to write the streamed bytes to.
+    url : str
+        The URL to request.
+    method : str
+        HTTP method. Only GET is allowed for streaming to disk.
+    headers : dict, optional
+        HTTP headers.
+    params : dict, optional
+        Query parameters.
+    data : any, optional
+        Data to send in the body.
+    json_payload : dict, optional
+        JSON data to send in the body.
+    proxies : dict, optional
+        Proxies to use for the request.
+    chunk_size : int
+        Size of each chunk to write (default 8192).
+    """
+    if not isinstance(method, str):
+        raise TypeError("Method must be a string.")
+    if method.upper() != "GET":
+        raise ValueError(
+            f"Invalid method: {method}. Must be 'GET' for streaming to disk."
+        )
+    _wait_for_api_call()
+    with requests.request(
+        method=method.upper(),
+        url=url,
+        headers=headers,
+        params=params,
+        data=data,
+        json=json_payload,
+        proxies=proxies,
+        stream=True,
+    ) as response:
+        response.raise_for_status()
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        with open(filename, "wb") as f:
+            for chunk in response.iter_content(chunk_size=chunk_size):
+                if chunk:
+                    f.write(chunk)
+
+
 class SimpleFusionAPIClient:
     def __init__(
         self,
@@ -577,9 +637,7 @@ class SimpleFusionAPIClient:
             member.
         """
         # /v1/catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions
-        endpoint: str = (
-            f"catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions"
-        )
+        endpoint: str = f"catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
     def get_seriesmember_distribution_details(
@@ -616,9 +674,7 @@ class SimpleFusionAPIClient:
             specified series member.
         """
         # /v1/catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions/{distribution}
-        endpoint: str = (
-            f"catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions/{distribution}"
-        )
+        endpoint: str = f"catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions/{distribution}"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
 
@@ -710,10 +766,10 @@ def read_parquet_from_bytes(response_bytes: bytes) -> pd.DataFrame:
 
     try:
         return pd.read_parquet(io.BytesIO(response_bytes))
+    except KeyboardInterrupt:
+        raise
     except Exception as e:
-        if isinstance(e, KeyboardInterrupt):
-            raise e
-        raise ValueError(f"Failed to read parquet from bytes: {e}") from e
+        raise ValueError(f"Failed to read Parquet from bytes: {e}") from e
 
 
 class JPMaQSFusionClient:
