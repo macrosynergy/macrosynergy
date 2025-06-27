@@ -637,9 +637,7 @@ class SimpleFusionAPIClient:
             member.
         """
         # /v1/catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions
-        endpoint: str = (
-            f"catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions"
-        )
+        endpoint: str = f"catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
     def get_seriesmember_distribution_details(
@@ -676,9 +674,7 @@ class SimpleFusionAPIClient:
             specified series member.
         """
         # /v1/catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions/{distribution}
-        endpoint: str = (
-            f"catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions/{distribution}"
-        )
+        endpoint: str = f"catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions/{distribution}"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
 
@@ -770,10 +766,10 @@ def read_parquet_from_bytes(response_bytes: bytes) -> pd.DataFrame:
 
     try:
         return pd.read_parquet(io.BytesIO(response_bytes))
+    except KeyboardInterrupt:
+        raise
     except Exception as e:
-        if isinstance(e, KeyboardInterrupt):
-            raise e
-        raise ValueError(f"Failed to read parquet from bytes: {e}") from e
+        raise ValueError(f"Failed to read Parquet from bytes: {e}") from e
 
 
 class JPMaQSFusionClient:
