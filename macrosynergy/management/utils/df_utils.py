@@ -477,9 +477,9 @@ def apply_slip(
 
         df = df.sort_values(by=["cid", "xcat", "real_date"])
 
+    
     for col in metrics:
         tks_isin = df["ticker"].isin(sel_tickers)
-        df.loc[tks_isin, col] = df.loc[tks_isin, col].astype(float)
         df.loc[tks_isin, col] = df.groupby("ticker", observed=True)[col].shift(slip)
 
     df = df.drop(columns=["ticker"]).reset_index(drop=True)
