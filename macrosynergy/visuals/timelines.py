@@ -318,6 +318,12 @@ def timelines(
             )
 
     else:
+        # Order cids by the values in cid_labels if provided, otherwise by the cids themselves
+        if cid_labels:
+            if isinstance(cid_labels, dict):
+                cids = sorted(cids, key=lambda x: cid_labels.get(x, x))
+            elif isinstance(cid_labels, list):
+                cids = sorted(cids, key=lambda x: cid_labels.index(x) if x in cid_labels else len(cid_labels))
         with FacetPlot(
             df=df,
             xcats=xcats,
@@ -394,7 +400,7 @@ if __name__ == "__main__":
         "FXVOL",
         "FX",
     ]
-    sel_cids: List[str] = ["USD", "EUR", "GBP"]
+    sel_cids: List[str] = ["GBP", "USD", "EUR"]
     sel_xcats: List[str] = ["FXXR", "EQXR", "RIR", "IR"]
     r_styles: List[str] = [
         "linear",
