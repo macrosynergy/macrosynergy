@@ -4,11 +4,19 @@ import datetime
 import time
 import logging
 import os
+from pathlib import Path
 import io
 import warnings
 import functools
 from typing import Dict, Optional, TypeVar, Any, List, Union, Callable
+
 import pandas as pd
+
+import pyarrow as pa  # noqa: F401
+import pyarrow.dataset as pa_ds
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
+import pyarrow.csv as pa_csv
 
 from macrosynergy import __version__ as ms_version_info
 
@@ -677,6 +685,51 @@ class SimpleFusionAPIClient:
         endpoint: str = f"catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions/{distribution}"
         return self._request(method="GET", endpoint=endpoint, **kwargs)
 
+    def get_seriesmember_distribution_details_to_disk(
+        self,
+        filename: str,
+        catalog: str,
+        dataset: str,
+        seriesmember: str,
+        distribution: str = "parquet",
+        **kwargs,
+    ) -> None:
+        """
+        Download the distribution for a specific series member in a dataset from a
+        specified catalog and save it to disk.
+
+        Parameters
+        ----------
+        filename : str
+            The file path to save the downloaded distribution data.
+        catalog : str
+            The catalog from which to retrieve the series member distribution.
+        dataset : str
+            The identifier of the dataset containing the series member.
+        seriesmember : str
+            The identifier of the series member for which to download the distribution.
+        distribution : str
+            The identifier of the distribution to download (e.g., "parquet").
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        None
+            The downloaded data is saved directly to the specified file.
+        """
+        # /v1/catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions/{distribution}
+        endpoint: str = f"catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions/{distribution}"
+        headers: Dict[str, str] = self.oauth_handler.get_auth()
+
+        request_wrapper_stream_bytes_to_disk(
+            filename=filename,
+            headers=headers,
+            url=f"{self.base_url}/{endpoint}",
+            method="GET",
+            **kwargs,
+        )
+
 
 def get_resources_df(
     response_dict: Dict[str, Any],
@@ -746,6 +799,60 @@ def convert_ticker_based_parquet_to_qdf(
     df = df.drop(columns=["ticker"])
     df = QuantamentalDataFrame(df, categorical=categorical)
     return df
+
+
+def convert_ticker_based_parquet_file_to_qdf(
+    filename: str,
+    compression: str = "zstd",
+    as_csv: bool = False,
+    qdf: bool = False,
+) -> None:
+    src = Path(filename).expanduser().resolve()
+    if not src.is_file():
+        raise FileNotFoundError(src)
+
+    raw_csv_path = src.with_suffix(".csv")
+    qdf_parquet_stem = src.stem + "_qdf"
+    qdf_parquet_path = src.with_stem(qdf_parquet_stem)
+    qdf_csv_path = src.with_stem(qdf_parquet_stem).with_suffix(".csv")
+
+    if not qdf and not as_csv:
+        return
+
+    dataset = pa_ds.dataset(src, format="parquet")
+
+    if not qdf and as_csv:
+        scanner = dataset.scanner()
+        schema = scanner.dataset_schema
+        with pa_csv.CSVWriter(raw_csv_path, schema=schema) as writer:
+            for batch in scanner.to_batches():
+                writer.write(batch)
+        return
+
+    split_expr = pc.split_pattern(pc.field("ticker"), "_", max_splits=1)
+    cid_expr = pc.list_element(split_expr, 0)
+    xcat_expr = pc.list_element(split_expr, 1)
+
+    scanner = dataset.scanner(
+        columns={
+            "real_date": pc.field("real_date"),
+            "value": pc.field("value"),
+            "grading": pc.field("grading"),
+            "eop_lag": pc.field("eop_lag"),
+            "mop_lag": pc.field("mop_lag"),
+            "last_updated": pc.field("last_updated"),
+            "cid": cid_expr,
+            "xcat": xcat_expr,
+        }
+    )
+
+    if qdf and not as_csv:
+        pq.write_table(scanner.to_table(), qdf_parquet_path, compression=compression)
+    else:
+        schema = scanner.schema
+        with pa_csv.CSVWriter(qdf_csv_path, schema=schema) as writer:
+            for batch in scanner.to_batches():
+                writer.write(batch)
 
 
 def read_parquet_from_bytes(response_bytes: bytes) -> pd.DataFrame:
@@ -1031,6 +1138,40 @@ class JPMaQSFusionClient:
         result = read_parquet_from_bytes(result)
         return result
 
+    def download_series_member_distribution_to_disk(
+        self,
+        save_directory: str,
+        dataset: str,
+        seriesmember: str,
+        distribution: str = "parquet",
+        qdf: bool = False,
+        as_csv: bool = False,
+        **kwargs,
+    ) -> None:
+        os.makedirs(save_directory, exist_ok=True)
+
+        filename = os.path.join(
+            save_directory, f"{dataset}-{seriesmember}.{distribution}"
+        )
+        self.simple_fusion_client.get_seriesmember_distribution_details_to_disk(
+            filename=filename,
+            catalog=self._catalog,
+            dataset=dataset,
+            seriesmember=seriesmember,
+            distribution=distribution,
+            **kwargs,
+        )
+        if not os.path.exists(filename):
+            raise FileNotFoundError(
+                f"Failed to download series member distribution to {filename}."
+            )
+        else:
+            print(f"Successfully downloaded series member distribution to {filename}.")
+
+        convert_ticker_based_parquet_file_to_qdf(
+            filename=filename, as_csv=as_csv, qdf=qdf
+        )
+
     def get_latest_seriesmember_identifier(
         self,
         dataset: str,
@@ -1107,6 +1248,28 @@ class JPMaQSFusionClient:
 
         return dist_df
 
+    def download_latest_distribution_to_disk(
+        self,
+        save_directory: str,
+        dataset: str,
+        distribution: str = "parquet",
+        qdf: bool = False,
+        as_csv: bool = False,
+        **kwargs,
+    ) -> None:
+        latest_series_member = self.get_latest_seriesmember_identifier(
+            dataset=dataset, **kwargs
+        )
+        self.download_series_member_distribution_to_disk(
+            save_directory=save_directory,
+            dataset=dataset,
+            seriesmember=latest_series_member,
+            distribution=distribution,
+            qdf=qdf,
+            as_csv=as_csv,
+            **kwargs,
+        )
+
     def download_latest_full_snapshot(
         self,
         folder: str = None,
@@ -1114,6 +1277,7 @@ class JPMaQSFusionClient:
         include_catalog: bool = False,
         include_explorer_datasets: bool = False,
         include_delta_datasets: bool = False,
+        as_csv: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -1134,6 +1298,9 @@ class JPMaQSFusionClient:
             If True, includes Explorer datasets in the snapshot. Default is False.
         include_delta_datasets : bool
             If True, includes Delta datasets in the snapshot. Default is False.
+        as_csv : bool
+            If True, saves the downloaded datasets as CSV files. Default is False, with
+            Parquet as the default format.
 
         **kwargs : dict
             Additional keyword arguments to pass to the API request.
@@ -1143,17 +1310,17 @@ class JPMaQSFusionClient:
         pd.DataFrame
             A DataFrame containing the metadata catalog.
         """
-
         if folder is None:
             _date = pd.Timestamp.now().strftime("%Y-%m-%d")
             folder = "./jpmaqs-full-snapshot-" + _date
         os.makedirs(folder, exist_ok=True)
 
         catalog_df = self.get_metadata_catalog()
-        catalog_df.to_csv(
-            os.path.join(folder, "jpmaqs-metadata-catalog.csv"),
-            index=False,
-        )
+        metadata_catalog_path = os.path.join(folder, "jpmaqs-metadata-catalog")
+        if as_csv:
+            catalog_df.to_csv(f"{metadata_catalog_path}.csv", index=False)
+        else:
+            catalog_df.to_parquet(f"{metadata_catalog_path}.parquet", index=False)
 
         datasets = self.list_datasets(
             include_catalog=include_catalog,
@@ -1162,19 +1329,19 @@ class JPMaQSFusionClient:
             **kwargs,
         )["identifier"].tolist()
         for ds in datasets:
-            dist_df = self.download_latest_distribution(ds, qdf=qdf)
-            dist_df.to_csv(
-                os.path.join(folder, f"{ds}.csv"),
-                index=False,
-            )
-            print(
-                f"Downloaded latest distribution for dataset '{ds}' to {folder}/{ds}-latest.csv"
+            self.download_latest_distribution_to_disk(
+                save_directory=folder,
+                dataset=ds,
+                qdf=qdf,
+                as_csv=as_csv,
+                **kwargs,
             )
 
         return catalog_df
 
 
 if __name__ == "__main__":
+    st = time.time()
     oauth_handler = FusionOAuth.from_credentials_json(
         "data/fusion_client_credentials.json"
     )
@@ -1186,31 +1353,7 @@ if __name__ == "__main__":
 
     jpmaqs_client.download_latest_full_snapshot(
         qdf=False,
-        folder="./data/jpmaqs-full-snapshot-" + pd.Timestamp.now().strftime("%Y-%m-%d"),
+        # as_csv=True,
+        # include_delta_datasets=True
     )
-
-    # catalog_df = jpmaqs_client.get_metadata_catalog()
-    # print("JPMaQS Catalog:")
-    # print(catalog_df.head(5))
-
-    # min_dates, max_dates = [], []
-
-    # tickers_count = []
-
-    # for ds in jpmaqs_client.list_datasets()["identifier"].tolist():
-    #     dist_df = jpmaqs_client.download_latest_distribution(ds)
-    #     print(f"Dataset: {ds}")
-    #     if "ticker" in dist_df.columns:
-    #         tickers_count.append(len(dist_df["ticker"].drop_duplicates()))
-    #     else:
-    #         tickers_count.append(len(dist_df[["cid", "xcat"]].drop_duplicates()))
-
-    #     print(f"Unique tickers: {tickers_count[-1]}")
-    #     _min, _max = dist_df["real_date"].min(), dist_df["real_date"].max()
-    #     min_dates.append(_min)
-    #     max_dates.append(_max)
-    #     print(f"Min, Max dates: {_min}, {_max}")
-    #     print("\n---")
-
-    # print("Unique tickers count:", sum(tickers_count))
-    # print("Min. date: ", min(min_dates), "\t\tMax. date: ", max(max_dates))
+    print(f"Time taken: {time.time() - st:.2f} seconds")
