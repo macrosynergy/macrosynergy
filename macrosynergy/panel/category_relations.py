@@ -670,6 +670,10 @@ class CategoryRelations(object):
 
             if "real_date" not in dfx.index.names:
                 raise ValueError("`real_date` expected in index names.")
+
+            if remove_zero_predictor:
+                dfx = dfx[dfx.loc[:, self.xcats[0]] != 0]
+
             rdt_index = list(dfx.index.names).index("real_date")
             index_years = dfx.index.get_level_values(rdt_index).year
             years_in_df = list(index_years.unique())
