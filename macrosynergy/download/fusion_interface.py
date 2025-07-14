@@ -1309,57 +1309,35 @@ class JPMaQSFusionClient:
             **kwargs,
         )
 
-    def download_latest_delta_distribution(
+    def _download_multiple_distributions_to_disk(
         self,
         folder: str = None,
         qdf: bool = False,
+        include_catalog: bool = False,
+        include_full_datasets: bool = False,
+        include_explorer_datasets: bool = False,
+        include_delta_datasets: bool = False,
         as_csv: bool = False,
         keep_raw_data: bool = False,
-        **kwargs,
     ) -> pd.DataFrame:
-        """
-        Download the complete latest Delta distribution for all datasets in the JPMaQS
-        product.
-
-        Parameters
-        ----------
-        qdf : bool
-            If True, converts the DataFrame to a QuantamentalDataFrame.
-        as_csv : bool
-            If True, saves the downloaded datasets as CSV files. Default is False, with
-            Parquet as the default format.
-        keep_raw_data : bool
-            If True, keeps the raw data files after conversion. Default is False.
-        **kwargs : dict
-            Additional keyword arguments to pass to the API request.
-
-        Returns
-        -------
-        pd.DataFrame
-            A DataFrame containing the metadata for the Delta datasets.
-        """
         if folder is None:
             folder = Path.cwd()
         folder: Path = Path(folder).expanduser()
         timestamp = pd.Timestamp.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
         folder = folder / f"jpmaqs-download-{timestamp}"
         Path(folder).mkdir(parents=True, exist_ok=True)
-
         catalog_df = self.get_metadata_catalog()
         metadata_catalog_path = os.path.join(folder, "jpmaqs-metadata-catalog")
         if as_csv:
             catalog_df.to_csv(f"{metadata_catalog_path}.csv", index=False)
         else:
             catalog_df.to_parquet(f"{metadata_catalog_path}.parquet", index=False)
-        if as_csv:
-            catalog_df.to_csv(f"{metadata_catalog_path}.csv", index=False)
-        else:
-            catalog_df.to_parquet(f"{metadata_catalog_path}.parquet", index=False)
 
         datasets = self.list_datasets(
-            include_full_datasets=False,
-            include_delta_datasets=True,
-            **kwargs,
+            include_catalog=include_catalog,
+            include_full_datasets=include_full_datasets,
+            include_explorer_datasets=include_explorer_datasets,
+            include_delta_datasets=include_delta_datasets,
         )["identifier"].tolist()
 
         failures = []
@@ -1373,16 +1351,15 @@ class JPMaQSFusionClient:
                     qdf=qdf,
                     as_csv=as_csv,
                     keep_raw_data=keep_raw_data,
-                    **kwargs,
                 )
                 time.sleep(FUSION_API_DELAY)
-
             for ds, future in futures.items():
                 try:
                     future.result()
                 except Exception as e:
                     print(f"Failed to download dataset {ds}: {e}")
                     failures.append(ds)
+
         if failures:
             print(
                 f"Failed to download the following datasets: {', '.join(failures)}. "
@@ -1390,6 +1367,48 @@ class JPMaQSFusionClient:
             )
 
         return catalog_df
+
+    def download_latest_delta_distribution(
+        self,
+        folder: str = None,
+        qdf: bool = False,
+        as_csv: bool = False,
+        keep_raw_data: bool = False,
+        **kwargs,
+    ) -> pd.DataFrame:
+        """
+        Download the latest Delta distribution for all datasets in the JPMaQS product.
+
+        Parameters
+        ----------
+        folder : str
+            The folder where the Delta distribution will be saved. If None, a folder with
+            the current date will be created in the current directory.
+        qdf : bool
+            If True, converts the DataFrame to a QuantamentalDataFrame.
+        as_csv : bool
+            If True, saves the downloaded datasets as CSV files. Default is False, with
+            Parquet as the default format.
+        keep_raw_data : bool
+            If True, keeps the raw data files after conversion. Default is False.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the metadata catalog.
+        """
+        return self._download_multiple_distributions_to_disk(
+            folder=folder,
+            qdf=qdf,
+            include_catalog=False,
+            include_full_datasets=False,
+            include_explorer_datasets=False,
+            include_delta_datasets=True,
+            as_csv=as_csv,
+            keep_raw_data=keep_raw_data,
+        )
 
     def download_latest_full_snapshot(
         self,
@@ -1407,7 +1426,6 @@ class JPMaQSFusionClient:
 
         Parameters
         ----------
-
         folder : str
             The folder where the snapshot will be saved. If None, a folder with the current
             date will be created in the current directory.
@@ -1423,6 +1441,8 @@ class JPMaQSFusionClient:
         as_csv : bool
             If True, saves the downloaded datasets as CSV files. Default is False, with
             Parquet as the default format.
+        keep_raw_data : bool
+            If True, keeps the raw data files after conversion. Default is False.
 
         **kwargs : dict
             Additional keyword arguments to pass to the API request.
@@ -1432,57 +1452,16 @@ class JPMaQSFusionClient:
         pd.DataFrame
             A DataFrame containing the metadata catalog.
         """
-        if folder is None:
-            folder = Path.cwd()
-
-        folder: Path = Path(folder).expanduser()
-        timestamp = pd.Timestamp.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
-
-        folder = folder / f"jpmaqs-download-{timestamp}"
-        Path(folder).mkdir(parents=True, exist_ok=True)
-
-        catalog_df = self.get_metadata_catalog()
-        metadata_catalog_path = os.path.join(folder, "jpmaqs-metadata-catalog")
-        if as_csv:
-            catalog_df.to_csv(f"{metadata_catalog_path}.csv", index=False)
-        else:
-            catalog_df.to_parquet(f"{metadata_catalog_path}.parquet", index=False)
-
-        datasets = self.list_datasets(
+        return self._download_multiple_distributions_to_disk(
+            folder=folder,
+            qdf=qdf,
             include_catalog=include_catalog,
+            include_full_datasets=True,
             include_explorer_datasets=include_explorer_datasets,
             include_delta_datasets=include_delta_datasets,
-            **kwargs,
-        )["identifier"].tolist()
-
-        failures = []
-        with cf.ThreadPoolExecutor() as executor:
-            futures: Dict[str, cf.Future] = {}
-            for ds in datasets:
-                futures[ds] = executor.submit(
-                    self.download_latest_distribution_to_disk,
-                    save_directory=folder,
-                    dataset=ds,
-                    qdf=qdf,
-                    as_csv=as_csv,
-                    keep_raw_data=keep_raw_data,
-                    **kwargs,
-                )
-                time.sleep(FUSION_API_DELAY)
-
-            for ds, future in futures.items():
-                try:
-                    future.result()
-                except Exception as e:
-                    print(f"Failed to download dataset {ds}: {e}")
-                    failures.append(ds)
-        if failures:
-            print(
-                f"Failed to download the following datasets: {', '.join(failures)}. "
-                "Please check the logs for more details."
-            )
-
-        return catalog_df
+            as_csv=as_csv,
+            keep_raw_data=keep_raw_data,
+        )
 
 
 if __name__ == "__main__":
@@ -1491,22 +1470,17 @@ if __name__ == "__main__":
         "data/fusion_client_credentials.json"
     )
     jpmaqs_client = JPMaQSFusionClient(oauth_handler=oauth_handler)
+    ds = jpmaqs_client.list_datasets()
 
-    # ds = jpmaqs_client.list_datasets()
-
-    # print(ds.head(10))
-
-    # jpmaqs_client.download_latest_full_snapshot(
-    #     folder="./data", keep_raw_data=True, qdf=False, as_csv=False
-    # )
-    # print(f"Time taken: {time.time() - st:.2f} seconds")
+    st = time.time()
+    jpmaqs_client.download_latest_full_snapshot(
+        folder="./data", qdf=True, keep_raw_data=False
+    )
+    print(f"Time taken for full snapshots download: {time.time() - st:.2f} seconds")
 
     st = time.time()
 
     jpmaqs_client.download_latest_delta_distribution(
-        folder="./data",
-        # keep_raw_data=True,
-        qdf=True,
-        as_csv=True,
+        folder="./data", qdf=True, keep_raw_data=False
     )
-    print(f"Time taken: {time.time() - st:.2f} seconds")
+    print(f"Time taken for latest delta download: {time.time() - st:.2f} seconds")
