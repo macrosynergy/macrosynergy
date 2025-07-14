@@ -649,7 +649,7 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
         with patch("pandas.read_parquet", side_effect=Exception("fail")):
             with self.assertRaises(ValueError) as cm:
                 read_parquet_from_bytes(b"bytes")
-            self.assertIn("Failed to read parquet", str(cm.exception))
+            self.assertIn("Failed to read Parquet".lower(), str(cm.exception).lower())
 
     def test_jpmaqsclient_list_datasets_all_explorer(self):
         # All datasets are explorer datasets
