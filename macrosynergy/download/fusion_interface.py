@@ -8,6 +8,7 @@ from pathlib import Path
 import io
 import warnings
 import functools
+import concurrent.futures as cf
 from typing import Dict, Optional, TypeVar, Any, List, Union, Callable
 
 import pandas as pd
@@ -806,6 +807,7 @@ def convert_ticker_based_parquet_file_to_qdf(
     compression: str = "zstd",
     as_csv: bool = False,
     qdf: bool = False,
+    keep_raw_data: bool = False,
 ) -> None:
     src = Path(filename).expanduser().resolve()
     if not src.is_file():
@@ -853,6 +855,9 @@ def convert_ticker_based_parquet_file_to_qdf(
         with pa_csv.CSVWriter(qdf_csv_path, schema=schema) as writer:
             for batch in scanner.to_batches():
                 writer.write(batch)
+
+    if (not keep_raw_data) and (qdf or as_csv):
+        os.remove(src)
 
 
 def read_parquet_from_bytes(response_bytes: bytes) -> pd.DataFrame:
@@ -914,6 +919,7 @@ class JPMaQSFusionClient:
         product_id: str = "JPMAQS",
         fields: List[str] = ["@id", "identifier", "title", "description"],
         include_catalog: bool = False,
+        include_full_datasets: bool = True,
         include_explorer_datasets: bool = False,
         include_delta_datasets: bool = False,
         **kwargs,
@@ -947,6 +953,17 @@ class JPMaQSFusionClient:
         resources_df: pd.DataFrame = get_resources_df(r, keep_fields=None)
         resources_df = resources_df.sort_values(by=["isRestricted", "@id"])
 
+        if not (
+            include_catalog
+            or include_full_datasets
+            or include_explorer_datasets
+            or include_delta_datasets
+        ):
+            raise ValueError(
+                "At least one of `include_catalog`, `include_full_datasets`, "
+                "`include_explorer_datasets`, or `include_delta_datasets` must be True."
+            )
+
         if not include_catalog:
             resources_df = resources_df[
                 resources_df["identifier"] != self._catalog_dataset
@@ -962,11 +979,20 @@ class JPMaQSFusionClient:
 
         if not include_delta_datasets:
             sel_bools = resources_df["identifier"].str.startswith("JPMAQS_DELTA_")
-            if all(sel_bools):
-                warnings.warn(
-                    "`include_delta_datasets` is True, but all datasets are Delta datasets. Setting it to False."
-                )
             resources_df = resources_df[~sel_bools]
+
+        if not include_full_datasets:
+            delta_datasets = resources_df[
+                resources_df["identifier"].str.startswith("JPMAQS_DELTA_")
+            ]
+            explorer_datasets = resources_df[
+                resources_df["identifier"].str.startswith("JPMAQS_EXPLORER_")
+            ]
+            other_ds_ids = set(delta_datasets["identifier"]) | set(
+                explorer_datasets["identifier"]
+            )
+            full_datasets = resources_df[resources_df["identifier"].isin(other_ds_ids)]
+            resources_df = full_datasets
 
         resources_df = resources_df[fields].reset_index(drop=True)
         resources_df.index = resources_df.index + 1
@@ -1146,6 +1172,7 @@ class JPMaQSFusionClient:
         distribution: str = "parquet",
         qdf: bool = False,
         as_csv: bool = False,
+        keep_raw_data: bool = False,
         **kwargs,
     ) -> None:
         os.makedirs(save_directory, exist_ok=True)
@@ -1169,8 +1196,18 @@ class JPMaQSFusionClient:
             print(f"Successfully downloaded series member distribution to {filename}.")
 
         convert_ticker_based_parquet_file_to_qdf(
-            filename=filename, as_csv=as_csv, qdf=qdf
+            filename=filename,
+            as_csv=as_csv,
+            qdf=qdf,
+            keep_raw_data=keep_raw_data,
         )
+        if qdf:
+            msg_str = (
+                f"Successfully converted {filename} to Quantamental Data Format (QDF)"
+            )
+            if as_csv:
+                msg_str += " and saved as CSV"
+            print(msg_str)
 
     def get_latest_seriesmember_identifier(
         self,
@@ -1255,6 +1292,7 @@ class JPMaQSFusionClient:
         distribution: str = "parquet",
         qdf: bool = False,
         as_csv: bool = False,
+        keep_raw_data: bool = False,
         **kwargs,
     ) -> None:
         latest_series_member = self.get_latest_seriesmember_identifier(
@@ -1267,17 +1305,101 @@ class JPMaQSFusionClient:
             distribution=distribution,
             qdf=qdf,
             as_csv=as_csv,
+            keep_raw_data=keep_raw_data,
             **kwargs,
         )
+
+    def download_latest_delta_distribution(
+        self,
+        folder: str = None,
+        qdf: bool = False,
+        as_csv: bool = False,
+        keep_raw_data: bool = False,
+        **kwargs,
+    ) -> pd.DataFrame:
+        """
+        Download the complete latest Delta distribution for all datasets in the JPMaQS
+        product.
+
+        Parameters
+        ----------
+        qdf : bool
+            If True, converts the DataFrame to a QuantamentalDataFrame.
+        as_csv : bool
+            If True, saves the downloaded datasets as CSV files. Default is False, with
+            Parquet as the default format.
+        keep_raw_data : bool
+            If True, keeps the raw data files after conversion. Default is False.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the metadata for the Delta datasets.
+        """
+        if folder is None:
+            folder = Path.cwd()
+        folder: Path = Path(folder).expanduser()
+        timestamp = pd.Timestamp.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
+        folder = folder / f"jpmaqs-download-{timestamp}"
+        Path(folder).mkdir(parents=True, exist_ok=True)
+
+        catalog_df = self.get_metadata_catalog()
+        metadata_catalog_path = os.path.join(folder, "jpmaqs-metadata-catalog")
+        if as_csv:
+            catalog_df.to_csv(f"{metadata_catalog_path}.csv", index=False)
+        else:
+            catalog_df.to_parquet(f"{metadata_catalog_path}.parquet", index=False)
+        if as_csv:
+            catalog_df.to_csv(f"{metadata_catalog_path}.csv", index=False)
+        else:
+            catalog_df.to_parquet(f"{metadata_catalog_path}.parquet", index=False)
+
+        datasets = self.list_datasets(
+            include_full_datasets=False,
+            include_delta_datasets=True,
+            **kwargs,
+        )["identifier"].tolist()
+
+        failures = []
+        with cf.ThreadPoolExecutor() as executor:
+            futures: Dict[str, cf.Future] = {}
+            for ds in datasets:
+                futures[ds] = executor.submit(
+                    self.download_latest_distribution_to_disk,
+                    save_directory=folder,
+                    dataset=ds,
+                    qdf=qdf,
+                    as_csv=as_csv,
+                    keep_raw_data=keep_raw_data,
+                    **kwargs,
+                )
+                time.sleep(FUSION_API_DELAY)
+
+            for ds, future in futures.items():
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"Failed to download dataset {ds}: {e}")
+                    failures.append(ds)
+        if failures:
+            print(
+                f"Failed to download the following datasets: {', '.join(failures)}. "
+                "Please check the logs for more details."
+            )
+
+        return catalog_df
 
     def download_latest_full_snapshot(
         self,
         folder: str = None,
-        qdf: bool = True,
+        qdf: bool = False,
         include_catalog: bool = False,
         include_explorer_datasets: bool = False,
         include_delta_datasets: bool = False,
         as_csv: bool = False,
+        keep_raw_data: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -1332,13 +1454,32 @@ class JPMaQSFusionClient:
             include_delta_datasets=include_delta_datasets,
             **kwargs,
         )["identifier"].tolist()
-        for ds in datasets:
-            self.download_latest_distribution_to_disk(
-                save_directory=folder,
-                dataset=ds,
-                qdf=qdf,
-                as_csv=as_csv,
-                **kwargs,
+
+        failures = []
+        with cf.ThreadPoolExecutor() as executor:
+            futures: Dict[str, cf.Future] = {}
+            for ds in datasets:
+                futures[ds] = executor.submit(
+                    self.download_latest_distribution_to_disk,
+                    save_directory=folder,
+                    dataset=ds,
+                    qdf=qdf,
+                    as_csv=as_csv,
+                    keep_raw_data=keep_raw_data,
+                    **kwargs,
+                )
+                time.sleep(FUSION_API_DELAY)
+
+            for ds, future in futures.items():
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"Failed to download dataset {ds}: {e}")
+                    failures.append(ds)
+        if failures:
+            print(
+                f"Failed to download the following datasets: {', '.join(failures)}. "
+                "Please check the logs for more details."
             )
 
         return catalog_df
@@ -1351,13 +1492,21 @@ if __name__ == "__main__":
     )
     jpmaqs_client = JPMaQSFusionClient(oauth_handler=oauth_handler)
 
-    ds = jpmaqs_client.list_datasets()
+    # ds = jpmaqs_client.list_datasets()
 
-    print(ds.head(10))
+    # print(ds.head(10))
 
-    jpmaqs_client.download_latest_full_snapshot(
-        qdf=False,
-        # as_csv=True,
-        # include_delta_datasets=True
+    # jpmaqs_client.download_latest_full_snapshot(
+    #     folder="./data", keep_raw_data=True, qdf=False, as_csv=False
+    # )
+    # print(f"Time taken: {time.time() - st:.2f} seconds")
+
+    st = time.time()
+
+    jpmaqs_client.download_latest_delta_distribution(
+        folder="./data",
+        # keep_raw_data=True,
+        qdf=True,
+        as_csv=True,
     )
     print(f"Time taken: {time.time() - st:.2f} seconds")
