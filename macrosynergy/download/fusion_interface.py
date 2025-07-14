@@ -1311,9 +1311,13 @@ class JPMaQSFusionClient:
             A DataFrame containing the metadata catalog.
         """
         if folder is None:
-            _date = pd.Timestamp.now().strftime("%Y-%m-%d_%H-%M-%S")
-            folder = "./jpmaqs-full-snapshot-" + _date
-        os.makedirs(folder, exist_ok=True)
+            folder = Path.cwd()
+
+        folder: Path = Path(folder).expanduser()
+        timestamp = pd.Timestamp.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
+
+        folder = folder / f"jpmaqs-download-{timestamp}"
+        Path(folder).mkdir(parents=True, exist_ok=True)
 
         catalog_df = self.get_metadata_catalog()
         metadata_catalog_path = os.path.join(folder, "jpmaqs-metadata-catalog")
