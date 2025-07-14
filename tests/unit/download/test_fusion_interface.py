@@ -27,6 +27,7 @@ from macrosynergy.download.fusion_interface import (
     read_parquet_from_bytes,
     request_wrapper_stream_bytes_to_disk,
     NoContentError,
+    convert_ticker_based_parquet_file_to_qdf,
 )
 
 
@@ -699,6 +700,7 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
             with self.assertRaises(KeyError):
                 client.download_latest_distribution("ds")
 
+
 class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
     @patch(
         "macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True
@@ -791,6 +793,69 @@ class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
                 content = f.read()
             expected_content = b"".join(chunks)
             self.assertEqual(content, expected_content)
+
+    def test_convert_ticker_based_parquet_file_to_qdf_creates_qdf_file_and_csv(self):
+        df = pd.DataFrame(
+            {
+                "ticker": ["AAA_BBB", "CCC_DDD"],
+                "real_date": [20230101, 20230102],
+                "value": [1.0, 2.0],
+                "grading": [0, 1],
+                "eop_lag": [0, 0],
+                "mop_lag": [0, 0],
+                "last_updated": [20230101, 20230102],
+            }
+        )
+
+        for as_csv in [False, True]:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                parquet_path = os.path.join(tmpdir, "test.parquet")
+                df.to_parquet(parquet_path, index=False)
+                convert_ticker_based_parquet_file_to_qdf(
+                    parquet_path, qdf=True, as_csv=as_csv
+                )
+
+                # load the QDF file to verify its content
+                if as_csv:
+                    qdf_path = os.path.join(tmpdir, "test_qdf.csv")
+                    self.assertTrue(os.path.exists(qdf_path))
+                    readfunc = pd.read_csv
+                else:
+                    qdf_path = os.path.join(tmpdir, "test_qdf.parquet")
+                    self.assertTrue(os.path.exists(qdf_path))
+                    readfunc = pd.read_parquet
+                qdf = readfunc(qdf_path)
+                try:
+                    QuantamentalDataFrame(qdf)
+                except Exception as e:
+                    self.fail(f"Failed to load QDF file: {e}")
+
+                tkrs = qdf["cid"] + "_" + qdf["xcat"]
+                expected_cols = (set(df.columns) - {"ticker"}) | {"cid", "xcat"}
+                self.assertEqual(set(qdf.columns), expected_cols)
+                self.assertEqual(set(tkrs), set(df["ticker"]))
+
+    def test_convert_ticker_based_parquet_file_to_qdf_do_nothing_case(self):
+        df = pd.DataFrame(
+            {
+                "ticker": ["AAA_BBB", "CCC_DDD"],
+                "real_date": [20230101, 20230102],
+                "value": [1.0, 2.0],
+                "grading": [0, 1],
+                "eop_lag": [0, 0],
+                "mop_lag": [0, 0],
+                "last_updated": [20230101, 20230102],
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            qdf_path = os.path.join(tmpdir, "test.parquet")
+            df.to_parquet(qdf_path, index=False)
+            convert_ticker_based_parquet_file_to_qdf(qdf_path, qdf=False)
+            self.assertTrue(os.path.exists(qdf_path))
+            # check that this is the same file
+            qdf = pd.read_parquet(qdf_path)
+            pd.testing.assert_frame_equal(qdf, df)
 
 
 if __name__ == "__main__":
