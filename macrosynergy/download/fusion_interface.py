@@ -849,7 +849,7 @@ def convert_ticker_based_parquet_file_to_qdf(
     if qdf and not as_csv:
         pq.write_table(scanner.to_table(), qdf_parquet_path, compression=compression)
     else:
-        schema = scanner.schema
+        schema = scanner.projected_schema
         with pa_csv.CSVWriter(qdf_csv_path, schema=schema) as writer:
             for batch in scanner.to_batches():
                 writer.write(batch)
@@ -1311,7 +1311,7 @@ class JPMaQSFusionClient:
             A DataFrame containing the metadata catalog.
         """
         if folder is None:
-            _date = pd.Timestamp.now().strftime("%Y-%m-%d")
+            _date = pd.Timestamp.now().strftime("%Y-%m-%d_%H-%M-%S")
             folder = "./jpmaqs-full-snapshot-" + _date
         os.makedirs(folder, exist_ok=True)
 
