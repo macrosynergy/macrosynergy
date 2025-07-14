@@ -1,11 +1,16 @@
 import unittest
 from unittest.mock import patch, MagicMock
 import json
-import requests
 import datetime
 import io
-import pandas as pd
+
+import tempfile
+import os
 import warnings
+
+import pandas as pd
+import requests
+
 from macrosynergy.download.fusion_interface import cache_decorator
 
 from macrosynergy.management.simulate import make_test_df
@@ -20,6 +25,7 @@ from macrosynergy.download.fusion_interface import (
     SimpleFusionAPIClient,
     JPMaQSFusionClient,
     read_parquet_from_bytes,
+    request_wrapper_stream_bytes_to_disk,
     NoContentError,
 )
 
@@ -693,17 +699,98 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
             with self.assertRaises(KeyError):
                 client.download_latest_distribution("ds")
 
-    def test_jpmaqsclient_download_latest_full_snapshot(self):
-        ...
-        # with patch(
-        #     "macrosynergy.download.fusion_interface.SimpleFusionAPIClient"
-        # ) as _, patch("os.makedirs"), patch("pandas.DataFrame.to_csv"), patch(
-        #     "macrosynergy.download.fusion_interface.JPMaQSFusionClient.get_metadata_catalog",
-        #     return_value=pd.DataFrame({"a": [1]}),
-        # ), patch(
-        #     "macrosynergy.download.fusion_interface.JPMaQSFusionClient.list_datasets",
-        #     return_value=pd.DataFrame({"identifier": ["ds1"]}),
-        # ), ...
+class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
+    @patch(
+        "macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True
+    )
+    @patch("requests.request")
+    def test_stream_bytes_to_disk_writes_file(self, mock_request, _):
+        # Prepare mock response with iter_content
+        mock_resp = MagicMock()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_resp.__exit__.return_value = False
+        mock_resp.raise_for_status.return_value = None
+        # Simulate two chunks
+        mock_resp.iter_content.return_value = [b"abc", b"def"]
+        mock_request.return_value = mock_resp
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file_path = os.path.join(tmpdir, "testfile.bin")
+            request_wrapper_stream_bytes_to_disk(
+                filename=file_path,
+                url="http://example.com/file",
+                method="GET",
+                headers={"Authorization": "Bearer test"},
+            )
+            # Check file exists and content is correct
+            self.assertTrue(os.path.exists(file_path))
+            with open(file_path, "rb") as f:
+                content = f.read()
+            self.assertEqual(content, b"abcdef")
+
+    @patch(
+        "macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True
+    )
+    def test_stream_bytes_to_disk_invalid_method(self, _):
+        with self.assertRaises(ValueError):
+            request_wrapper_stream_bytes_to_disk(
+                filename="dummy",
+                url="http://example.com/file",
+                method="POST",
+            )
+
+    @patch(
+        "macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True
+    )
+    @patch("requests.request")
+    def test_stream_bytes_to_disk_creates_directory(self, mock_request, _):
+        mock_resp = MagicMock()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_resp.__exit__.return_value = False
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.iter_content.return_value = [b"xyz"]
+        mock_request.return_value = mock_resp
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            subdir = os.path.join(tmpdir, "subdir")
+            file_path = os.path.join(subdir, "file.bin")
+            self.assertFalse(os.path.exists(subdir))
+            request_wrapper_stream_bytes_to_disk(
+                filename=file_path,
+                url="http://example.com/file",
+                method="GET",
+            )
+            self.assertTrue(os.path.exists(file_path))
+            with open(file_path, "rb") as f:
+                self.assertEqual(f.read(), b"xyz")
+
+    @patch(
+        "macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True
+    )
+    @patch("requests.request")
+    def test_stream_bytes_to_disk_writes_many_chunks(self, mock_request, _):
+        mock_resp = MagicMock()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_resp.__exit__.return_value = False
+        mock_resp.raise_for_status.return_value = None
+        # 10 bytes per chunk, values 1..20
+        chunks = [bytes([i]) * 10 for i in range(1, 21)]
+        mock_resp.iter_content.return_value = chunks
+        mock_request.return_value = mock_resp
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file_path = os.path.join(tmpdir, "testfile_many_chunks.bin")
+            request_wrapper_stream_bytes_to_disk(
+                filename=file_path,
+                url="http://example.com/file",
+                method="GET",
+                headers={"Authorization": "Bearer test"},
+            )
+            self.assertTrue(os.path.exists(file_path))
+            with open(file_path, "rb") as f:
+                content = f.read()
+            expected_content = b"".join(chunks)
+            self.assertEqual(content, expected_content)
 
 
 if __name__ == "__main__":
