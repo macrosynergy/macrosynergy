@@ -813,6 +813,27 @@ def convert_ticker_based_parquet_file_to_qdf(
     qdf: bool = False,
     keep_raw_data: bool = False,
 ) -> None:
+    """
+    Convert a Parquet file with ticker entries to a QDF or CSV format.
+    This function reads a Parquet file, extracts the 'ticker' column, splits it into
+    'cid' and 'xcat', and writes the result to a new Parquet file or CSV file.
+
+    Parameters
+    ----------
+    filename : str
+        The path to the Parquet file to convert. The file must exist.
+    compression : str
+        The compression algorithm to use for the output Parquet file. Default is 'zstd'.
+    as_csv : bool
+        If True, the output will be saved as a CSV file instead of a Parquet file.
+        Default is False.
+    qdf : bool
+        If True, the output will be saved as a Quantamental DataFrame, in parquet or
+        CSV format depending on the `as_csv` parameter. Default is False.
+    keep_raw_data : bool
+        If True, the original Parquet file will not be deleted after conversion.
+        If False, the original file will be removed after conversion. Default is False.
+    """
     src = Path(filename).expanduser().resolve()
     if not src.is_file():
         raise FileNotFoundError(src)
