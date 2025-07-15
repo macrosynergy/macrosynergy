@@ -423,10 +423,14 @@ class SimpleFusionAPIClient:
         as_json: Optional[bool] = None,
         as_bytes: Optional[bool] = None,
         as_text: Optional[bool] = None,
+        timestamp: Optional[Any] = None,
         **kwargs,
     ) -> Optional[Dict[str, Any]]:
         url: str = f"{self.base_url}/{endpoint.lstrip('/')}"
         headers: Dict[str, str] = self.oauth_handler.get_auth()
+        if timestamp:
+            # timestamp is solely for cache busting purposes
+            pass
         return request_wrapper(
             method=method,
             url=url,
