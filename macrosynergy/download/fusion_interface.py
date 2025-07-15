@@ -840,8 +840,8 @@ def convert_ticker_based_parquet_file_to_qdf(
 
     raw_csv_path = src.with_suffix(".csv")
     qdf_parquet_stem = src.stem + "_qdf"
-    qdf_parquet_path = src.with_stem(qdf_parquet_stem)
-    qdf_csv_path = src.with_stem(qdf_parquet_stem).with_suffix(".csv")
+    qdf_parquet_path = src.parent / (qdf_parquet_stem + ".parquet")
+    qdf_csv_path = src.parent / (qdf_parquet_stem + ".csv")
 
     if not qdf and not as_csv:
         return
