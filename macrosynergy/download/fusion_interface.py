@@ -1029,7 +1029,7 @@ class JPMaQSFusionClient:
         )
         return read_parquet_from_bytes(r_bytes)
 
-    def list_tickers(self, **kwargs) -> pd.DataFrame:
+    def list_tickers(self, **kwargs) -> List[str]:
         """
         List all tickers available in the JPMaQS product. This method retrieves the
         metadata catalog and extracts the tickers from it.
