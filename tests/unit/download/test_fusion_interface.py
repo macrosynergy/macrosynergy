@@ -282,6 +282,42 @@ class TestSimpleFusionAPIClient(unittest.TestCase):
                 self.assertEqual(result, {"resources": []})
                 mock_request.reset_mock()
 
+    def test_get_seriesmember_distribution_details_to_disk_calls_stream_bytes(self):
+        with patch(
+            "macrosynergy.download.fusion_interface.request_wrapper_stream_bytes_to_disk"
+        ) as mock_stream:
+            # Arrange
+            filename = "out.parquet"
+            catalog = "common"
+            dataset = "MY_DS"
+            seriesmember = "latest"
+            extra_kwargs = {"timeout": 30, "verify": False}
+
+            # Act
+            self.client.get_seriesmember_distribution_details_to_disk(
+                filename=filename,
+                catalog=catalog,
+                dataset=dataset,
+                seriesmember=seriesmember,
+                **extra_kwargs,
+            )
+
+            # Assert
+            expected_endpoint = (
+                f"catalogs/{catalog}"
+                f"/datasets/{dataset}"
+                f"/datasetseries/{seriesmember}"
+                f"/distributions/parquet"
+            )
+            expected_url = f"{self.client.base_url}/{expected_endpoint}"
+            mock_stream.assert_called_once_with(
+                filename=filename,
+                headers=self.oauth.get_auth.return_value,
+                url=expected_url,
+                method="GET",
+                **extra_kwargs,
+            )
+
 
 class TestJPMaQSFusionClient(unittest.TestCase):
     def setUp(self):
