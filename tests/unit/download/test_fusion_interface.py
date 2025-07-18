@@ -24,7 +24,7 @@ from macrosynergy.download.fusion_interface import (
     FusionOAuth,
     SimpleFusionAPIClient,
     JPMaQSFusionClient,
-    read_parquet_from_bytes,
+    read_parquet_from_bytes_to_pandas_dataframe,
     request_wrapper_stream_bytes_to_disk,
     NoContentError,
     convert_ticker_based_parquet_file_to_qdf,
@@ -524,7 +524,7 @@ class TestUtilityFunctions(unittest.TestCase):
         df.to_parquet(buf, index=False)
         buf.seek(0)
         bytes_data = buf.read()
-        result = read_parquet_from_bytes(bytes_data)
+        result = read_parquet_from_bytes_to_pandas_dataframe(bytes_data)
         pd.testing.assert_frame_equal(result, df)
 
 
@@ -686,12 +686,12 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
     def test_read_parquet_from_bytes_keyboardinterrupt(self):
         with patch("pandas.read_parquet", side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt):
-                read_parquet_from_bytes(b"bytes")
+                read_parquet_from_bytes_to_pandas_dataframe(b"bytes")
 
     def test_read_parquet_from_bytes_invalid(self):
         with patch("pandas.read_parquet", side_effect=Exception("fail")):
             with self.assertRaises(ValueError) as cm:
-                read_parquet_from_bytes(b"bytes")
+                read_parquet_from_bytes_to_pandas_dataframe(b"bytes")
             self.assertIn("Failed to read Parquet".lower(), str(cm.exception).lower())
 
     def test_jpmaqsclient_list_datasets_all_explorer(self):
