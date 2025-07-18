@@ -894,7 +894,7 @@ def convert_ticker_based_parquet_file_to_qdf(
         os.remove(filename)
 
 
-def read_parquet_from_bytes(response_bytes: bytes) -> pd.DataFrame:
+def read_parquet_from_bytes_to_pandas_dataframe(response_bytes: bytes) -> pd.DataFrame:
     """
     Read a Parquet file from bytes and return a DataFrame.
     This function is used to read Parquet files downloaded from the JPMaQS Fusion API.
@@ -1132,7 +1132,7 @@ class JPMaQSFusionClient:
             as_bytes=True,
             **kwargs,
         )
-        return read_parquet_from_bytes(r_bytes)
+        return read_parquet_from_bytes_to_pandas_dataframe(r_bytes)
 
     def list_tickers(self, **kwargs) -> List[str]:
         """
@@ -1270,7 +1270,7 @@ class JPMaQSFusionClient:
             **kwargs,
         )
 
-        result = read_parquet_from_bytes(result)
+        result = read_parquet_from_bytes_to_pandas_dataframe(result)
         return result
 
     def download_series_member_distribution_to_disk(
