@@ -917,6 +917,81 @@ def read_parquet_from_bytes(response_bytes: bytes) -> pd.DataFrame:
         raise ValueError(f"Failed to read Parquet from bytes: {e}") from e
 
 
+def read_parquet_from_bytes_to_pyarrow_table(
+    response_bytes: bytes, **kwargs
+) -> pa.Table:
+    """
+    Read a Parquet file from bytes and return a PyArrow Table.
+    This function is used to read Parquet files downloaded from the JPMaQS Fusion API.
+
+    Parameters
+    ----------
+    response_bytes : bytes
+        The bytes of the Parquet file to read.
+    **kwargs : dict
+        Additional keyword arguments to pass to `pyarrow.parquet.read_table`.
+
+    Returns
+    -------
+    pa.Table
+        A PyArrow Table containing the data from the Parquet file.
+    """
+    try:
+        return pa.parquet.read_table(io.BytesIO(response_bytes), **kwargs)
+    except KeyboardInterrupt:
+        raise
+    except Exception as e:
+        raise ValueError(f"Failed to read Parquet to PyArrow Table: {e}") from e
+
+
+def coerce_real_date(table: pa.Table) -> pa.Table:
+    ts = pc.strptime(table["real_date"], format="%Y-%m-%d", unit="s")
+    dates = pc.cast(ts, pa.date32())
+    idx = table.schema.get_field_index("real_date")
+    return table.set_column(idx, "real_date", dates)
+
+
+def filter_parquet_table(
+    table: pa.Table,
+    tickers: List[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> pa.Table:
+    if not isinstance(table, pa.Table):
+        raise TypeError("Input must be a PyArrow Table.")
+
+    table = coerce_real_date(table)
+    if not any([tickers, start_date, end_date]):
+        return table
+
+    if pd.Timestamp(start_date) > pd.Timestamp(end_date):
+        start_date, end_date = end_date, start_date
+    ticker_col = "ticker"
+    exprs = []
+    if tickers:
+        if ticker_col not in table.schema.names:
+            raise KeyError(f"No column named '{ticker_col}' in table")
+        table.column(ticker_col).type
+        tickers_array = pa.array(tickers, type=pa.string())
+        exprs.append(pc.is_in(pc.field("ticker"), value_set=tickers_array))
+
+    if start_date:
+        dt = datetime.date.fromisoformat(start_date)
+        scalar = pa.scalar(dt, type=pa.date32())
+        exprs.append(pc.greater_equal(pc.field("real_date"), scalar))
+
+    if end_date:
+        dt = datetime.date.fromisoformat(end_date)
+        scalar = pa.scalar(dt, type=pa.date32())
+        exprs.append(pc.less_equal(pc.field("real_date"), scalar))
+
+    if not exprs:
+        return table
+
+    expression = functools.reduce(operator.and_, exprs)
+    return table.filter(expression)
+
+
 class JPMaQSFusionClient:
     """
     A client for accessing the JPMaQS product on the JPMorgan Fusion API.
