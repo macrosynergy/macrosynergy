@@ -8,6 +8,7 @@ from pathlib import Path
 import io
 import warnings
 import functools
+import operator
 import concurrent.futures as cf
 from typing import Dict, Optional, TypeVar, Any, List, Union, Callable
 
