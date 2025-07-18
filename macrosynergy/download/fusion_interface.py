@@ -834,55 +834,63 @@ def convert_ticker_based_parquet_file_to_qdf(
         If True, the original Parquet file will not be deleted after conversion.
         If False, the original file will be removed after conversion. Default is False.
     """
-    src = Path(filename).expanduser().resolve()
-    if not src.is_file():
-        raise FileNotFoundError(src)
 
-    raw_csv_path = src.with_suffix(".csv")
-    qdf_parquet_stem = src.stem + "_qdf"
-    qdf_parquet_path = src.parent / (qdf_parquet_stem + ".parquet")
-    qdf_csv_path = src.parent / (qdf_parquet_stem + ".csv")
+    # Ensure source exists
+    if not os.path.isfile(filename):
+        raise FileNotFoundError(f"No such file: {filename}")
 
-    if not qdf and not as_csv:
-        return
+    base, ext = os.path.splitext(filename)
+    dirpath = os.path.dirname(filename)
 
-    dataset = pa_ds.dataset(src, format="parquet")
-
-    if not qdf and as_csv:
+    # quick dump of raw data to csv - if csv and not qdf
+    if as_csv and not qdf:
+        dataset = pa_ds.dataset(filename, format="parquet")
         scanner = dataset.scanner()
-        schema = scanner.dataset_schema
-        with pa_csv.CSVWriter(raw_csv_path, schema=schema) as writer:
+        out_csv = base + ".csv"
+        with pa_csv.CSVWriter(out_csv, schema=scanner.dataset_schema) as writer:
             for batch in scanner.to_batches():
                 writer.write(batch)
+        if not keep_raw_data:
+            os.remove(filename)
         return
 
-    split_expr = pc.split_pattern(pc.field("ticker"), "_", max_splits=1)
-    cid_expr = pc.list_element(split_expr, 0)
-    xcat_expr = pc.list_element(split_expr, 1)
+    # return - nothing todo
+    if not qdf:
+        return
 
-    scanner = dataset.scanner(
-        columns={
-            "real_date": pc.field("real_date"),
-            "value": pc.field("value"),
-            "grading": pc.field("grading"),
-            "eop_lag": pc.field("eop_lag"),
-            "mop_lag": pc.field("mop_lag"),
-            "last_updated": pc.field("last_updated"),
-            "cid": cid_expr,
-            "xcat": xcat_expr,
-        }
-    )
+    # setup pa scanner for lazy loading
+    dataset = pa_ds.dataset(filename, format="parquet")
+    split = pc.split_pattern(pc.field("ticker"), "_", max_splits=1)
+    cols = {
+        "real_date": pc.field("real_date"),
+        "value": pc.field("value"),
+        "grading": pc.field("grading"),
+        "eop_lag": pc.field("eop_lag"),
+        "mop_lag": pc.field("mop_lag"),
+        "last_updated": pc.field("last_updated"),
+        "cid": pc.list_element(split, 0),
+        "xcat": pc.list_element(split, 1),
+    }
+    scanner = dataset.scanner(columns=cols)
 
-    if qdf and not as_csv:
-        pq.write_table(scanner.to_table(), qdf_parquet_path, compression=compression)
+    # set output extension and path
+    out_ext = ".csv" if as_csv else ".parquet"
+    if keep_raw_data:
+        out_path = os.path.join(dirpath, os.path.basename(base) + "_qdf" + out_ext)
     else:
+        # overwrite for parquet, or replace for csv
+        out_path = filename if not as_csv else base + ".csv"
+
+    if as_csv:
         schema = scanner.projected_schema
-        with pa_csv.CSVWriter(qdf_csv_path, schema=schema) as writer:
+        with pa_csv.CSVWriter(out_path, schema=schema) as writer:
             for batch in scanner.to_batches():
                 writer.write(batch)
+    else:
+        pq.write_table(scanner.to_table(), out_path, compression=compression)
 
-    if (not keep_raw_data) and (qdf or as_csv):
-        os.remove(src)
+    if qdf and as_csv and not keep_raw_data:
+        os.remove(filename)
 
 
 def read_parquet_from_bytes(response_bytes: bytes) -> pd.DataFrame:
