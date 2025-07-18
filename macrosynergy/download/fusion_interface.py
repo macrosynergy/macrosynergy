@@ -1394,6 +1394,58 @@ class JPMaQSFusionClient:
 
         return dist_df
 
+    def download_and_filter_series_member_distribution(
+        self,
+        dataset: str,
+        seriesmember: str,
+        tickers: List[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        distribution: str = "parquet",
+        **kwargs,
+    ) -> pd.DataFrame:
+        """
+        Download and filter the distribution for a given series member in a dataset.
+
+        Parameters
+        ----------
+        dataset : str
+            The dataset identifier for which to download the series member distribution.
+        seriesmember : str
+            The series member identifier for which to download the distribution.
+        tickers : List[str]
+            A list of tickers to filter the distribution by. If None, no filtering is done.
+        start_date : Optional[str]
+            The start date to filter the distribution by (in ISO format). If None, no
+            filtering is done.
+        end_date : Optional[str]
+            The end date to filter the distribution by (in ISO format). If None, no
+            filtering is done.
+        distribution : str
+            The distribution format to download. Default is "parquet".
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the filtered distribution for the specified series member.
+        """
+        result = self.simple_fusion_client.get_seriesmember_distribution_details(
+            catalog=self._catalog,
+            dataset=dataset,
+            seriesmember=seriesmember,
+            distribution=distribution,
+            as_bytes=True,
+            **kwargs,
+        )
+
+        result = read_parquet_from_bytes_to_pyarrow_table(result)
+        result = filter_parquet_table(
+            table=result, tickers=tickers, start_date=start_date, end_date=end_date
+        )
+        return result.to_pandas()
+
     def download_latest_distribution_to_disk(
         self,
         save_directory: str,
