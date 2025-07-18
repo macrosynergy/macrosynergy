@@ -1788,6 +1788,18 @@ if __name__ == "__main__":
         "data/fusion_client_credentials.json"
     )
     jpmaqs_client = JPMaQSFusionClient(oauth_handler=oauth_handler)
+
+    st = time.time()
+
+    df = jpmaqs_client.download(
+        folder="./data",
+        tickers=["USD_EQXR_NSA", "GBP_EQXR_NSA"],
+        cids=["USD", "GBP", "EUR", "JPY", "CHF", "AUD", "CAD"],
+        xcats=["FXXR_NSA", "EQXR_NSA", "EQCRY_NSA"],
+        start_date="2025-07-17",
+    )
+    print(f"Time taken for download: {time.time() - st:.2f} seconds")
+    df = None
     ds = jpmaqs_client.list_datasets()
 
     st = time.time()
