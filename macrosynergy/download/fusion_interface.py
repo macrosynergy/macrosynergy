@@ -1624,6 +1624,163 @@ class JPMaQSFusionClient:
             keep_raw_data=keep_raw_data,
         )
 
+    def download(
+        self,
+        folder: str = None,
+        tickers: Optional[List[str]] = None,
+        cids: Optional[List[str]] = None,
+        xcats: Optional[List[str]] = None,
+        metrics: List[str] = ["all"],
+        start_date: str = "2000-01-01",
+        end_date: Optional[str] = None,
+        cache_folder: str = None,
+        **kwargs,
+    ) -> pd.DataFrame:
+        """
+        Download data for specified tickers, `cids`, or `xcats` from the JPMaQS product.
+        This method downloads the full snapshots of the requested tickers' respective
+        datasets and filters them based on the provided parameters.
+
+        Parameters
+        ----------
+        folder : str
+            The folder where the downloaded data will be saved. If None, a dataframe
+            will be returned without saving to disk.
+        tickers : Optional[List[str]]
+            A list of tickers to download data for. This list will be concatenated with
+            the tickers generated from the combination of `cids` and `xcats`.
+        cids : Optional[List[str]]
+            A list of `cids` to download data for. This will be used to generate tickers
+            in the format "cid_xcat".
+        xcats : Optional[List[str]]
+            A list of `xcats` to download data for. This will be used to generate tickers
+            in the format "cid_xcat".
+        metrics : List[str]
+            A list of metrics to include in the downloaded data. Default is ["all"], which
+            includes all available metrics.
+        start_date : str
+            The start date for the data to be downloaded, in "YYYY-MM-DD" format.
+            Default is "2000-01-01".
+        end_date : Optional[str]
+            The end date for the data to be downloaded, in "YYYY-MM-DD" format.
+            If None, defaults to the current date.
+        cache_folder : str
+            The folder where the downloaded data will be cached. If None, no caching is done.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the downloaded data for the specified tickers, `cids`,
+            or `xcats`. If `folder` is specified, the data will also be saved to disk.
+        """
+        if folder is None:
+            folder = Path.cwd()
+        folder: Path = Path(folder).expanduser()
+
+        def vartolist(x: Optional[List[str]]) -> List[str]:
+            return [x] if isinstance(x, str) else x
+
+        tickers = vartolist(tickers)
+        cids = vartolist(cids)
+        xcats = vartolist(xcats)
+        metrics = vartolist(metrics)
+
+        if tickers is None:
+            tickers = []
+        if bool(cids) ^ bool(xcats):
+            raise ValueError(
+                "Both `cids` and `xcats` must be provided together or neither."
+            )
+        if cids is not None and xcats is not None:
+            tickers += [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+
+        if not tickers:
+            raise ValueError(
+                "At least one of `tickers`, `cids`, or `xcats` must be provided."
+            )
+
+        catalog_df = self.get_metadata_catalog()
+
+        all_tickers_lower = catalog_df["Ticker"].str.lower().tolist()
+        non_existing = sorted(_ for _ in tickers if _.lower() not in all_tickers_lower)
+        tickers = sorted(_ for _ in tickers if _.lower() not in non_existing)
+        if non_existing:
+            wstr = f"There are {len(non_existing)} tickers that do not exist in the metadata catalog. "
+            wstr += "Please check the input tickers against the metadata catalog."
+            warnings.warn(wstr)
+
+        tickers_info = catalog_df[
+            catalog_df["Ticker"].str.lower().isin([_.lower() for _ in tickers])
+        ]
+        datasets = tickers_info.drop_duplicates(subset=["Theme"], keep="first")
+        if datasets.empty:
+            raise ValueError(
+                "No datasets found for the specified tickers. Please check the tickers "
+                "against the metadata catalog."
+            )
+        datasets = sorted(
+            set(
+                "JPMAQS_"
+                + datasets["Theme"]
+                .str.replace(" ", "_")
+                .str.upper()
+                .reset_index(drop=True)
+            )
+        )
+        if not datasets:
+            raise ValueError(
+                "No datasets found for the specified tickers, cids, or xcats."
+            )
+
+        if end_date is None:
+            end_date = pd.Timestamp.utcnow().strftime("%Y-%m-%d")
+        if pd.Timestamp(start_date) > pd.Timestamp(end_date):
+            start_date, end_date = end_date, start_date
+
+        def _download_df(
+            dataset: str,
+            tickers: List[str],
+            start_date: str,
+            end_date: str,
+            **kwargs,
+        ) -> pd.DataFrame:
+            series_member = self.get_latest_seriesmember_identifier(
+                dataset=dataset, **kwargs
+            )
+            df = self.download_and_filter_series_member_distribution(
+                dataset=dataset,
+                seriesmember=series_member,
+                tickers=tickers,
+                start_date=start_date,
+                end_date=end_date,
+                **kwargs,
+            )
+            df["dataset"] = dataset
+            return df
+
+        _commonargs = dict(tickers=tickers, start_date=start_date, end_date=end_date)
+
+        print(f"downloading {len(datasets)} datasets: {', '.join(datasets)}")
+        results = []
+        with cf.ThreadPoolExecutor() as executor:
+            futures: Dict[str, cf.Future] = {}
+            for dataset in datasets:
+                futures[dataset] = executor.submit(
+                    _download_df, dataset=dataset, **_commonargs, **kwargs
+                )
+                time.sleep(FUSION_API_DELAY)
+
+            for dataset, future in futures.items():
+                try:
+                    results.append(future.result())
+                except Exception as e:
+                    print(f"Failed to download data for dataset {dataset}: {e}")
+        if not results:
+            raise ValueError(
+                "No data found for the specified tickers, cids, or xcats within the date range."
+            )
+        return pd.concat(results, ignore_index=True)
+
 
 if __name__ == "__main__":
     st = time.time()
