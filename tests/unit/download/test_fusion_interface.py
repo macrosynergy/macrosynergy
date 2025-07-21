@@ -7,6 +7,7 @@ import io
 import tempfile
 import os
 import warnings
+import time
 
 import pandas as pd
 import requests
@@ -16,6 +17,7 @@ from macrosynergy.download.fusion_interface import cache_decorator
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils.df_utils import is_categorical_qdf
 from macrosynergy.management.types import QuantamentalDataFrame
+import pyarrow as pa
 
 from macrosynergy.download.fusion_interface import (
     request_wrapper as fusion_request_wrapper,
@@ -28,6 +30,10 @@ from macrosynergy.download.fusion_interface import (
     request_wrapper_stream_bytes_to_disk,
     NoContentError,
     convert_ticker_based_parquet_file_to_qdf,
+    read_parquet_from_bytes_to_pyarrow_table,
+    coerce_real_date,
+    filter_parquet_table_as_qdf,
+    convert_ticker_based_pyarrow_table_to_qdf,
 )
 
 
@@ -409,7 +415,7 @@ class TestJPMaQSFusionClient(unittest.TestCase):
             return_value=pd.DataFrame({"ticker": ["A_B"]})
         )
         with patch(
-            "macrosynergy.download.fusion_interface.convert_ticker_based_parquet_to_qdf",
+            "macrosynergy.download.fusion_interface.convert_ticker_based_pandas_df_to_qdf",
             return_value="QDF",
         ) as mock_convert:
             result = self.client.download_latest_distribution("ds")
@@ -507,12 +513,12 @@ class TestUtilityFunctions(unittest.TestCase):
         qdf = qdf.drop(columns=["cid", "xcat"])
         self.qdf = qdf
 
-    def test_convert_ticker_based_parquet_to_qdf_empty(self):
+    def test_convert_ticker_based_pandas_df_to_qdf_empty(self):
         result = convert_ticker_based_pandas_df_to_qdf(self.qdf, categorical=False)
         pd.testing.assert_frame_equal(result, self.expected_qdf)
         self.assertFalse(is_categorical_qdf(result))
 
-    def test_convert_ticker_based_parquet_to_qdf_categorical(self):
+    def test_convert_ticker_based_pandas_df_to_qdf_categorical(self):
         result = convert_ticker_based_pandas_df_to_qdf(self.qdf, categorical=True)
         self.expected_qdf = QuantamentalDataFrame(self.expected_qdf, categorical=True)
         pd.testing.assert_frame_equal(result, self.expected_qdf)
@@ -528,6 +534,77 @@ class TestUtilityFunctions(unittest.TestCase):
         pd.testing.assert_frame_equal(result, df)
 
 
+class TestParquetArrowFunctions(unittest.TestCase):
+    def setUp(self):
+        self.df = pd.DataFrame(
+            {
+                "ticker": ["AAA_BBB", "CCC_DDD"],
+                "real_date": ["2023-02-01", "2023-02-02"],
+                "value": [1.0, 2.0],
+                "grading": [0, 1],
+                "eop_lag": [0, 0],
+                "mop_lag": [0, 0],
+                "last_updated": ["2023-02-01", "2023-02-02"],
+            }
+        )
+        self.table = pa.Table.from_pandas(self.df)
+
+    def test_convert_ticker_based_pyarrow_table_to_qdf(self):
+        with patch(
+            "macrosynergy.download.fusion_interface.convert_ticker_based_pyarrow_table_to_qdf",
+            return_value=self.table,
+        ):
+            qdf_table = convert_ticker_based_pyarrow_table_to_qdf(self.table)
+            qdf_table = QuantamentalDataFrame(qdf_table.to_pandas())
+            expected = self.table.to_pandas()
+            expected["cid"] = expected["ticker"].str.split("_").str[0]
+            expected["xcat"] = expected["ticker"].str.split("_").str[1]
+            expected = expected.drop(columns=["ticker"])
+            self.assertTrue(
+                bool(
+                    (
+                        QuantamentalDataFrame(qdf_table)
+                        == QuantamentalDataFrame(expected)
+                    )
+                    .all()
+                    .all()
+                )
+            )
+
+    def test_read_parquet_from_bytes_to_pyarrow_table(self):
+        buf = io.BytesIO()
+        self.df.to_parquet(buf, index=False)
+        buf.seek(0)
+        bytes_data = buf.read()
+        table = read_parquet_from_bytes_to_pyarrow_table(bytes_data)
+        pd.testing.assert_frame_equal(table.to_pandas(), self.df)
+
+    def test_coerce_real_date(self):
+        table = self.table
+        coerced = coerce_real_date(table)
+        # Should be date32 type
+        self.assertEqual(coerced.column("real_date").type, pa.date32())
+        # Should match the original dates
+        dates = pd.to_datetime(self.df["real_date"]).values
+        coerced_dates = pd.to_datetime(coerced.to_pandas()["real_date"]).values
+        self.assertTrue((dates == coerced_dates).all())
+
+    def test_filter_parquet_table_as_qdf(self):
+        with patch(
+            "macrosynergy.download.fusion_interface.convert_ticker_based_parquet_file_to_qdf"
+        ):
+            tickers = ["AAA_BBB"]
+            filtered = filter_parquet_table_as_qdf(
+                self.table,
+                tickers=tickers,
+                start_date="2023-02-01",
+                end_date="2023-02-03",
+                qdf=True,
+            )
+            df_filtered = filtered.to_pandas()
+            self.assertEqual(len(df_filtered), 1)  # Since patch returns original table
+
+
 class TestFusionInterfaceEdgeCases(unittest.TestCase):
     def setUp(self):
         self.creds = {
@@ -541,13 +618,9 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
         }
 
     def test_fusionoauth_from_credentials_json_missing_keys(self):
-        import tempfile
-        import os
-        import json as js
-
         creds = {"client_id": "a"}  # missing client_secret
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
-            js.dump(creds, f)
+            json.dump(creds, f)
             fname = f.name
         try:
             with self.assertRaises(TypeError):
@@ -577,7 +650,6 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
         f.cache_clear()
         f(1)
         self.assertEqual(len(calls), 2)
-        import time
 
         time.sleep(1.1)
         f(1)
@@ -673,12 +745,12 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
         self.assertIn("identifier", df.columns)
         self.assertNotIn("title", df.columns)
 
-    def test_convert_ticker_based_parquet_to_qdf_missing_ticker(self):
+    def test_convert_ticker_based_pandas_df_to_qdf_missing_ticker(self):
         df = pd.DataFrame({"foo": [1, 2]})
         with self.assertRaises(KeyError):
             convert_ticker_based_pandas_df_to_qdf(df)
 
-    def test_convert_ticker_based_parquet_to_qdf_malformed_ticker(self):
+    def test_convert_ticker_based_pandas_df_to_qdf_malformed_ticker(self):
         df = pd.DataFrame({"ticker": ["A"]})
         with self.assertRaises(ValueError):
             convert_ticker_based_pandas_df_to_qdf(df)
