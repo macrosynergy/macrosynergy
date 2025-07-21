@@ -1698,6 +1698,7 @@ class JPMaQSFusionClient:
             raise ValueError(
                 "At least one of `tickers`, `cids`, or `xcats` must be provided."
             )
+        tickers = sorted(set(tickers))
 
         catalog_df = self.get_metadata_catalog()
 
