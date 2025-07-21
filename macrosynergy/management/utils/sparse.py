@@ -305,7 +305,11 @@ class InformationStateChanges(object):
         pd.DataFrame
             A DataFrame with the information state changes.
         """
-
+        if not self.isc_dict:
+            raise ValueError(
+                "InformationStateChanges object is empty. "
+                "Please create it using `from_qdf` or `from_isc_df`."
+            )
         result = sparse_to_dense(
             isc=self.isc_dict,
             value_column=value_column,
