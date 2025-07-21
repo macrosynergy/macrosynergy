@@ -69,7 +69,10 @@ def check_availability(
     df = QuantamentalDataFrame(df)
 
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
-    
+
+    if xcats is None:
+        xcats = sorted(dfx["xcat"].unique())
+
     if xcat_labels is not None:
         dfx = dfx.rename_xcats(xcat_labels)
 
@@ -79,12 +82,24 @@ def check_availability(
         )
     if start_years:
         dfs = check_startyears(dfx)
+        row_order = get_heatmap_row_order(df=dfs, xcats=xcats, xcat_labels=xcat_labels)
         visual_paneldates(
-            dfs, size=start_size, use_last_businessday=use_last_businessday, title=title
+            dfs,
+            size=start_size,
+            use_last_businessday=use_last_businessday,
+            title=title,
+            row_order=row_order,
         )
     if missing_recent:
         dfe = check_enddates(dfx)
-        visual_paneldates(dfe, size=end_size, use_last_businessday=use_last_businessday, title=title)
+        row_order = get_heatmap_row_order(df=dfe, xcats=xcats, xcat_labels=xcat_labels)
+        visual_paneldates(
+            dfe,
+            size=end_size,
+            use_last_businessday=use_last_businessday,
+            title=title,
+            row_order=row_order,
+        )
 
 
 def missing_in_df(
@@ -233,6 +248,7 @@ def visual_paneldates(
     size: Tuple[float] = None,
     use_last_businessday: bool = True,
     title: str = None,
+    row_order: List[str] = None,
 ):
     """
     Visualize panel dates with color codes.
@@ -246,10 +262,21 @@ def visual_paneldates(
     use_last_businessday : bool
         boolean indicating whether or not to use the last business day before today as
         the end date. Default is True.
+    title : str
+        A string to be used as the title of the heatmap. If None, a default header will be
+        used.
+    row_order : List[str]
+        A list of strings specifying the order of rows in the heatmap. These rows
+        correspond to the columns of the input DataFrame. If None, the default order
+        used by Seaborn will be applied.
     """
 
     msv.view_panel_dates(
-        df=df, size=size, use_last_businessday=use_last_businessday, header=title
+        df=df,
+        size=size,
+        use_last_businessday=use_last_businessday,
+        header=title,
+        row_order=row_order,
     )
 
 
@@ -277,5 +304,10 @@ if __name__ == "__main__":
     xxcids = cids + ["USD"]
 
     check_availability(
-        df=dfd, xcats=xcats, cids=cids, start_size=(10, 5), end_size=(10, 8), xcat_labels={"XR": "Exchange Rate", "CRY": "Commodity"}
+        df=dfd,
+        xcats=xcats,
+        cids=cids,
+        start_size=(10, 5),
+        end_size=(10, 8),
+        xcat_labels={"XR": "Exchange Rate", "CRY": "Commodity"},
     )
