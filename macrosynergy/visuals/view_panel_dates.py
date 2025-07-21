@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Tuple, List
 from macrosynergy.management import business_day_dif
-from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def view_panel_dates(
