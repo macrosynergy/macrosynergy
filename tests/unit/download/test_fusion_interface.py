@@ -19,7 +19,7 @@ from macrosynergy.management.types import QuantamentalDataFrame
 
 from macrosynergy.download.fusion_interface import (
     request_wrapper as fusion_request_wrapper,
-    convert_ticker_based_parquet_to_qdf,
+    convert_ticker_based_pandas_df_to_qdf,
     get_resources_df,
     FusionOAuth,
     SimpleFusionAPIClient,
@@ -508,12 +508,12 @@ class TestUtilityFunctions(unittest.TestCase):
         self.qdf = qdf
 
     def test_convert_ticker_based_parquet_to_qdf_empty(self):
-        result = convert_ticker_based_parquet_to_qdf(self.qdf, categorical=False)
+        result = convert_ticker_based_pandas_df_to_qdf(self.qdf, categorical=False)
         pd.testing.assert_frame_equal(result, self.expected_qdf)
         self.assertFalse(is_categorical_qdf(result))
 
     def test_convert_ticker_based_parquet_to_qdf_categorical(self):
-        result = convert_ticker_based_parquet_to_qdf(self.qdf, categorical=True)
+        result = convert_ticker_based_pandas_df_to_qdf(self.qdf, categorical=True)
         self.expected_qdf = QuantamentalDataFrame(self.expected_qdf, categorical=True)
         pd.testing.assert_frame_equal(result, self.expected_qdf)
         self.assertTrue(is_categorical_qdf(result))
@@ -676,12 +676,12 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
     def test_convert_ticker_based_parquet_to_qdf_missing_ticker(self):
         df = pd.DataFrame({"foo": [1, 2]})
         with self.assertRaises(KeyError):
-            convert_ticker_based_parquet_to_qdf(df)
+            convert_ticker_based_pandas_df_to_qdf(df)
 
     def test_convert_ticker_based_parquet_to_qdf_malformed_ticker(self):
         df = pd.DataFrame({"ticker": ["A"]})
         with self.assertRaises(ValueError):
-            convert_ticker_based_parquet_to_qdf(df)
+            convert_ticker_based_pandas_df_to_qdf(df)
 
     def test_read_parquet_from_bytes_keyboardinterrupt(self):
         with patch("pandas.read_parquet", side_effect=KeyboardInterrupt):

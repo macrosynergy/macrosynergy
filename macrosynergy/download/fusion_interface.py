@@ -788,7 +788,7 @@ def get_resources_df(
     return resources_df
 
 
-def convert_ticker_based_parquet_to_qdf(
+def convert_ticker_based_pandas_df_to_qdf(
     df: pd.DataFrame, categorical: bool = True
 ) -> pd.DataFrame:
     """
@@ -1387,7 +1387,7 @@ class JPMaQSFusionClient:
         )
 
         if qdf:
-            dist_df = convert_ticker_based_parquet_to_qdf(
+            dist_df = convert_ticker_based_pandas_df_to_qdf(
                 df=dist_df,
                 categorical=categorical,
             )
