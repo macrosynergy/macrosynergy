@@ -916,16 +916,18 @@ def convert_ticker_based_pyarrow_table_to_qdf(table: pa.Table) -> pa.Table:
 
     dataset = pa_ds.dataset(table)
 
-    ticker = pa_ds.field("ticker")
-    split = ticker.split_pattern("_", max_splits=1)
-    cid_expr = split.list_element(0).alias("cid")
-    xcat_expr = split.list_element(1).alias("xcat")
-
-    other_fields = [
-        pa_ds.field(name) for name in table.schema.names if name != "ticker"
-    ]
-
-    scanner = dataset.scanner(fields=[*other_fields, cid_expr, xcat_expr])
+    split = pc.split_pattern(pc.field("ticker"), "_", max_splits=1)
+    cols = {
+        "real_date": pc.field("real_date"),
+        "value": pc.field("value"),
+        "grading": pc.field("grading"),
+        "eop_lag": pc.field("eop_lag"),
+        "mop_lag": pc.field("mop_lag"),
+        "last_updated": pc.field("last_updated"),
+        "cid": pc.list_element(split, 0),
+        "xcat": pc.list_element(split, 1),
+    }
+    scanner = dataset.scanner(columns=cols)
 
     return scanner.to_table()
 
@@ -1085,6 +1087,7 @@ class JPMaQSFusionClient:
         self._catalog = "common"
         self._product_id = "JPMAQS"
         self._catalog_dataset = "JPMAQS_METADATA_CATALOG"
+        self._notifications_dataset = "JPMAQS_METADATA_NOTIFICATIONS"
         self.simple_fusion_client = SimpleFusionAPIClient(
             oauth_handler=oauth_handler, base_url=base_url, proxies=proxies
         )
@@ -1094,6 +1097,7 @@ class JPMaQSFusionClient:
         product_id: str = "JPMAQS",
         fields: List[str] = ["@id", "identifier", "title", "description"],
         include_catalog: bool = False,
+        include_notifications: bool = False,
         include_full_datasets: bool = True,
         include_explorer_datasets: bool = False,
         include_delta_datasets: bool = False,
@@ -1112,6 +1116,8 @@ class JPMaQSFusionClient:
             List of fields to include in the returned DataFrame.
         include_catalog : bool
             If True, includes the metadata catalog dataset in the results.
+        include_notifications : bool
+            If True, includes the notifications dataset in the results.
         include_explorer_datasets : bool
             If True, includes the Explorer datasets in the results.
         include_delta_datasets : bool
@@ -1142,6 +1148,11 @@ class JPMaQSFusionClient:
         if not include_catalog:
             resources_df = resources_df[
                 resources_df["identifier"] != self._catalog_dataset
+            ]
+
+        if not include_notifications:
+            resources_df = resources_df[
+                resources_df["identifier"] != self._notifications_dataset
             ]
 
         if not include_explorer_datasets:
@@ -1820,6 +1831,16 @@ class JPMaQSFusionClient:
         if not datasets:
             raise ValueError(
                 "No datasets found for the specified tickers, cids, or xcats."
+            )
+
+        if save_to_folder:
+            return self.download_latest_full_snapshot(
+                folder=folder,
+                qdf=qdf,
+                include_catalog=True,
+                include_full_datasets=True,
+                as_csv=as_csv,
+                keep_raw_data=False,
             )
 
         if end_date is None:
