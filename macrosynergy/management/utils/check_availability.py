@@ -57,6 +57,9 @@ def check_availability(
     use_last_businessday : bool
         boolean indicating whether or not to use the last business day before today as
         the end date. Default is True.
+    title : str
+        A string to be used as the title of the heatmap. If None, a default header will be
+        used.
     xcat_labels : dict
         dictionary with xcat labels. Default is None (no labels).
     """
