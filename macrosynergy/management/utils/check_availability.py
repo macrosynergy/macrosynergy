@@ -222,6 +222,12 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp) -> pd.DataFrame:
     return df.where(df >= 0, 0)
 
 
+def get_heatmap_row_order(
+    df: pd.DataFrame, xcats: List[str], xcat_labels: dict = None
+) -> List[str]:
+    return [xcat_labels[xcat] for xcat in xcats] if xcat_labels else xcats
+
+
 def visual_paneldates(
     df: pd.DataFrame,
     size: Tuple[float] = None,
