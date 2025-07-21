@@ -1467,6 +1467,7 @@ class JPMaQSFusionClient:
         tickers: List[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        qdf: bool = False,
         distribution: str = "parquet",
         **kwargs,
     ) -> pd.DataFrame:
@@ -1487,6 +1488,8 @@ class JPMaQSFusionClient:
         end_date : Optional[str]
             The end date to filter the distribution by (in ISO format). If None, no
             filtering is done.
+        qdf : bool
+            If True, converts the DataFrame to a QuantamentalDataFrame. Default is False.
         distribution : str
             The distribution format to download. Default is "parquet".
         **kwargs : dict
@@ -1508,7 +1511,11 @@ class JPMaQSFusionClient:
 
         result = read_parquet_from_bytes_to_pyarrow_table(result)
         result = filter_parquet_table_as_qdf(
-            table=result, tickers=tickers, start_date=start_date, end_date=end_date
+            table=result,
+            tickers=tickers,
+            start_date=start_date,
+            end_date=end_date,
+            qdf=qdf,
         )
         return result.to_pandas()
 
@@ -1546,6 +1553,7 @@ class JPMaQSFusionClient:
         include_delta_datasets: bool = False,
         as_csv: bool = False,
         keep_raw_data: bool = False,
+        datasets_list: Optional[List[str]] = None,
     ) -> pd.DataFrame:
         if folder is None:
             folder = Path.cwd()
@@ -1560,12 +1568,19 @@ class JPMaQSFusionClient:
         else:
             catalog_df.to_parquet(f"{metadata_catalog_path}.parquet", index=False)
 
-        datasets = self.list_datasets(
+        datasets: List[str] = self.list_datasets(
             include_catalog=include_catalog,
             include_full_datasets=include_full_datasets,
             include_explorer_datasets=include_explorer_datasets,
             include_delta_datasets=include_delta_datasets,
         )["identifier"].tolist()
+        if datasets_list is not None:
+            ds_lower = [ds.lower() for ds in datasets]
+            datasets = [ds for ds in datasets_list if ds.lower() in ds_lower]
+            if not datasets:
+                raise ValueError(
+                    f"No datasets found in the provided `datasets_list`. Available datasets: {', '.join(datasets)}"
+                )
 
         failures = []
         with cf.ThreadPoolExecutor() as executor:
@@ -1699,12 +1714,14 @@ class JPMaQSFusionClient:
         metrics: List[str] = ["all"],
         start_date: str = "2000-01-01",
         end_date: Optional[str] = None,
+        qdf: bool = True,
+        as_csv: bool = False,
         cache_folder: str = None,
         **kwargs,
-    ) -> pd.DataFrame:
+    ) -> Optional[pd.DataFrame]:
         """
         Download data for specified tickers, `cids`, or `xcats` from the JPMaQS product.
-        This method downloads the full snapshots of the requested tickers' respective
+        This method downloads the latest full snapshots of the requested tickers' respective
         datasets and filters them based on the provided parameters.
 
         Parameters
@@ -1730,6 +1747,11 @@ class JPMaQSFusionClient:
         end_date : Optional[str]
             The end date for the data to be downloaded, in "YYYY-MM-DD" format.
             If None, defaults to the current date.
+        qdf : bool
+            If True, converts the DataFrame to a QuantamentalDataFrame. Default is True.
+        as_csv : bool
+            If True, saves the downloaded datasets as CSV files. Default is False, with
+            Parquet as the default format.
         cache_folder : str
             The folder where the downloaded data will be cached. If None, no caching is done.
 
@@ -1739,6 +1761,7 @@ class JPMaQSFusionClient:
             A DataFrame containing the downloaded data for the specified tickers, `cids`,
             or `xcats`. If `folder` is specified, the data will also be saved to disk.
         """
+        save_to_folder = folder is not None
         if folder is None:
             folder = Path.cwd()
         folder: Path = Path(folder).expanduser()
@@ -1820,6 +1843,7 @@ class JPMaQSFusionClient:
                 tickers=tickers,
                 start_date=start_date,
                 end_date=end_date,
+                qdf=qdf,
                 **kwargs,
             )
             df["dataset"] = dataset
