@@ -894,6 +894,42 @@ def convert_ticker_based_parquet_file_to_qdf(
         os.remove(filename)
 
 
+def convert_ticker_based_pyarrow_table_to_qdf(table: pa.Table) -> pa.Table:
+    """
+    Convert a PyArrow Table with ticker entries to a Quantamental DataFrame (QDF)
+    with 'cid' and 'xcat' columns, splitting on '_' lazily via a Scanner.
+
+    Parameters
+    ----------
+    table : pa.Table
+        The PyArrow Table to convert, which should contain a 'ticker' column.
+
+    Returns
+    -------
+    pa.Table
+        A PyArrow Table with all original columns except 'ticker',
+        plus new 'cid' and 'xcat' (string) columns.
+        The split only happens when you call to_table().
+    """
+    if "ticker" not in table.schema.names:
+        raise KeyError("Column 'ticker' not found in the table.")
+
+    dataset = pa_ds.dataset(table)
+
+    ticker = pa_ds.field("ticker")
+    split = ticker.split_pattern("_", max_splits=1)
+    cid_expr = split.list_element(0).alias("cid")
+    xcat_expr = split.list_element(1).alias("xcat")
+
+    other_fields = [
+        pa_ds.field(name) for name in table.schema.names if name != "ticker"
+    ]
+
+    scanner = dataset.scanner(fields=[*other_fields, cid_expr, xcat_expr])
+
+    return scanner.to_table()
+
+
 def read_parquet_from_bytes_to_pandas_dataframe(response_bytes: bytes) -> pd.DataFrame:
     """
     Read a Parquet file from bytes and return a DataFrame.
@@ -952,12 +988,39 @@ def coerce_real_date(table: pa.Table) -> pa.Table:
     return table.set_column(idx, "real_date", dates)
 
 
-def filter_parquet_table(
+def filter_parquet_table_as_qdf(
     table: pa.Table,
     tickers: List[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    qdf: bool = False,
 ) -> pa.Table:
+    """
+    Filter a PyArrow Table based on tickers and date range. Optionally converts the
+    table from a ticker-based format to a Quantamental DataFrame (QDF).
+
+    Parameters
+    ----------
+    table : pa.Table
+        The PyArrow Table to filter.
+    tickers : List[str], optional
+        A list of tickers to filter by. If None, no ticker filtering is applied.
+    start_date : Optional[str], optional
+        The start date for filtering in ISO format (YYYY-MM-DD). If None, no start date
+        filtering is applied.
+    end_date : Optional[str], optional
+        The end date for filtering in ISO format (YYYY-MM-DD). If None, no end date
+        filtering is applied.
+    qdf : bool, optional
+        If True, converts the filtered table to a Quantamental DataFrame (QDF) format.
+        Default is False.
+
+    Returns
+    -------
+    pa.Table
+        A filtered PyArrow Table. If `qdf` is True, the table is converted to a QDF.
+    """
+
     if not isinstance(table, pa.Table):
         raise TypeError("Input must be a PyArrow Table.")
 
@@ -986,11 +1049,14 @@ def filter_parquet_table(
         scalar = pa.scalar(dt, type=pa.date32())
         exprs.append(pc.less_equal(pc.field("real_date"), scalar))
 
-    if not exprs:
+    if not exprs and not qdf:
         return table
 
     expression = functools.reduce(operator.and_, exprs)
-    return table.filter(expression)
+    table = table.filter(expression)
+    if qdf:
+        table = convert_ticker_based_pyarrow_table_to_qdf(table)
+    return table
 
 
 class JPMaQSFusionClient:
@@ -1441,7 +1507,7 @@ class JPMaQSFusionClient:
         )
 
         result = read_parquet_from_bytes_to_pyarrow_table(result)
-        result = filter_parquet_table(
+        result = filter_parquet_table_as_qdf(
             table=result, tickers=tickers, start_date=start_date, end_date=end_date
         )
         return result.to_pandas()
