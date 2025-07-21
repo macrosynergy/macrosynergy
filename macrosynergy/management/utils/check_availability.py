@@ -70,12 +70,12 @@ def check_availability(
         sorting, ordered as provided in `xcats`).
     """
 
-    if not isinstance(start_years, bool):
-        raise TypeError(f"<bool> object expected and not {type(start_years)}.")
-    if not isinstance(missing_recent, bool):
-        raise TypeError(f"<bool> object expected and not {type(missing_recent)}.")
-    if not isinstance(sort_labels, bool):
-        raise TypeError(f"<bool> object expected and not {type(sort_labels)}.")
+    for bvar, varname in zip(
+        [start_years, missing_recent, sort_labels],
+        ["start_years", "missing_recent", "sort_labels"],
+    ):
+        if not isinstance(bvar, bool):
+            raise TypeError(f"`{varname}` must be a `bool` and not {type(bvar)}.")
 
     df = QuantamentalDataFrame(df)
 
