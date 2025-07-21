@@ -64,8 +64,10 @@ def check_availability(
     xcat_labels : dict
         dictionary with xcat labels. Default is None (no labels).
     sort_labels : bool
-        boolean indicating whether to sort the `xcats` (or their labels) in the heatmap
-        alphabetically. Default is False (no sorting, ordered as provided in `xcats`).
+        boolean indicating whether to sort the `xcats` in the heatmap alphabetically.
+        The sorting is done based on the `xcats` list, with the labels from `xcat_labels`
+        simply used for display (not regarded for sorting at all). Default is False (no
+        sorting, ordered as provided in `xcats`).
     """
 
     if not isinstance(start_years, bool):
