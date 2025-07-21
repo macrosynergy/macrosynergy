@@ -1300,6 +1300,12 @@ def sparse_to_dense(
 
         tdf = tdf.clip(lower=wins_lower, upper=wins_upper)
 
+    if tdf.empty or tdf.isna().all().all():
+        raise ValueError(
+            "Could not calculate dense DataFrame from the information state changes for "
+            f"metric '{value_column}'. Please verify that the input data has the required "
+            "columns, or has the relevant metrics (such as `eop_lag`) for any score calculations."
+        )
     sm_qdfs: List[QuantamentalDataFrame] = [ticker_df_to_qdf(tdf)]
     if metrics is None:
         metrics = []
