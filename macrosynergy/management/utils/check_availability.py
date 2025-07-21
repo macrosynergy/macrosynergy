@@ -26,6 +26,7 @@ def check_availability(
     use_last_businessday: bool = True,
     title: str = None,
     xcat_labels: dict = None,
+    sort_labels: bool = False,
 ):
     """
     Wrapper for visualizing start and end dates of a filtered DataFrame.
@@ -62,12 +63,17 @@ def check_availability(
         used.
     xcat_labels : dict
         dictionary with xcat labels. Default is None (no labels).
+    sort_labels : bool
+        boolean indicating whether to sort the `xcats` (or their labels) in the heatmap
+        alphabetically. Default is False (no sorting, ordered as provided in `xcats`).
     """
 
     if not isinstance(start_years, bool):
         raise TypeError(f"<bool> object expected and not {type(start_years)}.")
     if not isinstance(missing_recent, bool):
         raise TypeError(f"<bool> object expected and not {type(missing_recent)}.")
+    if not isinstance(sort_labels, bool):
+        raise TypeError(f"<bool> object expected and not {type(sort_labels)}.")
 
     df = QuantamentalDataFrame(df)
 
@@ -75,6 +81,9 @@ def check_availability(
 
     if xcats is None:
         xcats = sorted(dfx["xcat"].unique())
+
+    if sort_labels:
+        xcats = sorted(xcats)
 
     if xcat_labels is not None:
         dfx = dfx.rename_xcats(xcat_labels)
@@ -85,7 +94,7 @@ def check_availability(
         )
     if start_years:
         dfs = check_startyears(dfx)
-        row_order = get_heatmap_row_order(df=dfs, xcats=xcats, xcat_labels=xcat_labels)
+        row_order = get_heatmap_row_order(xcats=xcats, xcat_labels=xcat_labels)
         visual_paneldates(
             dfs,
             size=start_size,
@@ -95,7 +104,7 @@ def check_availability(
         )
     if missing_recent:
         dfe = check_enddates(dfx)
-        row_order = get_heatmap_row_order(df=dfe, xcats=xcats, xcat_labels=xcat_labels)
+        row_order = get_heatmap_row_order(xcats=xcats, xcat_labels=xcat_labels)
         visual_paneldates(
             dfe,
             size=end_size,
@@ -240,9 +249,7 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp) -> pd.DataFrame:
     return df.where(df >= 0, 0)
 
 
-def get_heatmap_row_order(
-    df: pd.DataFrame, xcats: List[str], xcat_labels: dict = None
-) -> List[str]:
+def get_heatmap_row_order(xcats: List[str], xcat_labels: dict = None) -> List[str]:
     return [xcat_labels[xcat] for xcat in xcats] if xcat_labels else xcats
 
 
