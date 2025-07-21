@@ -844,32 +844,54 @@ class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
         )
 
         for as_csv in [False, True]:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                parquet_path = os.path.join(tmpdir, "test.parquet")
-                df.to_parquet(parquet_path, index=False)
-                convert_ticker_based_parquet_file_to_qdf(
-                    parquet_path, qdf=True, as_csv=as_csv
-                )
+            for keep_raw_data in [False, True]:
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    parquet_path = os.path.join(tmpdir, "test.parquet")
+                    df.to_parquet(parquet_path, index=False)
+                    convert_ticker_based_parquet_file_to_qdf(
+                        parquet_path,
+                        qdf=True,
+                        as_csv=as_csv,
+                        keep_raw_data=keep_raw_data,
+                    )
 
-                # load the QDF file to verify its content
-                if as_csv:
-                    qdf_path = os.path.join(tmpdir, "test_qdf.csv")
-                    self.assertTrue(os.path.exists(qdf_path))
-                    readfunc = pd.read_csv
-                else:
-                    qdf_path = os.path.join(tmpdir, "test_qdf.parquet")
-                    self.assertTrue(os.path.exists(qdf_path))
-                    readfunc = pd.read_parquet
-                qdf = readfunc(qdf_path)
-                try:
-                    QuantamentalDataFrame(qdf)
-                except Exception as e:
-                    self.fail(f"Failed to load QDF file: {e}")
+                    base, ext = os.path.splitext(parquet_path)
+                    if as_csv:
+                        expected_path = (
+                            os.path.join(tmpdir, "test_qdf.csv")
+                            if keep_raw_data
+                            else base + ".csv"
+                        )
+                        readfunc = pd.read_csv
+                    else:
+                        expected_path = (
+                            os.path.join(tmpdir, "test_qdf.parquet")
+                            if keep_raw_data
+                            else parquet_path
+                        )
+                        readfunc = pd.read_parquet
 
-                tkrs = qdf["cid"] + "_" + qdf["xcat"]
-                expected_cols = (set(df.columns) - {"ticker"}) | {"cid", "xcat"}
-                self.assertEqual(set(qdf.columns), expected_cols)
-                self.assertEqual(set(tkrs), set(df["ticker"]))
+                    self.assertTrue(os.path.exists(expected_path))
+                    qdf = readfunc(expected_path)
+                    try:
+                        QuantamentalDataFrame(qdf)
+                    except Exception as e:
+                        self.fail(f"Failed to load QDF file: {e}")
+
+                    tkrs = qdf["cid"] + "_" + qdf["xcat"]
+                    expected_cols = (set(df.columns) - {"ticker"}) | {"cid", "xcat"}
+                    self.assertEqual(set(qdf.columns), expected_cols)
+                    self.assertEqual(set(tkrs), set(df["ticker"]))
+
+                    # Check raw file existence/deletion
+                    if keep_raw_data:
+                        self.assertTrue(os.path.exists(parquet_path))
+                    else:
+                        # If as_csv and not keep_raw_data, parquet should be deleted
+                        if as_csv:
+                            self.assertFalse(os.path.exists(parquet_path))
+                        else:
+                            self.assertTrue(os.path.exists(parquet_path))
 
     def test_convert_ticker_based_parquet_file_to_qdf_do_nothing_case(self):
         df = pd.DataFrame(
@@ -885,12 +907,12 @@ class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            qdf_path = os.path.join(tmpdir, "test.parquet")
-            df.to_parquet(qdf_path, index=False)
-            convert_ticker_based_parquet_file_to_qdf(qdf_path, qdf=False)
-            self.assertTrue(os.path.exists(qdf_path))
+            parquet_path = os.path.join(tmpdir, "test.parquet")
+            df.to_parquet(parquet_path, index=False)
+            convert_ticker_based_parquet_file_to_qdf(parquet_path, qdf=False)
+            self.assertTrue(os.path.exists(parquet_path))
             # check that this is the same file
-            qdf = pd.read_parquet(qdf_path)
+            qdf = pd.read_parquet(parquet_path)
             pd.testing.assert_frame_equal(qdf, df)
 
 
