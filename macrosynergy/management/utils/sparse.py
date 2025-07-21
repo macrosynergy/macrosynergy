@@ -9,7 +9,6 @@ from macrosynergy.management.utils import (
     qdf_to_ticker_df,
     ticker_df_to_qdf,
     concat_single_metric_qdfs,
-    get_cid,
     get_xcat,
     is_valid_iso_date,
 )
@@ -1134,7 +1133,7 @@ def infer_frequency(df: QuantamentalDataFrame) -> pd.Series:
 
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("`df` must be a QuantamentalDataFrame")
-    if not "eop_lag" in df.columns:
+    if "eop_lag" not in df.columns:
         raise ValueError("`df` must contain an `eop_lag` column")
 
     ticker_df = qdf_to_ticker_df(df, value_column="eop_lag")
@@ -1509,7 +1508,7 @@ def _calculate_score_on_sparse_indicator_for_class(
     score_by_column = SCORE_BY_OPTIONS[score_by]
 
     for key, v in cls.isc_dict.items():
-        if not score_by_column in v.columns:
+        if score_by_column not in v.columns:
             raise ValueError(f"Column `{score_by_column}` not in for ticker {key}")
 
     curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
