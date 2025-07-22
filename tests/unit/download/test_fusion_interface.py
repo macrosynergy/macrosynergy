@@ -630,13 +630,20 @@ class TestParquetArrowFunctions(unittest.TestCase):
             filtered = filter_parquet_table_as_qdf(
                 self.table,
                 tickers=tickers,
-                start_date="2023-02-01",
-                end_date="2023-02-03",
+                # the dates are switched on purpose to test if they are correctly swapped
+                start_date="2023-02-03",
+                end_date="2023-02-01",
                 qdf=True,
             )
             df_filtered = filtered.to_pandas()
             self.assertEqual(len(df_filtered), 1)
 
+        filtered = filter_parquet_table_as_qdf(self.table)
+        filtered = filtered.to_pandas()
+        expc = self.table.to_pandas()
+        expc["real_date"] = pd.to_datetime(expc["real_date"])
+        filtered["real_date"] = pd.to_datetime(filtered["real_date"])
+        pd.testing.assert_frame_equal(filtered, expc)
 
     def test_filter_parquet_table_as_qdf_error(self):
         with self.assertRaises(TypeError):
