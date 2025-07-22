@@ -837,6 +837,15 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
             self.assertEqual(len(df), 1)
             self.assertTrue((df["identifier"].isin(["JPMAQS_DELTA_ABC"])).all())
 
+    def test_jpmaqsclient_list_datasets_error(self):
+        client = JPMaQSFusionClient(FusionOAuth(**self.creds))
+        try:
+            client.list_datasets(include_full_datasets=False)
+        except Exception as e:
+            expc_msg = "At least one of `include_catalog`, `include_full_datasets`, `include_explorer_datasets`, or `include_delta_datasets` must be True."
+            self.assertIn(expc_msg, str(e))
+            self.assertIsInstance(e, ValueError)
+
     def test_jpmaqsclient_download_latest_distribution_empty_series(self):
         with patch(
             "macrosynergy.download.fusion_interface.SimpleFusionAPIClient"
