@@ -1403,5 +1403,141 @@ class TestJPMaQSFusionClientDownloadAndFilterSeriesMemberDistribution(
         self.assertIn("fail", str(cm.exception))
 
 
+class TestJPMaQSFusionClientDownloadMultipleDistributionsToDisk(unittest.TestCase):
+    def setUp(self):
+        from macrosynergy.download.fusion_interface import (
+            JPMaQSFusionClient,
+            FusionOAuth,
+        )
+
+        self.oauth = MagicMock(spec=FusionOAuth)
+        self.client = JPMaQSFusionClient(self.oauth)
+
+    @patch("macrosynergy.download.fusion_interface.cf.ThreadPoolExecutor")
+    @patch("macrosynergy.download.fusion_interface.get_resources_df")
+    @patch("macrosynergy.download.fusion_interface.pd.DataFrame")
+    @patch("macrosynergy.download.fusion_interface.os.path.exists", return_value=True)
+    @patch("macrosynergy.download.fusion_interface.os.makedirs")
+    def test_successful_download(
+        self, mock_makedirs, mock_exists, mock_df, mock_get_resources_df, mock_executor
+    ):
+        # Simulate catalog_df and datasets
+        mock_catalog_df = pd.DataFrame({"Ticker": ["A_B"], "Theme": ["FOO"]})
+        mock_get_resources_df.return_value = pd.DataFrame(
+            {
+                "@id": ["id1"],
+                "identifier": ["JPMAQS_FOO"],
+                "title": ["Foo"],
+                "description": ["desc"],
+                "isRestricted": [False],
+            }
+        )
+        self.client.get_metadata_catalog = MagicMock(return_value=mock_catalog_df)
+        self.client.list_datasets = MagicMock(
+            return_value=mock_get_resources_df.return_value
+        )
+        # Patch ThreadPoolExecutor to simulate futures
+        mock_future = MagicMock()
+        mock_future.result.return_value = None
+        mock_executor.return_value.__enter__.return_value = mock_executor
+        mock_executor.submit.return_value = mock_future
+        mock_executor.items.return_value = [("JPMAQS_FOO", mock_future)]
+        # Patch time.sleep to avoid delay
+        with patch("macrosynergy.download.fusion_interface.time.sleep"):
+            result = self.client._download_multiple_distributions_to_disk(
+                folder=".",
+                qdf=True,
+                include_catalog=True,
+                include_full_datasets=True,
+                include_explorer_datasets=False,
+                include_delta_datasets=False,
+                as_csv=False,
+                keep_raw_data=False,
+                datasets_list=None,
+            )
+        self.assertIsNotNone(result)
+        self.client.get_metadata_catalog.assert_called_once()
+        self.client.list_datasets.assert_called_once()
+
+    @patch("macrosynergy.download.fusion_interface.cf.ThreadPoolExecutor")
+    @patch("macrosynergy.download.fusion_interface.get_resources_df")
+    @patch("macrosynergy.download.fusion_interface.pd.DataFrame")
+    @patch("macrosynergy.download.fusion_interface.os.path.exists", return_value=True)
+    @patch("macrosynergy.download.fusion_interface.os.makedirs")
+    def test_with_datasets_list_and_no_match(
+        self, mock_makedirs, mock_exists, mock_df, mock_get_resources_df, mock_executor
+    ):
+        # Simulate catalog_df and datasets
+        mock_catalog_df = pd.DataFrame({"Ticker": ["A_B"], "Theme": ["FOO"]})
+        mock_get_resources_df.return_value = pd.DataFrame(
+            {
+                "@id": ["id1"],
+                "identifier": ["JPMAQS_FOO"],
+                "title": ["Foo"],
+                "description": ["desc"],
+                "isRestricted": [False],
+            }
+        )
+        self.client.get_metadata_catalog = MagicMock(return_value=mock_catalog_df)
+        self.client.list_datasets = MagicMock(
+            return_value=mock_get_resources_df.return_value
+        )
+        # Patch ThreadPoolExecutor to simulate futures
+        mock_executor.return_value.__enter__.return_value = mock_executor
+        # datasets_list with no match
+        with self.assertRaises(ValueError):
+            self.client._download_multiple_distributions_to_disk(
+                folder=".",
+                qdf=True,
+                include_catalog=True,
+                include_full_datasets=True,
+                include_explorer_datasets=False,
+                include_delta_datasets=False,
+                as_csv=False,
+                keep_raw_data=False,
+                datasets_list=["notfound"],
+            )
+
+    @patch("macrosynergy.download.fusion_interface.cf.ThreadPoolExecutor")
+    @patch("macrosynergy.download.fusion_interface.get_resources_df")
+    @patch("macrosynergy.download.fusion_interface.pd.DataFrame")
+    @patch("macrosynergy.download.fusion_interface.os.path.exists", return_value=True)
+    @patch("macrosynergy.download.fusion_interface.os.makedirs")
+    def test_download_with_empty_datasets(
+        self, mock_makedirs, mock_exists, mock_df, mock_get_resources_df, mock_executor
+    ):
+        # Simulate catalog_df and datasets
+        mock_catalog_df = pd.DataFrame({"Ticker": ["A_B"], "Theme": ["FOO"]})
+        mock_get_resources_df.return_value = pd.DataFrame(
+            {
+                "@id": [],
+                "identifier": [],
+                "title": [],
+                "description": [],
+                "isRestricted": [],
+            }
+        )
+        self.client.get_metadata_catalog = MagicMock(return_value=mock_catalog_df)
+        self.client.list_datasets = MagicMock(
+            return_value=mock_get_resources_df.return_value
+        )
+        # Patch ThreadPoolExecutor to simulate no futures
+        mock_executor.return_value.__enter__.return_value = mock_executor
+        # Patch time.sleep to avoid delay
+        with patch("macrosynergy.download.fusion_interface.time.sleep"):
+            result = self.client._download_multiple_distributions_to_disk(
+                folder=".",
+                qdf=True,
+                include_catalog=True,
+                include_full_datasets=True,
+                include_explorer_datasets=False,
+                include_delta_datasets=False,
+                as_csv=False,
+                keep_raw_data=False,
+                datasets_list=None,
+            )
+            self.assertIsNotNone(result)
+
+
 if __name__ == "__main__":
     unittest.main()
