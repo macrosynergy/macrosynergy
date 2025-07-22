@@ -612,6 +612,15 @@ class TestParquetArrowFunctions(unittest.TestCase):
         table = read_parquet_from_bytes_to_pyarrow_table(bytes_data)
         pd.testing.assert_frame_equal(table.to_pandas(), self.df)
 
+    def test_read_parquet_from_bytes_to_pyarrow_table_error(self):
+        with self.assertRaises(ValueError) as cm:
+            read_parquet_from_bytes_to_pyarrow_table(b"not a parquet file")
+        self.assertIn("Failed to read Parquet", str(cm.exception))
+
+        with patch("pyarrow.parquet.read_table", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                read_parquet_from_bytes_to_pyarrow_table(b"bytes")
+
     def test_coerce_real_date(self):
         table = self.table
         coerced = coerce_real_date(table)
