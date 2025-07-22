@@ -1577,7 +1577,7 @@ class JPMaQSFusionClient:
         folder: Path = Path(folder).expanduser()
         timestamp = pd.Timestamp.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
         folder = folder / f"jpmaqs-download-{timestamp}"
-        Path(folder).mkdir(parents=True, exist_ok=True)
+        os.makedirs(folder, exist_ok=True)
         catalog_df = self.get_metadata_catalog()
         metadata_catalog_path = os.path.join(folder, "jpmaqs-metadata-catalog")
         if as_csv:
