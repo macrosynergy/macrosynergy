@@ -1361,7 +1361,10 @@ class JPMaQSFusionClient:
         **kwargs,
     ) -> None:
         os.makedirs(save_directory, exist_ok=True)
-
+        is_catalog_dataset = dataset in [
+            self._catalog_dataset,
+            self._notifications_dataset,
+        ]
         filename = os.path.join(
             save_directory, f"{dataset}-{seriesmember}.{distribution}"
         )
@@ -1373,12 +1376,16 @@ class JPMaQSFusionClient:
             distribution=distribution,
             **kwargs,
         )
+        ftype = "catalog" if is_catalog_dataset else "series member"
         if not os.path.exists(filename):
             raise FileNotFoundError(
-                f"Failed to download series member distribution to {filename}."
+                f"Failed to download {ftype} distribution to {filename}."
             )
         else:
-            print(f"Successfully downloaded series member distribution to {filename}.")
+            print(f"Successfully downloaded {ftype} distribution to {filename}.")
+
+        if is_catalog_dataset:
+            return
 
         convert_ticker_based_parquet_file_to_qdf(
             filename=filename,
@@ -1671,6 +1678,7 @@ class JPMaQSFusionClient:
         include_delta_datasets: bool = False,
         as_csv: bool = False,
         keep_raw_data: bool = False,
+        datasets_list: List[str] = None,
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -1695,6 +1703,9 @@ class JPMaQSFusionClient:
             Parquet as the default format.
         keep_raw_data : bool
             If True, keeps the raw data files after conversion. Default is False.
+        datasets_list : Optional[List[str]]
+            A list of specific datasets to download. If None, all datasets specified using
+            the `include_*` parameters will be downloaded.
 
         **kwargs : dict
             Additional keyword arguments to pass to the API request.
@@ -1713,6 +1724,7 @@ class JPMaQSFusionClient:
             include_delta_datasets=include_delta_datasets,
             as_csv=as_csv,
             keep_raw_data=keep_raw_data,
+            datasets_list=datasets_list,
         )
 
     def download(
@@ -1840,6 +1852,8 @@ class JPMaQSFusionClient:
                 include_full_datasets=True,
                 as_csv=as_csv,
                 keep_raw_data=False,
+                datasets_list=datasets,
+                **kwargs,
             )
 
         if end_date is None:
