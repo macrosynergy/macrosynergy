@@ -1264,6 +1264,40 @@ class TestJPMaQSFusionClientDownloadSeriesMemberDistributionToDisk(unittest.Test
                 any("Successfully converted" in p and "CSV" in p for p in prints)
             )
 
+    @patch.object(
+        JPMaQSFusionClient,
+        "get_latest_seriesmember_identifier",
+        return_value="LATEST_SERIES",
+    )
+    @patch.object(JPMaQSFusionClient, "download_series_member_distribution_to_disk")
+    def test_download_latest_distribution_to_disk(
+        self, mock_download_to_disk, mock_get_latest
+    ):
+        # Arrange
+        client = self.client
+        save_dir = self.save_dir
+        dataset = "DS"
+        # Act
+        client.download_latest_distribution_to_disk(
+            save_directory=save_dir,
+            dataset=dataset,
+            distribution="parquet",
+            qdf=True,
+            as_csv=True,
+            keep_raw_data=False,
+        )
+        # Assert
+        mock_get_latest.assert_called_once_with(dataset=dataset)
+        mock_download_to_disk.assert_called_once_with(
+            save_directory=save_dir,
+            dataset=dataset,
+            seriesmember="LATEST_SERIES",
+            distribution="parquet",
+            qdf=True,
+            as_csv=True,
+            keep_raw_data=False,
+        )
+
 
 class TestJPMaQSFusionClientDownloadAndFilterSeriesMemberDistribution(
     unittest.TestCase
