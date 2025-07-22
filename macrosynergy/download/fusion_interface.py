@@ -1030,8 +1030,10 @@ def filter_parquet_table_as_qdf(
     if not any([tickers, start_date, end_date]) and not qdf:
         return table
 
-    if pd.Timestamp(start_date) > pd.Timestamp(end_date):
-        start_date, end_date = end_date, start_date
+    if bool(start_date) and bool(end_date):
+        if pd.Timestamp(start_date) > pd.Timestamp(end_date):
+            start_date, end_date = end_date, start_date
+
     ticker_col = "ticker"
     exprs = []
     if tickers:
@@ -1050,9 +1052,6 @@ def filter_parquet_table_as_qdf(
         dt = datetime.date.fromisoformat(end_date)
         scalar = pa.scalar(dt, type=pa.date32())
         exprs.append(pc.less_equal(pc.field("real_date"), scalar))
-
-    if not exprs and not qdf:
-        return table
 
     expression = functools.reduce(operator.and_, exprs)
     table = table.filter(expression)
