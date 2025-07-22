@@ -32,6 +32,7 @@ def view_ranges(
     facet: bool = False,
     ncols: int = None,
     nrows: int = None,
+    drop_cid_labels: bool = False,
 ):
     """
     Plots averages and various ranges across sections for one or more categories.
@@ -201,6 +202,11 @@ def view_ranges(
         ax.axhline(0, ls="--", linewidth=1, color="black")
         if ax.get_legend() is not None:
             ax.get_legend().remove()
+        if drop_cid_labels:
+            ax.set_xticklabels([])
+            ax.set_xlabel("")
+
+            ax.set_xticklabels([])
 
     def _set_main_axis(ax, title, ylab):
         ax.set_title(title, fontdict={"fontsize": 16})
@@ -311,12 +317,13 @@ if __name__ == "__main__":
         dfd,
         xcats=["XR", "CRY", "INFL", "GROWTH", "XR2", "XR3", ],
         cids=cids,
-        kind="box",
+        kind="bar",
         start="2012-01-01",
         end="2018-01-01",
         sort_cids_by=None,
-        # xcat_labels=["EQXR_NSA"],
+        xcat_labels={"XR": "Equity Risk", "CRY": "Commodity Risk", "INFL": "Inflation Risk", "GROWTH": "Growth Risk", "XR2": "Equity Risk 2", "XR3": "Equity Risk 3"},
         facet=True,
         ncols=2,
         nrows=3,
+        drop_cid_labels=True,
     )
