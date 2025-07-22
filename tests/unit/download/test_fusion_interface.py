@@ -1128,5 +1128,142 @@ class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
             convert_ticker_based_parquet_file_to_qdf("non_existant_file.parquet")
 
 
+class TestJPMaQSFusionClientDownloadSeriesMemberDistributionToDisk(unittest.TestCase):
+    def setUp(self):
+        self.oauth = MagicMock(spec=FusionOAuth)
+        self.simple_client = MagicMock(spec=SimpleFusionAPIClient)
+        patcher = patch(
+            "macrosynergy.download.fusion_interface.SimpleFusionAPIClient",
+            return_value=self.simple_client,
+        )
+        self.addCleanup(patcher.stop)
+        patcher.start()
+        self.client = JPMaQSFusionClient(self.oauth)
+        self.save_dir = "./tmp"
+
+    @patch(
+        "macrosynergy.download.fusion_interface.convert_ticker_based_parquet_file_to_qdf"
+    )
+    @patch("os.makedirs")
+    @patch("os.path.exists")
+    def test_successful_download_and_conversion(
+        self, mock_exists, mock_makedirs, mock_convert
+    ):
+        # check file exists after download
+        mock_exists.return_value = True
+        # mock successful call to get_seriesmember_distribution_details_to_disk
+        self.simple_client.get_seriesmember_distribution_details_to_disk.return_value = None
+
+        with patch("builtins.print") as mock_print:
+            self.client.download_series_member_distribution_to_disk(
+                save_directory=self.save_dir,
+                dataset="DS",
+                seriesmember="SM",
+                distribution="parquet",
+                qdf=True,
+                as_csv=True,
+                keep_raw_data=False,
+            )
+            # Check makedirs called
+            mock_makedirs.assert_called_once_with(self.save_dir, exist_ok=True)
+            # Check file existence checked
+            mock_exists.assert_called()
+            # Check conversion called
+            mock_convert.assert_called_once()
+            # Check print called for both download and conversion
+            self.assertTrue(
+                any(
+                    "Successfully downloaded" in str(c[0][0])
+                    for c in mock_print.call_args_list
+                )
+            )
+            self.assertTrue(
+                any(
+                    "Successfully converted" in str(c[0][0])
+                    for c in mock_print.call_args_list
+                )
+            )
+
+    @patch(
+        "macrosynergy.download.fusion_interface.convert_ticker_based_parquet_file_to_qdf"
+    )
+    @patch("os.makedirs")
+    @patch("os.path.exists")
+    def test_file_not_found_raises(self, mock_exists, mock_makedirs, mock_convert):
+        # File does not exist after download
+        mock_exists.return_value = False
+        self.simple_client.get_seriesmember_distribution_details_to_disk.return_value = None
+        with self.assertRaises(FileNotFoundError) as cm:
+            self.client.download_series_member_distribution_to_disk(
+                save_directory=self.save_dir,
+                dataset="DS",
+                seriesmember="SM",
+            )
+        self.assertIn(
+            "Failed to download series member distribution", str(cm.exception)
+        )
+        mock_makedirs.assert_called_once()
+        mock_convert.assert_not_called()
+
+    @patch(
+        "macrosynergy.download.fusion_interface.convert_ticker_based_parquet_file_to_qdf"
+    )
+    @patch("os.makedirs")
+    @patch("os.path.exists")
+    def test_no_qdf_prints_only_download(
+        self, mock_exists, mock_makedirs, mock_convert
+    ):
+        mock_exists.return_value = True
+        self.simple_client.get_seriesmember_distribution_details_to_disk.return_value = None
+        with patch("builtins.print") as mock_print:
+            self.client.download_series_member_distribution_to_disk(
+                save_directory=self.save_dir,
+                dataset="DS",
+                seriesmember="SM",
+                qdf=False,
+            )
+            # Should print only download message, not conversion
+            prints = [str(c[0][0]) for c in mock_print.call_args_list]
+            self.assertTrue(any("Successfully downloaded" in p for p in prints))
+            self.assertFalse(any("Successfully converted" in p for p in prints))
+
+    @patch(
+        "macrosynergy.download.fusion_interface.convert_ticker_based_parquet_file_to_qdf"
+    )
+    @patch("os.makedirs")
+    @patch("os.path.exists")
+    def test_conversion_message_varies_with_as_csv(
+        self, mock_exists, mock_makedirs, mock_convert
+    ):
+        mock_exists.return_value = True
+        self.simple_client.get_seriesmember_distribution_details_to_disk.return_value = None
+        # qdf True, as_csv False
+        with patch("builtins.print") as mock_print:
+            self.client.download_series_member_distribution_to_disk(
+                save_directory=self.save_dir,
+                dataset="DS",
+                seriesmember="SM",
+                qdf=True,
+                as_csv=False,
+            )
+            prints = [str(c[0][0]) for c in mock_print.call_args_list]
+            self.assertTrue(
+                any("Successfully converted" in p and "CSV" not in p for p in prints)
+            )
+        # qdf True, as_csv True
+        with patch("builtins.print") as mock_print:
+            self.client.download_series_member_distribution_to_disk(
+                save_directory=self.save_dir,
+                dataset="DS",
+                seriesmember="SM",
+                qdf=True,
+                as_csv=True,
+            )
+            prints = [str(c[0][0]) for c in mock_print.call_args_list]
+            self.assertTrue(
+                any("Successfully converted" in p and "CSV" in p for p in prints)
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
