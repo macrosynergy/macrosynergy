@@ -1027,7 +1027,7 @@ def filter_parquet_table_as_qdf(
         raise TypeError("Input must be a PyArrow Table.")
 
     table = coerce_real_date(table)
-    if not any([tickers, start_date, end_date]):
+    if not any([tickers, start_date, end_date]) and not qdf:
         return table
 
     if pd.Timestamp(start_date) > pd.Timestamp(end_date):
