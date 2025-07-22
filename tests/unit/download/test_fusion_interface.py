@@ -924,6 +924,13 @@ class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
                 method="POST",
             )
 
+        with self.assertRaises(TypeError):
+            request_wrapper_stream_bytes_to_disk(
+                filename="dummy",
+                url="http://example.com/file",
+                method=123,
+            )
+
     @patch(
         "macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True
     )
