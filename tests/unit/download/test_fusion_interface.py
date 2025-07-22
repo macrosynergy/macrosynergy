@@ -1062,6 +1062,35 @@ class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
             qdf = pd.read_parquet(parquet_path)
             pd.testing.assert_frame_equal(qdf, df)
 
+    def test_convert_ticker_based_parquet_file_to_qdf_as_csv_not_qdf(self):
+        df = pd.DataFrame(
+            {
+                "ticker": ["AAA_BBB", "CCC_DDD"],
+                "real_date": [20230101, 20230102],
+                "value": [1.01, 2.02],
+                "grading": [0.1, 1.1],
+                "eop_lag": [0.2, 0.3],
+                "mop_lag": [0.4, 0.5],
+                "last_updated": [20230101, 20230102],
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            parquet_path = os.path.join(tmpdir, "test.parquet")
+            df.to_parquet(parquet_path, index=False)
+            convert_ticker_based_parquet_file_to_qdf(
+                parquet_path, qdf=False, as_csv=True, keep_raw_data=False
+            )
+            expected_file = os.path.join(tmpdir, "test.csv")
+            self.assertTrue(os.path.exists(expected_file))
+            # check that this is the same file
+            qdf = pd.read_csv(expected_file)
+            pd.testing.assert_frame_equal(qdf, df)
+
+    def test_convert_ticker_based_parquet_file_to_qdf_error(self):
+        with self.assertRaises(FileNotFoundError):
+            convert_ticker_based_parquet_file_to_qdf("non_existant_file.parquet")
+
 
 if __name__ == "__main__":
     unittest.main()
