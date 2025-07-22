@@ -9,7 +9,6 @@ from macrosynergy.management.utils import (
     qdf_to_ticker_df,
     ticker_df_to_qdf,
     concat_single_metric_qdfs,
-    get_cid,
     get_xcat,
     is_valid_iso_date,
 )
@@ -306,7 +305,11 @@ class InformationStateChanges(object):
         pd.DataFrame
             A DataFrame with the information state changes.
         """
-
+        if not self.isc_dict:
+            raise ValueError(
+                "InformationStateChanges object is empty. "
+                "Please create it using `from_qdf` or `from_isc_df`."
+            )
         result = sparse_to_dense(
             isc=self.isc_dict,
             value_column=value_column,
@@ -788,7 +791,7 @@ def create_delta_data(
     if "eop_lag" not in df.columns:
         warnings.warn(
             "`df` does not contain an `eop_lag` column. Differences calculated will not be "
-            " based on end-of-period adjustments."
+            "based on end-of-period adjustments."
         )
         df["eop_lag"] = np.nan
     if "grading" not in df.columns:
@@ -1134,7 +1137,7 @@ def infer_frequency(df: QuantamentalDataFrame) -> pd.Series:
 
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("`df` must be a QuantamentalDataFrame")
-    if not "eop_lag" in df.columns:
+    if "eop_lag" not in df.columns:
         raise ValueError("`df` must contain an `eop_lag` column")
 
     ticker_df = qdf_to_ticker_df(df, value_column="eop_lag")
@@ -1300,6 +1303,12 @@ def sparse_to_dense(
 
         tdf = tdf.clip(lower=wins_lower, upper=wins_upper)
 
+    if tdf.empty or tdf.isna().all().all():
+        raise ValueError(
+            "Could not calculate dense DataFrame from the information state changes for "
+            f"metric '{value_column}'. Please verify that the input data has the required "
+            "columns, or has the relevant metrics (such as `eop_lag`) for any score calculations."
+        )
     sm_qdfs: List[QuantamentalDataFrame] = [ticker_df_to_qdf(tdf)]
     if metrics is None:
         metrics = []
@@ -1323,8 +1332,10 @@ def sparse_to_dense(
         sm_qdfs.append(m_qdf)
 
     qdf: QuantamentalDataFrame = QuantamentalDataFrame.from_qdf_list(sm_qdfs)
-    if "eop" in metrics:
-        qdf["eop_lag"] = (qdf["real_date"] - qdf["eop"]).dt.days
+    if ("eop" in metrics) and ("eop" in qdf.columns):
+        qdf["eop_lag"] = (
+            qdf["real_date"] - qdf["eop"].astype("datetime64[ns]").fillna(pd.NaT)
+        ).dt.days
         qdf = QuantamentalDataFrame(qdf)
 
     if postfix:
@@ -1501,7 +1512,7 @@ def _calculate_score_on_sparse_indicator_for_class(
     score_by_column = SCORE_BY_OPTIONS[score_by]
 
     for key, v in cls.isc_dict.items():
-        if not score_by_column in v.columns:
+        if score_by_column not in v.columns:
             raise ValueError(f"Column `{score_by_column}` not in for ticker {key}")
 
     curr_method: Callable[[pd.Series, Optional[Dict[str, Any]]], pd.Series]
