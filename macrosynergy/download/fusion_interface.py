@@ -1128,12 +1128,6 @@ class JPMaQSFusionClient:
         pd.DataFrame
             A DataFrame containing information about the available datasets.
         """
-        r = self.simple_fusion_client.get_product_details(
-            product_id=product_id, **kwargs
-        )
-        resources_df: pd.DataFrame = get_resources_df(r, keep_fields=None)
-        resources_df = resources_df.sort_values(by=["isRestricted", "@id"])
-
         if not (
             include_catalog
             or include_full_datasets
@@ -1144,6 +1138,12 @@ class JPMaQSFusionClient:
                 "At least one of `include_catalog`, `include_full_datasets`, "
                 "`include_explorer_datasets`, or `include_delta_datasets` must be True."
             )
+
+        r = self.simple_fusion_client.get_product_details(
+            product_id=product_id, **kwargs
+        )
+        resources_df: pd.DataFrame = get_resources_df(r, keep_fields=None)
+        resources_df = resources_df.sort_values(by=["isRestricted", "@id"])
 
         if not include_catalog:
             resources_df = resources_df[
