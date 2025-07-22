@@ -213,6 +213,9 @@ def view_correlation(
 
             new_xcat_labels = xcat_labels
             new_xcat_labels = xcat_labels
+            
+            df_w1 = df_w1.rename(columns=cid_labels)
+            df_w2 = df_w2.rename(columns=cid_secondary_labels)
 
         # If more than one xcat in at least one set, we will compute cross category
         # correlation.
@@ -262,7 +265,7 @@ def view_correlation(
         e_date: str = df["real_date"].max().strftime("%Y-%m-%d")
 
         if len(xcats) == 1:
-            df_w = _transform_df_for_cross_sectional_corr(df=df, val=val, freq=freq)
+            df_w = _transform_df_for_cross_sectional_corr(df=df, val=val, freq=freq, cid_labels=cid_labels)
 
             if title is None:
                 title = (
@@ -364,7 +367,7 @@ def _parse_labels(keys: List[str], labels: Union[List[str], Dict[str, str]], lab
 
 
 def _transform_df_for_cross_sectional_corr(
-    df: pd.DataFrame, val: str = "value", freq: str = None
+    df: pd.DataFrame, val: str = "value", freq: str = None, cid_labels: Optional[Dict[str, str]] = None
 ) -> pd.DataFrame:
     """
     Pivots dataframe and down-samples according to the specified frequency so that
@@ -388,6 +391,9 @@ def _transform_df_for_cross_sectional_corr(
     df_w = df.pivot(index="real_date", columns="cid", values=val)
     if freq is not None:
         df_w = df_w.resample(freq).mean()
+
+    if cid_labels is not None:
+        df_w = df_w.rename(columns=cid_labels)
 
     return df_w
 
@@ -649,12 +655,45 @@ if __name__ == "__main__":
     # )
     # print(xcat_labels)
     
+    # view_correlation(
+    #     df=dfd,
+    #     xcats=["XR"],
+    #     xcats_secondary=["CRY", "XR"],
+    #     cids=cids,
+    #     cids_secondary=cids[:1],
+    #     start=start,
+    #     end=end,
+    #     val="value",
+    #     freq=None,
+    #     cluster=True,
+    #     title="Correlation Matrix",
+    #     size=(14, 8),
+    #     max_color=None,
+    #     lags=None,
+    #     lags_secondary=None,
+    #     annot=True,
+    #     fmt=".2f",
+    #     xcat_labels={
+    #         "XR": "Excess returns",
+    #     },
+    #     xcat_secondary_labels={
+    #         "CRY": "Carry",
+    #         "XR": "Excess returns",
+    #     },
+    #     # cid_secondary_labels={
+    #     #     "AUD": "Australian Dollar",
+    #     #     "CAD": "Canadian Dollar",
+    #     #     "GBP": "British Pound",
+    #     #     "USD": "US Dollar",
+    #     # }
+    # )
+    
     view_correlation(
         df=dfd,
         xcats=["XR"],
-        xcats_secondary=["CRY"],
-        cids=cids,
-        cids_secondary=cids[:4],
+        # xcats_secondary=["CRY", "XR"],
+        cids=cids[:4],
+        # cids_secondary=cids[:1],
         start=start,
         end=end,
         val="value",
@@ -667,10 +706,17 @@ if __name__ == "__main__":
         lags_secondary=None,
         annot=True,
         fmt=".2f",
-        xcat_labels={
-            "XR": "Excess returns",
-        },
-        xcat_secondary_labels={
-            "CRY": "Carry",
-        },
+        # xcat_labels={
+        #     "XR": "Excess returns",
+        # },
+        # xcat_secondary_labels={
+        #     "CRY": "Carry",
+        #     "XR": "Excess returns",
+        # },
+        cid_labels={
+            "AUD": "Australian Dollar",
+            "CAD": "Canadian Dollar",
+            "GBP": "British Pound",
+            "USD": "US Dollar",
+        }
     )
