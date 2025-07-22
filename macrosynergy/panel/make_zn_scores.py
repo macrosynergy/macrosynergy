@@ -11,6 +11,7 @@ from macrosynergy.management.utils import (
     drop_nan_series,
     reduce_df,
     _map_to_business_day_frequency,
+    forward_fill_wide_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 from numbers import Number
@@ -31,6 +32,7 @@ def make_zn_scores(
     thresh: float = None,
     pan_weight: float = 1,
     postfix: str = "ZN",
+    ffill: int = 0,
     unscore: bool = False,
 ) -> pd.DataFrame:
     """
@@ -84,6 +86,10 @@ def make_zn_scores(
         parameters are all specific to cross section.
     postfix : str
         string appended to category name for output; default is "ZN".
+    ffill : int, default 0
+        Forward fills the trailing NaN values in the input DataFrame. The parameter
+        specifies the number of periods to fill. If set to 0, no forward fill is
+        performed.
     unscore : bool, default False
         If True, the function will apply the specified threshold to z-scores,
         but return values on the original scale. The `thresh` parameter will
@@ -173,6 +179,12 @@ def make_zn_scores(
 
     dfw = df.pivot(index="real_date", columns="cid", values="value")
     cross_sections = dfw.columns
+    
+    if ffill > 0:
+        # Forward fill the trailing NaN values in the input DataFrame.
+        dfw = forward_fill_wide_df(
+            dfw, blacklist, n=ffill
+        )
 
     # --- The actual scoring.
 
@@ -435,23 +447,17 @@ def _unscore_dfw_zns(
             df_neutral_pan["value"], axis=0
         )
     else:
-        dfw_unscored_pan = pd.DataFrame(
-            0, index=dfw_zns.index, columns=dfw_zns.columns
-        )
+        dfw_unscored_pan = pd.DataFrame(0, index=dfw_zns.index, columns=dfw_zns.columns)
 
     if pan_weight < 1:
         dfw_zns_css = (dfw_zns - (dfw_zns_pan * pan_weight)) / (1 - pan_weight)
-        dfw_unscored_css = pd.DataFrame(
-            index=dfw_zns.index, columns=dfw_zns.columns
-        )
+        dfw_unscored_css = pd.DataFrame(index=dfw_zns.index, columns=dfw_zns.columns)
         for cid in cross_sections:
-            dfw_unscored_css[cid] = (
-                dfw_zns_css[cid] * cid_mabs[cid]
-            ) + cid_neutral[cid]
+            dfw_unscored_css[cid] = (dfw_zns_css[cid] * cid_mabs[cid]) + cid_neutral[
+                cid
+            ]
     else:
-        dfw_unscored_css = pd.DataFrame(
-            0, index=dfw_zns.index, columns=dfw_zns.columns
-        )
+        dfw_unscored_css = pd.DataFrame(0, index=dfw_zns.index, columns=dfw_zns.columns)
 
     if pan_weight == 1:
         dfw_unscored = dfw_unscored_pan
@@ -462,6 +468,7 @@ def _unscore_dfw_zns(
     dfw_zns = dfw_unscored
 
     return dfw_unscored
+
 
 if __name__ == "__main__":
     np.random.seed(1)
@@ -474,8 +481,8 @@ if __name__ == "__main__":
     )
 
     df_cids.loc["AUD"] = ["2010-01-01", "2020-12-31", 0.5, 2]
-    df_cids.loc["CAD"] = ["2006-01-01", "2020-11-30", 0, 1]
-    df_cids.loc["GBP"] = ["2008-01-01", "2020-11-30", -0.2, 0.5]
+    df_cids.loc["CAD"] = ["2006-01-01", "2020-12-30", 0, 1]
+    df_cids.loc["GBP"] = ["2008-01-01", "2020-12-29", -0.2, 0.5]
     df_cids.loc["USD"] = ["2007-01-01", "2020-09-30", -0.2, 0.5]
     df_cids.loc["NZD"] = ["2002-01-01", "2020-09-30", -0.1, 2]
 
@@ -489,7 +496,7 @@ if __name__ == "__main__":
     df_xcats.loc["INFL"] = ["2013-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
 
     # Apply a blacklist period from series' start date.
-    black = {"AUD": ["2010-01-01", "2013-12-31"], "GBP": ["2018-01-01", "2100-01-01"]}
+    black = {"AUD": ["2010-01-01", "2013-12-31"], "GBP": ["2020-12-31", "2100-01-01"]}
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfd["grading"] = np.ones(dfd.shape[0])

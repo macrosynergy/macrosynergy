@@ -34,6 +34,7 @@ def multiple_reg_scatter(
     subplot_title_fontsize: int = 14,
     color_cids: bool = False,
     remove_zero_predictor: bool = False,
+    share_axes: bool = True,
 ):
     """
     Displays multiple regression scatter plots across categories. The categories are 
@@ -87,6 +88,8 @@ def multiple_reg_scatter(
         scatter plot.
     remove_zero_predictor : bool, default=False
             Remove zeros from the input series.
+    share_axes : bool
+        if True (default is True) the axes are shared across subplots.
     """
 
     sns.set_theme(style="whitegrid")
@@ -108,7 +111,7 @@ def multiple_reg_scatter(
     single_scatter = color_cids
     separator = "cids" if color_cids else separator
     fig, axes = plt.subplots(
-        nrows=nrow, ncols=ncol, figsize=figsize, sharex=True, sharey=True
+        nrows=nrow, ncols=ncol, figsize=figsize, sharex=share_axes, sharey=share_axes
     )
     fig.suptitle(title, x=title_xadj, y=title_yadj, fontsize=title_fontsize)
     fig.supxlabel(xlab, fontsize=label_fontsize)
@@ -306,6 +309,8 @@ if __name__ == "__main__":
         nrow=2,
         coef_box="upper right",
         color_cids=True,
+        single_chart=True,
+        share_axes=False,
     )
 
     multiple_reg_scatter(
