@@ -800,6 +800,43 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
                 )
                 self.assertEqual(len(df), 0)
 
+    def test_jpmaqsclient_list_datasets_all_non_full(self):
+        with patch(
+            "macrosynergy.download.fusion_interface.SimpleFusionAPIClient"
+        ) as mock_client:
+            inst = mock_client.return_value
+            inst.get_product_details.return_value = {
+                "resources": [
+                    {
+                        "@id": "id1",
+                        "identifier": "JPMAQS_DELTA_ABC",
+                        "title": "t",
+                        "description": "d",
+                        "isRestricted": False,
+                    },
+                    {
+                        "@id": "id2",
+                        "identifier": "JPMAQS_EXPLORER_DEF",
+                        "title": "t2",
+                        "description": "d2",
+                        "isRestricted": False,
+                    },
+                    {
+                        "@id": "id3",
+                        "identifier": "JPMAQS_XYZ",
+                        "title": "t3",
+                        "description": "d3",
+                        "isRestricted": False,
+                    },
+                ]
+            }
+            client = JPMaQSFusionClient(FusionOAuth(**self.creds))
+            df = client.list_datasets(
+                include_full_datasets=False, include_delta_datasets=True
+            )
+            self.assertEqual(len(df), 1)
+            self.assertTrue((df["identifier"].isin(["JPMAQS_DELTA_ABC"])).all())
+
     def test_jpmaqsclient_download_latest_distribution_empty_series(self):
         with patch(
             "macrosynergy.download.fusion_interface.SimpleFusionAPIClient"
