@@ -638,6 +638,14 @@ class TestParquetArrowFunctions(unittest.TestCase):
             self.assertEqual(len(df_filtered), 1)
 
 
+    def test_filter_parquet_table_as_qdf_error(self):
+        with self.assertRaises(TypeError):
+            filter_parquet_table_as_qdf(table=123)
+
+        with self.assertRaises(KeyError):
+            filter_parquet_table_as_qdf(self.bad_table, tickers=["AAA_BBB"])
+
+
 class TestFusionInterfaceEdgeCases(unittest.TestCase):
     def setUp(self):
         self.creds = {
