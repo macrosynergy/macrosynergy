@@ -13,7 +13,7 @@ import pandas as pd
 import requests
 
 from macrosynergy.download.fusion_interface import cache_decorator
-
+from macrosynergy.compat import PD_2_0_OR_LATER
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils.df_utils import is_categorical_qdf
 from macrosynergy.management.types import QuantamentalDataFrame
@@ -76,8 +76,11 @@ class TestRequestWrapper(unittest.TestCase):
         with patch(
             "macrosynergy.download.fusion_interface._wait_for_api_call",
             return_value=True,
-        ), patch("requests.request", return_value=response):
-            return fusion_request_wrapper("GET", self.URL, headers=self.HDRS, **kwargs)
+        ):
+            with patch("requests.request", return_value=response):
+                return fusion_request_wrapper(
+                    "GET", self.URL, headers=self.HDRS, **kwargs
+                )
 
     def assertRaisesMessage(self, exc_type, msg, func, *args, **kwargs):
         with self.assertRaises(exc_type) as cm:
@@ -97,20 +100,21 @@ class TestRequestWrapper(unittest.TestCase):
         with patch(
             "macrosynergy.download.fusion_interface._wait_for_api_call",
             return_value=True,
-        ), patch(
-            "requests.request",
-            side_effect=requests.exceptions.RequestException(
-                "Request failed", response=resp
-            ),
         ):
-            self.assertRaisesMessage(
-                Exception,
-                "API request failed",
-                fusion_request_wrapper,
-                "GET",
-                self.URL,
-                headers=self.HDRS,
-            )
+            with patch(
+                "requests.request",
+                side_effect=requests.exceptions.RequestException(
+                    "Request failed", response=resp
+                ),
+            ):
+                self.assertRaisesMessage(
+                    Exception,
+                    "API request failed",
+                    fusion_request_wrapper,
+                    "GET",
+                    self.URL,
+                    headers=self.HDRS,
+                )
 
     def test_json_decode_error(self):
         resp = self._make_response(content=b"notjson")
@@ -556,20 +560,17 @@ class TestParquetArrowFunctions(unittest.TestCase):
         ):
             qdf_table = convert_ticker_based_pyarrow_table_to_qdf(self.table)
             qdf_table = QuantamentalDataFrame(qdf_table.to_pandas())
-            expected = self.table.to_pandas()
-            expected["cid"] = expected["ticker"].str.split("_").str[0]
-            expected["xcat"] = expected["ticker"].str.split("_").str[1]
-            expected = expected.drop(columns=["ticker"])
-            self.assertTrue(
-                bool(
-                    (
-                        QuantamentalDataFrame(qdf_table)
-                        == QuantamentalDataFrame(expected)
-                    )
-                    .all()
-                    .all()
+            expc: pd.DataFrame = self.table.to_pandas()
+            expc[["cid", "xcat"]] = expc["ticker"].str.split("_", expand=True, n=1)
+            expc = expc.drop(columns=["ticker"])
+            expc = QuantamentalDataFrame(expc)
+
+            if PD_2_0_OR_LATER:
+                self.assertTrue((qdf_table == expc).all().all())
+            else:
+                self.assertTrue(
+                    pd.DataFrame(qdf_table).eq(pd.DataFrame(expc)).all().all()
                 )
-            )
 
     def test_read_parquet_from_bytes_to_pyarrow_table(self):
         buf = io.BytesIO()
@@ -602,7 +603,7 @@ class TestParquetArrowFunctions(unittest.TestCase):
                 qdf=True,
             )
             df_filtered = filtered.to_pandas()
-            self.assertEqual(len(df_filtered), 1)  # Since patch returns original table
+            self.assertEqual(len(df_filtered), 1)
 
 
 class TestFusionInterfaceEdgeCases(unittest.TestCase):
@@ -674,20 +675,21 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
 
     def test_request_wrapper_multiple_as_flags(self):
         # Patch requests.request to avoid real HTTP call
-        with patch("requests.request") as mock_req, patch(
-            "macrosynergy.download.fusion_interface._wait_for_api_call",
-            return_value=True,
-        ):
-            mock_req.return_value = MagicMock(
-                status_code=200,
-                content=b"{}",
-                raise_for_status=lambda: None,
-                json=lambda: {},
-            )
-            with self.assertRaises(ValueError):
-                fusion_request_wrapper(
-                    "GET", "http://example.com", as_bytes=True, as_text=True
+        with patch("requests.request") as mock_req:
+            with patch(
+                "macrosynergy.download.fusion_interface._wait_for_api_call",
+                return_value=True,
+            ):
+                mock_req.return_value = MagicMock(
+                    status_code=200,
+                    content=b"{}",
+                    raise_for_status=lambda: None,
+                    json=lambda: {},
                 )
+                with self.assertRaises(ValueError):
+                    fusion_request_wrapper(
+                        "GET", "http://example.com", as_bytes=True, as_text=True
+                    )
 
     @patch(
         "macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True
