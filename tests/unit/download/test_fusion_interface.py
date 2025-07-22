@@ -579,6 +579,7 @@ class TestParquetArrowFunctions(unittest.TestCase):
             }
         )
         self.table = pa.Table.from_pandas(self.df)
+        self.bad_table = pa.Table.from_pandas(self.df.drop(columns=["ticker"]))
 
     def test_convert_ticker_based_pyarrow_table_to_qdf(self):
         with patch(
@@ -598,6 +599,10 @@ class TestParquetArrowFunctions(unittest.TestCase):
                 self.assertTrue(
                     pd.DataFrame(qdf_table).eq(pd.DataFrame(expc)).all().all()
                 )
+
+    def test_convert_ticker_based_pyarrow_table_to_qdf_error(self):
+        with self.assertRaises(KeyError):
+            convert_ticker_based_pyarrow_table_to_qdf(self.bad_table)
 
     def test_read_parquet_from_bytes_to_pyarrow_table(self):
         buf = io.BytesIO()
