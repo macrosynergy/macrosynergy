@@ -1265,5 +1265,109 @@ class TestJPMaQSFusionClientDownloadSeriesMemberDistributionToDisk(unittest.Test
             )
 
 
+class TestJPMaQSFusionClientDownloadAndFilterSeriesMemberDistribution(
+    unittest.TestCase
+):
+    def setUp(self):
+        self.oauth = MagicMock(spec=FusionOAuth)
+        self.simple_client = MagicMock(spec=SimpleFusionAPIClient)
+        patcher = patch(
+            "macrosynergy.download.fusion_interface.SimpleFusionAPIClient",
+            return_value=self.simple_client,
+        )
+        self.addCleanup(patcher.stop)
+        patcher.start()
+        self.client = JPMaQSFusionClient(self.oauth)
+        self.client._catalog = "CATALOG"
+
+    @patch("macrosynergy.download.fusion_interface.filter_parquet_table_as_qdf")
+    @patch(
+        "macrosynergy.download.fusion_interface.read_parquet_from_bytes_to_pyarrow_table"
+    )
+    def test_download_and_filter_calls_all_steps(self, mock_read_parquet, mock_filter):
+        # Arrange
+        fake_bytes = b"bytes"
+        fake_table = MagicMock()
+        filtered_table = MagicMock()
+        filtered_df = MagicMock()
+        filtered_table.to_pandas.return_value = filtered_df
+        self.simple_client.get_seriesmember_distribution_details.return_value = (
+            fake_bytes
+        )
+        mock_read_parquet.return_value = fake_table
+        mock_filter.return_value = filtered_table
+
+        # Act
+        result = self.client.download_and_filter_series_member_distribution(
+            dataset="DS",
+            seriesmember="SM",
+            tickers=["A_B"],
+            start_date="2020-01-01",
+            end_date="2020-12-31",
+            qdf=True,
+        )
+
+        # Assert
+        self.simple_client.get_seriesmember_distribution_details.assert_called_once_with(
+            catalog="CATALOG",
+            dataset="DS",
+            seriesmember="SM",
+            distribution="parquet",
+            as_bytes=True,
+        )
+        mock_read_parquet.assert_called_once_with(fake_bytes)
+        mock_filter.assert_called_once_with(
+            table=fake_table,
+            tickers=["A_B"],
+            start_date="2020-01-01",
+            end_date="2020-12-31",
+            qdf=True,
+        )
+        self.assertIs(result, filtered_df)
+
+    @patch("macrosynergy.download.fusion_interface.filter_parquet_table_as_qdf")
+    @patch(
+        "macrosynergy.download.fusion_interface.read_parquet_from_bytes_to_pyarrow_table"
+    )
+    def test_download_and_filter_defaults(self, mock_read_parquet, mock_filter):
+        # Test with only required args, defaults for others
+        fake_bytes = b"bytes"
+        fake_table = MagicMock()
+        filtered_table = MagicMock()
+        filtered_df = MagicMock()
+        filtered_table.to_pandas.return_value = filtered_df
+        self.simple_client.get_seriesmember_distribution_details.return_value = (
+            fake_bytes
+        )
+        mock_read_parquet.return_value = fake_table
+        mock_filter.return_value = filtered_table
+
+        result = self.client.download_and_filter_series_member_distribution(
+            dataset="DS", seriesmember="SM"
+        )
+        mock_filter.assert_called_once()
+        self.assertIs(result, filtered_df)
+
+    @patch(
+        "macrosynergy.download.fusion_interface.filter_parquet_table_as_qdf",
+        side_effect=Exception("fail"),
+    )
+    @patch(
+        "macrosynergy.download.fusion_interface.read_parquet_from_bytes_to_pyarrow_table"
+    )
+    def test_download_and_filter_raises(self, mock_read_parquet, mock_filter):
+        fake_bytes = b"bytes"
+        fake_table = MagicMock()
+        self.simple_client.get_seriesmember_distribution_details.return_value = (
+            fake_bytes
+        )
+        mock_read_parquet.return_value = fake_table
+        with self.assertRaises(Exception) as cm:
+            self.client.download_and_filter_series_member_distribution(
+                dataset="DS", seriesmember="SM"
+            )
+        self.assertIn("fail", str(cm.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
