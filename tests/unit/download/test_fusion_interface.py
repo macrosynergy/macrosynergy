@@ -19,6 +19,8 @@ from macrosynergy.management.utils.df_utils import is_categorical_qdf
 from macrosynergy.management.types import QuantamentalDataFrame
 import pyarrow as pa
 
+from macrosynergy.download import fusion_interface as fusion_interface_module
+
 from macrosynergy.download.fusion_interface import (
     request_wrapper as fusion_request_wrapper,
     convert_ticker_based_pandas_df_to_qdf,
@@ -34,6 +36,7 @@ from macrosynergy.download.fusion_interface import (
     coerce_real_date,
     filter_parquet_table_as_qdf,
     convert_ticker_based_pyarrow_table_to_qdf,
+    _wait_for_api_call,
 )
 
 
@@ -506,6 +509,30 @@ class TestGetResourcesDf(unittest.TestCase):
         self.assertIn("@id", df.columns)
         self.assertIn("identifier", df.columns)
         self.assertNotIn("title", df.columns)
+
+
+class TestWaitSimple(unittest.TestCase):
+    def test_repeated_calls_delay(self):
+        fusion_interface_module.FUSION_API_DELAY = 0.5
+        fusion_interface_module.LAST_API_CALL = None
+
+        calls = 5
+        start = time.time()
+        for _ in range(calls):
+            _wait_for_api_call()
+        elapsed = time.time() - start
+
+        expected = (calls - 1) * fusion_interface_module.FUSION_API_DELAY
+        self.assertGreaterEqual(
+            elapsed,
+            expected,
+            f"Elapsed {elapsed:.2f}s should be >= expected {expected:.2f}s",
+        )
+        self.assertLess(
+            elapsed - expected,
+            0.1,
+            f"Test overhead too large: extra {elapsed - expected:.2f}s",
+        )
 
 
 class TestUtilityFunctions(unittest.TestCase):
