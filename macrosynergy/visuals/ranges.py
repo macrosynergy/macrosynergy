@@ -83,6 +83,10 @@ def view_ranges(
     nrows : int
         Number of rows in the facet plot. Default is None, which will be set to
         `min(n_xcats, 2)`.
+    drop_cid_labels : bool
+        If True, the x-axis labels for cids will be dropped when plotting a facet. 
+        Default is False. This is useful when there are many cids and the labels would 
+        overlap.
     """
 
     df = QuantamentalDataFrame(df)
@@ -291,14 +295,14 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    # view_ranges(
-    #     dfd,
-    #     xcats=["XR"],
-    #     kind="box",
-    #     start="2012-01-01",
-    #     end="2018-01-01",
-    #     sort_cids_by="std",
-    # )
+    view_ranges(
+        dfd,
+        xcats=["XR"],
+        kind="box",
+        start="2012-01-01",
+        end="2018-01-01",
+        sort_cids_by="std",
+    )
 
     filter_1 = (dfd["xcat"] == "XR") & (dfd["cid"] == "AUD")
     dfd = dfd[~filter_1]
@@ -315,13 +319,12 @@ if __name__ == "__main__":
     )
     view_ranges(
         dfd,
-        xcats=["XR", "CRY", "INFL", "GROWTH", "XR2", "XR3", ],
+        xcats=["XR", "CRY", "INFL", "GROWTH", "XR2", "XR3"],
         cids=cids,
-        kind="bar",
+        kind="box",
         start="2012-01-01",
         end="2018-01-01",
         sort_cids_by=None,
-        xcat_labels={"XR": "Equity Risk", "CRY": "Commodity Risk", "INFL": "Inflation Risk", "GROWTH": "Growth Risk", "XR2": "Equity Risk 2", "XR3": "Equity Risk 3"},
         facet=True,
         ncols=2,
         nrows=3,
