@@ -627,73 +627,12 @@ if __name__ == "__main__":
         "CRY2": "Carry 2",
     }
     # Clustered correlation matrices. Test hierarchical clustering.
-    # view_correlation(
-    #     df=dfd,
-    #     xcats=["XR", "CRY", "XR2", "CRY2"],
-    #     xcats_secondary=["CRY", "XR", "CRY2", "XR2"],
-    #     cids=cids,
-    #     cids_secondary=cids[:4],
-    #     start=start,
-    #     end=end,
-    #     val="value",
-    #     freq=None,
-    #     cluster=True,
-    #     title="Correlation Matrix",
-    #     size=(14, 8),
-    #     max_color=None,
-    #     lags=None,
-    #     lags_secondary=None,
-    #     annot=True,
-    #     fmt=".2f",
-    #     xcat_labels=xcat_labels,
-    #     xcat_secondary_labels={
-    #         "XR": "Excess returns",
-    #         "CRY": "Carry",
-    #         "XR2": "Excess returns 2",
-    #         "CRY2": "Carry 2",
-    #     },
-    # )
-    # print(xcat_labels)
-    
-    # view_correlation(
-    #     df=dfd,
-    #     xcats=["XR"],
-    #     xcats_secondary=["CRY", "XR"],
-    #     cids=cids,
-    #     cids_secondary=cids[:1],
-    #     start=start,
-    #     end=end,
-    #     val="value",
-    #     freq=None,
-    #     cluster=True,
-    #     title="Correlation Matrix",
-    #     size=(14, 8),
-    #     max_color=None,
-    #     lags=None,
-    #     lags_secondary=None,
-    #     annot=True,
-    #     fmt=".2f",
-    #     xcat_labels={
-    #         "XR": "Excess returns",
-    #     },
-    #     xcat_secondary_labels={
-    #         "CRY": "Carry",
-    #         "XR": "Excess returns",
-    #     },
-    #     # cid_secondary_labels={
-    #     #     "AUD": "Australian Dollar",
-    #     #     "CAD": "Canadian Dollar",
-    #     #     "GBP": "British Pound",
-    #     #     "USD": "US Dollar",
-    #     # }
-    # )
-    
     view_correlation(
         df=dfd,
-        xcats=["XR"],
-        # xcats_secondary=["CRY", "XR"],
-        cids=cids[:4],
-        # cids_secondary=cids[:1],
+        xcats=["XR", "CRY", "XR2", "CRY2"],
+        xcats_secondary=["CRY", "XR", "CRY2", "XR2"],
+        cids=cids,
+        cids_secondary=cids[:4],
         start=start,
         end=end,
         val="value",
@@ -706,17 +645,65 @@ if __name__ == "__main__":
         lags_secondary=None,
         annot=True,
         fmt=".2f",
-        # xcat_labels={
-        #     "XR": "Excess returns",
-        # },
-        # xcat_secondary_labels={
-        #     "CRY": "Carry",
-        #     "XR": "Excess returns",
-        # },
-        cid_labels={
-            "AUD": "Australian Dollar",
-            "CAD": "Canadian Dollar",
-            "GBP": "British Pound",
-            "USD": "US Dollar",
-        }
+        xcat_labels=xcat_labels,
+        xcat_secondary_labels={
+            "XR": "Excess returns",
+            "CRY": "Carry",
+            "XR2": "Excess returns 2",
+            "CRY2": "Carry 2",
+        },
+    )
+    print(xcat_labels)
+    
+    view_correlation(
+        df=dfd,
+        xcats=["XR"],
+        xcats_secondary=["CRY", "XR"],
+        cids=cids,
+        cids_secondary=cids[:1],
+        start=start,
+        end=end,
+        val="value",
+        freq=None,
+        cluster=True,
+        title="Correlation Matrix",
+        size=(14, 8),
+        max_color=None,
+        lags=None,
+        lags_secondary=None,
+        annot=True,
+        fmt=".2f",
+        xcat_labels={
+            "XR": "Excess returns",
+        },
+        xcat_secondary_labels={
+            "CRY": "Carry",
+            "XR": "Excess returns",
+        },
+        # cid_secondary_labels={
+        #     "AUD": "Australian Dollar",
+        #     "CAD": "Canadian Dollar",
+        #     "GBP": "British Pound",
+        #     "USD": "US Dollar",
+        # }
+    )
+    
+    view_correlation(
+        df=dfd,
+        xcats=["XR"],
+        # xcats_secondary=["CRY", "XR"],
+        cids=cids[:4],
+        cids_secondary=cids[:1],
+        start=start,
+        end=end,
+        val="value",
+        freq=None,
+        cluster=True,
+        title="Correlation Matrix",
+        size=(14, 8),
+        max_color=None,
+        lags=None,
+        lags_secondary=None,
+        annot=True,
+        fmt=".2f",
     )
