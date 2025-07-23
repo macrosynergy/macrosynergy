@@ -1485,6 +1485,47 @@ class TestJPMaQSFusionClientDownloadMultipleDistributionsToDisk(unittest.TestCas
             self.assertTrue(self.mock_sleep.called)
             self.mock_makedirs.assert_called_once_with(expected_folder, exist_ok=True)
 
+    def test_failure_records_populated_on_exception(self):
+        # Arrange: catalog and dataset list with two datasets
+        fake_catalog = MagicMock(spec=pd.DataFrame)
+        self.client.get_metadata_catalog = MagicMock(return_value=fake_catalog)
+        ds_df = pd.DataFrame({"identifier": ["ds1", "ds2"]})
+        self.client.list_datasets = MagicMock(return_value=ds_df)
+
+        # Side effect: ds1 succeeds, ds2 raises
+        def download_side_effect(save_directory, dataset, qdf, as_csv, keep_raw_data):
+            if dataset == "ds2":
+                raise Exception("network error")
+            return None
+
+        self.client.download_latest_distribution_to_disk = MagicMock(
+            side_effect=download_side_effect
+        )
+
+        # Act within temp dir
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tmp_path = Path(tmpdirname)
+            result = self.client._download_multiple_distributions_to_disk(
+                folder=str(tmp_path),
+                qdf=False,
+                include_catalog=False,
+                include_full_datasets=False,
+                include_explorer_datasets=False,
+                include_delta_datasets=False,
+                as_csv=False,
+                keep_raw_data=False,
+                datasets_list=None,
+            )
+
+            # Assert: failure_messages contains expected error for ds2
+            self.assertEqual(len(self.client.failure_messages), 1)
+            self.assertIn(
+                "Failed to download dataset ds2: network error",
+                self.client.failure_messages[0],
+            )
+            # Assert: returned catalog is preserved
+            self.assertIs(result, fake_catalog)
+
 
 if __name__ == "__main__":
     unittest.main()
