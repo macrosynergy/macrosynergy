@@ -1576,6 +1576,63 @@ class TestJPMaQSFusionClientDownloadMultipleDistributionsToDisk(unittest.TestCas
                 msg,
             )
 
+    def test_download_latest_delta_distribution_calls_download_multiple(self):
+        # Arrange: patch the internal downloader
+        self.client._download_multiple_distributions_to_disk = MagicMock(
+            return_value=pd.DataFrame()
+        )
+        # Act
+        result = self.client.download_latest_delta_distribution(
+            folder="test_folder",
+            qdf=True,
+            as_csv=False,
+            keep_raw_data=True,
+            extra_param=123,
+        )
+        # Assert
+        self.client._download_multiple_distributions_to_disk.assert_called_once_with(
+            folder="test_folder",
+            qdf=True,
+            include_catalog=False,
+            include_full_datasets=False,
+            include_explorer_datasets=False,
+            include_delta_datasets=True,
+            as_csv=False,
+            keep_raw_data=True,
+        )
+        self.assertIsInstance(result, pd.DataFrame)
+
+    def test_download_latest_full_snapshot_calls_download_multiple(self):
+        # Arrange: patch the internal downloader
+        self.client._download_multiple_distributions_to_disk = MagicMock(
+            return_value=pd.DataFrame()
+        )
+        # Act
+        result = self.client.download_latest_full_snapshot(
+            folder="snapshot_folder",
+            qdf=False,
+            include_catalog=True,
+            include_explorer_datasets=True,
+            include_delta_datasets=True,
+            as_csv=True,
+            keep_raw_data=False,
+            datasets_list=["dsA", "dsB"],
+            another_arg="value",
+        )
+        # Assert
+        self.client._download_multiple_distributions_to_disk.assert_called_once_with(
+            folder="snapshot_folder",
+            qdf=False,
+            include_catalog=True,
+            include_full_datasets=True,
+            include_explorer_datasets=True,
+            include_delta_datasets=True,
+            as_csv=True,
+            keep_raw_data=False,
+            datasets_list=["dsA", "dsB"],
+        )
+        self.assertIsInstance(result, pd.DataFrame)
+
 
 if __name__ == "__main__":
     unittest.main()
