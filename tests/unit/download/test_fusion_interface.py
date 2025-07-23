@@ -1674,6 +1674,79 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
             with warnings.catch_warnings(record=True):
                 self.client.download(tickers=["ABCDEFGH"])
 
+    @patch("time.sleep", lambda *args, **kwargs: None)
+    def test_download_threadpool_success(self):
+        df = self.client.download(
+            folder=None,
+            tickers=["AAA", "BBB"],
+            start_date="2025-01-01",
+            end_date="2025-06-01",
+            qdf=False,
+            as_csv=False,
+        )
+        self.assertEqual(
+            self.client.download_and_filter_series_member_distribution.call_count, 2
+        )
+        self.assertEqual(len(df), 4)
+        unique_datasets = set(df["dataset"].tolist())
+        expected = {"JPMAQS_ONE", "JPMAQS_TWO"}
+        self.assertEqual(unique_datasets, expected)
+
+    @patch("time.sleep", lambda *args, **kwargs: None)
+    def test_download_with_cids_xcats(self):
+        custom_catalog = pd.DataFrame({"Ticker": ["X_Y"], "Theme": ["special theme"]})
+        self.client.get_metadata_catalog.return_value = custom_catalog
+
+        df = self.client.download(
+            folder=None,
+            cids=["X"],
+            xcats=["Y"],
+            start_date="2025-02-01",
+            end_date="2025-02-15",
+        )
+        self.assertEqual(
+            self.client.download_and_filter_series_member_distribution.call_count, 1
+        )
+        self.assertTrue((df["dataset"] == "JPMAQS_SPECIAL_THEME").all())
+
+    @patch("time.sleep", lambda *args, **kwargs: None)
+    def test_start_end_dates_swapped(self):
+        captured = []
+
+        def capture_side_effect(
+            dataset, seriesmember, tickers, start_date, end_date, qdf, **kw
+        ):
+            captured.append((start_date, end_date))
+            return pd.DataFrame({"value": [1], "dataset": [dataset]})
+
+        self.client.download_and_filter_series_member_distribution.side_effect = (
+            capture_side_effect
+        )
+
+        self.client.download(
+            folder=None, tickers=["AAA"], start_date="2025-06-01", end_date="2025-01-01"
+        )
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0], ("2025-01-01", "2025-06-01"))
+
+    @patch("time.sleep", lambda *args, **kwargs: None)
+    def test_warning_for_non_existing_tickers(self):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            df = self.client.download(
+                folder=None,
+                tickers=["AAA", "ZZZ"],
+                start_date="2025-03-01",
+                end_date="2025-03-10",
+            )
+            self.assertEqual(len(w), 1)
+            self.assertIn(
+                "There are 1 tickers that do not exist in the metadata catalog",
+                str(w[0].message),
+            )
+        self.assertTrue((df["dataset"] == "JPMAQS_ONE").all())
+        self.assertEqual(len(df), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
