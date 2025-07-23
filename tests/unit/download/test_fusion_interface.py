@@ -1526,6 +1526,56 @@ class TestJPMaQSFusionClientDownloadMultipleDistributionsToDisk(unittest.TestCas
             # Assert: returned catalog is preserved
             self.assertIs(result, fake_catalog)
 
+    def test_folder_none_uses_cwd(self):
+        # Arrange: when folder is None, use current working directory
+        fake_catalog = MagicMock(spec=pd.DataFrame)
+        self.client.get_metadata_catalog = MagicMock(return_value=fake_catalog)
+        ds_df = pd.DataFrame({"identifier": ["ds1"]})
+        self.client.list_datasets = MagicMock(return_value=ds_df)
+        self.client.download_latest_distribution_to_disk = MagicMock()
+        # Patch Path.cwd to a temp directory
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tmp_path = Path(tmpdirname)
+            with patch.object(Path, "cwd", return_value=tmp_path):
+                result = self.client._download_multiple_distributions_to_disk(
+                    folder=None,
+                    datasets_list=["ds1"],
+                )
+
+            expected_folder = tmp_path / "jpmaqs-download-2025-07-23_12-00-00"
+            # Assert makedirs used cwd-based path
+            self.mock_makedirs.assert_called_once_with(expected_folder, exist_ok=True)
+            # Assert download called once for ds1
+            self.client.download_latest_distribution_to_disk.assert_called_once_with(
+                save_directory=expected_folder,
+                dataset="ds1",
+                qdf=False,
+                as_csv=False,
+                keep_raw_data=False,
+            )
+            # Assert returned catalog
+            self.assertIs(result, fake_catalog)
+
+    def test_datasets_list_no_match_raises(self):
+        # Arrange: provided list yields no matches
+        fake_catalog = MagicMock(spec=pd.DataFrame)
+        self.client.get_metadata_catalog = MagicMock(return_value=fake_catalog)
+        ds_df = pd.DataFrame({"identifier": ["alpha", "beta"]})
+        self.client.list_datasets = MagicMock(return_value=ds_df)
+        # Act & Assert
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tmp_path = Path(tmpdirname)
+            with self.assertRaises(ValueError) as cm:
+                self.client._download_multiple_distributions_to_disk(
+                    folder=str(tmp_path),
+                    datasets_list=["gamma"],
+                )
+            msg = str(cm.exception)
+            self.assertIn(
+                "No datasets found in the provided `datasets_list`. Available datasets: alpha, beta",
+                msg,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
