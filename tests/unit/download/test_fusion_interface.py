@@ -11,6 +11,7 @@ import time
 
 import pandas as pd
 import requests
+from pathlib import Path
 
 from macrosynergy.download.fusion_interface import cache_decorator
 from macrosynergy.compat import PD_2_0_OR_LATER
@@ -299,14 +300,12 @@ class TestSimpleFusionAPIClient(unittest.TestCase):
         with patch(
             "macrosynergy.download.fusion_interface.request_wrapper_stream_bytes_to_disk"
         ) as mock_stream:
-            # Arrange
             filename = "out.parquet"
             catalog = "common"
             dataset = "MY_DS"
             seriesmember = "latest"
             extra_kwargs = {"timeout": 30, "verify": False}
 
-            # Act
             self.client.get_seriesmember_distribution_details_to_disk(
                 filename=filename,
                 catalog=catalog,
@@ -315,7 +314,6 @@ class TestSimpleFusionAPIClient(unittest.TestCase):
                 **extra_kwargs,
             )
 
-            # Assert
             expected_endpoint = (
                 f"catalogs/{catalog}"
                 f"/datasets/{dataset}"
@@ -436,7 +434,6 @@ class TestJPMaQSFusionClientTickers(unittest.TestCase):
         self.client = JPMaQSFusionClient(self.oauth)
 
     def test_list_tickers_returns_sorted_list(self):
-        # Mock get_metadata_catalog to return a DataFrame with 'Ticker' column
         df = pd.DataFrame({"Ticker": ["BBB", "aaa", "CCC"]})
         self.client.get_metadata_catalog = MagicMock(return_value=df)
         result = self.client.list_tickers()
@@ -730,7 +727,6 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
             fusion_request_wrapper(123, "url")
 
     def test_request_wrapper_multiple_as_flags(self):
-        # Patch requests.request to avoid real HTTP call
         with patch("requests.request") as mock_req:
             with patch(
                 "macrosynergy.download.fusion_interface._wait_for_api_call",
@@ -797,7 +793,6 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
 
     def test_get_resources_df_custom_sort_columns_missing_column(self):
         d = {"resources": [{"@id": "id1", "identifier": "foo"}]}
-        # Should not raise AssertionError, but should work (title is optional)
         df = get_resources_df(d, custom_sort_columns=True)
         self.assertIn("@id", df.columns)
         self.assertIn("identifier", df.columns)
@@ -825,7 +820,7 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
             self.assertIn("Failed to read Parquet".lower(), str(cm.exception).lower())
 
     def test_jpmaqsclient_list_datasets_all_explorer(self):
-        # All datasets are explorer datasets
+        # All datasets are explorer datasets case
         with patch(
             "macrosynergy.download.fusion_interface.SimpleFusionAPIClient"
         ) as mock_client:
@@ -919,12 +914,10 @@ class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
     )
     @patch("requests.request")
     def test_stream_bytes_to_disk_writes_file(self, mock_request, _):
-        # Prepare mock response with iter_content
         mock_resp = MagicMock()
         mock_resp.__enter__.return_value = mock_resp
         mock_resp.__exit__.return_value = False
         mock_resp.raise_for_status.return_value = None
-        # Simulate two chunks
         mock_resp.iter_content.return_value = [b"abc", b"def"]
         mock_request.return_value = mock_resp
 
@@ -994,7 +987,6 @@ class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
         mock_resp.__enter__.return_value = mock_resp
         mock_resp.__exit__.return_value = False
         mock_resp.raise_for_status.return_value = None
-        # 10 bytes per chunk, values 1..20
         chunks = [bytes([i]) * 10 for i in range(1, 21)]
         mock_resp.iter_content.return_value = chunks
         mock_request.return_value = mock_resp
@@ -1066,11 +1058,9 @@ class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
                     self.assertEqual(set(qdf.columns), expected_cols)
                     self.assertEqual(set(tkrs), set(df["ticker"]))
 
-                    # Check raw file existence/deletion
                     if keep_raw_data:
                         self.assertTrue(os.path.exists(parquet_path))
                     else:
-                        # If as_csv and not keep_raw_data, parquet should be deleted
                         if as_csv:
                             self.assertFalse(os.path.exists(parquet_path))
                         else:
@@ -1094,7 +1084,6 @@ class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
             df.to_parquet(parquet_path, index=False)
             convert_ticker_based_parquet_file_to_qdf(parquet_path, qdf=False)
             self.assertTrue(os.path.exists(parquet_path))
-            # check that this is the same file
             qdf = pd.read_parquet(parquet_path)
             pd.testing.assert_frame_equal(qdf, df)
 
@@ -1119,7 +1108,6 @@ class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
             )
             expected_file = os.path.join(tmpdir, "test.csv")
             self.assertTrue(os.path.exists(expected_file))
-            # check that this is the same file
             qdf = pd.read_csv(expected_file)
             pd.testing.assert_frame_equal(qdf, df)
 
@@ -1149,9 +1137,7 @@ class TestJPMaQSFusionClientDownloadSeriesMemberDistributionToDisk(unittest.Test
     def test_successful_download_and_conversion(
         self, mock_exists, mock_makedirs, mock_convert
     ):
-        # check file exists after download
         mock_exists.return_value = True
-        # mock successful call to get_seriesmember_distribution_details_to_disk
         self.simple_client.get_seriesmember_distribution_details_to_disk.return_value = None
 
         with patch("builtins.print") as mock_print:
@@ -1164,13 +1150,9 @@ class TestJPMaQSFusionClientDownloadSeriesMemberDistributionToDisk(unittest.Test
                 as_csv=True,
                 keep_raw_data=False,
             )
-            # Check makedirs called
             mock_makedirs.assert_called_once_with(self.save_dir, exist_ok=True)
-            # Check file existence checked
             mock_exists.assert_called()
-            # Check conversion called
             mock_convert.assert_called_once()
-            # Check print called for both download and conversion
             self.assertTrue(
                 any(
                     "Successfully downloaded" in str(c[0][0])
@@ -1190,7 +1172,6 @@ class TestJPMaQSFusionClientDownloadSeriesMemberDistributionToDisk(unittest.Test
     @patch("os.makedirs")
     @patch("os.path.exists")
     def test_file_not_found_raises(self, mock_exists, mock_makedirs, mock_convert):
-        # File does not exist after download
         mock_exists.return_value = False
         self.simple_client.get_seriesmember_distribution_details_to_disk.return_value = None
         with self.assertRaises(FileNotFoundError) as cm:
@@ -1222,7 +1203,6 @@ class TestJPMaQSFusionClientDownloadSeriesMemberDistributionToDisk(unittest.Test
                 seriesmember="SM",
                 qdf=False,
             )
-            # Should print only download message, not conversion
             prints = [str(c[0][0]) for c in mock_print.call_args_list]
             self.assertTrue(any("Successfully downloaded" in p for p in prints))
             self.assertFalse(any("Successfully converted" in p for p in prints))
@@ -1273,11 +1253,9 @@ class TestJPMaQSFusionClientDownloadSeriesMemberDistributionToDisk(unittest.Test
     def test_download_latest_distribution_to_disk(
         self, mock_download_to_disk, mock_get_latest
     ):
-        # Arrange
         client = self.client
         save_dir = self.save_dir
         dataset = "DS"
-        # Act
         client.download_latest_distribution_to_disk(
             save_directory=save_dir,
             dataset=dataset,
@@ -1286,7 +1264,6 @@ class TestJPMaQSFusionClientDownloadSeriesMemberDistributionToDisk(unittest.Test
             as_csv=True,
             keep_raw_data=False,
         )
-        # Assert
         mock_get_latest.assert_called_once_with(dataset=dataset)
         mock_download_to_disk.assert_called_once_with(
             save_directory=save_dir,
@@ -1319,7 +1296,6 @@ class TestJPMaQSFusionClientDownloadAndFilterSeriesMemberDistribution(
         "macrosynergy.download.fusion_interface.read_parquet_from_bytes_to_pyarrow_table"
     )
     def test_download_and_filter_calls_all_steps(self, mock_read_parquet, mock_filter):
-        # Arrange
         fake_bytes = b"bytes"
         fake_table = MagicMock()
         filtered_table = MagicMock()
@@ -1331,7 +1307,6 @@ class TestJPMaQSFusionClientDownloadAndFilterSeriesMemberDistribution(
         mock_read_parquet.return_value = fake_table
         mock_filter.return_value = filtered_table
 
-        # Act
         result = self.client.download_and_filter_series_member_distribution(
             dataset="DS",
             seriesmember="SM",
@@ -1341,7 +1316,6 @@ class TestJPMaQSFusionClientDownloadAndFilterSeriesMemberDistribution(
             qdf=True,
         )
 
-        # Assert
         self.simple_client.get_seriesmember_distribution_details.assert_called_once_with(
             catalog="CATALOG",
             dataset="DS",
@@ -1364,7 +1338,6 @@ class TestJPMaQSFusionClientDownloadAndFilterSeriesMemberDistribution(
         "macrosynergy.download.fusion_interface.read_parquet_from_bytes_to_pyarrow_table"
     )
     def test_download_and_filter_defaults(self, mock_read_parquet, mock_filter):
-        # Test with only required args, defaults for others
         fake_bytes = b"bytes"
         fake_table = MagicMock()
         filtered_table = MagicMock()
@@ -1405,138 +1378,112 @@ class TestJPMaQSFusionClientDownloadAndFilterSeriesMemberDistribution(
 
 class TestJPMaQSFusionClientDownloadMultipleDistributionsToDisk(unittest.TestCase):
     def setUp(self):
-        from macrosynergy.download.fusion_interface import (
-            JPMaQSFusionClient,
-            FusionOAuth,
-        )
+        # Patch filesystem and time utilities
+        self.patcher_makedirs = patch("os.makedirs")
+        self.mock_makedirs = self.patcher_makedirs.start()
 
-        self.oauth = MagicMock(spec=FusionOAuth)
-        self.client = JPMaQSFusionClient(self.oauth)
+        self.patcher_timestamp = patch("pandas.Timestamp")
+        self.mock_timestamp_class = self.patcher_timestamp.start()
 
-    @patch("macrosynergy.download.fusion_interface.cf.ThreadPoolExecutor")
-    @patch("macrosynergy.download.fusion_interface.get_resources_df")
-    @patch("macrosynergy.download.fusion_interface.pd.DataFrame")
-    @patch("macrosynergy.download.fusion_interface.os.path.exists", return_value=True)
-    @patch("macrosynergy.download.fusion_interface.os.makedirs")
-    def test_successful_download(
-        self, mock_makedirs, mock_exists, mock_df, mock_get_resources_df, mock_executor
-    ):
-        # Simulate catalog_df and datasets
-        mock_catalog_df = pd.DataFrame({"Ticker": ["A_B"], "Theme": ["FOO"]})
-        mock_get_resources_df.return_value = pd.DataFrame(
-            {
-                "@id": ["id1"],
-                "identifier": ["JPMAQS_FOO"],
-                "title": ["Foo"],
-                "description": ["desc"],
-                "isRestricted": [False],
-            }
+        self.patcher_sleep = patch("time.sleep")
+        self.mock_sleep = self.patcher_sleep.start()
+
+        # Patch DataFrame serialization methods to avoid actual I/O
+        self.patcher_to_csv = patch.object(pd.DataFrame, "to_csv")
+        self.mock_to_csv = self.patcher_to_csv.start()
+
+        self.patcher_to_parquet = patch.object(pd.DataFrame, "to_parquet")
+        self.mock_to_parquet = self.patcher_to_parquet.start()
+
+        # Patch the underlying SimpleFusionAPIClient to avoid real HTTP calls
+        self.patcher_simple_client = patch(
+            "macrosynergy.download.fusion_interface.SimpleFusionAPIClient"
         )
-        self.client.get_metadata_catalog = MagicMock(return_value=mock_catalog_df)
-        self.client.list_datasets = MagicMock(
-            return_value=mock_get_resources_df.return_value
-        )
-        # Patch ThreadPoolExecutor to simulate futures
-        mock_future = MagicMock()
-        mock_future.result.return_value = None
-        mock_executor.return_value.__enter__.return_value = mock_executor
-        mock_executor.submit.return_value = mock_future
-        mock_executor.items.return_value = [("JPMAQS_FOO", mock_future)]
-        # Patch time.sleep to avoid delay
-        with patch("macrosynergy.download.fusion_interface.time.sleep"):
+        self.mock_simple_client_cls = self.patcher_simple_client.start()
+        self.mock_simple_client = MagicMock()
+        self.mock_simple_client_cls.return_value = self.mock_simple_client
+
+        # Setup a fixed timestamp
+        fixed_ts = MagicMock()
+        fixed_ts.strftime.return_value = "2025-07-23_12-00-00"
+        self.mock_timestamp_class.utcnow.return_value = fixed_ts
+
+        # Instantiate client with dummy oauth handler
+        dummy_oauth = MagicMock()
+        self.client = JPMaQSFusionClient(oauth_handler=dummy_oauth)
+
+    def tearDown(self):
+        # Stop all patchers
+        self.patcher_makedirs.stop()
+        self.patcher_timestamp.stop()
+        self.patcher_sleep.stop()
+        self.patcher_to_csv.stop()
+        self.patcher_to_parquet.stop()
+        self.patcher_simple_client.stop()
+
+    def test_successful_download_csv(self):
+        # Arrange: catalog and dataset list
+        fake_catalog = MagicMock(spec=pd.DataFrame)
+        self.client.get_metadata_catalog = MagicMock(return_value=fake_catalog)
+        ds_df = pd.DataFrame({"identifier": ["ds1", "ds2"]})
+        self.client.list_datasets = MagicMock(return_value=ds_df)
+        self.client.download_latest_distribution_to_disk = MagicMock()
+
+        # Act within a temp dir context
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tmp_path = Path(tmpdirname)
             result = self.client._download_multiple_distributions_to_disk(
-                folder=".",
+                folder=str(tmp_path),
                 qdf=True,
                 include_catalog=True,
-                include_full_datasets=True,
-                include_explorer_datasets=False,
+                include_full_datasets=False,
+                include_explorer_datasets=True,
                 include_delta_datasets=False,
-                as_csv=False,
-                keep_raw_data=False,
-                datasets_list=None,
-            )
-        self.assertIsNotNone(result)
-        self.client.get_metadata_catalog.assert_called_once()
-        self.client.list_datasets.assert_called_once()
-
-    @patch("macrosynergy.download.fusion_interface.cf.ThreadPoolExecutor")
-    @patch("macrosynergy.download.fusion_interface.get_resources_df")
-    @patch("macrosynergy.download.fusion_interface.pd.DataFrame")
-    @patch("macrosynergy.download.fusion_interface.os.path.exists", return_value=True)
-    @patch("macrosynergy.download.fusion_interface.os.makedirs")
-    def test_with_datasets_list_and_no_match(
-        self, mock_makedirs, mock_exists, mock_df, mock_get_resources_df, mock_executor
-    ):
-        # Simulate catalog_df and datasets
-        mock_catalog_df = pd.DataFrame({"Ticker": ["A_B"], "Theme": ["FOO"]})
-        mock_get_resources_df.return_value = pd.DataFrame(
-            {
-                "@id": ["id1"],
-                "identifier": ["JPMAQS_FOO"],
-                "title": ["Foo"],
-                "description": ["desc"],
-                "isRestricted": [False],
-            }
-        )
-        self.client.get_metadata_catalog = MagicMock(return_value=mock_catalog_df)
-        self.client.list_datasets = MagicMock(
-            return_value=mock_get_resources_df.return_value
-        )
-        # Patch ThreadPoolExecutor to simulate futures
-        mock_executor.return_value.__enter__.return_value = mock_executor
-        # datasets_list with no match
-        with self.assertRaises(ValueError):
-            self.client._download_multiple_distributions_to_disk(
-                folder=".",
-                qdf=True,
-                include_catalog=True,
-                include_full_datasets=True,
-                include_explorer_datasets=False,
-                include_delta_datasets=False,
-                as_csv=False,
-                keep_raw_data=False,
-                datasets_list=["notfound"],
+                as_csv=True,
+                keep_raw_data=True,
+                datasets_list=["ds1"],
             )
 
-    @patch("macrosynergy.download.fusion_interface.cf.ThreadPoolExecutor")
-    @patch("macrosynergy.download.fusion_interface.get_resources_df")
-    @patch("macrosynergy.download.fusion_interface.pd.DataFrame")
-    @patch("macrosynergy.download.fusion_interface.os.path.exists", return_value=True)
-    @patch("macrosynergy.download.fusion_interface.os.makedirs")
-    def test_download_with_empty_datasets(
-        self, mock_makedirs, mock_exists, mock_df, mock_get_resources_df, mock_executor
-    ):
-        # Simulate catalog_df and datasets
-        mock_catalog_df = pd.DataFrame({"Ticker": ["A_B"], "Theme": ["FOO"]})
-        mock_get_resources_df.return_value = pd.DataFrame(
-            {
-                "@id": [],
-                "identifier": [],
-                "title": [],
-                "description": [],
-                "isRestricted": [],
-            }
-        )
-        self.client.get_metadata_catalog = MagicMock(return_value=mock_catalog_df)
-        self.client.list_datasets = MagicMock(
-            return_value=mock_get_resources_df.return_value
-        )
-        # Patch ThreadPoolExecutor to simulate no futures
-        mock_executor.return_value.__enter__.return_value = mock_executor
-        # Patch time.sleep to avoid delay
-        with patch("macrosynergy.download.fusion_interface.time.sleep"):
-            result = self.client._download_multiple_distributions_to_disk(
-                folder=".",
-                qdf=True,
+            expected_folder = tmp_path / "jpmaqs-download-2025-07-23_12-00-00"
+
+            # Assert behavior
+            self.client.get_metadata_catalog.assert_called_once()
+            fake_catalog.to_csv.assert_called_once()
+            fake_catalog.to_parquet.assert_not_called()
+            self.client.list_datasets.assert_called_once_with(
                 include_catalog=True,
-                include_full_datasets=True,
-                include_explorer_datasets=False,
+                include_full_datasets=False,
+                include_explorer_datasets=True,
                 include_delta_datasets=False,
-                as_csv=False,
-                keep_raw_data=False,
-                datasets_list=None,
             )
-            self.assertIsNotNone(result)
+            # Expect download called for each dataset when dataset_list not applied correctly
+            self.assertEqual(
+                self.client.download_latest_distribution_to_disk.call_count,
+                2,
+                "Expected download_latest_distribution_to_disk to be called twice",
+            )
+            expected_calls = [
+                unittest.mock.call(
+                    save_directory=expected_folder,
+                    dataset="ds1",
+                    qdf=True,
+                    as_csv=True,
+                    keep_raw_data=True,
+                ),
+                unittest.mock.call(
+                    save_directory=expected_folder,
+                    dataset="ds2",
+                    qdf=True,
+                    as_csv=True,
+                    keep_raw_data=True,
+                ),
+            ]
+            self.client.download_latest_distribution_to_disk.assert_has_calls(
+                expected_calls, any_order=True
+            )
+            self.assertIs(result, fake_catalog)
+            self.assertTrue(self.mock_sleep.called)
+            self.mock_makedirs.assert_called_once_with(expected_folder, exist_ok=True)
 
 
 if __name__ == "__main__":
