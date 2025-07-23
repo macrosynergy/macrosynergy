@@ -886,7 +886,11 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
         try:
             client.list_datasets(include_full_datasets=False)
         except Exception as e:
-            expc_msg = "At least one of `include_catalog`, `include_full_datasets`, `include_explorer_datasets`, or `include_delta_datasets` must be True.' not found in 'At least one of `include_catalog`, `include_notifications`, `include_full_datasets`, `include_explorer_datasets`, or `include_delta_datasets` must be True."
+            expc_msg = (
+                "At least one of `include_catalog`, `include_notifications`, "
+                "`include_full_datasets`, `include_explorer_datasets`, or "
+                "`include_delta_datasets` must be True."
+            )
             self.assertIn(expc_msg, str(e))
             self.assertIsInstance(e, ValueError)
 
