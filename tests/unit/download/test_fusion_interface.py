@@ -62,13 +62,11 @@ class TestRequestWrapper(unittest.TestCase):
         r.url = self.URL
         r.request = MagicMock(method="GET")
 
-        # raise_for_status
         if raise_exc:
             r.raise_for_status.side_effect = raise_exc
         else:
             r.raise_for_status.return_value = None
 
-        # json()
         if json_data is not None:
             r.json.return_value = json_data
         else:
@@ -361,10 +359,11 @@ class TestJPMaQSFusionClient(unittest.TestCase):
                 },
             ]
         }
-        # should filter out JPMAQS_METADATA_CATALOG -- not really a dataset
+        # should filter out metadata and notifs datasets -- not really datasets
         df = self.client.list_datasets()
         self.assertIn("identifier", df.columns)
-        self.assertTrue((df["identifier"] != "JPMAQS_METADATA_CATALOG").all())
+        ds = [self.client._catalog_dataset, self.client._notifications_dataset]
+        self.assertTrue(df[df["identifier"].isin(ds)].empty)
 
     def test_get_metadata_catalog(self):
         fake_bytes = b"parquetbytes"
