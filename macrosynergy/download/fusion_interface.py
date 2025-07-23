@@ -1855,7 +1855,7 @@ class JPMaQSFusionClient:
                 include_catalog=True,
                 include_full_datasets=True,
                 as_csv=as_csv,
-                keep_raw_data=False,
+                keep_raw_data=kwargs.pop("keep_raw_data", False),
                 datasets_list=datasets,
                 **kwargs,
             )
