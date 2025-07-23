@@ -1130,13 +1130,15 @@ class JPMaQSFusionClient:
         """
         if not (
             include_catalog
+            or include_notifications
             or include_full_datasets
             or include_explorer_datasets
             or include_delta_datasets
         ):
             raise ValueError(
-                "At least one of `include_catalog`, `include_full_datasets`, "
-                "`include_explorer_datasets`, or `include_delta_datasets` must be True."
+                "At least one of `include_catalog`, `include_notifications`, "
+                "`include_full_datasets`, `include_explorer_datasets`, or "
+                "`include_delta_datasets` must be True."
             )
 
         r = self.simple_fusion_client.get_product_details(
