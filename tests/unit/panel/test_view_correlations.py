@@ -4,7 +4,7 @@ from pandas.testing import assert_frame_equal
 from tests.simulate import make_qdf
 from macrosynergy.panel.view_correlations import correl_matrix
 from macrosynergy.visuals.correlation import (
-    _parse_xcat_labels,
+    _parse_labels,
     lag_series,
     _transform_df_for_cross_sectional_corr,
     _transform_df_for_cross_category_corr,
@@ -345,17 +345,17 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"correl_matrix raised {e} unexpectedly")
 
-    def test_parse_xcat_labels(self):
+    def test_parse_labels(self):
         xcats = ["XR", "CRY"]
         xcat_labels_dict = {"XR": "Excess Returns", "CRY": "Carry"}
-        xcat_labels = _parse_xcat_labels(xcats, xcat_labels_dict)
+        xcat_labels = _parse_labels(keys=xcats, labels=xcat_labels_dict, label_type="xcat")
         self.assertEqual(xcat_labels_dict, xcat_labels)
 
         xcat_labels_list = ["Excess Returns", "Carry"]
-        xcat_labels = _parse_xcat_labels(xcats, xcat_labels_list)
+        xcat_labels = _parse_labels(keys=xcats, labels=xcat_labels_list, label_type="xcat")
         self.assertEqual(xcat_labels_dict, xcat_labels)
 
-        xcat_labels = _parse_xcat_labels(xcats, None)
+        xcat_labels = _parse_labels(keys=xcats, labels=None, label_type="xcat")
         self.assertEqual(xcat_labels, {"XR": "XR", "CRY": "CRY"})
 
 
