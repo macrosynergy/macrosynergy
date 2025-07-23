@@ -1090,6 +1090,7 @@ class JPMaQSFusionClient:
         self.simple_fusion_client = SimpleFusionAPIClient(
             oauth_handler=oauth_handler, base_url=base_url, proxies=proxies
         )
+        self.failure_messages: List[str] = []
 
     def list_datasets(
         self,
@@ -1593,12 +1594,13 @@ class JPMaQSFusionClient:
         )["identifier"].tolist()
         if datasets_list is not None:
             ds_lower = [ds.lower() for ds in datasets]
-            datasets = [ds for ds in datasets_list if ds.lower() in ds_lower]
-            if not datasets:
+            avail_ds = [ds for ds in datasets_list if ds.lower() in ds_lower]
+            if not avail_ds:
                 raise ValueError(
                     f"No datasets found in the provided `datasets_list`. Available datasets: {', '.join(datasets)}"
                 )
 
+        self.failure_messages = []
         failures = []
         with cf.ThreadPoolExecutor() as executor:
             futures: Dict[str, cf.Future] = {}
@@ -1616,7 +1618,9 @@ class JPMaQSFusionClient:
                 try:
                     future.result()
                 except Exception as e:
-                    print(f"Failed to download dataset {ds}: {e}")
+                    e_msg = f"Failed to download dataset {ds}: {e}"
+                    print(e_msg)
+                    self.failure_messages.append(e_msg)
                     failures.append(ds)
 
         if failures:
