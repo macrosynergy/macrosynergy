@@ -51,6 +51,7 @@ class TestRequestWrapper(unittest.TestCase):
         status=200,
         content=b"",
         text="",
+        response=None,
         json_data=None,
         raise_exc=None,
     ):
@@ -61,6 +62,9 @@ class TestRequestWrapper(unittest.TestCase):
         r.text = text or content.decode(errors="ignore")
         r.url = self.URL
         r.request = MagicMock(method="GET")
+        r.request.headers = self.HDRS
+        if response is not None:
+            r.response = response.encode("utf-8")
 
         if raise_exc:
             r.raise_for_status.side_effect = raise_exc
@@ -90,10 +94,16 @@ class TestRequestWrapper(unittest.TestCase):
         self.assertIn(msg, str(cm.exception))
 
     def test_http_error(self):
+        error = requests.exceptions.HTTPError("HTTP Error")
+        mock_resp = requests.Response()
+        mock_resp.status_code = 500
+        mock_resp.reason = "Bad Request"
+        mock_resp.url = self.URL
+        error.response = mock_resp
         resp = self._make_response(
-            status=400,
+            status=500,
             text="Bad Request",
-            raise_exc=requests.exceptions.HTTPError("HTTP Error"),
+            raise_exc=error,
         )
         self.assertRaisesMessage(Exception, "API HTTP error", self._call, resp)
 
