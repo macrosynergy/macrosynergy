@@ -29,6 +29,8 @@ def correl_matrix(
     show: bool = True,
     xcat_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     xcat_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    cid_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    cid_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     **kwargs: Any,
 ):
     """
@@ -88,9 +90,14 @@ def correl_matrix(
     xcat_labels : Optional[Union[List[str], Dict[str, str]]
         optional list or dictionary of labels for the categories specified in `xcats`.
         A list should be in the same order as `xcats`, a dictionary should map from each
-        category to its label (e.g. {'XR': 'Exchange Rate', 'CRY': 'Cryptocurrency'}).
+        category to its label (e.g. {'XR': 'Excess returns', 'CRY': 'Carry'}).
     xcat_secondary_labels : Optional[Union[List[str], Dict[str, str]]]
         optional list or dictionary of labels for `xcats_secondary`.
+    cid_labels : Optional[Union[List[str], Dict[str, str]]]
+        optional list or dictionary of labels for cids. A list should be in the same
+        order as cids, a dictionary should map from each cid to its label.
+    cid_secondary_labels : Optional[Union[List[str], Dict[str, str]]]
+        optional list or dictionary of labels for cids_secondary.
     **kwargs : Dict
         Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
@@ -122,6 +129,8 @@ def correl_matrix(
         show=show,
         xcat_labels=xcat_labels,
         xcat_secondary_labels=xcat_secondary_labels,
+        cid_labels=cid_labels,
+        cid_secondary_labels=cid_secondary_labels,
         **kwargs,
     )
 

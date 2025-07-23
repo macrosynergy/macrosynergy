@@ -1096,6 +1096,7 @@ if __name__ == "__main__":
         ylab="Return",
         coef_box="lower left",
         ncol=5,
+        remove_zero_predictor=True
     )
     cr.reg_scatter(
         labels=False,
