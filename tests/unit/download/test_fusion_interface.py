@@ -1634,5 +1634,86 @@ class TestJPMaQSFusionClientDownloadMultipleDistributionsToDisk(unittest.TestCas
         self.assertIsInstance(result, pd.DataFrame)
 
 
+class TestJPMaQSFusionClientDownload(unittest.TestCase):
+    def setUp(self):
+        # Patch SimpleFusionAPIClient to avoid OAuth type check and HTTP calls
+        self.patcher_simple = patch(
+            "macrosynergy.download.fusion_interface.SimpleFusionAPIClient"
+        )
+        self.mock_simple_cls = self.patcher_simple.start()
+        self.mock_simple = MagicMock()
+        self.mock_simple_cls.return_value = self.mock_simple
+
+        # Instantiate a real FusionOAuth to satisfy isinstance check
+        dummy_oauth = FusionOAuth(client_id="dummy", client_secret="dummy")
+        self.client = JPMaQSFusionClient(oauth_handler=dummy_oauth)
+
+        # Patch catalog retrieval
+        self.catalog = pd.DataFrame({"Ticker": ["AAA", "BBB"], "Theme": ["one", "two"]})
+        self.client.get_metadata_catalog = MagicMock(return_value=self.catalog)
+
+        # Patch series member and filter
+        self.client.get_latest_seriesmember_identifier = MagicMock(
+            side_effect=lambda dataset, **kw: f"sm_{dataset}"
+        )
+
+        def filter_side_effect(
+            dataset, seriesmember, tickers, start_date, end_date, qdf, **kw
+        ):
+            df = pd.DataFrame({"value": [1, 2]})
+            df["dataset"] = dataset
+            return df
+
+        self.client.download_and_filter_series_member_distribution = MagicMock(
+            side_effect=filter_side_effect
+        )
+
+    def tearDown(self):
+        self.patcher_simple.stop()
+
+    def test_error_on_cids_xcats_xor(self):
+        with self.assertRaises(ValueError):
+            self.client.download(folder=None, cids=["X"], xcats=None)
+        with self.assertRaises(ValueError):
+            self.client.download(folder=None, cids=None, xcats=["Y"])
+
+    def test_error_on_no_tickers(self):
+        with self.assertRaises(ValueError):
+            self.client.download(folder=None, tickers=None, cids=None, xcats=None)
+
+    @patch("pathlib.Path.cwd", return_value=Path("./tmp"))
+    def test_save_to_folder_calls_full_snapshot(self, mock_cwd):
+        self.client.download_latest_full_snapshot = MagicMock(
+            return_value=pd.DataFrame()
+        )
+        df = self.client.download(
+            folder="myfolder",
+            tickers=["AAA"],
+            qdf=False,
+            as_csv=True,
+            keep_raw_data=False,
+        )
+        self.client.download_latest_full_snapshot.assert_called_once_with(
+            folder=Path("myfolder"),
+            qdf=False,
+            include_catalog=True,
+            include_full_datasets=True,
+            as_csv=True,
+            keep_raw_data=False,
+            datasets_list=["JPMAQS_ONE"],
+        )
+        self.assertIsInstance(df, pd.DataFrame)
+
+    @patch.object(pd.Timestamp, "utcnow")
+    def test_no_results_raises(self, mock_utcnow):
+        mock_utcnow.return_value = pd.Timestamp("2025-07-23")
+        self.client.download_and_filter_series_member_distribution = MagicMock(
+            return_value=pd.DataFrame()
+        )
+        with self.assertRaises(ValueError):
+            with warnings.catch_warnings(record=True):
+                self.client.download(tickers=["ABCDEFGH"])
+
+
 if __name__ == "__main__":
     unittest.main()
