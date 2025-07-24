@@ -416,8 +416,13 @@ class TestJPMaQSFusionClient(unittest.TestCase):
             ]
         }
         self.simple_client.get_dataset_series.return_value = dct
-        df = self.client.get_dataset_available_series("SOME_DATASET")
-        self.assertEqual(set(df.columns), set(["identifier", "@id"]))
+        metadata_cols = {
+            self.client._catalog_dataset: ["@id", "identifier"],
+            self.client._notifications_dataset: ["@id", "identifier", "createdDate"],
+        }
+        for dataset, cols in metadata_cols.items():
+            df = self.client.get_dataset_available_series(dataset)
+            self.assertEqual(set(df.columns), set(cols))
 
     def test_get_seriesmember_distributions(self):
         self.simple_client.get_seriesmember_distributions.return_value = {
@@ -1689,7 +1694,6 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
             folder=Path("myfolder"),
             qdf=False,
             include_catalog=True,
-            include_full_datasets=True,
             as_csv=True,
             keep_raw_data=False,
             datasets_list=["JPMAQS_ONE"],
