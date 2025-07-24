@@ -1725,7 +1725,8 @@ class JPMaQSFusionClient:
         pd.DataFrame
             A DataFrame containing the metadata catalog.
         """
-        return self._download_multiple_distributions_to_disk(
+        start_time = time.time()
+        result = self._download_multiple_distributions_to_disk(
             folder=folder,
             qdf=qdf,
             include_catalog=include_catalog,
@@ -1736,6 +1737,12 @@ class JPMaQSFusionClient:
             keep_raw_data=keep_raw_data,
             datasets_list=datasets_list,
         )
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(
+            f"Downloaded latest full snapshot of JPMaQS datasets in {elapsed_time:.2f} seconds."
+        )
+        return result
 
     def download(
         self,
@@ -1859,7 +1866,6 @@ class JPMaQSFusionClient:
                 folder=folder,
                 qdf=qdf,
                 include_catalog=True,
-                include_full_datasets=True,
                 as_csv=as_csv,
                 keep_raw_data=kwargs.pop("keep_raw_data", False),
                 datasets_list=datasets,
