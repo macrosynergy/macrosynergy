@@ -7,6 +7,7 @@ from .linear_model import (
     ModifiedLinearRegression,
     ModifiedSignWeightedLinearRegression,
     ModifiedTimeWeightedLinearRegression,
+    GlobalLocalRegression,
 )
 
 from .model_systems import (
@@ -22,7 +23,7 @@ from .naive_predictors import (
 
 from .neighbors.nearest_neighbors import KNNClassifier
 
-from .meta_estimators import ProbabilityEstimator, FIExtractor, DataFrameTransformer
+from .meta_estimators import ProbabilityEstimator, FIExtractor, DataFrameTransformer, CountryByCountryRegression
 
 from .ensemble import (
     VotingClassifier,
@@ -49,4 +50,6 @@ __all__ = [
     "VotingRegressor",
     "FIExtractor",
     "DataFrameTransformer",
+    "GlobalLocalRegression",
+    "CountryByCountryRegression",
 ]
