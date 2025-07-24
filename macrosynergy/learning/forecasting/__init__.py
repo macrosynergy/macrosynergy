@@ -7,6 +7,7 @@ from .linear_model import (
     ModifiedLinearRegression,
     ModifiedSignWeightedLinearRegression,
     ModifiedTimeWeightedLinearRegression,
+    GlobalLocalRegression,
 )
 
 from .model_systems import (
@@ -49,4 +50,5 @@ __all__ = [
     "VotingRegressor",
     "FIExtractor",
     "DataFrameTransformer",
+    "GlobalLocalRegression",
 ]

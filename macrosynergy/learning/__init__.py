@@ -51,6 +51,7 @@ from .forecasting import (
     VotingClassifier,
     FIExtractor,
     DataFrameTransformer,
+    GlobalLocalRegression,
 )
 
 from .random_effects import RandomEffects
@@ -102,6 +103,7 @@ __all__ = [
     "ModifiedTimeWeightedLinearRegression",
     "VotingRegressor",
     "VotingClassifier",
+    "GlobalLocalRegression",
     # market beta estimation
     "BetaEstimator",
     # regression system
