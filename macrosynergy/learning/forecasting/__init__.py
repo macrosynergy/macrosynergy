@@ -23,7 +23,7 @@ from .naive_predictors import (
 
 from .neighbors.nearest_neighbors import KNNClassifier
 
-from .meta_estimators import ProbabilityEstimator, FIExtractor, DataFrameTransformer
+from .meta_estimators import ProbabilityEstimator, FIExtractor, DataFrameTransformer, CountryByCountryRegression
 
 from .ensemble import (
     VotingClassifier,
@@ -51,4 +51,5 @@ __all__ = [
     "FIExtractor",
     "DataFrameTransformer",
     "GlobalLocalRegression",
+    "CountryByCountryRegression",
 ]

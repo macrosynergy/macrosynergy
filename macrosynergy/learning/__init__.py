@@ -52,6 +52,7 @@ from .forecasting import (
     FIExtractor,
     DataFrameTransformer,
     GlobalLocalRegression,
+    CountryByCountryRegression,
 )
 
 from .random_effects import RandomEffects
@@ -117,4 +118,5 @@ __all__ = [
     "ProbabilityEstimator",
     "FIExtractor",
     "DataFrameTransformer",
+    "CountryByCountryRegression",
 ]
