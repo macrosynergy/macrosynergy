@@ -386,7 +386,7 @@ class TestJPMaQSFusionClient(unittest.TestCase):
             self.assertEqual(result, "DF")
 
     def test_get_dataset_available_series(self):
-        self.simple_client.get_dataset_series.return_value = {
+        dct = {
             "resources": [
                 {
                     "@id": "id1",
@@ -397,9 +397,27 @@ class TestJPMaQSFusionClient(unittest.TestCase):
                 }
             ]
         }
+        self.simple_client.get_dataset_series.return_value = dct
         df = self.client.get_dataset_available_series("SOME_DATASET")
-        self.assertIn("identifier", df.columns)
-        self.assertIn("@id", df.columns)
+        self.assertEqual(set(df.columns), set(dct["resources"][0].keys()))
+
+    def test_get_dataset_available_series_metadata(self):
+        # the extra fields are included solely to test if they are successfully
+        # removed. these are not available in metadata and notifs datasets
+        dct = {
+            "resources": [
+                {
+                    "@id": "id1",
+                    "identifier": "ser1",
+                    "createdDate": "2020-01-01",
+                    "fromDate": "2020-01-01",
+                    "toDate": "2020-12-31",
+                }
+            ]
+        }
+        self.simple_client.get_dataset_series.return_value = dct
+        df = self.client.get_dataset_available_series("SOME_DATASET")
+        self.assertEqual(set(df.columns), set(["identifier", "@id"]))
 
     def test_get_seriesmember_distributions(self):
         self.simple_client.get_seriesmember_distributions.return_value = {

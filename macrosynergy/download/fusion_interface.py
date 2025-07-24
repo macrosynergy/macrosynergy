@@ -1280,8 +1280,12 @@ class JPMaQSFusionClient:
             catalog=self._catalog, dataset=dataset, **kwargs
         )
         cols = ["@id", "identifier", "createdDate", "fromDate", "toDate"]
-        if dataset == self._catalog_dataset:
-            cols = cols[:2]
+        metadata_cols = {
+            self._catalog_dataset: ["@id", "identifier"],
+            self._notifications_dataset: ["@id", "identifier", "createdDate"],
+        }
+        if dataset in metadata_cols:
+            cols = metadata_cols[dataset]
 
         result = get_resources_df(result, keep_fields=cols)
         return result
