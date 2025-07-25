@@ -1816,6 +1816,70 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
         self.assertTrue((df["dataset"] == "JPMAQS_ONE").all())
         self.assertEqual(len(df), 2)
 
+    @patch("time.sleep", lambda *args, **kwargs: None)  # keep tests fast
+    @patch("builtins.print")  # capture logging
+    def test_download_threadpool_exception(self, mock_print):
+        # Side‑effect: raise for JPMAQS_ONE, return df for JPMAQS_TWO
+        def faulty_side_effect(
+            dataset, seriesmember, tickers, start_date, end_date, qdf, **kw
+        ):
+            if dataset == "JPMAQS_ONE":
+                raise RuntimeError("boom")
+            df = pd.DataFrame({"value": [1, 2]})
+            df["dataset"] = dataset
+            return df
+
+        self.client.download_and_filter_series_member_distribution.side_effect = (
+            faulty_side_effect
+        )
+
+        df = self.client.download(
+            folder=None,
+            tickers=["AAA", "BBB"],
+            start_date="2025-01-01",
+            end_date="2025-06-01",
+            qdf=False,
+        )
+
+        # both datasets should have been attempted
+        self.assertEqual(
+            self.client.download_and_filter_series_member_distribution.call_count, 2
+        )
+
+        # the failing dataset should be absent from the result
+        self.assertTrue((df["dataset"] == "JPMAQS_TWO").all())
+        self.assertEqual(len(df), 2)
+
+        # confirm the error message was printed for the failed dataset
+        mock_print.assert_any_call(
+            "Failed to download data for dataset JPMAQS_ONE: boom"
+        )
+
+    @patch("time.sleep", lambda *args, **kwargs: None)  # speed up threads
+    def test_download_threadpool_empty_results(self):
+        """
+        All dataset downloads return an empty DataFrame →
+        the concatenated result is empty → download() must raise ValueError.
+        """
+        # every dataset download returns an empty DataFrame
+        self.client.download_and_filter_series_member_distribution = MagicMock(
+            return_value=pd.DataFrame()
+        )
+
+        with self.assertRaises(ValueError):
+            self.client.download(
+                folder=None,
+                tickers=["AAA", "BBB"],
+                start_date="2025-01-01",
+                end_date="2025-06-01",
+                qdf=False,
+            )
+
+        # ensure both datasets were still attempted
+        self.assertEqual(
+            self.client.download_and_filter_series_member_distribution.call_count, 2
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
