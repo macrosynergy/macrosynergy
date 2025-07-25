@@ -937,6 +937,13 @@ class TestFusionInterfaceEdgeCases(unittest.TestCase):
             with self.assertRaises(KeyError):
                 client.download_latest_distribution("ds")
 
+    def test_jpmaqsclient_get_latest_seriesmember_identifier_error(self):
+        fake_df = pd.DataFrame()
+        client = JPMaQSFusionClient(FusionOAuth(**self.creds))
+        with patch.object(client, "get_dataset_available_series", return_value=fake_df):
+            with self.assertRaises(ValueError):
+                client.get_latest_seriesmember_identifier("ds")
+
 
 class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
     @patch(
@@ -1195,6 +1202,32 @@ class TestJPMaQSFusionClientDownloadSeriesMemberDistributionToDisk(unittest.Test
                     for c in mock_print.call_args_list
                 )
             )
+
+    @patch(
+        "macrosynergy.download.fusion_interface.convert_ticker_based_parquet_file_to_qdf"
+    )
+    @patch("os.makedirs")
+    @patch("os.path.exists")
+    def test_successful_download_metadata_dataset(
+        self, mock_exists, mock_makedirs, mock_convert
+    ):
+        mock_exists.return_value = True
+        self.simple_client.get_seriesmember_distribution_details_to_disk.return_value = None
+
+        with patch("builtins.print"):
+            self.client.download_series_member_distribution_to_disk(
+                save_directory=self.save_dir,
+                dataset=self.client._catalog_dataset,
+                seriesmember="SM",
+                distribution="parquet",
+                qdf=True,
+                as_csv=True,
+                keep_raw_data=False,
+            )
+            mock_makedirs.assert_called_once_with(self.save_dir, exist_ok=True)
+            mock_exists.assert_called()
+            # chekc that mock convert was Never called
+            mock_convert.assert_not_called()
 
     @patch(
         "macrosynergy.download.fusion_interface.convert_ticker_based_parquet_file_to_qdf"
@@ -1738,7 +1771,7 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
             cids=["X"],
             xcats=["Y"],
             start_date="2025-02-01",
-            end_date="2025-02-15",
+            # end_date="2025-02-15", # testing with no end date
         )
         self.assertEqual(
             self.client.download_and_filter_series_member_distribution.call_count, 1
