@@ -1505,6 +1505,7 @@ class TestJPMaQSFusionClientDownloadMultipleDistributionsToDisk(unittest.TestCas
             fake_catalog.to_parquet.assert_not_called()
             self.client.list_datasets.assert_called_once_with(
                 include_catalog=True,
+                include_notifications=False,
                 include_full_datasets=False,
                 include_explorer_datasets=True,
                 include_delta_datasets=False,
@@ -1658,6 +1659,7 @@ class TestJPMaQSFusionClientDownloadMultipleDistributionsToDisk(unittest.TestCas
             folder="snapshot_folder",
             qdf=False,
             include_catalog=True,
+            include_notifications=False,
             include_full_datasets=True,
             include_explorer_datasets=True,
             include_delta_datasets=True,
@@ -1727,6 +1729,7 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
             folder=Path("myfolder"),
             qdf=False,
             include_catalog=True,
+            include_notifications=True,
             as_csv=True,
             keep_raw_data=False,
             datasets_list=["JPMAQS_ONE"],
