@@ -1091,6 +1091,10 @@ class JPMaQSFusionClient:
             oauth_handler=oauth_handler, base_url=base_url, proxies=proxies
         )
         self.failure_messages: List[str] = []
+        self.metadata_datesets = [
+            self._catalog_dataset,
+            self._notifications_dataset,
+        ]
 
     def list_datasets(
         self,
@@ -1368,10 +1372,7 @@ class JPMaQSFusionClient:
         **kwargs,
     ) -> None:
         os.makedirs(save_directory, exist_ok=True)
-        is_catalog_dataset = dataset in [
-            self._catalog_dataset,
-            self._notifications_dataset,
-        ]
+        is_catalog_dataset = dataset in self.metadata_datesets
         filename = os.path.join(
             save_directory, f"{dataset}-{seriesmember}.{distribution}"
         )
