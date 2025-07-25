@@ -1856,10 +1856,6 @@ class JPMaQSFusionClient:
                 .reset_index(drop=True)
             )
         )
-        if not datasets:
-            raise ValueError(
-                "No datasets found for the specified tickers, cids, or xcats."
-            )
 
         if save_to_folder:
             return self.download_latest_full_snapshot(
