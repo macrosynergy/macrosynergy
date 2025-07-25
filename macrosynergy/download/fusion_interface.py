@@ -431,7 +431,8 @@ class SimpleFusionAPIClient:
         headers: Dict[str, str] = self.oauth_handler.get_auth()
         if timestamp:
             # timestamp is solely for cache busting purposes
-            pass
+            pass  # pragma: no cover
+
         return request_wrapper(
             method=method,
             url=url,
