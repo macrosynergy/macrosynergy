@@ -38,6 +38,8 @@ def view_correlation(
     show: bool = True,
     xcat_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     xcat_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    cid_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    cid_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     cbar_shrink: Union[float, int] = 0.5,
     cbar_fontsize: int = 12,
     **kwargs: Any,
@@ -106,6 +108,11 @@ def view_correlation(
         order as xcats, a dictionary should map from each xcat to its label.
     xcat_secondary_labels : Optional[Union[List[str], Dict[str, str]]]
         optional list or dictionary of labels for xcats_secondary.
+    cid_labels : Optional[Union[List[str], Dict[str, str]]]
+        optional list or dictionary of labels for cids. A list should be in the same
+        order as cids, a dictionary should map from each cid to its label.
+    cid_secondary_labels : Optional[Union[List[str], Dict[str, str]]]
+        optional list or dictionary of labels for cids_secondary.
     cbar_shrink : Union[float, int]
         shrinkage factor of the color bar. Default is 0.5.
     cbar_fontsize : int
@@ -149,13 +156,14 @@ def view_correlation(
         "specified categories: {xcats}. Please check the data."
     )
 
-    xcat_labels = _parse_xcat_labels(xcats, xcat_labels)
+    xcat_labels = _parse_labels(xcats, xcat_labels, label_type="xcats")
+    cid_labels = _parse_labels(cids, cid_labels, label_type="cids")
 
     # If more than one set of xcats or cids have been supplied.
     if xcats_secondary or cids_secondary:
         if xcats_secondary:
-            xcat_secondary_labels = _parse_xcat_labels(
-                xcats_secondary, xcat_secondary_labels
+            xcat_secondary_labels = _parse_labels(
+                xcats_secondary, xcat_secondary_labels, label_type="xcats_secondary"
             )
             xcats_secondary = (
                 xcats_secondary
@@ -166,8 +174,13 @@ def view_correlation(
             xcats_secondary = xcats
             xcat_secondary_labels = xcat_labels
 
-        if not cids_secondary:
+        if cids_secondary:
+            cid_secondary_labels = _parse_labels(
+                cids_secondary, cid_secondary_labels, label_type="cids_secondary"
+            )
+        else:
             cids_secondary = cids
+            cid_secondary_labels = cid_labels
 
         df1, xcats, cids = reduce_df(df.copy(), xcats, cids, start, end, out_all=True)
         df2, xcats_secondary, cids_secondary = reduce_df(
@@ -200,6 +213,9 @@ def view_correlation(
 
             new_xcat_labels = xcat_labels
             new_xcat_labels = xcat_labels
+            
+            df_w1 = df_w1.rename(columns=cid_labels)
+            df_w2 = df_w2.rename(columns=cid_secondary_labels)
 
         # If more than one xcat in at least one set, we will compute cross category
         # correlation.
@@ -249,7 +265,7 @@ def view_correlation(
         e_date: str = df["real_date"].max().strftime("%Y-%m-%d")
 
         if len(xcats) == 1:
-            df_w = _transform_df_for_cross_sectional_corr(df=df, val=val, freq=freq)
+            df_w = _transform_df_for_cross_sectional_corr(df=df, val=val, freq=freq, cid_labels=cid_labels)
 
             if title is None:
                 title = (
@@ -318,38 +334,40 @@ def view_correlation(
         return ax
 
 
-def _parse_xcat_labels(xcats: List[str], xcat_labels: Union[List[str], Dict[str, str]]):
+def _parse_labels(keys: List[str], labels: Union[List[str], Dict[str, str]], label_type: str):
     """
-    Parse xcat labels for correlation plot.
+    Parse labels for cross-sections or categories for correlation plot.
 
     Parameters
     ----------
-    xcats : List[str]
-        extended categories to be correlated.
-    xcat_labels : Union[List[str], Dict[str, str]]
-        optional list or dictionary of labels for the extended categories.
+    keys : List[str]
+        a list of keys for which there may be labels (cids or xcats).
+    labels : Union[List[str], Dict[str, str]]
+        optional list or dictionary of labels for the keys.
+    label_type : str
+        Description of the key type for error messages.
     """
 
     labels_dict = {}
-    if xcat_labels is not None:
-        assert len(xcat_labels) == len(xcats), (
-            "The number of labels provided for the extended categories must match the "
-            "number of extended categories."
+    if labels is not None:
+        assert len(labels) == len(keys), (
+            f"The number of labels provided for the {label_type} must match the "
+            f"number of {label_type}."
         )
-        if isinstance(xcat_labels, list):
-            for xcat, xcat_label in zip(xcats, xcat_labels):
-                labels_dict[xcat] = xcat_label
-        elif isinstance(xcat_labels, dict):
-            labels_dict = xcat_labels
+        if isinstance(labels, list):
+            for key, label in zip(keys, labels):
+                labels_dict[key] = label
+        elif isinstance(labels, dict):
+            labels_dict = labels
         else:
-            raise ValueError("The xcats parameter must be a list or a dictionary.")
+            raise ValueError(f"The labels parameter for {label_type} must be a list or a dictionary.")
     else:
-        labels_dict = {xcat: xcat for xcat in xcats}
+        labels_dict = {key: key for key in keys}
     return labels_dict
 
 
 def _transform_df_for_cross_sectional_corr(
-    df: pd.DataFrame, val: str = "value", freq: str = None
+    df: pd.DataFrame, val: str = "value", freq: str = None, cid_labels: Optional[Dict[str, str]] = None
 ) -> pd.DataFrame:
     """
     Pivots dataframe and down-samples according to the specified frequency so that
@@ -373,6 +391,9 @@ def _transform_df_for_cross_sectional_corr(
     df_w = df.pivot(index="real_date", columns="cid", values=val)
     if freq is not None:
         df_w = df_w.resample(freq).mean()
+
+    if cid_labels is not None:
+        df_w = df_w.rename(columns=cid_labels)
 
     return df_w
 
@@ -611,7 +632,7 @@ if __name__ == "__main__":
         xcats=["XR", "CRY", "XR2", "CRY2"],
         xcats_secondary=["CRY", "XR", "CRY2", "XR2"],
         cids=cids,
-        cids_secondary=None,
+        cids_secondary=cids[:4],
         start=start,
         end=end,
         val="value",
@@ -633,3 +654,56 @@ if __name__ == "__main__":
         },
     )
     print(xcat_labels)
+    
+    view_correlation(
+        df=dfd,
+        xcats=["XR"],
+        xcats_secondary=["CRY", "XR"],
+        cids=cids,
+        cids_secondary=cids[:1],
+        start=start,
+        end=end,
+        val="value",
+        freq=None,
+        cluster=True,
+        title="Correlation Matrix",
+        size=(14, 8),
+        max_color=None,
+        lags=None,
+        lags_secondary=None,
+        annot=True,
+        fmt=".2f",
+        xcat_labels={
+            "XR": "Excess returns",
+        },
+        xcat_secondary_labels={
+            "CRY": "Carry",
+            "XR": "Excess returns",
+        },
+        # cid_secondary_labels={
+        #     "AUD": "Australian Dollar",
+        #     "CAD": "Canadian Dollar",
+        #     "GBP": "British Pound",
+        #     "USD": "US Dollar",
+        # }
+    )
+    
+    view_correlation(
+        df=dfd,
+        xcats=["XR"],
+        # xcats_secondary=["CRY", "XR"],
+        cids=cids[:4],
+        cids_secondary=cids[:1],
+        start=start,
+        end=end,
+        val="value",
+        freq=None,
+        cluster=True,
+        title="Correlation Matrix",
+        size=(14, 8),
+        max_color=None,
+        lags=None,
+        lags_secondary=None,
+        annot=True,
+        fmt=".2f",
+    )

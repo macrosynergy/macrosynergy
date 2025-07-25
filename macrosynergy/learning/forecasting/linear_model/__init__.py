@@ -12,6 +12,8 @@ from .ls_regressors import (
     ModifiedTimeWeightedLinearRegression,
 )
 
+from .global_local import GlobalLocalRegression
+
 __all__ = [
     "LADRegressor",
     "SignWeightedLADRegressor",
@@ -21,4 +23,5 @@ __all__ = [
     "ModifiedLinearRegression",
     "ModifiedSignWeightedLinearRegression",
     "ModifiedTimeWeightedLinearRegression",
+    "GlobalLocalRegression",
 ]

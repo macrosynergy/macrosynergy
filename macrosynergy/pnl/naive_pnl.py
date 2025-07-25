@@ -126,6 +126,8 @@ class NaivePnL:
         thresh: float = None,
         entry_barrier: float = None,
         exit_barrier: float = None,
+        winsorize_first: bool = False,
+        normalized_weights: bool = False,
     ):
         """
         Calculate daily PnL and add to class instance.
@@ -188,18 +190,28 @@ class NaivePnL:
             function is allowed to produce. The minimum threshold is one standard deviation.
             Default is no threshold.
         entry_barrier : float
-            Threshold in terms of absolute signal value to enter a position in a binary 
-            strategy. This prevents binary strategies from excessive position flipping. 
-            Default is None, i.e., the binary strategy always takes its full position, no 
+            Threshold in terms of absolute signal value to enter a position in a binary
+            strategy. This prevents binary strategies from excessive position flipping.
+            Default is None, i.e., the binary strategy always takes its full position, no
             matter how small the signal value.
         exit_barrier : float
-            Threshold in terms of absolute signal value to exit a position in a binary 
-            strategy. In conjunction with an entry barrier, this determines the 
-            probability of position liquidations when the sign of the signal does not 
-            change. The value must be below the entry barrier. Without an entry barrier 
-            there can be no exit barrier. Default is None, which means that a position is 
+            Threshold in terms of absolute signal value to exit a position in a binary
+            strategy. In conjunction with an entry barrier, this determines the
+            probability of position liquidations when the sign of the signal does not
+            change. The value must be below the entry barrier. Without an entry barrier
+            there can be no exit barrier. Default is None, which means that a position is
             only liquidated of the sign of the signal flips.
-
+        winsorize_first : bool
+            if True, the signal is winsorized before any signal manipulation is applied.
+            This means that the signal is clipped to a specified range before any further
+            processing is done.
+            Default is False, meaning that the signal is winsorized after all other
+            transformations have been applied.
+        normalized_weights : bool
+            if True, the PnL is computed using normalized weights, meaning that the
+            PnL is computed as the mean of the signal-adjusted returns across all
+            cross-sections. Default is False, meaning that the PnL is computed as the
+            sum of the signal-adjusted returns across all cross-sections.
 
         Notes
         -----
@@ -209,7 +221,7 @@ class NaivePnL:
         When `sig_op = "zn_score_cs"`, raw signals are transformed into zn-scores
         around a neutral value where statistics are calculated by cross section alone.
 
-        When `sig_op = "binary"`, transforms signals into uniform long/shorts (1/-1) 
+        When `sig_op = "binary"`, transforms signals into uniform long/shorts (1/-1)
         across all cross sections.
 
         When `sig_op = "raw"`, no transformation is applied to the signal.
@@ -296,6 +308,8 @@ class NaivePnL:
         # format.
         dfx = self.df[self.df["xcat"].isin([self.ret, sig])]
 
+        thresh_sig = thresh if winsorize_first else None
+
         dfw = self._make_signal(
             dfx=dfx,
             sig=sig,
@@ -304,7 +318,7 @@ class NaivePnL:
             iis=iis,
             sequential=sequential,
             neutral=neutral,
-            thresh=thresh,
+            thresh=thresh_sig,
         )
 
         if sig_neg:
@@ -316,7 +330,8 @@ class NaivePnL:
         dfw["psig"] += sig_add
         dfw["psig"] *= sig_mult
 
-        self._winsorize(df=dfw["psig"], thresh=thresh)
+        if not winsorize_first:
+            self._winsorize(df=dfw["psig"], thresh=thresh)
 
         # Multi-index DataFrame with a natural minimum lag applied.
         dfw["psig"] = dfw["psig"].groupby(level=0, observed=True).shift(1)
@@ -357,6 +372,12 @@ class NaivePnL:
         #     dfw = dfw.rename({"psig": "sig"}, axis=1)
 
         # The signals are generated across the panel.
+        if normalized_weights:
+            # Normalize signal weights by the number of available cids for each real_date
+            dfw["sig"] = dfw.groupby("real_date")["sig"].transform(
+                lambda x: x / x.count() if x.count() > 0 else x
+            )
+
         dfw["value"] = dfw[self.ret] * dfw["sig"]
 
         df_pnl = dfw.loc[:, ["cid", "real_date", "value"]]
@@ -424,6 +445,7 @@ class NaivePnL:
         vol_scale: Optional[float] = None,
         label: Optional[str] = None,
         leverage: float = 1.0,
+        normalized_weights: bool = False,
     ):
         """
         Computes long-only returns which may act as a basis for comparison
@@ -467,7 +489,11 @@ class NaivePnL:
         dfx = self.df[self.df["xcat"].isin([self.ret])]
 
         df_long = self.long_only_pnl(
-            dfw=dfx, vol_scale=vol_scale, label=label, leverage=leverage
+            dfw=dfx,
+            vol_scale=vol_scale,
+            label=label,
+            leverage=leverage,
+            normalized_weights=normalized_weights,
         )
 
         self.df = QuantamentalDataFrame.from_qdf_list([self.df, df_long])
@@ -699,6 +725,7 @@ class NaivePnL:
         vol_scale: float = None,
         label: str = None,
         leverage: float = 1.0,
+        normalized_weights: bool = False,
     ):
         """
         Method used to compute the PnL accrued from simply taking a long-only position
@@ -728,8 +755,10 @@ class NaivePnL:
         lev_err = "`leverage` must be a numerical value greater than 0."
 
         dfw_long = dfw.reset_index(drop=True)
-
-        panel_pnl = dfw_long.groupby(["real_date"]).sum(numeric_only=True)
+        if normalized_weights:
+            panel_pnl = dfw_long.groupby(["real_date"]).mean(numeric_only=True)
+        else:
+            panel_pnl = dfw_long.groupby(["real_date"]).sum(numeric_only=True)
         panel_pnl = panel_pnl.reset_index(level=0)
         panel_pnl = QuantamentalDataFrame.from_long_df(panel_pnl, cid="ALL", xcat=label)
 
@@ -1689,6 +1718,7 @@ if __name__ == "__main__":
         rebal_slip=1,
         min_obs=250,
         thresh=2,
+        normalized_weights=True
     )
 
     pnl.make_pnl(
