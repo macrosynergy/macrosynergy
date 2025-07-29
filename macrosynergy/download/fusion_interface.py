@@ -1218,6 +1218,56 @@ class JPMaQSFusionClient:
         )
         return read_parquet_from_bytes_to_pandas_dataframe(r_bytes)
 
+    @cache_decorator(CACHE_TTL)
+    def get_notifications_distribution(
+        self, series_member: Optional[str] = None, **kwargs
+    ) -> pd.DataFrame:
+        """
+        Get the notifications distribution for JPMaQS. This dataset contains notifications
+        around updating and refresh times of various series in the JPMaQS product.
+
+        Parameters
+        ----------
+        series_member : Optional[str]
+            The series member identifier for which to retrieve the distribution.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the notifications distribution details.
+        """
+        if series_member is None:
+            series_member = self.get_latest_seriesmember_identifier(
+                dataset=self._notifications_dataset, **kwargs
+            )
+        r_json = self.simple_fusion_client.get_seriesmember_distribution_details(
+            catalog=self._catalog,
+            dataset=self._notifications_dataset,
+            seriesmember=series_member,
+            distribution="json",
+            as_json=True,
+            **kwargs,
+        )
+
+        # handle timestamp issue
+        timestamp_str = r_json["metadata"]["datetime"]
+        dt_fmt = "%Y-%d-%mT%H%M%S"
+        timestamp = pd.to_datetime(timestamp_str, format=dt_fmt, errors="raise")
+        df = pd.DataFrame(r_json["data"])
+        df["timestamp"] = timestamp
+
+        # explode report fields
+        df["cross_section"] = df["cross_section"].str.replace(" ", "").str.split(",")
+        df["category"] = df["category"].str.replace(" ", "").str.split(",")
+        df = df.explode("cross_section").explode("category").reset_index(drop=True)
+
+        df = df.sort_values(by=["category", "cross_section", "comment"])
+        df = df.reset_index(drop=True)
+
+        return df
+
     def list_tickers(self, **kwargs) -> List[str]:
         """
         List all tickers available in the JPMaQS product. This method retrieves the
@@ -1934,6 +1984,12 @@ if __name__ == "__main__":
         "data/fusion_client_credentials.json"
     )
     jpmaqs_client = JPMaQSFusionClient(oauth_handler=oauth_handler)
+
+    st = time.time()
+    df = jpmaqs_client.get_notifications_distribution()
+    print(df.head())
+    print(f"Time taken for notifications download: {time.time() - st:.2f} seconds")
+
     st = time.time()
 
     df = jpmaqs_client.download(
@@ -1952,8 +2008,8 @@ if __name__ == "__main__":
     jpmaqs_client.download_latest_full_snapshot(
         folder="./data",
         keep_raw_data=False,
-        qdf=True,
-        as_csv=True,
+        # qdf=True,
+        # as_csv=True,
     )
     print(f"Time taken for full snapshots download: {time.time() - st:.2f} seconds")
 
@@ -1961,7 +2017,8 @@ if __name__ == "__main__":
 
     jpmaqs_client.download_latest_delta_distribution(
         folder="./data",
-        qdf=True,
+        # qdf=True,
+        # as_csv=True,
         keep_raw_data=False,
     )
     print(f"Time taken for latest delta download: {time.time() - st:.2f} seconds")

@@ -385,6 +385,70 @@ class TestJPMaQSFusionClient(unittest.TestCase):
             mock_read_parquet.assert_called_once()
             self.assertEqual(result, "DF")
 
+    def test_get_notifications_distribution(self):
+        self.client.get_latest_seriesmember_identifier = MagicMock(
+            return_value="SERIESMEMBER"
+        )
+
+        fake_json = {
+            # Matches incorrect format "%Y-%d-%mT%H%M%S"
+            "metadata": {"datetime": "2025-23-07T120000"},
+            "data": [
+                {
+                    "cross_section": "USD,GBP",
+                    "category": "FXXR_NSA,EQXR_NSA",
+                    "comment": "Updated",
+                },
+                {
+                    "cross_section": "EUR",
+                    "category": "EQCRY_NSA",
+                    "comment": "Refreshed",
+                },
+            ],
+        }
+
+        self.client.simple_fusion_client.get_seriesmember_distribution_details.return_value = fake_json
+
+        df = self.client.get_notifications_distribution()
+
+        for col in ("cross_section", "category", "comment", "timestamp"):
+            self.assertIn(col, df.columns)
+
+        self.assertEqual(len(df), 5)
+
+        self.assertTrue(pd.api.types.is_datetime64_any_dtype(df["timestamp"]))
+        self.assertTrue((df["timestamp"] == pd.Timestamp(2025, 7, 23, 12, 0, 0)).all())
+
+        expected_rows = pd.DataFrame(
+            {
+                "category": [
+                    "EQCRY_NSA",
+                    "EQXR_NSA",
+                    "EQXR_NSA",
+                    "FXXR_NSA",
+                    "FXXR_NSA",
+                ],
+                "cross_section": [
+                    "EUR",
+                    "GBP",
+                    "USD",
+                    "GBP",
+                    "USD",
+                ],
+                "comment": [
+                    "Refreshed",
+                    "Updated",
+                    "Updated",
+                    "Updated",
+                    "Updated",
+                ],
+            }
+        )
+        actual_rows = df[["category", "cross_section", "comment"]].reset_index(
+            drop=True
+        )
+        self.assertTrue(expected_rows.equals(actual_rows))
+
     def test_get_dataset_available_series(self):
         dct = {
             "resources": [
