@@ -1811,7 +1811,6 @@ class JPMaQSFusionClient:
         end_date: Optional[str] = None,
         qdf: bool = True,
         as_csv: bool = False,
-        cache_folder: str = None,
         **kwargs,
     ) -> Optional[pd.DataFrame]:
         """
@@ -1847,8 +1846,8 @@ class JPMaQSFusionClient:
         as_csv : bool
             If True, saves the downloaded datasets as CSV files. Default is False, with
             Parquet as the default format.
-        cache_folder : str
-            The folder where the downloaded data will be cached. If None, no caching is done.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
 
         Returns
         -------
