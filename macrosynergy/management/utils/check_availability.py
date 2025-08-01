@@ -326,7 +326,7 @@ if __name__ == "__main__":
 
     check_availability(
         df=dfd,
-        xcats=xxcats,
+        xcats=xcats,
         cids=cids,
         start_size=(10, 5),
         end_size=(10, 8),
