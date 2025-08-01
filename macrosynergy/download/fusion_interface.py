@@ -1974,7 +1974,7 @@ class JPMaQSFusionClient:
             raise ValueError(
                 "No data found for the specified tickers, cids, or xcats within the date range."
             )
-        return results
+        return QuantamentalDataFrame(results)
 
 
 if __name__ == "__main__":
