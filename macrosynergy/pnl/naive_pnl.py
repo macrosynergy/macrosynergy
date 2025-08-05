@@ -158,10 +158,11 @@ class NaivePnL:
             compared, each PnL requires a distinct name.
         rebal_freq : str
             re-balancing frequency for positions according to signal must be one of
-            'daily' (default), 'weekly' or 'monthly'. The re-balancing is only concerned
-            with the signal value on the re-balancing date which is delimited by the
-            frequency chosen. Additionally, the re-balancing frequency will be applied to
-            make_zn_scores() if used as the method to produce the raw signals.
+            'daily' (default), 'weekly', 'monthly', 'quarterly', or 'annual'. The
+            re-balancing is only concerned with the signal value on the re-balancing date
+            which is delimited by the frequency chosen. Additionally, the re-balancing
+            frequency will be applied to make_zn_scores() if used as the method to produce
+            the raw signals.
         rebal_slip : str
             re-balancing slippage in days. Default is 1 which means that it takes one
             day to re-balance the position and that the new positions produce PnL from the
@@ -272,7 +273,7 @@ class NaivePnL:
         if sig_op not in sig_options:
             raise ValueError(error_sig_method)
 
-        freq_params = ["daily", "weekly", "monthly"]
+        freq_params = ["daily", "weekly", "monthly", "quarterly", "annual"]
         freq_error = f"Re-balancing frequency must be one of: {freq_params}."
         if rebal_freq not in freq_params:
             raise ValueError(freq_error)
@@ -652,7 +653,7 @@ class NaivePnL:
             also included with the column name 'psig'.
         rebal_freq : str
             re-balancing frequency for positions according to signal must be one of
-            'daily' (default), 'weekly' or 'monthly'.
+            'daily' (default), 'weekly', 'monthly', 'quarterly', or 'annual'.
         rebal_slip : str
             re-balancing slippage in days.
 
@@ -667,7 +668,15 @@ class NaivePnL:
         # the shift forward by one day applied earlier in the code. Therefore, only
         # concerned with the minimum date of each re-balance period.
         dfw["year"] = dfw["real_date"].dt.year
-        if rebal_freq == "monthly":
+        if rebal_freq == "annual":
+            rebal_dates = dfw.groupby(["cid", "year"], observed=True)["real_date"].min()
+        elif rebal_freq == "quarterly":
+            dfw["quarter"] = dfw["real_date"].dt.quarter
+            rebal_dates = dfw.groupby(
+                ["cid", "year", "quarter"],
+                observed=True,
+            )["real_date"].min()
+        elif rebal_freq == "monthly":
             dfw["month"] = dfw["real_date"].dt.month
             rebal_dates = dfw.groupby(
                 ["cid", "year", "month"],
@@ -684,7 +693,7 @@ class NaivePnL:
             ].min()
         else:
             raise ValueError(
-                "Re-balancing frequency must be one of: daily, weekly, monthly."
+                "Re-balancing frequency must be one of: daily, weekly, monthly, quarterly or annual."
             )
 
         # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
@@ -877,7 +886,7 @@ class NaivePnL:
                 )
             elif len(pnl_cats) == 0:
                 raise ValueError(
-                    "There are not any valid PnL(s) to display given the " "request."
+                    "There are not any valid PnL(s) to display given the request."
                 )
 
         error_message = "Either pnl_cats or pnl_cids must be a list of length 1"
@@ -1086,7 +1095,7 @@ class NaivePnL:
         if not freq.startswith(("BQ", "BM")):
             raise ValueError(err_msg)
 
-        err_cids = f"Cross-sections not available. Available cids are:" f"{self.cids}."
+        err_cids = f"Cross-sections not available. Available cids are:{self.cids}."
 
         if pnl_cids is None:
             pnl_cids = self.cids
@@ -1162,7 +1171,7 @@ class NaivePnL:
         """
 
         assert isinstance(pnl_name, str), (
-            "The method expects to receive a single " "PnL name."
+            "The method expects to receive a single PnL name."
         )
         error_cats = (
             f"The PnL passed to 'pnl_name' parameter is not defined. The "
@@ -1713,20 +1722,20 @@ if __name__ == "__main__":
         exit_barrier=0.3,
         # sig_neg=True,
         # sig_add=0.5,
-        rebal_freq="monthly",
+        rebal_freq="quarterly",
         vol_scale=5,
         rebal_slip=1,
         min_obs=250,
         thresh=2,
-        normalized_weights=True
+        normalized_weights=True,
     )
 
     pnl.make_pnl(
         sig="GROWTH",
         sig_op="binary",
-        # sig_neg=True,
+        sig_neg=True,
         # sig_add=0.5,
-        rebal_freq="monthly",
+        rebal_freq="annual",
         vol_scale=5,
         rebal_slip=1,
         min_obs=250,
@@ -1738,7 +1747,7 @@ if __name__ == "__main__":
         sig_op="zn_score_pan",
         sig_neg=True,
         sig_add=0.5,
-        rebal_freq="monthly",
+        rebal_freq="annual",
         vol_scale=5,
         rebal_slip=1,
         min_obs=250,
