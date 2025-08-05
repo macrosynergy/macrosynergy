@@ -117,6 +117,19 @@ class FusionOAuth(object):
         self.application_name = application_name
         self.root_url = root_url
         self.auth_url = auth_url
+
+        # none of the above can be None
+        for attr_name, attr_val in [
+            ("client_id", self.client_id),
+            ("client_secret", self.client_secret),
+            ("resource", self.resource),
+            ("application_name", self.application_name),
+            ("root_url", self.root_url),
+            ("auth_url", self.auth_url),
+        ]:
+            if attr_val is None:
+                raise ValueError(f"{attr_name} must be provided and cannot be None.")
+
         self.proxies = proxies or None
 
         self.token_data = {
