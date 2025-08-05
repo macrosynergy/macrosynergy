@@ -252,6 +252,15 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp) -> pd.DataFrame:
 
 
 def get_heatmap_row_order(xcats: List[str], xcat_labels: dict = None) -> List[str]:
+    if not xcat_labels:
+        return xcats
+    missing = set(xcats) - set(xcat_labels.keys())
+    if missing:
+        raise ValueError(
+            f"Missing labels for xcats: {sorted(missing)}. "
+            "Ensure all specified `xcats` are present in the `xcat_labels` dictionary."
+        )
+
     return [xcat_labels[xcat] for xcat in xcats] if xcat_labels else xcats
 
 

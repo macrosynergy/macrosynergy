@@ -66,21 +66,16 @@ def view_panel_dates(
     if row_order is None:
         row_order = df.index.tolist()
 
-    error_msg = (
-        "Row order contains missing columns: {missing}. "
-        "Ensure all specified rows are present in the DataFrame."
-    )
-
     if isinstance(df.index, pd.CategoricalIndex):
         missing = set(row_order) - set(df.index.categories)
         if missing:
-            raise ValueError(error_msg.format(missing=missing))
-        df.index = df.index.set_categories(row_order, ordered=True)
+            df = df.reindex(row_order, fill_value=pd.NA)
+        df.index = pd.CategoricalIndex(df.index, categories=row_order, ordered=True)
         df = df.sort_index()
     else:
         missing = set(row_order) - set(df.index)
         if missing:
-            raise ValueError(error_msg.format(missing=missing))
+            df = df.reindex(row_order, fill_value=pd.NA)
         df = df.loc[row_order]
 
     sns.set(rc={"figure.figsize": size})
