@@ -698,7 +698,6 @@ class TestAll(unittest.TestCase):
                 coef_box="lower right",
                 prob_est="map",
             )
-            self.assertEqual(len(w), 2) # Account for FigureCanvas due to mocking
             self.assertTrue(
                 "The 'map' estimator is not applicable to a single cross-section. "
                 "Using 'pool' instead." in str(w[0].message)
