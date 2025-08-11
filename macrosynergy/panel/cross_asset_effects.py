@@ -6,7 +6,7 @@ from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel import panel_calculator
 
 
-def cross_assets_effects(
+def cross_asset_effects(
         df: QuantamentalDataFrame,
         cids: List[str],
         effect_name: str,

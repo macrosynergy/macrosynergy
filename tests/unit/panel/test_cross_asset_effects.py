@@ -4,7 +4,7 @@ import pandas as pd
 import warnings
 from typing import List, Union, Dict, Any
 
-from macrosynergy.panel.cross_asset_effects import cross_assets_effects
+from macrosynergy.panel.cross_asset_effects import cross_asset_effects
 from macrosynergy.management.simulate import make_test_df
 
 
@@ -57,9 +57,9 @@ class TestAll(unittest.TestCase):
                 )
             )
             with self.assertRaises(AssertionError):
-                rdf: pd.DataFrame = cross_assets_effects(**argsx)
+                rdf: pd.DataFrame = cross_asset_effects(**argsx)
 
-        rdf: pd.DataFrame = cross_assets_effects(
+        rdf: pd.DataFrame = cross_asset_effects(
             signal_xcats={"asset1": "X1", "asset2": "X2", "asset3": "X3"},
             weights_xcats={"asset1": "V1", "asset2": "V2", "asset3": "V3"},
             signal_signs={"asset1": 1, "asset2": 1, "asset3": 1},
@@ -68,7 +68,7 @@ class TestAll(unittest.TestCase):
         # any return data implies success
         self.assertTrue(not rdf.empty)
 
-        rdf_neg: pd.DataFrame = cross_assets_effects(
+        rdf_neg: pd.DataFrame = cross_asset_effects(
             signal_xcats={"asset1": "X1", "asset2": "X2", "asset3": "X3"},
             weights_xcats={"asset1": "V1", "asset2": "V2", "asset3": "V3"},
             signal_signs={"asset1": -1, "asset2": -1, "asset3": -1},
