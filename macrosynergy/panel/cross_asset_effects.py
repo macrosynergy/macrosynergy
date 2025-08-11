@@ -26,11 +26,12 @@ def cross_assets_effects(
     :param effect_name: str
         Name of the new quantamental xcat.
     :param signal_xcats: Dict[str, str]
-        . Default is None.
+        Dictionary of asset class names and related signals' time-series specified as xcats, part of df.
     :param weights_xcats: Dict[str, str]
-        . Default is None.
+        Dictionary of asset class names and related weights' time-series specified as xcats, part of df.
     :param signal_signs: Dict[str, int], optional
-        . Default is None.
+        Dictionary of asset class names and related signs in form of +1 / -1.
+        Default is None, hence we assume all components contribute positively and proportionately to the final average.
 
     :return: pd.DataFrame
     """
