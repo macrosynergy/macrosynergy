@@ -1,5 +1,7 @@
 from typing import List, Optional, Dict
 
+from pandas import DataFrame
+
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel import panel_calculator
 
@@ -11,7 +13,7 @@ def cross_assets_effects(
         signal_xcats: Dict[str, str],
         weights_xcats: Dict[str, str],
         signal_signs: Optional[Dict[str, int]] = None,
-) -> QuantamentalDataFrame:
+) -> DataFrame:
     """
     Linear combination of a set of categories with corresponding weights and, optionally, signs.
     Corresponding assets' volatilities are generally used as weights.
@@ -56,12 +58,12 @@ def cross_assets_effects(
         }
 
     weighted_parts_calc = [
-        f"( {k.upper()}_WSHARE ) * ( {signal_signs.get(k)} ) * {v}" for k, v in signal_xcats.items()
+        f"( {k.upper()}_SHARE ) * ( {str(signal_signs.get(k))} ) * {v}" for k, v in signal_xcats.items()
     ]
 
     calcs = [
                 # Computing the total weight assigned across xcat elements
-                f"WSUM = {' + '.join(weights_xcats.values())}",
+                f"WSUM = {' + '.join(weights_xcats.values())}"
             ] + [
                 # Computing each category's share
                 f"{k.upper()}_SHARE = {v} / WSUM" for k, v in weights_xcats.items()
