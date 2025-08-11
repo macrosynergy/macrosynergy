@@ -1202,6 +1202,10 @@ class SignalReturnRelations:
         )
 
     def cross_section_table(self):
+        """
+        Deprecated method for cross-section table. Use `single_relation_table` instead.
+        Shows a table of category values across cross-sections for a given date.
+        """
         warnings.warn(
             "cross_section_table() has been deprecated will be removed in a subsequent "
             "version, please now use "
@@ -1211,6 +1215,10 @@ class SignalReturnRelations:
         return self.single_relation_table(table_type="cross_section")
 
     def yearly_table(self):
+        """
+        Deprecated method for yearly table. Use `single_relation_table` instead.
+        Displays annual average values of selected categories across cross-sections.
+        """
         warnings.warn(
             "yearly_table() has been deprecated will be removed in a subsequent "
             "version, please now use single_relation_table(table_type='years')",
