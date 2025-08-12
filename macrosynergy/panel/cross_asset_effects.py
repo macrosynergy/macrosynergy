@@ -20,22 +20,23 @@ def cross_asset_effects(
 
     Parameters
     ----------
-
-    :param df: QuantamentalDataFrame
+    df : str
         QuantamentalDataFrame with time-series of categories for both values and weights for all cross-sections.
-    :param cids: List[str]
+    cids : List[str]
         List of cross-sections to compute the new quantamental category for.
-    :param effect_name: str
+    effect_name : str
         Name of the new quantamental xcat.
-    :param signal_xcats: Dict[str, str]
+    signal_xcats : Dict[str, str]
         Dictionary of asset class names and related signals' time-series specified as xcats, part of df.
-    :param weights_xcats: Dict[str, str]
+    weights_xcats : Dict[str, str]
         Dictionary of asset class names and related weights' time-series specified as xcats, part of df.
-    :param signal_signs: Dict[str, int], optional
+    signal_signs : Dict[str, int], optional
         Dictionary of asset class names and related signs in form of +1 / -1.
-        Default is None, hence we assume all components contribute positively and proportionately to the final average.
+        Default is None, hence we assume all components contribute positively and proportionately to the final average
 
-    :return: pd.DataFrame
+    Returns
+    -------
+    pd.DataFrame
     """
     assert isinstance(signal_xcats, dict), "Please provide a dictionary for assets' xcats"
     assert isinstance(weights_xcats, dict), "Please provide a dictionary for assets' weights"
