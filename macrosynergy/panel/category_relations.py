@@ -619,6 +619,14 @@ class CategoryRelations(object):
             "kendall",
         ], "prob_est must be 'pool', 'kendall' or 'map'"
 
+        if len(self.cids) == 1 and prob_est == "map":
+            warnings.warn(
+                "The 'map' estimator is not applicable to a single cross-section. "
+                "Using 'pool' instead.",
+                UserWarning,
+            )
+            prob_est = "pool"
+
         sns.set_theme(style="whitegrid")
         dfx = self.df.copy()
 
