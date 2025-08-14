@@ -235,6 +235,13 @@ class TestFusionOAuth(unittest.TestCase):
         self.assertTrue(headers["Authorization"].startswith("Bearer "))
         self.assertIn("User-Agent", headers)
 
+    def test_required_args_not_passed(self):
+        for k in self.creds.keys():
+            if k == "proxies":
+                continue
+            with self.assertRaises(ValueError):
+                FusionOAuth(**{**self.creds, k: None})
+
 
 class TestSimpleFusionAPIClient(unittest.TestCase):
     ENDPOINTS = [
@@ -1974,8 +1981,8 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
         self.assertTrue((df["dataset"] == "JPMAQS_ONE").all())
         self.assertEqual(len(df), 2)
 
-    @patch("time.sleep", lambda *args, **kwargs: None) 
-    @patch("builtins.print") 
+    @patch("time.sleep", lambda *args, **kwargs: None)
+    @patch("builtins.print")
     def test_download_threadpool_exception(self, mock_print):
         self.set_download_cases(
             cases={
