@@ -1982,7 +1982,10 @@ class JPMaQSFusionClient:
                 except Exception as e:
                     print(f"Failed to download data for dataset {dataset}: {e}")
 
-        results = pd.concat(results, ignore_index=True).reset_index(drop=True)
+        if not len(results):
+            results = pd.DataFrame()
+        else:
+            results = pd.concat(results, ignore_index=True).reset_index(drop=True)
         if results.empty:
             raise ValueError(
                 "No data found for the specified tickers, cids, or xcats within the date range."
