@@ -12,7 +12,7 @@ import time
 import pandas as pd
 import requests
 from pathlib import Path
-
+from typing import Optional
 from macrosynergy.download.fusion_interface import cache_decorator
 from macrosynergy.compat import PD_2_0_OR_LATER
 from macrosynergy.management.simulate import make_test_df
@@ -1763,7 +1763,7 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
             side_effect=lambda dataset, **kw: f"sm_{dataset}"
         )
 
-        def dataset_for_ticker(ticker: str) -> str | None:
+        def dataset_for_ticker(ticker: str) -> Optional[str]:
             cat = self.client.get_metadata_catalog()
             row = cat.loc[cat["Ticker"] == ticker]
             if row.empty:
@@ -1808,11 +1808,6 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
             raise TypeError(f"Unsupported action spec: {action!r}")
 
         def set_download_cases(*, cases=None, defaults="default", seq=None):
-            """
-            cases: dict[dataset -> action]
-              action = callable(...) | Exception() | 'empty' | 'default' | DataFrame
-            seq: list[(expected_dataset_or_None, action)] to control call order.
-            """
             local_cases = cases or {}
             local_seq = list(seq) if seq else []
             call_idx = {"i": 0}
@@ -2017,10 +2012,6 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
 
     @patch("time.sleep", lambda *args, **kwargs: None)  # speed up threads
     def test_download_threadpool_empty_results(self):
-        """
-        All dataset downloads return an empty DataFrame →
-        the concatenated result is empty → download() must raise ValueError.
-        """
         self.set_download_cases(defaults="empty")
 
         with self.assertRaises(ValueError):
