@@ -1967,7 +1967,7 @@ class JPMaQSFusionClient:
         _commonargs = dict(tickers=tickers, start_date=start_date, end_date=end_date)
 
         print(f"downloading {len(datasets)} datasets: {', '.join(datasets)}")
-        results = []
+        results: List[pd.DataFrame] = []
         with cf.ThreadPoolExecutor() as executor:
             futures: Dict[str, cf.Future] = {}
             for dataset in datasets:
@@ -1982,7 +1982,7 @@ class JPMaQSFusionClient:
                 except Exception as e:
                     print(f"Failed to download data for dataset {dataset}: {e}")
 
-        if not len(results):
+        if not len(results) or all(df.empty for df in results):
             results = pd.DataFrame()
         else:
             results = pd.concat(results, ignore_index=True).reset_index(drop=True)
