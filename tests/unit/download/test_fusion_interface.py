@@ -757,6 +757,43 @@ class TestParquetArrowFunctions(unittest.TestCase):
             filter_parquet_table_as_qdf(self.bad_table, tickers=["AAA_BBB"])
 
 
+class TestCoerceRealDate(unittest.TestCase):
+    def test_timestamp_ns(self):
+        arr = pa.array([pd.Timestamp("2020-08-26"), pd.Timestamp("2020-08-27")])
+        table = pa.table({"real_date": arr})
+        coerced = coerce_real_date(table)
+        expected = pa.array([18500, 18501], type=pa.date32())
+        self.assertTrue(coerced["real_date"].combine_chunks().equals(expected))
+
+    def test_timestamp_s(self):
+        arr = pa.array([1577836800, 1577923200], type=pa.timestamp("s"))
+        table = pa.table({"real_date": arr})
+        coerced = coerce_real_date(table)
+        expected = pa.array([18262, 18263], type=pa.date32())
+        self.assertTrue(coerced["real_date"].combine_chunks().equals(expected))
+
+    def test_string_correct_format(self):
+        arr = pa.array(["2020-08-26", "2020-08-27"], type=pa.string())
+        table = pa.table({"real_date": arr})
+        coerced = coerce_real_date(table)
+        expected = pa.array([18500, 18501], type=pa.date32())
+        self.assertTrue(coerced["real_date"].combine_chunks().equals(expected))
+
+    def test_string_with_time_component(self):
+        arr = pa.array(["2020-08-26 15:30:00", "2020-08-27 00:00:00"], type=pa.string())
+        table = pa.table({"real_date": arr})
+        coerced = coerce_real_date(table)
+        expected = pa.array([18500, 18501], type=pa.date32())
+        self.assertTrue(coerced["real_date"].combine_chunks().equals(expected))
+
+    def test_null_values(self):
+        arr = pa.array(["2020-08-26", None, "2020-08-28"], type=pa.string())
+        table = pa.table({"real_date": arr})
+        coerced = coerce_real_date(table)
+        expected = pa.array([18500, None, 18502], type=pa.date32())
+        self.assertTrue(coerced["real_date"].combine_chunks().equals(expected))
+
+
 class TestFusionInterfaceEdgeCases(unittest.TestCase):
     def setUp(self):
         self.creds = {
