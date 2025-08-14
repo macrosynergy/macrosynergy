@@ -998,9 +998,26 @@ def read_parquet_from_bytes_to_pyarrow_table(
 
 
 def coerce_real_date(table: pa.Table) -> pa.Table:
-    ts = pc.strptime(table["real_date"], format="%Y-%m-%d", unit="s")
-    dates = pc.cast(ts, pa.date32())
     idx = table.schema.get_field_index("real_date")
+    col = table.column(idx)
+    t = col.type
+
+    if pa.types.is_date32(t):
+        # Already correct type
+        return table
+
+    elif pa.types.is_timestamp(t):
+        # Fast direct cast
+        dates = pc.cast(col, pa.date32())
+
+    elif pa.types.is_string(t):
+        # Parse only once
+        ts = pc.strptime(col, format="%Y-%m-%d", unit="s")
+        dates = pc.cast(ts, pa.date32())
+
+    else:
+        raise TypeError(f"Unsupported type for real_date: {t}")
+
     return table.set_column(idx, "real_date", dates)
 
 
