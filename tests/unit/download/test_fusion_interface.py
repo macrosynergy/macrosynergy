@@ -627,7 +627,7 @@ class TestWaitSimple(unittest.TestCase):
 
 class TestUtilityFunctions(unittest.TestCase):
     def setUp(self):
-        qdf = make_test_df(start="2010-01-01", end="2011-02-01")
+        qdf = make_test_df(start="2010-01-01", end="2011-02-01", style="linear")
         self.expected_qdf = qdf.copy()
 
         qdf["ticker"] = qdf["cid"] + "_" + qdf["xcat"]
@@ -1746,23 +1746,110 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
         dummy_oauth = FusionOAuth(client_id="dummy", client_secret="dummy")
         self.client = JPMaQSFusionClient(oauth_handler=dummy_oauth)
 
-        self.catalog = pd.DataFrame({"Ticker": ["AAA", "BBB"], "Theme": ["one", "two"]})
+        self.catalog = pd.DataFrame(
+            {"Ticker": ["AAA_1", "BBB_2"], "Theme": ["one", "two"]}
+        )
         self.client.get_metadata_catalog = MagicMock(return_value=self.catalog)
 
+        # Deterministic series member id
         self.client.get_latest_seriesmember_identifier = MagicMock(
             side_effect=lambda dataset, **kw: f"sm_{dataset}"
         )
 
-        def filter_side_effect(
-            dataset, seriesmember, tickers, start_date, end_date, qdf, **kw
-        ):
-            df = pd.DataFrame({"value": [1, 2]})
+        def dataset_for_ticker(ticker: str) -> str | None:
+            cat = self.client.get_metadata_catalog()
+            row = cat.loc[cat["Ticker"] == ticker]
+            if row.empty:
+                return None
+            theme = str(row["Theme"].iloc[0])
+            return f"JPMAQS_{theme.upper().replace(' ', '_')}"
+
+        def make_df_for_dataset(
+            dataset: str, tickers, start_date, end_date
+        ) -> pd.DataFrame:
+            keep = [t for t in (tickers or []) if dataset_for_ticker(t) == dataset]
+            if not keep:
+                return pd.DataFrame()
+            df = make_test_df(
+                tickers=keep, start=start_date, end=end_date, style="linear"
+            )
             df["dataset"] = dataset
             return df
 
-        self.client.download_and_filter_series_member_distribution = MagicMock(
-            side_effect=filter_side_effect
-        )
+        def default_action(
+            dataset, _seriesmember, tickers, start_date, end_date, _qdf, **_kw
+        ):
+            return make_df_for_dataset(dataset, tickers, start_date, end_date)
+
+        def _resolve_action(
+            action, dataset, seriesmember, tickers, start_date, end_date, qdf, **kw
+        ):
+            if callable(action):
+                return action(
+                    dataset, seriesmember, tickers, start_date, end_date, qdf, **kw
+                )
+            if isinstance(action, Exception):
+                raise action
+            if isinstance(action, pd.DataFrame):
+                return action
+            if action in ("empty", None):
+                return pd.DataFrame()
+            if action in ("default", "per_dataset"):
+                return default_action(
+                    dataset, seriesmember, tickers, start_date, end_date, qdf
+                )
+            raise TypeError(f"Unsupported action spec: {action!r}")
+
+        def set_download_cases(*, cases=None, defaults="default", seq=None):
+            """
+            cases: dict[dataset -> action]
+              action = callable(...) | Exception() | 'empty' | 'default' | DataFrame
+            seq: list[(expected_dataset_or_None, action)] to control call order.
+            """
+            local_cases = cases or {}
+            local_seq = list(seq) if seq else []
+            call_idx = {"i": 0}
+
+            def side_effect(
+                dataset, seriesmember, tickers, start_date, end_date, qdf, **kw
+            ):
+                # sequence override if provided
+                if local_seq and call_idx["i"] < len(local_seq):
+                    expected_dataset, action = local_seq[call_idx["i"]]
+                    call_idx["i"] += 1
+                    if expected_dataset is not None:
+                        assert dataset == expected_dataset, (
+                            f"Expected {expected_dataset}, got {dataset}"
+                        )
+                    return _resolve_action(
+                        action,
+                        dataset,
+                        seriesmember,
+                        tickers,
+                        start_date,
+                        end_date,
+                        qdf,
+                        **kw,
+                    )
+                # otherwise dataset-specific or default
+                return _resolve_action(
+                    local_cases.get(dataset, defaults),
+                    dataset,
+                    seriesmember,
+                    tickers,
+                    start_date,
+                    end_date,
+                    qdf,
+                    **kw,
+                )
+
+            self.client.download_and_filter_series_member_distribution = MagicMock(
+                side_effect=side_effect
+            )
+
+        # expose
+        self.set_download_cases = set_download_cases
+        self._make_df_for_dataset = make_df_for_dataset
 
     def tearDown(self):
         self.patcher_simple.stop()
@@ -1778,13 +1865,13 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
             self.client.download(folder=None, tickers=None, cids=None, xcats=None)
 
     @patch("pathlib.Path.cwd", return_value=Path("./tmp"))
-    def test_save_to_folder_calls_full_snapshot(self, mock_cwd):
+    def test_save_to_folder_calls_full_snapshot(self, _mock_cwd):
         self.client.download_latest_full_snapshot = MagicMock(
             return_value=pd.DataFrame()
         )
         df = self.client.download(
             folder="myfolder",
-            tickers=["AAA"],
+            tickers=["AAA_1"],
             qdf=False,
             as_csv=True,
             keep_raw_data=False,
@@ -1803,20 +1890,20 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
     @patch.object(pd.Timestamp, "utcnow")
     def test_no_results_raises(self, mock_utcnow):
         mock_utcnow.return_value = pd.Timestamp("2025-07-23")
-        self.client.download_and_filter_series_member_distribution = MagicMock(
-            return_value=pd.DataFrame()
-        )
+        # Force all dataset downloads (if any) to return empty
+        self.set_download_cases(defaults="empty")
         with self.assertRaises(ValueError):
             with warnings.catch_warnings(record=True):
                 self.client.download(tickers=["ABCDEFGH"])
 
     @patch("time.sleep", lambda *args, **kwargs: None)
     def test_download_threadpool_success(self):
+        self.set_download_cases(defaults="default")
         df = self.client.download(
             folder=None,
-            tickers=["AAA", "BBB"],
-            start_date="2025-01-01",
-            end_date="2025-06-01",
+            tickers=["AAA_1", "BBB_2"],
+            start_date="2025-01-02",
+            end_date="2025-01-03",
             qdf=False,
             as_csv=False,
         )
@@ -1824,14 +1911,16 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
             self.client.download_and_filter_series_member_distribution.call_count, 2
         )
         self.assertEqual(len(df), 4)
-        unique_datasets = set(df["dataset"].tolist())
-        expected = {"JPMAQS_ONE", "JPMAQS_TWO"}
-        self.assertEqual(unique_datasets, expected)
+        self.assertEqual(set(df["dataset"]), {"JPMAQS_ONE", "JPMAQS_TWO"})
 
     @patch("time.sleep", lambda *args, **kwargs: None)
     def test_download_with_cids_xcats(self):
         custom_catalog = pd.DataFrame({"Ticker": ["X_Y"], "Theme": ["special theme"]})
         self.client.get_metadata_catalog.return_value = custom_catalog
+
+        self.set_download_cases(
+            cases={"JPMAQS_SPECIAL_THEME": "default"}, defaults="empty"
+        )
 
         df = self.client.download(
             folder=None,
@@ -1849,31 +1938,33 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
     def test_start_end_dates_swapped(self):
         captured = []
 
-        def capture_side_effect(
-            dataset, seriesmember, tickers, start_date, end_date, qdf, **kw
-        ):
+        def capture_df(dataset, _sm, tickers, start_date, end_date, _qdf, **kw):
             captured.append((start_date, end_date))
-            return pd.DataFrame({"value": [1], "dataset": [dataset]})
+            return self._make_df_for_dataset(dataset, tickers, start_date, end_date)
 
-        self.client.download_and_filter_series_member_distribution.side_effect = (
-            capture_side_effect
-        )
+        self.set_download_cases(cases={"JPMAQS_ONE": capture_df}, defaults="empty")
 
         self.client.download(
-            folder=None, tickers=["AAA"], start_date="2025-06-01", end_date="2025-01-01"
+            folder=None,
+            tickers=["AAA_1"],
+            start_date="2025-06-01",
+            end_date="2025-01-01",
         )
         self.assertEqual(len(captured), 1)
         self.assertEqual(captured[0], ("2025-01-01", "2025-06-01"))
 
     @patch("time.sleep", lambda *args, **kwargs: None)
     def test_warning_for_non_existing_tickers(self):
+        # Only ONE produces data; ZZZ_2 will be ignored by production and warned about
+        self.set_download_cases(cases={"JPMAQS_ONE": "default"}, defaults="empty")
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             df = self.client.download(
                 folder=None,
-                tickers=["AAA", "ZZZ"],
-                start_date="2025-03-01",
-                end_date="2025-03-10",
+                tickers=["AAA_1", "ZZZ_2"],
+                start_date="2025-03-03",
+                end_date="2025-03-04",
             )
             self.assertEqual(len(w), 1)
             self.assertIn(
@@ -1883,41 +1974,36 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
         self.assertTrue((df["dataset"] == "JPMAQS_ONE").all())
         self.assertEqual(len(df), 2)
 
-    @patch("time.sleep", lambda *args, **kwargs: None)  # keep tests fast
-    @patch("builtins.print")  # capture logging
+    @patch("time.sleep", lambda *args, **kwargs: None) 
+    @patch("builtins.print") 
     def test_download_threadpool_exception(self, mock_print):
-        # Side‑effect: raise for JPMAQS_ONE, return df for JPMAQS_TWO
-        def faulty_side_effect(
-            dataset, seriesmember, tickers, start_date, end_date, qdf, **kw
-        ):
-            if dataset == "JPMAQS_ONE":
-                raise RuntimeError("boom")
-            df = pd.DataFrame({"value": [1, 2]})
-            df["dataset"] = dataset
-            return df
-
-        self.client.download_and_filter_series_member_distribution.side_effect = (
-            faulty_side_effect
+        self.set_download_cases(
+            cases={
+                "JPMAQS_ONE": RuntimeError("boom"),
+                "JPMAQS_TWO": "default",
+            },
+            defaults="empty",
         )
 
         df = self.client.download(
             folder=None,
-            tickers=["AAA", "BBB"],
-            start_date="2025-01-01",
-            end_date="2025-06-01",
+            tickers=["AAA_1", "BBB_2"],
+            start_date="2025-01-02",
+            end_date="2025-01-03",
             qdf=False,
         )
 
-        # both datasets should have been attempted
+        # both datasets attempted
         self.assertEqual(
             self.client.download_and_filter_series_member_distribution.call_count, 2
         )
 
-        # the failing dataset should be absent from the result
+        # failing dataset absent from result; only BBB_2 remains
         self.assertTrue((df["dataset"] == "JPMAQS_TWO").all())
+        self.assertTrue((df["cid"] == "BBB").all())
+        self.assertTrue((df["xcat"] == "2").all())
         self.assertEqual(len(df), 2)
 
-        # confirm the error message was printed for the failed dataset
         mock_print.assert_any_call(
             "Failed to download data for dataset JPMAQS_ONE: boom"
         )
@@ -1928,15 +2014,12 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
         All dataset downloads return an empty DataFrame →
         the concatenated result is empty → download() must raise ValueError.
         """
-        # every dataset download returns an empty DataFrame
-        self.client.download_and_filter_series_member_distribution = MagicMock(
-            return_value=pd.DataFrame()
-        )
+        self.set_download_cases(defaults="empty")
 
         with self.assertRaises(ValueError):
             self.client.download(
                 folder=None,
-                tickers=["AAA", "BBB"],
+                tickers=["AAA_1", "BBB_2"],
                 start_date="2025-01-01",
                 end_date="2025-06-01",
                 qdf=False,
