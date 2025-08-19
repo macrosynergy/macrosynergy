@@ -27,6 +27,7 @@ def view_timelines(
     xcat_grid: bool = False,
     xcat_labels: Union[Optional[List[str]], Dict] = None,
     cid_labels: Union[Optional[List[str]], Dict] = None,
+    sort_cid_labels: bool = False,
     single_chart: bool = False,
     label_adj: float = 0.05,
     title: Optional[str] = None,
@@ -83,6 +84,9 @@ def view_timelines(
     cid_labels : Union[Optional[List[str]], Dict]
         labels to be used for cids. If not defined, the labels will be identical to
         cross-sections.
+    sort_cid_labels : bool
+        if True, sorts the cross-sectional labels in the grid alphabetically. Otherwise,
+        the order of `cids` is preserved. Default is False.
     single_chart : bool
         if True, all lines are plotted in a single chart.
     title : str
@@ -131,6 +135,7 @@ def view_timelines(
         xcat_grid=xcat_grid,
         xcat_labels=xcat_labels,
         cid_labels=cid_labels,
+        sort_cid_labels=sort_cid_labels,
         single_chart=single_chart,
         title=title,
         legend_ncol=legend_ncol,
@@ -150,6 +155,7 @@ def view_timelines(
 
 
 if __name__ == "__main__":
+    np.random.seed(42)
     cids = ["AUD", "CAD", "GBP", "NZD"]
     xcats = ["XR", "CRY", "INFL", "FXXR"]
     df_cids = pd.DataFrame(
@@ -218,10 +224,16 @@ if __name__ == "__main__":
     view_timelines(
         dfd,
         xcats=["XR"],
-        cids=cids[:2],
+        cids=['AUD', 'NZD', 'CAD'],
         ncol=2,
         cumsum=True,
         same_y=False,
         aspect=2,
-        single_chart=True,
+        single_chart=False,
+        cid_labels={
+            'NZD': 'New Zealand Dollar',
+            'CAD': 'Canadian Dollar',
+            'AUD': 'Australian Dollar'
+        },
+        sort_cid_labels=False,
     )
