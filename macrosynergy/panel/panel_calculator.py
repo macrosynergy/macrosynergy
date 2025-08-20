@@ -246,6 +246,7 @@ def panel_calc_pll(
     end: str = None,
     blacklist: dict = None,
     external_func: dict = None,
+    sort_execution_order: bool = True,
 ):
     ops = {}
     for calc in calcs:
@@ -258,6 +259,20 @@ def panel_calc_pll(
     subgraphs_calcs = CalcList(
         calcs, already_existing_vars=avail
     ).get_independent_subgraphs()
+    if len(subgraphs_calcs) < 2:
+        # with one subgraph there is no benefit to parallelizing
+        return panel_calculator(
+            df,
+            calcs,
+            cids=cids,
+            external_func=external_func,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            sort_execution_order=sort_execution_order,
+            use_parallel=False,
+        )
+
     subgraphs = {}
     for i, subgraph in enumerate(subgraphs_calcs):
         xcats_used = sorted(
@@ -356,7 +371,7 @@ def xcat_isolator(expression: str, start_index: str, index: int) -> Tuple[str, i
     return xcat, start_index + start + len(xcat)
 
 
-def _get_xcats_used(ops: dict[str, str]) -> Tuple[List[str], List[str]]:
+def _get_xcats_used(ops: Dict[str, str]) -> Tuple[List[str], List[str]]:
     """
     Collect all categories used in the panel calculation.
 
