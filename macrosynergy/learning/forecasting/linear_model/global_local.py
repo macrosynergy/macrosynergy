@@ -5,7 +5,7 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from scipy.optimize import minimize
 
 class GlobalLocalRegression(BaseEstimator, RegressorMixin):
-    """
+    r"""
     Linear panel model with hierarchical shrinkage of country-specific (local) coefficients 
     towards unknown global coefficients. Learning means that both country-specific and 
     global coefficients are estimated from data.
@@ -45,7 +45,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
 
     .. math::
 
-            L(\{\beta_{i}\}_{i=1}^{C},\beta) = (1/C) \sum_{i=1}^{C} (1/n_i) \sum_{i=1}^{n_i} (y_{it} - x_{it}^{\intercal}\beta_i)^2 + \lambda_{\text{local}}\sum_{i=1}^{C} ||\beta_i - \beta||_{2}^{2} + \lambda_{\text{global}} ||\beta||_{2}^{2}
+            L(\{\beta_i\}_{i=1}^{C}, \beta) = \frac{1}{C} \sum_{i = 1}^{C} \left [ \frac{1}{n_{i}}  \sum_{t=1}^{n_{i}} (y_{it} - x_{it}^{\intercal} \beta_{i})^2 \right ] + \lambda_{\text{local}} \sum_{i=1}^{C} ||\beta_i - \beta||_{2}^{2} + \lambda_{\text{global}} ||\beta||_{2}^{2}
     """
     def __init__(self, local_lambda = 1, global_lambda = 1, positive = False, fit_intercept = True, min_xs_samples = 36):
         # Attributes
