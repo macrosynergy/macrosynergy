@@ -39,6 +39,7 @@ def timelines(
     xcat_grid: bool = False,
     xcat_labels: Union[Optional[List[str]], Dict] = None,
     cid_labels: Union[Optional[List[str]], Dict] = None,
+    sort_cid_labels: bool = False,
     single_chart: bool = False,
     label_adj: float = 0.05,
     title: Optional[str] = None,
@@ -94,6 +95,9 @@ def timelines(
     cid_labels : Union[Optional[List[str]], Dict]
         labels to be used for cids. If not defined, the labels will be identical to
         cross-sections.
+    sort_cid_labels : bool
+        if True, sorts the cross-sectional labels in the grid alphabetically. Otherwise,
+        the order of `cids` is preserved. Default is False.
     single_chart : bool
         if True, all lines are plotted in a single chart.
     title : str
@@ -319,11 +323,11 @@ def timelines(
 
     else:
         # Order cids by the values in cid_labels if provided, otherwise by the cids themselves
-        if cid_labels:
-            if isinstance(cid_labels, dict):
-                cids = sorted(cids, key=lambda x: cid_labels.get(x, x))
-            elif isinstance(cid_labels, list):
-                cids = sorted(cids, key=lambda x: cid_labels.index(x) if x in cid_labels else len(cid_labels))
+        if cid_labels and sort_cid_labels:
+            if isinstance(cid_labels, list):
+                cid_labels = {cid: label for cid, label in zip(cids, cid_labels)}
+            cids = sorted(cids, key=lambda x: cid_labels.get(x, x))
+
         with FacetPlot(
             df=df,
             xcats=xcats,
