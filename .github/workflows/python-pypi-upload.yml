@@ -53,6 +53,8 @@ jobs:
         env:
           DQ_CLIENT_ID: ${{ secrets.DQ_CLIENT_ID }}
           DQ_CLIENT_SECRET: ${{ secrets.DQ_CLIENT_SECRET }}
+          FUSION_CLIENT_ID: ${{ secrets.FUSION_CLIENT_ID }}
+          FUSION_CLIENT_SECRET: ${{ secrets.FUSION_CLIENT_SECRET }}
         run: |
           echo 'Run Integration tests'
           pytest tests/integration/
