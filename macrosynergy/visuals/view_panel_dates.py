@@ -10,6 +10,7 @@ def view_panel_dates(
     size: Tuple[float, float] = None,
     use_last_businessday: bool = True,
     header: str = None,
+    title_fontsize: int = None,
     row_order: List[str] = None,
 ):
     """
@@ -27,6 +28,8 @@ def view_panel_dates(
     header : str
         A string to be used as the title of the heatmap. If None, a default header will be used
         based on the data type of the DataFrame.
+    title_fontsize : int
+        Font size for the title of the heatmap. Default is None (automatic sizing).
     row_order : List[str]
         A list of strings specifying the order of rows in the heatmap. These rows
         correspond to the columns of the input DataFrame. If None, the default order
@@ -90,5 +93,5 @@ def view_panel_dates(
     )
     plt.xlabel("")
     plt.ylabel("")
-    plt.title(header, fontsize=18)
+    plt.title(header, fontsize=title_fontsize)
     plt.show()
