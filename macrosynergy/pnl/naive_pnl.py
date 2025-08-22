@@ -1227,11 +1227,11 @@ class NaivePnL:
             x="",
             y="aggregate_signal",
             ax=ax,
-            title=title,
-            title_fontsize=title_fontsize,
+            # title=title,
             ylabel=y_label,
             legend=False,
         )
+        ax.set_title(title, fontsize=title_fontsize)
 
         ticklabels = [""] * len(df_signal)
         skip = len(df_signal) // 12
