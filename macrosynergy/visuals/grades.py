@@ -20,6 +20,7 @@ def view_grades(
     end: str = None,
     grade: str = "grading",
     title: str = None,
+    title_fontsize: int = 16,
     figsize: Tuple[float] = None,
 ):
     """
@@ -42,6 +43,8 @@ def view_grades(
         name of column that contains the grades. Default is 'grading'.
     title : str
         string of chart title; defaults depend on type of range plot.
+    title_fontsize : int
+        font size of the title; defaults to 16.
     figsize : Tuple[float]
         Tuple of width and height of graph. Default is None, meaning it is set in
         accordance with df.
@@ -80,6 +83,7 @@ def view_grades(
         show_colorbar=False,
         show_annotations=True,
         show_boundaries=True,
+        title_fontsize=title_fontsize,
     )
 
 
