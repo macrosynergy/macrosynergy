@@ -1043,6 +1043,7 @@ class NaivePnL:
         end: str = None,
         freq: str = "M",
         title: str = "Average applied signal values",
+        title_fontsize: int = None,
         x_label: str = "",
         y_label: str = "",
         figsize: Optional[Tuple[float, float]] = None,
@@ -1067,6 +1068,8 @@ class NaivePnL:
             The only alternative is quarterly ('q').
         title : str
             allows entering text for a custom chart header.
+        title_fontsize : int
+            font size of the title. Default is None, uses matplotlib default.
         x_label : str
             label for the x-axis. Default is None.
         y_label : str
@@ -1130,7 +1133,7 @@ class NaivePnL:
 
         ax.set(xlabel=x_label, ylabel=y_label)
         ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
-        ax.set_title(title, fontsize=14)
+        ax.set_title(title, fontsize=title_fontsize)
 
         ax.tick_params(axis="x", labelsize=tick_fontsize)
         ax.tick_params(axis="y", labelsize=tick_fontsize)
@@ -1143,6 +1146,7 @@ class NaivePnL:
         freq: str = "m",
         metric: str = "direction",
         title: str = None,
+        title_fontsize: int = None,
         y_label: str = "Sum of Std. across the Panel",
     ):
         """
@@ -1160,6 +1164,8 @@ class NaivePnL:
         title : str
             allows entering text for a custom chart header. Default will be "Directional
             Bar Chart of <pnl_name>.".
+        title_fontsize : int
+            font size of the title. Default is None, uses matplotlib default.
         y_label : str
             label for the y-axis. Default is the sum of standard deviations across the
             panel corresponding to the default signal transformation: 'zn_score_pan'.
@@ -1170,9 +1176,9 @@ class NaivePnL:
             PnL.
         """
 
-        assert isinstance(pnl_name, str), (
-            "The method expects to receive a single PnL name."
-        )
+        assert isinstance(
+            pnl_name, str
+        ), "The method expects to receive a single PnL name."
         error_cats = (
             f"The PnL passed to 'pnl_name' parameter is not defined. The "
             f"possible options are {self.pnl_names}."
@@ -1218,8 +1224,14 @@ class NaivePnL:
 
         fig, ax = plt.subplots()
         df_signal.plot.bar(
-            x="", y="aggregate_signal", ax=ax, title=title, ylabel=y_label, legend=False
+            x="",
+            y="aggregate_signal",
+            ax=ax,
+            # title=title,
+            ylabel=y_label,
+            legend=False,
         )
+        ax.set_title(title, fontsize=title_fontsize)
 
         ticklabels = [""] * len(df_signal)
         skip = len(df_signal) // 12

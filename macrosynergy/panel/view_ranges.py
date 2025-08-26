@@ -19,6 +19,7 @@ def view_ranges(
     kind: str = "bar",
     sort_cids_by: Optional[str] = None,
     title: Optional[str] = None,
+    title_fontsize: int = None,
     ylab: Optional[str] = None,
     size: Tuple[float] = (16, 8),
     xcat_labels: Optional[List[str]] = None,
@@ -52,6 +53,8 @@ def view_ranges(
         calculated, of the cross-sections, computed across all categories.
     title : str
         string of chart title; defaults depend on type of range plot.
+    title_fontsize : int
+        font size of the title. Default is None.
     ylab : str
         y label. Default is no label.
     size : Tuple[float]
@@ -85,6 +88,7 @@ def view_ranges(
         kind=kind,
         sort_cids_by=sort_cids_by,
         title=title,
+        title_fontsize=title_fontsize,
         ylab=ylab,
         size=size,
         xcat_labels=xcat_labels,

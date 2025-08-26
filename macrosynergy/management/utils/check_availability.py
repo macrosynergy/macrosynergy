@@ -25,6 +25,7 @@ def check_availability(
     missing_recent: bool = True,
     use_last_businessday: bool = True,
     title: str = None,
+    title_fontsize: int = None,
     xcat_labels: dict = None,
     sort_labels: bool = False,
 ):
@@ -61,6 +62,8 @@ def check_availability(
     title : str
         A string to be used as the title of the heatmap. If None, a default header will be
         used.
+    title_fontsize : int
+        Font size for the title of the heatmap. Default is None (automatic sizing).
     xcat_labels : dict
         dictionary with xcat labels. Default is None (no labels).
     sort_labels : bool
@@ -102,6 +105,7 @@ def check_availability(
             size=start_size,
             use_last_businessday=use_last_businessday,
             title=title,
+            title_fontsize=title_fontsize,
             row_order=row_order,
         )
     if missing_recent:
@@ -112,6 +116,7 @@ def check_availability(
             size=end_size,
             use_last_businessday=use_last_businessday,
             title=title,
+            title_fontsize=title_fontsize,
             row_order=row_order,
         )
 
@@ -270,6 +275,7 @@ def visual_paneldates(
     use_last_businessday: bool = True,
     title: str = None,
     row_order: List[str] = None,
+    title_fontsize: int = None,
 ):
     """
     Visualize panel dates with color codes.
@@ -286,6 +292,8 @@ def visual_paneldates(
     title : str
         A string to be used as the title of the heatmap. If None, a default header will be
         used.
+    title_fontsize : int
+        Font size for the title of the heatmap. Default is None (automatic sizing).
     row_order : List[str]
         A list of strings specifying the order of rows in the heatmap. These rows
         correspond to the columns of the input DataFrame. If None, the default order
@@ -298,6 +306,7 @@ def visual_paneldates(
         use_last_businessday=use_last_businessday,
         header=title,
         row_order=row_order,
+        title_fontsize=title_fontsize,
     )
 
 

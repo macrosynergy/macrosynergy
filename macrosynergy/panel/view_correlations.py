@@ -24,6 +24,7 @@ def correl_matrix(
     lags: dict = None,
     lags_secondary: Optional[dict] = None,
     title: str = None,
+    title_fontsize: Optional[int] = None,
     size: Tuple[float] = (14, 8),
     max_color: float = None,
     show: bool = True,
@@ -79,6 +80,8 @@ def correl_matrix(
         `xcats_secondary` is provided.
     title : str
         chart heading. If none is given, a default title is used.
+    title_fontsize : int
+        font size of the title. Default is None.
     size : Tuple[float]
         two-element tuple setting width/height of figure. Default is (14, 8).
     max_color : float
@@ -124,6 +127,7 @@ def correl_matrix(
         lags=lags,
         lags_secondary=lags_secondary,
         title=title,
+        title_fontsize=title_fontsize,
         size=size,
         max_color=max_color,
         show=show,
