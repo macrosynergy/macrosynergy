@@ -12,11 +12,11 @@ from typing import Dict, List, Set, Tuple
 import joblib
 import numpy as np
 import pandas as pd
-
+import string
 from macrosynergy import PYTHON_3_8_OR_LATER
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.utils import drop_nan_series, reduce_df
+from macrosynergy.management.utils import drop_nan_series, reduce_df, get_cid, get_xcat
 
 
 def panel_calculator(
@@ -256,6 +256,8 @@ def panel_calc_pll(
     old_xcats_used, singles_used, single_cids = _get_xcats_used(ops)
     avail = set(df["xcat"]) & set(old_xcats_used)
 
+    cids = sorted(set((cids or []) + single_cids))
+
     subgraphs_calcs = CalcList(
         calcs, already_existing_vars=avail
     ).get_independent_subgraphs()
@@ -309,66 +311,51 @@ def panel_calc_pll(
     return QuantamentalDataFrame.from_qdf_list(results)
 
 
-def time_series_check(formula: str, index: int):
+def is_valid_xcat(xcat_str: str) -> bool:
     """
-    Determine if the panel has any time-series methods applied. If a time-series
-    conversion is applied, the function will return the terminal index of the respective
-    category. Further, a boolean parameter is also returned to confirm the presence of a
-    time-series operation.
+    Heuristic to determine if a string is a valid category (`xcat`).
+    Conditions:
+        - Only composed of alphanumeric characters and underscores
+        - Must contain at least one uppercase letter
+        - If starts with "i", must be a ticker, i.e containing an underscore
 
     Parameters
     ----------
-    formula : str
-
-    index : int
-        starting index to iterate over.
+    xcat_str : str
+        The string to check.
 
     Returns
     -------
-    Tuple[int, bool]
+    bool
+        True if the string is a valid category (`xcat`), False otherwise.
     """
-
-    def check(a: str, b: str, c: str) -> bool:
-        return (a.isupper() or a.isnumeric()) and b == "." and c.islower()
-
-    f = formula
-    length = len(f)
-    clause = False
-    for i in range(index, (length - 2)):
-        if check(f[i], f[i + 1], f[i + 2]):
-            clause = True
-            break
-
-    return i, clause
+    xcat_chars = string.ascii_letters + string.digits + "_"
+    if xcat_str.startswith("i"):
+        if (get_cid(xcat_str) + "_" + get_xcat(xcat_str)) != xcat_str:
+            return False
+    if len(set(xcat_str) - set(xcat_chars)) > 0:
+        return False
+    if not any(c in string.ascii_uppercase for c in xcat_str):
+        return False
+    return True
 
 
-def xcat_isolator(expression: str, start_index: str, index: int) -> Tuple[str, int]:
-    """
-    Split the category from the time-series operation. The function will return the
-    respective category.
+def xcat_isolator(calc_rhs_str: str) -> List[str]:
+    xcat_chars = string.ascii_letters + string.digits + "_"
+    mask = [c in xcat_chars for c in calc_rhs_str]
+    found_xcats = [""]
+    for ic, char in enumerate(calc_rhs_str):
+        if mask[ic]:
+            found_xcats[-1] += char
+        elif found_xcats[-1] != "":
+            found_xcats.append("")
 
-    Parameters
-    ----------
-    expression : str
-
-    start_index : str
-        starting index to search over.
-    index : int
-        defines the end of the search space over the expression.
-
-    Returns
-    -------
-    Tuple[str, int]
-        xcat string, and the string index where the xcat ends.
-    """
-
-    op_copy = expression[start_index : index + 1]
-
-    start = next(i for i, elem in enumerate(op_copy) if elem.isupper())
-
-    xcat = op_copy[start : index + 1]
-
-    return xcat, start_index + start + len(xcat)
+    found_xcats = list(filter(is_valid_xcat, found_xcats))
+    if not found_xcats:
+        raise ValueError(
+            f"This calculation does not contain any valid categories (XCATs).\n\t:{calc_rhs_str}"
+        )
+    return found_xcats
 
 
 def _get_xcats_used(ops: Dict[str, str]) -> Tuple[List[str], List[str]]:
@@ -389,21 +376,18 @@ def _get_xcats_used(ops: Dict[str, str]) -> Tuple[List[str], List[str]]:
     xcats_used: List[str] = []
     singles_used: List[str] = []
     for op in ops.values():
-        index, clause = time_series_check(formula=op, index=0)
-        start_index = 0
-        if clause:
-            while clause:
-                xcat, end_ = xcat_isolator(op, start_index, index)
-                xcats_used.append(xcat)
-                index, clause = time_series_check(op, index=end_)
-                start_index = end_
-        else:
-            op_list = op.split(" ")
-            xcats_used += [x for x in op_list if re.match("^[A-Z]", x)]
-            singles_used += [s for s in op_list if re.match("^i", s)]
+        xcats_found = xcat_isolator(op)
+        new_single_tickers = [x for x in xcats_found if x.startswith("i")]
+        new_xcats_used = [x for x in xcats_found if x not in new_single_tickers]
+
+        singles_used += new_single_tickers
+        xcats_used += new_xcats_used
 
     single_xcats = [x.split("_", 1)[1] for x in singles_used]
-    single_cids = [x.split("_", 1)[0] for x in single_xcats]
+    single_cids = [x.split("_", 1)[0] for x in singles_used]
+    # removing the "i" prefix from single_cids
+    single_cids = [x[1:] for x in single_cids]
+
     all_xcats_used = xcats_used + single_xcats
     return all_xcats_used, singles_used, single_cids
 
@@ -489,9 +473,10 @@ class SingleCalc:
 
     def dependencies(self) -> List[str]:
         rhs = self.rhs
-        tokens: List[str] = re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\b", rhs)
-        exclude = set([self.lhs, "np", "pd"])
-        deps = [t for t in tokens if t.isupper() and t not in exclude]
+        # tokens: List[str] = re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\b", rhs)
+        # exclude = set([self.lhs, "np", "pd"])
+        # deps = [t for t in tokens if t.isupper() and t not in exclude]
+        deps = xcat_isolator(rhs)
         return sorted(set(deps))
 
     def creates(self) -> str:
@@ -697,5 +682,11 @@ if __name__ == "__main__":
     formula_2 = "NEW2 = GROWTH - iEUR_INFL"
     formulas = [formula, formula_2]
     df_calc = panel_calculator(
-        df=dfd, calcs=formulas, cids=cids, start=start, end=end, blacklist=black
+        df=dfd,
+        calcs=formulas,
+        cids=cids,
+        start=start,
+        end=end,
+        blacklist=black,
+        # use_parallel=False,
     )
