@@ -541,6 +541,8 @@ class CategoryRelations(object):
         ----------
         title : str
             title of plot. If None (default) an informative title is applied.
+        title_fontsize : int
+            font size of the title. Default is None.
         labels : bool
             assign a cross-section/period label to each dot. Default is False.
         size : Tuple[float]
@@ -1057,6 +1059,7 @@ if __name__ == "__main__":
         coef_box="lower left",
         prob_est="map",
         remove_zero_predictor=True,
+        title_fontsize=14,
     )
 
     # years parameter
