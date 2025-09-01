@@ -297,7 +297,7 @@ def request_wrapper(
     raise DownloadError(e_str)
 
 
-class OAuth(JPMorganOAuth):
+class DataQueryOAuth(JPMorganOAuth):
     def __init__(
         self,
         client_id: str,
@@ -589,7 +589,7 @@ class DataQueryInterface(object):
             if not isinstance(varx, typex) and varx is not None:
                 raise TypeError(f"{namex} must be a {typex} and not {type(varx)}.")
 
-        self.auth: Optional[Union[CertAuth, OAuth]] = None
+        self.auth: Optional[Union[CertAuth, DataQueryOAuth]] = None
         if oauth and not all([client_id, client_secret]):
             warnings.warn(
                 "OAuth authentication requested but client ID and/or client secret "
@@ -607,7 +607,7 @@ class DataQueryInterface(object):
         self.verify: bool = verify
 
         if oauth:
-            self.auth: OAuth = OAuth(
+            self.auth: DataQueryOAuth = DataQueryOAuth(
                 client_id=client_id,
                 client_secret=client_secret,
                 token_url=token_url,
