@@ -109,7 +109,7 @@ class TestJPMaQSDownload(unittest.TestCase):
 
     @mock.patch(
         "macrosynergy.download.dataquery.DataQueryOAuth._get_token",
-        return_value=("SOME_TEST_TOKEN"),
+        return_value="SOME_TEST_TOKEN",
     )
     @mock.patch(
         "macrosynergy.download.dataquery.request_wrapper",
@@ -291,7 +291,6 @@ class TestJPMaQSDownload(unittest.TestCase):
             self.jpmaqs_download.validate_download_args(**bad_args)
 
     def test_filter_expressions_from_catalogue(self):
-
         catalogue = self.expressions.copy()
 
         with mock.patch(
@@ -310,7 +309,6 @@ class TestJPMaQSDownload(unittest.TestCase):
             )
 
     def test_chain_download_outputs(self):
-
         with self.assertRaises(TypeError):
             self.jpmaqs_download._chain_download_outputs("")
 
@@ -669,7 +667,6 @@ class TestFunctions(unittest.TestCase):
             self.assertIsNone(timeseries_to_qdf(dicts_list[0]))
 
     def test_timeseries_to_column(self):
-
         with self.assertRaises(TypeError):
             timeseries_to_column("")
 
@@ -791,21 +788,270 @@ class TestFunctions(unittest.TestCase):
             )
 
     def test_check_attributes_in_sync(self):
-        ts_list = [{"attributes": [{"expression": "DB(JPMAQS,CID_TEST,value)", "time-series": [["20240125", 0.1], ["20240126", -0.1], ["20240127", None], ["20240128", None], ["20240129", 0.8], ["20240130", -0.01], ["20240131", 1.5], ["20240201", 1.0], ["20240202", 1.0], ["20240203", None], ["20240204", None], ["20240205", 1.0]]}]}, 
-                   {"attributes": [{"expression": "DB(JPMAQS,CID_TEST,grading)", "time-series": [["20240125", 1.0], ["20240126", 1.0], ["20240127", None], ["20240128", None], ["20240129", 1.0], ["20240130", 1.0], ["20240131", 1.0], ["20240201", 1.0], ["20240202", 1.0], ["20240203", None], ["20240204", None], ["20240205", 1.0]]}]}, 
-                   {"attributes": [{"expression": "DB(JPMAQS,CID_TEST,mop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", None], ["20240128", None], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0], ["20240203", None], ["20240204", None], ["20240205", 0.0]]}]}, 
-                   {"attributes": [{"expression": "DB(JPMAQS,CID_TEST,eop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", None], ["20240128", None], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0], ["20240203", None], ["20240204", None], ["20240205", 0.0]]}]},
-                   {"attributes": [{"expression": "DB(JPMAQS,CID1_TEST,value)", "time-series": [["20240125", 0.1], ["20240126", -0.1], ["20240127", None], ["20240128", None], ["20240129", 0.8], ["20240130", -0.01], ["20240131", 1.5], ["20240201", 1.0], ["20240202", 1.0]]}]}, 
-                   {"attributes": [{"expression": "DB(JPMAQS,CID1_TEST,grading)", "time-series": [["20240125", 1.0], ["20240126", 1.0], ["20240127", None], ["20240128", None], ["20240129", 1.0], ["20240130", 1.0], ["20240131", 1.0], ["20240201", 1.0], ["20240202", 1.0]]}]}, 
-                   {"attributes": [{"expression": "DB(JPMAQS,CID1_TEST,mop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", None], ["20240128", None], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0]]}]}, 
-                   {"attributes": [{"expression": "DB(JPMAQS,CID1_TEST,eop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", None], ["20240128", None], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0]]}]},
-                   {"attributes": [{"expression": "DB(CFX,BGB,123,,FRW)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", None], ["20240128", None], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0]]}]}]
+        ts_list = [
+            {
+                "attributes": [
+                    {
+                        "expression": "DB(JPMAQS,CID_TEST,value)",
+                        "time-series": [
+                            ["20240125", 0.1],
+                            ["20240126", -0.1],
+                            ["20240127", None],
+                            ["20240128", None],
+                            ["20240129", 0.8],
+                            ["20240130", -0.01],
+                            ["20240131", 1.5],
+                            ["20240201", 1.0],
+                            ["20240202", 1.0],
+                            ["20240203", None],
+                            ["20240204", None],
+                            ["20240205", 1.0],
+                        ],
+                    }
+                ]
+            },
+            {
+                "attributes": [
+                    {
+                        "expression": "DB(JPMAQS,CID_TEST,grading)",
+                        "time-series": [
+                            ["20240125", 1.0],
+                            ["20240126", 1.0],
+                            ["20240127", None],
+                            ["20240128", None],
+                            ["20240129", 1.0],
+                            ["20240130", 1.0],
+                            ["20240131", 1.0],
+                            ["20240201", 1.0],
+                            ["20240202", 1.0],
+                            ["20240203", None],
+                            ["20240204", None],
+                            ["20240205", 1.0],
+                        ],
+                    }
+                ]
+            },
+            {
+                "attributes": [
+                    {
+                        "expression": "DB(JPMAQS,CID_TEST,mop_lag)",
+                        "time-series": [
+                            ["20240125", 0.0],
+                            ["20240126", 0.0],
+                            ["20240127", None],
+                            ["20240128", None],
+                            ["20240129", 0.0],
+                            ["20240130", 0.0],
+                            ["20240131", 0.0],
+                            ["20240201", 0.0],
+                            ["20240202", 0.0],
+                            ["20240203", None],
+                            ["20240204", None],
+                            ["20240205", 0.0],
+                        ],
+                    }
+                ]
+            },
+            {
+                "attributes": [
+                    {
+                        "expression": "DB(JPMAQS,CID_TEST,eop_lag)",
+                        "time-series": [
+                            ["20240125", 0.0],
+                            ["20240126", 0.0],
+                            ["20240127", None],
+                            ["20240128", None],
+                            ["20240129", 0.0],
+                            ["20240130", 0.0],
+                            ["20240131", 0.0],
+                            ["20240201", 0.0],
+                            ["20240202", 0.0],
+                            ["20240203", None],
+                            ["20240204", None],
+                            ["20240205", 0.0],
+                        ],
+                    }
+                ]
+            },
+            {
+                "attributes": [
+                    {
+                        "expression": "DB(JPMAQS,CID1_TEST,value)",
+                        "time-series": [
+                            ["20240125", 0.1],
+                            ["20240126", -0.1],
+                            ["20240127", None],
+                            ["20240128", None],
+                            ["20240129", 0.8],
+                            ["20240130", -0.01],
+                            ["20240131", 1.5],
+                            ["20240201", 1.0],
+                            ["20240202", 1.0],
+                        ],
+                    }
+                ]
+            },
+            {
+                "attributes": [
+                    {
+                        "expression": "DB(JPMAQS,CID1_TEST,grading)",
+                        "time-series": [
+                            ["20240125", 1.0],
+                            ["20240126", 1.0],
+                            ["20240127", None],
+                            ["20240128", None],
+                            ["20240129", 1.0],
+                            ["20240130", 1.0],
+                            ["20240131", 1.0],
+                            ["20240201", 1.0],
+                            ["20240202", 1.0],
+                        ],
+                    }
+                ]
+            },
+            {
+                "attributes": [
+                    {
+                        "expression": "DB(JPMAQS,CID1_TEST,mop_lag)",
+                        "time-series": [
+                            ["20240125", 0.0],
+                            ["20240126", 0.0],
+                            ["20240127", None],
+                            ["20240128", None],
+                            ["20240129", 0.0],
+                            ["20240130", 0.0],
+                            ["20240131", 0.0],
+                            ["20240201", 0.0],
+                            ["20240202", 0.0],
+                        ],
+                    }
+                ]
+            },
+            {
+                "attributes": [
+                    {
+                        "expression": "DB(JPMAQS,CID1_TEST,eop_lag)",
+                        "time-series": [
+                            ["20240125", 0.0],
+                            ["20240126", 0.0],
+                            ["20240127", None],
+                            ["20240128", None],
+                            ["20240129", 0.0],
+                            ["20240130", 0.0],
+                            ["20240131", 0.0],
+                            ["20240201", 0.0],
+                            ["20240202", 0.0],
+                        ],
+                    }
+                ]
+            },
+            {
+                "attributes": [
+                    {
+                        "expression": "DB(CFX,BGB,123,,FRW)",
+                        "time-series": [
+                            ["20240125", 0.0],
+                            ["20240126", 0.0],
+                            ["20240127", None],
+                            ["20240128", None],
+                            ["20240129", 0.0],
+                            ["20240130", 0.0],
+                            ["20240131", 0.0],
+                            ["20240201", 0.0],
+                            ["20240202", 0.0],
+                        ],
+                    }
+                ]
+            },
+        ]
         self.assertTrue(check_attributes_in_sync(ts_list))
 
-        out_of_sync_ts_list = [{"attributes": [{"expression": "DB(JPMAQS,CID_TEST,value)", "time-series": [["20240125", 0.1], ["20240126", -0.1], ["20240127", None], ["20240128", None], ["20240129", 0.8], ["20240130", -0.01], ["20240131", 1.5], ["20240201", 1.0], ["20240202", 1.0], ["20240203", None], ["20240204", None], ["20240205", None]]}]}, 
-                                {"attributes": [{"expression": "DB(JPMAQS,CID_TEST,grading)", "time-series": [["20240125", 1.0], ["20240126", 1.0], ["20240127", None], ["20240128", None], ["20240129", 1.0], ["20240130", 1.0], ["20240131", 1.0], ["20240201", 1.0], ["20240202", 1.0], ["20240203", None], ["20240204", None], ["20240205", 1.0]]}]}, 
-                                {"attributes": [{"expression": "DB(JPMAQS,CID_TEST,mop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", None], ["20240128", None], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0], ["20240203", None], ["20240204", None], ["20240205", 0.0]]}]}, 
-                                {"attributes": [{"expression": "DB(JPMAQS,CID_TEST,eop_lag)", "time-series": [["20240125", 0.0], ["20240126", 0.0], ["20240127", None], ["20240128", None], ["20240129", 0.0], ["20240130", 0.0], ["20240131", 0.0], ["20240201", 0.0], ["20240202", 0.0], ["20240203", None], ["20240204", None], ["20240205", 0.0]]}]}]
+        out_of_sync_ts_list = [
+            {
+                "attributes": [
+                    {
+                        "expression": "DB(JPMAQS,CID_TEST,value)",
+                        "time-series": [
+                            ["20240125", 0.1],
+                            ["20240126", -0.1],
+                            ["20240127", None],
+                            ["20240128", None],
+                            ["20240129", 0.8],
+                            ["20240130", -0.01],
+                            ["20240131", 1.5],
+                            ["20240201", 1.0],
+                            ["20240202", 1.0],
+                            ["20240203", None],
+                            ["20240204", None],
+                            ["20240205", None],
+                        ],
+                    }
+                ]
+            },
+            {
+                "attributes": [
+                    {
+                        "expression": "DB(JPMAQS,CID_TEST,grading)",
+                        "time-series": [
+                            ["20240125", 1.0],
+                            ["20240126", 1.0],
+                            ["20240127", None],
+                            ["20240128", None],
+                            ["20240129", 1.0],
+                            ["20240130", 1.0],
+                            ["20240131", 1.0],
+                            ["20240201", 1.0],
+                            ["20240202", 1.0],
+                            ["20240203", None],
+                            ["20240204", None],
+                            ["20240205", 1.0],
+                        ],
+                    }
+                ]
+            },
+            {
+                "attributes": [
+                    {
+                        "expression": "DB(JPMAQS,CID_TEST,mop_lag)",
+                        "time-series": [
+                            ["20240125", 0.0],
+                            ["20240126", 0.0],
+                            ["20240127", None],
+                            ["20240128", None],
+                            ["20240129", 0.0],
+                            ["20240130", 0.0],
+                            ["20240131", 0.0],
+                            ["20240201", 0.0],
+                            ["20240202", 0.0],
+                            ["20240203", None],
+                            ["20240204", None],
+                            ["20240205", 0.0],
+                        ],
+                    }
+                ]
+            },
+            {
+                "attributes": [
+                    {
+                        "expression": "DB(JPMAQS,CID_TEST,eop_lag)",
+                        "time-series": [
+                            ["20240125", 0.0],
+                            ["20240126", 0.0],
+                            ["20240127", None],
+                            ["20240128", None],
+                            ["20240129", 0.0],
+                            ["20240130", 0.0],
+                            ["20240131", 0.0],
+                            ["20240201", 0.0],
+                            ["20240202", 0.0],
+                            ["20240203", None],
+                            ["20240204", None],
+                            ["20240205", 0.0],
+                        ],
+                    }
+                ]
+            },
+        ]
         self.assertFalse(check_attributes_in_sync(out_of_sync_ts_list))
 
 
