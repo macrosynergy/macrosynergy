@@ -23,12 +23,7 @@ from macrosynergy.download.jpmaqs import (
 
 from macrosynergy.download.exceptions import InvalidDataframeError
 from macrosynergy.management.types import QuantamentalDataFrame
-from .mock_helpers import (
-    mock_jpmaqs_value,
-    mock_request_wrapper,
-    random_string,
-    MockDataQueryInterface,
-)
+from .mock_helpers import mock_request_wrapper, random_string
 
 
 class TestJPMaQSDownload(unittest.TestCase):
@@ -121,13 +116,7 @@ class TestJPMaQSDownload(unittest.TestCase):
         # If the connection to DataQuery is working, the response code will invariably be
         # 200. Therefore, use the Interface Object's method to check DataQuery
         # connections.
-
-        with JPMaQSDownload(
-            client_id="client1",
-            client_secret="123",
-            oauth=True,
-        ) as jpmaqs:
-            pass
+        JPMaQSDownload(client_id="client1", client_secret="123", oauth=True)
 
         mock_p_request.assert_called_once()
         mock_p_get_token.assert_called_once()
