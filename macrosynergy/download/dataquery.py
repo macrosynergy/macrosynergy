@@ -414,7 +414,7 @@ class OAuth(object):
                 proxy=self.proxy,
                 tracking_id=OAUTH_TRACKING_ID,
                 user_id=self._get_user_id(),
-                **self.kwargs
+                **self.kwargs,
             )
             # on failure, exception will be raised by request_wrapper
 
@@ -574,8 +574,8 @@ def validate_download_args(
     if delay_param < 0.2:
         warnings.warn(
             RuntimeWarning(
-                f"`delay_param` is too low; DataQuery API may reject requests. "
-                f"Minimum recommended value is 0.2 seconds. "
+                "`delay_param` is too low; DataQuery API may reject requests. "
+                "Minimum recommended value is 0.2 seconds. "
             )
         )
 
@@ -586,8 +586,8 @@ def validate_download_args(
     elif batch_size > 20:
         warnings.warn(
             RuntimeWarning(
-                f"`batch_size` is too high; DataQuery API's time-series endpoint "
-                f"accepts a maximum of 20 expressions per request. "
+                "`batch_size` is too high; DataQuery API's time-series endpoint "
+                "accepts a maximum of 20 expressions per request. "
             )
         )
 
@@ -734,7 +734,7 @@ class DataQueryInterface(object):
                 client_secret=client_secret,
                 token_url=token_url,
                 proxy=proxy,
-                verify=self.verify
+                verify=self.verify,
             )
         elif custom_auth is not None:
             self.auth = custom_auth
@@ -825,7 +825,7 @@ class DataQueryInterface(object):
             proxy=self.proxy,
             tracking_id=HEARTBEAT_TRACKING_ID,
             verify=self.verify,
-            **self.auth.get_auth()
+            **self.auth.get_auth(),
         )
 
         result: bool = True
@@ -1127,8 +1127,10 @@ class DataQueryInterface(object):
             print("Retrying failed downloads. Retry count:", retry_counter)
 
         if retry_counter > HL_RETRY_COUNT:
-            error_str = (f"Failed {retry_counter} times to download data all requested data.\n"
-                f"No longer retrying.")
+            error_str = (
+                f"Failed {retry_counter} times to download data all requested data.\n"
+                "No longer retrying."
+            )
             if len(self.msg_errors) > 0:
                 error_str += "\n".join(self.msg_errors)
             raise DownloadError(error_str)
