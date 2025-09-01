@@ -205,7 +205,8 @@ def request_wrapper(
     # insert tracking info in headers
     if headers is None:
         headers: Dict = {}
-    headers["User-Agent"] = f"MacrosynergyPackage/{ms_version_info}"
+    if "User-Agent" not in headers:
+        headers["User-Agent"] = f"MacrosynergyPackage/{ms_version_info}"
 
     uuid_str: str = str(uuid.uuid4())
     if (tracking_id is None) or (tracking_id == ""):
@@ -703,7 +704,7 @@ class DataQueryInterface(object):
             proxy=self.proxy,
             tracking_id=HEARTBEAT_TRACKING_ID,
             verify=self.verify,
-            **self.auth.get_auth(),
+            headers=self.auth.get_auth(),
         )
 
         result: bool = True
@@ -764,7 +765,7 @@ class DataQueryInterface(object):
             proxy=self.proxy,
             tracking_id=tracking_id,
             verify=self.verify,
-            **self.auth.get_auth(),
+            headers=self.auth.get_auth(),
         )
 
         if (response is None) or ("instruments" not in response.keys()):
