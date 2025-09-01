@@ -86,6 +86,7 @@ class JPMorganOAuth(object):
         root_url: str,
         auth_url: str,
         proxies: Optional[dict] = None,
+        verify: bool = True,
     ):
         self.client_id = client_id
         self.client_secret = client_secret
@@ -93,6 +94,7 @@ class JPMorganOAuth(object):
         self.application_name = application_name
         self.root_url = root_url
         self.auth_url = auth_url
+        self._verify = verify
 
         # none of the above can be None
         for attr_name, attr_val in [
@@ -105,6 +107,11 @@ class JPMorganOAuth(object):
         ]:
             if attr_val is None:
                 raise ValueError(f"{attr_name} must be provided and cannot be None.")
+            elif not isinstance(attr_val, str):
+                raise TypeError(f"{attr_name} must be a string.")
+
+        if proxies is not None and not isinstance(proxies, dict):
+            raise TypeError("`proxies` must be a dictionary.")
 
         self.proxies = proxies or None
 
@@ -137,11 +144,12 @@ class JPMorganOAuth(object):
                 self.auth_url,
                 data=self.token_data,
                 proxies=self.proxies,
+                verify=self._verify,
             )
             response.raise_for_status()
             token_data = response.json()
             self._stored_token = {
-                "created_at": datetime.datetime.now(),
+                "created_at": datetime.datetime.now(datetime.timezone.utc),
                 "expires_in": token_data["expires_in"],
                 "access_token": token_data["access_token"],
             }
@@ -151,11 +159,9 @@ class JPMorganOAuth(object):
     def _is_valid_token(self):
         if self._stored_token is None:
             return False
-        return (
-            self._stored_token["created_at"]
-            + datetime.timedelta(seconds=self._stored_token["expires_in"])
-            > datetime.datetime.now()
-        )
+        return self._stored_token["created_at"] + datetime.timedelta(
+            seconds=self._stored_token["expires_in"]
+        ) > datetime.datetime.now(datetime.timezone.utc)
 
     def _get_token(self):
         if not self._is_valid_token():
