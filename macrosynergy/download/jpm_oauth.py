@@ -9,8 +9,8 @@ from macrosynergy import __version__ as ms_version_info
 
 class JPMorganOAuth(object):
     """
-    A lightweight helper for OAuth 2.0 (Client Credentials) authentication
-    against **any JPMorgan API**.
+    A lightweight helper for OAuth 2.0 (Client Credentials) authentication used by the
+    JPMorgan DataQuery API, DataQuery File API, and JPMorgan Fusion API.
 
     This class retrieves and manages access tokens for API requests and supports
     loading credentials from a JSON file or a dictionary.
