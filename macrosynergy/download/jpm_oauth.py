@@ -162,6 +162,9 @@ class JPMorganOAuth(object):
             self.retrieve_token()
         return self._stored_token["access_token"]
 
+    def _get_user_id(self) -> str:
+        return "OAuth_ClientID - " + self.client_id
+
     def get_auth(self) -> dict:
         """
         Get the authorization headers for API requests.
